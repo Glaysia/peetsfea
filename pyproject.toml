@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 license = { text = "GPL-3.0-only" }
 dependencies = [
   "pyaedt==0.24.1",
+  "dearpygui",
 ]
 
 [project.optional-dependencies]
