@@ -57,6 +57,9 @@ coverage.xml
 # IDEs
 .idea/
 
+# Local fonts
+font/
+
 
 # OS files
 .DS_Store
