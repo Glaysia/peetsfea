@@ -1,0 +1,12 @@
+# UF-core (D-driven inner leg thickness) spec
+[meta]
+spec = "uf_core_d_v1"
+units = "mm"
+
+[dimensions]
+A = 120.0
+B = 117.0
+C = 40.0
+D = 30.0
+E = 59.0
+z_oversize = 1.0
