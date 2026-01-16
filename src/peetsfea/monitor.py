@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from . import config
+from .types import AedtMachine, PyaedtProcessInfo
+
 
 _D2CODING_URL = (
     "https://github.com/naver/d2codingfont/releases/download/VER1.3.2/"
@@ -12,8 +15,28 @@ _D2CODING_URL = (
 )
 _D2CODING_TTF = "D2Coding-Ver1.3.2-20180524.ttf"
 _FONT_DIR_NAME = "font"
-_VIEWPORT_WIDTH = 360
-_VIEWPORT_HEIGHT = 220
+_VIEWPORT_WIDTH = 980
+_VIEWPORT_HEIGHT = 560
+
+_MACHINE_COLUMNS = (
+    "Machine",
+    "IP",
+    "AEDT",
+    "Current",
+    "Slurm",
+    "Max AEDT",
+)
+_PROCESS_COLUMNS = (
+    "IP",
+    "Status",
+    "GUI",
+    "Stage",
+    "Stage min",
+    "Design",
+    "TOML",
+    "AEDT",
+    "Machine info",
+)
 
 
 def _in_ipython() -> bool:
@@ -34,6 +57,82 @@ class MonitorHandle:
 
 
 _ACTIVE_MONITOR: MonitorHandle | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MachineSnapshot:
+    machine: AedtMachine
+    processes: tuple[PyaedtProcessInfo, ...]
+
+
+def _collect_machine_snapshots() -> list[MachineSnapshot]:
+    snapshots: list[MachineSnapshot] = []
+    for machine in config.machine_list:
+        processes = config.pyaedt_processes_by_machine.get(machine.name, [])
+        snapshots.append(MachineSnapshot(machine=machine, processes=tuple(processes)))
+    return snapshots
+
+
+def _format_bool(value: bool | None) -> str:
+    if value is True:
+        return "yes"
+    if value is False:
+        return "no"
+    return "-"
+
+
+def _format_minutes(value: float | None) -> str:
+    if value is None:
+        return "-"
+    return f"{value:.1f}m"
+
+
+def _machine_info_text(machine: AedtMachine) -> str:
+    current = "local" if machine.is_current_pc else "remote"
+    slurm = "yes" if machine.use_slurm else "no"
+    if machine.max_aedt_instances is None:
+        max_instances = "-"
+    else:
+        max_instances = str(machine.max_aedt_instances)
+    return f"{machine.name} | {current}, slurm={slurm}, max={max_instances}"
+
+
+def _process_row_values(
+    machine: AedtMachine,
+    process: PyaedtProcessInfo,
+) -> tuple[str, ...]:
+    ip_address = process.ip_address or machine.ip_address or "-"
+    status = process.status or "unknown"
+    gui = _format_bool(process.gui_enabled)
+    stage = process.stage or "unknown"
+    stage_min = _format_minutes(process.stage_elapsed_min)
+    design = process.design_name or "-"
+    toml = process.toml_path or "-"
+    aedt_version = process.aedt_version or machine.aedt_version or "-"
+    machine_info = process.machine_info or _machine_info_text(machine)
+    return (
+        ip_address,
+        status,
+        gui,
+        stage,
+        stage_min,
+        design,
+        toml,
+        aedt_version,
+        machine_info,
+    )
+
+
+def _monitor_text(snapshot: list[MachineSnapshot]) -> str:
+    total_processes = sum(len(item.processes) for item in snapshot)
+    lines = [
+        "peetsfea monitor",
+        f"machines: {len(snapshot)}",
+        f"processes: {total_processes}",
+    ]
+    if not snapshot:
+        lines.append("note: no machines configured")
+    return "\n".join(lines)
 
 
 def _font_dir() -> "Path":
@@ -89,6 +188,159 @@ def _ensure_font_file() -> str | None:
         return None
 
 
+def _machine_row_values(machine: AedtMachine) -> tuple[str, ...]:
+    ip_address = machine.ip_address or "-"
+    aedt_version = machine.aedt_version or "-"
+    current = "yes" if machine.is_current_pc else "no"
+    slurm = "yes" if machine.use_slurm else "no"
+    if machine.max_aedt_instances is None:
+        max_instances = "-"
+    else:
+        max_instances = str(machine.max_aedt_instances)
+    return (ip_address, aedt_version, current, slurm, max_instances)
+
+
+def _empty_process_row(machine: AedtMachine) -> tuple[str, ...]:
+    ip_address = machine.ip_address or "-"
+    aedt_version = machine.aedt_version or "-"
+    return (
+        ip_address,
+        "no processes",
+        "-",
+        "-",
+        "-",
+        "-",
+        "-",
+        aedt_version,
+        _machine_info_text(machine),
+    )
+
+
+def _render_process_table_dpg(
+    dpg: Any,
+    machine: AedtMachine,
+    processes: tuple[PyaedtProcessInfo, ...],
+) -> None:
+    with dpg.table(
+        header_row=True,
+        policy=dpg.mvTable_SizingStretchProp,
+        row_background=True,
+        borders_innerH=True,
+        borders_outerH=True,
+        borders_innerV=True,
+        borders_outerV=True,
+    ):
+        for label in _PROCESS_COLUMNS:
+            dpg.add_table_column(label=label)
+        if not processes:
+            with dpg.table_row():
+                for value in _empty_process_row(machine):
+                    dpg.add_text(value)
+            return
+        for process in processes:
+            with dpg.table_row():
+                for value in _process_row_values(machine, process):
+                    dpg.add_text(value)
+
+
+def _render_machine_table_dpg(
+    dpg: Any,
+    snapshot: list[MachineSnapshot],
+) -> None:
+    with dpg.table(
+        header_row=True,
+        policy=dpg.mvTable_SizingStretchProp,
+        row_background=True,
+        borders_innerH=True,
+        borders_outerH=True,
+        borders_innerV=True,
+        borders_outerV=True,
+    ):
+        for label in _MACHINE_COLUMNS:
+            dpg.add_table_column(label=label)
+        if not snapshot:
+            with dpg.table_row():
+                dpg.add_text("no machines configured")
+                for _ in _MACHINE_COLUMNS[1:]:
+                    dpg.add_text("-")
+            return
+        for item in snapshot:
+            machine = item.machine
+            with dpg.table_row():
+                with dpg.tree_node(label=machine.name, default_open=False):
+                    _render_process_table_dpg(dpg, machine, item.processes)
+                for value in _machine_row_values(machine):
+                    dpg.add_text(value)
+
+
+def _build_inline_monitor_html(snapshot: list[MachineSnapshot]) -> str:
+    from html import escape
+
+    total_processes = sum(len(item.processes) for item in snapshot)
+    rows: list[str] = []
+    if not snapshot:
+        rows.append("<div style='color: #666;'>no machines configured</div>")
+    for item in snapshot:
+        machine = item.machine
+        machine_summary = " | ".join(
+            [
+                escape(machine.name),
+                f"ip={escape(machine.ip_address or '-')}",
+                f"aedt={escape(machine.aedt_version or '-')}",
+                f"current={'yes' if machine.is_current_pc else 'no'}",
+                f"slurm={'yes' if machine.use_slurm else 'no'}",
+                f"max={escape(str(machine.max_aedt_instances)) if machine.max_aedt_instances is not None else '-'}",
+            ]
+        )
+        rows.append(
+            "<details style='margin-top: 10px;'>"
+            f"<summary style='cursor: pointer; font-weight: 600;'>{machine_summary}</summary>"
+        )
+        rows.append("<div style='margin-top: 8px;'>")
+        rows.append("<table style='width: 100%; border-collapse: collapse;'>")
+        rows.append(
+            "<thead><tr>"
+            + "".join(
+                "<th style='text-align: left; padding: 6px; border-bottom: 1px solid #ddd;'>"
+                f"{escape(label)}"
+                "</th>"
+                for label in _PROCESS_COLUMNS
+            )
+            + "</tr></thead>"
+        )
+        rows.append("<tbody>")
+        processes = item.processes or (None,)
+        for process in processes:
+            if process is None:
+                values = _empty_process_row(machine)
+            else:
+                values = _process_row_values(machine, process)
+            rows.append(
+                "<tr>"
+                + "".join(
+                    "<td style='padding: 6px; border-bottom: 1px solid #f0f0f0;'>"
+                    f"{escape(value)}"
+                    "</td>"
+                    for value in values
+                )
+                + "</tr>"
+            )
+        rows.append("</tbody></table>")
+        rows.append("</div></details>")
+
+    return (
+        "<div style='font-family: ui-monospace, SFMono-Regular, Menlo, monospace;"
+        " border: 1px solid #bbb; padding: 12px; border-radius: 8px;'>"
+        "<div style='font-weight: 700; margin-bottom: 6px;'>peetsfea monitor</div>"
+        f"<div>machines: {len(snapshot)}</div>"
+        f"<div>processes: {total_processes}</div>"
+        "<div style='margin-top: 10px; border-top: 1px solid #eee; padding-top: 8px;'>"
+        + "".join(rows)
+        + "</div>"
+        "</div>"
+    )
+
+
 def _reuse_dpg_monitor() -> MonitorHandle | None:
     global _ACTIVE_MONITOR
     if _ACTIVE_MONITOR is None or _ACTIVE_MONITOR.backend != "dearpygui":
@@ -96,7 +348,10 @@ def _reuse_dpg_monitor() -> MonitorHandle | None:
     return _ACTIVE_MONITOR
 
 
-def _try_start_dpg_monitor(text: str) -> MonitorHandle | None:
+def _try_start_dpg_monitor(
+    snapshot: list[MachineSnapshot],
+    text: str,
+) -> MonitorHandle | None:
     existing = _reuse_dpg_monitor()
     if existing is not None:
         return existing
@@ -115,25 +370,25 @@ def _try_start_dpg_monitor(text: str) -> MonitorHandle | None:
                 dpg.add_font_range_hint(dpg.mvFontRangeHint_Korean)
         dpg.bind_font(font_id)
 
+    total_processes = sum(len(item.processes) for item in snapshot)
     with dpg.window(
         label="peetsfea monitor",
         tag="peetsfea_monitor",
         width=_VIEWPORT_WIDTH,
         height=_VIEWPORT_HEIGHT,
-        no_resize=True,
     ):
         dpg.add_text("peetsfea monitor")
-        dpg.add_text("status: idle")
-        dpg.add_text("jobs: 0")
-        dpg.add_text("한글 테스트: 정상 표시")
-        dpg.add_text("note: this is a placeholder UI", color=(102, 102, 102))
+        dpg.add_text(f"machines: {len(snapshot)}")
+        dpg.add_text(f"processes: {total_processes}")
+        dpg.add_spacer(height=6)
+        _render_machine_table_dpg(dpg, snapshot)
 
     dpg.set_primary_window("peetsfea_monitor", True)
     dpg.create_viewport(
         title="peetsfea monitor",
         width=_VIEWPORT_WIDTH,
         height=_VIEWPORT_HEIGHT,
-        resizable=False,
+        resizable=True,
     )
     dpg.setup_dearpygui()
     dpg.show_viewport()
@@ -148,20 +403,15 @@ def _try_start_dpg_monitor(text: str) -> MonitorHandle | None:
     return handle
 
 
-def _start_inline_monitor(text: str) -> str:
+def _start_inline_monitor(
+    snapshot: list[MachineSnapshot],
+    text: str,
+) -> str:
     if _in_ipython():
         try:
             from IPython.display import HTML, display  # type: ignore
 
-            html = (
-                "<div style='font-family: ui-monospace, SFMono-Regular, Menlo, monospace;"
-                " border: 1px solid #bbb; padding: 12px; border-radius: 8px;'>"
-                "<div style='font-weight: 700; margin-bottom: 6px;'>peetsfea monitor</div>"
-                "<div>status: idle</div>"
-                "<div>jobs: 0</div>"
-                "<div style='color: #666; margin-top: 6px;'>note: this is a placeholder UI</div>"
-                "</div>"
-            )
+            html = _build_inline_monitor_html(snapshot)
             display(HTML(html))
             return html
         except Exception:
@@ -172,13 +422,9 @@ def _start_inline_monitor(text: str) -> str:
 
 def start_monitor() -> MonitorHandle | str:
     """Start a minimal monitor UI, preferring a separate GUI window."""
-    text = (
-        "peetsfea monitor\n"
-        "status: idle\n"
-        "jobs: 0\n"
-        "note: this is a placeholder UI"
-    )
-    handle = _try_start_dpg_monitor(text)
+    snapshot = _collect_machine_snapshots()
+    text = _monitor_text(snapshot)
+    handle = _try_start_dpg_monitor(snapshot, text)
     if handle is not None:
         return handle
-    return _start_inline_monitor(text)
+    return _start_inline_monitor(snapshot, text)
