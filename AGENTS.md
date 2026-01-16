@@ -16,6 +16,10 @@ This document defines the project rules for coding agents working in this reposi
 - Do not add features that assume a UI/GUI (headless AEDT, GUI off).
 - Keep execution configuration (machines, runners) in Python code, not in TOML.
 - Prefer thorough type hints across the codebase.
+- Use a project-root virtual environment at `.venv` for local installs and commands.
+- Agents can use `.venv` as the Python interpreter when running or linting code in this repo.
+- Recommended: download Pyaedt docs to `ref/pyaedt-doc-v0.24.1` for local reference.
+- Agents can consult `ref/pyaedt-doc-v0.24.1` when implementing or modifying Pyaedt-related code.
 - In long sessions, restate key assumptions and re-check AGENTS/README for drift before major changes.
 - Keep the TOML-to-code mapping one-to-one; avoid generating multiple code paths per spec.
 - Ensure (TOML + seed) deterministically maps to final parameters; treat this as a testable contract.
