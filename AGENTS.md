@@ -13,7 +13,8 @@ This document defines the project rules for coding agents working in this reposi
 - Random/sampling logic must always accept an explicit `seed`.
 - Document defaults; do not hide implicit values.
 - Keep Pyaedt-dependent code isolated and replaceable.
-- Do not add features that assume a UI/GUI.
+- Do not add features that assume a UI/GUI (headless AEDT, GUI off).
+- Keep execution configuration (machines, runners) in Python code, not in TOML.
 - Prefer thorough type hints across the codebase.
 - In long sessions, restate key assumptions and re-check AGENTS/README for drift before major changes.
 - Keep the TOML-to-code mapping one-to-one; avoid generating multiple code paths per spec.
