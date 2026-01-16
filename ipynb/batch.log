@@ -123,3 +123,41 @@ Click OK to proceed.
 WARNING: All work will be lost.
 
 Click OK to proceed.
+[error] Project "maxwell_eddy_current" cannot be closed/deleted because it is in use by another application.
+[error] Project "maxwell_eddy_current" cannot be closed/deleted because it is in use by another application.
+[warning] Electronics Desktop cannot be closed right now because it is being used by another application, script or extension wizard.
+
+[warning] Electronics Desktop cannot be closed right now because it is being used by another application, script or extension wizard.
+
+-- Message Window --
+      *Global - Messages
+        [info] GRPC server running on port: 38267. 
+        [warning] The project selected and all the files from aedtresults folder (including the folder) will be deleted from the permanent storage medium.  WARNING: All work will be lost.  Click OK to proceed.
+        [warning] The project selected and all the files from aedtresults folder (including the folder) will be deleted from the permanent storage medium.  WARNING: All work will be lost.  Click OK to proceed.
+        [error] Project "maxwell_eddy_current" cannot be closed/deleted because it is in use by another application.
+        [error] Project "maxwell_eddy_current" cannot be closed/deleted because it is in use by another application.
+        [warning] Electronics Desktop cannot be closed right now because it is being used by another application, script or extension wizard. 
+        [warning] Electronics Desktop cannot be closed right now because it is being used by another application, script or extension wizard.
+        [warning] Electronics Desktop cannot be closed right now because it is being used by another application, script or extension wizard. 
+        [warning] Electronics Desktop cannot be closed right now because it is being used by another application, script or extension wizard.
+-- Message Window --
+Stopping Batch Run: 9:56:12 PM  Jan 16, 2026
+ 
+Ansys Electronics Desktop Version 2025.2.0, Build: 2025-05-16 11:57:52
+Location: /opt/ansys_inc/v252/AnsysEM/ansysedt.exe
+Non Graphical Mode: No Project??
+Starting Batch Run: 9:56:19 PM  Jan 16, 2026
+Temp directory: /tmp
+Project directory: /home/harry/Ansoft
+-- Message Window --
+      *Global - Messages
+        [info] GRPC server running on port: 53179. 
+-- Message Window --
+Stopping Batch Run: 10:00:34 PM  Jan 16, 2026
+ 
+Ansys Electronics Desktop Version 2025.2.0, Build: 2025-05-16 11:57:52
+Location: /opt/ansys_inc/v252/AnsysEM/ansysedt.exe
+Non Graphical Mode: No Project??
+Starting Batch Run: 10:00:38 PM  Jan 16, 2026
+Temp directory: /tmp
+Project directory: /home/harry/Ansoft
