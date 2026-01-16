@@ -16,11 +16,11 @@ This plan captures the development direction for distributed execution of spec-d
 ## Assumptions
 - AEDT (Ansys Electronics Desktop) is installed and licensed on target machines.
 - Pyaedt is the only supported backend for modeling/simulation.
-- No UI/GUI dependency is required or assumed.
+- AEDT is expected to run headless (GUI off);
 
 ## Architecture Overview
 - Spec layer: TOML schema, validation, normalization, and deterministic parameter expansion.
-- Config layer: runtime config objects derived from TOML (machines, process limits, and monitor snapshots).
+- Config layer: runtime config objects set in Python (machines, process limits, and monitor snapshots).
 - Execution layer: job planning and remote execution adapters.
 - Backend layer: Pyaedt adapters that are isolated and replaceable.
 - Result layer: structured outputs (logs, parameter manifests, result artifacts).
@@ -34,28 +34,29 @@ This plan captures the development direction for distributed execution of spec-d
 ## Workstreams and Milestones
 
 ### 1) Spec + Validation (SSOT)
-- Define stable spec paths for geometry, simulation, dataset, and execution targets.
+- Define stable spec paths for geometry, simulation, and dataset.
 - Add explicit defaults in docs and spec docs; avoid implicit values.
 - Implement deterministic parameter resolution (TOML + seed => concrete parameters).
 - Preflight validation must report supported vs unsupported features.
-- Parse TOML execution targets into runtime config (machines, process limits, slurm settings).
-- Compute a deterministic TOML hash and map it to a friendly unique identifier
-  (e.g., "friendly Aristotle", "calm Marx") without collisions.
+- Keep TOML focused on design definitions; execution settings are managed in Python code.
+- Compute a deterministic TOML hash and map it to a friendly unique identifier using
+  adjective + scholar list + hash prefix (first two chars) as a suffix
+  (200 adjectives, 300 scholars).
 
 Deliverables:
 - TOML spec docs and validator
 - Determinism test suite
-- TOML-to-config loader with deterministic hash + friendly-id mapping
+- TOML loader for design metadata plus deterministic hash + friendly-id mapping
 
 ### 2) Execution Model (Local/SSH/Slurm)
-- Define execution target schema:
+- Define Python-side execution target config schema (not in TOML):
   - local: python executable, AEDT path, environment overrides
   - ssh: host/user/key, ssh key path, remote working dir, AEDT path
   - ssh+slurm: host/user/key + slurm parameters (partition, time, nodes, constraints, modules)
 - Extend machine config with:
   - ip address, ssh key path
   - slurm usage flag
-  - slurm mode/strategy (submit/attach/srun vs sbatch; module loading policy)
+  - slurm strategy (srun default; module loading policy)
   - max processes to schedule per machine
 - Design a job manifest:
   - parameters, seed, spec version, backend version, target info
@@ -67,10 +68,11 @@ Deliverables:
   - SshSlurmRunner (submit, monitor, fetch results, Fabric-based)
 
 Deliverables:
-- Execution target spec section
+- Execution target config section
 - Job planner + runners
 - Remote file staging (spec, manifest, script)
 - Fabric-based SSH/Slurm execution adapter
+- Python execution config schema and API
 
 ### 3) Monitoring + Timeout Control
 - Define per-stage timeouts:
@@ -159,15 +161,24 @@ Deliverables:
 - Consider spec version bumps for new parameters.
 - Maintain a simple backward-compatibility policy in spec docs.
 
+## Divide and Conquer
+- Track A: Spec/Determinism/Config + Execution (active focus).
+- Track B: Backend/Monitoring/Docs (later phase).
+
+## Current Focus
+- Prioritize Spec/Determinism/Config + local execution.
+- Defer remote execution (SSH/Slurm) and monitoring to a later phase.
+
 ## Todo List
-- Define TOML fields for execution targets, slurm mode/strategy, and per-machine process limits.
-- Implement TOML-to-config loader that populates `peetsfea.config`.
-- Add deterministic TOML hash + friendly unique name mapping without collisions.
-- Wire Fabric-based SSH execution for remote and Slurm modes.
-- Document the monitor data grid fields and how to populate process snapshots.
+- Define Python execution config fields for targets, slurm strategy (srun), and per-machine process limits.
+- Implement TOML loader for design metadata and manifest generation (execution config stays in Python).
+- Add deterministic TOML hash + friendly unique name mapping
+  (adjective + scholar + hash prefix first two chars as suffix).
+- Wire Fabric-based SSH execution for remote and Slurm modes (later phase).
+- Document the monitor data grid fields and how to populate process snapshots (later phase).
 
 ## Next Steps (Suggested)
-- Draft the execution target schema and add it to spec docs.
+- Draft the Python execution config schema and document it.
 - Implement a minimal LocalRunner + manifest format.
 - Add a deterministic parameter expansion test.
 - Create an example TOML that uses a local target.
