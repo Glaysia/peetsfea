@@ -20,10 +20,16 @@ This plan captures the development direction for distributed execution of spec-d
 
 ## Architecture Overview
 - Spec layer: TOML schema, validation, normalization, and deterministic parameter expansion.
+- Config layer: runtime config objects derived from TOML (machines, process limits, and monitor snapshots).
 - Execution layer: job planning and remote execution adapters.
 - Backend layer: Pyaedt adapters that are isolated and replaceable.
 - Result layer: structured outputs (logs, parameter manifests, result artifacts).
 - Monitoring layer: job heartbeats, timeouts, and aggregated status reporting.
+
+## Current Implementation Notes
+- Monitor UI renders an expandable machine table with per-process columns.
+- Runtime config stores machine lists and per-machine Pyaedt process snapshots.
+- Process snapshots capture status, GUI mode, stage, stage duration, design, TOML, AEDT version, and machine info.
 
 ## Workstreams and Milestones
 
@@ -32,29 +38,39 @@ This plan captures the development direction for distributed execution of spec-d
 - Add explicit defaults in docs and spec docs; avoid implicit values.
 - Implement deterministic parameter resolution (TOML + seed => concrete parameters).
 - Preflight validation must report supported vs unsupported features.
+- Parse TOML execution targets into runtime config (machines, process limits, slurm settings).
+- Compute a deterministic TOML hash and map it to a friendly unique identifier
+  (e.g., "friendly Aristotle", "calm Marx") without collisions.
 
 Deliverables:
 - TOML spec docs and validator
 - Determinism test suite
+- TOML-to-config loader with deterministic hash + friendly-id mapping
 
 ### 2) Execution Model (Local/SSH/Slurm)
 - Define execution target schema:
   - local: python executable, AEDT path, environment overrides
-  - ssh: host/user/key, remote working dir, AEDT path
+  - ssh: host/user/key, ssh key path, remote working dir, AEDT path
   - ssh+slurm: host/user/key + slurm parameters (partition, time, nodes, constraints, modules)
+- Extend machine config with:
+  - ip address, ssh key path
+  - slurm usage flag
+  - slurm mode/strategy (submit/attach/srun vs sbatch; module loading policy)
+  - max processes to schedule per machine
 - Design a job manifest:
   - parameters, seed, spec version, backend version, target info
   - TOML hash, TOML path, and deterministic run id for traceability
 - Build an execution planner that maps N parameter sets to M targets.
 - Implement adapters:
   - LocalRunner
-  - SshRunner (non-interactive)
-  - SshSlurmRunner (submit, monitor, fetch results)
+  - SshRunner (non-interactive, Fabric-based)
+  - SshSlurmRunner (submit, monitor, fetch results, Fabric-based)
 
 Deliverables:
 - Execution target spec section
 - Job planner + runners
 - Remote file staging (spec, manifest, script)
+- Fabric-based SSH/Slurm execution adapter
 
 ### 3) Monitoring + Timeout Control
 - Define per-stage timeouts:
@@ -69,6 +85,8 @@ Deliverables:
   - seed
   - target
   - timestamps (start, last heartbeat, end)
+- Provide a monitor data grid with expandable machine rows and per-process columns
+  (IP, status, GUI, stage, stage minutes, design, TOML, AEDT version, machine info).
 - Provide a scalable monitoring backend that can track 500+ active jobs.
 - Expose monitor CLI/reporting (summary table and filter by status/target).
 
@@ -76,6 +94,7 @@ Deliverables:
 - Monitoring spec section
 - Heartbeat + timeout implementation
 - Aggregated status view (CLI or report file)
+- Monitor UI table with expandable machine rows and Pyaedt process details
 
 ### 4) Backend Integration (Pyaedt)
 - Isolate AEDT interaction in backend modules.
@@ -139,6 +158,13 @@ Deliverables:
 ## Versioning
 - Consider spec version bumps for new parameters.
 - Maintain a simple backward-compatibility policy in spec docs.
+
+## Todo List
+- Define TOML fields for execution targets, slurm mode/strategy, and per-machine process limits.
+- Implement TOML-to-config loader that populates `peetsfea.config`.
+- Add deterministic TOML hash + friendly unique name mapping without collisions.
+- Wire Fabric-based SSH execution for remote and Slurm modes.
+- Document the monitor data grid fields and how to populate process snapshots.
 
 ## Next Steps (Suggested)
 - Draft the execution target schema and add it to spec docs.
