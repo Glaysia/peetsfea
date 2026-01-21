@@ -33,7 +33,7 @@ TOML은 기본적으로 여러 파라미터 범위 안의 설계 셋을 정의�
 - “새로운 언어” 수준의 문법 설계(표준 TOML 사용).
 
 ## 테스트 환경
-- Python 3.13 이상
+- Python 3.12 이상
 - AEDT 25 R2: Windows 10/11, Kubuntu 25
 - AEDT 24 R2: Rocky 8.8
 

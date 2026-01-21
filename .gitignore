@@ -64,3 +64,6 @@ font/
 # OS files
 .DS_Store
 Thumbs.db
+
+
+batch.log
