@@ -161,3 +161,31 @@ Non Graphical Mode: No Project??
 Starting Batch Run: 10:00:38 PM  Jan 16, 2026
 Temp directory: /tmp
 Project directory: /home/harry/Ansoft
+ 
+Ansys Electronics Desktop Version 2025.2.0, Build: 2025-05-16 11:57:52
+Location: /opt/ansys_inc/v252/AnsysEM/ansysedt.exe
+Non Graphical Mode: No Project??
+Starting Batch Run: 8:31:49 PM  Jan 21, 2026
+Temp directory: /tmp
+Project directory: /home/harry/Ansoft
+-- Message Window --
+      *Global - Messages
+        [info] GRPC server running on port: 53675. 
+-- Message Window --
+Stopping Batch Run: 8:32:35 PM  Jan 21, 2026
+ 
+Ansys Electronics Desktop Version 2025.2.0, Build: 2025-05-16 11:57:52
+Location: /opt/ansys_inc/v252/AnsysEM/ansysedt.exe
+Non Graphical Mode: No Project??
+Starting Batch Run: 8:34:35 PM  Jan 21, 2026
+Temp directory: /tmp
+Project directory: /home/harry/Ansoft
+[error] Project "maxwell_eddy_current" cannot be closed/deleted because it is in use by another application.
+[error] Project "maxwell_eddy_current" cannot be closed/deleted because it is in use by another application.
+-- Message Window --
+      *Global - Messages
+        [info] GRPC server running on port: 48031. 
+        [error] Project "maxwell_eddy_current" cannot be closed/deleted because it is in use by another application.
+        [error] Project "maxwell_eddy_current" cannot be closed/deleted because it is in use by another application.
+-- Message Window --
+Stopping Batch Run: 8:40:30 PM  Jan 21, 2026
