@@ -1,12 +1,12 @@
 [project]
 name = "peetsfea"
-version = "0.4.0"
+version = "0.1.1"
 description = "Spec-first deterministic device design with Pyaedt."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = "==3.12"
 license = { text = "GPL-3.0-only" }
 dependencies = [
-  "pyaedt>=0.24.1",
+  "pyaedt>=0.22.0",
   "dearpygui>=2.1.1",
   "cadquery>=2.6.1",
   "sympy>=1.14.0",
@@ -29,7 +29,7 @@ build-backend = "hatchling.build"
 packages = ["src/peetsfea"]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.12"
 warn_unused_configs = true
 ignore_missing_imports = true
 check_untyped_defs = true

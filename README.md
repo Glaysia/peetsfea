@@ -103,5 +103,23 @@ values = [8, 10, 12, 14]
 3) Pyaedt 백엔드 구현(기본 IPT/변압기 템플릿).
 4) 데이터셋 생성기(스윕/샘플링/태그) 구현.
 
+## run.py MVP (함수 호출 기반)
+현재 MVP는 `run.py`에서 CLI 인자 없이 `RunConfig`를 사용해 manifest JSON을 생성한다.
+
+- 실행:
+```bash
+python run.py
+```
+- 기본 TOML 예시: `examples/coil1_turns_mvp.toml`
+- 출력: 현재 작업 디렉토리에 `manifest_<design_id>.json`
+- 현재 지원 파라미터: `[parameters.coil1_turns].range = [is_integer, start, end, count]`
+
+동작 요약:
+1) TOML 원본 바이트 SHA-256(`toml_hash`) 계산
+2) `git rev-parse HEAD`로 40자 커밋 해시 확인
+3) 워킹트리가 dirty면 실패
+4) `seed % len(candidates)`로 단일 설계 원소 선택
+5) `toml_hash + commit + seed + coil1_turns`의 SHA-256 앞 8글자로 `design_id` 생성
+
 ## 기여
 아직 초기 단계다. 아이디어/요구사항/스펙 제안은 언제든 환영한다.
