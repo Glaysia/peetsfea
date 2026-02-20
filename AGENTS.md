@@ -43,3 +43,31 @@ This document defines the project rules for coding agents working in this reposi
 - `peetsfea/backend/`: Pyaedt adapters
 - `examples/`: TOML examples
 - `docs/`: spec/design docs
+
+## Discord notifications (MCP)
+- Send a Discord message via `mcp__discord__discord_send` when work is finished.
+- Skip Discord notifications when total task time is under 5 minutes.
+- Do not estimate duration; compute it in shell seconds.
+  - At start: `start_ts=$(date +%s)`
+  - At end: `end_ts=$(date +%s); elapsed=$((end_ts-start_ts))`
+  - Send Discord notification only when `elapsed >= 300`.
+- On success, start with `Codex 완료`, then add a 1-2 line summary and next action (if any).
+- On failure/interruption, start with `Codex 실패`, then add a short cause summary.
+
+## Discord MCP setup (`~/.codex`)
+- Ensure `~/.codex/config.toml` has an enabled Discord MCP server:
+  - `[mcp_servers.discord]`
+  - `enabled = true`
+  - `url = "http://127.0.0.1:17870/mcp"`
+- Keep allowed tools configured for Discord usage:
+  - `discord_send`, `discord_list_servers`, `discord_get_server_info`
+  - `discord_create_text_channel`, `discord_delete_channel`
+- Optional timeout tuning:
+  - `startup_timeout_sec = 20`
+  - `tool_timeout_sec = 60`
+- Resolve IDs before first use:
+  - `mcp__discord__discord_list_servers` -> get `guildId`
+  - `mcp__discord__discord_get_server_info` -> pick `channelId`
+
+## Discord test
+- Send a smoke-test message with your name using `mcp__discord__discord_send`.
