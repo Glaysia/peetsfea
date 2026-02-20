@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run run.py from run/",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/.venv/bin/python3",
+      "program": "${workspaceFolder}/run.py",
+      "cwd": "${workspaceFolder}/run",
+      "console": "integratedTerminal"
+    }
+  ]
+}
