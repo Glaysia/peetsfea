@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-import peetsfea.design_manifest_runner as runner
+import peetsfea.pipeline.run_design as runner
 
 
-def _write_toml(path: Path, count: int = 8, start: float = 6, end: float = 20, is_integer: bool = True) -> None:
+def _write_toml(path: Path) -> None:
     path.write_text(
         "\n".join(
             [
@@ -20,8 +20,20 @@ def _write_toml(path: Path, count: int = 8, start: float = 6, end: float = 20, i
                 "[backend]",
                 'tool = "hfss"',
                 "",
-                "[parameters.coil1_turns]",
-                f"range = [{str(is_integer).lower()}, {start}, {end}, {count}]",
+                "[parameters.turns]",
+                "range = [true, 4, 8, 5]",
+                "",
+                "[parameters.outer]",
+                "range = [false, 40.0, 52.0, 4]",
+                "",
+                "[parameters.trace]",
+                "range = [false, 0.6, 1.2, 4]",
+                "",
+                "[parameters.gap]",
+                "range = [false, 0.2, 0.6, 4]",
+                "",
+                "[parameters.thickness]",
+                "range = [false, 0.03, 0.06, 4]",
             ]
         ),
         encoding="utf-8",
@@ -42,12 +54,12 @@ def test_run_creates_manifest_and_is_deterministic(tmp_path: Path, monkeypatch: 
     toml_path = tmp_path / "spec.toml"
     _write_toml(toml_path)
 
-    monkeypatch.setattr(runner, "_get_git_commit_and_dirty", lambda _: ("a" * 40, False))
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("a" * 40))
     monkeypatch.chdir(tmp_path)
 
     config = runner.RunConfig(
         ansys_executable_path="/bin/ansysedt",
-        ansys_run_dir="/tmp/aedt",
+        ansys_run_dir=str(tmp_path / "run"),
         toml_path=str(toml_path),
         seed=1,
         backend="hfss",
@@ -57,7 +69,9 @@ def test_run_creates_manifest_and_is_deterministic(tmp_path: Path, monkeypatch: 
 
     assert first["design_id"] == second["design_id"]
     assert first["selected_parameters"] == second["selected_parameters"]
-    assert first["selected_parameters"]["coil1_turns"] == 8
+    assert set(first["selected_parameters"].keys()) == {"turns", "outer", "trace", "gap", "thickness"}
+    assert first["inputs"]["non_graphical"] is True
+    assert first["inputs"]["close_on_exit"] is True
 
     manifest_file = tmp_path / f"manifest_{first['design_id']}.json"
     assert manifest_file.exists()
@@ -66,31 +80,84 @@ def test_run_creates_manifest_and_is_deterministic(tmp_path: Path, monkeypatch: 
 def test_run_seed_changes_selection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "spec.toml"
     _write_toml(toml_path)
-    monkeypatch.setattr(runner, "_get_git_commit_and_dirty", lambda _: ("b" * 40, False))
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("b" * 40))
     monkeypatch.chdir(tmp_path)
 
-    m1 = runner.run(
-        runner.RunConfig("/bin/ansysedt", "/tmp/aedt", str(toml_path), seed=1, backend="hfss")
-    )
-    m2 = runner.run(
-        runner.RunConfig("/bin/ansysedt", "/tmp/aedt", str(toml_path), seed=2, backend="hfss")
-    )
+    m1 = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+    m2 = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=2, backend="hfss"))
     assert m1["design_id"] != m2["design_id"]
 
 
 def test_invalid_range_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "bad.toml"
-    _write_toml(toml_path, count=0)
-    monkeypatch.setattr(runner, "_get_git_commit_and_dirty", lambda _: ("c" * 40, False))
+    toml_path.write_text(
+        "\n".join(
+            [
+                'spec_version = "0.1.0"',
+                "[design]",
+                'name = "bad"',
+                'units = "mm"',
+                "[backend]",
+                'tool = "hfss"',
+                "[parameters.turns]",
+                "range = [true, 6, 10, 0]",
+                "[parameters.outer]",
+                "range = [false, 40.0, 50.0, 3]",
+                "[parameters.trace]",
+                "range = [false, 0.5, 1.0, 3]",
+                "[parameters.gap]",
+                "range = [false, 0.2, 0.3, 3]",
+                "[parameters.thickness]",
+                "range = [false, 0.03, 0.05, 3]",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("c" * 40))
 
     with pytest.raises(ValueError, match="count"):
-        runner.run(runner.RunConfig("/bin/ansysedt", "/tmp/aedt", str(toml_path), seed=1, backend="hfss"))
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
-def test_dirty_git_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_geometry_constraint_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "bad_geom.toml"
+    toml_path.write_text(
+        "\n".join(
+            [
+                'spec_version = "0.1.0"',
+                "[design]",
+                'name = "bad_geom"',
+                'units = "mm"',
+                "[backend]",
+                'tool = "hfss"',
+                "[parameters.turns]",
+                "range = [true, 12, 12, 1]",
+                "[parameters.outer]",
+                "range = [false, 20.0, 20.0, 1]",
+                "[parameters.trace]",
+                "range = [false, 1.5, 1.5, 1]",
+                "[parameters.gap]",
+                "range = [false, 0.5, 0.5, 1]",
+                "[parameters.thickness]",
+                "range = [false, 0.05, 0.05, 1]",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("e" * 40))
+
+    with pytest.raises(ValueError, match="inner width"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_git_commit_lookup_failure_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "spec.toml"
     _write_toml(toml_path)
-    monkeypatch.setattr(runner, "_get_git_commit_and_dirty", lambda _: ("d" * 40, True))
+    monkeypatch.setattr(
+        runner,
+        "get_git_commit",
+        lambda _: (_ for _ in ()).throw(RuntimeError("git commit lookup failed")),
+    )
 
-    with pytest.raises(RuntimeError, match="dirty"):
-        runner.run(runner.RunConfig("/bin/ansysedt", "/tmp/aedt", str(toml_path), seed=1, backend="hfss"))
+    with pytest.raises(RuntimeError):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))

@@ -1,5 +1,4 @@
-from peetsfea import RunConfig, run
-
+from peetsfea import RunConfig, build_square_spiral_from_manifest, run
 
 DEFAULT_RUN_CONFIG = {
     "ansys_executable_path": "/opt/ansys_inc/v252/AnsysEM",
@@ -7,6 +6,11 @@ DEFAULT_RUN_CONFIG = {
     "toml_path": "/home/harry/Projects/PythonProjects/peetsfea/run/type1.toml",
     "seed": 1,
     "backend": "hfss",
+    "non_graphical": False,
+    "close_on_exit": False,
 }
 if __name__ == "__main__":
-    print(run(RunConfig(**DEFAULT_RUN_CONFIG))["design_id"])
+    config = RunConfig(**DEFAULT_RUN_CONFIG)
+    manifest = run(config)
+    geometry = build_square_spiral_from_manifest(manifest)
+    print(geometry["aedt_path"])

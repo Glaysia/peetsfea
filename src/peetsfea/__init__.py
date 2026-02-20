@@ -1,7 +1,7 @@
 """peetsfea package entry."""
 
-from .monitor import start_monitor
-from .design_manifest_runner import RunConfig, run
+from .pipeline.run_design import RunConfig, run
+from .backend.pyaedt.geometry.square_spiral import build_square_spiral_from_manifest
 
-__all__ = ["__version__", "RunConfig", "run", "start_monitor"]
-__version__ = "0.1.1"
+__all__ = ["__version__", "RunConfig", "build_square_spiral_from_manifest", "run"]
+__version__ = "0.1.2"

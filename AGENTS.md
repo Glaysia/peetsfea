@@ -16,8 +16,13 @@ This document defines the project rules for coding agents working in this reposi
 - Do not add features that assume a UI/GUI (headless AEDT, GUI off).
 - Keep execution configuration (machines, runners) in Python code, not in TOML.
 - Prefer thorough type hints across the codebase.
+- Do not use `Any` unless there is a hard external boundary that cannot be typed precisely; document the reason when `Any` is unavoidable.
+- If a value is expected to be a concrete runtime type, prefer explicit runtime checks and `assert` to fail fast instead of passing loosely typed values through.
+- Do not replace `Any` with broad `object` just to satisfy a type checker; use concrete library types whenever available (for example, `Hfss`, `Modeler3D` from `ansys.aedt.core`).
 - Use a project-root virtual environment at `.venv` for local installs and commands.
 - Agents can use `.venv` as the Python interpreter when running or linting code in this repo.
+- Always prefer commands via `.venv` binaries (for example, `.venv/bin/python`, `.venv/bin/pytest`).
+- Always check and resolve Pylance diagnostics (`reportArgumentType`, `reportCallIssue`, `reportGeneralTypeIssues`, etc.) before considering work complete.
 - Recommended: download Pyaedt docs to `ref/pyaedt-doc-v0.24.1` for local reference.
 - Agents can consult `ref/pyaedt-doc-v0.24.1` when implementing or modifying Pyaedt-related code.
 - In long sessions, restate key assumptions and re-check AGENTS/README for drift before major changes.
@@ -30,12 +35,15 @@ This document defines the project rules for coding agents working in this reposi
 - Consider a spec version bump when adding new parameters.
 - Keep spec `path` as a stable dot notation.
 - Keep a simple backward-compatibility policy documented in spec docs.
+- Keep `run/type1.toml` as the primary runnable example spec, and include rich explanatory comments for each section/parameter.
 
 ## Tests/execution
 - Prefer pure-Python tests for the spec parser/validator.
 - Separate integration tests that require Pyaedt.
 - Do not include large dataset generation in default test runs.
 - Determinism tests are required; Pyaedt integration tests are optional.
+- Run commands from the `run/` directory when executing scripts/tests to avoid polluting the repo root with generated artifacts.
+- Prefer output paths under `run/` for manifests, AEDT files, logs, and temporary execution artifacts.
 
 ## File layout (planned)
 - `peetsfea/`: library code
