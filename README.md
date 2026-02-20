@@ -108,11 +108,25 @@ values = [8, 10, 12, 14]
 1) manifest JSON 생성
 2) HFSS 3D Modeler로 사각 PCB 스파이럴 코일 형상 생성
 3) `.aedt + geometry metadata JSON` 저장
+4) 출력 산출물 경로는 하드코딩된 `run/aedt/`를 사용
+
+### Geometry generation contract (centerline-first)
+- 사각 스파이럴은 `copper outer edge/corner` 기준으로 centerline을 먼저 절대좌표로 생성한다.
+- 모든 세그먼트는 축 정렬(axis-aligned)이며, turn pitch는 `trace + gap`으로 고정된다.
+- 코너 처리는 방향별 분기 대신 벡터 회전 규칙(`cross_z`)으로 분류한다.
+- `geometry_metadata_<design_id>.json`에는 다음 디버그 정보가 포함된다.
+  - `anchor_mode = "copper_outer_edge_corner"`
+  - `debug.centerline_vertices`
+  - `debug.corner_debug` (corner type, incoming/outgoing dir, offset)
+  - `debug.axis_checks`, `debug.pitch_checks`
+  - `debug.cad_probe` (CAD bbox/edge 샘플 좌표)
+  - `debug.constraints_ok`
 
 - 실행:
 ```bash
 python run.py
 ```
+- VS Code launch(`Run run.py from run/`)는 pre-launch task로 `run/aedt/`를 먼저 비운 뒤 실행한다.
 - 기본 TOML 예시: `examples/type1.toml`
 - 현재 지원 파라미터:
   - `[parameters.turns].range = [is_integer, start, end, count]`
@@ -127,7 +141,7 @@ python run.py
 3) `git rev-parse HEAD`로 커밋 해시를 기록 (dirty 상태도 허용)
 4) seed 오프셋 방식으로 파라미터별 단일 설계 원소 선택
 5) `toml_hash + commit + seed + selected_parameters`의 SHA-256 앞 8글자로 `design_id` 생성
-6) `<ansys_run_dir>/<design_id>.aedt`와 `geometry_metadata_<design_id>.json` 저장
+6) `<ansys_run_dir>/<design_id>.aedt`, `geometry_metadata_<design_id>.json`, `manifest_<design_id>.json` 저장
 
 ## 기여
 아직 초기 단계다. 아이디어/요구사항/스펙 제안은 언제든 환영한다.
