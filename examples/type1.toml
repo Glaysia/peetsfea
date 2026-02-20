@@ -1,0 +1,46 @@
+# peetsfea primary runnable TOML (`run/type1.toml` points here)
+# ----------------------------------------------------------------------------
+# This file is intentionally verbose and comment-heavy for onboarding.
+# Keep this as the canonical example spec for local execution/debugging.
+
+# Spec schema version used by parser/validator.
+spec_version = "0.1.0"
+
+[design]
+# Human-readable design name written to manifest metadata.
+name = "square_pcb_coil_mvp"
+# Unit used for geometric parameters.
+units = "mm"
+
+[backend]
+# Current supported backend in this execution pipeline.
+tool = "hfss"
+
+[parameters.turns]
+# [is_integer, start, end, count]
+# turns must be integer; candidates are chosen deterministically from this range.
+range = [true, 6, 12, 7]
+
+[parameters.outer]
+# Outer side length of square spiral footprint.
+# Must be large enough to satisfy the inner-width constraint.
+range = [false, 40.0, 70.0, 7]
+
+[parameters.trace]
+# Conductor width.
+# Runtime constraint: trace > 0
+range = [false, 0.6, 1.2, 7]
+
+[parameters.gap]
+# Gap between adjacent turns.
+# Runtime constraint: gap >= 0
+range = [false, 0.2, 0.8, 7]
+
+[parameters.thickness]
+# Conductor thickness (used as xsection_height in HFSS polyline).
+# Runtime constraint: thickness > 0
+range = [false, 0.03, 0.07, 5]
+
+# Geometry validity contract:
+# inner_width = outer - 2*turns*trace - 2*(turns-1)*gap
+# inner_width must be > 0
