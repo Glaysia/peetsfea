@@ -8,6 +8,7 @@
       "python": "${workspaceFolder}/.venv/bin/python3",
       "program": "${workspaceFolder}/run.py",
       "cwd": "${workspaceFolder}/run",
+      "preLaunchTask": "clean-run-aedt",
       "console": "integratedTerminal"
     }
   ]

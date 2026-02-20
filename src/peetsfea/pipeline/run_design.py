@@ -34,8 +34,10 @@ def run(config: RunConfig) -> Manifest:
 
     spec_version = require_str(spec.get("spec_version"), "spec_version")
     design = require_table(spec.get("design"), "design")
-    design_name = require_str(design.get("name"), "design.name")
     units = require_str(design.get("units"), "design.units")
+    raw_design_name = design.get("name")
+    design_name = "pcb_design" if raw_design_name is None else require_str(raw_design_name, "design.name")
+
     backend = require_table(spec.get("backend"), "backend")
     backend_tool = require_str(backend.get("tool"), "backend.tool")
     if backend_tool != "hfss":
@@ -45,6 +47,9 @@ def run(config: RunConfig) -> Manifest:
     toml_hash = compute_toml_hash(raw_toml)
     design_id = compute_design_id(toml_hash, commit_hash, config.seed, selected_parameters)
 
+    output_dir = Path(config.ansys_run_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"manifest_{design_id}.json"
     manifest: Manifest = {
         "design_id": design_id,
         "toml_hash": toml_hash,
@@ -65,11 +70,10 @@ def run(config: RunConfig) -> Manifest:
             "units": units,
         },
         "created_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "manifest_path": str(output_path),
     }
 
-    output_path = Path.cwd() / f"manifest_{design_id}.json"
     output_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    manifest["manifest_path"] = str(output_path)
     return manifest
 
 

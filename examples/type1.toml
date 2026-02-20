@@ -1,46 +1,57 @@
-# peetsfea primary runnable TOML (`run/type1.toml` points here)
+# peetsfea primary runnable TOML (`run/type1.toml` symlinks to this file)
 # ----------------------------------------------------------------------------
-# This file is intentionally verbose and comment-heavy for onboarding.
-# Keep this as the canonical example spec for local execution/debugging.
+# This spec is the SSOT for deterministic parameter resolution.
+# Numeric values are expressed ONLY as: range = [is_integer, start, end, count]
+# Fixed values are represented by start=end and count=1.
 
-# Spec schema version used by parser/validator.
-spec_version = "0.1.0"
+# Spec contract version for parser/validator behavior.
+spec_version = "0.1.3"
 
 [design]
-# Human-readable design name written to manifest metadata.
-name = "square_pcb_coil_mvp"
-# Unit used for geometric parameters.
+# Global modeling units used by resolver and geometry backend.
 units = "mm"
 
 [backend]
-# Current supported backend in this execution pipeline.
+# Current MVP backend. Only "hfss" is supported.
 tool = "hfss"
 
+[parameters.pcb_count]
+# Number of PCBs in one generated system.
+# Current MVP supports only one board.
+range = [true, 1, 1, 1]
+
 [parameters.turns]
-# [is_integer, start, end, count]
-# turns must be integer; candidates are chosen deterministically from this range.
+# Integer number of turns for the top-layer square spiral.
 range = [true, 6, 12, 7]
 
 [parameters.outer]
-# Outer side length of square spiral footprint.
-# Must be large enough to satisfy the inner-width constraint.
+# Outer side length of the spiral footprint.
 range = [false, 40.0, 70.0, 7]
 
 [parameters.trace]
-# Conductor width.
-# Runtime constraint: trace > 0
+# Trace width for both top coil and bottom connection.
 range = [false, 0.6, 1.2, 7]
 
 [parameters.gap]
-# Gap between adjacent turns.
-# Runtime constraint: gap >= 0
+# Gap between adjacent spiral traces.
 range = [false, 0.2, 0.8, 7]
 
-[parameters.thickness]
-# Conductor thickness (used as xsection_height in HFSS polyline).
-# Runtime constraint: thickness > 0
-range = [false, 0.03, 0.07, 5]
+[parameters.via_diameter]
+# Finished via diameter used for L1-L2-L1 connection pair.
+range = [false, 0.3, 0.8, 6]
 
-# Geometry validity contract:
+[parameters.pcb_thickness]
+# Fixed FR4 board thickness: 1.6T.
+range = [false, 1.6, 1.6, 1]
+
+[parameters.cu_thickness]
+# Fixed copper thickness for both layers: 35um = 0.035mm.
+range = [false, 0.035, 0.035, 1]
+
+[parameters.fr4_er]
+# Fixed FR4 relative permittivity for this spec.
+range = [false, 4.4, 4.4, 1]
+
+# Geometry validity contract
 # inner_width = outer - 2*turns*trace - 2*(turns-1)*gap
 # inner_width must be > 0

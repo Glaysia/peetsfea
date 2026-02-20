@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import NotRequired, TypedDict
+from typing import Literal, TypedDict
 
 
 class ManifestInputs(TypedDict):
@@ -18,11 +18,15 @@ class ManifestSpec(TypedDict):
 
 
 class SelectedParameters(TypedDict):
+    pcb_count: int
     turns: int
     outer: float
     trace: float
     gap: float
-    thickness: float
+    via_diameter: float
+    pcb_thickness: float
+    cu_thickness: float
+    fr4_er: float
 
 
 class Manifest(TypedDict):
@@ -35,7 +39,49 @@ class Manifest(TypedDict):
     inputs: ManifestInputs
     spec: ManifestSpec
     created_at_utc: str
-    manifest_path: NotRequired[str]
+    manifest_path: str
+
+
+class AxisCheckEntry(TypedDict):
+    segment_index: int
+    start_xy: tuple[float, float]
+    end_xy: tuple[float, float]
+    is_vertical: bool
+    is_horizontal: bool
+    x_constant: float | None
+    y_constant: float | None
+
+
+class CornerDebugEntry(TypedDict):
+    vertex_index: int
+    xy: tuple[float, float]
+    corner_type: Literal["left_turn", "right_turn", "collinear", "endpoint"]
+    incoming_dir: tuple[float, float] | None
+    outgoing_dir: tuple[float, float] | None
+    offset_applied: tuple[float, float] | None
+
+
+class PitchCheckEntry(TypedDict):
+    turn_index: int
+    pitch_expected: float
+    pitch_measured: float
+    delta: float
+
+
+class CadProbe(TypedDict):
+    object_name: str
+    bbox: list[float]
+    edge_samples_xy: list[tuple[float, float]]
+
+
+class GeometryDebug(TypedDict):
+    centerline_vertices: list[tuple[float, float, float]]
+    corner_debug: list[CornerDebugEntry]
+    axis_checks: list[AxisCheckEntry]
+    pitch_checks: list[PitchCheckEntry]
+    cad_probe: list[CadProbe]
+    constraints_ok: bool
+    eps: float
 
 
 class GeometryMetadata(TypedDict):
@@ -47,4 +93,6 @@ class GeometryMetadata(TypedDict):
     aedt_path: str
     object_names: list[str]
     created_at_utc: str
-    metadata_path: NotRequired[str]
+    metadata_path: str
+    anchor_mode: Literal["copper_outer_edge_corner"]
+    debug: GeometryDebug
