@@ -140,8 +140,10 @@ python run.py
 2) `git rev-parse HEAD`로 40자 커밋 해시 확인
 3) `git rev-parse HEAD`로 커밋 해시를 기록 (dirty 상태도 허용)
 4) seed 오프셋 방식으로 파라미터별 단일 설계 원소 선택
-5) `toml_hash + commit + seed + selected_parameters`의 SHA-256 앞 8글자로 `design_id` 생성
-6) `<ansys_run_dir>/<design_id>.aedt`, `geometry_metadata_<design_id>.json`, `manifest_<design_id>.json` 저장
+5) `toml_hash` 앞 8글자로 `toml_space_hash` 생성
+6) `toml_hash + commit + seed + selected_parameters`의 SHA-256 앞 8글자로 `design_unique_hash` 생성
+7) `design_id = <design_unique_hash>_<toml_space_hash>_<seed>` 조합
+8) `<ansys_run_dir>/<design_id>.aedt`, `geometry_metadata_<design_id>.json`, `manifest_<design_id>.json` 저장
 
 ## 기여
 아직 초기 단계다. 아이디어/요구사항/스펙 제안은 언제든 환영한다.

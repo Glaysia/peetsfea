@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 import pytest
 
@@ -96,6 +97,9 @@ def test_run_creates_manifest_and_is_deterministic(tmp_path: Path, monkeypatch: 
     assert first["selected_parameters"]["cu_thickness"] == 0.035
     assert first["inputs"]["non_graphical"] is True
     assert first["inputs"]["close_on_exit"] is True
+    assert first["design_id"].split("_")[0] == first["design_unique_hash"]
+    assert first["design_id"].split("_")[1] == first["toml_space_hash"]
+    assert re.fullmatch(r"[0-9a-f]{8}_[0-9a-f]{8}_-?[0-9]+", first["design_id"]) is not None
     assert first["manifest_path"].endswith(f"manifest_{first['design_id']}.json")
 
     manifest_file = tmp_path / "run" / f"manifest_{first['design_id']}.json"

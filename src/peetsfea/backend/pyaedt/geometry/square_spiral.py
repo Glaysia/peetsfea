@@ -65,24 +65,6 @@ def _square_spiral_points(turns: int, outer: float, trace: float, gap: float, z:
     return [list(p) for p in _build_square_spiral_centerline_absolute(turns=turns, outer=outer, trace=trace, gap=gap, z=z)]
 
 
-def _bottom_uturn_points(
-    start_xy: _Point2,
-    end_xy: _Point2,
-    z: float,
-    trace: float,
-    gap: float,
-    via_diameter: float,
-) -> list[list[float]]:
-    turn_depth = trace + gap + via_diameter
-    turn_y = min(start_xy[1], end_xy[1]) - turn_depth
-    return [
-        [start_xy[0], start_xy[1], z],
-        [start_xy[0], turn_y, z],
-        [end_xy[0], turn_y, z],
-        [end_xy[0], end_xy[1], z],
-    ]
-
-
 def _create_hfss_session(manifest: Manifest, aedt_path: Path) -> Hfss:
     design_name = manifest["spec"]["design_name"]
     non_graphical = manifest["inputs"]["non_graphical"]
@@ -366,6 +348,8 @@ def _build_geometry_metadata(
 ) -> GeometryMetadata:
     return {
         "design_id": manifest["design_id"],
+        "design_unique_hash": manifest["design_unique_hash"],
+        "toml_space_hash": manifest["toml_space_hash"],
         "toml_hash": manifest["toml_hash"],
         "peetsfea_commit": manifest["peetsfea_commit"],
         "seed": manifest["seed"],
@@ -393,7 +377,6 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     outer = selected["outer"]
     trace = selected["trace"]
     gap = selected["gap"]
-    via_diameter = selected["via_diameter"]
     pcb_thickness = selected["pcb_thickness"]
     cu_thickness = selected["cu_thickness"]
     fr4_er = selected["fr4_er"]
@@ -406,8 +389,6 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
         raise ValueError("selected_parameters.trace must be > 0")
     if gap < 0:
         raise ValueError("selected_parameters.gap must be >= 0")
-    if via_diameter <= 0:
-        raise ValueError("selected_parameters.via_diameter must be > 0")
     if pcb_thickness <= 0:
         raise ValueError("selected_parameters.pcb_thickness must be > 0")
     if cu_thickness <= 0:
@@ -428,16 +409,6 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
 
     centerline_vertices = _build_square_spiral_centerline_absolute(turns=turns, outer=outer, trace=trace, gap=gap, z=0.0)
     top_points = [list(point) for point in centerline_vertices]
-    start_xy = (centerline_vertices[0][0], centerline_vertices[0][1])
-    end_xy = (centerline_vertices[-1][0], centerline_vertices[-1][1])
-    bottom_points = _bottom_uturn_points(
-        start_xy=start_xy,
-        end_xy=end_xy,
-        z=-pcb_thickness,
-        trace=trace,
-        gap=gap,
-        via_diameter=via_diameter,
-    )
 
     hfss = _create_hfss_session(manifest=manifest, aedt_path=aedt_path)
     modeler = cast(Modeler3D, hfss.modeler)
@@ -474,51 +445,6 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
         )
         object_names.append(_object_name(top_obj, top_name))
         cad_probe.append(_probe_cad_object(top_obj, top_name))
-
-        bottom_name = f"coil1_bottom_link_{design_id}"
-        bottom_obj = cast(
-            Object3d,
-            modeler.create_polyline(
-                points=bottom_points,
-                name=bottom_name,
-                material="copper",
-                xsection_type="Rectangle",
-                xsection_width=trace,
-                xsection_height=cu_thickness,
-            ),
-        )
-        object_names.append(_object_name(bottom_obj, bottom_name))
-        cad_probe.append(_probe_cad_object(bottom_obj, bottom_name))
-
-        via1_name = f"via1_{design_id}"
-        via1 = cast(
-            Object3d,
-            modeler.create_cylinder(
-                orientation="Z",
-                origin=[start_xy[0], start_xy[1], -pcb_thickness],
-                radius=via_diameter / 2.0,
-                height=pcb_thickness,
-                name=via1_name,
-                material="copper",
-            ),
-        )
-        object_names.append(_object_name(via1, via1_name))
-        cad_probe.append(_probe_cad_object(via1, via1_name))
-
-        via2_name = f"via2_{design_id}"
-        via2 = cast(
-            Object3d,
-            modeler.create_cylinder(
-                orientation="Z",
-                origin=[end_xy[0], end_xy[1], -pcb_thickness],
-                radius=via_diameter / 2.0,
-                height=pcb_thickness,
-                name=via2_name,
-                material="copper",
-            ),
-        )
-        object_names.append(_object_name(via2, via2_name))
-        cad_probe.append(_probe_cad_object(via2, via2_name))
 
         hfss.save_project(str(aedt_path))
     except Exception as exc:

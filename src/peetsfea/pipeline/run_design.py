@@ -5,7 +5,13 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 
-from peetsfea.identity.hashing import compute_design_id, compute_toml_hash, get_git_commit
+from peetsfea.identity.hashing import (
+    compose_design_id,
+    compute_design_unique_hash,
+    compute_toml_hash,
+    compute_toml_space_hash,
+    get_git_commit,
+)
 from peetsfea.spec.loader import load_toml_bytes, require_str, require_table
 from peetsfea.spec.resolver import _build_candidates, resolve_selected_parameters
 from peetsfea.types.manifest import Manifest
@@ -45,13 +51,17 @@ def run(config: RunConfig) -> Manifest:
 
     selected_parameters = resolve_selected_parameters(spec=spec, seed=config.seed)
     toml_hash = compute_toml_hash(raw_toml)
-    design_id = compute_design_id(toml_hash, commit_hash, config.seed, selected_parameters)
+    toml_space_hash = compute_toml_space_hash(toml_hash)
+    design_unique_hash = compute_design_unique_hash(toml_hash, commit_hash, config.seed, selected_parameters)
+    design_id = compose_design_id(design_unique_hash, toml_space_hash, config.seed)
 
     output_dir = Path(config.ansys_run_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"manifest_{design_id}.json"
     manifest: Manifest = {
         "design_id": design_id,
+        "design_unique_hash": design_unique_hash,
+        "toml_space_hash": toml_space_hash,
         "toml_hash": toml_hash,
         "peetsfea_commit": commit_hash,
         "seed": config.seed,

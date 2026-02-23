@@ -143,7 +143,9 @@ class _FakeHfss:
 
 def _manifest(tmp_path: Path) -> Manifest:
     return {
-        "design_id": "abcd1234",
+        "design_id": "abcd1234_eeeeeeee_1",
+        "design_unique_hash": "abcd1234",
+        "toml_space_hash": "eeeeeeee",
         "toml_hash": "t" * 64,
         "peetsfea_commit": "c" * 40,
         "seed": 1,
@@ -172,7 +174,7 @@ def _manifest(tmp_path: Path) -> Manifest:
             "units": "mm",
         },
         "created_at_utc": "2026-02-20T00:00:00Z",
-        "manifest_path": str(tmp_path / "manifest_abcd1234.json"),
+        "manifest_path": str(tmp_path / "manifest_abcd1234_eeeeeeee_1.json"),
     }
 
 
@@ -221,17 +223,19 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
 
     metadata = geom.build_square_spiral_from_manifest(_manifest(tmp_path))
 
-    assert metadata["design_id"] == "abcd1234"
+    assert metadata["design_id"] == "abcd1234_eeeeeeee_1"
+    assert metadata["design_unique_hash"] == "abcd1234"
+    assert metadata["toml_space_hash"] == "eeeeeeee"
     assert Path(metadata["metadata_path"]).exists()
-    assert metadata["aedt_path"].endswith("abcd1234.aedt")
+    assert metadata["aedt_path"].endswith("abcd1234_eeeeeeee_1.aedt")
     assert fake.release_args == (True, True)
 
     assert metadata["anchor_mode"] == "copper_outer_edge_corner"
     assert metadata["debug"]["constraints_ok"] is True
     assert len(metadata["debug"]["centerline_vertices"]) == 24
-    assert len(metadata["debug"]["cad_probe"]) == 5
+    assert len(metadata["debug"]["cad_probe"]) == 2
 
-    assert len(fake.modeler.polyline_calls) == 2
+    assert len(fake.modeler.polyline_calls) == 1
     for call in fake.modeler.polyline_calls:
         assert call["xsection_height"] == 0.035
 

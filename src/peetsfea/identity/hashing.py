@@ -8,6 +8,14 @@ import subprocess
 from peetsfea.types.manifest import SelectedParameters
 
 
+def _require_lower_hex(value: str, expected_len: int, field_name: str) -> None:
+    if len(value) != expected_len:
+        raise ValueError(f"{field_name} must be {expected_len} hex chars")
+    allowed = set("0123456789abcdef")
+    if any(char not in allowed for char in value):
+        raise ValueError(f"{field_name} must be lowercase hex")
+
+
 def get_git_commit(repo_dir: Path) -> str:
     try:
         commit_proc = subprocess.run(
@@ -30,7 +38,18 @@ def compute_toml_hash(raw_toml: bytes) -> str:
     return hashlib.sha256(raw_toml).hexdigest()
 
 
-def compute_design_id(toml_hash: str, commit_hash: str, seed: int, selected_parameters: SelectedParameters) -> str:
+def compute_toml_space_hash(toml_hash: str) -> str:
+    _require_lower_hex(toml_hash, 64, "toml_hash")
+    return toml_hash[:8]
+
+
+def compute_design_unique_hash(toml_hash: str, commit_hash: str, seed: int, selected_parameters: SelectedParameters) -> str:
     selected_json = json.dumps(selected_parameters, sort_keys=True, separators=(",", ":"))
     identity_base = f"{toml_hash}:{commit_hash}:{seed}:{selected_json}"
     return hashlib.sha256(identity_base.encode("utf-8")).hexdigest()[:8]
+
+
+def compose_design_id(unique_hash: str, toml_space_hash: str, seed: int) -> str:
+    _require_lower_hex(unique_hash, 8, "unique_hash")
+    _require_lower_hex(toml_space_hash, 8, "toml_space_hash")
+    return f"{unique_hash}_{toml_space_hash}_{seed}"
