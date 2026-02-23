@@ -25,6 +25,8 @@ SCALAR_RANGE_SPECS: tuple[tuple[str, str, bool], ...] = (
     ("tx.region.outer_w_mm", "tx_region_outer_w_mm", False),
     ("tx.region.outer_h_mm", "tx_region_outer_h_mm", False),
     ("tx.region.thickness_mm", "tx_region_thickness_mm", False),
+    ("tx.region.z_parts.vertical_z_mm", "tx_region_vertical_z_mm", False),
+    ("tx.region.z_parts.dd_z_mm", "tx_region_dd_z_mm", False),
     ("rx.region.outer_w_mm", "rx_region_outer_w_mm", False),
     ("rx.region.outer_h_mm", "rx_region_outer_h_mm", False),
     ("rx.region.thickness_mm", "rx_region_thickness_mm", False),
@@ -370,6 +372,13 @@ def _validate_constraints(selected: SelectedParameters, coil_groups: list[Resolv
         raise ValueError("profile clamp_min must be > 0")
     if selected["tx_region_outer_w_mm"] <= 0 or selected["tx_region_outer_h_mm"] <= 0:
         raise ValueError("tx.region outer dimensions must be > 0")
+    if selected["tx_region_thickness_mm"] <= 0:
+        raise ValueError("tx.region.thickness_mm must be > 0")
+    if selected["tx_region_vertical_z_mm"] <= 0 or selected["tx_region_dd_z_mm"] <= 0:
+        raise ValueError("tx.region.z_parts.vertical_z_mm and tx.region.z_parts.dd_z_mm must be > 0")
+    leftover_z = selected["tx_region_thickness_mm"] - selected["tx_region_vertical_z_mm"] - selected["tx_region_dd_z_mm"]
+    if leftover_z < 0:
+        raise ValueError("tx.region.leftover_z_mm computed negative; reduce vertical_z/dd_z or increase tx.region.thickness_mm")
 
     if selected["outer"] >= min(selected["tx_region_outer_w_mm"], selected["tx_region_outer_h_mm"]):
         raise ValueError("TX coil outer must be < min(tx.region.outer_w_mm, tx.region.outer_h_mm)")
@@ -404,9 +413,12 @@ def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, 
         "tx_region_outer_w_mm": float(raw["tx_region_outer_w_mm"]),
         "tx_region_outer_h_mm": float(raw["tx_region_outer_h_mm"]),
         "tx_region_thickness_mm": float(raw["tx_region_thickness_mm"]),
+        "tx_region_vertical_z_mm": float(raw["tx_region_vertical_z_mm"]),
+        "tx_region_dd_z_mm": float(raw["tx_region_dd_z_mm"]),
         "rx_region_outer_w_mm": float(raw["rx_region_outer_w_mm"]),
         "rx_region_outer_h_mm": float(raw["rx_region_outer_h_mm"]),
-        "rx_region_thickness_mm": float(raw["rx_region_thickness_mm"]),
+        # RX actual thickness is forced to max thickness for deterministic zone alignment.
+        "rx_region_thickness_mm": float(raw_max["rx_region_thickness_mm"]),
         "wall_thickness_mm": float(raw["wall_thickness_mm"]),
         "wall_size_y_mm": float(raw["wall_size_y_mm"]),
         "wall_size_z_mm": float(raw["wall_size_z_mm"]),
@@ -434,6 +446,8 @@ def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, 
         "tx_region_outer_w_mm": float(raw_max["tx_region_outer_w_mm"]),
         "tx_region_outer_h_mm": float(raw_max["tx_region_outer_h_mm"]),
         "tx_region_thickness_mm": float(raw_max["tx_region_thickness_mm"]),
+        "tx_region_vertical_z_mm": float(raw_max["tx_region_vertical_z_mm"]),
+        "tx_region_dd_z_mm": float(raw_max["tx_region_dd_z_mm"]),
         "rx_region_outer_w_mm": float(raw_max["rx_region_outer_w_mm"]),
         "rx_region_outer_h_mm": float(raw_max["rx_region_outer_h_mm"]),
         "rx_region_thickness_mm": float(raw_max["rx_region_thickness_mm"]),

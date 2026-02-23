@@ -35,6 +35,10 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 220.
                 f"range = [false, {tx_region_h:.1f}, {tx_region_h:.1f}, 1]",
                 "[tx.region.thickness_mm]",
                 "range = [false, 20.0, 20.0, 1]",
+                "[tx.region.z_parts.vertical_z_mm]",
+                "range = [false, 8.0, 8.0, 1]",
+                "[tx.region.z_parts.dd_z_mm]",
+                "range = [false, 7.0, 7.0, 1]",
                 "",
                 "[rx.region.outer_w_mm]",
                 "range = [false, 280.0, 280.0, 1]",
@@ -153,6 +157,9 @@ def test_run_creates_manifest_and_is_deterministic(tmp_path: Path, monkeypatch: 
     assert re.fullmatch(r"[0-9a-f]{8}_[0-9a-f]{8}_-?[0-9]+", first["design_id"]) is not None
     assert first["selected_parameters"]["turn_count_max"] == 8
     assert first["selected_parameters"]["outer"] == 180.0
+    assert first["selected_parameters"]["tx_region_vertical_z_mm"] == 8.0
+    assert first["selected_parameters"]["tx_region_dd_z_mm"] == 7.0
+    assert first["selected_parameters"]["rx_region_thickness_mm"] == first["selected_parameters_max"]["rx_region_thickness_mm"]
     assert first["selected_parameters_max"]["tx_region_outer_h_mm"] == 200.0
     assert first["selected_parameters_max"]["rx_region_thickness_mm"] == 4.0
     assert len(first["selected_coil_groups"]) == 3
@@ -195,6 +202,19 @@ def test_tx_region_constraint_validation(tmp_path: Path, monkeypatch: pytest.Mon
     _write_toml(toml_path, tx_region_h=160.0, outer_x=220.0, outer_y=180.0)
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("e" * 40))
     with pytest.raises(ValueError, match="TX coil outer must be < min"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_tx_region_leftover_negative_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "bad_tx_parts.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        "[tx.region.z_parts.dd_z_mm]\nrange = [false, 7.0, 7.0, 1]",
+        "[tx.region.z_parts.dd_z_mm]\nrange = [false, 15.0, 15.0, 1]",
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("f" * 40))
+    with pytest.raises(ValueError, match="tx.region.leftover_z_mm computed negative"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 

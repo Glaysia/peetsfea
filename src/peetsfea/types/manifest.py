@@ -33,6 +33,8 @@ class SelectedParameters(TypedDict):
     tx_region_outer_w_mm: float
     tx_region_outer_h_mm: float
     tx_region_thickness_mm: float
+    tx_region_vertical_z_mm: float
+    tx_region_dd_z_mm: float
     rx_region_outer_w_mm: float
     rx_region_outer_h_mm: float
     rx_region_thickness_mm: float
@@ -65,6 +67,8 @@ class SelectedParametersMax(TypedDict):
     tx_region_outer_w_mm: float
     tx_region_outer_h_mm: float
     tx_region_thickness_mm: float
+    tx_region_vertical_z_mm: float
+    tx_region_dd_z_mm: float
     rx_region_outer_w_mm: float
     rx_region_outer_h_mm: float
     rx_region_thickness_mm: float
@@ -178,7 +182,17 @@ class CoilPolaritySpec(TypedDict):
 
 class SceneObjectEntry(TypedDict):
     name: str
-    kind: Literal["tv", "wall", "floor", "shelf", "tx_region_max", "tx_region_actual", "rx_region_max", "rx_region_actual"]
+    kind: Literal[
+        "tv",
+        "wall",
+        "floor",
+        "shelf",
+        "tx_region_max",
+        "tx_region_vertical",
+        "tx_region_dd",
+        "rx_region_max",
+        "rx_region_actual",
+    ]
     present: bool
     origin_xyz: tuple[float, float, float]
     size_xyz: tuple[float, float, float]

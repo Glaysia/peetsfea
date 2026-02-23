@@ -42,6 +42,16 @@ range = [false, 280.0, 280.0, 1]
 [tx.region.thickness_mm]
 range = [false, 90.0, 90.0, 1]
 
+[tx.region.z_parts.vertical_z_mm]
+# Top zone in TX max region for vertical-coil allocation.
+range = [false, 15.0, 45.0, 7]
+
+[tx.region.z_parts.dd_z_mm]
+# Middle zone in TX max region for DD-coil allocation.
+range = [false, 15.0, 45.0, 7]
+# Bottom leftover is implicit:
+# leftover_z = tx.region.thickness_mm - vertical_z_mm - dd_z_mm
+
 [rx.region.outer_w_mm]
 range = [false, 560.0, 560.0, 1]
 

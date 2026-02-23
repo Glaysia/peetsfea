@@ -12,7 +12,7 @@ def run_one(seed:int)-> None:
         "backend": "hfss",
         "non_graphical": False,
         "close_on_exit": False,
-    }
+    } 
     config = RunConfig(**config_dict)
     manifest = run(config)
     geometry = build_square_spiral_from_manifest(manifest)
