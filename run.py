@@ -27,7 +27,7 @@ RUN_MODE = MANY
 
 if __name__ == "__main__": 
     if RUN_MODE == MANY:
-        for seed in range(25):
+        for seed in range(7,25):
             run_one(seed)
     elif RUN_MODE == SINGLE:
         run_one(2) 

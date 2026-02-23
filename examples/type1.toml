@@ -8,7 +8,7 @@
 # Numeric range convention:
 #   range = [is_integer, start, end, count]
 
-spec_version = "0.1.5"
+spec_version = "0.1.6"
 
 [design]
 units = "mm"
@@ -44,11 +44,11 @@ range = [false, 90.0, 90.0, 1]
 
 [tx.region.z_parts.vertical_z_mm]
 # Top zone in TX max region for vertical-coil allocation.
-range = [false, 15.0, 45.0, 7]
+range = [false, 15.0, 45.0, 14]
 
 [tx.region.z_parts.dd_z_mm]
 # Middle zone in TX max region for DD-coil allocation.
-range = [false, 15.0, 45.0, 7]
+range = [false, 15.0, 45.0, 14]
 # Bottom leftover is implicit:
 # leftover_z = tx.region.thickness_mm - vertical_z_mm - dd_z_mm
 
@@ -85,111 +85,61 @@ range = [false, 5000.0, 5000.0, 1]
 
 [coil_shape.outer_x]
 # Allow near full TX X-span usage (TX width is 160mm).
-range = [false, 60.0, 158.0, 5]
+range = [false, 60.0, 158.0, 10]
 
 [coil_shape.outer_y]
 # Expanded Y-span to allow diverse DD aspect ratios.
-range = [false, 60.0, 130.0, 20]
-
-[coil_shape.turn_count_max]
-# Expanded integer turn candidates for broader dataset diversity.
-range = [true, 1, 20, 20]
+range = [false, 60.0, 130.0, 40]
 
 [coil_shape.inner_margin_x]
-range = [false, 2.0, 8.0, 4]
+range = [false, 2.0, 8.0, 8]
 
 [coil_shape.inner_margin_y]
-range = [false, 2.0, 8.0, 4]
+range = [false, 2.0, 8.0, 8]
 
 # Grouped coil spacing controls
 [coil_spacing.tx_dd_pair_spacing_mm]
 # Additional center-to-center clearance for XZ-mirrored TX DD pair (mm).
-range = [false, 2.0, 25.0, 6]
+range = [false, 2.0, 25.0, 12]
 
 [coil_spacing.rx_dd_pair_spacing_mm]
 # RX DD pair edge-to-edge gap in Y-axis (mm).
-range = [false, 0.0, 5.0, 8]
+range = [false, 0.0, 5.0, 16]
 
 [coil_spacing.tx_vertical_span_mm]
 # Total Y-axis spread for tx_vertical coil centers (ZX-plane normal axis).
 # For n>=2, centers are evenly spaced with delta=span/(n-1) over [-span/2, +span/2].
-range = [false, 0.0, 15.0, 4]
+range = [false, 0.0, 15.0, 8]
 
-# Trace/gap profile presets (seed selects one profile deterministically)
-[[trace_gap_profile.profiles]]
-id = "p1"
-[trace_gap_profile.profiles.trace]
-mode = "biased_linear"
-base = 0.8
-outer_bias = 0.08
-inner_bias = -0.06
-clamp_min = 0.20
-[trace_gap_profile.profiles.gap]
-mode = "biased_linear"
-base = 0.35
-outer_bias = 0.03
-inner_bias = -0.03
-clamp_min = 0.12
+# Group-specific geometry free variables.
+# One key = one meaning: no shared global turns/trace/gap key across groups.
+# Geometry derives from:
+#   pitch_mm = band_thickness_mm / turn_count_max
+#   trace_mm = pitch_mm * metal_ratio
+#   gap_mm   = pitch_mm * (1 - metal_ratio)
+# where `metal_ratio` is the metal occupancy ratio per equal pitch cell.
+# Resolver selects each path once per attempt and reuses it across internal consumers.
+# If constraints fail, deterministic retry uses attempt offset (same seed => same retry sequence).
+[coil_groups_params.tx_dd.turn_count_max]
+range = [true, 1, 20, 40]
+[coil_groups_params.tx_dd.band_thickness_mm]
+range = [false, 8.0, 48.0, 65]
+[coil_groups_params.tx_dd.metal_ratio]
+range = [false, 0.15, 0.85, 71]
 
-[[trace_gap_profile.profiles]]
-id = "p2"
-[trace_gap_profile.profiles.trace]
-mode = "biased_linear"
-base = 1.0
-outer_bias = 0.10
-inner_bias = -0.10
-clamp_min = 0.20
-[trace_gap_profile.profiles.gap]
-mode = "biased_linear"
-base = 0.50
-outer_bias = 0.05
-inner_bias = -0.05
-clamp_min = 0.15
+[coil_groups_params.tx_vertical.turn_count_max]
+range = [true, 1, 20, 40]
+[coil_groups_params.tx_vertical.band_thickness_mm]
+range = [false, 8.0, 48.0, 65]
+[coil_groups_params.tx_vertical.metal_ratio]
+range = [false, 0.15, 0.85, 71]
 
-[[trace_gap_profile.profiles]]
-id = "p3"
-[trace_gap_profile.profiles.trace]
-mode = "biased_linear"
-base = 1.2
-outer_bias = 0.12
-inner_bias = -0.08
-clamp_min = 0.25
-[trace_gap_profile.profiles.gap]
-mode = "biased_linear"
-base = 0.60
-outer_bias = 0.07
-inner_bias = -0.04
-clamp_min = 0.20
-
-[[trace_gap_profile.profiles]]
-id = "p4"
-[trace_gap_profile.profiles.trace]
-mode = "biased_linear"
-base = 0.9
-outer_bias = 0.05
-inner_bias = -0.12
-clamp_min = 0.18
-[trace_gap_profile.profiles.gap]
-mode = "biased_linear"
-base = 0.45
-outer_bias = 0.02
-inner_bias = -0.08
-clamp_min = 0.14
-
-[[trace_gap_profile.profiles]]
-id = "p5"
-[trace_gap_profile.profiles.trace]
-mode = "biased_linear"
-base = 1.1
-outer_bias = 0.09
-inner_bias = -0.09
-clamp_min = 0.22
-[trace_gap_profile.profiles.gap]
-mode = "biased_linear"
-base = 0.55
-outer_bias = 0.06
-inner_bias = -0.06
-clamp_min = 0.17
+[coil_groups_params.rx_dd.turn_count_max]
+range = [true, 1, 20, 20]
+[coil_groups_params.rx_dd.band_thickness_mm]
+range = [false, 8.0, 44.0, 65]
+[coil_groups_params.rx_dd.metal_ratio]
+range = [false, 0.15, 0.85, 71]
 
 # ----------------------------------------------------------------------------
 # Lifted fixed design values (count=1 for TOML SSOT contract)
@@ -271,15 +221,6 @@ lhs = { path = "outer_y" }
 op = ">"
 rhs = { value = 0.0 }
 
-# Turn count lower bound: at least one turn, otherwise invalid winding.
-[[constraints.rules]]
-id = "turn_count_min"
-kind = "comparison"
-message = "turn_count_max must be >= 1"
-lhs = { path = "turn_count_max" }
-op = ">="
-rhs = { value = 1.0 }
-
 # Inner margin must be non-negative (mm), negative margin is physically invalid.
 [[constraints.rules]]
 id = "inner_margin_x_non_negative"
@@ -326,24 +267,6 @@ min = { value = 0.0 }
 max = { value = 15.0 }
 inclusive_min = true
 inclusive_max = true
-
-# Profile clamp must stay positive (mm) to avoid non-physical copper width.
-[[constraints.rules]]
-id = "trace_clamp_positive"
-kind = "comparison"
-message = "trace_profile_clamp_min must be > 0"
-lhs = { path = "trace_profile_clamp_min" }
-op = ">"
-rhs = { value = 0.0 }
-
-# Profile clamp must stay positive (mm) to avoid non-physical trace gap.
-[[constraints.rules]]
-id = "gap_clamp_positive"
-kind = "comparison"
-message = "gap_profile_clamp_min must be > 0"
-lhs = { path = "gap_profile_clamp_min" }
-op = ">"
-rhs = { value = 0.0 }
 
 # TX region outer dimensions must be positive (mm); invalid envelope otherwise.
 [[constraints.rules]]
@@ -399,14 +322,14 @@ lhs = { path = "tx_region_leftover_z_mm" }
 op = ">="
 rhs = { value = 0.0 }
 
-# Coil outer must fit TX region min span (mm), otherwise layout does not fit.
+# Coil outer must fit TX region width (mm), otherwise layout does not fit.
 [[constraints.rules]]
-id = "coil_outer_fits_tx_region"
+id = "coil_outer_x_fits_tx_region"
 kind = "comparison"
-message = "TX coil outer must be < min(tx.region.outer_w_mm, tx.region.outer_h_mm)"
-lhs = { path = "outer" }
+message = "TX coil outer_x must be < tx.region.outer_w_mm"
+lhs = { path = "outer_x" }
 op = "<"
-rhs = { func = "min(tx_region_outer_w_mm,tx_region_outer_h_mm)" }
+rhs = { path = "tx_region_outer_w_mm" }
 
 # Aggregate bound: total selected coils capped at 10 for supported scene complexity.
 [[constraints.rules]]

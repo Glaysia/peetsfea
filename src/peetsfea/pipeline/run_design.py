@@ -13,8 +13,19 @@ from peetsfea.identity.hashing import (
     get_git_commit,
 )
 from peetsfea.spec.loader import load_toml_bytes, require_str, require_table
-from peetsfea.spec.resolver import _build_candidates, resolve_selection
-from peetsfea.types.manifest import Manifest
+from peetsfea.spec.resolver import SelectionConstraintError, _build_candidates, resolve_selection
+from peetsfea.types.manifest import (
+    GroupGeometryParams,
+    Manifest,
+    ResolvedCoilGroup,
+    ResolvedPcbInstance,
+    SelectedParameters,
+    SelectedParametersMax,
+)
+
+
+MAX_ATTEMPTS = 64
+SUPPORTED_SPEC_VERSION = "0.1.6"
 
 
 @dataclass(frozen=True)
@@ -39,6 +50,8 @@ def run(config: RunConfig) -> Manifest:
     spec, raw_toml = load_toml_bytes(toml_path)
 
     spec_version = require_str(spec.get("spec_version"), "spec_version")
+    if spec_version != SUPPORTED_SPEC_VERSION:
+        raise ValueError(f"spec_version must be '{SUPPORTED_SPEC_VERSION}'")
     design = require_table(spec.get("design"), "design")
     units = require_str(design.get("units"), "design.units")
     raw_design_name = design.get("name")
@@ -49,11 +62,46 @@ def run(config: RunConfig) -> Manifest:
     if backend_tool != "hfss":
         raise ValueError("backend.tool must be 'hfss' for this MVP")
 
-    selected_parameters, selected_parameters_max, selected_coil_groups, selected_pcbs = resolve_selection(spec=spec, seed=config.seed)
+    selected_parameters: SelectedParameters | None = None
+    selected_parameters_max: SelectedParametersMax | None = None
+    selected_coil_groups: list[ResolvedCoilGroup] | None = None
+    selected_group_geometry: list[GroupGeometryParams] | None = None
+    selected_pcbs: list[ResolvedPcbInstance] | None = None
+    retry_attempt = 0
+    retry_count = 0
+    last_error = ""
+    for attempt in range(MAX_ATTEMPTS):
+        try:
+            (
+                selected_parameters,
+                selected_parameters_max,
+                selected_coil_groups,
+                selected_group_geometry,
+                selected_pcbs,
+            ) = resolve_selection(spec=spec, seed=config.seed, attempt=attempt)
+            retry_attempt = attempt
+            retry_count = attempt
+            break
+        except SelectionConstraintError as exc:
+            last_error = str(exc)
+            continue
+
+    if selected_parameters is None or selected_parameters_max is None or selected_coil_groups is None or selected_group_geometry is None or selected_pcbs is None:
+        raise RuntimeError(
+            "No valid selection within max attempts "
+            f"(seed={config.seed}, max_attempts={MAX_ATTEMPTS}, last_error={last_error})"
+        )
+    assert selected_parameters is not None
+    assert selected_parameters_max is not None
+    assert selected_coil_groups is not None
+    assert selected_group_geometry is not None
+    assert selected_pcbs is not None
     toml_hash = compute_toml_hash(raw_toml)
     toml_space_hash = compute_toml_space_hash(toml_hash)
-    design_unique_hash = compute_design_unique_hash(toml_hash, commit_hash, config.seed, selected_parameters)
-    design_id = compose_design_id(design_unique_hash, toml_space_hash, config.seed)
+    design_unique_hash = compute_design_unique_hash(
+        toml_hash, commit_hash, selected_parameters, selected_group_geometry, selected_coil_groups, selected_pcbs
+    )
+    design_id = compose_design_id(design_unique_hash, toml_space_hash, config.seed, retry_attempt)
 
     output_dir = Path(config.ansys_run_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -65,10 +113,13 @@ def run(config: RunConfig) -> Manifest:
         "toml_hash": toml_hash,
         "peetsfea_commit": commit_hash,
         "seed": config.seed,
+        "retry_attempt": retry_attempt,
+        "retry_count": retry_count,
         "backend": config.backend,
         "selected_parameters": selected_parameters,
         "selected_parameters_max": selected_parameters_max,
         "selected_coil_groups": selected_coil_groups,
+        "selected_group_geometry": selected_group_geometry,
         "selected_pcbs": selected_pcbs,
         "inputs": {
             "ansys_executable_path": config.ansys_executable_path,

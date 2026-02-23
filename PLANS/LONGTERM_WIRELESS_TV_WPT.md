@@ -3,6 +3,10 @@
 ## Mission and Fixed Constraints
 본 문서는 Wireless TV 적용을 위한 장기 설계 제약을 고정한다.
 
+## Project Boundary Decision
+- 시뮬레이션을 실행하지 않은 경량 AEDT 파일(텍스트 기반) 수만 개 생성까지를 `peetsfea`의 범위로 정의한다.
+- 대규모 실행/오케스트레이션 역할은 `peetsfea-runner`를 별도 프로젝트로 분리해 개발한다.
+
 - Tx와 Rx는 각각 허용 직육면체(envelope) 범위 내에서만 존재한다.
 - Tx-Rx 최소 표면 거리 제약은 항상 `110.0 mm`로 고정한다.
 - Rx 측 물리 적층 순서는 고정한다.

@@ -4,15 +4,21 @@ import math
 from typing import Literal, Sequence, TypedDict, TypeAlias, cast
 
 from peetsfea.spec.loader import TOMLTable, TOMLValue, require_table
-from peetsfea.types.manifest import ResolvedCoilGroup, ResolvedPcbInstance, SelectedParameters, SelectedParametersMax
+from peetsfea.types.manifest import (
+    GroupGeometryParams,
+    ResolvedCoilGroup,
+    ResolvedPcbInstance,
+    SelectedParameters,
+    SelectedParametersMax,
+)
 
 
 Number: TypeAlias = int | float
+SamplingContext: TypeAlias = dict[str, Number]
 
 SCALAR_RANGE_SPECS: tuple[tuple[str, str, bool], ...] = (
     ("coil_shape.outer_x", "outer_x", False),
     ("coil_shape.outer_y", "outer_y", False),
-    ("coil_shape.turn_count_max", "turn_count_max", True),
     ("coil_shape.inner_margin_x", "inner_margin_x", False),
     ("coil_shape.inner_margin_y", "inner_margin_y", False),
     ("coil_spacing.tx_dd_pair_spacing_mm", "tx_dd_pair_spacing_mm", False),
@@ -51,7 +57,12 @@ SCALAR_OFFSET: dict[str, int] = {path: idx for idx, (path, _, _) in enumerate(SC
 GROUP_KIND_ORDER: tuple[str, ...] = ("tx_dd", "tx_vertical", "rx_dd")
 GROUP_OFFSET_BASE = 100
 PCB_OFFSET_BASE = 200
-PROFILE_OFFSET = 300
+GROUP_GEOMETRY_OFFSET_BASE = 300
+ATTEMPT_STRIDE = 1009
+
+
+class SelectionConstraintError(ValueError):
+    pass
 
 def _build_candidates(is_integer: bool, start: float, end: float, count: int) -> Sequence[Number]:
     raw_values: list[float]
@@ -114,12 +125,30 @@ def _parse_range_at_path(root: TOMLTable, dotted_path: str, expect_integer: bool
     return is_integer, float(start), float(end), count
 
 
-def _select_range_value(root: TOMLTable, dotted_path: str, expect_integer: bool, seed: int, offset: int) -> Number:
+def _sample_candidate(candidates: Sequence[Number], *, seed: int, offset: int, attempt: int) -> Number:
+    if len(candidates) == 0:
+        raise ValueError("No candidates available for sampling")
+    return candidates[(seed + offset + (attempt * ATTEMPT_STRIDE)) % len(candidates)]
+
+
+def _select_range_value(
+    root: TOMLTable,
+    dotted_path: str,
+    expect_integer: bool,
+    seed: int,
+    offset: int,
+    attempt: int,
+    context: SamplingContext,
+) -> Number:
+    if dotted_path in context:
+        return context[dotted_path]
     is_integer, start, end, count = _parse_range_at_path(root, dotted_path, expect_integer=expect_integer)
     candidates = _build_candidates(is_integer=is_integer, start=start, end=end, count=count)
     if len(candidates) == 0:
         raise ValueError(f"No candidates generated from {dotted_path}.range")
-    return candidates[(seed + offset) % len(candidates)]
+    selected = _sample_candidate(candidates, seed=seed, offset=offset, attempt=attempt)
+    context[dotted_path] = selected
+    return selected
 
 
 def _select_range_end_value(root: TOMLTable, dotted_path: str, expect_integer: bool) -> Number:
@@ -127,43 +156,6 @@ def _select_range_end_value(root: TOMLTable, dotted_path: str, expect_integer: b
     if is_integer:
         return int(math.floor(end + 0.5))
     return float(end)
-
-
-def _parse_profile_table(raw_profile: TOMLValue, dotted_path: str) -> tuple[float, float, float, float]:
-    profile = require_table(raw_profile, dotted_path)
-    required = {"mode", "base", "outer_bias", "inner_bias", "clamp_min"}
-    if set(profile.keys()) != required:
-        raise ValueError(f"{dotted_path} must contain only {sorted(required)}")
-
-    mode = profile.get("mode")
-    if mode != "biased_linear":
-        raise ValueError(f"{dotted_path}.mode must be 'biased_linear'")
-
-    values: list[float] = []
-    for key in ("base", "outer_bias", "inner_bias", "clamp_min"):
-        raw = profile.get(key)
-        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-            raise ValueError(f"{dotted_path}.{key} must be number")
-        values.append(float(raw))
-    if values[3] <= 0:
-        raise ValueError(f"{dotted_path}.clamp_min must be > 0")
-    return values[0], values[1], values[2], values[3]
-
-
-def _parse_profile_entry(entry: TOMLValue, idx: int) -> tuple[str, tuple[float, float, float, float], tuple[float, float, float, float]]:
-    dotted_root = f"trace_gap_profile.profiles[{idx}]"
-    profile_entry = require_table(entry, dotted_root)
-    required = {"id", "trace", "gap"}
-    if set(profile_entry.keys()) != required:
-        raise ValueError(f"{dotted_root} must contain only {sorted(required)}")
-
-    raw_id = profile_entry.get("id")
-    if not isinstance(raw_id, str) or raw_id == "":
-        raise ValueError(f"{dotted_root}.id must be non-empty string")
-
-    trace_values = _parse_profile_table(profile_entry["trace"], f"{dotted_root}.trace")
-    gap_values = _parse_profile_table(profile_entry["gap"], f"{dotted_root}.gap")
-    return raw_id, trace_values, gap_values
 
 
 def _parse_string_value_at_path(root: TOMLTable, dotted_path: str, *, allowed: set[str]) -> str:
@@ -178,36 +170,68 @@ def _parse_string_value_at_path(root: TOMLTable, dotted_path: str, *, allowed: s
     return raw_value
 
 
-def _resolve_profile_selection(spec: TOMLTable, seed: int) -> tuple[str, float, float, float, float, float, float, float, float]:
-    trace_gap_profile = require_table(spec.get("trace_gap_profile"), "trace_gap_profile")
-    raw_profiles = trace_gap_profile.get("profiles")
-    if not isinstance(raw_profiles, list):
-        raise ValueError("trace_gap_profile.profiles must be a non-empty array of tables")
-    if len(raw_profiles) == 0:
-        raise ValueError("trace_gap_profile.profiles must contain at least one profile")
+def _resolve_group_geometry(spec: TOMLTable, seed: int, attempt: int, context: SamplingContext) -> list[GroupGeometryParams]:
+    groups_table = require_table(spec.get("coil_groups_params"), "coil_groups_params")
+    required_kinds = set(GROUP_KIND_ORDER)
+    if set(groups_table.keys()) != required_kinds:
+        raise ValueError("coil_groups_params must contain exactly {tx_dd, tx_vertical, rx_dd}")
 
-    parsed_profiles: list[tuple[str, tuple[float, float, float, float], tuple[float, float, float, float]]] = []
-    seen_ids: set[str] = set()
-    for idx, raw_entry in enumerate(raw_profiles):
-        profile_id, trace_values, gap_values = _parse_profile_entry(raw_entry, idx)
-        if profile_id in seen_ids:
-            raise ValueError(f"Duplicate trace_gap_profile.profiles id: {profile_id}")
-        seen_ids.add(profile_id)
-        parsed_profiles.append((profile_id, trace_values, gap_values))
+    selected: list[GroupGeometryParams] = []
+    for idx, kind in enumerate(GROUP_KIND_ORDER):
+        kind_root = f"coil_groups_params.{kind}"
+        kind_table = require_table(groups_table.get(kind), kind_root)
+        if set(kind_table.keys()) != {"turn_count_max", "band_thickness_mm", "metal_ratio"}:
+            raise ValueError(f"{kind_root} must contain only ['turn_count_max', 'band_thickness_mm', 'metal_ratio']")
 
-    selected_idx = (seed + PROFILE_OFFSET) % len(parsed_profiles)
-    selected_id, selected_trace, selected_gap = parsed_profiles[selected_idx]
-    return (
-        selected_id,
-        selected_trace[0],
-        selected_trace[1],
-        selected_trace[2],
-        selected_trace[3],
-        selected_gap[0],
-        selected_gap[1],
-        selected_gap[2],
-        selected_gap[3],
-    )
+        offset = GROUP_GEOMETRY_OFFSET_BASE + (idx * 10)
+        turns = _select_range_value(
+            spec, f"{kind_root}.turn_count_max", expect_integer=True, seed=seed, offset=offset, attempt=attempt, context=context
+        )
+        band_thickness_mm = _select_range_value(
+            spec,
+            f"{kind_root}.band_thickness_mm",
+            expect_integer=False,
+            seed=seed,
+            offset=offset + 1,
+            attempt=attempt,
+            context=context,
+        )
+        metal_ratio = _select_range_value(
+            spec,
+            f"{kind_root}.metal_ratio",
+            expect_integer=False,
+            seed=seed,
+            offset=offset + 2,
+            attempt=attempt,
+            context=context,
+        )
+        n_turns = int(turns)
+        band = float(band_thickness_mm)
+        ratio = float(metal_ratio)
+        if n_turns < 1:
+            raise ValueError(f"{kind_root}.turn_count_max must be >= 1")
+        if band <= 0:
+            raise ValueError(f"{kind_root}.band_thickness_mm must be > 0")
+        if ratio <= 0 or ratio >= 1:
+            raise ValueError(f"{kind_root}.metal_ratio must be > 0 and < 1")
+        pitch = band / float(n_turns)
+        trace = pitch * ratio
+        gap = pitch * (1.0 - ratio)
+        if trace <= 0:
+            raise ValueError(f"{kind_root}.trace (derived) must be > 0")
+        if gap < 0:
+            raise ValueError(f"{kind_root}.gap (derived) must be >= 0")
+        selected.append(
+            {
+                "kind": cast(Literal["tx_dd", "tx_vertical", "rx_dd"], kind),
+                "turn_count_max": n_turns,
+                "band_thickness_mm": band,
+                "metal_ratio": ratio,
+                "trace": trace,
+                "gap": gap,
+            }
+        )
+    return selected
 
 
 def _parse_group_transforms(group: TOMLTable, field_name: str) -> list[dict[str, float]]:
@@ -231,26 +255,44 @@ def _parse_group_transforms(group: TOMLTable, field_name: str) -> list[dict[str,
     return transforms
 
 
-def _parse_group_count(group: TOMLTable, kind: str, seed: int, offset: int) -> tuple[int, int]:
+def _parse_group_count(
+    group: TOMLTable,
+    kind: str,
+    seed: int,
+    offset: int,
+    attempt: int,
+    context: SamplingContext,
+    key_prefix: str,
+) -> tuple[int, int]:
     if kind == "tx_dd":
-        value = _select_count_field(group, "count_mode", seed, offset)
+        value = _select_count_field(group, "count_mode", seed, offset, attempt, context, f"{key_prefix}.count_mode")
         if value not in (2, 4):
             raise ValueError("tx_dd count_mode must resolve to 2 or 4")
         return value, value
     if kind == "tx_vertical":
-        value = _select_count_field(group, "count_range", seed, offset)
+        value = _select_count_field(group, "count_range", seed, offset, attempt, context, f"{key_prefix}.count_range")
         if value < 0 or value > 4:
             raise ValueError("tx_vertical count_range must resolve to [0,4]")
         return value, value
     if kind == "rx_dd":
-        value = _select_count_field(group, "count_fixed", seed, offset)
+        value = _select_count_field(group, "count_fixed", seed, offset, attempt, context, f"{key_prefix}.count_fixed")
         if value != 2:
             raise ValueError("rx_dd count_fixed must resolve to 2")
         return value, value
     raise ValueError(f"Unsupported coil_groups.kind: {kind}")
 
 
-def _select_count_field(group: TOMLTable, field_name: str, seed: int, offset: int) -> int:
+def _select_count_field(
+    group: TOMLTable,
+    field_name: str,
+    seed: int,
+    offset: int,
+    attempt: int,
+    context: SamplingContext,
+    path_key: str,
+) -> int:
+    if path_key in context:
+        return int(context[path_key])
     if field_name not in group:
         raise ValueError(f"coil_groups.{field_name} is required")
     raw_range = group.get(field_name)
@@ -268,10 +310,14 @@ def _select_count_field(group: TOMLTable, field_name: str, seed: int, offset: in
     candidates = _build_candidates(is_integer=True, start=float(start), end=float(end), count=count)
     if len(candidates) == 0:
         raise ValueError(f"No candidates generated from coil_groups.{field_name}")
-    return int(candidates[(seed + offset) % len(candidates)])
+    selected = int(_sample_candidate(candidates, seed=seed, offset=offset, attempt=attempt))
+    context[path_key] = selected
+    return selected
 
 
-def _resolve_coil_groups(spec: TOMLTable, seed: int, selected: SelectedParameters) -> list[ResolvedCoilGroup]:
+def _resolve_coil_groups(
+    spec: TOMLTable, seed: int, attempt: int, selected: SelectedParameters, context: SamplingContext
+) -> list[ResolvedCoilGroup]:
     raw_groups = spec.get("coil_groups")
     if not isinstance(raw_groups, list) or len(raw_groups) == 0:
         raise ValueError("coil_groups must be a non-empty array of tables")
@@ -293,7 +339,9 @@ def _resolve_coil_groups(spec: TOMLTable, seed: int, selected: SelectedParameter
         kind = str(raw_kind)
         seen_kinds.add(kind)
         transforms = _parse_group_transforms(group, "instance_transforms")
-        requested_count, selected_count = _parse_group_count(group, kind, seed, GROUP_OFFSET_BASE + idx)
+        requested_count, selected_count = _parse_group_count(
+            group, kind, seed, GROUP_OFFSET_BASE + idx, attempt, context, f"coil_groups[{idx}]"
+        )
         resolved.append(
             {
                 "kind": kind,  # type: ignore[typeddict-item]
@@ -322,7 +370,7 @@ def _parse_position(value: TOMLValue, name: str) -> tuple[float, float, float]:
     return (out[0], out[1], out[2])
 
 
-def _resolve_pcbs(spec: TOMLTable, seed: int) -> list[ResolvedPcbInstance]:
+def _resolve_pcbs(spec: TOMLTable, seed: int, attempt: int, context: SamplingContext) -> list[ResolvedPcbInstance]:
     raw_pcbs = spec.get("pcbs")
     if not isinstance(raw_pcbs, list) or len(raw_pcbs) == 0:
         raise ValueError("pcbs must be a non-empty array of tables")
@@ -368,7 +416,12 @@ def _resolve_pcbs(spec: TOMLTable, seed: int) -> list[ResolvedPcbInstance]:
         candidates = _build_candidates(True, float(start), float(end), count)
         if not all(int(v) in (0, 1) for v in candidates):
             raise ValueError(f"pcbs[{idx}].present candidates must be 0 or 1")
-        present = bool(int(candidates[(seed + PCB_OFFSET_BASE + idx) % len(candidates)]))
+        present_key = f"pcbs[{idx}].present"
+        if present_key in context:
+            present = bool(int(context[present_key]))
+        else:
+            present = bool(int(_sample_candidate(candidates, seed=seed, offset=PCB_OFFSET_BASE + idx, attempt=attempt)))
+            context[present_key] = int(present)
 
         resolved.append(
             {
@@ -410,10 +463,12 @@ def _validate_mounts(coil_groups: list[ResolvedCoilGroup], pcbs: list[ResolvedPc
                 raise ValueError(f"Mount index out of range for {kind}: {mount}")
 
 
-def _resolve_selected_scalars(spec: TOMLTable, seed: int) -> dict[str, Number]:
+def _resolve_selected_scalars(spec: TOMLTable, seed: int, attempt: int, context: SamplingContext) -> dict[str, Number]:
     selected: dict[str, Number] = {}
     for path, key, expect_integer in SCALAR_RANGE_SPECS:
-        selected[key] = _select_range_value(spec, path, expect_integer=expect_integer, seed=seed, offset=SCALAR_OFFSET[path])
+        selected[key] = _select_range_value(
+            spec, path, expect_integer=expect_integer, seed=seed, offset=SCALAR_OFFSET[path], attempt=attempt, context=context
+        )
     return selected
 
 
@@ -690,7 +745,9 @@ def _evaluate_constraints(rules: list[ConstraintRule], selected: SelectedParamet
             lhs_value = _resolve_selected_comparable_path(selected, rule["lhs"]["path"])
             rhs_value = _resolve_value_ref(selected, rule["rhs"])
             if not _compare(lhs_value, rhs_value, rule["op"]):
-                raise ValueError(f"Constraint {rule['id']} failed: {rule['message']} (lhs={lhs_value}, rhs={rhs_value})")
+                raise SelectionConstraintError(
+                    f"Constraint {rule['id']} failed: {rule['message']} (lhs={lhs_value}, rhs={rhs_value})"
+                )
             continue
         if rule["kind"] == "range":
             target_value = _resolve_selected_numeric_path(selected, rule["target"]["path"])
@@ -698,17 +755,23 @@ def _evaluate_constraints(rules: list[ConstraintRule], selected: SelectedParamet
                 min_value = float(rule["min"]["value"])
                 min_ok = target_value >= min_value if rule["inclusive_min"] else target_value > min_value
                 if not min_ok:
-                    raise ValueError(f"Constraint {rule['id']} failed: {rule['message']} (lhs={target_value}, rhs={min_value})")
+                    raise SelectionConstraintError(
+                        f"Constraint {rule['id']} failed: {rule['message']} (lhs={target_value}, rhs={min_value})"
+                    )
             if rule["max"] is not None:
                 max_value = float(rule["max"]["value"])
                 max_ok = target_value <= max_value if rule["inclusive_max"] else target_value < max_value
                 if not max_ok:
-                    raise ValueError(f"Constraint {rule['id']} failed: {rule['message']} (lhs={target_value}, rhs={max_value})")
+                    raise SelectionConstraintError(
+                        f"Constraint {rule['id']} failed: {rule['message']} (lhs={target_value}, rhs={max_value})"
+                    )
             continue
         aggregate_value = float(sum(group["selected_count"] for group in coil_groups))
         rhs_value = float(rule["rhs"]["value"])
         if not _compare(aggregate_value, rhs_value, rule["op"]):
-            raise ValueError(f"Constraint {rule['id']} failed: {rule['message']} (lhs={aggregate_value}, rhs={rhs_value})")
+            raise SelectionConstraintError(
+                f"Constraint {rule['id']} failed: {rule['message']} (lhs={aggregate_value}, rhs={rhs_value})"
+            )
 
 
 def _validate_constraints(spec: TOMLTable, selected: SelectedParameters, coil_groups: list[ResolvedCoilGroup]) -> None:
@@ -716,30 +779,19 @@ def _validate_constraints(spec: TOMLTable, selected: SelectedParameters, coil_gr
     _evaluate_constraints(rules, selected, coil_groups)
 
 
-def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, SelectedParametersMax, list[ResolvedCoilGroup], list[ResolvedPcbInstance]]:
-    (
-        profile_id,
-        trace_base,
-        trace_outer_bias,
-        trace_inner_bias,
-        trace_clamp_min,
-        gap_base,
-        gap_outer_bias,
-        gap_inner_bias,
-        gap_clamp_min,
-    ) = _resolve_profile_selection(spec, seed)
-    raw = _resolve_selected_scalars(spec, seed)
+def _resolve_selection(
+    spec: TOMLTable, seed: int, attempt: int = 0
+) -> tuple[SelectedParameters, SelectedParametersMax, list[ResolvedCoilGroup], list[GroupGeometryParams], list[ResolvedPcbInstance]]:
+    context: SamplingContext = {}
+    raw = _resolve_selected_scalars(spec, seed, attempt, context)
     raw_max = _resolve_selected_max_scalars(spec)
     dd_mirror_plane = _parse_string_value_at_path(spec, "coil_placement.dd_mirror_plane", allowed={"XZ"})
     rx_plane = _parse_string_value_at_path(spec, "coil_placement.rx_plane", allowed={"YZ"})
     tx_vertical_plane = _parse_string_value_at_path(spec, "coil_placement.tx_vertical_plane", allowed={"ZX"})
 
-    # Current geometry path is still square-spiral MVP. Keep compatibility fields deterministic.
-    derived_outer = min(float(raw["outer_x"]), float(raw["outer_y"]))
     selected: SelectedParameters = {
         "outer_x": float(raw["outer_x"]),
         "outer_y": float(raw["outer_y"]),
-        "turn_count_max": int(raw["turn_count_max"]),
         "inner_margin_x": float(raw["inner_margin_x"]),
         "inner_margin_y": float(raw["inner_margin_y"]),
         "tx_dd_pair_spacing_mm": float(raw["tx_dd_pair_spacing_mm"]),
@@ -772,19 +824,6 @@ def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, 
         "dd_mirror_plane": cast(Literal["XZ"], dd_mirror_plane),
         "rx_plane": cast(Literal["YZ"], rx_plane),
         "tx_vertical_plane": cast(Literal["ZX"], tx_vertical_plane),
-        "profile_id": profile_id,
-        "trace_profile_base": trace_base,
-        "trace_profile_outer_bias": trace_outer_bias,
-        "trace_profile_inner_bias": trace_inner_bias,
-        "trace_profile_clamp_min": trace_clamp_min,
-        "gap_profile_base": gap_base,
-        "gap_profile_outer_bias": gap_outer_bias,
-        "gap_profile_inner_bias": gap_inner_bias,
-        "gap_profile_clamp_min": gap_clamp_min,
-        "turns": int(raw["turn_count_max"]),
-        "outer": derived_outer,
-        "trace": trace_base,
-        "gap": gap_base,
         "via_diameter_mm": float(raw["via_diameter_mm"]),
         "pcb_thickness_mm": float(raw["pcb_thickness_mm"]),
         "cu_thickness_mm": float(raw["cu_thickness_mm"]),
@@ -803,17 +842,20 @@ def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, 
         "rx_region_outer_h_mm": float(raw_max["rx_region_outer_h_mm"]),
         "rx_region_thickness_mm": float(raw_max["rx_region_thickness_mm"]),
     }
-    groups = _resolve_coil_groups(spec, seed, selected)
-    pcbs = _resolve_pcbs(spec, seed)
+    groups = _resolve_coil_groups(spec, seed, attempt, selected, context)
+    group_geometry = _resolve_group_geometry(spec, seed, attempt, context)
+    pcbs = _resolve_pcbs(spec, seed, attempt, context)
     _validate_mounts(groups, pcbs)
     _validate_constraints(spec, selected, groups)
-    return selected, selected_max, groups, pcbs
+    return selected, selected_max, groups, group_geometry, pcbs
 
 
-def resolve_selected_parameters(spec: TOMLTable, seed: int) -> SelectedParameters:
-    selected, _, _, _ = _resolve_selection(spec, seed)
+def resolve_selected_parameters(spec: TOMLTable, seed: int, attempt: int = 0) -> SelectedParameters:
+    selected, _, _, _, _ = _resolve_selection(spec, seed, attempt)
     return selected
 
 
-def resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, SelectedParametersMax, list[ResolvedCoilGroup], list[ResolvedPcbInstance]]:
-    return _resolve_selection(spec, seed)
+def resolve_selection(
+    spec: TOMLTable, seed: int, attempt: int = 0
+) -> tuple[SelectedParameters, SelectedParametersMax, list[ResolvedCoilGroup], list[GroupGeometryParams], list[ResolvedPcbInstance]]:
+    return _resolve_selection(spec, seed, attempt)

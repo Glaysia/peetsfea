@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 
-from peetsfea.types.manifest import SelectedParameters
+from peetsfea.types.manifest import GroupGeometryParams, ResolvedCoilGroup, ResolvedPcbInstance, SelectedParameters
 
 
 def _require_lower_hex(value: str, expected_len: int, field_name: str) -> None:
@@ -43,13 +43,23 @@ def compute_toml_space_hash(toml_hash: str) -> str:
     return toml_hash[:8]
 
 
-def compute_design_unique_hash(toml_hash: str, commit_hash: str, seed: int, selected_parameters: SelectedParameters) -> str:
+def compute_design_unique_hash(
+    toml_hash: str,
+    commit_hash: str,
+    selected_parameters: SelectedParameters,
+    selected_group_geometry: list[GroupGeometryParams],
+    selected_coil_groups: list[ResolvedCoilGroup],
+    selected_pcbs: list[ResolvedPcbInstance],
+) -> str:
     selected_json = json.dumps(selected_parameters, sort_keys=True, separators=(",", ":"))
-    identity_base = f"{toml_hash}:{commit_hash}:{seed}:{selected_json}"
+    selected_group_geometry_json = json.dumps(selected_group_geometry, sort_keys=True, separators=(",", ":"))
+    selected_coil_groups_json = json.dumps(selected_coil_groups, sort_keys=True, separators=(",", ":"))
+    selected_pcbs_json = json.dumps(selected_pcbs, sort_keys=True, separators=(",", ":"))
+    identity_base = f"{toml_hash}:{commit_hash}:{selected_json}:{selected_group_geometry_json}:{selected_coil_groups_json}:{selected_pcbs_json}"
     return hashlib.sha256(identity_base.encode("utf-8")).hexdigest()[:8]
 
 
-def compose_design_id(unique_hash: str, toml_space_hash: str, seed: int) -> str:
+def compose_design_id(unique_hash: str, toml_space_hash: str, seed: int, attempt: int) -> str:
     _require_lower_hex(unique_hash, 8, "unique_hash")
     _require_lower_hex(toml_space_hash, 8, "toml_space_hash")
-    return f"{unique_hash}_{toml_space_hash}_{seed}"
+    return f"{unique_hash}_{toml_space_hash}_{seed}_{attempt}"
