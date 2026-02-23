@@ -42,6 +42,7 @@ SCALAR_OFFSET: dict[str, int] = {path: idx for idx, (path, _, _) in enumerate(SC
 GROUP_KIND_ORDER: tuple[str, ...] = ("tx_dd", "tx_vertical", "rx_dd")
 GROUP_OFFSET_BASE = 100
 PCB_OFFSET_BASE = 200
+PROFILE_OFFSET = 300
 
 FIXED_DEFAULTS: dict[str, float] = {
     "pcb_thickness": 1.6,
@@ -127,25 +128,73 @@ def _select_range_end_value(root: TOMLTable, dotted_path: str, expect_integer: b
     return float(end)
 
 
-def _parse_profile_table(profile_root: TOMLTable, name: str) -> tuple[float, float, float, float]:
-    profile = require_table(profile_root.get(name), f"trace_gap_profile.{name}")
+def _parse_profile_table(raw_profile: TOMLValue, dotted_path: str) -> tuple[float, float, float, float]:
+    profile = require_table(raw_profile, dotted_path)
     required = {"mode", "base", "outer_bias", "inner_bias", "clamp_min"}
     if set(profile.keys()) != required:
-        raise ValueError(f"trace_gap_profile.{name} must contain only {sorted(required)}")
+        raise ValueError(f"{dotted_path} must contain only {sorted(required)}")
 
     mode = profile.get("mode")
     if mode != "biased_linear":
-        raise ValueError(f"trace_gap_profile.{name}.mode must be 'biased_linear'")
+        raise ValueError(f"{dotted_path}.mode must be 'biased_linear'")
 
     values: list[float] = []
     for key in ("base", "outer_bias", "inner_bias", "clamp_min"):
         raw = profile.get(key)
         if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-            raise ValueError(f"trace_gap_profile.{name}.{key} must be number")
+            raise ValueError(f"{dotted_path}.{key} must be number")
         values.append(float(raw))
     if values[3] <= 0:
-        raise ValueError(f"trace_gap_profile.{name}.clamp_min must be > 0")
+        raise ValueError(f"{dotted_path}.clamp_min must be > 0")
     return values[0], values[1], values[2], values[3]
+
+
+def _parse_profile_entry(entry: TOMLValue, idx: int) -> tuple[str, tuple[float, float, float, float], tuple[float, float, float, float]]:
+    dotted_root = f"trace_gap_profile.profiles[{idx}]"
+    profile_entry = require_table(entry, dotted_root)
+    required = {"id", "trace", "gap"}
+    if set(profile_entry.keys()) != required:
+        raise ValueError(f"{dotted_root} must contain only {sorted(required)}")
+
+    raw_id = profile_entry.get("id")
+    if not isinstance(raw_id, str) or raw_id == "":
+        raise ValueError(f"{dotted_root}.id must be non-empty string")
+
+    trace_values = _parse_profile_table(profile_entry.get("trace"), f"{dotted_root}.trace") # type: ignore
+    gap_values = _parse_profile_table(profile_entry.get("gap"), f"{dotted_root}.gap") # type: ignore
+    return raw_id, trace_values, gap_values
+
+
+def _resolve_profile_selection(spec: TOMLTable, seed: int) -> tuple[str, float, float, float, float, float, float, float, float]:
+    trace_gap_profile = require_table(spec.get("trace_gap_profile"), "trace_gap_profile")
+    raw_profiles = trace_gap_profile.get("profiles")
+    if not isinstance(raw_profiles, list):
+        raise ValueError("trace_gap_profile.profiles must be a non-empty array of tables")
+    if len(raw_profiles) == 0:
+        raise ValueError("trace_gap_profile.profiles must contain at least one profile")
+
+    parsed_profiles: list[tuple[str, tuple[float, float, float, float], tuple[float, float, float, float]]] = []
+    seen_ids: set[str] = set()
+    for idx, raw_entry in enumerate(raw_profiles):
+        profile_id, trace_values, gap_values = _parse_profile_entry(raw_entry, idx)
+        if profile_id in seen_ids:
+            raise ValueError(f"Duplicate trace_gap_profile.profiles id: {profile_id}")
+        seen_ids.add(profile_id)
+        parsed_profiles.append((profile_id, trace_values, gap_values))
+
+    selected_idx = (seed + PROFILE_OFFSET) % len(parsed_profiles)
+    selected_id, selected_trace, selected_gap = parsed_profiles[selected_idx]
+    return (
+        selected_id,
+        selected_trace[0],
+        selected_trace[1],
+        selected_trace[2],
+        selected_trace[3],
+        selected_gap[0],
+        selected_gap[1],
+        selected_gap[2],
+        selected_gap[3],
+    )
 
 
 def _parse_group_transforms(group: TOMLTable, field_name: str) -> list[dict[str, float]]:
@@ -389,9 +438,17 @@ def _validate_constraints(selected: SelectedParameters, coil_groups: list[Resolv
 
 
 def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, SelectedParametersMax, list[ResolvedCoilGroup], list[ResolvedPcbInstance]]:
-    trace_gap_profile = require_table(spec.get("trace_gap_profile"), "trace_gap_profile")
-    trace_base, trace_outer_bias, trace_inner_bias, trace_clamp_min = _parse_profile_table(trace_gap_profile, "trace_profile")
-    gap_base, gap_outer_bias, gap_inner_bias, gap_clamp_min = _parse_profile_table(trace_gap_profile, "gap_profile")
+    (
+        profile_id,
+        trace_base,
+        trace_outer_bias,
+        trace_inner_bias,
+        trace_clamp_min,
+        gap_base,
+        gap_outer_bias,
+        gap_inner_bias,
+        gap_clamp_min,
+    ) = _resolve_profile_selection(spec, seed)
     raw = _resolve_selected_scalars(spec, seed)
     raw_max = _resolve_selected_max_scalars(spec)
 
@@ -425,6 +482,7 @@ def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, 
         "floor_thickness_mm": float(raw["floor_thickness_mm"]),
         "floor_size_x_mm": float(raw["floor_size_x_mm"]),
         "floor_size_y_mm": float(raw["floor_size_y_mm"]),
+        "profile_id": profile_id,
         "trace_profile_base": trace_base,
         "trace_profile_outer_bias": trace_outer_bias,
         "trace_profile_inner_bias": trace_inner_bias,

@@ -109,20 +109,81 @@ range = [false, 20.0, 60.0, 5]
 [coil_spacing.tx_vertical_span_mm]
 range = [false, 0.0, 15.0, 4]
 
-# Trace/gap profile controls
-[trace_gap_profile.trace_profile]
+# Trace/gap profile presets (seed selects one profile deterministically)
+[[trace_gap_profile.profiles]]
+id = "p1"
+[trace_gap_profile.profiles.trace]
+mode = "biased_linear"
+base = 0.8
+outer_bias = 0.08
+inner_bias = -0.06
+clamp_min = 0.20
+[trace_gap_profile.profiles.gap]
+mode = "biased_linear"
+base = 0.35
+outer_bias = 0.03
+inner_bias = -0.03
+clamp_min = 0.12
+
+[[trace_gap_profile.profiles]]
+id = "p2"
+[trace_gap_profile.profiles.trace]
 mode = "biased_linear"
 base = 1.0
 outer_bias = 0.10
 inner_bias = -0.10
 clamp_min = 0.20
-
-[trace_gap_profile.gap_profile]
+[trace_gap_profile.profiles.gap]
 mode = "biased_linear"
 base = 0.50
 outer_bias = 0.05
 inner_bias = -0.05
 clamp_min = 0.15
+
+[[trace_gap_profile.profiles]]
+id = "p3"
+[trace_gap_profile.profiles.trace]
+mode = "biased_linear"
+base = 1.2
+outer_bias = 0.12
+inner_bias = -0.08
+clamp_min = 0.25
+[trace_gap_profile.profiles.gap]
+mode = "biased_linear"
+base = 0.60
+outer_bias = 0.07
+inner_bias = -0.04
+clamp_min = 0.20
+
+[[trace_gap_profile.profiles]]
+id = "p4"
+[trace_gap_profile.profiles.trace]
+mode = "biased_linear"
+base = 0.9
+outer_bias = 0.05
+inner_bias = -0.12
+clamp_min = 0.18
+[trace_gap_profile.profiles.gap]
+mode = "biased_linear"
+base = 0.45
+outer_bias = 0.02
+inner_bias = -0.08
+clamp_min = 0.14
+
+[[trace_gap_profile.profiles]]
+id = "p5"
+[trace_gap_profile.profiles.trace]
+mode = "biased_linear"
+base = 1.1
+outer_bias = 0.09
+inner_bias = -0.09
+clamp_min = 0.22
+[trace_gap_profile.profiles.gap]
+mode = "biased_linear"
+base = 0.55
+outer_bias = 0.06
+inner_bias = -0.06
+clamp_min = 0.17
 
 # ----------------------------------------------------------------------------
 # Coil groups
