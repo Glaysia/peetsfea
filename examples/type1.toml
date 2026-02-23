@@ -81,41 +81,43 @@ range = [false, 5000.0, 5000.0, 1]
 range = [false, 5000.0, 5000.0, 1]
 
 # ----------------------------------------------------------------------------
-# Grouped coil parameter space
+# Grouped coil geometry controls
 
-[parameters.outer_x]
+[coil_shape.outer_x]
 # Keep TX coil max below tx.region minimum span (currently 160mm).
 range = [false, 120.0, 150.0, 4]
 
-[parameters.outer_y]
+[coil_shape.outer_y]
 range = [false, 110.0, 150.0, 5]
 
-[parameters.turn_count_max]
+[coil_shape.turn_count_max]
 range = [true, 6, 12, 7]
 
-[parameters.inner_margin_x]
+[coil_shape.inner_margin_x]
 range = [false, 2.0, 8.0, 4]
 
-[parameters.inner_margin_y]
+[coil_shape.inner_margin_y]
 range = [false, 2.0, 8.0, 4]
 
-[parameters.tx_dd_pair_spacing_mm]
+# Grouped coil spacing controls
+[coil_spacing.tx_dd_pair_spacing_mm]
 range = [false, 20.0, 60.0, 5]
 
-[parameters.rx_dd_pair_spacing_mm]
+[coil_spacing.rx_dd_pair_spacing_mm]
 range = [false, 20.0, 60.0, 5]
 
-[parameters.tx_vertical_span_mm]
+[coil_spacing.tx_vertical_span_mm]
 range = [false, 0.0, 15.0, 4]
 
-[parameters.trace_profile]
+# Trace/gap profile controls
+[trace_gap_profile.trace_profile]
 mode = "biased_linear"
 base = 1.0
 outer_bias = 0.10
 inner_bias = -0.10
 clamp_min = 0.20
 
-[parameters.gap_profile]
+[trace_gap_profile.gap_profile]
 mode = "biased_linear"
 base = 0.50
 outer_bias = 0.05

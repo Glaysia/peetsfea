@@ -10,14 +10,14 @@ from peetsfea.types.manifest import ResolvedCoilGroup, ResolvedPcbInstance, Sele
 Number: TypeAlias = int | float
 
 SCALAR_RANGE_SPECS: tuple[tuple[str, str, bool], ...] = (
-    ("parameters.outer_x", "outer_x", False),
-    ("parameters.outer_y", "outer_y", False),
-    ("parameters.turn_count_max", "turn_count_max", True),
-    ("parameters.inner_margin_x", "inner_margin_x", False),
-    ("parameters.inner_margin_y", "inner_margin_y", False),
-    ("parameters.tx_dd_pair_spacing_mm", "tx_dd_pair_spacing_mm", False),
-    ("parameters.rx_dd_pair_spacing_mm", "rx_dd_pair_spacing_mm", False),
-    ("parameters.tx_vertical_span_mm", "tx_vertical_span_mm", False),
+    ("coil_shape.outer_x", "outer_x", False),
+    ("coil_shape.outer_y", "outer_y", False),
+    ("coil_shape.turn_count_max", "turn_count_max", True),
+    ("coil_shape.inner_margin_x", "inner_margin_x", False),
+    ("coil_shape.inner_margin_y", "inner_margin_y", False),
+    ("coil_spacing.tx_dd_pair_spacing_mm", "tx_dd_pair_spacing_mm", False),
+    ("coil_spacing.rx_dd_pair_spacing_mm", "rx_dd_pair_spacing_mm", False),
+    ("coil_spacing.tx_vertical_span_mm", "tx_vertical_span_mm", False),
     ("tv.width_mm", "tv_width_mm", False),
     ("tv.height_mm", "tv_height_mm", False),
     ("tv.thickness_mm", "tv_thickness_mm", False),
@@ -127,24 +127,24 @@ def _select_range_end_value(root: TOMLTable, dotted_path: str, expect_integer: b
     return float(end)
 
 
-def _parse_profile_table(parameters: TOMLTable, name: str) -> tuple[float, float, float, float]:
-    profile = require_table(parameters.get(name), f"parameters.{name}")
+def _parse_profile_table(profile_root: TOMLTable, name: str) -> tuple[float, float, float, float]:
+    profile = require_table(profile_root.get(name), f"trace_gap_profile.{name}")
     required = {"mode", "base", "outer_bias", "inner_bias", "clamp_min"}
     if set(profile.keys()) != required:
-        raise ValueError(f"parameters.{name} must contain only {sorted(required)}")
+        raise ValueError(f"trace_gap_profile.{name} must contain only {sorted(required)}")
 
     mode = profile.get("mode")
     if mode != "biased_linear":
-        raise ValueError(f"parameters.{name}.mode must be 'biased_linear'")
+        raise ValueError(f"trace_gap_profile.{name}.mode must be 'biased_linear'")
 
     values: list[float] = []
     for key in ("base", "outer_bias", "inner_bias", "clamp_min"):
         raw = profile.get(key)
         if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-            raise ValueError(f"parameters.{name}.{key} must be number")
+            raise ValueError(f"trace_gap_profile.{name}.{key} must be number")
         values.append(float(raw))
     if values[3] <= 0:
-        raise ValueError(f"parameters.{name}.clamp_min must be > 0")
+        raise ValueError(f"trace_gap_profile.{name}.clamp_min must be > 0")
     return values[0], values[1], values[2], values[3]
 
 
@@ -389,9 +389,9 @@ def _validate_constraints(selected: SelectedParameters, coil_groups: list[Resolv
 
 
 def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, SelectedParametersMax, list[ResolvedCoilGroup], list[ResolvedPcbInstance]]:
-    parameters = require_table(spec.get("parameters"), "parameters")
-    trace_base, trace_outer_bias, trace_inner_bias, trace_clamp_min = _parse_profile_table(parameters, "trace_profile")
-    gap_base, gap_outer_bias, gap_inner_bias, gap_clamp_min = _parse_profile_table(parameters, "gap_profile")
+    trace_gap_profile = require_table(spec.get("trace_gap_profile"), "trace_gap_profile")
+    trace_base, trace_outer_bias, trace_inner_bias, trace_clamp_min = _parse_profile_table(trace_gap_profile, "trace_profile")
+    gap_base, gap_outer_bias, gap_inner_bias, gap_clamp_min = _parse_profile_table(trace_gap_profile, "gap_profile")
     raw = _resolve_selected_scalars(spec, seed)
     raw_max = _resolve_selected_max_scalars(spec)
 
