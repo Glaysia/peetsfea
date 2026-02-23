@@ -1,72 +1,76 @@
-# Phase 3 - Geometry Generation for 3 Coil Groups on Multi-PCB
+# Phase 3 - Geometry Generation on Multi-PCB with Profiled Coils
 
 ## Goal
-선택된 그룹/PCB를 기준으로 N개 PCB에 코일을 독립 생성한다. 가변 turn profile + inner margin solver를 적용하며, 보드 간 연결은 구현하지 않는다.
+Phase 2에서 결정된 group/pcb 선택 결과를 기반으로 다중 PCB에 코일을 독립 생성한다.
+코일은 profile 기반 turn 폭/간격을 사용하고, 보드 간 연결은 여전히 구현하지 않는다.
+
+## Preconditions
+- Phase 2에서 `selected_coil_groups`, `selected_pcbs`가 manifest에 기록되어야 함.
+- TX 영역 제약이 resolver에서 이미 검증되어야 함.
+- 기존 연결 레이어 제거 정책(open endpoints 유지)이 계속 유효해야 함.
 
 ## In Scope
-- `outer_x/outer_y` 기반 직사각 centerline 생성
-- 턴별 `trace_k/gap_k/pitch_k` 계산 적용
-- inner margin 종료조건 적용
-- 그룹 템플릿 기반 코일 인스턴싱
-  - tx_dd 2 또는 4개
-  - tx_vertical 0~4개 (등간격 span 배치)
-  - rx_dd 2개
-- 코일 방향 메타데이터 출력
-- PCB별 `present==1`만 생성
-- board/local transform + mount 적용
-- board/group debug 출력 저장
+- `outer_x/outer_y` 기반 직사각 centerline 생성.
+- 턴별 `trace_k/gap_k/pitch_k` 적용.
+- inner margin 종료조건으로 `turn_count_used` 계산.
+- 그룹 템플릿 기반 코일 인스턴싱:
+  - tx_dd 2/4
+  - tx_vertical 0~4 (span 등간격)
+  - rx_dd 2
+- PCB별 `present==1` 대상만 생성.
+- board/local transform + mounts 적용.
+- polarity 방향 메타데이터 출력.
+- board/group/turn/profile debug 저장.
 
 ## Out of Scope
-- Tx/Rx Unite 수행
-- PCB 간 전기적/기하학적 연결
-- connection routing 최적화
+- Tx/Rx Unite 수행.
+- PCB 간 전기적/기하학적 연결.
+- shortest-path routing 최적화.
 
-## Spec/Type Changes
-- geometry debug 확장
-  - `board_debug[]`: board id, constraint status, cad probe
-  - `group_debug[]`: group kind, instance index, turn_count_used
-  - `turn_profile_debug[]`: k별 trace/gap/pitch
-  - `vertical_layout_debug[]`: tx_vertical 등간격 좌표와 delta
-  - `polarity_debug[]`: 코일별 current/b-field 방향
-- naming 규칙
+## Geometry Metadata Contract
+- `board_debug[]`: board_id, present, transform, constraints_ok, cad_probe.
+- `group_debug[]`: group_kind, instance_index, board_id, turn_count_used.
+- `turn_profile_debug[]`: k별 trace/gap/pitch.
+- `vertical_layout_debug[]`: tx_vertical 좌표/간격(delta).
+- `polarity_debug[]`: current_direction, b_field_direction.
+- naming:
   - `coil_{group}_g{idx}_b{board_idx}_{design_id}`
   - `fr4_b{board_idx}_{design_id}`
 
-## Implementation Steps
-1. centerline 생성기를 profile 기반으로 교체한다.
-2. inner margin solver로 실제 `turn_count_used`를 결정한다.
-3. group별 base geometry를 만들고 instance transform을 적용한다.
-4. tx_vertical은 `tx_vertical_span_mm` 기반 등간격 배치한다.
-5. tx_dd/rx_dd pair spacing을 배치에 반영한다.
-6. 코일별 전류/자기장 방향 계약을 metadata에 기록한다.
-7. PCB별 mount 규칙대로 geometry를 배치한다.
-8. present=0 PCB는 skip한다.
-9. 생성 객체를 group/board별로 metadata에 기록한다.
-10. 콘솔에 요약(활성 PCB 수, 코일 수, constraint 결과)을 출력한다.
+## Work Packages
+1. centerline 생성기 profile 지원 버전 구현.
+2. inner margin solver 구현 + fail-fast 조건 정의.
+3. group별 base geometry -> instance transform 파이프라인 구현.
+4. tx_vertical 등간격 배치기 구현.
+5. pair spacing(tx_dd/rx_dd) 배치 반영.
+6. polarity metadata 생성기 구현.
+7. present board 필터링 + mounts 배치 적용.
+8. debug metadata 저장 확장.
+9. 콘솔 요약(활성 PCB/코일 수/제약 결과) 출력.
 
 ## Validation Rules
-- 모든 세그먼트 axis-aligned
-- 모든 `trace_k`, `gap_k`, `pitch_k > 0`
-- inner margin 위반 없이 turn 종료
-- `tx_vertical_count >= 2`이면 등간격 오차 `<= tol`
-- 코일 수 상한 `<= 10`
-- object naming 충돌 없음
-- 방향 계약 위반 시 실패
+- 모든 세그먼트 axis-aligned.
+- 모든 `trace_k`, `gap_k`, `pitch_k > 0`.
+- inner margin 위반 없이 종료.
+- `tx_vertical_count >= 2`이면 등간격 오차 `<= tol`.
+- 총 코일 수 상한 `<= 10`.
+- object naming 충돌 없음.
+- polarity 계약 위반 시 실패.
 
-## Test Cases
-- profile bias 변화 시 turn 분포 변화 확인
-- inner_margin이 큰 경우 turn_count_used 감소 확인
-- tx_vertical=0,1,2,4 경계 케이스 검증
-- `span=0`, `span=15` 경계 검증
-- tx_dd=2/4 모드 검증
-- 8 PCB(항상 4 + optional 4)에서 optional off 시 mount skip 확인
+## Test Matrix
+- profile bias 변화 시 turn 분포 변화.
+- inner_margin 증가 시 `turn_count_used` 감소 확인.
+- tx_vertical count 경계: `0,1,2,4`.
+- span 경계: `0`, `15`.
+- tx_dd 모드: `2`, `4`.
+- optional PCB off/on에서 mount 반영 검증.
 
 ## Exit Criteria
-- 그룹 기반 다중 코일이 다중 PCB에 안정적으로 생성된다.
-- turn profile/inner margin/vertical span 결과가 debug에 완전 기록된다.
-- optional PCB off/on에 따른 생성 결과가 결정론적으로 일치한다.
+- 그룹 기반 다중 코일이 다중 PCB에 결정론적으로 생성됨.
+- profile/inner_margin/vertical span 결과가 metadata에 완전 기록됨.
+- optional PCB 선택 변화가 seed 기반으로 재현 가능.
 
 ## Risks and Rollback
-- 리스크: solver 종료 조건 오류로 self-overlap 또는 과소 생성
-- 대응: 턴별 bbox/간격 검증 및 실패 시 즉시 예외
-- 롤백: profile 모드를 임시 uniform으로 제한해 안정화 가능
+- 리스크: solver 종료 조건 오류로 self-overlap 혹은 under-generation.
+- 대응: 턴별 bbox/간격 검증 + 즉시 예외.
+- 롤백: profile 모드를 임시 uniform으로 제한해 안정화.
