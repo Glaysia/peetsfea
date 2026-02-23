@@ -43,6 +43,7 @@ def _selected_parameters() -> SelectedParameters:
         "rx_face_clearance_mm": 0.0,
         "dd_mirror_plane": "XZ",
         "rx_plane": "YZ",
+        "tx_vertical_plane": "ZX",
         "turns": 6,
         "outer": 40.0,
         "trace": 1.0,

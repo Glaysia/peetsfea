@@ -93,6 +93,10 @@ def _map_xy_points_to_yz(points: list[list[float]], *, x_const: float, y_center:
     return [[x_const, y_center + point[0], z_center + point[1]] for point in points]
 
 
+def _map_xy_points_to_zx(points: list[list[float]], *, x_center: float, y_const: float, z_center: float) -> list[list[float]]:
+    return [[x_center + point[0], y_const, z_center + point[1]] for point in points]
+
+
 def _bounds_from_scene_entry(entry: SceneObjectEntry) -> tuple[_Point3, _Point3]:
     ox, oy, oz = entry["origin_xyz"]
     sx, sy, sz = entry["size_xyz"]
@@ -109,11 +113,12 @@ def _bbox_violations(
 ) -> list[RegionViolation]:
     if len(bbox) < 6:
         return []
+    eps = 1e-9
     actual_min = (bbox[0], bbox[1], bbox[2])
     actual_max = (bbox[3], bbox[4], bbox[5])
     violations: list[RegionViolation] = []
     for idx, axis in enumerate(("x", "y", "z")):
-        if actual_min[idx] < region_min[idx]:
+        if actual_min[idx] < (region_min[idx] - eps):
             violations.append(
                 {
                     "object_name": object_name,
@@ -126,7 +131,7 @@ def _bbox_violations(
                     "region_max": region_max[idx],
                 }
             )
-        if actual_max[idx] > region_max[idx]:
+        if actual_max[idx] > (region_max[idx] + eps):
             violations.append(
                 {
                     "object_name": object_name,
@@ -142,16 +147,70 @@ def _bbox_violations(
     return violations
 
 
+def _required_pair_spacing_mm(kind: Literal["tx_dd", "rx_dd"], outer_x: float, outer_y: float) -> float:
+    if kind == "tx_dd":
+        return outer_y
+    return outer_x
+
+
+def _tx_dd_center_y_and_layer(
+    *,
+    instance_count: int,
+    instance_index: int,
+    pair_clearance_mm: float,
+    outer_y: float,
+    region_center_y: float,
+    region_min_y: float,
+    region_max_y: float,
+) -> tuple[float, int]:
+    if instance_count not in (2, 4):
+        raise ValueError(f"tx_dd selected_count must be 2 or 4 (actual={instance_count})")
+    if instance_index < 0 or instance_index >= instance_count:
+        raise ValueError(f"tx_dd instance index out of range: {instance_index}")
+
+    half_outer_y = outer_y / 2.0
+    pair_center_distance = outer_y + pair_clearance_mm
+    half_center_distance = pair_center_distance / 2.0
+    local_slot = instance_index % 2
+    layer_index = 0 if instance_count == 2 else (instance_index // 2)
+    sign = -1.0 if local_slot == 0 else 1.0
+    center_y = region_center_y + (sign * half_center_distance)
+    if (center_y - half_outer_y) < region_min_y or (center_y + half_outer_y) > region_max_y:
+        raise ValueError(
+            "tx_dd symmetric placement out of region "
+            f"(pair_clearance_mm={pair_clearance_mm}, outer_y={outer_y}, "
+            f"instance_index={instance_index}, region_min_y={region_min_y}, region_max_y={region_max_y})"
+        )
+    return center_y, layer_index
+
+
+def _max_feasible_turns(outer: float, trace: float, gap: float) -> int:
+    pitch = trace + gap
+    if pitch <= 0:
+        return 0
+    raw = (outer + (2.0 * gap)) / (2.0 * pitch)
+    max_turns = int(math.floor(raw - 1e-12))
+    return max(0, max_turns)
+
+
+def _rx_dd_center_offset_y(instance_index: int, instance_count: int, outer_x: float, edge_gap_mm: float) -> float:
+    if instance_count < 1:
+        raise ValueError("rx_dd selected_count must be >= 1")
+    if edge_gap_mm < 0:
+        raise ValueError(f"rx_dd edge gap must be >= 0 (actual={edge_gap_mm})")
+    center = (instance_count - 1) / 2.0
+    pair_center_distance = outer_x + edge_gap_mm
+    return (instance_index - center) * pair_center_distance
+
+
 def _coil_instance_offset(kind: str, instance_index: int, instance_count: int, spacing_mm: float) -> _Point3:
-    if kind in ("tx_dd", "rx_dd"):
-        center = (instance_count - 1) / 2.0
-        return (0.0, (instance_index - center) * spacing_mm, 0.0)
     if kind == "tx_vertical":
         if instance_count <= 1:
             return (0.0, 0.0, 0.0)
         delta = spacing_mm / float(instance_count - 1)
         start = -spacing_mm / 2.0
-        return (0.0, 0.0, start + (instance_index * delta))
+        # tx_vertical span is distributed along the ZX-plane normal (Y axis).
+        return (0.0, start + (instance_index * delta), 0.0)
     return (0.0, 0.0, 0.0)
 
 
@@ -777,6 +836,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     rx_face_clearance = selected["rx_face_clearance_mm"]
     dd_mirror_plane = selected["dd_mirror_plane"]
     rx_plane = selected["rx_plane"]
+    tx_vertical_plane = selected["tx_vertical_plane"]
 
     if turns < 1:
         raise ValueError("selected_parameters.turns must be >= 1")
@@ -798,6 +858,8 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
         raise ValueError("selected_parameters.dd_mirror_plane must be 'XZ'")
     if rx_plane != "YZ":
         raise ValueError("selected_parameters.rx_plane must be 'YZ'")
+    if tx_vertical_plane != "ZX":
+        raise ValueError("selected_parameters.tx_vertical_plane must be 'ZX'")
 
     inner_width_x = outer_x - (2.0 * turns * trace) - (2.0 * (turns - 1) * gap)
     inner_width_y = outer_y - (2.0 * turns * trace) - (2.0 * (turns - 1) * gap)
@@ -834,6 +896,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     coil_polarity: list[CoilPolaritySpec] = []
     scene_objects: list[SceneObjectEntry] = []
     placement_violations: list[RegionViolation] = []
+    coil_plane_bboxes: list[tuple[str, Literal["XY", "YZ", "ZX"], list[float]]] = []
 
     try:
         scene_names, scene_probes, scene_objects = _create_scene_non_model_objects(
@@ -848,30 +911,18 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
         tx_dd_region_min, tx_dd_region_max = _bounds_from_scene_entry(scene_by_kind["tx_region_dd"])
         tx_vertical_region_min, tx_vertical_region_max = _bounds_from_scene_entry(scene_by_kind["tx_region_vertical"])
         rx_region_min, rx_region_max = _bounds_from_scene_entry(scene_by_kind["rx_region_actual"])
-        tx_dd_center_x = (tx_dd_region_min[0] + tx_dd_region_max[0]) / 2.0
+        # Keep TX coils attached to the YZ plane side (minimum X of TX region)
+        # so TX-RX distance is minimized even when outer_x is small.
+        tx_dd_center_x = tx_dd_region_min[0] + (outer_x / 2.0)
         tx_dd_center_y = (tx_dd_region_min[1] + tx_dd_region_max[1]) / 2.0
-        tx_vertical_center_x = (tx_vertical_region_min[0] + tx_vertical_region_max[0]) / 2.0
+        tx_vertical_center_x = tx_vertical_region_min[0] + (outer_x / 2.0)
         tx_vertical_center_y = (tx_vertical_region_min[1] + tx_vertical_region_max[1]) / 2.0
         rx_center_y = (rx_region_min[1] + rx_region_max[1]) / 2.0
-        rx_center_z = (rx_region_min[2] + rx_region_max[2]) / 2.0
 
         for board_idx, pcb in enumerate(selected_pcbs):
             if not pcb["present"]:
                 continue
-
             board_x, board_y, board_z = pcb["position"]
-            substrate_name = f"fr4_b{board_idx}_{design_id}"
-            substrate = cast(
-                Object3d,
-                modeler.create_box(
-                    origin=[board_x - (outer_x / 2.0), board_y - (outer_y / 2.0), board_z - pcb_thickness],
-                    sizes=[outer_x, outer_y, pcb_thickness],
-                    name=substrate_name,
-                    material="FR4_epoxy",
-                ),
-            )
-            object_names.append(_object_name(substrate, substrate_name))
-            cad_probe.append(_probe_cad_object(substrate, substrate_name))
 
             for group in selected_groups:
                 kind = group["kind"]
@@ -879,21 +930,47 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                 spacing_mm = group["spacing_mm"]
                 transforms = group["instance_transforms"]
                 transform = transforms[0] if transforms else {"dx": 0.0, "dy": 0.0, "dz": 0.0, "rot_deg": 0.0}
+                if kind == "rx_dd" and spacing_mm < 0:
+                    raise ValueError(f"rx_dd edge gap must be >= 0 (actual={spacing_mm})")
 
                 for instance_index in range(instance_count):
                     if not _mount_allows_instance(pcb["mounts"], kind, instance_index):
                         continue
-                    off_x, off_y, off_z = _coil_instance_offset(kind, instance_index, instance_count, spacing_mm)
+                    off_x = 0.0
+                    off_y = 0.0
+                    off_z = 0.0
                     if kind == "tx_dd":
+                        tx_dd_instance_center_y, _ = _tx_dd_center_y_and_layer(
+                            instance_count=instance_count,
+                            instance_index=instance_index,
+                            pair_clearance_mm=spacing_mm,
+                            outer_y=outer_y,
+                            region_center_y=tx_dd_center_y,
+                            region_min_y=tx_dd_region_min[1],
+                            region_max_y=tx_dd_region_max[1],
+                        )
+                        off_y = tx_dd_instance_center_y - tx_dd_center_y
                         tx_dd_anchor_z = tx_dd_region_max[2] - tx_dd_top_clearance - cu_thickness
                         top_points = _translate_points(
                             base_points,
-                            dx=tx_dd_center_x + transform["dx"] + off_x,
-                            dy=tx_dd_center_y + transform["dy"] + off_y,
-                            dz=tx_dd_anchor_z + transform["dz"] + off_z,
+                            dx=tx_dd_center_x + transform["dx"],
+                            dy=tx_dd_instance_center_y + transform["dy"],
+                            dz=tx_dd_anchor_z - board_z + transform["dz"] + off_z,
                         )
                     elif kind == "rx_dd":
+                        off_y = _rx_dd_center_offset_y(
+                            instance_index=instance_index,
+                            instance_count=instance_count,
+                            outer_x=outer_x,
+                            edge_gap_mm=spacing_mm,
+                        )
+                        if abs(transform["dz"]) > 1e-12:
+                            raise ValueError("rx_dd transform dz must be 0 for bottom-anchor contract")
+                        if abs(transform["dx"]) > 1e-12:
+                            raise ValueError("rx_dd transform dx must be 0 for +X face-anchor contract")
                         rx_anchor_x = rx_region_max[0] - rx_face_clearance - cu_thickness
+                        # Bottom-anchor contract: coil bottom touches RX region minimum Z.
+                        rx_center_z = rx_region_min[2] + (outer_y / 2.0) + 1e-6
                         translated_xy = _translate_points(
                             base_points,
                             dx=0.0,
@@ -907,14 +984,35 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                             z_center=rx_center_z + transform["dz"] + off_z,
                         )
                     elif kind == "tx_vertical":
-                        # Polyline rectangle section is centered on centerline.
-                        # Keep copper fully inside TX vertical region by lifting centerline half thickness.
-                        tx_vertical_anchor_z = tx_vertical_region_min[2] + (cu_thickness / 2.0)
-                        top_points = _translate_points(
-                            base_points,
-                            dx=tx_vertical_center_x + transform["dx"] + off_x,
-                            dy=tx_vertical_center_y + transform["dy"] + off_y,
-                            dz=tx_vertical_anchor_z + transform["dz"] + off_z,
+                        off_x, off_y, off_z = _coil_instance_offset(kind, instance_index, instance_count, spacing_mm)
+                        tx_vertical_zone_h = tx_vertical_region_max[2] - tx_vertical_region_min[2]
+                        tx_vertical_outer_y = min(outer_y, tx_vertical_zone_h)
+                        tx_vertical_turns = min(
+                            turns,
+                            _max_feasible_turns(outer_x, trace, gap),
+                            _max_feasible_turns(tx_vertical_outer_y, trace, gap),
+                        )
+                        if tx_vertical_turns < 1:
+                            raise ValueError(
+                                "tx_vertical cannot fit in tx_region_vertical "
+                                f"(available_outer_x={outer_x}, available_outer_y={tx_vertical_outer_y})"
+                            )
+                        tx_vertical_points = _build_rect_spiral_centerline_absolute(
+                            turns=tx_vertical_turns,
+                            outer_x=outer_x,
+                            outer_y=tx_vertical_outer_y,
+                            trace=trace,
+                            gap=gap,
+                            z=0.0,
+                        )
+                        tx_vertical_center_z = tx_vertical_region_min[2] + (tx_vertical_outer_y / 2.0)
+                        if tx_vertical_plane != "ZX":
+                            raise ValueError("tx_vertical plane contract violation: expected ZX")
+                        top_points = _map_xy_points_to_zx(
+                            [list(point) for point in tx_vertical_points],
+                            x_center=tx_vertical_center_x + transform["dx"] + off_x,
+                            y_const=tx_vertical_center_y + transform["dy"] + off_y,
+                            z_center=tx_vertical_center_z + transform["dz"] + off_z,
                         )
                     else:
                         top_points = _translate_points(
@@ -939,6 +1037,13 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                     object_names.append(obj_name)
                     probe = _probe_cad_object(top_obj, top_name)
                     cad_probe.append(probe)
+                    if kind == "tx_dd":
+                        plane: Literal["XY", "YZ", "ZX"] = "XY"
+                    elif kind == "rx_dd":
+                        plane = "YZ"
+                    else:
+                        plane = "ZX"
+                    coil_plane_bboxes.append((pcb["id"], plane, probe["bbox"]))
                     if kind == "tx_dd":
                         violations = _bbox_violations(
                             object_name=obj_name,
@@ -998,6 +1103,51 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                             "b_field_direction": b_field_direction,
                         }
                     )
+
+        grouped_plane_bboxes: dict[tuple[str, Literal["XY", "YZ", "ZX"]], list[float]] = {}
+        for board_id, plane, bbox in coil_plane_bboxes:
+            if len(bbox) < 6:
+                continue
+            key = (board_id, plane)
+            existing = grouped_plane_bboxes.get(key)
+            if existing is None:
+                grouped_plane_bboxes[key] = list(bbox[:6])
+            else:
+                existing[0] = min(existing[0], bbox[0])
+                existing[1] = min(existing[1], bbox[1])
+                existing[2] = min(existing[2], bbox[2])
+                existing[3] = max(existing[3], bbox[3])
+                existing[4] = max(existing[4], bbox[4])
+                existing[5] = max(existing[5], bbox[5])
+
+        eps_len = 1e-6
+        for (board_id, plane), bbox in grouped_plane_bboxes.items():
+            min_x, min_y, min_z, max_x, max_y, max_z = bbox
+            span_x = max(max_x - min_x, eps_len)
+            span_y = max(max_y - min_y, eps_len)
+            span_z = max(max_z - min_z, eps_len)
+            if plane == "XY": 
+                origin = [min_x, min_y, min_z - pcb_thickness]
+                sizes = [span_x, span_y, pcb_thickness]
+            elif plane == "YZ":
+                origin = [min_x - pcb_thickness, min_y, min_z]
+                sizes = [pcb_thickness, span_y, span_z]
+            else:  # ZX
+                origin = [min_x, min_y - pcb_thickness, min_z]
+                sizes = [span_x, pcb_thickness, span_z]
+
+            substrate_name = f"fr4_{board_id}_{plane.lower()}_{design_id}"
+            substrate = cast(
+                Object3d,
+                modeler.create_box(
+                    origin=origin,
+                    sizes=sizes,
+                    name=substrate_name,
+                    material="FR4_epoxy",
+                ),
+            )
+            object_names.append(_object_name(substrate, substrate_name))
+            cad_probe.append(_probe_cad_object(substrate, substrate_name))
 
         hfss.save_project(str(aedt_path))
     except Exception as exc:

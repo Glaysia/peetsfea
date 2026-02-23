@@ -165,8 +165,8 @@ def _manifest(tmp_path: Path) -> Manifest:
             "turn_count_max": 5,
             "inner_margin_x": 2.0,
             "inner_margin_y": 2.0,
-            "tx_dd_pair_spacing_mm": 40.0,
-            "rx_dd_pair_spacing_mm": 40.0,
+            "tx_dd_pair_spacing_mm": 60.0,
+            "rx_dd_pair_spacing_mm": 60.0,
             "tx_vertical_span_mm": 10.0,
             "tv_width_mm": 1200.0,
             "tv_height_mm": 700.0,
@@ -193,6 +193,7 @@ def _manifest(tmp_path: Path) -> Manifest:
             "rx_face_clearance_mm": 0.0,
             "dd_mirror_plane": "XZ",
             "rx_plane": "YZ",
+            "tx_vertical_plane": "ZX",
             "profile_id": "p1",
             "trace_profile_base": 1.0,
             "trace_profile_outer_bias": 0.1,
@@ -229,7 +230,7 @@ def _manifest(tmp_path: Path) -> Manifest:
                 "kind": "tx_dd",
                 "requested_count": 2,
                 "selected_count": 2,
-                "spacing_mm": 40.0,
+                "spacing_mm": 60.0,
                 "instance_transforms": [{"dx": 0.0, "dy": 0.0, "dz": 0.0, "rot_deg": 0.0}],
             },
             {
@@ -243,7 +244,7 @@ def _manifest(tmp_path: Path) -> Manifest:
                 "kind": "rx_dd",
                 "requested_count": 2,
                 "selected_count": 2,
-                "spacing_mm": 40.0,
+                "spacing_mm": 60.0,
                 "instance_transforms": [{"dx": 0.0, "dy": 0.0, "dz": 0.0, "rot_deg": 0.0}],
             },
         ],
@@ -323,6 +324,17 @@ def test_corner_debug_contains_offsets() -> None:
     assert all(corner["offset_applied"] is not None for corner in non_endpoints)
 
 
+def test_bbox_violations_ignores_tiny_fp_overflow() -> None:
+    violations = geom._bbox_violations(
+        object_name="coil_tx_vertical_test",
+        bbox=[0.0, 0.0, 0.0, 100.0 + 1.11022302462516e-13, 50.0, 10.0],
+        region_kind="tx_region_vertical",
+        region_min=(0.0, 0.0, 0.0),
+        region_max=(100.0, 50.0, 10.0),
+    )
+    assert violations == []
+
+
 def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     fake = _FakeHfss()
     monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
@@ -398,6 +410,26 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert scene_by_kind["rx_region_actual"]["origin_xyz"][2] == scene_by_kind["tv"]["origin_xyz"][2] + 1.0
     # RX actual thickness must match RX max thickness.
     assert scene_by_kind["rx_region_actual"]["size_xyz"][0] == scene_by_kind["rx_region_max"]["size_xyz"][0]
+    rx_coil_probe = next(probe for probe in metadata["debug"]["cad_probe"] if probe["object_name"].startswith("coil_rx_dd_"))
+    tx_vertical_probe = next(probe for probe in metadata["debug"]["cad_probe"] if probe["object_name"].startswith("coil_tx_vertical_"))
+    # TX vertical coil must be in a vertical plane (ZX): y must be constant.
+    assert tx_vertical_probe["bbox"][1] == pytest.approx(tx_vertical_probe["bbox"][4], abs=1e-6)
+    # Fake CAD probe uses centerline points only (no xsection), so z_min reflects centerline bottom.
+    expected_rx_centerline_z_min = (
+        scene_by_kind["rx_region_actual"]["origin_xyz"][2]
+        + (metadata["selected_parameters"]["trace"] / 2.0)
+        + 1e-6
+    )
+    assert rx_coil_probe["bbox"][2] == pytest.approx(expected_rx_centerline_z_min, abs=1e-4)
+    # RX coil centerline is attached to +X face side with face clearance considered.
+    expected_rx_centerline_x = (
+        scene_by_kind["rx_region_actual"]["origin_xyz"][0]
+        + scene_by_kind["rx_region_actual"]["size_xyz"][0]
+        - metadata["selected_parameters"]["rx_face_clearance_mm"]
+        - metadata["selected_parameters"]["cu_thickness"]
+    )
+    assert rx_coil_probe["bbox"][0] == pytest.approx(expected_rx_centerline_x)
+    assert rx_coil_probe["bbox"][3] == pytest.approx(expected_rx_centerline_x)
     # ZX symmetry contract: Y-centered placement.
     for kind in (
         "floor",
@@ -432,7 +464,7 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert all(entry["present"] for entry in metadata["group_endpoints"])
     assert metadata["debug"]["constraints_ok"] is True
     assert len(metadata["debug"]["centerline_vertices"]) == 24
-    assert len(metadata["debug"]["cad_probe"]) == 14
+    assert len(metadata["debug"]["cad_probe"]) == 15
 
     assert len(fake.modeler.polyline_calls) == 3
     for call in fake.modeler.polyline_calls:
@@ -440,6 +472,48 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     scene_boxes = [call for call in fake.modeler.box_calls if str(call["name"]).startswith("scene_")]
     assert len(scene_boxes) == 9
     assert all(call["non_model"] is True for call in scene_boxes)
+    fr4_boxes = [call for call in fake.modeler.box_calls if str(call["name"]).startswith("fr4_")]
+    assert len(fr4_boxes) == 3
+
+
+def test_tx_vertical_span_distributes_on_y_and_stays_in_vertical_z_region(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_coil_groups"][1]["requested_count"] = 2
+    manifest["selected_coil_groups"][1]["selected_count"] = 2
+    manifest["selected_coil_groups"][1]["spacing_mm"] = 10.0
+
+    metadata = geom.build_square_spiral_from_manifest(manifest)
+
+    scene_by_kind = {entry["kind"]: entry for entry in metadata["scene_objects"]}
+    vertical_region = scene_by_kind["tx_region_vertical"]
+    region_center_y = vertical_region["origin_xyz"][1] + (vertical_region["size_xyz"][1] / 2.0)
+    region_min_z = vertical_region["origin_xyz"][2]
+    region_max_z = vertical_region["origin_xyz"][2] + vertical_region["size_xyz"][2]
+
+    tx_vertical_probes = sorted(
+        (
+            probe
+            for probe in metadata["debug"]["cad_probe"]
+            if probe["object_name"].startswith("coil_tx_vertical_")
+        ),
+        key=lambda probe: probe["object_name"],
+    )
+    assert len(tx_vertical_probes) == 2
+
+    y_centers = [(probe["bbox"][1] + probe["bbox"][4]) / 2.0 for probe in tx_vertical_probes]
+    assert y_centers[0] == pytest.approx(region_center_y - 5.0, abs=1e-6)
+    assert y_centers[1] == pytest.approx(region_center_y + 5.0, abs=1e-6)
+
+    eps = 1e-6
+    for probe in tx_vertical_probes:
+        z_min = probe["bbox"][2]
+        z_max = probe["bbox"][5]
+        assert z_min >= (region_min_z - eps)
+        assert z_max <= (region_max_z + eps)
 
 
 def test_build_square_spiral_invalid_params(tmp_path: Path) -> None:
@@ -461,3 +535,134 @@ def test_pitch_checks_with_zero_gap() -> None:
     for check in checks:
         assert check["pitch_measured"] == pytest.approx(1.0)
         assert check["delta"] <= 1e-6
+
+
+def test_tx_dd_symmetric_precheck_fails_for_tx_dd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_coil_groups"][0]["spacing_mm"] = 170.0
+
+    with pytest.raises(RuntimeError, match="tx_dd symmetric placement out of region"):
+        geom.build_square_spiral_from_manifest(manifest)
+
+
+def test_rx_dd_edge_gap_must_be_non_negative(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_coil_groups"][2]["spacing_mm"] = -0.1
+
+    with pytest.raises(RuntimeError, match="rx_dd edge gap must be >= 0"):
+        geom.build_square_spiral_from_manifest(manifest)
+
+
+def test_tx_dd_two_coils_use_single_layer_when_selected_count_two(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_pcbs"][0]["mounts"] = ["tx_dd:0", "tx_dd:1", "tx_vertical:*"]
+    manifest["selected_coil_groups"][0]["selected_count"] = 2
+    manifest["selected_coil_groups"][0]["requested_count"] = 2
+    manifest["selected_coil_groups"][0]["spacing_mm"] = 25.0
+
+    metadata = geom.build_square_spiral_from_manifest(manifest)
+    tx_dd_probes = sorted(
+        [probe for probe in metadata["debug"]["cad_probe"] if probe["object_name"].startswith("coil_tx_dd_")],
+        key=lambda probe: probe["object_name"],
+    )
+    assert len(tx_dd_probes) == 2
+    z_centers = [((probe["bbox"][2] + probe["bbox"][5]) / 2.0) for probe in tx_dd_probes]
+    assert z_centers[0] == pytest.approx(z_centers[1], abs=1e-6)
+
+
+def test_tx_dd_four_coils_use_two_layers_when_selected_count_four(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_coil_groups"][0]["selected_count"] = 4
+    manifest["selected_coil_groups"][0]["requested_count"] = 4
+    manifest["selected_coil_groups"][0]["spacing_mm"] = 25.0
+    manifest["selected_pcbs"][0]["mounts"] = ["tx_dd:0", "tx_dd:1", "tx_vertical:*"]
+    manifest["selected_pcbs"].append(
+        {
+            "id": "tx_main_1",
+            "role": "tx",
+            "position": (0.0, 0.0, 2.0),
+            "rotation_deg": 0.0,
+            "present": True,
+            "mounts": ["tx_dd:2", "tx_dd:3", "tx_vertical:*"],
+        }
+    )
+
+    metadata = geom.build_square_spiral_from_manifest(manifest)
+    scene_by_kind = {entry["kind"]: entry for entry in metadata["scene_objects"]}
+    region_min_y = scene_by_kind["tx_region_dd"]["origin_xyz"][1]
+    region_max_y = region_min_y + scene_by_kind["tx_region_dd"]["size_xyz"][1]
+    region_center_y = (region_min_y + region_max_y) / 2.0
+    outer_y = metadata["selected_parameters"]["outer_y"]
+    pair_center_distance = outer_y + 25.0
+    expected_y = sorted([region_center_y - (pair_center_distance / 2.0), region_center_y + (pair_center_distance / 2.0)])
+
+    tx_dd_probes = sorted(
+        [probe for probe in metadata["debug"]["cad_probe"] if probe["object_name"].startswith("coil_tx_dd_")],
+        key=lambda probe: probe["object_name"],
+    )
+    assert len(tx_dd_probes) == 4
+    y_centers = sorted((probe["bbox"][1] + probe["bbox"][4]) / 2.0 for probe in tx_dd_probes)
+    assert y_centers[0] == pytest.approx(expected_y[0], abs=1e-6)
+    assert y_centers[1] == pytest.approx(expected_y[0], abs=1e-6)
+    assert y_centers[2] == pytest.approx(expected_y[1], abs=1e-6)
+    assert y_centers[3] == pytest.approx(expected_y[1], abs=1e-6)
+    z_centers = sorted((probe["bbox"][2] + probe["bbox"][5]) / 2.0 for probe in tx_dd_probes)
+    assert z_centers[1] == pytest.approx(z_centers[0], abs=1e-6)
+    assert z_centers[3] == pytest.approx(z_centers[2], abs=1e-6)
+    assert z_centers[2] > z_centers[1]
+
+
+def test_rx_dd_edge_gap_zero_means_touching_edges(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_pcbs"][1]["mounts"] = ["rx_dd:0", "rx_dd:1"]
+    manifest["selected_coil_groups"][2]["spacing_mm"] = 0.0
+
+    metadata = geom.build_square_spiral_from_manifest(manifest)
+    rx_dd_probes = sorted(
+        [probe for probe in metadata["debug"]["cad_probe"] if probe["object_name"].startswith("coil_rx_dd_")],
+        key=lambda probe: probe["object_name"],
+    )
+    assert len(rx_dd_probes) == 2
+    y_gap = rx_dd_probes[1]["bbox"][1] - rx_dd_probes[0]["bbox"][4]
+    assert y_gap == pytest.approx(metadata["selected_parameters"]["trace"], abs=1e-6)
+
+
+def test_rx_dd_edge_gap_five_mm(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_pcbs"][1]["mounts"] = ["rx_dd:0", "rx_dd:1"]
+    manifest["selected_coil_groups"][2]["spacing_mm"] = 5.0
+
+    metadata = geom.build_square_spiral_from_manifest(manifest)
+    rx_dd_probes = sorted(
+        [probe for probe in metadata["debug"]["cad_probe"] if probe["object_name"].startswith("coil_rx_dd_")],
+        key=lambda probe: probe["object_name"],
+    )
+    assert len(rx_dd_probes) == 2
+    y_gap = rx_dd_probes[1]["bbox"][1] - rx_dd_probes[0]["bbox"][4]
+    assert y_gap == pytest.approx(5.0 + metadata["selected_parameters"]["trace"], abs=1e-6)
+
+
+def test_rx_dd_transform_dz_must_be_zero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_coil_groups"][2]["instance_transforms"][0]["dz"] = 1.0
+
+    with pytest.raises(RuntimeError, match="rx_dd transform dz must be 0 for bottom-anchor contract"):
+        geom.build_square_spiral_from_manifest(manifest)
