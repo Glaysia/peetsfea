@@ -31,6 +31,8 @@ class SelectedParameters(TypedDict):
 
 class Manifest(TypedDict):
     design_id: str
+    design_unique_hash: str
+    toml_space_hash: str
     toml_hash: str
     peetsfea_commit: str
     seed: int
@@ -86,6 +88,8 @@ class GeometryDebug(TypedDict):
 
 class GeometryMetadata(TypedDict):
     design_id: str
+    design_unique_hash: str
+    toml_space_hash: str
     toml_hash: str
     peetsfea_commit: str
     seed: int
