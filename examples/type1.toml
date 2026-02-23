@@ -26,7 +26,12 @@ range = [false, 1200.0, 1200.0, 1]
 range = [false, 700.0, 700.0, 1]
 
 [tv.thickness_mm]
-range = [false, 45.0, 45.0, 1]
+# TV panel thickness (updated to 9mm class).
+range = [false, 9.0, 9.0, 1]
+
+[tv.base_z_mm]
+# TV bottom elevation from floor (z=0 reference plane).
+range = [false, 700.0, 700.0, 1]
 
 [tx.region.outer_w_mm]
 range = [false, 300.0, 300.0, 1]

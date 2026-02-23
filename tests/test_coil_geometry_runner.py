@@ -112,8 +112,17 @@ class _FakeModeler:
         sizes: list[float],
         name: str | None = None,
         material: str | None = None,
+        non_model: bool = False,
     ) -> _FakeObject:
-        self.box_calls.append({"origin": origin, "sizes": sizes, "name": name, "material": material})
+        self.box_calls.append(
+            {
+                "origin": origin,
+                "sizes": sizes,
+                "name": name,
+                "material": material,
+                "non_model": non_model,
+            }
+        )
         return _FakeObject(
             name or "box",
             [
@@ -161,7 +170,8 @@ def _manifest(tmp_path: Path) -> Manifest:
             "tx_vertical_span_mm": 10.0,
             "tv_width_mm": 1200.0,
             "tv_height_mm": 700.0,
-            "tv_thickness_mm": 45.0,
+            "tv_thickness_mm": 9.0,
+            "tv_base_z_mm": 700.0,
             "tx_region_outer_w_mm": 300.0,
             "tx_region_outer_h_mm": 200.0,
             "tx_region_thickness_mm": 20.0,
@@ -302,6 +312,31 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert fake.release_args == (True, True)
 
     assert metadata["anchor_mode"] == "copper_outer_edge_corner"
+    assert len(metadata["scene_objects"]) == 5
+    assert {entry["kind"] for entry in metadata["scene_objects"]} == {"tv", "wall", "floor", "tx_region", "rx_region"}
+    plane_by_kind = {entry["kind"]: entry["plane"] for entry in metadata["scene_objects"]}
+    scene_by_kind = {entry["kind"]: entry for entry in metadata["scene_objects"]}
+    assert plane_by_kind["tv"] == "YZ"
+    assert plane_by_kind["wall"] == "YZ"
+    assert plane_by_kind["floor"] == "XY"
+    assert plane_by_kind["tx_region"] == "XY"
+    assert plane_by_kind["rx_region"] == "YZ"
+    # Floor starts on the ZY plane and is placed below XY.
+    assert scene_by_kind["floor"]["origin_xyz"][0] == 0.0
+    assert scene_by_kind["floor"]["origin_xyz"][2] < 0.0
+    assert scene_by_kind["tv"]["origin_xyz"][2] == 700.0
+    assert scene_by_kind["tv"]["size_xyz"][0] == 9.0
+    # TX region is generated below TV and independent from coil center.
+    assert scene_by_kind["tx_region"]["origin_xyz"][2] < scene_by_kind["tv"]["origin_xyz"][2]
+    # RX region is generated inside TV span (y/z) and independent from coil center.
+    assert scene_by_kind["rx_region"]["origin_xyz"][1] >= scene_by_kind["tv"]["origin_xyz"][1]
+    assert scene_by_kind["rx_region"]["origin_xyz"][2] >= scene_by_kind["tv"]["origin_xyz"][2]
+    assert all(entry["non_model"] for entry in metadata["scene_objects"])
+    assert any(name.startswith("scene_tv_") for name in metadata["object_names"])
+    assert any(name.startswith("scene_wall_") for name in metadata["object_names"])
+    assert any(name.startswith("scene_floor_") for name in metadata["object_names"])
+    assert any(name.startswith("scene_tx_region_") for name in metadata["object_names"])
+    assert any(name.startswith("scene_rx_region_") for name in metadata["object_names"])
     assert set(metadata["group_objects"].keys()) == {"tx_dd", "tx_vertical", "rx_dd"}
     assert len(metadata["group_objects"]["tx_dd"]) == 1
     assert len(metadata["group_objects"]["tx_vertical"]) == 1
@@ -313,11 +348,14 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert all(entry["present"] for entry in metadata["group_endpoints"])
     assert metadata["debug"]["constraints_ok"] is True
     assert len(metadata["debug"]["centerline_vertices"]) == 24
-    assert len(metadata["debug"]["cad_probe"]) == 5
+    assert len(metadata["debug"]["cad_probe"]) == 10
 
     assert len(fake.modeler.polyline_calls) == 3
     for call in fake.modeler.polyline_calls:
         assert call["xsection_height"] == 0.035
+    scene_boxes = [call for call in fake.modeler.box_calls if str(call["name"]).startswith("scene_")]
+    assert len(scene_boxes) == 5
+    assert all(call["non_model"] is True for call in scene_boxes)
 
 
 def test_build_square_spiral_invalid_params(tmp_path: Path) -> None:

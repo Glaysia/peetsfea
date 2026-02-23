@@ -21,11 +21,15 @@ from peetsfea.types.manifest import (
     GroupObjects,
     Manifest,
     PitchCheckEntry,
+    SelectedParameters,
+    SceneObjectEntry,
     UniteGroups,
 )
 
 _Point2 = tuple[float, float]
 _Point3 = tuple[float, float, float]
+TV_GAP_X_MM = 10.0
+TX_REGION_BELOW_TV_GAP_MM = 10.0
 
 
 def _build_rect_spiral_centerline_absolute(turns: int, outer_x: float, outer_y: float, trace: float, gap: float, z: float) -> list[_Point3]:
@@ -136,6 +140,167 @@ def _build_polarity(kind: str, side: Literal["left", "right", "center"]) -> tupl
     if side == "left":
         return ("ccw", "out_of_wall")
     return ("cw", "into_wall")
+
+
+def _create_non_model_box(
+    modeler: Modeler3D,
+    *,
+    origin: list[float],
+    sizes: list[float],
+    name: str,
+) -> Object3d:
+    try:
+        obj = cast(
+            Object3d,
+            modeler.create_box(
+                origin=origin,
+                sizes=sizes,
+                name=name,
+                material="vacuum",
+                non_model=True,
+            ),
+        )
+    except TypeError:
+        obj = cast(
+            Object3d,
+            modeler.create_box(
+                origin=origin,
+                sizes=sizes,
+                name=name,
+                material="vacuum",
+            ),
+        )
+    # Keep non-model semantics explicit even when backend APIs differ.
+    try:
+        setattr(obj, "model", False)
+    except Exception:
+        pass
+    try:
+        set_model_state = getattr(modeler, "set_object_model_state", None)
+        if callable(set_model_state):
+            object_name = getattr(obj, "name", name)
+            set_model_state(object_name, False)
+    except Exception:
+        pass
+    return obj
+
+
+def _create_scene_non_model_objects(
+    modeler: Modeler3D,
+    design_id: str,
+    selected: SelectedParameters,
+) -> tuple[list[str], list[CadProbe], list[SceneObjectEntry]]:
+    def _assert_positive(value: float, path: str) -> None:
+        if value <= 0:
+            raise ValueError(f"{path} must be > 0")
+
+    floor_x = float(selected["floor_size_x_mm"])
+    floor_y = float(selected["floor_size_y_mm"])
+    floor_t = float(selected["floor_thickness_mm"])
+    wall_t = float(selected["wall_thickness_mm"])
+    wall_y = float(selected["wall_size_y_mm"])
+    wall_z = float(selected["wall_size_z_mm"])
+    tv_w = float(selected["tv_width_mm"])
+    tv_h = float(selected["tv_height_mm"])
+    tv_t = float(selected["tv_thickness_mm"])
+    tv_base_z = float(selected["tv_base_z_mm"])
+    tx_w = float(selected["tx_region_outer_w_mm"])
+    tx_h = float(selected["tx_region_outer_h_mm"])
+    tx_t = float(selected["tx_region_thickness_mm"])
+    rx_w = float(selected["rx_region_outer_w_mm"])
+    rx_h = float(selected["rx_region_outer_h_mm"])
+    rx_t = float(selected["rx_region_thickness_mm"])
+
+    _assert_positive(floor_x, "floor.size_x_mm")
+    _assert_positive(floor_y, "floor.size_y_mm")
+    _assert_positive(floor_t, "floor.thickness_mm")
+    _assert_positive(wall_t, "wall.thickness_mm")
+    _assert_positive(wall_y, "wall.size_y_mm")
+    _assert_positive(wall_z, "wall.size_z_mm")
+    _assert_positive(tv_w, "tv.width_mm")
+    _assert_positive(tv_h, "tv.height_mm")
+    _assert_positive(tv_t, "tv.thickness_mm")
+    _assert_positive(tx_w, "tx.region.outer_w_mm")
+    _assert_positive(tx_h, "tx.region.outer_h_mm")
+    _assert_positive(tx_t, "tx.region.thickness_mm")
+    _assert_positive(rx_w, "rx.region.outer_w_mm")
+    _assert_positive(rx_h, "rx.region.outer_h_mm")
+    _assert_positive(rx_t, "rx.region.thickness_mm")
+
+    tv_x = wall_t + TV_GAP_X_MM
+    # TX region is independent from coil geometry and sits below the TV block.
+    tx_origin_x = tv_x - (tx_w / 2.0)
+    tx_origin_y = -tx_h / 2.0
+    tx_origin_z = tv_base_z - tx_t - TX_REGION_BELOW_TV_GAP_MM
+    # RX region is independent from coil geometry and anchored inside the TV volume.
+    rx_origin_x = tv_x + max((tv_t - rx_t) / 2.0, 0.0)
+    rx_origin_y = -rx_w / 2.0
+    rx_origin_z = tv_base_z + (tv_h - rx_h) / 2.0
+
+    scene_specs: list[tuple[str, Literal["tv", "wall", "floor", "tx_region", "rx_region"], _Point3, _Point3, Literal["XY", "YZ"]]] = [
+        (
+            f"scene_floor_{design_id}",
+            "floor",
+            # Start from the ZY plane (x=0) and place floor below the XY plane.
+            (0.0, -floor_y / 2.0, -floor_t),
+            (floor_x, floor_y, floor_t),
+            "XY",
+        ),
+        (
+            f"scene_wall_{design_id}",
+            "wall",
+            (0.0, -wall_y / 2.0, 0.0),
+            (wall_t, wall_y, wall_z),
+            "YZ",
+        ),
+        (
+            f"scene_tv_{design_id}",
+            "tv",
+            (tv_x, -tv_w / 2.0, tv_base_z),
+            (tv_t, tv_w, tv_h),
+            "YZ",
+        ),
+        (
+            f"scene_tx_region_{design_id}",
+            "tx_region",
+            (tx_origin_x, tx_origin_y, tx_origin_z),
+            (tx_w, tx_h, tx_t),
+            "XY",
+        ),
+        (
+            f"scene_rx_region_{design_id}",
+            "rx_region",
+            (rx_origin_x, rx_origin_y, rx_origin_z),
+            (rx_t, rx_w, rx_h),
+            "YZ",
+        ),
+    ]
+
+    names: list[str] = []
+    probes: list[CadProbe] = []
+    entries: list[SceneObjectEntry] = []
+    for name, kind, origin_xyz, size_xyz, plane in scene_specs:
+        obj = _create_non_model_box(
+            modeler,
+            origin=[origin_xyz[0], origin_xyz[1], origin_xyz[2]],
+            sizes=[size_xyz[0], size_xyz[1], size_xyz[2]],
+            name=name,
+        )
+        obj_name = _object_name(obj, name)
+        names.append(obj_name)
+        probes.append(_probe_cad_object(obj, name))
+        entries.append(
+            {
+                "name": obj_name,
+                "kind": kind,
+                "present": True,
+                "origin_xyz": origin_xyz,
+                "size_xyz": size_xyz,
+                "plane": plane,
+                "non_model": True,
+            }
+        )
+    return names, probes, entries
 
 
 def _create_hfss_session(manifest: Manifest, aedt_path: Path) -> Hfss:
@@ -421,6 +586,7 @@ def _build_geometry_metadata(
     unite_groups: UniteGroups,
     group_endpoints: list[GroupEndpointEntry],
     coil_polarity: list[CoilPolaritySpec],
+    scene_objects: list[SceneObjectEntry],
     debug: GeometryDebug,
 ) -> GeometryMetadata:
     return {
@@ -440,6 +606,7 @@ def _build_geometry_metadata(
         "unite_groups": unite_groups,
         "group_endpoints": group_endpoints,
         "coil_polarity": coil_polarity,
+        "scene_objects": scene_objects,
         "debug": debug,
     }
 
@@ -508,8 +675,17 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     group_objects: GroupObjects = {"tx_dd": [], "tx_vertical": [], "rx_dd": []}
     group_endpoints: list[GroupEndpointEntry] = []
     coil_polarity: list[CoilPolaritySpec] = []
+    scene_objects: list[SceneObjectEntry] = []
 
     try:
+        scene_names, scene_probes, scene_objects = _create_scene_non_model_objects(
+            modeler=modeler,
+            design_id=design_id,
+            selected=selected,
+        )
+        object_names.extend(scene_names)
+        cad_probe.extend(scene_probes)
+
         for board_idx, pcb in enumerate(selected_pcbs):
             if not pcb["present"]:
                 continue
@@ -625,6 +801,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
         },
         group_endpoints=group_endpoints,
         coil_polarity=coil_polarity,
+        scene_objects=scene_objects,
         debug=debug,
     )
     metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")

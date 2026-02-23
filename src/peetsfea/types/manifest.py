@@ -29,6 +29,7 @@ class SelectedParameters(TypedDict):
     tv_width_mm: float
     tv_height_mm: float
     tv_thickness_mm: float
+    tv_base_z_mm: float
     tx_region_outer_w_mm: float
     tx_region_outer_h_mm: float
     tx_region_thickness_mm: float
@@ -165,6 +166,16 @@ class CoilPolaritySpec(TypedDict):
     b_field_direction: Literal["up", "down", "left", "right", "into_wall", "out_of_wall"]
 
 
+class SceneObjectEntry(TypedDict):
+    name: str
+    kind: Literal["tv", "wall", "floor", "tx_region", "rx_region"]
+    present: bool
+    origin_xyz: tuple[float, float, float]
+    size_xyz: tuple[float, float, float]
+    plane: Literal["XY", "YZ"]
+    non_model: bool
+
+
 class GeometryMetadata(TypedDict):
     design_id: str
     design_unique_hash: str
@@ -182,4 +193,5 @@ class GeometryMetadata(TypedDict):
     unite_groups: UniteGroups
     group_endpoints: list[GroupEndpointEntry]
     coil_polarity: list[CoilPolaritySpec]
+    scene_objects: list[SceneObjectEntry]
     debug: GeometryDebug
