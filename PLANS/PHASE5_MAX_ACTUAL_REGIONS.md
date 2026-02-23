@@ -6,7 +6,7 @@ TX/RX 논모델 영역을 코일과 독립적으로 항상 2종(`max`, `actual`)
 
 ## Summary
 - 생성 대상:
-  - `tx_region_max`, `tx_region_actual`
+  - `tx_region_max` + 내부 2분할(`tx_region_vertical`, `tx_region_dd`) + 하단 leftover
   - `rx_region_max`, `rx_region_actual`
 - 기준:
   - `actual`: seed 기반 selected 값
@@ -21,7 +21,7 @@ TX/RX 논모델 영역을 코일과 독립적으로 항상 2종(`max`, `actual`)
 - resolver에 `selected_parameters_max` 계산 추가(`range end` 사용).
 - manifest에 `selected_parameters_max` 저장.
 - geometry에서 TX/RX max+actual 박스 동시 생성.
-- scene metadata kind 확장(`*_max`, `*_actual`).
+- scene metadata kind 확장(`tx_region_vertical/dd/empty`, `rx_region_max/actual`).
 - RX 두께 TOML 고정값 적용(4mm).
 
 ## Out of Scope
@@ -75,4 +75,3 @@ TX/RX 논모델 영역을 코일과 독립적으로 항상 2종(`max`, `actual`)
 - max/actual 경계가 metadata로 완전 재현 가능.
 - 코일 정보 없이도 영역 배치가 결정됨.
 - `ruff`, `mypy`, `pytest` 통과.
-

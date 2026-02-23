@@ -175,6 +175,8 @@ def _manifest(tmp_path: Path) -> Manifest:
             "tx_region_outer_w_mm": 300.0,
             "tx_region_outer_h_mm": 200.0,
             "tx_region_thickness_mm": 20.0,
+            "tx_region_vertical_z_mm": 8.0,
+            "tx_region_dd_z_mm": 7.0,
             "rx_region_outer_w_mm": 280.0,
             "rx_region_outer_h_mm": 180.0,
             "rx_region_thickness_mm": 4.0,
@@ -205,6 +207,8 @@ def _manifest(tmp_path: Path) -> Manifest:
             "tx_region_outer_w_mm": 300.0,
             "tx_region_outer_h_mm": 200.0,
             "tx_region_thickness_mm": 20.0,
+            "tx_region_vertical_z_mm": 8.0,
+            "tx_region_dd_z_mm": 7.0,
             "rx_region_outer_w_mm": 280.0,
             "rx_region_outer_h_mm": 180.0,
             "rx_region_thickness_mm": 4.0,
@@ -321,14 +325,15 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert fake.release_args == (True, True)
 
     assert metadata["anchor_mode"] == "copper_outer_edge_corner"
-    assert len(metadata["scene_objects"]) == 8
+    assert len(metadata["scene_objects"]) == 9
     assert {entry["kind"] for entry in metadata["scene_objects"]} == {
         "tv",
         "wall",
         "floor",
         "shelf",
         "tx_region_max",
-        "tx_region_actual",
+        "tx_region_vertical",
+        "tx_region_dd",
         "rx_region_max",
         "rx_region_actual",
     }
@@ -339,7 +344,8 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert plane_by_kind["floor"] == "XY"
     assert plane_by_kind["shelf"] == "XY"
     assert plane_by_kind["tx_region_max"] == "XY"
-    assert plane_by_kind["tx_region_actual"] == "XY"
+    assert plane_by_kind["tx_region_vertical"] == "XY"
+    assert plane_by_kind["tx_region_dd"] == "XY"
     assert plane_by_kind["rx_region_max"] == "YZ"
     assert plane_by_kind["rx_region_actual"] == "YZ"
     # Floor starts on the ZY plane and is placed below XY.
@@ -347,7 +353,7 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert scene_by_kind["floor"]["origin_xyz"][2] < 0.0
     assert scene_by_kind["shelf"]["origin_xyz"][2] == 0.0
     assert scene_by_kind["shelf"]["size_xyz"][2] == 400.0
-    assert scene_by_kind["shelf"]["size_xyz"][0] >= 900.0
+    assert scene_by_kind["shelf"]["size_xyz"][0] == pytest.approx(max(350.0, scene_by_kind["tx_region_max"]["size_xyz"][0] * 2.5))
     # Wall is attached to ZY and extends to -X.
     assert scene_by_kind["wall"]["origin_xyz"][0] < 0.0
     # TV and RX regions are attached to ZY and extend to +X.
@@ -357,27 +363,49 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert scene_by_kind["tv"]["size_xyz"][0] == 9.0
     # TX region bottom touches shelf top.
     shelf_top_z = scene_by_kind["shelf"]["origin_xyz"][2] + scene_by_kind["shelf"]["size_xyz"][2]
-    assert scene_by_kind["tx_region_actual"]["origin_xyz"][2] == shelf_top_z
     assert scene_by_kind["tx_region_max"]["origin_xyz"][2] == shelf_top_z
+    # TX 2-part split is stacked contiguously with bottom leftover space.
+    tx_max_z0 = scene_by_kind["tx_region_max"]["origin_xyz"][2]
+    tx_max_z1 = tx_max_z0 + scene_by_kind["tx_region_max"]["size_xyz"][2]
+    dd_z0 = scene_by_kind["tx_region_dd"]["origin_xyz"][2]
+    dd_z1 = dd_z0 + scene_by_kind["tx_region_dd"]["size_xyz"][2]
+    vertical_z0 = scene_by_kind["tx_region_vertical"]["origin_xyz"][2]
+    vertical_z1 = vertical_z0 + scene_by_kind["tx_region_vertical"]["size_xyz"][2]
+    assert vertical_z0 == dd_z1
+    assert dd_z0 >= tx_max_z0
+    assert tx_max_z1 == vertical_z1
+    assert (scene_by_kind["tx_region_dd"]["size_xyz"][2] + scene_by_kind["tx_region_vertical"]["size_xyz"][2]) <= scene_by_kind["tx_region_max"]["size_xyz"][2]
     # TX regions are entirely on +X side and do not cross the YZ plane.
-    assert scene_by_kind["tx_region_actual"]["origin_xyz"][0] == 0.0
     assert scene_by_kind["tx_region_max"]["origin_xyz"][0] == 0.0
+    assert scene_by_kind["tx_region_vertical"]["origin_xyz"][0] == 0.0
+    assert scene_by_kind["tx_region_dd"]["origin_xyz"][0] == 0.0
+    expected_leftover = scene_by_kind["tx_region_max"]["size_xyz"][2] - scene_by_kind["tx_region_vertical"]["size_xyz"][2] - scene_by_kind["tx_region_dd"]["size_xyz"][2]
+    assert scene_by_kind["tx_region_dd"]["origin_xyz"][2] == pytest.approx(tx_max_z0 + expected_leftover)
     # RX region bottom is fixed at +1mm from TV bottom.
     assert scene_by_kind["rx_region_actual"]["origin_xyz"][2] == scene_by_kind["tv"]["origin_xyz"][2] + 1.0
-    # Actual region dimensions should be <= max region dimensions.
-    assert scene_by_kind["tx_region_actual"]["size_xyz"][0] <= scene_by_kind["tx_region_max"]["size_xyz"][0]
-    assert scene_by_kind["tx_region_actual"]["size_xyz"][1] <= scene_by_kind["tx_region_max"]["size_xyz"][1]
-    assert scene_by_kind["tx_region_actual"]["size_xyz"][2] <= scene_by_kind["tx_region_max"]["size_xyz"][2]
-    assert scene_by_kind["rx_region_actual"]["size_xyz"][0] <= scene_by_kind["rx_region_max"]["size_xyz"][0]
-    assert scene_by_kind["rx_region_actual"]["size_xyz"][1] <= scene_by_kind["rx_region_max"]["size_xyz"][1]
-    assert scene_by_kind["rx_region_actual"]["size_xyz"][2] <= scene_by_kind["rx_region_max"]["size_xyz"][2]
+    # RX actual thickness must match RX max thickness.
+    assert scene_by_kind["rx_region_actual"]["size_xyz"][0] == scene_by_kind["rx_region_max"]["size_xyz"][0]
+    # ZX symmetry contract: Y-centered placement.
+    for kind in (
+        "floor",
+        "shelf",
+        "wall",
+        "tv",
+        "tx_region_max",
+        "tx_region_vertical",
+        "tx_region_dd",
+        "rx_region_max",
+        "rx_region_actual",
+    ):
+        assert scene_by_kind[kind]["origin_xyz"][1] == pytest.approx(-scene_by_kind[kind]["size_xyz"][1] / 2.0)
     assert all(entry["non_model"] for entry in metadata["scene_objects"])
     assert any(name.startswith("scene_tv_") for name in metadata["object_names"])
     assert any(name.startswith("scene_wall_") for name in metadata["object_names"])
     assert any(name.startswith("scene_floor_") for name in metadata["object_names"])
     assert any(name.startswith("scene_shelf_") for name in metadata["object_names"])
     assert any(name.startswith("scene_tx_region_max_") for name in metadata["object_names"])
-    assert any(name.startswith("scene_tx_region_actual_") for name in metadata["object_names"])
+    assert any(name.startswith("scene_tx_region_vertical_") for name in metadata["object_names"])
+    assert any(name.startswith("scene_tx_region_dd_") for name in metadata["object_names"])
     assert any(name.startswith("scene_rx_region_max_") for name in metadata["object_names"])
     assert any(name.startswith("scene_rx_region_actual_") for name in metadata["object_names"])
     assert set(metadata["group_objects"].keys()) == {"tx_dd", "tx_vertical", "rx_dd"}
@@ -391,13 +419,13 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert all(entry["present"] for entry in metadata["group_endpoints"])
     assert metadata["debug"]["constraints_ok"] is True
     assert len(metadata["debug"]["centerline_vertices"]) == 24
-    assert len(metadata["debug"]["cad_probe"]) == 13
+    assert len(metadata["debug"]["cad_probe"]) == 14
 
     assert len(fake.modeler.polyline_calls) == 3
     for call in fake.modeler.polyline_calls:
         assert call["xsection_height"] == 0.035
     scene_boxes = [call for call in fake.modeler.box_calls if str(call["name"]).startswith("scene_")]
-    assert len(scene_boxes) == 8
+    assert len(scene_boxes) == 9
     assert all(call["non_model"] is True for call in scene_boxes)
 
 

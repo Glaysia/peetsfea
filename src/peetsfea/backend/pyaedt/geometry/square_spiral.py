@@ -210,6 +210,8 @@ def _create_scene_non_model_objects(
     tx_w = float(selected["tx_region_outer_w_mm"])
     tx_h = float(selected["tx_region_outer_h_mm"])
     tx_t = float(selected["tx_region_thickness_mm"])
+    tx_vertical_z = float(selected["tx_region_vertical_z_mm"])
+    tx_dd_z = float(selected["tx_region_dd_z_mm"])
     rx_w = float(selected["rx_region_outer_w_mm"])
     rx_h = float(selected["rx_region_outer_h_mm"])
     rx_t = float(selected["rx_region_thickness_mm"])
@@ -232,6 +234,8 @@ def _create_scene_non_model_objects(
     _assert_positive(tx_w, "tx.region.outer_w_mm")
     _assert_positive(tx_h, "tx.region.outer_h_mm")
     _assert_positive(tx_t, "tx.region.thickness_mm")
+    _assert_positive(tx_vertical_z, "tx.region.z_parts.vertical_z_mm")
+    _assert_positive(tx_dd_z, "tx.region.z_parts.dd_z_mm")
     _assert_positive(rx_w, "rx.region.outer_w_mm")
     _assert_positive(rx_h, "rx.region.outer_h_mm")
     _assert_positive(rx_t, "rx.region.thickness_mm")
@@ -246,12 +250,12 @@ def _create_scene_non_model_objects(
         raise ValueError("tx.region actual dimensions must be <= max dimensions")
     if rx_w > rx_w_max or rx_h > rx_h_max or rx_t > rx_t_max:
         raise ValueError("rx.region actual dimensions must be <= max dimensions")
+    tx_leftover_z = tx_t - tx_vertical_z - tx_dd_z
+    if tx_leftover_z < 0:
+        raise ValueError("tx.region.leftover_z_mm computed negative; reduce vertical_z/dd_z or increase tx.region.thickness_mm")
 
     tv_x = 0.0
     # TX region is independent from coil geometry and its bottom touches shelf top.
-    tx_origin_x = 0.0
-    tx_origin_y = -tx_h / 2.0
-    tx_origin_z = SHELF_HEIGHT_MM
     tx_origin_x_max = 0.0
     tx_origin_y_max = -tx_h_max / 2.0
     tx_origin_z_max = SHELF_HEIGHT_MM
@@ -264,10 +268,24 @@ def _create_scene_non_model_objects(
     rx_origin_y_max = -rx_w_max / 2.0
     rx_origin_z_max = tv_base_z + RX_REGION_BOTTOM_FROM_TV_MM
 
+    # Bottom leftover is kept as free space; DD and vertical zones are contiguous above it.
+    tx_dd_origin_z = tx_origin_z_max + tx_leftover_z
+    tx_vertical_origin_z = tx_dd_origin_z + tx_dd_z
+
     scene_specs: list[
         tuple[
             str,
-            Literal["tv", "wall", "floor", "shelf", "tx_region_max", "tx_region_actual", "rx_region_max", "rx_region_actual"],
+            Literal[
+                "tv",
+                "wall",
+                "floor",
+                "shelf",
+                "tx_region_max",
+                "tx_region_vertical",
+                "tx_region_dd",
+                "rx_region_max",
+                "rx_region_actual",
+            ],
             _Point3,
             _Point3,
             Literal["XY", "YZ"],
@@ -307,14 +325,21 @@ def _create_scene_non_model_objects(
             f"scene_tx_region_max_{design_id}",
             "tx_region_max",
             (tx_origin_x_max, tx_origin_y_max, tx_origin_z_max),
-            (tx_w_max, tx_h_max, tx_t_max),
+            (tx_w_max, tx_h_max, tx_t),
             "XY",
         ),
         (
-            f"scene_tx_region_actual_{design_id}",
-            "tx_region_actual",
-            (tx_origin_x, tx_origin_y, tx_origin_z),
-            (tx_w, tx_h, tx_t),
+            f"scene_tx_region_vertical_{design_id}",
+            "tx_region_vertical",
+            (tx_origin_x_max, tx_origin_y_max, tx_vertical_origin_z),
+            (tx_w_max, tx_h_max, tx_vertical_z),
+            "XY",
+        ),
+        (
+            f"scene_tx_region_dd_{design_id}",
+            "tx_region_dd",
+            (tx_origin_x_max, tx_origin_y_max, tx_dd_origin_z),
+            (tx_w_max, tx_h_max, tx_dd_z),
             "XY",
         ),
         (
@@ -328,7 +353,7 @@ def _create_scene_non_model_objects(
             f"scene_rx_region_actual_{design_id}",
             "rx_region_actual",
             (rx_origin_x, rx_origin_y, rx_origin_z),
-            (rx_t, rx_w, rx_h),
+            (rx_t_max, rx_w, rx_h),
             "YZ",
         ),
     ]

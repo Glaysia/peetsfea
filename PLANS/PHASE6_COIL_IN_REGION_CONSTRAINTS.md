@@ -6,7 +6,7 @@ Phase 5의 max/actual 경계를 사용해 코일이 지정 영역 내부에 들�
 
 ## Summary
 - 대상 제약:
-  - TX 코일(또는 코일 그룹) ⊂ `tx_region_actual`
+  - TX 코일(또는 코일 그룹) ⊂ `tx_region_vertical` 또는 `tx_region_dd` (목적별)
   - RX 코일(또는 코일 그룹) ⊂ `rx_region_actual`
 - 실패 시 명확한 위반 리포트 제공(축/거리/객체명).
 
@@ -63,4 +63,3 @@ Phase 5의 max/actual 경계를 사용해 코일이 지정 영역 내부에 들�
 - 제약 위반 시 즉시/명확히 실패하고 원인 재현 가능.
 - 정상 케이스에서 metadata에 제약 통과 근거가 기록됨.
 - 후속 유나이트/연결 단계가 제약 결과를 신뢰 가능.
-
