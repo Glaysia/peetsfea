@@ -20,10 +20,10 @@ tool = "hfss"
 # Non-model scene/envelope sizes
 
 [tv.width_mm]
-range = [false, 1200.0, 1200.0, 1]
+range = [false, 1842.0, 1842.0, 1]
 
 [tv.height_mm]
-range = [false, 700.0, 700.0, 1]
+range = [false, 1055.0, 1055.0, 1]
 
 [tv.thickness_mm]
 # TV panel thickness (updated to 9mm class).
@@ -31,25 +31,26 @@ range = [false, 9.0, 9.0, 1]
 
 [tv.base_z_mm]
 # TV bottom elevation from floor (z=0 reference plane).
-range = [false, 700.0, 700.0, 1]
+range = [false, 600.0, 600.0, 1]
 
 [tx.region.outer_w_mm]
-range = [false, 300.0, 300.0, 1]
+range = [false, 160.0, 160.0, 1]
 
 [tx.region.outer_h_mm]
-range = [false, 200.0, 200.0, 1]
-
-[tx.region.thickness_mm]
-range = [false, 20.0, 20.0, 1]
-
-[rx.region.outer_w_mm]
 range = [false, 280.0, 280.0, 1]
 
+[tx.region.thickness_mm]
+range = [false, 90.0, 90.0, 1]
+
+[rx.region.outer_w_mm]
+range = [false, 560.0, 560.0, 1]
+
 [rx.region.outer_h_mm]
-range = [false, 180.0, 180.0, 1]
+range = [false, 360.0, 360.0, 1]
 
 [rx.region.thickness_mm]
-range = [false, 18.0, 18.0, 1]
+# RX region thickness is fixed to 4mm for wall-aligned placement baseline.
+range = [false, 4.0, 4.0, 1]
 
 [wall.thickness_mm]
 range = [false, 200.0, 200.0, 1]
@@ -73,10 +74,11 @@ range = [false, 5000.0, 5000.0, 1]
 # Grouped coil parameter space
 
 [parameters.outer_x]
-range = [false, 220.0, 300.0, 5]
+# Keep TX coil max below tx.region minimum span (currently 160mm).
+range = [false, 120.0, 150.0, 4]
 
 [parameters.outer_y]
-range = [false, 150.0, 220.0, 5]
+range = [false, 110.0, 150.0, 5]
 
 [parameters.turn_count_max]
 range = [true, 6, 12, 7]

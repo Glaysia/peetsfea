@@ -177,7 +177,7 @@ def _manifest(tmp_path: Path) -> Manifest:
             "tx_region_thickness_mm": 20.0,
             "rx_region_outer_w_mm": 280.0,
             "rx_region_outer_h_mm": 180.0,
-            "rx_region_thickness_mm": 18.0,
+            "rx_region_thickness_mm": 4.0,
             "wall_thickness_mm": 200.0,
             "wall_size_y_mm": 4000.0,
             "wall_size_z_mm": 3000.0,
@@ -200,6 +200,14 @@ def _manifest(tmp_path: Path) -> Manifest:
             "pcb_thickness": 1.6,
             "cu_thickness": 0.035,
             "fr4_er": 4.4,
+        },
+        "selected_parameters_max": {
+            "tx_region_outer_w_mm": 300.0,
+            "tx_region_outer_h_mm": 200.0,
+            "tx_region_thickness_mm": 20.0,
+            "rx_region_outer_w_mm": 280.0,
+            "rx_region_outer_h_mm": 180.0,
+            "rx_region_thickness_mm": 4.0,
         },
         "selected_coil_groups": [
             {
@@ -307,36 +315,71 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert metadata["design_id"] == "abcd1234_eeeeeeee_1"
     assert metadata["design_unique_hash"] == "abcd1234"
     assert metadata["toml_space_hash"] == "eeeeeeee"
+    assert metadata["selected_parameters_max"]["rx_region_thickness_mm"] == 4.0
     assert Path(metadata["metadata_path"]).exists()
     assert metadata["aedt_path"].endswith("abcd1234_eeeeeeee_1.aedt")
     assert fake.release_args == (True, True)
 
     assert metadata["anchor_mode"] == "copper_outer_edge_corner"
-    assert len(metadata["scene_objects"]) == 5
-    assert {entry["kind"] for entry in metadata["scene_objects"]} == {"tv", "wall", "floor", "tx_region", "rx_region"}
+    assert len(metadata["scene_objects"]) == 8
+    assert {entry["kind"] for entry in metadata["scene_objects"]} == {
+        "tv",
+        "wall",
+        "floor",
+        "shelf",
+        "tx_region_max",
+        "tx_region_actual",
+        "rx_region_max",
+        "rx_region_actual",
+    }
     plane_by_kind = {entry["kind"]: entry["plane"] for entry in metadata["scene_objects"]}
     scene_by_kind = {entry["kind"]: entry for entry in metadata["scene_objects"]}
     assert plane_by_kind["tv"] == "YZ"
     assert plane_by_kind["wall"] == "YZ"
     assert plane_by_kind["floor"] == "XY"
-    assert plane_by_kind["tx_region"] == "XY"
-    assert plane_by_kind["rx_region"] == "YZ"
+    assert plane_by_kind["shelf"] == "XY"
+    assert plane_by_kind["tx_region_max"] == "XY"
+    assert plane_by_kind["tx_region_actual"] == "XY"
+    assert plane_by_kind["rx_region_max"] == "YZ"
+    assert plane_by_kind["rx_region_actual"] == "YZ"
     # Floor starts on the ZY plane and is placed below XY.
     assert scene_by_kind["floor"]["origin_xyz"][0] == 0.0
     assert scene_by_kind["floor"]["origin_xyz"][2] < 0.0
+    assert scene_by_kind["shelf"]["origin_xyz"][2] == 0.0
+    assert scene_by_kind["shelf"]["size_xyz"][2] == 400.0
+    assert scene_by_kind["shelf"]["size_xyz"][0] >= 900.0
+    # Wall is attached to ZY and extends to -X.
+    assert scene_by_kind["wall"]["origin_xyz"][0] < 0.0
+    # TV and RX regions are attached to ZY and extend to +X.
+    assert scene_by_kind["tv"]["origin_xyz"][0] == 0.0
+    assert scene_by_kind["rx_region_actual"]["origin_xyz"][0] == 0.0
     assert scene_by_kind["tv"]["origin_xyz"][2] == 700.0
     assert scene_by_kind["tv"]["size_xyz"][0] == 9.0
-    # TX region is generated below TV and independent from coil center.
-    assert scene_by_kind["tx_region"]["origin_xyz"][2] < scene_by_kind["tv"]["origin_xyz"][2]
-    # RX region is generated inside TV span (y/z) and independent from coil center.
-    assert scene_by_kind["rx_region"]["origin_xyz"][1] >= scene_by_kind["tv"]["origin_xyz"][1]
-    assert scene_by_kind["rx_region"]["origin_xyz"][2] >= scene_by_kind["tv"]["origin_xyz"][2]
+    # TX region bottom touches shelf top.
+    shelf_top_z = scene_by_kind["shelf"]["origin_xyz"][2] + scene_by_kind["shelf"]["size_xyz"][2]
+    assert scene_by_kind["tx_region_actual"]["origin_xyz"][2] == shelf_top_z
+    assert scene_by_kind["tx_region_max"]["origin_xyz"][2] == shelf_top_z
+    # TX regions are entirely on +X side and do not cross the YZ plane.
+    assert scene_by_kind["tx_region_actual"]["origin_xyz"][0] == 0.0
+    assert scene_by_kind["tx_region_max"]["origin_xyz"][0] == 0.0
+    # RX region bottom is fixed at +1mm from TV bottom.
+    assert scene_by_kind["rx_region_actual"]["origin_xyz"][2] == scene_by_kind["tv"]["origin_xyz"][2] + 1.0
+    # Actual region dimensions should be <= max region dimensions.
+    assert scene_by_kind["tx_region_actual"]["size_xyz"][0] <= scene_by_kind["tx_region_max"]["size_xyz"][0]
+    assert scene_by_kind["tx_region_actual"]["size_xyz"][1] <= scene_by_kind["tx_region_max"]["size_xyz"][1]
+    assert scene_by_kind["tx_region_actual"]["size_xyz"][2] <= scene_by_kind["tx_region_max"]["size_xyz"][2]
+    assert scene_by_kind["rx_region_actual"]["size_xyz"][0] <= scene_by_kind["rx_region_max"]["size_xyz"][0]
+    assert scene_by_kind["rx_region_actual"]["size_xyz"][1] <= scene_by_kind["rx_region_max"]["size_xyz"][1]
+    assert scene_by_kind["rx_region_actual"]["size_xyz"][2] <= scene_by_kind["rx_region_max"]["size_xyz"][2]
     assert all(entry["non_model"] for entry in metadata["scene_objects"])
     assert any(name.startswith("scene_tv_") for name in metadata["object_names"])
     assert any(name.startswith("scene_wall_") for name in metadata["object_names"])
     assert any(name.startswith("scene_floor_") for name in metadata["object_names"])
-    assert any(name.startswith("scene_tx_region_") for name in metadata["object_names"])
-    assert any(name.startswith("scene_rx_region_") for name in metadata["object_names"])
+    assert any(name.startswith("scene_shelf_") for name in metadata["object_names"])
+    assert any(name.startswith("scene_tx_region_max_") for name in metadata["object_names"])
+    assert any(name.startswith("scene_tx_region_actual_") for name in metadata["object_names"])
+    assert any(name.startswith("scene_rx_region_max_") for name in metadata["object_names"])
+    assert any(name.startswith("scene_rx_region_actual_") for name in metadata["object_names"])
     assert set(metadata["group_objects"].keys()) == {"tx_dd", "tx_vertical", "rx_dd"}
     assert len(metadata["group_objects"]["tx_dd"]) == 1
     assert len(metadata["group_objects"]["tx_vertical"]) == 1
@@ -348,13 +391,13 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert all(entry["present"] for entry in metadata["group_endpoints"])
     assert metadata["debug"]["constraints_ok"] is True
     assert len(metadata["debug"]["centerline_vertices"]) == 24
-    assert len(metadata["debug"]["cad_probe"]) == 10
+    assert len(metadata["debug"]["cad_probe"]) == 13
 
     assert len(fake.modeler.polyline_calls) == 3
     for call in fake.modeler.polyline_calls:
         assert call["xsection_height"] == 0.035
     scene_boxes = [call for call in fake.modeler.box_calls if str(call["name"]).startswith("scene_")]
-    assert len(scene_boxes) == 5
+    assert len(scene_boxes) == 8
     assert all(call["non_model"] is True for call in scene_boxes)
 
 

@@ -41,7 +41,7 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 220.
                 "[rx.region.outer_h_mm]",
                 "range = [false, 180.0, 180.0, 1]",
                 "[rx.region.thickness_mm]",
-                "range = [false, 18.0, 18.0, 1]",
+                "range = [false, 4.0, 4.0, 1]",
                 "",
                 "[wall.thickness_mm]",
                 "range = [false, 200.0, 200.0, 1]",
@@ -145,6 +145,7 @@ def test_run_creates_manifest_and_is_deterministic(tmp_path: Path, monkeypatch: 
 
     assert first["design_id"] == second["design_id"]
     assert first["selected_parameters"] == second["selected_parameters"]
+    assert first["selected_parameters_max"] == second["selected_parameters_max"]
     assert first["selected_coil_groups"] == second["selected_coil_groups"]
     assert first["selected_pcbs"] == second["selected_pcbs"]
     assert first["design_id"].split("_")[0] == first["design_unique_hash"]
@@ -152,6 +153,8 @@ def test_run_creates_manifest_and_is_deterministic(tmp_path: Path, monkeypatch: 
     assert re.fullmatch(r"[0-9a-f]{8}_[0-9a-f]{8}_-?[0-9]+", first["design_id"]) is not None
     assert first["selected_parameters"]["turn_count_max"] == 8
     assert first["selected_parameters"]["outer"] == 180.0
+    assert first["selected_parameters_max"]["tx_region_outer_h_mm"] == 200.0
+    assert first["selected_parameters_max"]["rx_region_thickness_mm"] == 4.0
     assert len(first["selected_coil_groups"]) == 3
     assert len(first["selected_pcbs"]) == 2
     assert first["manifest_path"].endswith(f"manifest_{first['design_id']}.json")
@@ -164,6 +167,7 @@ def test_run_seed_changes_selection(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     m1 = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
     m2 = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=2, backend="hfss"))
     assert m1["design_id"] != m2["design_id"]
+    assert m1["selected_parameters_max"] == m2["selected_parameters_max"]
 
 
 def test_invalid_range_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

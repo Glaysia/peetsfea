@@ -4,7 +4,7 @@ import math
 from typing import Literal, Sequence, TypeAlias, cast
 
 from peetsfea.spec.loader import TOMLTable, TOMLValue, require_table
-from peetsfea.types.manifest import ResolvedCoilGroup, ResolvedPcbInstance, SelectedParameters
+from peetsfea.types.manifest import ResolvedCoilGroup, ResolvedPcbInstance, SelectedParameters, SelectedParametersMax
 
 
 Number: TypeAlias = int | float
@@ -116,6 +116,13 @@ def _select_range_value(root: TOMLTable, dotted_path: str, expect_integer: bool,
     if len(candidates) == 0:
         raise ValueError(f"No candidates generated from {dotted_path}.range")
     return candidates[(seed + offset) % len(candidates)]
+
+
+def _select_range_end_value(root: TOMLTable, dotted_path: str, expect_integer: bool) -> Number:
+    is_integer, _, end, _ = _parse_range_at_path(root, dotted_path, expect_integer=expect_integer)
+    if is_integer:
+        return int(math.floor(end + 0.5))
+    return float(end)
 
 
 def _parse_profile_table(parameters: TOMLTable, name: str) -> tuple[float, float, float, float]:
@@ -341,6 +348,13 @@ def _resolve_selected_scalars(spec: TOMLTable, seed: int) -> dict[str, Number]:
     return selected
 
 
+def _resolve_selected_max_scalars(spec: TOMLTable) -> dict[str, Number]:
+    selected: dict[str, Number] = {}
+    for path, key, expect_integer in SCALAR_RANGE_SPECS:
+        selected[key] = _select_range_end_value(spec, path, expect_integer=expect_integer)
+    return selected
+
+
 def _validate_constraints(selected: SelectedParameters, coil_groups: list[ResolvedCoilGroup]) -> None:
     if selected["outer_x"] <= 0 or selected["outer_y"] <= 0:
         raise ValueError("outer_x and outer_y must be > 0")
@@ -365,11 +379,12 @@ def _validate_constraints(selected: SelectedParameters, coil_groups: list[Resolv
         raise ValueError("Total selected coil count must be <= 10")
 
 
-def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, list[ResolvedCoilGroup], list[ResolvedPcbInstance]]:
+def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, SelectedParametersMax, list[ResolvedCoilGroup], list[ResolvedPcbInstance]]:
     parameters = require_table(spec.get("parameters"), "parameters")
     trace_base, trace_outer_bias, trace_inner_bias, trace_clamp_min = _parse_profile_table(parameters, "trace_profile")
     gap_base, gap_outer_bias, gap_inner_bias, gap_clamp_min = _parse_profile_table(parameters, "gap_profile")
     raw = _resolve_selected_scalars(spec, seed)
+    raw_max = _resolve_selected_max_scalars(spec)
 
     # Current geometry path is still square-spiral MVP. Keep compatibility fields deterministic.
     derived_outer = min(float(raw["outer_x"]), float(raw["outer_y"]))
@@ -415,17 +430,25 @@ def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, 
         "cu_thickness": FIXED_DEFAULTS["cu_thickness"],
         "fr4_er": FIXED_DEFAULTS["fr4_er"],
     }
+    selected_max: SelectedParametersMax = {
+        "tx_region_outer_w_mm": float(raw_max["tx_region_outer_w_mm"]),
+        "tx_region_outer_h_mm": float(raw_max["tx_region_outer_h_mm"]),
+        "tx_region_thickness_mm": float(raw_max["tx_region_thickness_mm"]),
+        "rx_region_outer_w_mm": float(raw_max["rx_region_outer_w_mm"]),
+        "rx_region_outer_h_mm": float(raw_max["rx_region_outer_h_mm"]),
+        "rx_region_thickness_mm": float(raw_max["rx_region_thickness_mm"]),
+    }
     groups = _resolve_coil_groups(spec, seed, selected)
     pcbs = _resolve_pcbs(spec, seed)
     _validate_mounts(groups, pcbs)
     _validate_constraints(selected, groups)
-    return selected, groups, pcbs
+    return selected, selected_max, groups, pcbs
 
 
 def resolve_selected_parameters(spec: TOMLTable, seed: int) -> SelectedParameters:
-    selected, _, _ = _resolve_selection(spec, seed)
+    selected, _, _, _ = _resolve_selection(spec, seed)
     return selected
 
 
-def resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, list[ResolvedCoilGroup], list[ResolvedPcbInstance]]:
+def resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, SelectedParametersMax, list[ResolvedCoilGroup], list[ResolvedPcbInstance]]:
     return _resolve_selection(spec, seed)

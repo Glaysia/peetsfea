@@ -22,14 +22,16 @@ from peetsfea.types.manifest import (
     Manifest,
     PitchCheckEntry,
     SelectedParameters,
+    SelectedParametersMax,
     SceneObjectEntry,
     UniteGroups,
 )
 
 _Point2 = tuple[float, float]
 _Point3 = tuple[float, float, float]
-TV_GAP_X_MM = 10.0
-TX_REGION_BELOW_TV_GAP_MM = 10.0
+SHELF_HEIGHT_MM = 400.0
+SHELF_MIN_SIZE_X_MM = 350.0
+RX_REGION_BOTTOM_FROM_TV_MM = 1.0
 
 
 def _build_rect_spiral_centerline_absolute(turns: int, outer_x: float, outer_y: float, trace: float, gap: float, z: float) -> list[_Point3]:
@@ -189,6 +191,7 @@ def _create_scene_non_model_objects(
     modeler: Modeler3D,
     design_id: str,
     selected: SelectedParameters,
+    selected_max: SelectedParametersMax,
 ) -> tuple[list[str], list[CadProbe], list[SceneObjectEntry]]:
     def _assert_positive(value: float, path: str) -> None:
         if value <= 0:
@@ -210,6 +213,12 @@ def _create_scene_non_model_objects(
     rx_w = float(selected["rx_region_outer_w_mm"])
     rx_h = float(selected["rx_region_outer_h_mm"])
     rx_t = float(selected["rx_region_thickness_mm"])
+    tx_w_max = float(selected_max["tx_region_outer_w_mm"])
+    tx_h_max = float(selected_max["tx_region_outer_h_mm"])
+    tx_t_max = float(selected_max["tx_region_thickness_mm"])
+    rx_w_max = float(selected_max["rx_region_outer_w_mm"])
+    rx_h_max = float(selected_max["rx_region_outer_h_mm"])
+    rx_t_max = float(selected_max["rx_region_thickness_mm"])
 
     _assert_positive(floor_x, "floor.size_x_mm")
     _assert_positive(floor_y, "floor.size_y_mm")
@@ -226,18 +235,44 @@ def _create_scene_non_model_objects(
     _assert_positive(rx_w, "rx.region.outer_w_mm")
     _assert_positive(rx_h, "rx.region.outer_h_mm")
     _assert_positive(rx_t, "rx.region.thickness_mm")
+    _assert_positive(tx_w_max, "tx.region.outer_w_mm(max)")
+    _assert_positive(tx_h_max, "tx.region.outer_h_mm(max)")
+    _assert_positive(tx_t_max, "tx.region.thickness_mm(max)")
+    _assert_positive(rx_w_max, "rx.region.outer_w_mm(max)")
+    _assert_positive(rx_h_max, "rx.region.outer_h_mm(max)")
+    _assert_positive(rx_t_max, "rx.region.thickness_mm(max)")
 
-    tv_x = wall_t + TV_GAP_X_MM
-    # TX region is independent from coil geometry and sits below the TV block.
-    tx_origin_x = tv_x - (tx_w / 2.0)
+    if tx_w > tx_w_max or tx_h > tx_h_max or tx_t > tx_t_max:
+        raise ValueError("tx.region actual dimensions must be <= max dimensions")
+    if rx_w > rx_w_max or rx_h > rx_h_max or rx_t > rx_t_max:
+        raise ValueError("rx.region actual dimensions must be <= max dimensions")
+
+    tv_x = 0.0
+    # TX region is independent from coil geometry and its bottom touches shelf top.
+    tx_origin_x = 0.0
     tx_origin_y = -tx_h / 2.0
-    tx_origin_z = tv_base_z - tx_t - TX_REGION_BELOW_TV_GAP_MM
+    tx_origin_z = SHELF_HEIGHT_MM
+    tx_origin_x_max = 0.0
+    tx_origin_y_max = -tx_h_max / 2.0
+    tx_origin_z_max = SHELF_HEIGHT_MM
+    shelf_x = max(SHELF_MIN_SIZE_X_MM, tx_w_max * 2.5)
+    shelf_y = max(tv_w, tx_h_max)
     # RX region is independent from coil geometry and anchored inside the TV volume.
-    rx_origin_x = tv_x + max((tv_t - rx_t) / 2.0, 0.0)
+    rx_origin_x = 0.0
     rx_origin_y = -rx_w / 2.0
-    rx_origin_z = tv_base_z + (tv_h - rx_h) / 2.0
+    rx_origin_z = tv_base_z + RX_REGION_BOTTOM_FROM_TV_MM
+    rx_origin_y_max = -rx_w_max / 2.0
+    rx_origin_z_max = tv_base_z + RX_REGION_BOTTOM_FROM_TV_MM
 
-    scene_specs: list[tuple[str, Literal["tv", "wall", "floor", "tx_region", "rx_region"], _Point3, _Point3, Literal["XY", "YZ"]]] = [
+    scene_specs: list[
+        tuple[
+            str,
+            Literal["tv", "wall", "floor", "shelf", "tx_region_max", "tx_region_actual", "rx_region_max", "rx_region_actual"],
+            _Point3,
+            _Point3,
+            Literal["XY", "YZ"],
+        ]
+    ] = [
         (
             f"scene_floor_{design_id}",
             "floor",
@@ -247,9 +282,17 @@ def _create_scene_non_model_objects(
             "XY",
         ),
         (
+            f"scene_shelf_{design_id}",
+            "shelf",
+            # Shelf bottom touches floor top (z=0), shelf top is z=400.
+            (0.0, -shelf_y / 2.0, 0.0),
+            (shelf_x, shelf_y, SHELF_HEIGHT_MM),
+            "XY",
+        ),
+        (
             f"scene_wall_{design_id}",
             "wall",
-            (0.0, -wall_y / 2.0, 0.0),
+            (-wall_t, -wall_y / 2.0, 0.0),
             (wall_t, wall_y, wall_z),
             "YZ",
         ),
@@ -261,15 +304,29 @@ def _create_scene_non_model_objects(
             "YZ",
         ),
         (
-            f"scene_tx_region_{design_id}",
-            "tx_region",
+            f"scene_tx_region_max_{design_id}",
+            "tx_region_max",
+            (tx_origin_x_max, tx_origin_y_max, tx_origin_z_max),
+            (tx_w_max, tx_h_max, tx_t_max),
+            "XY",
+        ),
+        (
+            f"scene_tx_region_actual_{design_id}",
+            "tx_region_actual",
             (tx_origin_x, tx_origin_y, tx_origin_z),
             (tx_w, tx_h, tx_t),
             "XY",
         ),
         (
-            f"scene_rx_region_{design_id}",
-            "rx_region",
+            f"scene_rx_region_max_{design_id}",
+            "rx_region_max",
+            (rx_origin_x, rx_origin_y_max, rx_origin_z_max),
+            (rx_t_max, rx_w_max, rx_h_max),
+            "YZ",
+        ),
+        (
+            f"scene_rx_region_actual_{design_id}",
+            "rx_region_actual",
             (rx_origin_x, rx_origin_y, rx_origin_z),
             (rx_t, rx_w, rx_h),
             "YZ",
@@ -597,6 +654,7 @@ def _build_geometry_metadata(
         "peetsfea_commit": manifest["peetsfea_commit"],
         "seed": manifest["seed"],
         "selected_parameters": manifest["selected_parameters"],
+        "selected_parameters_max": manifest["selected_parameters_max"],
         "aedt_path": str(aedt_path),
         "object_names": object_names,
         "created_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
@@ -682,6 +740,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
             modeler=modeler,
             design_id=design_id,
             selected=selected,
+            selected_max=manifest["selected_parameters_max"],
         )
         object_names.extend(scene_names)
         cad_probe.extend(scene_probes)
