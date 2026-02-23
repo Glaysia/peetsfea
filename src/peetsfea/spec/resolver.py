@@ -36,6 +36,15 @@ SCALAR_RANGE_SPECS: tuple[tuple[str, str, bool], ...] = (
     ("floor.thickness_mm", "floor_thickness_mm", False),
     ("floor.size_x_mm", "floor_size_x_mm", False),
     ("floor.size_y_mm", "floor_size_y_mm", False),
+    ("coil_material.via_diameter_mm", "via_diameter_mm", False),
+    ("coil_material.pcb_thickness_mm", "pcb_thickness_mm", False),
+    ("coil_material.cu_thickness_mm", "cu_thickness_mm", False),
+    ("coil_material.fr4_er", "fr4_er", False),
+    ("scene_anchor.shelf_height_mm", "shelf_height_mm", False),
+    ("scene_anchor.shelf_min_size_x_mm", "shelf_min_size_x_mm", False),
+    ("scene_anchor.rx_region_bottom_from_tv_mm", "rx_region_bottom_from_tv_mm", False),
+    ("coil_placement.tx_dd_top_clearance_mm", "tx_dd_top_clearance_mm", False),
+    ("coil_placement.rx_face_clearance_mm", "rx_face_clearance_mm", False),
 )
 
 SCALAR_OFFSET: dict[str, int] = {path: idx for idx, (path, _, _) in enumerate(SCALAR_RANGE_SPECS)}
@@ -43,14 +52,6 @@ GROUP_KIND_ORDER: tuple[str, ...] = ("tx_dd", "tx_vertical", "rx_dd")
 GROUP_OFFSET_BASE = 100
 PCB_OFFSET_BASE = 200
 PROFILE_OFFSET = 300
-
-FIXED_DEFAULTS: dict[str, float] = {
-    "pcb_thickness": 1.6,
-    "cu_thickness": 0.035,
-    "fr4_er": 4.4,
-    "via_diameter": 0.5,
-}
-
 
 def _build_candidates(is_integer: bool, start: float, end: float, count: int) -> Sequence[Number]:
     raw_values: list[float]
@@ -160,9 +161,21 @@ def _parse_profile_entry(entry: TOMLValue, idx: int) -> tuple[str, tuple[float, 
     if not isinstance(raw_id, str) or raw_id == "":
         raise ValueError(f"{dotted_root}.id must be non-empty string")
 
-    trace_values = _parse_profile_table(profile_entry.get("trace"), f"{dotted_root}.trace")
-    gap_values = _parse_profile_table(profile_entry.get("gap"), f"{dotted_root}.gap")
+    trace_values = _parse_profile_table(profile_entry["trace"], f"{dotted_root}.trace")
+    gap_values = _parse_profile_table(profile_entry["gap"], f"{dotted_root}.gap")
     return raw_id, trace_values, gap_values
+
+
+def _parse_string_value_at_path(root: TOMLTable, dotted_path: str, *, allowed: set[str]) -> str:
+    table = require_table(_read_path(root, dotted_path), dotted_path)
+    if set(table.keys()) != {"value"}:
+        raise ValueError(f"{dotted_path} supports only the 'value' key")
+    raw_value = table.get("value")
+    if not isinstance(raw_value, str):
+        raise ValueError(f"{dotted_path}.value must be string")
+    if raw_value not in allowed:
+        raise ValueError(f"{dotted_path}.value must be one of {sorted(allowed)}")
+    return raw_value
 
 
 def _resolve_profile_selection(spec: TOMLTable, seed: int) -> tuple[str, float, float, float, float, float, float, float, float]:
@@ -513,15 +526,15 @@ def _parse_rule(raw_rule: TOMLValue, idx: int) -> ConstraintRule:
         op = table.get("op")
         if op not in ("<", "<=", ">", ">=", "=="):
             raise ValueError(f"{dotted}.op must be one of ['<','<=','>','>=','==']")
-        lhs = _parse_path_ref(table.get("lhs"), f"{dotted}.lhs")
-        rhs = _parse_rhs_ref(table.get("rhs"), f"{dotted}.rhs")
+        lhs = _parse_path_ref(table["lhs"], f"{dotted}.lhs")
+        rhs = _parse_rhs_ref(table["rhs"], f"{dotted}.rhs")
         return {"id": raw_id, "kind": "comparison", "message": raw_message, "enabled": enabled, "lhs": lhs, "op": op, "rhs": rhs}
 
     if raw_kind == "range":
         allowed = {"id", "kind", "message", "enabled", "target", "min", "max", "inclusive_min", "inclusive_max"}
         if set(table.keys()) != allowed and set(table.keys()) != (allowed - {"enabled"}) and set(table.keys()) != (allowed - {"inclusive_min", "inclusive_max"}) and set(table.keys()) != (allowed - {"enabled", "inclusive_min", "inclusive_max"}):
             raise ValueError(f"{dotted} must contain only {sorted(allowed)}")
-        target = _parse_path_ref(table.get("target"), f"{dotted}.target")
+        target = _parse_path_ref(table["target"], f"{dotted}.target")
         raw_min = table.get("min")
         raw_max = table.get("max")
         min_ref = _parse_value_ref(raw_min, f"{dotted}.min") if raw_min is not None else None
@@ -554,7 +567,7 @@ def _parse_rule(raw_rule: TOMLValue, idx: int) -> ConstraintRule:
         op = table.get("op")
         if op not in ("<", "<=", ">", ">=", "=="):
             raise ValueError(f"{dotted}.op must be one of ['<','<=','>','>=','==']")
-        rhs = _parse_value_ref(table.get("rhs"), f"{dotted}.rhs")
+        rhs = _parse_value_ref(table["rhs"], f"{dotted}.rhs")
         return {
             "id": raw_id,
             "kind": "aggregate",
@@ -683,6 +696,8 @@ def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, 
     ) = _resolve_profile_selection(spec, seed)
     raw = _resolve_selected_scalars(spec, seed)
     raw_max = _resolve_selected_max_scalars(spec)
+    dd_mirror_plane = _parse_string_value_at_path(spec, "coil_placement.dd_mirror_plane", allowed={"XZ"})
+    rx_plane = _parse_string_value_at_path(spec, "coil_placement.rx_plane", allowed={"YZ"})
 
     # Current geometry path is still square-spiral MVP. Keep compatibility fields deterministic.
     derived_outer = min(float(raw["outer_x"]), float(raw["outer_y"]))
@@ -714,6 +729,13 @@ def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, 
         "floor_thickness_mm": float(raw["floor_thickness_mm"]),
         "floor_size_x_mm": float(raw["floor_size_x_mm"]),
         "floor_size_y_mm": float(raw["floor_size_y_mm"]),
+        "shelf_height_mm": float(raw["shelf_height_mm"]),
+        "shelf_min_size_x_mm": float(raw["shelf_min_size_x_mm"]),
+        "rx_region_bottom_from_tv_mm": float(raw["rx_region_bottom_from_tv_mm"]),
+        "tx_dd_top_clearance_mm": float(raw["tx_dd_top_clearance_mm"]),
+        "rx_face_clearance_mm": float(raw["rx_face_clearance_mm"]),
+        "dd_mirror_plane": cast(Literal["XZ"], dd_mirror_plane),
+        "rx_plane": cast(Literal["YZ"], rx_plane),
         "profile_id": profile_id,
         "trace_profile_base": trace_base,
         "trace_profile_outer_bias": trace_outer_bias,
@@ -727,10 +749,13 @@ def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, 
         "outer": derived_outer,
         "trace": trace_base,
         "gap": gap_base,
-        "via_diameter": FIXED_DEFAULTS["via_diameter"],
-        "pcb_thickness": FIXED_DEFAULTS["pcb_thickness"],
-        "cu_thickness": FIXED_DEFAULTS["cu_thickness"],
-        "fr4_er": FIXED_DEFAULTS["fr4_er"],
+        "via_diameter_mm": float(raw["via_diameter_mm"]),
+        "pcb_thickness_mm": float(raw["pcb_thickness_mm"]),
+        "cu_thickness_mm": float(raw["cu_thickness_mm"]),
+        "via_diameter": float(raw["via_diameter_mm"]),
+        "pcb_thickness": float(raw["pcb_thickness_mm"]),
+        "cu_thickness": float(raw["cu_thickness_mm"]),
+        "fr4_er": float(raw["fr4_er"]),
     }
     selected_max: SelectedParametersMax = {
         "tx_region_outer_w_mm": float(raw_max["tx_region_outer_w_mm"]),

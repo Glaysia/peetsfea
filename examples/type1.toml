@@ -186,6 +186,55 @@ inner_bias = -0.06
 clamp_min = 0.17
 
 # ----------------------------------------------------------------------------
+# Lifted fixed design values (count=1 for TOML SSOT contract)
+# These were previously hardcoded in resolver/geometry and are declared here
+# so optimizers and data pipelines can see a single source of truth.
+
+[coil_material.via_diameter_mm]
+# Via diameter for coil feed-through (mm). Non-positive values are invalid.
+range = [false, 0.5, 0.5, 1]
+
+[coil_material.pcb_thickness_mm]
+# PCB dielectric thickness (mm). Must stay > 0 for geometry generation.
+range = [false, 1.6, 1.6, 1]
+
+[coil_material.cu_thickness_mm]
+# Copper trace thickness (mm). Must stay > 0.
+range = [false, 0.035, 0.035, 1]
+
+[coil_material.fr4_er]
+# FR4 relative permittivity. Must be > 1.0 for physical meaning.
+range = [false, 4.4, 4.4, 1]
+
+[scene_anchor.shelf_height_mm]
+# Shelf top height from floor (mm) where TX region starts.
+range = [false, 400.0, 400.0, 1]
+
+[scene_anchor.shelf_min_size_x_mm]
+# Minimum shelf size in +X (mm) to ensure scene envelope availability.
+range = [false, 350.0, 350.0, 1]
+
+[scene_anchor.rx_region_bottom_from_tv_mm]
+# RX region bottom offset from TV base plane (mm), must be >= 0.
+range = [false, 1.0, 1.0, 1]
+
+[coil_placement.tx_dd_top_clearance_mm]
+# Clearance from TX DD zone top face to DD coil top (mm), must be >= 0.
+range = [false, 0.0, 0.0, 1]
+
+[coil_placement.rx_face_clearance_mm]
+# Clearance from RX +X face (TV side) to RX DD coil face (mm), must be >= 0.
+range = [false, 0.0, 0.0, 1]
+
+[coil_placement.dd_mirror_plane]
+# DD mirror plane contract for pair symmetry.
+value = "XZ"
+
+[coil_placement.rx_plane]
+# RX coil placement plane contract (vertical to floor).
+value = "YZ"
+
+# ----------------------------------------------------------------------------
 # Declarative constraints (SSOT for preflight validity checks)
 # Rule format:
 # - kind = "comparison": lhs.path <op> rhs.path|rhs.value|rhs.func
@@ -357,6 +406,116 @@ message = "Total selected coil count must be <= 10"
 agg = "sum_group_selected_count"
 op = "<="
 rhs = { value = 10.0 }
+
+# Material constraint from TOML SSOT.
+[[constraints.rules]]
+id = "pcb_thickness_positive"
+kind = "comparison"
+message = "pcb_thickness_mm must be > 0"
+enabled = true
+lhs = { path = "pcb_thickness_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+# Material constraint from TOML SSOT.
+[[constraints.rules]]
+id = "cu_thickness_positive"
+kind = "comparison"
+message = "cu_thickness_mm must be > 0"
+enabled = true
+lhs = { path = "cu_thickness_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+# Material constraint from TOML SSOT.
+[[constraints.rules]]
+id = "via_diameter_positive"
+kind = "comparison"
+message = "via_diameter_mm must be > 0"
+enabled = true
+lhs = { path = "via_diameter_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+# Material constraint from TOML SSOT.
+[[constraints.rules]]
+id = "fr4_er_gt_one"
+kind = "comparison"
+message = "fr4_er must be > 1.0"
+enabled = true
+lhs = { path = "fr4_er" }
+op = ">"
+rhs = { value = 1.0 }
+
+# Scene anchor constraint from TOML SSOT.
+[[constraints.rules]]
+id = "shelf_height_positive"
+kind = "comparison"
+message = "shelf_height_mm must be > 0"
+enabled = true
+lhs = { path = "shelf_height_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+# Scene anchor constraint from TOML SSOT.
+[[constraints.rules]]
+id = "shelf_min_size_x_positive"
+kind = "comparison"
+message = "shelf_min_size_x_mm must be > 0"
+enabled = true
+lhs = { path = "shelf_min_size_x_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+# Scene anchor constraint from TOML SSOT.
+[[constraints.rules]]
+id = "rx_region_bottom_from_tv_non_negative"
+kind = "comparison"
+message = "rx_region_bottom_from_tv_mm must be >= 0"
+enabled = true
+lhs = { path = "rx_region_bottom_from_tv_mm" }
+op = ">="
+rhs = { value = 0.0 }
+
+# Placement clearance constraint from TOML SSOT.
+[[constraints.rules]]
+id = "tx_dd_top_clearance_non_negative"
+kind = "comparison"
+message = "tx_dd_top_clearance_mm must be >= 0"
+enabled = true
+lhs = { path = "tx_dd_top_clearance_mm" }
+op = ">="
+rhs = { value = 0.0 }
+
+# Placement clearance constraint from TOML SSOT.
+[[constraints.rules]]
+id = "rx_face_clearance_non_negative"
+kind = "comparison"
+message = "rx_face_clearance_mm must be >= 0"
+enabled = true
+lhs = { path = "rx_face_clearance_mm" }
+op = ">="
+rhs = { value = 0.0 }
+
+# Placement feasibility constraint in TX DD region.
+[[constraints.rules]]
+id = "tx_dd_top_clearance_within_dd_zone"
+kind = "comparison"
+message = "tx_dd_top_clearance_mm must be <= tx_region_dd_z_mm"
+enabled = true
+lhs = { path = "tx_dd_top_clearance_mm" }
+op = "<="
+rhs = { path = "tx_region_dd_z_mm" }
+
+# Placement feasibility constraint in RX region.
+[[constraints.rules]]
+id = "rx_face_clearance_within_rx_thickness"
+kind = "comparison"
+message = "rx_face_clearance_mm must be <= rx_region_thickness_mm"
+enabled = true
+lhs = { path = "rx_face_clearance_mm" }
+op = "<="
+rhs = { path = "rx_region_thickness_mm" }
 
 # ----------------------------------------------------------------------------
 # Coil groups

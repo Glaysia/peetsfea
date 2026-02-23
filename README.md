@@ -33,11 +33,11 @@ TOML은 기본적으로 여러 파라미터 범위 안의 설계 셋을 정의�
 - “새로운 언어” 수준의 문법 설계(표준 TOML 사용).
 
 ## 테스트 환경
-- Python 3.12 이상
+- Python 3.12
 - AEDT 25 R2: Windows 10/11, Kubuntu 25
-- AEDT 24 R2: Rocky 8.8
+- AEDT 25 R2: Rocky 8.8
 
-신버전이 나오면 계속 버전을 올릴 예정이라 호환성에 불편이 있을 수 있어 미안하다. 내 성향이 그렇다.
+신버전이 나오면 계속 버전을 올릴 예정이라 하위 호환성에 불편이 있을 수 있어 미안하다. 내 성향이 그렇다.
 
 ## TOML 명세 예시
 아래는 방향성을 보여주는 최소 예시다. 실제 스키마는 프로젝트 진행과 함께 확정된다.
@@ -121,6 +121,7 @@ values = [8, 10, 12, 14]
   - `debug.axis_checks`, `debug.pitch_checks`
   - `debug.cad_probe` (CAD bbox/edge 샘플 좌표)
   - `debug.constraints_ok`
+  - `debug.in_region_ok`, `debug.violations` (영역 포함성 검사)
 
 - 실행:
 ```bash
@@ -139,6 +140,12 @@ python run.py
   - `rhs.func`는 `min(path_a,path_b)`, `sub(path_a,path_b,path_c)`만 지원
   - `constraints.rules`는 필수이며 누락/빈 값이면 실행 전 실패한다.
   - 목적은 GA/딥러닝 샘플러가 동일 TOML 제약을 사전 필터에 재사용하는 것이다.
+- 하드코딩 설계값은 TOML로 승격 중이며, 1차로 다음 섹션이 추가됐다.
+- 하드코딩 설계값은 TOML로 승격되어 resolver/geometry 입력으로 직접 사용된다.
+  - `[coil_material]`: `via_diameter_mm`, `pcb_thickness_mm`, `cu_thickness_mm`, `fr4_er`
+  - `[scene_anchor]`: `shelf_height_mm`, `shelf_min_size_x_mm`, `rx_region_bottom_from_tv_mm`
+  - `[coil_placement]`: `tx_dd_top_clearance_mm`, `rx_face_clearance_mm`, `dd_mirror_plane`, `rx_plane`
+  - 현재는 TOML 계약 고정을 위해 대부분 `count=1`(또는 단일 문자열)로 선언한다.
 
 동작 요약:
 1) TOML 원본 바이트 SHA-256(`toml_hash`) 계산

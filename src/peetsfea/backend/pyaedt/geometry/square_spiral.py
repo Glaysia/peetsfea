@@ -21,6 +21,7 @@ from peetsfea.types.manifest import (
     GroupObjects,
     Manifest,
     PitchCheckEntry,
+    RegionViolation,
     SelectedParameters,
     SelectedParametersMax,
     SceneObjectEntry,
@@ -29,9 +30,6 @@ from peetsfea.types.manifest import (
 
 _Point2 = tuple[float, float]
 _Point3 = tuple[float, float, float]
-SHELF_HEIGHT_MM = 400.0
-SHELF_MIN_SIZE_X_MM = 350.0
-RX_REGION_BOTTOM_FROM_TV_MM = 1.0
 
 
 def _build_rect_spiral_centerline_absolute(turns: int, outer_x: float, outer_y: float, trace: float, gap: float, z: float) -> list[_Point3]:
@@ -91,10 +89,63 @@ def _translate_points(points: list[list[float]], dx: float, dy: float, dz: float
     return [[point[0] + dx, point[1] + dy, point[2] + dz] for point in points]
 
 
+def _map_xy_points_to_yz(points: list[list[float]], *, x_const: float, y_center: float, z_center: float) -> list[list[float]]:
+    return [[x_const, y_center + point[0], z_center + point[1]] for point in points]
+
+
+def _bounds_from_scene_entry(entry: SceneObjectEntry) -> tuple[_Point3, _Point3]:
+    ox, oy, oz = entry["origin_xyz"]
+    sx, sy, sz = entry["size_xyz"]
+    return (ox, oy, oz), (ox + sx, oy + sy, oz + sz)
+
+
+def _bbox_violations(
+    *,
+    object_name: str,
+    bbox: list[float],
+    region_kind: Literal["tx_region_dd", "tx_region_vertical", "rx_region_actual"],
+    region_min: _Point3,
+    region_max: _Point3,
+) -> list[RegionViolation]:
+    if len(bbox) < 6:
+        return []
+    actual_min = (bbox[0], bbox[1], bbox[2])
+    actual_max = (bbox[3], bbox[4], bbox[5])
+    violations: list[RegionViolation] = []
+    for idx, axis in enumerate(("x", "y", "z")):
+        if actual_min[idx] < region_min[idx]:
+            violations.append(
+                {
+                    "object_name": object_name,
+                    "region_kind": region_kind,
+                    "axis": cast(Literal["x", "y", "z"], axis),
+                    "overflow_mm": region_min[idx] - actual_min[idx],
+                    "actual_min": actual_min[idx],
+                    "actual_max": actual_max[idx],
+                    "region_min": region_min[idx],
+                    "region_max": region_max[idx],
+                }
+            )
+        if actual_max[idx] > region_max[idx]:
+            violations.append(
+                {
+                    "object_name": object_name,
+                    "region_kind": region_kind,
+                    "axis": cast(Literal["x", "y", "z"], axis),
+                    "overflow_mm": actual_max[idx] - region_max[idx],
+                    "actual_min": actual_min[idx],
+                    "actual_max": actual_max[idx],
+                    "region_min": region_min[idx],
+                    "region_max": region_max[idx],
+                }
+            )
+    return violations
+
+
 def _coil_instance_offset(kind: str, instance_index: int, instance_count: int, spacing_mm: float) -> _Point3:
     if kind in ("tx_dd", "rx_dd"):
         center = (instance_count - 1) / 2.0
-        return ((instance_index - center) * spacing_mm, 0.0, 0.0)
+        return (0.0, (instance_index - center) * spacing_mm, 0.0)
     if kind == "tx_vertical":
         if instance_count <= 1:
             return (0.0, 0.0, 0.0)
@@ -119,9 +170,9 @@ def _mount_allows_instance(mounts: list[str], kind: str, instance_index: int) ->
 
 def _instance_side(kind: str, instance_offset: _Point3) -> Literal["left", "right", "center"]:
     if kind in ("tx_dd", "rx_dd"):
-        if instance_offset[0] < 0:
+        if instance_offset[1] < 0:
             return "left"
-        if instance_offset[0] > 0:
+        if instance_offset[1] > 0:
             return "right"
         return "center"
     return "center"
@@ -215,6 +266,9 @@ def _create_scene_non_model_objects(
     rx_w = float(selected["rx_region_outer_w_mm"])
     rx_h = float(selected["rx_region_outer_h_mm"])
     rx_t = float(selected["rx_region_thickness_mm"])
+    shelf_height = float(selected["shelf_height_mm"])
+    shelf_min_size_x = float(selected["shelf_min_size_x_mm"])
+    rx_region_bottom_from_tv = float(selected["rx_region_bottom_from_tv_mm"])
     tx_w_max = float(selected_max["tx_region_outer_w_mm"])
     tx_h_max = float(selected_max["tx_region_outer_h_mm"])
     tx_t_max = float(selected_max["tx_region_thickness_mm"])
@@ -245,6 +299,10 @@ def _create_scene_non_model_objects(
     _assert_positive(rx_w_max, "rx.region.outer_w_mm(max)")
     _assert_positive(rx_h_max, "rx.region.outer_h_mm(max)")
     _assert_positive(rx_t_max, "rx.region.thickness_mm(max)")
+    _assert_positive(shelf_height, "scene_anchor.shelf_height_mm")
+    _assert_positive(shelf_min_size_x, "scene_anchor.shelf_min_size_x_mm")
+    if rx_region_bottom_from_tv < 0:
+        raise ValueError("scene_anchor.rx_region_bottom_from_tv_mm must be >= 0")
 
     if tx_w > tx_w_max or tx_h > tx_h_max or tx_t > tx_t_max:
         raise ValueError("tx.region actual dimensions must be <= max dimensions")
@@ -258,15 +316,15 @@ def _create_scene_non_model_objects(
     # TX region is independent from coil geometry and its bottom touches shelf top.
     tx_origin_x_max = 0.0
     tx_origin_y_max = -tx_h_max / 2.0
-    tx_origin_z_max = SHELF_HEIGHT_MM
-    shelf_x = max(SHELF_MIN_SIZE_X_MM, tx_w_max * 2.5)
+    tx_origin_z_max = shelf_height
+    shelf_x = max(shelf_min_size_x, tx_w_max * 2.5)
     shelf_y = max(tv_w, tx_h_max)
     # RX region is independent from coil geometry and anchored inside the TV volume.
     rx_origin_x = 0.0
     rx_origin_y = -rx_w / 2.0
-    rx_origin_z = tv_base_z + RX_REGION_BOTTOM_FROM_TV_MM
+    rx_origin_z = tv_base_z + rx_region_bottom_from_tv
     rx_origin_y_max = -rx_w_max / 2.0
-    rx_origin_z_max = tv_base_z + RX_REGION_BOTTOM_FROM_TV_MM
+    rx_origin_z_max = tv_base_z + rx_region_bottom_from_tv
 
     # Bottom leftover is kept as free space; DD and vertical zones are contiguous above it.
     tx_dd_origin_z = tx_origin_z_max + tx_leftover_z
@@ -304,7 +362,7 @@ def _create_scene_non_model_objects(
             "shelf",
             # Shelf bottom touches floor top (z=0), shelf top is z=400.
             (0.0, -shelf_y / 2.0, 0.0),
-            (shelf_x, shelf_y, SHELF_HEIGHT_MM),
+            (shelf_x, shelf_y, shelf_height),
             "XY",
         ),
         (
@@ -325,7 +383,7 @@ def _create_scene_non_model_objects(
             f"scene_tx_region_max_{design_id}",
             "tx_region_max",
             (tx_origin_x_max, tx_origin_y_max, tx_origin_z_max),
-            (tx_w_max, tx_h_max, tx_t),
+            (tx_w_max, tx_h_max, tx_t_max),
             "XY",
         ),
         (
@@ -625,6 +683,8 @@ def _build_geometry_debug(
     gap: float,
     eps: float,
     cad_probe: list[CadProbe],
+    in_region_ok: bool,
+    violations: list[RegionViolation],
 ) -> GeometryDebug:
     corners: list[CornerDebugEntry] = []
     for idx, point in enumerate(centerline_vertices):
@@ -655,6 +715,8 @@ def _build_geometry_debug(
         "pitch_checks": pitch_checks,
         "cad_probe": cad_probe,
         "constraints_ok": axis_ok and pitch_ok and symmetry_ok,
+        "in_region_ok": in_region_ok,
+        "violations": violations,
         "eps": eps,
     }
 
@@ -711,6 +773,10 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     pcb_thickness = selected["pcb_thickness"]
     cu_thickness = selected["cu_thickness"]
     fr4_er = selected["fr4_er"]
+    tx_dd_top_clearance = selected["tx_dd_top_clearance_mm"]
+    rx_face_clearance = selected["rx_face_clearance_mm"]
+    dd_mirror_plane = selected["dd_mirror_plane"]
+    rx_plane = selected["rx_plane"]
 
     if turns < 1:
         raise ValueError("selected_parameters.turns must be >= 1")
@@ -724,6 +790,14 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
         raise ValueError("selected_parameters.cu_thickness must be > 0")
     if fr4_er <= 1.0:
         raise ValueError("selected_parameters.fr4_er must be > 1.0")
+    if tx_dd_top_clearance < 0:
+        raise ValueError("selected_parameters.tx_dd_top_clearance_mm must be >= 0")
+    if rx_face_clearance < 0:
+        raise ValueError("selected_parameters.rx_face_clearance_mm must be >= 0")
+    if dd_mirror_plane != "XZ":
+        raise ValueError("selected_parameters.dd_mirror_plane must be 'XZ'")
+    if rx_plane != "YZ":
+        raise ValueError("selected_parameters.rx_plane must be 'YZ'")
 
     inner_width_x = outer_x - (2.0 * turns * trace) - (2.0 * (turns - 1) * gap)
     inner_width_y = outer_y - (2.0 * turns * trace) - (2.0 * (turns - 1) * gap)
@@ -759,6 +833,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     group_endpoints: list[GroupEndpointEntry] = []
     coil_polarity: list[CoilPolaritySpec] = []
     scene_objects: list[SceneObjectEntry] = []
+    placement_violations: list[RegionViolation] = []
 
     try:
         scene_names, scene_probes, scene_objects = _create_scene_non_model_objects(
@@ -769,6 +844,16 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
         )
         object_names.extend(scene_names)
         cad_probe.extend(scene_probes)
+        scene_by_kind = {entry["kind"]: entry for entry in scene_objects}
+        tx_dd_region_min, tx_dd_region_max = _bounds_from_scene_entry(scene_by_kind["tx_region_dd"])
+        tx_vertical_region_min, tx_vertical_region_max = _bounds_from_scene_entry(scene_by_kind["tx_region_vertical"])
+        rx_region_min, rx_region_max = _bounds_from_scene_entry(scene_by_kind["rx_region_actual"])
+        tx_dd_center_x = (tx_dd_region_min[0] + tx_dd_region_max[0]) / 2.0
+        tx_dd_center_y = (tx_dd_region_min[1] + tx_dd_region_max[1]) / 2.0
+        tx_vertical_center_x = (tx_vertical_region_min[0] + tx_vertical_region_max[0]) / 2.0
+        tx_vertical_center_y = (tx_vertical_region_min[1] + tx_vertical_region_max[1]) / 2.0
+        rx_center_y = (rx_region_min[1] + rx_region_max[1]) / 2.0
+        rx_center_z = (rx_region_min[2] + rx_region_max[2]) / 2.0
 
         for board_idx, pcb in enumerate(selected_pcbs):
             if not pcb["present"]:
@@ -799,12 +884,45 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                     if not _mount_allows_instance(pcb["mounts"], kind, instance_index):
                         continue
                     off_x, off_y, off_z = _coil_instance_offset(kind, instance_index, instance_count, spacing_mm)
-                    top_points = _translate_points(
-                        base_points,
-                        dx=board_x + transform["dx"] + off_x,
-                        dy=board_y + transform["dy"] + off_y,
-                        dz=board_z + transform["dz"] + off_z,
-                    )
+                    if kind == "tx_dd":
+                        tx_dd_anchor_z = tx_dd_region_max[2] - tx_dd_top_clearance - cu_thickness
+                        top_points = _translate_points(
+                            base_points,
+                            dx=tx_dd_center_x + transform["dx"] + off_x,
+                            dy=tx_dd_center_y + transform["dy"] + off_y,
+                            dz=tx_dd_anchor_z + transform["dz"] + off_z,
+                        )
+                    elif kind == "rx_dd":
+                        rx_anchor_x = rx_region_max[0] - rx_face_clearance - cu_thickness
+                        translated_xy = _translate_points(
+                            base_points,
+                            dx=0.0,
+                            dy=0.0,
+                            dz=0.0,
+                        )
+                        top_points = _map_xy_points_to_yz(
+                            translated_xy,
+                            x_const=rx_anchor_x + transform["dx"] + off_x,
+                            y_center=rx_center_y + transform["dy"] + off_y,
+                            z_center=rx_center_z + transform["dz"] + off_z,
+                        )
+                    elif kind == "tx_vertical":
+                        # Polyline rectangle section is centered on centerline.
+                        # Keep copper fully inside TX vertical region by lifting centerline half thickness.
+                        tx_vertical_anchor_z = tx_vertical_region_min[2] + (cu_thickness / 2.0)
+                        top_points = _translate_points(
+                            base_points,
+                            dx=tx_vertical_center_x + transform["dx"] + off_x,
+                            dy=tx_vertical_center_y + transform["dy"] + off_y,
+                            dz=tx_vertical_anchor_z + transform["dz"] + off_z,
+                        )
+                    else:
+                        top_points = _translate_points(
+                            base_points,
+                            dx=board_x + transform["dx"] + off_x,
+                            dy=board_y + transform["dy"] + off_y,
+                            dz=board_z + transform["dz"] + off_z,
+                        )
                     top_name = f"coil_{kind}_g{instance_index}_b{board_idx}_{design_id}"
                     top_obj = cast(
                         Object3d,
@@ -819,7 +937,41 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                     )
                     obj_name = _object_name(top_obj, top_name)
                     object_names.append(obj_name)
-                    cad_probe.append(_probe_cad_object(top_obj, top_name))
+                    probe = _probe_cad_object(top_obj, top_name)
+                    cad_probe.append(probe)
+                    if kind == "tx_dd":
+                        violations = _bbox_violations(
+                            object_name=obj_name,
+                            bbox=probe["bbox"],
+                            region_kind="tx_region_dd",
+                            region_min=tx_dd_region_min,
+                            region_max=tx_dd_region_max,
+                        )
+                    elif kind == "tx_vertical":
+                        violations = _bbox_violations(
+                            object_name=obj_name,
+                            bbox=probe["bbox"],
+                            region_kind="tx_region_vertical",
+                            region_min=tx_vertical_region_min,
+                            region_max=tx_vertical_region_max,
+                        )
+                    elif kind == "rx_dd":
+                        violations = _bbox_violations(
+                            object_name=obj_name,
+                            bbox=probe["bbox"],
+                            region_kind="rx_region_actual",
+                            region_min=rx_region_min,
+                            region_max=rx_region_max,
+                        )
+                    else:
+                        violations = []
+                    if violations:
+                        placement_violations.extend(violations)
+                        first = violations[0]
+                        raise ValueError(
+                            f"Coil placement out of region for {first['object_name']} in {first['region_kind']} "
+                            f"(axis={first['axis']}, overflow_mm={first['overflow_mm']})"
+                        )
                     group_objects[kind].append(obj_name)
 
                     start_xyz = cast(_Point3, tuple(float(v) for v in top_points[0]))
@@ -863,6 +1015,8 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
         gap=gap,
         eps=eps,
         cad_probe=cad_probe,
+        in_region_ok=len(placement_violations) == 0,
+        violations=placement_violations,
     )
 
     pitch_max_delta = max((entry["delta"] for entry in debug["pitch_checks"]), default=0.0)
