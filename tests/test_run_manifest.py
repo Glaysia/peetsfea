@@ -61,31 +61,31 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 220.
                 "[floor.size_y_mm]",
                 "range = [false, 5000.0, 5000.0, 1]",
                 "",
-                "[parameters.outer_x]",
+                "[coil_shape.outer_x]",
                 f"range = [false, {outer_x:.1f}, {outer_x:.1f}, 1]",
-                "[parameters.outer_y]",
+                "[coil_shape.outer_y]",
                 f"range = [false, {outer_y:.1f}, {outer_y:.1f}, 1]",
-                "[parameters.turn_count_max]",
+                "[coil_shape.turn_count_max]",
                 "range = [true, 8, 8, 1]",
-                "[parameters.inner_margin_x]",
+                "[coil_shape.inner_margin_x]",
                 "range = [false, 2.0, 2.0, 1]",
-                "[parameters.inner_margin_y]",
+                "[coil_shape.inner_margin_y]",
                 "range = [false, 2.0, 2.0, 1]",
-                "[parameters.tx_dd_pair_spacing_mm]",
+                "[coil_spacing.tx_dd_pair_spacing_mm]",
                 "range = [false, 40.0, 40.0, 1]",
-                "[parameters.rx_dd_pair_spacing_mm]",
+                "[coil_spacing.rx_dd_pair_spacing_mm]",
                 "range = [false, 40.0, 40.0, 1]",
-                "[parameters.tx_vertical_span_mm]",
+                "[coil_spacing.tx_vertical_span_mm]",
                 "range = [false, 10.0, 10.0, 1]",
                 "",
-                "[parameters.trace_profile]",
+                "[trace_gap_profile.trace_profile]",
                 'mode = "biased_linear"',
                 "base = 1.0",
                 "outer_bias = 0.1",
                 "inner_bias = -0.1",
                 "clamp_min = 0.2",
                 "",
-                "[parameters.gap_profile]",
+                "[trace_gap_profile.gap_profile]",
                 'mode = "biased_linear"',
                 "base = 0.5",
                 "outer_bias = 0.05",
@@ -184,6 +184,16 @@ def test_invalid_range_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("c" * 40))
     with pytest.raises(ValueError, match="count"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_old_parameters_paths_unsupported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "old_path.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace("[coil_shape.outer_x]", "[parameters.outer_x]")
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("h" * 40))
+    with pytest.raises(ValueError, match="Missing required path: coil_shape.outer_x"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
