@@ -23,7 +23,7 @@ SINGLE = 'SINGLE'
 
 
 RUN_MODE = MANY
-# RUN_MODE = SINGLE
+RUN_MODE = SINGLE
 
 if __name__ == "__main__":
     if RUN_MODE == MANY:

@@ -1,122 +1,198 @@
-# peetsfea primary runnable TOML (`run/type1.toml` symlinks to this file)
+# peetsfea primary TOML (`run/type1.toml` symlinks to this file)
 # ----------------------------------------------------------------------------
-# This spec is the SSOT for deterministic parameter resolution.
-# Numeric values are expressed ONLY as: range = [is_integer, start, end, count]
-# Fixed values are represented by start=end and count=1.
+# Phase 1 spec-remodel target structure.
+# IMPORTANT:
+# - Keep comments rich and explicit in this file.
+# - When adding/changing fields, always add 1-2 lines describing intent/constraints.
+# - Treat comments as part of the spec contract for future maintainers/agents.
+# Numeric range convention:
+#   range = [is_integer, start, end, count]
 
-# Spec contract version for parser/validator behavior.
 spec_version = "0.1.4"
 
 [design]
-# Global modeling units used by resolver and geometry backend.
 units = "mm"
 
 [backend]
-# Current MVP backend. Only "hfss" is supported.
 tool = "hfss"
 
-[parameters.pcb_count]
-# Number of PCBs in one generated system.
-# Current MVP supports only one board.
-range = [true, 1, 1, 1]
-
-[parameters.turns]
-# Integer number of turns for the top-layer square spiral.
-range = [true, 6, 12, 7]
-
-[parameters.outer]
-# Outer side length of the spiral footprint.
-range = [false, 40.0, 70.0, 7]
-
-[parameters.trace]
-# Trace width for both top coil and bottom connection.
-range = [false, 0.6, 1.2, 7]
-
-[parameters.gap]
-# Gap between adjacent spiral traces.
-range = [false, 0.2, 0.8, 7]
-
-[parameters.via_diameter]
-# Finished via diameter used for L1-L2-L1 connection pair.
-range = [false, 0.3, 0.8, 6]
-
-[parameters.pcb_thickness]
-# Fixed FR4 board thickness: 1.6T.
-range = [false, 1.6, 1.6, 1]
-
-[parameters.cu_thickness]
-# Fixed copper thickness for both layers: 35um = 0.035mm.
-range = [false, 0.035, 0.035, 1]
-
-[parameters.fr4_er]
-# Fixed FR4 relative permittivity for this spec.
-range = [false, 4.4, 4.4, 1]
-
 # ----------------------------------------------------------------------------
-# Non-model size envelopes (scene constraints only, not modeled in CAD yet)
-# All entries use the current project format:
-# range = [is_integer, start, end, count]
+# Non-model scene/envelope sizes
 
 [tv.width_mm]
-# TV physical width envelope.
 range = [false, 1200.0, 1200.0, 1]
 
 [tv.height_mm]
-# TV physical height envelope.
 range = [false, 700.0, 700.0, 1]
 
 [tv.thickness_mm]
-# TV physical thickness envelope.
 range = [false, 45.0, 45.0, 1]
 
 [tx.region.outer_w_mm]
-# TX placement region outer width.
 range = [false, 300.0, 300.0, 1]
 
 [tx.region.outer_h_mm]
-# TX placement region outer height.
 range = [false, 200.0, 200.0, 1]
 
 [tx.region.thickness_mm]
-# TX placement region thickness budget.
 range = [false, 20.0, 20.0, 1]
 
 [rx.region.outer_w_mm]
-# RX placement region outer width.
 range = [false, 280.0, 280.0, 1]
 
 [rx.region.outer_h_mm]
-# RX placement region outer height.
 range = [false, 180.0, 180.0, 1]
 
 [rx.region.thickness_mm]
-# RX placement region thickness budget.
 range = [false, 18.0, 18.0, 1]
 
 [wall.thickness_mm]
-# Wall thickness along X direction.
 range = [false, 200.0, 200.0, 1]
 
 [wall.size_y_mm]
-# Wall Y span.
 range = [false, 4000.0, 4000.0, 1]
 
 [wall.size_z_mm]
-# Wall Z span.
 range = [false, 3000.0, 3000.0, 1]
 
 [floor.thickness_mm]
-# Floor thickness along Z direction.
 range = [false, 300.0, 300.0, 1]
 
 [floor.size_x_mm]
-# Floor X span.
 range = [false, 5000.0, 5000.0, 1]
 
 [floor.size_y_mm]
-# Floor Y span.
 range = [false, 5000.0, 5000.0, 1]
 
-# Geometry validity contract
-# inner_width = outer - 2*turns*trace - 2*(turns-1)*gap
-# inner_width must be > 0
+# ----------------------------------------------------------------------------
+# Grouped coil parameter space
+
+[parameters.outer_x]
+range = [false, 220.0, 300.0, 5]
+
+[parameters.outer_y]
+range = [false, 150.0, 220.0, 5]
+
+[parameters.turn_count_max]
+range = [true, 6, 12, 7]
+
+[parameters.inner_margin_x]
+range = [false, 2.0, 8.0, 4]
+
+[parameters.inner_margin_y]
+range = [false, 2.0, 8.0, 4]
+
+[parameters.tx_dd_pair_spacing_mm]
+range = [false, 20.0, 60.0, 5]
+
+[parameters.rx_dd_pair_spacing_mm]
+range = [false, 20.0, 60.0, 5]
+
+[parameters.tx_vertical_span_mm]
+range = [false, 0.0, 15.0, 4]
+
+[parameters.trace_profile]
+mode = "biased_linear"
+base = 1.0
+outer_bias = 0.10
+inner_bias = -0.10
+clamp_min = 0.20
+
+[parameters.gap_profile]
+mode = "biased_linear"
+base = 0.50
+outer_bias = 0.05
+inner_bias = -0.05
+clamp_min = 0.15
+
+# ----------------------------------------------------------------------------
+# Coil groups
+
+[[coil_groups]]
+kind = "tx_dd"
+count_mode = [true, 2, 4, 2]
+instance_transforms = [
+  { dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 },
+]
+
+[[coil_groups]]
+kind = "tx_vertical"
+count_range = [true, 0, 4, 5]
+instance_transforms = [
+  { dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 },
+]
+
+[[coil_groups]]
+kind = "rx_dd"
+count_fixed = [true, 2, 2, 1]
+instance_transforms = [
+  { dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 180.0 },
+]
+
+# ----------------------------------------------------------------------------
+# PCB instances (8 total: 4 always-on + 4 optional)
+# present follows integer range contract: 0/1
+
+[[pcbs]]
+id = "tx_main_0"
+role = "tx"
+position = [0.0, 0.0, 0.0]
+rotation_deg = 0.0
+present = [true, 1, 1, 1]
+mounts = ["tx_dd:0", "tx_vertical:*"]
+
+[[pcbs]]
+id = "tx_main_1"
+role = "tx"
+position = [0.0, 0.0, 2.0]
+rotation_deg = 0.0
+present = [true, 1, 1, 1]
+mounts = ["tx_dd:1", "tx_vertical:*"]
+
+[[pcbs]]
+id = "rx_main_0"
+role = "rx"
+position = [0.0, 0.0, 110.0]
+rotation_deg = 0.0
+present = [true, 1, 1, 1]
+mounts = ["rx_dd:0"]
+
+[[pcbs]]
+id = "rx_main_1"
+role = "rx"
+position = [0.0, 0.0, 112.0]
+rotation_deg = 0.0
+present = [true, 1, 1, 1]
+mounts = ["rx_dd:1"]
+
+[[pcbs]]
+id = "tx_opt_0"
+role = "tx"
+position = [40.0, 0.0, 0.0]
+rotation_deg = 0.0
+present = [true, 0, 1, 2]
+mounts = ["tx_vertical:*"]
+
+[[pcbs]]
+id = "tx_opt_1"
+role = "tx"
+position = [-40.0, 0.0, 0.0]
+rotation_deg = 0.0
+present = [true, 0, 1, 2]
+mounts = ["tx_vertical:*"]
+
+[[pcbs]]
+id = "rx_opt_0"
+role = "rx"
+position = [40.0, 0.0, 110.0]
+rotation_deg = 0.0
+present = [true, 0, 1, 2]
+mounts = ["rx_dd:0"]
+
+[[pcbs]]
+id = "rx_opt_1"
+role = "rx"
+position = [-40.0, 0.0, 110.0]
+rotation_deg = 0.0
+present = [true, 0, 1, 2]
+mounts = ["rx_dd:1"]

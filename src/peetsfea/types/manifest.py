@@ -18,7 +18,38 @@ class ManifestSpec(TypedDict):
 
 
 class SelectedParameters(TypedDict):
-    pcb_count: int
+    outer_x: float
+    outer_y: float
+    turn_count_max: int
+    inner_margin_x: float
+    inner_margin_y: float
+    tx_dd_pair_spacing_mm: float
+    rx_dd_pair_spacing_mm: float
+    tx_vertical_span_mm: float
+    tv_width_mm: float
+    tv_height_mm: float
+    tv_thickness_mm: float
+    tx_region_outer_w_mm: float
+    tx_region_outer_h_mm: float
+    tx_region_thickness_mm: float
+    rx_region_outer_w_mm: float
+    rx_region_outer_h_mm: float
+    rx_region_thickness_mm: float
+    wall_thickness_mm: float
+    wall_size_y_mm: float
+    wall_size_z_mm: float
+    floor_thickness_mm: float
+    floor_size_x_mm: float
+    floor_size_y_mm: float
+    trace_profile_base: float
+    trace_profile_outer_bias: float
+    trace_profile_inner_bias: float
+    trace_profile_clamp_min: float
+    gap_profile_base: float
+    gap_profile_outer_bias: float
+    gap_profile_inner_bias: float
+    gap_profile_clamp_min: float
+    # Compatibility fields used by current square-spiral MVP geometry path.
     turns: int
     outer: float
     trace: float
@@ -27,6 +58,23 @@ class SelectedParameters(TypedDict):
     pcb_thickness: float
     cu_thickness: float
     fr4_er: float
+
+
+class ResolvedCoilGroup(TypedDict):
+    kind: Literal["tx_dd", "tx_vertical", "rx_dd"]
+    requested_count: int
+    selected_count: int
+    spacing_mm: float
+    instance_transforms: list[dict[str, float]]
+
+
+class ResolvedPcbInstance(TypedDict):
+    id: str
+    role: Literal["tx", "rx"]
+    position: tuple[float, float, float]
+    rotation_deg: float
+    present: bool
+    mounts: list[str]
 
 
 class Manifest(TypedDict):
@@ -38,6 +86,8 @@ class Manifest(TypedDict):
     seed: int
     backend: str
     selected_parameters: SelectedParameters
+    selected_coil_groups: list[ResolvedCoilGroup]
+    selected_pcbs: list[ResolvedPcbInstance]
     inputs: ManifestInputs
     spec: ManifestSpec
     created_at_utc: str
@@ -86,6 +136,35 @@ class GeometryDebug(TypedDict):
     eps: float
 
 
+class GroupObjects(TypedDict):
+    tx_dd: list[str]
+    tx_vertical: list[str]
+    rx_dd: list[str]
+
+
+class UniteGroups(TypedDict):
+    tx: list[str]
+    rx: list[str]
+
+
+class GroupEndpointEntry(TypedDict):
+    group_kind: Literal["tx_dd", "tx_vertical", "rx_dd"]
+    group_instance_index: int
+    board_id: str
+    start_xyz: tuple[float, float, float]
+    end_xyz: tuple[float, float, float]
+    present: bool
+
+
+class CoilPolaritySpec(TypedDict):
+    group_kind: Literal["tx_dd", "tx_vertical", "rx_dd"]
+    group_instance_index: int
+    board_id: str
+    instance_side: Literal["left", "right", "center"]
+    current_direction: Literal["cw", "ccw"]
+    b_field_direction: Literal["up", "down", "left", "right", "into_wall", "out_of_wall"]
+
+
 class GeometryMetadata(TypedDict):
     design_id: str
     design_unique_hash: str
@@ -99,4 +178,8 @@ class GeometryMetadata(TypedDict):
     created_at_utc: str
     metadata_path: str
     anchor_mode: Literal["copper_outer_edge_corner"]
+    group_objects: GroupObjects
+    unite_groups: UniteGroups
+    group_endpoints: list[GroupEndpointEntry]
+    coil_polarity: list[CoilPolaritySpec]
     debug: GeometryDebug
