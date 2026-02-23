@@ -5,7 +5,7 @@
 # Fixed values are represented by start=end and count=1.
 
 # Spec contract version for parser/validator behavior.
-spec_version = "0.1.3"
+spec_version = "0.1.4"
 
 [design]
 # Global modeling units used by resolver and geometry backend.
@@ -51,6 +51,71 @@ range = [false, 0.035, 0.035, 1]
 [parameters.fr4_er]
 # Fixed FR4 relative permittivity for this spec.
 range = [false, 4.4, 4.4, 1]
+
+# ----------------------------------------------------------------------------
+# Non-model size envelopes (scene constraints only, not modeled in CAD yet)
+# All entries use the current project format:
+# range = [is_integer, start, end, count]
+
+[tv.width_mm]
+# TV physical width envelope.
+range = [false, 1200.0, 1200.0, 1]
+
+[tv.height_mm]
+# TV physical height envelope.
+range = [false, 700.0, 700.0, 1]
+
+[tv.thickness_mm]
+# TV physical thickness envelope.
+range = [false, 45.0, 45.0, 1]
+
+[tx.region.outer_w_mm]
+# TX placement region outer width.
+range = [false, 300.0, 300.0, 1]
+
+[tx.region.outer_h_mm]
+# TX placement region outer height.
+range = [false, 200.0, 200.0, 1]
+
+[tx.region.thickness_mm]
+# TX placement region thickness budget.
+range = [false, 20.0, 20.0, 1]
+
+[rx.region.outer_w_mm]
+# RX placement region outer width.
+range = [false, 280.0, 280.0, 1]
+
+[rx.region.outer_h_mm]
+# RX placement region outer height.
+range = [false, 180.0, 180.0, 1]
+
+[rx.region.thickness_mm]
+# RX placement region thickness budget.
+range = [false, 18.0, 18.0, 1]
+
+[wall.thickness_mm]
+# Wall thickness along X direction.
+range = [false, 200.0, 200.0, 1]
+
+[wall.size_y_mm]
+# Wall Y span.
+range = [false, 4000.0, 4000.0, 1]
+
+[wall.size_z_mm]
+# Wall Z span.
+range = [false, 3000.0, 3000.0, 1]
+
+[floor.thickness_mm]
+# Floor thickness along Z direction.
+range = [false, 300.0, 300.0, 1]
+
+[floor.size_x_mm]
+# Floor X span.
+range = [false, 5000.0, 5000.0, 1]
+
+[floor.size_y_mm]
+# Floor Y span.
+range = [false, 5000.0, 5000.0, 1]
 
 # Geometry validity contract
 # inner_width = outer - 2*turns*trace - 2*(turns-1)*gap
