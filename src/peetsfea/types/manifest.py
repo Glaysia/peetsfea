@@ -61,6 +61,15 @@ class SelectedParameters(TypedDict):
     fr4_er: float
 
 
+class SelectedParametersMax(TypedDict):
+    tx_region_outer_w_mm: float
+    tx_region_outer_h_mm: float
+    tx_region_thickness_mm: float
+    rx_region_outer_w_mm: float
+    rx_region_outer_h_mm: float
+    rx_region_thickness_mm: float
+
+
 class ResolvedCoilGroup(TypedDict):
     kind: Literal["tx_dd", "tx_vertical", "rx_dd"]
     requested_count: int
@@ -87,6 +96,7 @@ class Manifest(TypedDict):
     seed: int
     backend: str
     selected_parameters: SelectedParameters
+    selected_parameters_max: SelectedParametersMax
     selected_coil_groups: list[ResolvedCoilGroup]
     selected_pcbs: list[ResolvedPcbInstance]
     inputs: ManifestInputs
@@ -168,7 +178,7 @@ class CoilPolaritySpec(TypedDict):
 
 class SceneObjectEntry(TypedDict):
     name: str
-    kind: Literal["tv", "wall", "floor", "tx_region", "rx_region"]
+    kind: Literal["tv", "wall", "floor", "shelf", "tx_region_max", "tx_region_actual", "rx_region_max", "rx_region_actual"]
     present: bool
     origin_xyz: tuple[float, float, float]
     size_xyz: tuple[float, float, float]
@@ -184,6 +194,7 @@ class GeometryMetadata(TypedDict):
     peetsfea_commit: str
     seed: int
     selected_parameters: SelectedParameters
+    selected_parameters_max: SelectedParametersMax
     aedt_path: str
     object_names: list[str]
     created_at_utc: str

@@ -49,7 +49,7 @@ def run(config: RunConfig) -> Manifest:
     if backend_tool != "hfss":
         raise ValueError("backend.tool must be 'hfss' for this MVP")
 
-    selected_parameters, selected_coil_groups, selected_pcbs = resolve_selection(spec=spec, seed=config.seed)
+    selected_parameters, selected_parameters_max, selected_coil_groups, selected_pcbs = resolve_selection(spec=spec, seed=config.seed)
     toml_hash = compute_toml_hash(raw_toml)
     toml_space_hash = compute_toml_space_hash(toml_hash)
     design_unique_hash = compute_design_unique_hash(toml_hash, commit_hash, config.seed, selected_parameters)
@@ -67,6 +67,7 @@ def run(config: RunConfig) -> Manifest:
         "seed": config.seed,
         "backend": config.backend,
         "selected_parameters": selected_parameters,
+        "selected_parameters_max": selected_parameters_max,
         "selected_coil_groups": selected_coil_groups,
         "selected_pcbs": selected_pcbs,
         "inputs": {
