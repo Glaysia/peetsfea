@@ -84,14 +84,16 @@ range = [false, 5000.0, 5000.0, 1]
 # Grouped coil geometry controls
 
 [coil_shape.outer_x]
-# Keep TX coil max below tx.region minimum span (currently 160mm).
-range = [false, 120.0, 150.0, 4]
+# Allow near full TX X-span usage (TX width is 160mm).
+range = [false, 60.0, 158.0, 5]
 
 [coil_shape.outer_y]
-range = [false, 110.0, 150.0, 5]
+# Expanded Y-span to allow diverse DD aspect ratios.
+range = [false, 60.0, 130.0, 20]
 
 [coil_shape.turn_count_max]
-range = [true, 6, 12, 7]
+# Expanded integer turn candidates for broader dataset diversity.
+range = [true, 1, 20, 20]
 
 [coil_shape.inner_margin_x]
 range = [false, 2.0, 8.0, 4]
@@ -101,12 +103,16 @@ range = [false, 2.0, 8.0, 4]
 
 # Grouped coil spacing controls
 [coil_spacing.tx_dd_pair_spacing_mm]
-range = [false, 20.0, 60.0, 5]
+# Additional center-to-center clearance for XZ-mirrored TX DD pair (mm).
+range = [false, 2.0, 25.0, 6]
 
 [coil_spacing.rx_dd_pair_spacing_mm]
-range = [false, 20.0, 60.0, 5]
+# RX DD pair edge-to-edge gap in Y-axis (mm).
+range = [false, 0.0, 5.0, 8]
 
 [coil_spacing.tx_vertical_span_mm]
+# Total Y-axis spread for tx_vertical coil centers (ZX-plane normal axis).
+# For n>=2, centers are evenly spaced with delta=span/(n-1) over [-span/2, +span/2].
 range = [false, 0.0, 15.0, 4]
 
 # Trace/gap profile presets (seed selects one profile deterministically)
@@ -234,6 +240,10 @@ value = "XZ"
 # RX coil placement plane contract (vertical to floor).
 value = "YZ"
 
+[coil_placement.tx_vertical_plane]
+# TX vertical coil plane contract (parallel to ZX plane).
+value = "ZX"
+
 # ----------------------------------------------------------------------------
 # Declarative constraints (SSOT for preflight validity checks)
 # Rule format:
@@ -288,7 +298,7 @@ lhs = { path = "inner_margin_y" }
 op = ">="
 rhs = { value = 0.0 }
 
-# DD pair spacing must be positive (mm), zero/negative spacing causes overlap.
+# TX DD mirrored-pair clearance must be positive (mm).
 [[constraints.rules]]
 id = "tx_dd_spacing_positive"
 kind = "comparison"
@@ -297,13 +307,13 @@ lhs = { path = "tx_dd_pair_spacing_mm" }
 op = ">"
 rhs = { value = 0.0 }
 
-# DD pair spacing must be positive (mm), zero/negative spacing causes overlap.
+# RX DD pair edge gap must be non-negative (mm).
 [[constraints.rules]]
 id = "rx_dd_spacing_positive"
 kind = "comparison"
-message = "rx_dd_pair_spacing_mm must be > 0"
+message = "rx_dd_pair_spacing_mm must be >= 0"
 lhs = { path = "rx_dd_pair_spacing_mm" }
-op = ">"
+op = ">="
 rhs = { value = 0.0 }
 
 # Vertical span is bounded in [0, 15] mm for supported arrangement modes.
@@ -517,6 +527,16 @@ lhs = { path = "rx_face_clearance_mm" }
 op = "<="
 rhs = { path = "rx_region_thickness_mm" }
 
+# TX vertical coil plane is fixed by product requirement.
+[[constraints.rules]]
+id = "tx_vertical_plane_fixed_zx"
+kind = "comparison"
+message = "tx_vertical_plane must be ZX"
+enabled = true
+lhs = { path = "tx_vertical_plane" }
+op = "=="
+rhs = { value = "ZX" }
+
 # ----------------------------------------------------------------------------
 # Coil groups
 
@@ -551,7 +571,7 @@ role = "tx"
 position = [0.0, 0.0, 0.0]
 rotation_deg = 0.0
 present = [true, 1, 1, 1]
-mounts = ["tx_dd:0", "tx_vertical:*"]
+mounts = ["tx_dd:0", "tx_dd:1", "tx_vertical:*"]
 
 [[pcbs]]
 id = "tx_main_1"
@@ -559,7 +579,7 @@ role = "tx"
 position = [0.0, 0.0, 2.0]
 rotation_deg = 0.0
 present = [true, 1, 1, 1]
-mounts = ["tx_dd:1", "tx_vertical:*"]
+mounts = ["tx_dd:2", "tx_dd:3", "tx_vertical:*"]
 
 [[pcbs]]
 id = "rx_main_0"

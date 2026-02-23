@@ -129,6 +129,8 @@ python run.py
 ```
 - VS Code launch(`Run run.py from run/`)는 pre-launch task로 `run/aedt/`를 먼저 비운 뒤 실행한다.
 - 기본 TOML 예시: `examples/type1.toml` (grouped 구조)
+  - `tx_dd_pair_spacing_mm`: XZ 거울대칭 TX DD 페어의 추가 중심간 여유(mm)
+  - `rx_dd_pair_spacing_mm`: Y축 RX DD 페어의 edge-to-edge gap(mm)
 - 프로필은 `[[trace_gap_profile.profiles]]` 배열로 정의한다.
   - 각 프로필은 `id`, `trace`, `gap`을 가진다.
   - `seed` 기준 선택 규칙: `(seed + 300) % len(profiles)` (결정론).
@@ -144,7 +146,7 @@ python run.py
 - 하드코딩 설계값은 TOML로 승격되어 resolver/geometry 입력으로 직접 사용된다.
   - `[coil_material]`: `via_diameter_mm`, `pcb_thickness_mm`, `cu_thickness_mm`, `fr4_er`
   - `[scene_anchor]`: `shelf_height_mm`, `shelf_min_size_x_mm`, `rx_region_bottom_from_tv_mm`
-  - `[coil_placement]`: `tx_dd_top_clearance_mm`, `rx_face_clearance_mm`, `dd_mirror_plane`, `rx_plane`
+  - `[coil_placement]`: `tx_dd_top_clearance_mm`, `rx_face_clearance_mm`, `dd_mirror_plane`, `rx_plane`, `tx_vertical_plane`
   - 현재는 TOML 계약 고정을 위해 대부분 `count=1`(또는 단일 문자열)로 선언한다.
 
 동작 요약:

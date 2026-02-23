@@ -23,11 +23,11 @@ SINGLE = 'SINGLE'
 
 
 RUN_MODE = MANY
-RUN_MODE = SINGLE
+# RUN_MODE = SINGLE
 
-if __name__ == "__main__":
+if __name__ == "__main__": 
     if RUN_MODE == MANY:
-        for seed in range(10):
+        for seed in range(25):
             run_one(seed)
     elif RUN_MODE == SINGLE:
-        run_one(0) 
+        run_one(2) 

@@ -51,6 +51,7 @@ class SelectedParameters(TypedDict):
     rx_face_clearance_mm: float
     dd_mirror_plane: Literal["XZ"]
     rx_plane: Literal["YZ"]
+    tx_vertical_plane: Literal["ZX"]
     profile_id: str
     trace_profile_base: float
     trace_profile_outer_bias: float

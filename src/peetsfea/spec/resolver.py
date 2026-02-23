@@ -384,6 +384,13 @@ def _resolve_pcbs(spec: TOMLTable, seed: int) -> list[ResolvedPcbInstance]:
 
 
 def _validate_mounts(coil_groups: list[ResolvedCoilGroup], pcbs: list[ResolvedPcbInstance]) -> None:
+    def _max_supported_instances(kind: Literal["tx_dd", "tx_vertical", "rx_dd"]) -> int:
+        if kind == "tx_dd":
+            return 4
+        if kind == "tx_vertical":
+            return 4
+        return 2
+
     allowed_instances: dict[Literal["tx_dd", "tx_vertical", "rx_dd"], int] = {group["kind"]: group["selected_count"] for group in coil_groups}
     for pcb in pcbs:
         for mount in pcb["mounts"]:
@@ -398,7 +405,8 @@ def _validate_mounts(coil_groups: list[ResolvedCoilGroup], pcbs: list[ResolvedPc
             if not selector.isdigit():
                 raise ValueError(f"Mount selector must be '*' or integer index: {mount}")
             idx = int(selector)
-            if idx < 0 or idx >= allowed_instances[kind_key]:
+            max_instances = max(allowed_instances[kind_key], _max_supported_instances(kind_key))
+            if idx < 0 or idx >= max_instances:
                 raise ValueError(f"Mount index out of range for {kind}: {mount}")
 
 
@@ -421,7 +429,7 @@ class PathRef(TypedDict):
 
 
 class ValueRef(TypedDict):
-    value: float
+    value: float | str
 
 
 class FuncRef(TypedDict):
@@ -478,9 +486,13 @@ def _parse_value_ref(value: TOMLValue, dotted_path: str) -> ValueRef:
     if set(table.keys()) != {"value"}:
         raise ValueError(f"{dotted_path} must contain only ['value']")
     raw_value = table.get("value")
-    if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
-        raise ValueError(f"{dotted_path}.value must be number")
-    return {"value": float(raw_value)}
+    if isinstance(raw_value, bool):
+        raise ValueError(f"{dotted_path}.value must be number|string")
+    if isinstance(raw_value, (int, float)):
+        return {"value": float(raw_value)}
+    if isinstance(raw_value, str) and raw_value != "":
+        return {"value": raw_value}
+    raise ValueError(f"{dotted_path}.value must be number|string")
 
 
 def _parse_rhs_ref(value: TOMLValue, dotted_path: str) -> PathRef | ValueRef | FuncRef:
@@ -526,9 +538,10 @@ def _parse_rule(raw_rule: TOMLValue, idx: int) -> ConstraintRule:
         op = table.get("op")
         if op not in ("<", "<=", ">", ">=", "=="):
             raise ValueError(f"{dotted}.op must be one of ['<','<=','>','>=','==']")
+        op_lit = cast(Literal["<", "<=", ">", ">=", "=="], op)
         lhs = _parse_path_ref(table["lhs"], f"{dotted}.lhs")
         rhs = _parse_rhs_ref(table["rhs"], f"{dotted}.rhs")
-        return {"id": raw_id, "kind": "comparison", "message": raw_message, "enabled": enabled, "lhs": lhs, "op": op, "rhs": rhs}
+        return {"id": raw_id, "kind": "comparison", "message": raw_message, "enabled": enabled, "lhs": lhs, "op": op_lit, "rhs": rhs}
 
     if raw_kind == "range":
         allowed = {"id", "kind", "message", "enabled", "target", "min", "max", "inclusive_min", "inclusive_max"}
@@ -567,6 +580,7 @@ def _parse_rule(raw_rule: TOMLValue, idx: int) -> ConstraintRule:
         op = table.get("op")
         if op not in ("<", "<=", ">", ">=", "=="):
             raise ValueError(f"{dotted}.op must be one of ['<','<=','>','>=','==']")
+        op_lit = cast(Literal["<", "<=", ">", ">=", "=="], op)
         rhs = _parse_value_ref(table["rhs"], f"{dotted}.rhs")
         return {
             "id": raw_id,
@@ -574,7 +588,7 @@ def _parse_rule(raw_rule: TOMLValue, idx: int) -> ConstraintRule:
             "message": raw_message,
             "enabled": enabled,
             "agg": "sum_group_selected_count",
-            "op": op,
+            "op": op_lit,
             "rhs": rhs,
         }
 
@@ -600,19 +614,23 @@ def _parse_constraints(spec: TOMLTable) -> list[ConstraintRule]:
     return parsed_rules
 
 
-def _compare(lhs: float, rhs: float, op: Literal["<", "<=", ">", ">=", "=="]) -> bool:
+def _compare(lhs: float | str, rhs: float | str, op: Literal["<", "<=", ">", ">=", "=="]) -> bool:
+    if op == "==":
+        return lhs == rhs
+    if not isinstance(lhs, (int, float)) or not isinstance(rhs, (int, float)):
+        raise ValueError(f"Operator '{op}' supports only numeric operands")
     if op == "<":
-        return lhs < rhs
+        return float(lhs) < float(rhs)
     if op == "<=":
-        return lhs <= rhs
+        return float(lhs) <= float(rhs)
     if op == ">":
-        return lhs > rhs
+        return float(lhs) > float(rhs)
     if op == ">=":
-        return lhs >= rhs
-    return lhs == rhs
+        return float(lhs) >= float(rhs)
+    return False
 
 
-def _resolve_selected_path(selected: SelectedParameters, path: str) -> float:
+def _resolve_selected_numeric_path(selected: SelectedParameters, path: str) -> float:
     if path == "tx_region_leftover_z_mm":
         return (
             float(selected["tx_region_thickness_mm"])
@@ -627,24 +645,40 @@ def _resolve_selected_path(selected: SelectedParameters, path: str) -> float:
     return float(value)
 
 
-def _resolve_value_ref(selected: SelectedParameters, value_ref: PathRef | ValueRef | FuncRef) -> float:
+def _resolve_selected_comparable_path(selected: SelectedParameters, path: str) -> float | str:
+    if path == "tx_region_leftover_z_mm":
+        return _resolve_selected_numeric_path(selected, path)
+    value = selected.get(path)
+    if value is None:
+        raise ValueError(f"Unknown constraint path: {path}")
+    if isinstance(value, bool):
+        raise ValueError(f"Constraint path '{path}' is not comparable")
+    if isinstance(value, (int, float, str)):
+        return value
+    raise ValueError(f"Constraint path '{path}' is not comparable")
+
+
+def _resolve_value_ref(selected: SelectedParameters, value_ref: PathRef | ValueRef | FuncRef) -> float | str:
     if "path" in value_ref:
-        return _resolve_selected_path(selected, value_ref["path"])
+        path_ref = cast(PathRef, value_ref)
+        return _resolve_selected_comparable_path(selected, path_ref["path"])
     if "value" in value_ref:
-        return float(value_ref["value"])
-    func_text = value_ref["func"]
+        scalar_ref = cast(ValueRef, value_ref)
+        return scalar_ref["value"]
+    func_ref = cast(FuncRef, value_ref)
+    func_text = func_ref["func"]
     if func_text.startswith("min(") and func_text.endswith(")"):
         body = func_text[4:-1]
         parts = [part.strip() for part in body.split(",")]
         if len(parts) != 2 or any(part == "" for part in parts):
             raise ValueError("rhs.func min() must have 2 path arguments")
-        return min(_resolve_selected_path(selected, parts[0]), _resolve_selected_path(selected, parts[1]))
+        return min(_resolve_selected_numeric_path(selected, parts[0]), _resolve_selected_numeric_path(selected, parts[1]))
     if func_text.startswith("sub(") and func_text.endswith(")"):
         body = func_text[4:-1]
         parts = [part.strip() for part in body.split(",")]
         if len(parts) != 3 or any(part == "" for part in parts):
             raise ValueError("rhs.func sub() must have 3 path arguments")
-        return _resolve_selected_path(selected, parts[0]) - _resolve_selected_path(selected, parts[1]) - _resolve_selected_path(selected, parts[2])
+        return _resolve_selected_numeric_path(selected, parts[0]) - _resolve_selected_numeric_path(selected, parts[1]) - _resolve_selected_numeric_path(selected, parts[2])
     raise ValueError("rhs.func supports only min(path_a,path_b) and sub(path_a,path_b,path_c)")
 
 
@@ -653,13 +687,13 @@ def _evaluate_constraints(rules: list[ConstraintRule], selected: SelectedParamet
         if not rule["enabled"]:
             continue
         if rule["kind"] == "comparison":
-            lhs_value = _resolve_selected_path(selected, rule["lhs"]["path"])
+            lhs_value = _resolve_selected_comparable_path(selected, rule["lhs"]["path"])
             rhs_value = _resolve_value_ref(selected, rule["rhs"])
             if not _compare(lhs_value, rhs_value, rule["op"]):
                 raise ValueError(f"Constraint {rule['id']} failed: {rule['message']} (lhs={lhs_value}, rhs={rhs_value})")
             continue
         if rule["kind"] == "range":
-            target_value = _resolve_selected_path(selected, rule["target"]["path"])
+            target_value = _resolve_selected_numeric_path(selected, rule["target"]["path"])
             if rule["min"] is not None:
                 min_value = float(rule["min"]["value"])
                 min_ok = target_value >= min_value if rule["inclusive_min"] else target_value > min_value
@@ -698,6 +732,7 @@ def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, 
     raw_max = _resolve_selected_max_scalars(spec)
     dd_mirror_plane = _parse_string_value_at_path(spec, "coil_placement.dd_mirror_plane", allowed={"XZ"})
     rx_plane = _parse_string_value_at_path(spec, "coil_placement.rx_plane", allowed={"YZ"})
+    tx_vertical_plane = _parse_string_value_at_path(spec, "coil_placement.tx_vertical_plane", allowed={"ZX"})
 
     # Current geometry path is still square-spiral MVP. Keep compatibility fields deterministic.
     derived_outer = min(float(raw["outer_x"]), float(raw["outer_y"]))
@@ -736,6 +771,7 @@ def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, 
         "rx_face_clearance_mm": float(raw["rx_face_clearance_mm"]),
         "dd_mirror_plane": cast(Literal["XZ"], dd_mirror_plane),
         "rx_plane": cast(Literal["YZ"], rx_plane),
+        "tx_vertical_plane": cast(Literal["ZX"], tx_vertical_plane),
         "profile_id": profile_id,
         "trace_profile_base": trace_base,
         "trace_profile_outer_bias": trace_outer_bias,
