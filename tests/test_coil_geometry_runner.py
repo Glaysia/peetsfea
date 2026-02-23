@@ -169,7 +169,7 @@ def _manifest(tmp_path: Path) -> Manifest:
             "close_on_exit": True,
         },
         "spec": {
-            "spec_version": "0.1.3",
+            "spec_version": "0.1.4",
             "design_name": "square_test",
             "units": "mm",
         },

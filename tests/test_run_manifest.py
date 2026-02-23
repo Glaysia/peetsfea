@@ -12,7 +12,7 @@ def _write_toml(path: Path) -> None:
     path.write_text(
         "\n".join(
             [
-                'spec_version = "0.1.3"',
+                'spec_version = "0.1.4"',
                 "",
                 "[design]",
                 'units = "mm"',
@@ -122,7 +122,7 @@ def test_invalid_range_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     toml_path.write_text(
         "\n".join(
             [
-                'spec_version = "0.1.3"',
+                'spec_version = "0.1.4"',
                 "[design]",
                 'units = "mm"',
                 "[backend]",
@@ -170,7 +170,7 @@ def test_geometry_constraint_validation(tmp_path: Path, monkeypatch: pytest.Monk
     toml_path.write_text(
         "\n".join(
             [
-                'spec_version = "0.1.3"',
+                'spec_version = "0.1.4"',
                 "[design]",
                 'units = "mm"',
                 "[backend]",
