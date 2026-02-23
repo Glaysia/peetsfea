@@ -68,3 +68,5 @@ Thumbs.db
 
 batch.log
 run/*
+
+tmp/*

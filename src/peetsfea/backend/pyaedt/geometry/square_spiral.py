@@ -18,6 +18,7 @@ from peetsfea.types.manifest import (
     GeometryDebug,
     GeometryMetadata,
     GroupEndpointEntry,
+    GroupGeometryParams,
     GroupObjects,
     Manifest,
     PitchCheckEntry,
@@ -799,8 +800,11 @@ def _build_geometry_metadata(
         "toml_hash": manifest["toml_hash"],
         "peetsfea_commit": manifest["peetsfea_commit"],
         "seed": manifest["seed"],
+        "retry_attempt": manifest["retry_attempt"],
+        "retry_count": manifest["retry_count"],
         "selected_parameters": manifest["selected_parameters"],
         "selected_parameters_max": manifest["selected_parameters_max"],
+        "selected_group_geometry": manifest["selected_group_geometry"],
         "aedt_path": str(aedt_path),
         "object_names": object_names,
         "created_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
@@ -822,13 +826,60 @@ def _object_name(obj: Object3d, fallback: str) -> str:
     return fallback
 
 
+def _sanitize_var_name(name: str) -> str:
+    chars: list[str] = []
+    for ch in name:
+        if ch.isalnum() or ch == "_":
+            chars.append(ch)
+        else:
+            chars.append("_")
+    return "".join(chars).strip("_")
+
+
+def _var_expr(name: str, value: int | float | str) -> str:
+    if isinstance(value, str):
+        return value
+    if name.endswith("_count") or name.endswith("turn_count_max") or name.endswith("requested_count") or name.endswith("selected_count"):
+        return str(int(value))
+    if name.endswith("_deg") or name.endswith("rotation_deg"):
+        return f"{float(value)}deg"
+    if name == "fr4_er":
+        return str(float(value))
+    return f"{float(value)}mm"
+
+
+def _assign_design_variables(hfss: Hfss, manifest: Manifest) -> None:
+    selected = manifest["selected_parameters"]
+    for key, value in selected.items():
+        if isinstance(value, (int, float)):
+            hfss[_sanitize_var_name(f"spec_{key}")] = _var_expr(key, value)
+
+    for group in manifest["selected_coil_groups"]:
+        kind = group["kind"]
+        hfss[_sanitize_var_name(f"group_{kind}_requested_count")] = _var_expr("requested_count", group["requested_count"])
+        hfss[_sanitize_var_name(f"group_{kind}_selected_count")] = _var_expr("selected_count", group["selected_count"])
+        hfss[_sanitize_var_name(f"group_{kind}_spacing_mm")] = _var_expr("spacing_mm", group["spacing_mm"])
+
+    for geometry in manifest["selected_group_geometry"]:
+        kind = geometry["kind"]
+        hfss[_sanitize_var_name(f"group_geom_{kind}_turn_count_max")] = _var_expr("turn_count_max", geometry["turn_count_max"])
+        hfss[_sanitize_var_name(f"group_geom_{kind}_trace_mm")] = _var_expr("trace_mm", geometry["trace"])
+        hfss[_sanitize_var_name(f"group_geom_{kind}_gap_mm")] = _var_expr("gap_mm", geometry["gap"])
+
+    for pcb in manifest["selected_pcbs"]:
+        pcb_id = _sanitize_var_name(pcb["id"])
+        pos_x, pos_y, pos_z = pcb["position"]
+        hfss[f"pcb_{pcb_id}_position_x_mm"] = _var_expr("position_x_mm", pos_x)
+        hfss[f"pcb_{pcb_id}_position_y_mm"] = _var_expr("position_y_mm", pos_y)
+        hfss[f"pcb_{pcb_id}_position_z_mm"] = _var_expr("position_z_mm", pos_z)
+        hfss[f"pcb_{pcb_id}_rotation_deg"] = _var_expr("rotation_deg", pcb["rotation_deg"])
+        hfss[f"pcb_{pcb_id}_present"] = "1" if pcb["present"] else "0"
+
+
 def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     selected = manifest["selected_parameters"]
-    turns = selected["turn_count_max"]
     outer_x = selected["outer_x"]
     outer_y = selected["outer_y"]
-    trace = selected["trace"]
-    gap = selected["gap"]
     pcb_thickness = selected["pcb_thickness"]
     cu_thickness = selected["cu_thickness"]
     fr4_er = selected["fr4_er"]
@@ -838,12 +889,6 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     rx_plane = selected["rx_plane"]
     tx_vertical_plane = selected["tx_vertical_plane"]
 
-    if turns < 1:
-        raise ValueError("selected_parameters.turns must be >= 1")
-    if trace <= 0:
-        raise ValueError("selected_parameters.trace must be > 0")
-    if gap < 0:
-        raise ValueError("selected_parameters.gap must be >= 0")
     if pcb_thickness <= 0:
         raise ValueError("selected_parameters.pcb_thickness must be > 0")
     if cu_thickness <= 0:
@@ -861,11 +906,6 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     if tx_vertical_plane != "ZX":
         raise ValueError("selected_parameters.tx_vertical_plane must be 'ZX'")
 
-    inner_width_x = outer_x - (2.0 * turns * trace) - (2.0 * (turns - 1) * gap)
-    inner_width_y = outer_y - (2.0 * turns * trace) - (2.0 * (turns - 1) * gap)
-    if inner_width_x <= 0 or inner_width_y <= 0:
-        raise ValueError("Invalid geometry: inner width must be > 0 on both X/Y axes")
-
     run_dir = Path(manifest["inputs"]["ansys_run_dir"])
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -873,19 +913,18 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     aedt_path = run_dir / f"{design_id}.aedt"
     metadata_path = run_dir / f"geometry_metadata_{design_id}.json"
 
-    centerline_vertices = _build_rect_spiral_centerline_absolute(
-        turns=turns,
-        outer_x=outer_x,
-        outer_y=outer_y,
-        trace=trace,
-        gap=gap,
-        z=0.0,
-    )
-    base_points = [list(point) for point in centerline_vertices]
     selected_groups = manifest["selected_coil_groups"]
+    selected_group_geometry = manifest["selected_group_geometry"]
     selected_pcbs = manifest["selected_pcbs"]
+    group_geometry_by_kind: dict[Literal["tx_dd", "tx_vertical", "rx_dd"], GroupGeometryParams] = {
+        entry["kind"]: entry for entry in selected_group_geometry
+    }
+    missing_geometry = [kind for kind in ("tx_dd", "tx_vertical", "rx_dd") if kind not in group_geometry_by_kind]
+    if missing_geometry:
+        raise ValueError(f"Missing selected_group_geometry entries: {', '.join(missing_geometry)}")
 
     hfss = _create_hfss_session(manifest=manifest, aedt_path=aedt_path)
+    _assign_design_variables(hfss, manifest)
     modeler = cast(Modeler3D, hfss.modeler)
 
     close_on_exit = manifest["inputs"]["close_on_exit"]
@@ -926,6 +965,40 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
 
             for group in selected_groups:
                 kind = group["kind"]
+                geometry = group_geometry_by_kind[kind]
+                turns = geometry["turn_count_max"]
+                trace = geometry["trace"]
+                gap = geometry["gap"]
+                base_points: list[list[float]] | None = None
+                effective_turns = turns
+                if turns < 1:
+                    raise ValueError(f"selected_group_geometry.{kind}.turn_count_max must be >= 1")
+                if trace <= 0:
+                    raise ValueError(f"selected_group_geometry.{kind}.trace must be > 0")
+                if gap < 0:
+                    raise ValueError(f"selected_group_geometry.{kind}.gap must be >= 0")
+                if kind != "tx_vertical":
+                    max_turns = min(
+                        _max_feasible_turns(outer_x, trace, gap),
+                        _max_feasible_turns(outer_y, trace, gap),
+                    )
+                    effective_turns = min(turns, max_turns)
+                    if effective_turns < 1:
+                        raise ValueError(
+                            f"Invalid geometry for {kind}: cannot fit at least one turn on both X/Y axes "
+                            f"(turns={turns}, trace={trace}, gap={gap})"
+                        )
+                    base_points = [
+                        list(point)
+                        for point in _build_rect_spiral_centerline_absolute(
+                            turns=effective_turns,
+                            outer_x=outer_x,
+                            outer_y=outer_y,
+                            trace=trace,
+                            gap=gap,
+                            z=0.0,
+                        )
+                    ]
                 instance_count = group["selected_count"]
                 spacing_mm = group["spacing_mm"]
                 transforms = group["instance_transforms"]
@@ -940,6 +1013,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                     off_y = 0.0
                     off_z = 0.0
                     if kind == "tx_dd":
+                        assert base_points is not None
                         tx_dd_instance_center_y, _ = _tx_dd_center_y_and_layer(
                             instance_count=instance_count,
                             instance_index=instance_index,
@@ -958,6 +1032,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                             dz=tx_dd_anchor_z - board_z + transform["dz"] + off_z,
                         )
                     elif kind == "rx_dd":
+                        assert base_points is not None
                         off_y = _rx_dd_center_offset_y(
                             instance_index=instance_index,
                             instance_count=instance_count,
@@ -997,24 +1072,28 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                                 "tx_vertical cannot fit in tx_region_vertical "
                                 f"(available_outer_x={outer_x}, available_outer_y={tx_vertical_outer_y})"
                             )
-                        tx_vertical_points = _build_rect_spiral_centerline_absolute(
-                            turns=tx_vertical_turns,
-                            outer_x=outer_x,
-                            outer_y=tx_vertical_outer_y,
-                            trace=trace,
-                            gap=gap,
-                            z=0.0,
-                        )
+                        tx_vertical_points = [
+                            list(point)
+                            for point in _build_rect_spiral_centerline_absolute(
+                                turns=tx_vertical_turns,
+                                outer_x=outer_x,
+                                outer_y=tx_vertical_outer_y,
+                                trace=trace,
+                                gap=gap,
+                                z=0.0,
+                            )
+                        ]
                         tx_vertical_center_z = tx_vertical_region_min[2] + (tx_vertical_outer_y / 2.0)
                         if tx_vertical_plane != "ZX":
                             raise ValueError("tx_vertical plane contract violation: expected ZX")
                         top_points = _map_xy_points_to_zx(
-                            [list(point) for point in tx_vertical_points],
+                            tx_vertical_points,
                             x_center=tx_vertical_center_x + transform["dx"] + off_x,
                             y_const=tx_vertical_center_y + transform["dy"] + off_y,
                             z_center=tx_vertical_center_z + transform["dz"] + off_z,
                         )
                     else:
+                        assert base_points is not None
                         top_points = _translate_points(
                             base_points,
                             dx=board_x + transform["dx"] + off_x,
@@ -1159,10 +1238,26 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
             pass
 
     eps = 1e-6
+    debug_geometry = group_geometry_by_kind["tx_dd"]
+    debug_turns = min(
+        debug_geometry["turn_count_max"],
+        _max_feasible_turns(outer_x, debug_geometry["trace"], debug_geometry["gap"]),
+        _max_feasible_turns(outer_y, debug_geometry["trace"], debug_geometry["gap"]),
+    )
+    if debug_turns < 1:
+        debug_turns = 1
+    debug_centerline_vertices = _build_rect_spiral_centerline_absolute(
+        turns=debug_turns,
+        outer_x=outer_x,
+        outer_y=outer_y,
+        trace=debug_geometry["trace"],
+        gap=debug_geometry["gap"],
+        z=0.0,
+    )
     debug = _build_geometry_debug(
-        centerline_vertices=centerline_vertices,
-        trace=trace,
-        gap=gap,
+        centerline_vertices=debug_centerline_vertices,
+        trace=debug_geometry["trace"],
+        gap=debug_geometry["gap"],
         eps=eps,
         cad_probe=cad_probe,
         in_region_ok=len(placement_violations) == 0,

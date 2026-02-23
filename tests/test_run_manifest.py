@@ -8,11 +8,11 @@ import pytest
 import peetsfea.pipeline.run_design as runner
 
 
-def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 220.0, outer_y: float = 180.0) -> None:
+def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.0, outer_y: float = 120.0) -> None:
     path.write_text(
         "\n".join(
             [
-                'spec_version = "0.1.5"',
+                'spec_version = "0.1.6"',
                 "",
                 "[design]",
                 'units = "mm"',
@@ -65,93 +65,37 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 220.
                 f"range = [false, {outer_x:.1f}, {outer_x:.1f}, 1]",
                 "[coil_shape.outer_y]",
                 f"range = [false, {outer_y:.1f}, {outer_y:.1f}, 1]",
-                "[coil_shape.turn_count_max]",
-                "range = [true, 8, 8, 1]",
                 "[coil_shape.inner_margin_x]",
                 "range = [false, 2.0, 2.0, 1]",
                 "[coil_shape.inner_margin_y]",
                 "range = [false, 2.0, 2.0, 1]",
                 "[coil_spacing.tx_dd_pair_spacing_mm]",
-                "range = [false, 40.0, 40.0, 1]",
+                "range = [false, 2.0, 25.0, 6]",
                 "[coil_spacing.rx_dd_pair_spacing_mm]",
-                "range = [false, 40.0, 40.0, 1]",
+                "range = [false, 0.0, 5.0, 8]",
                 "[coil_spacing.tx_vertical_span_mm]",
-                "range = [false, 10.0, 10.0, 1]",
+                "range = [false, 0.0, 15.0, 4]",
                 "",
-                "[[trace_gap_profile.profiles]]",
-                'id = "p1"',
-                "[trace_gap_profile.profiles.trace]",
-                'mode = "biased_linear"',
-                "base = 0.8",
-                "outer_bias = 0.08",
-                "inner_bias = -0.06",
-                "clamp_min = 0.2",
-                "[trace_gap_profile.profiles.gap]",
-                'mode = "biased_linear"',
-                "base = 0.35",
-                "outer_bias = 0.03",
-                "inner_bias = -0.03",
-                "clamp_min = 0.12",
+                "[coil_groups_params.tx_dd.turn_count_max]",
+                "range = [true, 1, 20, 20]",
+                "[coil_groups_params.tx_dd.band_thickness_mm]",
+                "range = [false, 8.0, 48.0, 65]",
+                "[coil_groups_params.tx_dd.metal_ratio]",
+                "range = [false, 0.15, 0.85, 71]",
                 "",
-                "[[trace_gap_profile.profiles]]",
-                'id = "p2"',
-                "[trace_gap_profile.profiles.trace]",
-                'mode = "biased_linear"',
-                "base = 1.0",
-                "outer_bias = 0.1",
-                "inner_bias = -0.1",
-                "clamp_min = 0.2",
-                "[trace_gap_profile.profiles.gap]",
-                'mode = "biased_linear"',
-                "base = 0.5",
-                "outer_bias = 0.05",
-                "inner_bias = -0.05",
-                "clamp_min = 0.15",
+                "[coil_groups_params.tx_vertical.turn_count_max]",
+                "range = [true, 1, 20, 20]",
+                "[coil_groups_params.tx_vertical.band_thickness_mm]",
+                "range = [false, 8.0, 48.0, 65]",
+                "[coil_groups_params.tx_vertical.metal_ratio]",
+                "range = [false, 0.15, 0.85, 71]",
                 "",
-                "[[trace_gap_profile.profiles]]",
-                'id = "p3"',
-                "[trace_gap_profile.profiles.trace]",
-                'mode = "biased_linear"',
-                "base = 1.2",
-                "outer_bias = 0.12",
-                "inner_bias = -0.08",
-                "clamp_min = 0.25",
-                "[trace_gap_profile.profiles.gap]",
-                'mode = "biased_linear"',
-                "base = 0.6",
-                "outer_bias = 0.07",
-                "inner_bias = -0.04",
-                "clamp_min = 0.2",
-                "",
-                "[[trace_gap_profile.profiles]]",
-                'id = "p4"',
-                "[trace_gap_profile.profiles.trace]",
-                'mode = "biased_linear"',
-                "base = 0.9",
-                "outer_bias = 0.05",
-                "inner_bias = -0.12",
-                "clamp_min = 0.18",
-                "[trace_gap_profile.profiles.gap]",
-                'mode = "biased_linear"',
-                "base = 0.45",
-                "outer_bias = 0.02",
-                "inner_bias = -0.08",
-                "clamp_min = 0.14",
-                "",
-                "[[trace_gap_profile.profiles]]",
-                'id = "p5"',
-                "[trace_gap_profile.profiles.trace]",
-                'mode = "biased_linear"',
-                "base = 1.1",
-                "outer_bias = 0.09",
-                "inner_bias = -0.09",
-                "clamp_min = 0.22",
-                "[trace_gap_profile.profiles.gap]",
-                'mode = "biased_linear"',
-                "base = 0.55",
-                "outer_bias = 0.06",
-                "inner_bias = -0.06",
-                "clamp_min = 0.17",
+                "[coil_groups_params.rx_dd.turn_count_max]",
+                "range = [true, 1, 20, 20]",
+                "[coil_groups_params.rx_dd.band_thickness_mm]",
+                "range = [false, 8.0, 44.0, 65]",
+                "[coil_groups_params.rx_dd.metal_ratio]",
+                "range = [false, 0.15, 0.85, 71]",
                 "",
                 "[coil_material.via_diameter_mm]",
                 "range = [false, 0.5, 0.5, 1]",
@@ -198,30 +142,6 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 220.
                 "rhs = { value = 0.0 }",
                 "",
                 "[[constraints.rules]]",
-                'id = "turn_count_min"',
-                'kind = "comparison"',
-                'message = "turn_count_max must be >= 1"',
-                'lhs = { path = "turn_count_max" }',
-                'op = ">="',
-                "rhs = { value = 1.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "inner_margin_x_non_negative"',
-                'kind = "comparison"',
-                'message = "inner_margin_x must be >= 0"',
-                'lhs = { path = "inner_margin_x" }',
-                'op = ">="',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "inner_margin_y_non_negative"',
-                'kind = "comparison"',
-                'message = "inner_margin_y must be >= 0"',
-                'lhs = { path = "inner_margin_y" }',
-                'op = ">="',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
                 'id = "tx_dd_spacing_positive"',
                 'kind = "comparison"',
                 'message = "tx_dd_pair_spacing_mm must be > 0"',
@@ -248,76 +168,12 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 220.
                 "inclusive_max = true",
                 "",
                 "[[constraints.rules]]",
-                'id = "trace_clamp_positive"',
+                'id = "coil_outer_x_fits_tx_region"',
                 'kind = "comparison"',
-                'message = "trace_profile_clamp_min must be > 0"',
-                'lhs = { path = "trace_profile_clamp_min" }',
-                'op = ">"',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "gap_clamp_positive"',
-                'kind = "comparison"',
-                'message = "gap_profile_clamp_min must be > 0"',
-                'lhs = { path = "gap_profile_clamp_min" }',
-                'op = ">"',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "tx_region_outer_w_positive"',
-                'kind = "comparison"',
-                'message = "tx_region_outer_w_mm must be > 0"',
-                'lhs = { path = "tx_region_outer_w_mm" }',
-                'op = ">"',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "tx_region_outer_h_positive"',
-                'kind = "comparison"',
-                'message = "tx_region_outer_h_mm must be > 0"',
-                'lhs = { path = "tx_region_outer_h_mm" }',
-                'op = ">"',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "tx_region_thickness_positive"',
-                'kind = "comparison"',
-                'message = "tx_region_thickness_mm must be > 0"',
-                'lhs = { path = "tx_region_thickness_mm" }',
-                'op = ">"',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "tx_region_vertical_z_positive"',
-                'kind = "comparison"',
-                'message = "tx_region_vertical_z_mm must be > 0"',
-                'lhs = { path = "tx_region_vertical_z_mm" }',
-                'op = ">"',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "tx_region_dd_z_positive"',
-                'kind = "comparison"',
-                'message = "tx_region_dd_z_mm must be > 0"',
-                'lhs = { path = "tx_region_dd_z_mm" }',
-                'op = ">"',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "tx_region_leftover_non_negative"',
-                'kind = "comparison"',
-                'message = "tx.region.leftover_z_mm computed negative; reduce vertical_z/dd_z or increase tx.region.thickness_mm"',
-                'lhs = { path = "tx_region_leftover_z_mm" }',
-                'op = ">="',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "coil_outer_fits_tx_region"',
-                'kind = "comparison"',
-                'message = "TX coil outer must be < min(tx.region.outer_w_mm, tx.region.outer_h_mm)"',
-                'lhs = { path = "outer" }',
+                'message = "TX coil outer_x must be < tx.region.outer_w_mm"',
+                'lhs = { path = "outer_x" }',
                 'op = "<"',
-                'rhs = { func = "min(tx_region_outer_w_mm,tx_region_outer_h_mm)" }',
+                'rhs = { path = "tx_region_outer_w_mm" }',
                 "",
                 "[[constraints.rules]]",
                 'id = "max_total_selected_coils"',
@@ -326,102 +182,6 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 220.
                 'agg = "sum_group_selected_count"',
                 'op = "<="',
                 "rhs = { value = 10.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "via_diameter_positive"',
-                'kind = "comparison"',
-                'message = "via_diameter_mm must be > 0"',
-                'lhs = { path = "via_diameter_mm" }',
-                'op = ">"',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "pcb_thickness_positive"',
-                'kind = "comparison"',
-                'message = "pcb_thickness_mm must be > 0"',
-                'lhs = { path = "pcb_thickness_mm" }',
-                'op = ">"',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "cu_thickness_positive"',
-                'kind = "comparison"',
-                'message = "cu_thickness_mm must be > 0"',
-                'lhs = { path = "cu_thickness_mm" }',
-                'op = ">"',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "fr4_er_gt_one"',
-                'kind = "comparison"',
-                'message = "fr4_er must be > 1.0"',
-                'lhs = { path = "fr4_er" }',
-                'op = ">"',
-                "rhs = { value = 1.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "shelf_height_positive"',
-                'kind = "comparison"',
-                'message = "shelf_height_mm must be > 0"',
-                'lhs = { path = "shelf_height_mm" }',
-                'op = ">"',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "shelf_min_size_x_positive"',
-                'kind = "comparison"',
-                'message = "shelf_min_size_x_mm must be > 0"',
-                'lhs = { path = "shelf_min_size_x_mm" }',
-                'op = ">"',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "rx_region_bottom_from_tv_non_negative"',
-                'kind = "comparison"',
-                'message = "rx_region_bottom_from_tv_mm must be >= 0"',
-                'lhs = { path = "rx_region_bottom_from_tv_mm" }',
-                'op = ">="',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "tx_dd_top_clearance_non_negative"',
-                'kind = "comparison"',
-                'message = "tx_dd_top_clearance_mm must be >= 0"',
-                'lhs = { path = "tx_dd_top_clearance_mm" }',
-                'op = ">="',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "rx_face_clearance_non_negative"',
-                'kind = "comparison"',
-                'message = "rx_face_clearance_mm must be >= 0"',
-                'lhs = { path = "rx_face_clearance_mm" }',
-                'op = ">="',
-                "rhs = { value = 0.0 }",
-                "",
-                "[[constraints.rules]]",
-                'id = "tx_dd_top_clearance_within_dd_zone"',
-                'kind = "comparison"',
-                'message = "tx_dd_top_clearance_mm must be <= tx_region_dd_z_mm"',
-                'lhs = { path = "tx_dd_top_clearance_mm" }',
-                'op = "<="',
-                'rhs = { path = "tx_region_dd_z_mm" }',
-                "",
-                "[[constraints.rules]]",
-                'id = "rx_face_clearance_within_rx_thickness"',
-                'kind = "comparison"',
-                'message = "rx_face_clearance_mm must be <= rx_region_thickness_mm"',
-                'lhs = { path = "rx_face_clearance_mm" }',
-                'op = "<="',
-                'rhs = { path = "rx_region_thickness_mm" }',
-                "",
-                "[[constraints.rules]]",
-                'id = "tx_vertical_plane_fixed_zx"',
-                'kind = "comparison"',
-                'message = "tx_vertical_plane must be ZX"',
-                'lhs = { path = "tx_vertical_plane" }',
-                'op = "=="',
-                'rhs = { value = "ZX" }',
                 "",
                 "[[coil_groups]]",
                 'kind = "tx_dd"',
@@ -444,7 +204,7 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 220.
                 "position = [0.0, 0.0, 0.0]",
                 "rotation_deg = 0.0",
                 "present = [true, 1, 1, 1]",
-                'mounts = ["tx_dd:0", "tx_vertical:*"]',
+                'mounts = ["tx_dd:0", "tx_dd:1", "tx_vertical:*"]',
                 "",
                 "[[pcbs]]",
                 'id = "rx_main_0"',
@@ -452,7 +212,7 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 220.
                 "position = [0.0, 0.0, 110.0]",
                 "rotation_deg = 0.0",
                 "present = [true, 1, 1, 1]",
-                'mounts = ["rx_dd:0"]',
+                'mounts = ["rx_dd:0", "rx_dd:1"]',
             ]
         ),
         encoding="utf-8",
@@ -474,271 +234,161 @@ def test_run_creates_manifest_and_is_deterministic(tmp_path: Path, monkeypatch: 
     _write_toml(toml_path)
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("a" * 40))
 
-    config = runner.RunConfig("/bin/ansysedt", str(tmp_path / "run"), str(toml_path), seed=1, backend="hfss")
+    config = runner.RunConfig("/bin/ansysedt", str(tmp_path / "run"), str(toml_path), seed=7, backend="hfss")
     first = runner.run(config)
     second = runner.run(config)
 
     assert first["design_id"] == second["design_id"]
     assert first["selected_parameters"] == second["selected_parameters"]
-    assert first["selected_parameters_max"] == second["selected_parameters_max"]
+    assert first["selected_group_geometry"] == second["selected_group_geometry"]
     assert first["selected_coil_groups"] == second["selected_coil_groups"]
     assert first["selected_pcbs"] == second["selected_pcbs"]
-    assert first["design_id"].split("_")[0] == first["design_unique_hash"]
-    assert first["design_id"].split("_")[1] == first["toml_space_hash"]
-    assert re.fullmatch(r"[0-9a-f]{8}_[0-9a-f]{8}_-?[0-9]+", first["design_id"]) is not None
-    assert first["selected_parameters"]["turn_count_max"] == 8
-    assert first["selected_parameters"]["outer"] == 180.0
-    assert first["selected_parameters"]["profile_id"] == "p2"
-    assert first["selected_parameters"]["trace_profile_base"] == 1.0
-    assert first["selected_parameters"]["gap_profile_base"] == 0.5
-    assert first["selected_parameters"]["tx_region_vertical_z_mm"] == 8.0
-    assert first["selected_parameters"]["tx_region_dd_z_mm"] == 7.0
-    assert first["selected_parameters"]["rx_region_thickness_mm"] == first["selected_parameters_max"]["rx_region_thickness_mm"]
-    assert first["selected_parameters_max"]["tx_region_outer_h_mm"] == 200.0
-    assert first["selected_parameters_max"]["rx_region_thickness_mm"] == 4.0
-    assert len(first["selected_coil_groups"]) == 3
-    assert len(first["selected_pcbs"]) == 2
+    assert first["retry_attempt"] == 0
+    assert first["retry_count"] == 0
+    assert len(first["selected_group_geometry"]) == 3
+    assert {entry["kind"] for entry in first["selected_group_geometry"]} == {"tx_dd", "tx_vertical", "rx_dd"}
     assert first["manifest_path"].endswith(f"manifest_{first['design_id']}.json")
+    assert re.fullmatch(r"[0-9a-f]{8}_[0-9a-f]{8}_-?[0-9]+_[0-9]+", first["design_id"]) is not None
 
 
-def test_run_seed_changes_selection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_seed_changes_group_geometry_and_hash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "spec.toml"
     _write_toml(toml_path)
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("b" * 40))
+
     m1 = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
     m2 = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=2, backend="hfss"))
+
     assert m1["design_id"] != m2["design_id"]
-    assert m1["selected_parameters_max"] == m2["selected_parameters_max"]
-    assert m1["selected_parameters"]["profile_id"] == "p2"
-    assert m2["selected_parameters"]["profile_id"] == "p3"
+    assert m1["selected_group_geometry"] != m2["selected_group_geometry"]
 
 
-def test_profile_selection_is_deterministic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "profile.toml"
+def test_missing_group_geometry_section_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "missing_group_params.toml"
     _write_toml(toml_path)
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("1" * 40))
-    m1 = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=7, backend="hfss"))
-    m2 = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=7, backend="hfss"))
-    assert m1["selected_parameters"]["profile_id"] == m2["selected_parameters"]["profile_id"]
-    assert m1["selected_parameters"]["trace_profile_base"] == m2["selected_parameters"]["trace_profile_base"]
-    assert m1["selected_parameters"]["gap_profile_base"] == m2["selected_parameters"]["gap_profile_base"]
-
-
-def test_invalid_range_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "bad.toml"
-    _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace("range = [true, 8, 8, 1]", "range = [true, 8, 8, 0]")
-    toml_path.write_text(raw, encoding="utf-8")
+    raw = toml_path.read_text(encoding="utf-8")
+    start = raw.index("[coil_groups_params.tx_dd.turn_count_max]")
+    end = raw.index("\n[coil_material.via_diameter_mm]")
+    toml_path.write_text(raw[:start] + raw[end + 1 :], encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("c" * 40))
-    with pytest.raises(ValueError, match="count"):
+
+    with pytest.raises(ValueError, match="coil_groups_params must be a table/object"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
-def test_old_parameters_paths_unsupported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "old_path.toml"
-    _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace("[coil_shape.outer_x]", "[parameters.outer_x]")
-    toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("h" * 40))
-    with pytest.raises(ValueError, match="Missing required path: coil_shape.outer_x"):
-        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
-
-
-def test_mount_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "bad_mount.toml"
-    _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('mounts = ["rx_dd:0"]', 'mounts = ["rx_dd:5"]')
-    toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("d" * 40))
-    with pytest.raises(ValueError, match="Mount index out of range"):
-        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
-
-
-def test_profiles_required(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "missing_profiles.toml"
-    _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8")
-    start = raw.index("[[trace_gap_profile.profiles]]")
-    end = raw.index("\n[[coil_groups]]")
-    raw = raw[:start] + "\n[trace_gap_profile]\nlegacy = true\n" + raw[end:]
-    toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("2" * 40))
-    with pytest.raises(ValueError, match="trace_gap_profile.profiles must be a non-empty array of tables"):
-        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
-
-
-def test_profiles_empty_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "empty_profiles.toml"
-    _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8")
-    start = raw.index("[[trace_gap_profile.profiles]]")
-    end = raw.index("\n[[coil_groups]]")
-    raw = raw[:start] + "\n[trace_gap_profile]\nprofiles = []\n" + raw[end:]
-    toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("3" * 40))
-    with pytest.raises(ValueError, match="trace_gap_profile.profiles must contain at least one profile"):
-        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
-
-
-def test_profile_id_must_be_unique(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "dup_profile_id.toml"
-    _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('id = "p2"', 'id = "p1"', 1)
-    toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("4" * 40))
-    with pytest.raises(ValueError, match="Duplicate trace_gap_profile.profiles id"):
-        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
-
-
-def test_profile_trace_and_gap_required(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "missing_gap_table.toml"
-    _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8")
-    raw = raw.replace("[trace_gap_profile.profiles.gap]", "[trace_gap_profile.profiles.gap_removed]", 1)
-    toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("5" * 40))
-    with pytest.raises(ValueError, match=r"trace_gap_profile\.profiles\[0\] must contain only"):
-        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
-
-
-def test_profile_mode_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "bad_profile_mode.toml"
-    _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('mode = "biased_linear"', 'mode = "other"', 1)
-    toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("6" * 40))
-    with pytest.raises(ValueError, match="mode must be 'biased_linear'"):
-        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
-
-
-def test_profile_clamp_min_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "bad_profile_clamp.toml"
-    _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace("clamp_min = 0.2", "clamp_min = 0.0", 1)
-    toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("7" * 40))
-    with pytest.raises(ValueError, match="clamp_min must be > 0"):
-        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
-
-
-def test_constraints_required(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "missing_constraints.toml"
-    _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8")
-    start = raw.index("[constraints]")
-    end = raw.index("\n[[coil_groups]]")
-    raw = raw[:start] + "\n" + raw[end:]
-    toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("8" * 40))
-    with pytest.raises(ValueError, match="constraints must be a table/object"):
-        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
-
-
-def test_constraints_empty_rules_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "empty_constraints_rules.toml"
-    _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8")
-    start = raw.index("[constraints]")
-    end = raw.index("\n[[coil_groups]]")
-    raw = raw[:start] + "\n[constraints]\nrules = []\n" + raw[end:]
-    toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("9" * 40))
-    with pytest.raises(ValueError, match="constraints.rules must be a non-empty array of tables"):
-        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
-
-
-def test_constraints_duplicate_rule_id_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "dup_constraint_rule_id.toml"
-    _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('id = "outer_y_positive"', 'id = "outer_x_positive"', 1)
-    toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("a" * 40))
-    with pytest.raises(ValueError, match="Duplicate constraints.rules id"):
-        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
-
-
-def test_constraints_invalid_kind_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "bad_constraint_kind.toml"
-    _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('kind = "comparison"', 'kind = "bad_kind"', 1)
-    toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("b" * 40))
-    with pytest.raises(ValueError, match=r"constraints\.rules\[0\]\.kind must be one of"):
-        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
-
-
-def test_constraints_invalid_operator_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "bad_constraint_op.toml"
-    _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('op = ">"', 'op = "!="', 1)
-    toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("c" * 40))
-    with pytest.raises(ValueError, match=r"constraints\.rules\[0\]\.op must be one of"):
-        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
-
-
-def test_constraints_invalid_aggregate_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "bad_constraint_agg.toml"
-    _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('agg = "sum_group_selected_count"', 'agg = "sum_turns"', 1)
-    toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("d" * 40))
-    with pytest.raises(ValueError, match=r"constraints\.rules\[[0-9]+\]\.agg must be 'sum_group_selected_count'"):
-        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
-
-
-def test_constraints_invalid_func_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "bad_constraint_func.toml"
+def test_missing_kind_subfield_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "missing_metal_ratio.toml"
     _write_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8").replace(
-        'rhs = { func = "min(tx_region_outer_w_mm,tx_region_outer_h_mm)" }',
-        'rhs = { func = "max(tx_region_outer_w_mm,tx_region_outer_h_mm)" }',
+        "[coil_groups_params.rx_dd.metal_ratio]",
+        "[coil_groups_params.rx_dd.metal_ratio_removed]",
         1,
     )
     toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("e" * 40))
-    with pytest.raises(ValueError, match="rhs.func supports only min"):
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("d" * 40))
+
+    with pytest.raises(ValueError, match="coil_groups_params.rx_dd must contain only"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
-def test_constraints_unknown_path_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "bad_constraint_path.toml"
+def test_old_profile_only_spec_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "old_profile.toml"
     _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('lhs = { path = "outer_x" }', 'lhs = { path = "not_a_key" }', 1)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw += "\n[[trace_gap_profile.profiles]]\nid = \"legacy\"\n"
     toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("f" * 40))
-    with pytest.raises(ValueError, match="Unknown constraint path: not_a_key"):
-        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("e" * 40))
+
+    # Legacy profile block is ignored; new group geometry section remains mandatory/authoritative.
+    manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+    assert len(manifest["selected_group_geometry"]) == 3
 
 
 def test_tx_region_constraint_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "bad_geom.toml"
-    _write_toml(toml_path, tx_region_h=160.0, outer_x=220.0, outer_y=180.0)
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("e" * 40))
-    with pytest.raises(ValueError, match="TX coil outer must be < min"):
+    _write_toml(toml_path, outer_x=320.0)
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("f" * 40))
+
+    with pytest.raises(RuntimeError, match="No valid selection within max attempts"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
-def test_tx_region_leftover_negative_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "bad_tx_parts.toml"
+def test_invalid_group_turn_count_range_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "bad_turn_count.toml"
     _write_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8").replace(
-        "[tx.region.z_parts.dd_z_mm]\nrange = [false, 7.0, 7.0, 1]",
-        "[tx.region.z_parts.dd_z_mm]\nrange = [false, 15.0, 15.0, 1]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [false, 1, 20, 20]",
     )
     toml_path.write_text(raw, encoding="utf-8")
-    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("f" * 40))
-    with pytest.raises(ValueError, match="tx.region.leftover_z_mm computed negative"):
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("1" * 40))
+
+    with pytest.raises(ValueError, match=r"coil_groups_params\.tx_dd\.turn_count_max\.range\[0\].*must be true"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
-def test_git_commit_lookup_failure_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "spec.toml"
+def test_invalid_metal_ratio_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "bad_metal_ratio.toml"
     _write_toml(toml_path)
-    monkeypatch.setattr(
-        runner,
-        "get_git_commit",
-        lambda _: (_ for _ in ()).throw(RuntimeError("git commit lookup failed")),
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 1.0, 1.0, 1]",
     )
-    with pytest.raises(RuntimeError):
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("3" * 40))
+
+    with pytest.raises(ValueError, match=r"coil_groups_params\.tx_dd\.metal_ratio must be > 0 and < 1"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_invalid_band_thickness_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "bad_band_thickness.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        "[coil_groups_params.tx_dd.band_thickness_mm]\nrange = [false, 8.0, 48.0, 65]",
+        "[coil_groups_params.tx_dd.band_thickness_mm]\nrange = [false, 0.0, 0.0, 1]",
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("6" * 40))
+
+    with pytest.raises(ValueError, match=r"coil_groups_params\.tx_dd\.band_thickness_mm must be > 0"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_legacy_trace_gap_keys_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "legacy_trace_gap.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace("[coil_groups_params.tx_dd.band_thickness_mm]", "[coil_groups_params.tx_dd.trace]", 1)
+    raw = raw.replace("[coil_groups_params.tx_dd.metal_ratio]", "[coil_groups_params.tx_dd.gap]", 1)
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("4" * 40))
+
+    with pytest.raises(ValueError, match=r"coil_groups_params\.tx_dd must contain only"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_unsupported_spec_version_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "old_spec_version.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.1.6"', 'spec_version = "0.1.6"', 1)
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("5" * 40))
+
+    with pytest.raises(ValueError, match=r"spec_version must be '0\.1\.6'"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_retry_attempt_advances_until_constraint_satisfied(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "retry.toml"
+    _write_toml(toml_path, outer_x=140.0)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        "[coil_shape.outer_x]\nrange = [false, 140.0, 140.0, 1]",
+        "[coil_shape.outer_x]\nrange = [false, 120.0, 320.0, 2]",
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("2" * 40))
+
+    manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+    assert manifest["retry_attempt"] > 0
+    assert manifest["retry_count"] == manifest["retry_attempt"]

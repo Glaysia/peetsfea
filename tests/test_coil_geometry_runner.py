@@ -142,6 +142,10 @@ class _FakeHfss:
         self.modeler = _FakeModeler()
         self.saved_path: str | None = None
         self.release_args: tuple[bool, bool] | None = None
+        self.design_vars: dict[str, str] = {}
+
+    def __setitem__(self, key: str, value: str) -> None:
+        self.design_vars[key] = value
 
     def save_project(self, project_file: str) -> None:
         self.saved_path = project_file
@@ -152,17 +156,18 @@ class _FakeHfss:
 
 def _manifest(tmp_path: Path) -> Manifest:
     return {
-        "design_id": "abcd1234_eeeeeeee_1",
+        "design_id": "abcd1234_eeeeeeee_1_0",
         "design_unique_hash": "abcd1234",
         "toml_space_hash": "eeeeeeee",
         "toml_hash": "t" * 64,
         "peetsfea_commit": "c" * 40,
         "seed": 1,
+        "retry_attempt": 0,
+        "retry_count": 0,
         "backend": "hfss",
         "selected_parameters": {
             "outer_x": 48.0,
             "outer_y": 48.0,
-            "turn_count_max": 5,
             "inner_margin_x": 2.0,
             "inner_margin_y": 2.0,
             "tx_dd_pair_spacing_mm": 60.0,
@@ -194,19 +199,6 @@ def _manifest(tmp_path: Path) -> Manifest:
             "dd_mirror_plane": "XZ",
             "rx_plane": "YZ",
             "tx_vertical_plane": "ZX",
-            "profile_id": "p1",
-            "trace_profile_base": 1.0,
-            "trace_profile_outer_bias": 0.1,
-            "trace_profile_inner_bias": -0.1,
-            "trace_profile_clamp_min": 0.2,
-            "gap_profile_base": 0.5,
-            "gap_profile_outer_bias": 0.05,
-            "gap_profile_inner_bias": -0.05,
-            "gap_profile_clamp_min": 0.15,
-            "turns": 5,
-            "outer": 48.0,
-            "trace": 1.0,
-            "gap": 0.5,
             "via_diameter_mm": 0.5,
             "pcb_thickness_mm": 1.6,
             "cu_thickness_mm": 0.035,
@@ -248,6 +240,11 @@ def _manifest(tmp_path: Path) -> Manifest:
                 "instance_transforms": [{"dx": 0.0, "dy": 0.0, "dz": 0.0, "rot_deg": 0.0}],
             },
         ],
+        "selected_group_geometry": [
+            {"kind": "tx_dd", "turn_count_max": 5, "band_thickness_mm": 7.5, "metal_ratio": 2.0 / 3.0, "trace": 1.0, "gap": 0.5},
+            {"kind": "tx_vertical", "turn_count_max": 4, "band_thickness_mm": 5.2, "metal_ratio": 0.9 / 1.3, "trace": 0.9, "gap": 0.4},
+            {"kind": "rx_dd", "turn_count_max": 6, "band_thickness_mm": 8.4, "metal_ratio": 1.1 / 1.4, "trace": 1.1, "gap": 0.3},
+        ],
         "selected_pcbs": [
             {
                 "id": "tx_main_0",
@@ -274,12 +271,12 @@ def _manifest(tmp_path: Path) -> Manifest:
             "close_on_exit": True,
         },
         "spec": {
-            "spec_version": "0.1.5",
+            "spec_version": "0.1.6",
             "design_name": "square_test",
             "units": "mm",
         },
         "created_at_utc": "2026-02-20T00:00:00Z",
-        "manifest_path": str(tmp_path / "manifest_abcd1234_eeeeeeee_1.json"),
+        "manifest_path": str(tmp_path / "manifest_abcd1234_eeeeeeee_1_0.json"),
     }
 
 
@@ -341,12 +338,12 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
 
     metadata = geom.build_square_spiral_from_manifest(_manifest(tmp_path))
 
-    assert metadata["design_id"] == "abcd1234_eeeeeeee_1"
+    assert metadata["design_id"] == "abcd1234_eeeeeeee_1_0"
     assert metadata["design_unique_hash"] == "abcd1234"
     assert metadata["toml_space_hash"] == "eeeeeeee"
     assert metadata["selected_parameters_max"]["rx_region_thickness_mm"] == 4.0
     assert Path(metadata["metadata_path"]).exists()
-    assert metadata["aedt_path"].endswith("abcd1234_eeeeeeee_1.aedt")
+    assert metadata["aedt_path"].endswith("abcd1234_eeeeeeee_1_0.aedt")
     assert fake.release_args == (True, True)
 
     assert metadata["anchor_mode"] == "copper_outer_edge_corner"
@@ -417,7 +414,7 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     # Fake CAD probe uses centerline points only (no xsection), so z_min reflects centerline bottom.
     expected_rx_centerline_z_min = (
         scene_by_kind["rx_region_actual"]["origin_xyz"][2]
-        + (metadata["selected_parameters"]["trace"] / 2.0)
+        + (metadata["selected_group_geometry"][2]["trace"] / 2.0)
         + 1e-6
     )
     assert rx_coil_probe["bbox"][2] == pytest.approx(expected_rx_centerline_z_min, abs=1e-4)
@@ -467,6 +464,10 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert len(metadata["debug"]["cad_probe"]) == 15
 
     assert len(fake.modeler.polyline_calls) == 3
+    assert fake.design_vars["spec_outer_x"] == "48.0mm"
+    assert fake.design_vars["spec_fr4_er"] == "4.4"
+    assert fake.design_vars["group_geom_tx_dd_turn_count_max"] == "5"
+    assert fake.design_vars["pcb_tx_main_0_position_z_mm"] == "0.0mm"
     for call in fake.modeler.polyline_calls:
         assert call["xsection_height"] == 0.035
     scene_boxes = [call for call in fake.modeler.box_calls if str(call["name"]).startswith("scene_")]
@@ -545,6 +546,59 @@ def test_tx_dd_symmetric_precheck_fails_for_tx_dd(tmp_path: Path, monkeypatch: p
 
     with pytest.raises(RuntimeError, match="tx_dd symmetric placement out of region"):
         geom.build_square_spiral_from_manifest(manifest)
+
+
+def test_tx_vertical_large_requested_turns_are_clipped_to_fit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_group_geometry"][1]["turn_count_max"] = 11
+    manifest["selected_group_geometry"][1]["trace"] = 2.932558139534884
+    manifest["selected_group_geometry"][1]["gap"] = 2.7395348837209306
+
+    metadata = geom.build_square_spiral_from_manifest(manifest)
+
+    tx_vertical_calls = [
+        call for call in fake.modeler.polyline_calls if str(call["name"]).startswith("coil_tx_vertical_")
+    ]
+    assert len(tx_vertical_calls) == 1
+    # The requested turns are infeasible for the vertical region height; build path must clip turns.
+    tx_vertical_points = tx_vertical_calls[0]["points"]
+    assert isinstance(tx_vertical_points, list)
+    assert len(tx_vertical_points) == 4
+    assert len(metadata["group_objects"]["tx_vertical"]) == 1
+
+
+def test_tx_dd_large_requested_turns_are_clipped_to_fit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_group_geometry"][0]["turn_count_max"] = 8
+    manifest["selected_group_geometry"][0]["trace"] = 2.7953488372093025
+    manifest["selected_group_geometry"][0]["gap"] = 2.5930232558139537
+
+    metadata = geom.build_square_spiral_from_manifest(manifest)
+
+    tx_dd_calls = [call for call in fake.modeler.polyline_calls if str(call["name"]).startswith("coil_tx_dd_")]
+    assert len(tx_dd_calls) == 1
+    tx_dd_points = tx_dd_calls[0]["points"]
+    assert isinstance(tx_dd_points, list)
+    expected_turns = min(
+        manifest["selected_group_geometry"][0]["turn_count_max"],
+        geom._max_feasible_turns(
+            manifest["selected_parameters"]["outer_x"],
+            manifest["selected_group_geometry"][0]["trace"],
+            manifest["selected_group_geometry"][0]["gap"],
+        ),
+        geom._max_feasible_turns(
+            manifest["selected_parameters"]["outer_y"],
+            manifest["selected_group_geometry"][0]["trace"],
+            manifest["selected_group_geometry"][0]["gap"],
+        ),
+    )
+    assert expected_turns < manifest["selected_group_geometry"][0]["turn_count_max"]
+    assert len(tx_dd_points) == (5 * expected_turns) - 1
+    assert len(metadata["group_objects"]["tx_dd"]) == 1
 
 
 def test_rx_dd_edge_gap_must_be_non_negative(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -638,7 +692,7 @@ def test_rx_dd_edge_gap_zero_means_touching_edges(tmp_path: Path, monkeypatch: p
     )
     assert len(rx_dd_probes) == 2
     y_gap = rx_dd_probes[1]["bbox"][1] - rx_dd_probes[0]["bbox"][4]
-    assert y_gap == pytest.approx(metadata["selected_parameters"]["trace"], abs=1e-6)
+    assert y_gap == pytest.approx(metadata["selected_group_geometry"][2]["trace"], abs=1e-6)
 
 
 def test_rx_dd_edge_gap_five_mm(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -655,7 +709,7 @@ def test_rx_dd_edge_gap_five_mm(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     )
     assert len(rx_dd_probes) == 2
     y_gap = rx_dd_probes[1]["bbox"][1] - rx_dd_probes[0]["bbox"][4]
-    assert y_gap == pytest.approx(5.0 + metadata["selected_parameters"]["trace"], abs=1e-6)
+    assert y_gap == pytest.approx(5.0 + metadata["selected_group_geometry"][2]["trace"], abs=1e-6)
 
 
 def test_rx_dd_transform_dz_must_be_zero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

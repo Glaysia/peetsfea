@@ -131,10 +131,14 @@ python run.py
 - 기본 TOML 예시: `examples/type1.toml` (grouped 구조)
   - `tx_dd_pair_spacing_mm`: XZ 거울대칭 TX DD 페어의 추가 중심간 여유(mm)
   - `rx_dd_pair_spacing_mm`: Y축 RX DD 페어의 edge-to-edge gap(mm)
-- 프로필은 `[[trace_gap_profile.profiles]]` 배열로 정의한다.
-  - 각 프로필은 `id`, `trace`, `gap`을 가진다.
-  - `seed` 기준 선택 규칙: `(seed + 300) % len(profiles)` (결정론).
-  - 목적은 최적화가 아니라 데이터셋 다양성 확보이며, 운영 권장 개수는 5개다.
+- 그룹별 자유변수는 `[coil_groups_params.<kind>]` 아래에서 독립 정의한다.
+  - 고정 그룹 키: `tx_dd`, `tx_vertical`, `rx_dd`
+  - 각 그룹은 `turn_count_max`, `band_thickness_mm`, `metal_ratio`를 각각 별도 range로 가진다.
+  - `trace/gap`는 입력값이 아니라 파생값이다.
+    - `pitch_mm = band_thickness_mm / turn_count_max`
+    - `trace = pitch_mm * metal_ratio`
+    - `gap = pitch_mm * (1 - metal_ratio)`
+  - 동일 TOML+seed면 그룹별 선택값(`selected_group_geometry`)도 결정론적으로 동일하다.
 - 제약식은 TOML의 SSOT 섹션인 `[constraints]` + `[[constraints.rules]]`로 선언한다.
   - `kind = "comparison"`: `lhs.path`와 `rhs.path|rhs.value|rhs.func`를 `op`로 비교
   - `kind = "range"`: `target.path`를 `min/max`로 범위 제한
@@ -153,10 +157,12 @@ python run.py
 1) TOML 원본 바이트 SHA-256(`toml_hash`) 계산
 2) `git rev-parse HEAD`로 40자 커밋 해시 확인
 3) `git rev-parse HEAD`로 커밋 해시를 기록 (dirty 상태도 허용)
-4) seed 오프셋 방식으로 파라미터별 단일 설계 원소 선택
+4) seed/attempt 오프셋 방식으로 파라미터별 단일 설계 원소 선택
+  - 동일 attempt 내에서는 같은 TOML path를 여러 내부변수가 참조해도 단일 샘플을 공유한다.
+  - 제약 실패 시 deterministic retry(`attempt += 1`)를 수행한다.
 5) `toml_hash` 앞 8글자로 `toml_space_hash` 생성
-6) `toml_hash + commit + seed + selected_parameters`의 SHA-256 앞 8글자로 `design_unique_hash` 생성
-7) `design_id = <design_unique_hash>_<toml_space_hash>_<seed>` 조합
+6) `toml_hash + commit + selected_parameters + selected_group_geometry + selected_coil_groups + selected_pcbs`의 SHA-256 앞 8글자로 `design_unique_hash` 생성
+7) `design_id = <design_unique_hash>_<toml_space_hash>_<seed>_<attempt>` 조합
 8) `<ansys_run_dir>/<design_id>.aedt`, `geometry_metadata_<design_id>.json`, `manifest_<design_id>.json` 저장
 
 ## 기여

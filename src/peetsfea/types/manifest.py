@@ -20,7 +20,6 @@ class ManifestSpec(TypedDict):
 class SelectedParameters(TypedDict):
     outer_x: float
     outer_y: float
-    turn_count_max: int
     inner_margin_x: float
     inner_margin_y: float
     tx_dd_pair_spacing_mm: float
@@ -52,20 +51,6 @@ class SelectedParameters(TypedDict):
     dd_mirror_plane: Literal["XZ"]
     rx_plane: Literal["YZ"]
     tx_vertical_plane: Literal["ZX"]
-    profile_id: str
-    trace_profile_base: float
-    trace_profile_outer_bias: float
-    trace_profile_inner_bias: float
-    trace_profile_clamp_min: float
-    gap_profile_base: float
-    gap_profile_outer_bias: float
-    gap_profile_inner_bias: float
-    gap_profile_clamp_min: float
-    # Compatibility fields used by current square-spiral MVP geometry path.
-    turns: int
-    outer: float
-    trace: float
-    gap: float
     via_diameter_mm: float
     pcb_thickness_mm: float
     cu_thickness_mm: float
@@ -94,6 +79,15 @@ class ResolvedCoilGroup(TypedDict):
     instance_transforms: list[dict[str, float]]
 
 
+class GroupGeometryParams(TypedDict):
+    kind: Literal["tx_dd", "tx_vertical", "rx_dd"]
+    turn_count_max: int
+    band_thickness_mm: float
+    metal_ratio: float
+    trace: float
+    gap: float
+
+
 class ResolvedPcbInstance(TypedDict):
     id: str
     role: Literal["tx", "rx"]
@@ -110,10 +104,13 @@ class Manifest(TypedDict):
     toml_hash: str
     peetsfea_commit: str
     seed: int
+    retry_attempt: int
+    retry_count: int
     backend: str
     selected_parameters: SelectedParameters
     selected_parameters_max: SelectedParametersMax
     selected_coil_groups: list[ResolvedCoilGroup]
+    selected_group_geometry: list[GroupGeometryParams]
     selected_pcbs: list[ResolvedPcbInstance]
     inputs: ManifestInputs
     spec: ManifestSpec
@@ -232,8 +229,11 @@ class GeometryMetadata(TypedDict):
     toml_hash: str
     peetsfea_commit: str
     seed: int
+    retry_attempt: int
+    retry_count: int
     selected_parameters: SelectedParameters
     selected_parameters_max: SelectedParametersMax
+    selected_group_geometry: list[GroupGeometryParams]
     aedt_path: str
     object_names: list[str]
     created_at_utc: str
