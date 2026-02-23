@@ -13,7 +13,7 @@ from peetsfea.identity.hashing import (
     get_git_commit,
 )
 from peetsfea.spec.loader import load_toml_bytes, require_str, require_table
-from peetsfea.spec.resolver import _build_candidates, resolve_selected_parameters
+from peetsfea.spec.resolver import _build_candidates, resolve_selection
 from peetsfea.types.manifest import Manifest
 
 
@@ -49,7 +49,7 @@ def run(config: RunConfig) -> Manifest:
     if backend_tool != "hfss":
         raise ValueError("backend.tool must be 'hfss' for this MVP")
 
-    selected_parameters = resolve_selected_parameters(spec=spec, seed=config.seed)
+    selected_parameters, selected_coil_groups, selected_pcbs = resolve_selection(spec=spec, seed=config.seed)
     toml_hash = compute_toml_hash(raw_toml)
     toml_space_hash = compute_toml_space_hash(toml_hash)
     design_unique_hash = compute_design_unique_hash(toml_hash, commit_hash, config.seed, selected_parameters)
@@ -67,6 +67,8 @@ def run(config: RunConfig) -> Manifest:
         "seed": config.seed,
         "backend": config.backend,
         "selected_parameters": selected_parameters,
+        "selected_coil_groups": selected_coil_groups,
+        "selected_pcbs": selected_pcbs,
         "inputs": {
             "ansys_executable_path": config.ansys_executable_path,
             "ansys_run_dir": config.ansys_run_dir,

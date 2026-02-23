@@ -10,13 +10,25 @@ from ansys.aedt.core import Hfss
 from ansys.aedt.core.modeler.cad.object_3d import Object3d
 from ansys.aedt.core.modeler.modeler_3d import Modeler3D
 
-from peetsfea.types.manifest import AxisCheckEntry, CadProbe, CornerDebugEntry, GeometryDebug, GeometryMetadata, Manifest, PitchCheckEntry
+from peetsfea.types.manifest import (
+    AxisCheckEntry,
+    CadProbe,
+    CoilPolaritySpec,
+    CornerDebugEntry,
+    GeometryDebug,
+    GeometryMetadata,
+    GroupEndpointEntry,
+    GroupObjects,
+    Manifest,
+    PitchCheckEntry,
+    UniteGroups,
+)
 
 _Point2 = tuple[float, float]
 _Point3 = tuple[float, float, float]
 
 
-def _build_square_spiral_centerline_absolute(turns: int, outer: float, trace: float, gap: float, z: float) -> list[_Point3]:
+def _build_rect_spiral_centerline_absolute(turns: int, outer_x: float, outer_y: float, trace: float, gap: float, z: float) -> list[_Point3]:
     if turns < 1:
         raise ValueError("turns must be >= 1")
     if trace <= 0:
@@ -27,10 +39,10 @@ def _build_square_spiral_centerline_absolute(turns: int, outer: float, trace: fl
     pitch = trace + gap
     half_trace = trace / 2.0
 
-    left = -(outer / 2.0) + half_trace
-    right = (outer / 2.0) - half_trace
-    top = (outer / 2.0) - half_trace
-    bottom = -(outer / 2.0) + half_trace
+    left = -(outer_x / 2.0) + half_trace
+    right = (outer_x / 2.0) - half_trace
+    top = (outer_y / 2.0) - half_trace
+    bottom = -(outer_y / 2.0) + half_trace
 
     if left >= right or bottom >= top:
         raise ValueError("centerline outer width must be > 0")
@@ -61,8 +73,69 @@ def _build_square_spiral_centerline_absolute(turns: int, outer: float, trace: fl
     return points
 
 
+def _build_square_spiral_centerline_absolute(turns: int, outer: float, trace: float, gap: float, z: float) -> list[_Point3]:
+    return _build_rect_spiral_centerline_absolute(turns=turns, outer_x=outer, outer_y=outer, trace=trace, gap=gap, z=z)
+
+
 def _square_spiral_points(turns: int, outer: float, trace: float, gap: float, z: float) -> list[list[float]]:
     return [list(p) for p in _build_square_spiral_centerline_absolute(turns=turns, outer=outer, trace=trace, gap=gap, z=z)]
+
+
+def _translate_points(points: list[list[float]], dx: float, dy: float, dz: float) -> list[list[float]]:
+    return [[point[0] + dx, point[1] + dy, point[2] + dz] for point in points]
+
+
+def _coil_instance_offset(kind: str, instance_index: int, instance_count: int, spacing_mm: float) -> _Point3:
+    if kind in ("tx_dd", "rx_dd"):
+        center = (instance_count - 1) / 2.0
+        return ((instance_index - center) * spacing_mm, 0.0, 0.0)
+    if kind == "tx_vertical":
+        if instance_count <= 1:
+            return (0.0, 0.0, 0.0)
+        delta = spacing_mm / float(instance_count - 1)
+        start = -spacing_mm / 2.0
+        return (0.0, 0.0, start + (instance_index * delta))
+    return (0.0, 0.0, 0.0)
+
+
+def _mount_allows_instance(mounts: list[str], kind: str, instance_index: int) -> bool:
+    token_prefix = f"{kind}:"
+    for mount in mounts:
+        if not mount.startswith(token_prefix):
+            continue
+        selector = mount.split(":", 1)[1]
+        if selector == "*":
+            return True
+        if selector.isdigit() and int(selector) == instance_index:
+            return True
+    return False
+
+
+def _instance_side(kind: str, instance_offset: _Point3) -> Literal["left", "right", "center"]:
+    if kind in ("tx_dd", "rx_dd"):
+        if instance_offset[0] < 0:
+            return "left"
+        if instance_offset[0] > 0:
+            return "right"
+        return "center"
+    return "center"
+
+
+def _build_polarity(kind: str, side: Literal["left", "right", "center"]) -> tuple[Literal["cw", "ccw"], Literal["up", "down", "left", "right", "into_wall", "out_of_wall"]]:
+    if kind == "tx_dd":
+        if side == "right":
+            return ("ccw", "up")
+        if side == "left":
+            return ("cw", "down")
+        return ("ccw", "up")
+    if kind == "tx_vertical":
+        return ("ccw", "right")
+    # rx_dd
+    if side == "right":
+        return ("cw", "into_wall")
+    if side == "left":
+        return ("ccw", "out_of_wall")
+    return ("cw", "into_wall")
 
 
 def _create_hfss_session(manifest: Manifest, aedt_path: Path) -> Hfss:
@@ -344,6 +417,10 @@ def _build_geometry_metadata(
     aedt_path: Path,
     object_names: list[str],
     metadata_path: Path,
+    group_objects: GroupObjects,
+    unite_groups: UniteGroups,
+    group_endpoints: list[GroupEndpointEntry],
+    coil_polarity: list[CoilPolaritySpec],
     debug: GeometryDebug,
 ) -> GeometryMetadata:
     return {
@@ -359,6 +436,10 @@ def _build_geometry_metadata(
         "created_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "metadata_path": str(metadata_path),
         "anchor_mode": "copper_outer_edge_corner",
+        "group_objects": group_objects,
+        "unite_groups": unite_groups,
+        "group_endpoints": group_endpoints,
+        "coil_polarity": coil_polarity,
         "debug": debug,
     }
 
@@ -372,17 +453,15 @@ def _object_name(obj: Object3d, fallback: str) -> str:
 
 def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     selected = manifest["selected_parameters"]
-    pcb_count = selected["pcb_count"]
-    turns = selected["turns"]
-    outer = selected["outer"]
+    turns = selected["turn_count_max"]
+    outer_x = selected["outer_x"]
+    outer_y = selected["outer_y"]
     trace = selected["trace"]
     gap = selected["gap"]
     pcb_thickness = selected["pcb_thickness"]
     cu_thickness = selected["cu_thickness"]
     fr4_er = selected["fr4_er"]
 
-    if pcb_count != 1:
-        raise ValueError("selected_parameters.pcb_count must be 1 for current MVP")
     if turns < 1:
         raise ValueError("selected_parameters.turns must be >= 1")
     if trace <= 0:
@@ -396,9 +475,10 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     if fr4_er <= 1.0:
         raise ValueError("selected_parameters.fr4_er must be > 1.0")
 
-    inner_width = outer - (2.0 * turns * trace) - (2.0 * (turns - 1) * gap)
-    if inner_width <= 0:
-        raise ValueError("Invalid geometry: inner width must be > 0")
+    inner_width_x = outer_x - (2.0 * turns * trace) - (2.0 * (turns - 1) * gap)
+    inner_width_y = outer_y - (2.0 * turns * trace) - (2.0 * (turns - 1) * gap)
+    if inner_width_x <= 0 or inner_width_y <= 0:
+        raise ValueError("Invalid geometry: inner width must be > 0 on both X/Y axes")
 
     run_dir = Path(manifest["inputs"]["ansys_run_dir"])
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -407,8 +487,17 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     aedt_path = run_dir / f"{design_id}.aedt"
     metadata_path = run_dir / f"geometry_metadata_{design_id}.json"
 
-    centerline_vertices = _build_square_spiral_centerline_absolute(turns=turns, outer=outer, trace=trace, gap=gap, z=0.0)
-    top_points = [list(point) for point in centerline_vertices]
+    centerline_vertices = _build_rect_spiral_centerline_absolute(
+        turns=turns,
+        outer_x=outer_x,
+        outer_y=outer_y,
+        trace=trace,
+        gap=gap,
+        z=0.0,
+    )
+    base_points = [list(point) for point in centerline_vertices]
+    selected_groups = manifest["selected_coil_groups"]
+    selected_pcbs = manifest["selected_pcbs"]
 
     hfss = _create_hfss_session(manifest=manifest, aedt_path=aedt_path)
     modeler = cast(Modeler3D, hfss.modeler)
@@ -416,35 +505,87 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     close_on_exit = manifest["inputs"]["close_on_exit"]
     object_names: list[str] = []
     cad_probe: list[CadProbe] = []
+    group_objects: GroupObjects = {"tx_dd": [], "tx_vertical": [], "rx_dd": []}
+    group_endpoints: list[GroupEndpointEntry] = []
+    coil_polarity: list[CoilPolaritySpec] = []
 
     try:
-        substrate_name = f"fr4_{design_id}"
-        substrate = cast(
-            Object3d,
-            modeler.create_box(
-                origin=[-outer / 2.0, -outer / 2.0, -pcb_thickness],
-                sizes=[outer, outer, pcb_thickness],
-                name=substrate_name,
-                material="FR4_epoxy",
-            ),
-        )
-        object_names.append(_object_name(substrate, substrate_name))
-        cad_probe.append(_probe_cad_object(substrate, substrate_name))
+        for board_idx, pcb in enumerate(selected_pcbs):
+            if not pcb["present"]:
+                continue
 
-        top_name = f"coil1_top_{design_id}"
-        top_obj = cast(
-            Object3d,
-            modeler.create_polyline(
-                points=top_points,
-                name=top_name,
-                material="copper",
-                xsection_type="Rectangle",
-                xsection_width=trace,
-                xsection_height=cu_thickness,
-            ),
-        )
-        object_names.append(_object_name(top_obj, top_name))
-        cad_probe.append(_probe_cad_object(top_obj, top_name))
+            board_x, board_y, board_z = pcb["position"]
+            substrate_name = f"fr4_b{board_idx}_{design_id}"
+            substrate = cast(
+                Object3d,
+                modeler.create_box(
+                    origin=[board_x - (outer_x / 2.0), board_y - (outer_y / 2.0), board_z - pcb_thickness],
+                    sizes=[outer_x, outer_y, pcb_thickness],
+                    name=substrate_name,
+                    material="FR4_epoxy",
+                ),
+            )
+            object_names.append(_object_name(substrate, substrate_name))
+            cad_probe.append(_probe_cad_object(substrate, substrate_name))
+
+            for group in selected_groups:
+                kind = group["kind"]
+                instance_count = group["selected_count"]
+                spacing_mm = group["spacing_mm"]
+                transforms = group["instance_transforms"]
+                transform = transforms[0] if transforms else {"dx": 0.0, "dy": 0.0, "dz": 0.0, "rot_deg": 0.0}
+
+                for instance_index in range(instance_count):
+                    if not _mount_allows_instance(pcb["mounts"], kind, instance_index):
+                        continue
+                    off_x, off_y, off_z = _coil_instance_offset(kind, instance_index, instance_count, spacing_mm)
+                    top_points = _translate_points(
+                        base_points,
+                        dx=board_x + transform["dx"] + off_x,
+                        dy=board_y + transform["dy"] + off_y,
+                        dz=board_z + transform["dz"] + off_z,
+                    )
+                    top_name = f"coil_{kind}_g{instance_index}_b{board_idx}_{design_id}"
+                    top_obj = cast(
+                        Object3d,
+                        modeler.create_polyline(
+                            points=top_points,
+                            name=top_name,
+                            material="copper",
+                            xsection_type="Rectangle",
+                            xsection_width=trace, # type: ignore
+                            xsection_height=cu_thickness, # type: ignore
+                        ),
+                    )
+                    obj_name = _object_name(top_obj, top_name)
+                    object_names.append(obj_name)
+                    cad_probe.append(_probe_cad_object(top_obj, top_name))
+                    group_objects[kind].append(obj_name)
+
+                    start_xyz = cast(_Point3, tuple(float(v) for v in top_points[0]))
+                    end_xyz = cast(_Point3, tuple(float(v) for v in top_points[-1]))
+                    group_endpoints.append(
+                        {
+                            "group_kind": kind,
+                            "group_instance_index": instance_index,
+                            "board_id": pcb["id"],
+                            "start_xyz": start_xyz,
+                            "end_xyz": end_xyz,
+                            "present": True,
+                        }
+                    )
+                    side = _instance_side(kind, (off_x, off_y, off_z))
+                    current_direction, b_field_direction = _build_polarity(kind, side)
+                    coil_polarity.append(
+                        {
+                            "group_kind": kind,
+                            "group_instance_index": instance_index,
+                            "board_id": pcb["id"],
+                            "instance_side": side,
+                            "current_direction": current_direction,
+                            "b_field_direction": b_field_direction,
+                        }
+                    )
 
         hfss.save_project(str(aedt_path))
     except Exception as exc:
@@ -466,7 +607,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
 
     pitch_max_delta = max((entry["delta"] for entry in debug["pitch_checks"]), default=0.0)
     axis_aligned = all(check["is_vertical"] or check["is_horizontal"] for check in debug["axis_checks"])
-    top_probe = next((probe for probe in cad_probe if probe["object_name"].startswith("coil1_top_")), None)
+    top_probe = next((probe for probe in cad_probe if probe["object_name"].startswith("coil_")), None)
     top_bbox = top_probe["bbox"] if top_probe is not None else []
     print(f"[geometry] constraints_ok={debug['constraints_ok']}")
     print(f"[geometry] axis_aligned={axis_aligned} pitch_max_delta={pitch_max_delta:.9f}")
@@ -477,6 +618,13 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
         aedt_path=aedt_path,
         object_names=object_names,
         metadata_path=metadata_path,
+        group_objects=group_objects,
+        unite_groups={
+            "tx": sorted(group_objects["tx_dd"] + group_objects["tx_vertical"]),
+            "rx": sorted(group_objects["rx_dd"]),
+        },
+        group_endpoints=group_endpoints,
+        coil_polarity=coil_polarity,
         debug=debug,
     )
     metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")

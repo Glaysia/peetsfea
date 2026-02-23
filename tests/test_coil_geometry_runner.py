@@ -151,7 +151,37 @@ def _manifest(tmp_path: Path) -> Manifest:
         "seed": 1,
         "backend": "hfss",
         "selected_parameters": {
-            "pcb_count": 1,
+            "outer_x": 48.0,
+            "outer_y": 48.0,
+            "turn_count_max": 5,
+            "inner_margin_x": 2.0,
+            "inner_margin_y": 2.0,
+            "tx_dd_pair_spacing_mm": 40.0,
+            "rx_dd_pair_spacing_mm": 40.0,
+            "tx_vertical_span_mm": 10.0,
+            "tv_width_mm": 1200.0,
+            "tv_height_mm": 700.0,
+            "tv_thickness_mm": 45.0,
+            "tx_region_outer_w_mm": 300.0,
+            "tx_region_outer_h_mm": 200.0,
+            "tx_region_thickness_mm": 20.0,
+            "rx_region_outer_w_mm": 280.0,
+            "rx_region_outer_h_mm": 180.0,
+            "rx_region_thickness_mm": 18.0,
+            "wall_thickness_mm": 200.0,
+            "wall_size_y_mm": 4000.0,
+            "wall_size_z_mm": 3000.0,
+            "floor_thickness_mm": 300.0,
+            "floor_size_x_mm": 5000.0,
+            "floor_size_y_mm": 5000.0,
+            "trace_profile_base": 1.0,
+            "trace_profile_outer_bias": 0.1,
+            "trace_profile_inner_bias": -0.1,
+            "trace_profile_clamp_min": 0.2,
+            "gap_profile_base": 0.5,
+            "gap_profile_outer_bias": 0.05,
+            "gap_profile_inner_bias": -0.05,
+            "gap_profile_clamp_min": 0.15,
             "turns": 5,
             "outer": 48.0,
             "trace": 1.0,
@@ -161,6 +191,47 @@ def _manifest(tmp_path: Path) -> Manifest:
             "cu_thickness": 0.035,
             "fr4_er": 4.4,
         },
+        "selected_coil_groups": [
+            {
+                "kind": "tx_dd",
+                "requested_count": 2,
+                "selected_count": 2,
+                "spacing_mm": 40.0,
+                "instance_transforms": [{"dx": 0.0, "dy": 0.0, "dz": 0.0, "rot_deg": 0.0}],
+            },
+            {
+                "kind": "tx_vertical",
+                "requested_count": 1,
+                "selected_count": 1,
+                "spacing_mm": 10.0,
+                "instance_transforms": [{"dx": 0.0, "dy": 0.0, "dz": 0.0, "rot_deg": 0.0}],
+            },
+            {
+                "kind": "rx_dd",
+                "requested_count": 2,
+                "selected_count": 2,
+                "spacing_mm": 40.0,
+                "instance_transforms": [{"dx": 0.0, "dy": 0.0, "dz": 0.0, "rot_deg": 0.0}],
+            },
+        ],
+        "selected_pcbs": [
+            {
+                "id": "tx_main_0",
+                "role": "tx",
+                "position": (0.0, 0.0, 0.0),
+                "rotation_deg": 0.0,
+                "present": True,
+                "mounts": ["tx_dd:0", "tx_vertical:*"],
+            },
+            {
+                "id": "rx_main_0",
+                "role": "rx",
+                "position": (0.0, 0.0, 110.0),
+                "rotation_deg": 0.0,
+                "present": True,
+                "mounts": ["rx_dd:0"],
+            },
+        ],
         "inputs": {
             "ansys_executable_path": "/opt/ansys_inc/v252/AnsysEM",
             "ansys_run_dir": str(tmp_path),
@@ -231,11 +302,20 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert fake.release_args == (True, True)
 
     assert metadata["anchor_mode"] == "copper_outer_edge_corner"
+    assert set(metadata["group_objects"].keys()) == {"tx_dd", "tx_vertical", "rx_dd"}
+    assert len(metadata["group_objects"]["tx_dd"]) == 1
+    assert len(metadata["group_objects"]["tx_vertical"]) == 1
+    assert len(metadata["group_objects"]["rx_dd"]) == 1
+    assert len(metadata["unite_groups"]["tx"]) == 2
+    assert len(metadata["unite_groups"]["rx"]) == 1
+    assert len(metadata["group_endpoints"]) == 3
+    assert len(metadata["coil_polarity"]) == 3
+    assert all(entry["present"] for entry in metadata["group_endpoints"])
     assert metadata["debug"]["constraints_ok"] is True
     assert len(metadata["debug"]["centerline_vertices"]) == 24
-    assert len(metadata["debug"]["cad_probe"]) == 2
+    assert len(metadata["debug"]["cad_probe"]) == 5
 
-    assert len(fake.modeler.polyline_calls) == 1
+    assert len(fake.modeler.polyline_calls) == 3
     for call in fake.modeler.polyline_calls:
         assert call["xsection_height"] == 0.035
 

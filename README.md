@@ -127,13 +127,9 @@ values = [8, 10, 12, 14]
 python run.py
 ```
 - VS Code launch(`Run run.py from run/`)는 pre-launch task로 `run/aedt/`를 먼저 비운 뒤 실행한다.
-- 기본 TOML 예시: `examples/type1.toml`
-- 현재 지원 파라미터:
-  - `[parameters.turns].range = [is_integer, start, end, count]`
-  - `[parameters.outer].range = [is_integer, start, end, count]`
-  - `[parameters.trace].range = [is_integer, start, end, count]`
-  - `[parameters.gap].range = [is_integer, start, end, count]`
-  - `[parameters.thickness].range = [is_integer, start, end, count]`
+- 기본 TOML 예시: `examples/type1.toml` (Phase 1 grouped 구조)
+- 현재 코드 기준 실행 지원은 아직 MVP 파라미터 세트 중심이며,
+  grouped spec(`[[coil_groups]]`, `[[pcbs]]`, profile) 전체는 Phase 2에서 resolver 반영 예정이다.
 
 동작 요약:
 1) TOML 원본 바이트 SHA-256(`toml_hash`) 계산
