@@ -36,3 +36,12 @@ ignore_missing_imports = true
 check_untyped_defs = true
 disallow_incomplete_defs = false
 disallow_untyped_defs = false
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+include = ["src", "tests", "run.py"]
+exclude = ["ref", "**/__pycache__"]
+typeCheckingMode = "basic"
+reportMissingImports = "none"
+reportMissingModuleSource = "none"

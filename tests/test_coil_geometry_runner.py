@@ -186,6 +186,13 @@ def _manifest(tmp_path: Path) -> Manifest:
             "floor_thickness_mm": 300.0,
             "floor_size_x_mm": 5000.0,
             "floor_size_y_mm": 5000.0,
+            "shelf_height_mm": 400.0,
+            "shelf_min_size_x_mm": 350.0,
+            "rx_region_bottom_from_tv_mm": 1.0,
+            "tx_dd_top_clearance_mm": 0.0,
+            "rx_face_clearance_mm": 0.0,
+            "dd_mirror_plane": "XZ",
+            "rx_plane": "YZ",
             "profile_id": "p1",
             "trace_profile_base": 1.0,
             "trace_profile_outer_bias": 0.1,
@@ -199,6 +206,9 @@ def _manifest(tmp_path: Path) -> Manifest:
             "outer": 48.0,
             "trace": 1.0,
             "gap": 0.5,
+            "via_diameter_mm": 0.5,
+            "pcb_thickness_mm": 1.6,
+            "cu_thickness_mm": 0.035,
             "via_diameter": 0.5,
             "pcb_thickness": 1.6,
             "cu_thickness": 0.035,
@@ -300,6 +310,8 @@ def test_corner_debug_contains_offsets() -> None:
         gap=0.4,
         eps=1e-6,
         cad_probe=[],
+        in_region_ok=True,
+        violations=[],
     )
 
     assert debug["corner_debug"][0]["corner_type"] == "endpoint"

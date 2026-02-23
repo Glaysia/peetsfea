@@ -44,6 +44,13 @@ class SelectedParameters(TypedDict):
     floor_thickness_mm: float
     floor_size_x_mm: float
     floor_size_y_mm: float
+    shelf_height_mm: float
+    shelf_min_size_x_mm: float
+    rx_region_bottom_from_tv_mm: float
+    tx_dd_top_clearance_mm: float
+    rx_face_clearance_mm: float
+    dd_mirror_plane: Literal["XZ"]
+    rx_plane: Literal["YZ"]
     profile_id: str
     trace_profile_base: float
     trace_profile_outer_bias: float
@@ -58,6 +65,9 @@ class SelectedParameters(TypedDict):
     outer: float
     trace: float
     gap: float
+    via_diameter_mm: float
+    pcb_thickness_mm: float
+    cu_thickness_mm: float
     via_diameter: float
     pcb_thickness: float
     cu_thickness: float
@@ -142,6 +152,17 @@ class CadProbe(TypedDict):
     edge_samples_xy: list[tuple[float, float]]
 
 
+class RegionViolation(TypedDict):
+    object_name: str
+    region_kind: Literal["tx_region_dd", "tx_region_vertical", "rx_region_actual"]
+    axis: Literal["x", "y", "z"]
+    overflow_mm: float
+    actual_min: float
+    actual_max: float
+    region_min: float
+    region_max: float
+
+
 class GeometryDebug(TypedDict):
     centerline_vertices: list[tuple[float, float, float]]
     corner_debug: list[CornerDebugEntry]
@@ -149,6 +170,8 @@ class GeometryDebug(TypedDict):
     pitch_checks: list[PitchCheckEntry]
     cad_probe: list[CadProbe]
     constraints_ok: bool
+    in_region_ok: bool
+    violations: list[RegionViolation]
     eps: float
 
 
