@@ -44,6 +44,7 @@ class SelectedParameters(TypedDict):
     floor_thickness_mm: float
     floor_size_x_mm: float
     floor_size_y_mm: float
+    profile_id: str
     trace_profile_base: float
     trace_profile_outer_bias: float
     trace_profile_inner_bias: float

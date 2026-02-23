@@ -15,6 +15,7 @@ def _selected_parameters() -> SelectedParameters:
         "outer": 40.0,
         "trace": 1.0,
         "gap": 0.5,
+        "profile_id": "p1",
         "via_diameter": 0.6,
         "pcb_thickness": 1.6,
         "cu_thickness": 0.035,

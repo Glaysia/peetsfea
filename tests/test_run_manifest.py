@@ -78,19 +78,80 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 220.
                 "[coil_spacing.tx_vertical_span_mm]",
                 "range = [false, 10.0, 10.0, 1]",
                 "",
-                "[trace_gap_profile.trace_profile]",
+                "[[trace_gap_profile.profiles]]",
+                'id = "p1"',
+                "[trace_gap_profile.profiles.trace]",
+                'mode = "biased_linear"',
+                "base = 0.8",
+                "outer_bias = 0.08",
+                "inner_bias = -0.06",
+                "clamp_min = 0.2",
+                "[trace_gap_profile.profiles.gap]",
+                'mode = "biased_linear"',
+                "base = 0.35",
+                "outer_bias = 0.03",
+                "inner_bias = -0.03",
+                "clamp_min = 0.12",
+                "",
+                "[[trace_gap_profile.profiles]]",
+                'id = "p2"',
+                "[trace_gap_profile.profiles.trace]",
                 'mode = "biased_linear"',
                 "base = 1.0",
                 "outer_bias = 0.1",
                 "inner_bias = -0.1",
                 "clamp_min = 0.2",
-                "",
-                "[trace_gap_profile.gap_profile]",
+                "[trace_gap_profile.profiles.gap]",
                 'mode = "biased_linear"',
                 "base = 0.5",
                 "outer_bias = 0.05",
                 "inner_bias = -0.05",
                 "clamp_min = 0.15",
+                "",
+                "[[trace_gap_profile.profiles]]",
+                'id = "p3"',
+                "[trace_gap_profile.profiles.trace]",
+                'mode = "biased_linear"',
+                "base = 1.2",
+                "outer_bias = 0.12",
+                "inner_bias = -0.08",
+                "clamp_min = 0.25",
+                "[trace_gap_profile.profiles.gap]",
+                'mode = "biased_linear"',
+                "base = 0.6",
+                "outer_bias = 0.07",
+                "inner_bias = -0.04",
+                "clamp_min = 0.2",
+                "",
+                "[[trace_gap_profile.profiles]]",
+                'id = "p4"',
+                "[trace_gap_profile.profiles.trace]",
+                'mode = "biased_linear"',
+                "base = 0.9",
+                "outer_bias = 0.05",
+                "inner_bias = -0.12",
+                "clamp_min = 0.18",
+                "[trace_gap_profile.profiles.gap]",
+                'mode = "biased_linear"',
+                "base = 0.45",
+                "outer_bias = 0.02",
+                "inner_bias = -0.08",
+                "clamp_min = 0.14",
+                "",
+                "[[trace_gap_profile.profiles]]",
+                'id = "p5"',
+                "[trace_gap_profile.profiles.trace]",
+                'mode = "biased_linear"',
+                "base = 1.1",
+                "outer_bias = 0.09",
+                "inner_bias = -0.09",
+                "clamp_min = 0.22",
+                "[trace_gap_profile.profiles.gap]",
+                'mode = "biased_linear"',
+                "base = 0.55",
+                "outer_bias = 0.06",
+                "inner_bias = -0.06",
+                "clamp_min = 0.17",
                 "",
                 "[[coil_groups]]",
                 'kind = "tx_dd"',
@@ -157,6 +218,9 @@ def test_run_creates_manifest_and_is_deterministic(tmp_path: Path, monkeypatch: 
     assert re.fullmatch(r"[0-9a-f]{8}_[0-9a-f]{8}_-?[0-9]+", first["design_id"]) is not None
     assert first["selected_parameters"]["turn_count_max"] == 8
     assert first["selected_parameters"]["outer"] == 180.0
+    assert first["selected_parameters"]["profile_id"] == "p2"
+    assert first["selected_parameters"]["trace_profile_base"] == 1.0
+    assert first["selected_parameters"]["gap_profile_base"] == 0.5
     assert first["selected_parameters"]["tx_region_vertical_z_mm"] == 8.0
     assert first["selected_parameters"]["tx_region_dd_z_mm"] == 7.0
     assert first["selected_parameters"]["rx_region_thickness_mm"] == first["selected_parameters_max"]["rx_region_thickness_mm"]
@@ -175,6 +239,19 @@ def test_run_seed_changes_selection(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     m2 = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=2, backend="hfss"))
     assert m1["design_id"] != m2["design_id"]
     assert m1["selected_parameters_max"] == m2["selected_parameters_max"]
+    assert m1["selected_parameters"]["profile_id"] == "p2"
+    assert m2["selected_parameters"]["profile_id"] == "p3"
+
+
+def test_profile_selection_is_deterministic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "profile.toml"
+    _write_toml(toml_path)
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("1" * 40))
+    m1 = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=7, backend="hfss"))
+    m2 = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=7, backend="hfss"))
+    assert m1["selected_parameters"]["profile_id"] == m2["selected_parameters"]["profile_id"]
+    assert m1["selected_parameters"]["trace_profile_base"] == m2["selected_parameters"]["trace_profile_base"]
+    assert m1["selected_parameters"]["gap_profile_base"] == m2["selected_parameters"]["gap_profile_base"]
 
 
 def test_invalid_range_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -204,6 +281,73 @@ def test_mount_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("d" * 40))
     with pytest.raises(ValueError, match="Mount index out of range"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_profiles_required(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "missing_profiles.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    start = raw.index("[[trace_gap_profile.profiles]]")
+    end = raw.index("\n[[coil_groups]]")
+    raw = raw[:start] + "\n[trace_gap_profile]\nlegacy = true\n" + raw[end:]
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("2" * 40))
+    with pytest.raises(ValueError, match="trace_gap_profile.profiles must be a non-empty array of tables"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_profiles_empty_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "empty_profiles.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    start = raw.index("[[trace_gap_profile.profiles]]")
+    end = raw.index("\n[[coil_groups]]")
+    raw = raw[:start] + "\n[trace_gap_profile]\nprofiles = []\n" + raw[end:]
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("3" * 40))
+    with pytest.raises(ValueError, match="trace_gap_profile.profiles must contain at least one profile"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_profile_id_must_be_unique(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "dup_profile_id.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace('id = "p2"', 'id = "p1"', 1)
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("4" * 40))
+    with pytest.raises(ValueError, match="Duplicate trace_gap_profile.profiles id"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_profile_trace_and_gap_required(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "missing_gap_table.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace("[trace_gap_profile.profiles.gap]", "[trace_gap_profile.profiles.gap_removed]", 1)
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("5" * 40))
+    with pytest.raises(ValueError, match=r"trace_gap_profile\.profiles\[0\] must contain only"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_profile_mode_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "bad_profile_mode.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace('mode = "biased_linear"', 'mode = "other"', 1)
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("6" * 40))
+    with pytest.raises(ValueError, match="mode must be 'biased_linear'"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_profile_clamp_min_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "bad_profile_clamp.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace("clamp_min = 0.2", "clamp_min = 0.0", 1)
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("7" * 40))
+    with pytest.raises(ValueError, match="clamp_min must be > 0"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
