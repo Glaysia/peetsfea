@@ -132,6 +132,13 @@ python run.py
   - 각 프로필은 `id`, `trace`, `gap`을 가진다.
   - `seed` 기준 선택 규칙: `(seed + 300) % len(profiles)` (결정론).
   - 목적은 최적화가 아니라 데이터셋 다양성 확보이며, 운영 권장 개수는 5개다.
+- 제약식은 TOML의 SSOT 섹션인 `[constraints]` + `[[constraints.rules]]`로 선언한다.
+  - `kind = "comparison"`: `lhs.path`와 `rhs.path|rhs.value|rhs.func`를 `op`로 비교
+  - `kind = "range"`: `target.path`를 `min/max`로 범위 제한
+  - `kind = "aggregate"`: 현재는 `agg = "sum_group_selected_count"` 지원
+  - `rhs.func`는 `min(path_a,path_b)`, `sub(path_a,path_b,path_c)`만 지원
+  - `constraints.rules`는 필수이며 누락/빈 값이면 실행 전 실패한다.
+  - 목적은 GA/딥러닝 샘플러가 동일 TOML 제약을 사전 필터에 재사용하는 것이다.
 
 동작 요약:
 1) TOML 원본 바이트 SHA-256(`toml_hash`) 계산

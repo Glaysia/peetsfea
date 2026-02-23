@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Literal, Sequence, TypeAlias, cast
+from typing import Literal, Sequence, TypedDict, TypeAlias, cast
 
 from peetsfea.spec.loader import TOMLTable, TOMLValue, require_table
 from peetsfea.types.manifest import ResolvedCoilGroup, ResolvedPcbInstance, SelectedParameters, SelectedParametersMax
@@ -160,8 +160,8 @@ def _parse_profile_entry(entry: TOMLValue, idx: int) -> tuple[str, tuple[float, 
     if not isinstance(raw_id, str) or raw_id == "":
         raise ValueError(f"{dotted_root}.id must be non-empty string")
 
-    trace_values = _parse_profile_table(profile_entry.get("trace"), f"{dotted_root}.trace") # type: ignore
-    gap_values = _parse_profile_table(profile_entry.get("gap"), f"{dotted_root}.gap") # type: ignore
+    trace_values = _parse_profile_table(profile_entry.get("trace"), f"{dotted_root}.trace")
+    gap_values = _parse_profile_table(profile_entry.get("gap"), f"{dotted_root}.gap")
     return raw_id, trace_values, gap_values
 
 
@@ -295,9 +295,6 @@ def _resolve_coil_groups(spec: TOMLTable, seed: int, selected: SelectedParameter
     if missing:
         raise ValueError(f"Missing required coil groups: {', '.join(missing)}")
 
-    total = sum(group["selected_count"] for group in resolved)
-    if total > 10:
-        raise ValueError("Total selected coil count must be <= 10")
     return resolved
 
 
@@ -406,35 +403,270 @@ def _resolve_selected_max_scalars(spec: TOMLTable) -> dict[str, Number]:
     return selected
 
 
-def _validate_constraints(selected: SelectedParameters, coil_groups: list[ResolvedCoilGroup]) -> None:
-    if selected["outer_x"] <= 0 or selected["outer_y"] <= 0:
-        raise ValueError("outer_x and outer_y must be > 0")
-    if selected["turn_count_max"] < 1:
-        raise ValueError("turn_count_max must be >= 1")
-    if selected["inner_margin_x"] < 0 or selected["inner_margin_y"] < 0:
-        raise ValueError("inner_margin_x/inner_margin_y must be >= 0")
-    if selected["tx_dd_pair_spacing_mm"] <= 0 or selected["rx_dd_pair_spacing_mm"] <= 0:
-        raise ValueError("tx_dd_pair_spacing_mm and rx_dd_pair_spacing_mm must be > 0")
-    if selected["tx_vertical_span_mm"] < 0 or selected["tx_vertical_span_mm"] > 15:
-        raise ValueError("tx_vertical_span_mm must be in [0,15]")
-    if selected["trace_profile_clamp_min"] <= 0 or selected["gap_profile_clamp_min"] <= 0:
-        raise ValueError("profile clamp_min must be > 0")
-    if selected["tx_region_outer_w_mm"] <= 0 or selected["tx_region_outer_h_mm"] <= 0:
-        raise ValueError("tx.region outer dimensions must be > 0")
-    if selected["tx_region_thickness_mm"] <= 0:
-        raise ValueError("tx.region.thickness_mm must be > 0")
-    if selected["tx_region_vertical_z_mm"] <= 0 or selected["tx_region_dd_z_mm"] <= 0:
-        raise ValueError("tx.region.z_parts.vertical_z_mm and tx.region.z_parts.dd_z_mm must be > 0")
-    leftover_z = selected["tx_region_thickness_mm"] - selected["tx_region_vertical_z_mm"] - selected["tx_region_dd_z_mm"]
-    if leftover_z < 0:
-        raise ValueError("tx.region.leftover_z_mm computed negative; reduce vertical_z/dd_z or increase tx.region.thickness_mm")
+class PathRef(TypedDict):
+    path: str
 
-    if selected["outer"] >= min(selected["tx_region_outer_w_mm"], selected["tx_region_outer_h_mm"]):
-        raise ValueError("TX coil outer must be < min(tx.region.outer_w_mm, tx.region.outer_h_mm)")
 
-    total = sum(group["selected_count"] for group in coil_groups)
-    if total > 10:
-        raise ValueError("Total selected coil count must be <= 10")
+class ValueRef(TypedDict):
+    value: float
+
+
+class FuncRef(TypedDict):
+    func: str
+
+
+class ComparisonRule(TypedDict):
+    id: str
+    kind: Literal["comparison"]
+    message: str
+    enabled: bool
+    lhs: PathRef
+    op: Literal["<", "<=", ">", ">=", "=="]
+    rhs: PathRef | ValueRef | FuncRef
+
+
+class RangeRule(TypedDict):
+    id: str
+    kind: Literal["range"]
+    message: str
+    enabled: bool
+    target: PathRef
+    min: ValueRef | None
+    max: ValueRef | None
+    inclusive_min: bool
+    inclusive_max: bool
+
+
+class AggregateRule(TypedDict):
+    id: str
+    kind: Literal["aggregate"]
+    message: str
+    enabled: bool
+    agg: Literal["sum_group_selected_count"]
+    op: Literal["<", "<=", ">", ">=", "=="]
+    rhs: ValueRef
+
+
+ConstraintRule: TypeAlias = ComparisonRule | RangeRule | AggregateRule
+
+
+def _parse_path_ref(value: TOMLValue, dotted_path: str) -> PathRef:
+    table = require_table(value, dotted_path)
+    if set(table.keys()) != {"path"}:
+        raise ValueError(f"{dotted_path} must contain only ['path']")
+    raw_path = table.get("path")
+    if not isinstance(raw_path, str) or raw_path == "":
+        raise ValueError(f"{dotted_path}.path must be non-empty string")
+    return {"path": raw_path}
+
+
+def _parse_value_ref(value: TOMLValue, dotted_path: str) -> ValueRef:
+    table = require_table(value, dotted_path)
+    if set(table.keys()) != {"value"}:
+        raise ValueError(f"{dotted_path} must contain only ['value']")
+    raw_value = table.get("value")
+    if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+        raise ValueError(f"{dotted_path}.value must be number")
+    return {"value": float(raw_value)}
+
+
+def _parse_rhs_ref(value: TOMLValue, dotted_path: str) -> PathRef | ValueRef | FuncRef:
+    table = require_table(value, dotted_path)
+    if set(table.keys()) != {"path"} and set(table.keys()) != {"value"} and set(table.keys()) != {"func"}:
+        raise ValueError(f"{dotted_path} must have exactly one of ['path'], ['value'], ['func']")
+    if "path" in table:
+        return _parse_path_ref(value, dotted_path)
+    if "value" in table:
+        return _parse_value_ref(value, dotted_path)
+    raw_func = table.get("func")
+    if not isinstance(raw_func, str) or raw_func == "":
+        raise ValueError(f"{dotted_path}.func must be non-empty string")
+    return {"func": raw_func}
+
+
+def _parse_rule(raw_rule: TOMLValue, idx: int) -> ConstraintRule:
+    dotted = f"constraints.rules[{idx}]"
+    table = require_table(raw_rule, dotted)
+    base_required = {"id", "kind", "message"}
+    base_optional = {"enabled"}
+    if not base_required.issubset(table.keys()):
+        raise ValueError(f"{dotted} must contain required keys {sorted(base_required)}")
+    if set(table.keys()) - (base_required | base_optional | {"lhs", "op", "rhs", "target", "min", "max", "inclusive_min", "inclusive_max", "agg"}):
+        raise ValueError(f"{dotted} contains unsupported keys")
+
+    raw_id = table.get("id")
+    raw_kind = table.get("kind")
+    raw_message = table.get("message")
+    raw_enabled = table.get("enabled", True)
+    if not isinstance(raw_id, str) or raw_id == "":
+        raise ValueError(f"{dotted}.id must be non-empty string")
+    if not isinstance(raw_message, str) or raw_message == "":
+        raise ValueError(f"{dotted}.message must be non-empty string")
+    if not isinstance(raw_enabled, bool):
+        raise ValueError(f"{dotted}.enabled must be bool")
+    enabled = raw_enabled
+
+    if raw_kind == "comparison":
+        allowed = {"id", "kind", "message", "enabled", "lhs", "op", "rhs"}
+        if set(table.keys()) != allowed and set(table.keys()) != (allowed - {"enabled"}):
+            raise ValueError(f"{dotted} must contain only {sorted(allowed)}")
+        op = table.get("op")
+        if op not in ("<", "<=", ">", ">=", "=="):
+            raise ValueError(f"{dotted}.op must be one of ['<','<=','>','>=','==']")
+        lhs = _parse_path_ref(table.get("lhs"), f"{dotted}.lhs")
+        rhs = _parse_rhs_ref(table.get("rhs"), f"{dotted}.rhs")
+        return {"id": raw_id, "kind": "comparison", "message": raw_message, "enabled": enabled, "lhs": lhs, "op": op, "rhs": rhs}
+
+    if raw_kind == "range":
+        allowed = {"id", "kind", "message", "enabled", "target", "min", "max", "inclusive_min", "inclusive_max"}
+        if set(table.keys()) != allowed and set(table.keys()) != (allowed - {"enabled"}) and set(table.keys()) != (allowed - {"inclusive_min", "inclusive_max"}) and set(table.keys()) != (allowed - {"enabled", "inclusive_min", "inclusive_max"}):
+            raise ValueError(f"{dotted} must contain only {sorted(allowed)}")
+        target = _parse_path_ref(table.get("target"), f"{dotted}.target")
+        raw_min = table.get("min")
+        raw_max = table.get("max")
+        min_ref = _parse_value_ref(raw_min, f"{dotted}.min") if raw_min is not None else None
+        max_ref = _parse_value_ref(raw_max, f"{dotted}.max") if raw_max is not None else None
+        if min_ref is None and max_ref is None:
+            raise ValueError(f"{dotted} must define at least one of min/max")
+        inclusive_min = table.get("inclusive_min", True)
+        inclusive_max = table.get("inclusive_max", True)
+        if not isinstance(inclusive_min, bool) or not isinstance(inclusive_max, bool):
+            raise ValueError(f"{dotted}.inclusive_min/inclusive_max must be bool")
+        return {
+            "id": raw_id,
+            "kind": "range",
+            "message": raw_message,
+            "enabled": enabled,
+            "target": target,
+            "min": min_ref,
+            "max": max_ref,
+            "inclusive_min": inclusive_min,
+            "inclusive_max": inclusive_max,
+        }
+
+    if raw_kind == "aggregate":
+        allowed = {"id", "kind", "message", "enabled", "agg", "op", "rhs"}
+        if set(table.keys()) != allowed and set(table.keys()) != (allowed - {"enabled"}):
+            raise ValueError(f"{dotted} must contain only {sorted(allowed)}")
+        agg = table.get("agg")
+        if agg != "sum_group_selected_count":
+            raise ValueError(f"{dotted}.agg must be 'sum_group_selected_count'")
+        op = table.get("op")
+        if op not in ("<", "<=", ">", ">=", "=="):
+            raise ValueError(f"{dotted}.op must be one of ['<','<=','>','>=','==']")
+        rhs = _parse_value_ref(table.get("rhs"), f"{dotted}.rhs")
+        return {
+            "id": raw_id,
+            "kind": "aggregate",
+            "message": raw_message,
+            "enabled": enabled,
+            "agg": "sum_group_selected_count",
+            "op": op,
+            "rhs": rhs,
+        }
+
+    raise ValueError(f"{dotted}.kind must be one of ['comparison', 'range', 'aggregate']")
+
+
+def _parse_constraints(spec: TOMLTable) -> list[ConstraintRule]:
+    constraints = require_table(spec.get("constraints"), "constraints")
+    raw_rules = constraints.get("rules")
+    if not isinstance(raw_rules, list):
+        raise ValueError("constraints.rules must be a non-empty array of tables")
+    if len(raw_rules) == 0:
+        raise ValueError("constraints.rules must be a non-empty array of tables")
+    parsed_rules: list[ConstraintRule] = []
+    ids: set[str] = set()
+    for idx, raw_rule in enumerate(raw_rules):
+        parsed = _parse_rule(raw_rule, idx)
+        rule_id = parsed["id"]
+        if rule_id in ids:
+            raise ValueError(f"Duplicate constraints.rules id: {rule_id}")
+        ids.add(rule_id)
+        parsed_rules.append(parsed)
+    return parsed_rules
+
+
+def _compare(lhs: float, rhs: float, op: Literal["<", "<=", ">", ">=", "=="]) -> bool:
+    if op == "<":
+        return lhs < rhs
+    if op == "<=":
+        return lhs <= rhs
+    if op == ">":
+        return lhs > rhs
+    if op == ">=":
+        return lhs >= rhs
+    return lhs == rhs
+
+
+def _resolve_selected_path(selected: SelectedParameters, path: str) -> float:
+    if path == "tx_region_leftover_z_mm":
+        return (
+            float(selected["tx_region_thickness_mm"])
+            - float(selected["tx_region_vertical_z_mm"])
+            - float(selected["tx_region_dd_z_mm"])
+        )
+    value = selected.get(path)
+    if value is None:
+        raise ValueError(f"Unknown constraint path: {path}")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"Constraint path '{path}' is not numeric")
+    return float(value)
+
+
+def _resolve_value_ref(selected: SelectedParameters, value_ref: PathRef | ValueRef | FuncRef) -> float:
+    if "path" in value_ref:
+        return _resolve_selected_path(selected, value_ref["path"])
+    if "value" in value_ref:
+        return float(value_ref["value"])
+    func_text = value_ref["func"]
+    if func_text.startswith("min(") and func_text.endswith(")"):
+        body = func_text[4:-1]
+        parts = [part.strip() for part in body.split(",")]
+        if len(parts) != 2 or any(part == "" for part in parts):
+            raise ValueError("rhs.func min() must have 2 path arguments")
+        return min(_resolve_selected_path(selected, parts[0]), _resolve_selected_path(selected, parts[1]))
+    if func_text.startswith("sub(") and func_text.endswith(")"):
+        body = func_text[4:-1]
+        parts = [part.strip() for part in body.split(",")]
+        if len(parts) != 3 or any(part == "" for part in parts):
+            raise ValueError("rhs.func sub() must have 3 path arguments")
+        return _resolve_selected_path(selected, parts[0]) - _resolve_selected_path(selected, parts[1]) - _resolve_selected_path(selected, parts[2])
+    raise ValueError("rhs.func supports only min(path_a,path_b) and sub(path_a,path_b,path_c)")
+
+
+def _evaluate_constraints(rules: list[ConstraintRule], selected: SelectedParameters, coil_groups: list[ResolvedCoilGroup]) -> None:
+    for rule in rules:
+        if not rule["enabled"]:
+            continue
+        if rule["kind"] == "comparison":
+            lhs_value = _resolve_selected_path(selected, rule["lhs"]["path"])
+            rhs_value = _resolve_value_ref(selected, rule["rhs"])
+            if not _compare(lhs_value, rhs_value, rule["op"]):
+                raise ValueError(f"Constraint {rule['id']} failed: {rule['message']} (lhs={lhs_value}, rhs={rhs_value})")
+            continue
+        if rule["kind"] == "range":
+            target_value = _resolve_selected_path(selected, rule["target"]["path"])
+            if rule["min"] is not None:
+                min_value = float(rule["min"]["value"])
+                min_ok = target_value >= min_value if rule["inclusive_min"] else target_value > min_value
+                if not min_ok:
+                    raise ValueError(f"Constraint {rule['id']} failed: {rule['message']} (lhs={target_value}, rhs={min_value})")
+            if rule["max"] is not None:
+                max_value = float(rule["max"]["value"])
+                max_ok = target_value <= max_value if rule["inclusive_max"] else target_value < max_value
+                if not max_ok:
+                    raise ValueError(f"Constraint {rule['id']} failed: {rule['message']} (lhs={target_value}, rhs={max_value})")
+            continue
+        aggregate_value = float(sum(group["selected_count"] for group in coil_groups))
+        rhs_value = float(rule["rhs"]["value"])
+        if not _compare(aggregate_value, rhs_value, rule["op"]):
+            raise ValueError(f"Constraint {rule['id']} failed: {rule['message']} (lhs={aggregate_value}, rhs={rhs_value})")
+
+
+def _validate_constraints(spec: TOMLTable, selected: SelectedParameters, coil_groups: list[ResolvedCoilGroup]) -> None:
+    rules = _parse_constraints(spec)
+    _evaluate_constraints(rules, selected, coil_groups)
 
 
 def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, SelectedParametersMax, list[ResolvedCoilGroup], list[ResolvedPcbInstance]]:
@@ -513,7 +745,7 @@ def _resolve_selection(spec: TOMLTable, seed: int) -> tuple[SelectedParameters, 
     groups = _resolve_coil_groups(spec, seed, selected)
     pcbs = _resolve_pcbs(spec, seed)
     _validate_mounts(groups, pcbs)
-    _validate_constraints(selected, groups)
+    _validate_constraints(spec, selected, groups)
     return selected, selected_max, groups, pcbs
 
 

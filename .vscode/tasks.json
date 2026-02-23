@@ -2,9 +2,27 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "install-dev-editable",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/python -m uv pip install -e \".[dev]\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "clean-run-aedt",
       "type": "shell",
       "command": "mkdir -p /home/harry/Projects/PythonProjects/peetsfea/run/aedt && find /home/harry/Projects/PythonProjects/peetsfea/run/aedt -mindepth 1 -maxdepth 1 -exec rm -rf {} +",
+      "problemMatcher": []
+    },
+    {
+      "label": "prepare-run-debug",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "install-dev-editable",
+        "clean-run-aedt"
+      ],
       "problemMatcher": []
     }
   ]
