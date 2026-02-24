@@ -46,6 +46,7 @@ def _selected_parameters() -> SelectedParameters:
         "rx_region_bottom_from_tv_mm": 1.0,
         "tx_dd_top_clearance_mm": 0.0,
         "rx_face_clearance_mm": 0.0,
+        "tx_main_1_z_from_tx_main_0_mm": 3.0,
         "dd_mirror_plane": "XZ",
         "rx_plane": "YZ",
         "tx_vertical_plane": "ZX",
@@ -87,7 +88,10 @@ def test_compute_design_unique_hash_is_deterministic() -> None:
             "position": (0.0, 0.0, 0.0),
             "rotation_deg": 0.0,
             "present": True,
-            "mounts": ["tx_dd:0"],
+            "z_mode": "absolute",
+            "z_relative_base_id": None,
+            "z_delta_path": None,
+            "mounts": [{"kind": "tx_dd", "selector_mode": "index", "selector_index": 0}],
         }
     ]
     first = compute_design_unique_hash("b" * 64, "c" * 40, selected, group_geometry, selected_coil_groups, selected_pcbs)

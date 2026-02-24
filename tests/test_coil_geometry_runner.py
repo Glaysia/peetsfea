@@ -221,6 +221,7 @@ def _manifest(tmp_path: Path) -> Manifest:
             "rx_region_bottom_from_tv_mm": 1.0,
             "tx_dd_top_clearance_mm": 0.0,
             "rx_face_clearance_mm": 0.0,
+            "tx_main_1_z_from_tx_main_0_mm": 3.0,
             "dd_mirror_plane": "XZ",
             "rx_plane": "YZ",
             "tx_vertical_plane": "ZX",
@@ -267,7 +268,7 @@ def _manifest(tmp_path: Path) -> Manifest:
         ],
         "selected_group_geometry": [
             {"kind": "tx_dd", "turn_count_max": 5, "band_ratio": 0.3, "metal_ratio": 2.0 / 3.0, "trace": 1.0, "gap": 0.5},
-            {"kind": "tx_vertical", "turn_count_max": 4, "band_ratio": 0.25, "metal_ratio": 0.9 / 1.3, "trace": 0.9, "gap": 0.4},
+            {"kind": "tx_vertical", "turn_count_max": 3, "band_ratio": 0.25, "metal_ratio": 0.9 / 1.3, "trace": 0.9, "gap": 0.4},
             {"kind": "rx_dd", "turn_count_max": 6, "band_ratio": 0.35, "metal_ratio": 1.1 / 1.4, "trace": 1.1, "gap": 0.3},
         ],
         "selected_pcbs": [
@@ -277,7 +278,13 @@ def _manifest(tmp_path: Path) -> Manifest:
                 "position": (0.0, 0.0, 0.0),
                 "rotation_deg": 0.0,
                 "present": True,
-                "mounts": ["tx_dd:0", "tx_vertical:*"],
+                "z_mode": "absolute",
+                "z_relative_base_id": None,
+                "z_delta_path": None,
+                "mounts": [
+                    {"kind": "tx_dd", "selector_mode": "index", "selector_index": 0},
+                    {"kind": "tx_vertical", "selector_mode": "all", "selector_index": None},
+                ],
             },
             {
                 "id": "rx_main_0",
@@ -285,7 +292,10 @@ def _manifest(tmp_path: Path) -> Manifest:
                 "position": (0.0, 0.0, 110.0),
                 "rotation_deg": 0.0,
                 "present": True,
-                "mounts": ["rx_dd:0"],
+                "z_mode": "absolute",
+                "z_relative_base_id": None,
+                "z_delta_path": None,
+                "mounts": [{"kind": "rx_dd", "selector_mode": "index", "selector_index": 0}],
             },
         ],
         "inputs": {
@@ -296,7 +306,7 @@ def _manifest(tmp_path: Path) -> Manifest:
             "close_on_exit": True,
         },
         "spec": {
-            "spec_version": "0.1.8",
+            "spec_version": "0.2.0",
             "design_name": "square_test",
             "units": "mm",
         },
@@ -576,7 +586,7 @@ def test_tx_dd_symmetric_precheck_fails_for_tx_dd(tmp_path: Path, monkeypatch: p
         geom.build_square_spiral_from_manifest(manifest)
 
 
-def test_tx_vertical_large_requested_turns_are_clipped_to_fit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tx_vertical_large_requested_turns_fail_when_infeasible(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     fake = _FakeHfss()
     monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
     manifest = _manifest(tmp_path)
@@ -584,20 +594,11 @@ def test_tx_vertical_large_requested_turns_are_clipped_to_fit(tmp_path: Path, mo
     manifest["selected_group_geometry"][1]["trace"] = 2.932558139534884
     manifest["selected_group_geometry"][1]["gap"] = 2.7395348837209306
 
-    metadata = geom.build_square_spiral_from_manifest(manifest)
-
-    tx_vertical_calls = [
-        call for call in fake.modeler.polyline_calls if str(call["name"]).startswith("coil_tx_vertical_")
-    ]
-    assert len(tx_vertical_calls) == 1
-    # The requested turns are infeasible for the vertical region height; build path must clip turns.
-    tx_vertical_points = tx_vertical_calls[0]["points"]
-    assert isinstance(tx_vertical_points, list)
-    assert len(tx_vertical_points) == 4
-    assert len(metadata["group_objects"]["tx_vertical"]) == 1
+    with pytest.raises(RuntimeError, match="Infeasible turn_count_max for tx_vertical"):
+        geom.build_square_spiral_from_manifest(manifest)
 
 
-def test_tx_dd_large_requested_turns_are_clipped_to_fit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tx_dd_large_requested_turns_fail_when_infeasible(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     fake = _FakeHfss()
     monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
     manifest = _manifest(tmp_path)
@@ -605,28 +606,8 @@ def test_tx_dd_large_requested_turns_are_clipped_to_fit(tmp_path: Path, monkeypa
     manifest["selected_group_geometry"][0]["trace"] = 2.7953488372093025
     manifest["selected_group_geometry"][0]["gap"] = 2.5930232558139537
 
-    metadata = geom.build_square_spiral_from_manifest(manifest)
-
-    tx_dd_calls = [call for call in fake.modeler.polyline_calls if str(call["name"]).startswith("coil_tx_dd_")]
-    assert len(tx_dd_calls) == 1
-    tx_dd_points = tx_dd_calls[0]["points"]
-    assert isinstance(tx_dd_points, list)
-    expected_turns = min(
-        manifest["selected_group_geometry"][0]["turn_count_max"],
-        geom._max_feasible_turns(
-            manifest["selected_parameters"]["tx_dd_outer_x"],
-            manifest["selected_group_geometry"][0]["trace"],
-            manifest["selected_group_geometry"][0]["gap"],
-        ),
-        geom._max_feasible_turns(
-            manifest["selected_parameters"]["tx_dd_outer_y"],
-            manifest["selected_group_geometry"][0]["trace"],
-            manifest["selected_group_geometry"][0]["gap"],
-        ),
-    )
-    assert expected_turns < manifest["selected_group_geometry"][0]["turn_count_max"]
-    assert len(tx_dd_points) == (5 * expected_turns) - 1
-    assert len(metadata["group_objects"]["tx_dd"]) == 1
+    with pytest.raises(RuntimeError, match="Infeasible turn_count_max for tx_dd"):
+        geom.build_square_spiral_from_manifest(manifest)
 
 
 def test_rx_dd_edge_gap_must_be_non_negative(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -645,7 +626,11 @@ def test_tx_dd_two_coils_use_single_layer_when_selected_count_two(
     fake = _FakeHfss()
     monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
     manifest = _manifest(tmp_path)
-    manifest["selected_pcbs"][0]["mounts"] = ["tx_dd:0", "tx_dd:1", "tx_vertical:*"]
+    manifest["selected_pcbs"][0]["mounts"] = [
+        {"kind": "tx_dd", "selector_mode": "index", "selector_index": 0},
+        {"kind": "tx_dd", "selector_mode": "index", "selector_index": 1},
+        {"kind": "tx_vertical", "selector_mode": "all", "selector_index": None},
+    ]
     manifest["selected_coil_groups"][0]["selected_count"] = 2
     manifest["selected_coil_groups"][0]["requested_count"] = 2
     manifest["selected_coil_groups"][0]["spacing_mm"] = 25.0
@@ -677,15 +662,26 @@ def test_tx_dd_four_coils_use_two_layers_when_selected_count_four(
     manifest["selected_coil_groups"][0]["selected_count"] = 4
     manifest["selected_coil_groups"][0]["requested_count"] = 4
     manifest["selected_coil_groups"][0]["spacing_mm"] = 25.0
-    manifest["selected_pcbs"][0]["mounts"] = ["tx_dd:0", "tx_dd:1", "tx_vertical:*"]
+    manifest["selected_pcbs"][0]["mounts"] = [
+        {"kind": "tx_dd", "selector_mode": "index", "selector_index": 0},
+        {"kind": "tx_dd", "selector_mode": "index", "selector_index": 1},
+        {"kind": "tx_vertical", "selector_mode": "all", "selector_index": None},
+    ]
     manifest["selected_pcbs"].append(
         {
             "id": "tx_main_1",
             "role": "tx",
-            "position": (0.0, 0.0, 2.0),
+            "position": (0.0, 0.0, 3.0),
             "rotation_deg": 0.0,
             "present": True,
-            "mounts": ["tx_dd:2", "tx_dd:3", "tx_vertical:*"],
+            "z_mode": "absolute",
+            "z_relative_base_id": None,
+            "z_delta_path": None,
+            "mounts": [
+                {"kind": "tx_dd", "selector_mode": "index", "selector_index": 2},
+                {"kind": "tx_dd", "selector_mode": "index", "selector_index": 3},
+                {"kind": "tx_vertical", "selector_mode": "all", "selector_index": None},
+            ],
         }
     )
 
@@ -712,13 +708,17 @@ def test_tx_dd_four_coils_use_two_layers_when_selected_count_four(
     assert z_centers[1] == pytest.approx(z_centers[0], abs=1e-6)
     assert z_centers[3] == pytest.approx(z_centers[2], abs=1e-6)
     assert z_centers[2] > z_centers[1]
+    assert (z_centers[2] - z_centers[1]) >= 3.0
 
 
 def test_rx_dd_edge_gap_zero_means_touching_edges(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     fake = _FakeHfss()
     monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
     manifest = _manifest(tmp_path)
-    manifest["selected_pcbs"][1]["mounts"] = ["rx_dd:0", "rx_dd:1"]
+    manifest["selected_pcbs"][1]["mounts"] = [
+        {"kind": "rx_dd", "selector_mode": "index", "selector_index": 0},
+        {"kind": "rx_dd", "selector_mode": "index", "selector_index": 1},
+    ]
     manifest["selected_coil_groups"][2]["spacing_mm"] = 0.0
 
     metadata = geom.build_square_spiral_from_manifest(manifest)
@@ -743,7 +743,10 @@ def test_rx_dd_edge_gap_five_mm(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     fake = _FakeHfss()
     monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
     manifest = _manifest(tmp_path)
-    manifest["selected_pcbs"][1]["mounts"] = ["rx_dd:0", "rx_dd:1"]
+    manifest["selected_pcbs"][1]["mounts"] = [
+        {"kind": "rx_dd", "selector_mode": "index", "selector_index": 0},
+        {"kind": "rx_dd", "selector_mode": "index", "selector_index": 1},
+    ]
     manifest["selected_coil_groups"][2]["spacing_mm"] = 5.0
 
     metadata = geom.build_square_spiral_from_manifest(manifest)

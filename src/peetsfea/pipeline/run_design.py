@@ -26,7 +26,7 @@ from peetsfea.types.manifest import (
 
 
 MAX_ATTEMPTS = 64
-SUPPORTED_SPEC_VERSION = "0.1.8"
+SUPPORTED_SPEC_VERSION = "0.2.0"
 
 
 def _collect_range_nodes(value: object) -> list[list[object]]:
@@ -43,11 +43,32 @@ def _collect_range_nodes(value: object) -> list[list[object]]:
     return nodes
 
 
+def _is_derived_dummy_range(entry: list[object]) -> bool:
+    if len(entry) != 4:
+        return False
+    is_integer, start, end, count = entry
+    return (
+        isinstance(is_integer, bool)
+        and is_integer is False
+        and isinstance(start, (int, float))
+        and not isinstance(start, bool)
+        and float(start) == -1.0
+        and isinstance(end, (int, float))
+        and not isinstance(end, bool)
+        and float(end) == -1.0
+        and isinstance(count, int)
+        and not isinstance(count, bool)
+        and count == -1
+    )
+
+
 def _detect_repro_mode(spec: Mapping[str, object]) -> Literal["sampled_toml", "frozen_toml"]:
     range_nodes = _collect_range_nodes(spec)
     if not range_nodes:
         return "sampled_toml"
     for entry in range_nodes:
+        if _is_derived_dummy_range(entry):
+            continue
         if len(entry) != 4:
             return "sampled_toml"
         _, start, end, count = entry

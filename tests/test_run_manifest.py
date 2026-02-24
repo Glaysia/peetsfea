@@ -14,7 +14,7 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
     path.write_text(
         "\n".join(
             [
-                'spec_version = "0.1.8"',
+                'spec_version = "0.2.0"',
                 "",
                 "[design]",
                 'units = "mm"',
@@ -68,7 +68,7 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
                 "[coil_shape.tx_dd.outer_y]",
                 f"range = [false, {outer_y:.1f}, {outer_y:.1f}, 1]",
                 "[coil_shape.tx_vertical.outer_x]",
-                f"range = [false, {outer_x:.1f}, {outer_x:.1f}, 1]",
+                "range = [false, -1, -1, -1]",
                 "[coil_shape.tx_vertical.outer_y]",
                 f"range = [false, {outer_y:.1f}, {outer_y:.1f}, 1]",
                 "[coil_shape.rx_dd.outer_x]",
@@ -134,6 +134,9 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
                 "[coil_placement.tx_vertical_plane]",
                 'value = "ZX"',
                 "",
+                "[pcb_spacing.tx_main_1_z_from_tx_main_0_mm]",
+                "range = [false, 3.0, 10.0, 5]",
+                "",
                 "[constraints]",
                 "[[constraints.rules]]",
                 'id = "outer_x_positive"',
@@ -160,12 +163,28 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
                 "rhs = { value = 0.0 }",
                 "",
                 "[[constraints.rules]]",
+                'id = "tx_dd_spacing_ratio_upper_bound"',
+                'kind = "comparison"',
+                'message = "tx_dd_pair_spacing_ratio must be <= 0.12"',
+                'lhs = { path = "tx_dd_pair_spacing_ratio" }',
+                'op = "<="',
+                "rhs = { value = 0.12 }",
+                "",
+                "[[constraints.rules]]",
                 'id = "rx_dd_spacing_positive"',
                 'kind = "comparison"',
                 'message = "rx_dd_pair_spacing_ratio must be >= 0"',
                 'lhs = { path = "rx_dd_pair_spacing_ratio" }',
                 'op = ">="',
                 "rhs = { value = 0.0 }",
+                "",
+                "[[constraints.rules]]",
+                'id = "rx_dd_spacing_ratio_upper_bound"',
+                'kind = "comparison"',
+                'message = "rx_dd_pair_spacing_ratio must be <= 0.03"',
+                'lhs = { path = "rx_dd_pair_spacing_ratio" }',
+                'op = "<="',
+                "rhs = { value = 0.03 }",
                 "",
                 "[[constraints.rules]]",
                 'id = "tx_vertical_span_range"',
@@ -184,6 +203,46 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
                 'lhs = { path = "outer_x" }',
                 'op = "<"',
                 'rhs = { path = "tx_region_outer_w_mm" }',
+                "",
+                "[[constraints.rules]]",
+                'id = "tx_dd_pair_fits_region"',
+                'kind = "comparison"',
+                'message = "2*tx_dd_outer_y + tx_dd_pair_spacing_mm must be <= tx_region_outer_h_mm"',
+                'lhs = { func = "add(mul(2,tx_dd_outer_y),tx_dd_pair_spacing_mm)" }',
+                'op = "<="',
+                'rhs = { path = "tx_region_outer_h_mm" }',
+                "",
+                "[[constraints.rules]]",
+                'id = "rx_dd_pair_fits_region"',
+                'kind = "comparison"',
+                'message = "2*rx_dd_outer_x + rx_dd_pair_spacing_mm must be <= rx_region_outer_w_mm"',
+                'lhs = { func = "add(mul(2,rx_dd_outer_x),rx_dd_pair_spacing_mm)" }',
+                'op = "<="',
+                'rhs = { path = "rx_region_outer_w_mm" }',
+                "",
+                "[[constraints.rules]]",
+                'id = "tx_vertical_turn_count_within_feasible_max"',
+                'kind = "comparison"',
+                'message = "tx_vertical turn_count_max must be <= feasible_turns_max under capped vertical zone"',
+                'lhs = { path = "selected_group_geometry.tx_vertical.turn_count_max" }',
+                'op = "<="',
+                'rhs = { func = "feasible_turns_max(tx_vertical,outer_x,outer_y,tx_region_vertical_z_mm)" }',
+                "",
+                "[[constraints.rules]]",
+                'id = "tx_dd_turn_count_within_feasible_max"',
+                'kind = "comparison"',
+                'message = "tx_dd turn_count_max must be <= feasible_turns_max"',
+                'lhs = { path = "selected_group_geometry.tx_dd.turn_count_max" }',
+                'op = "<="',
+                'rhs = { func = "feasible_turns_max(tx_dd,outer_x,outer_y,outer_y)" }',
+                "",
+                "[[constraints.rules]]",
+                'id = "rx_dd_turn_count_within_feasible_max"',
+                'kind = "comparison"',
+                'message = "rx_dd turn_count_max must be <= feasible_turns_max"',
+                'lhs = { path = "selected_group_geometry.rx_dd.turn_count_max" }',
+                'op = "<="',
+                'rhs = { func = "feasible_turns_max(rx_dd,outer_x,outer_y,outer_y)" }',
                 "",
                 "[[constraints.rules]]",
                 'id = "max_total_selected_coils"',
@@ -214,7 +273,18 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
                 "position = [0.0, 0.0, 0.0]",
                 "rotation_deg = 0.0",
                 "present = [true, 1, 1, 1]",
-                'mounts = ["tx_dd:0", "tx_dd:1", "tx_vertical:*"]',
+                'z_mode = "absolute"',
+                "[[pcbs.mounts]]",
+                'kind = "tx_dd"',
+                'selector_mode = "index"',
+                "selector_index = 0",
+                "[[pcbs.mounts]]",
+                'kind = "tx_dd"',
+                'selector_mode = "index"',
+                "selector_index = 1",
+                "[[pcbs.mounts]]",
+                'kind = "tx_vertical"',
+                'selector_mode = "all"',
                 "",
                 "[[pcbs]]",
                 'id = "rx_main_0"',
@@ -222,7 +292,36 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
                 "position = [0.0, 0.0, 110.0]",
                 "rotation_deg = 0.0",
                 "present = [true, 1, 1, 1]",
-                'mounts = ["rx_dd:0", "rx_dd:1"]',
+                'z_mode = "absolute"',
+                "[[pcbs.mounts]]",
+                'kind = "rx_dd"',
+                'selector_mode = "index"',
+                "selector_index = 0",
+                "[[pcbs.mounts]]",
+                'kind = "rx_dd"',
+                'selector_mode = "index"',
+                "selector_index = 1",
+                "",
+                "[[pcbs]]",
+                'id = "tx_main_1"',
+                'role = "tx"',
+                "position = [0.0, 0.0, 0.0]",
+                "rotation_deg = 0.0",
+                "present = [true, 1, 1, 1]",
+                'z_mode = "relative_to_pcb"',
+                'z_relative_base_id = "tx_main_0"',
+                'z_delta_path = "pcb_spacing.tx_main_1_z_from_tx_main_0_mm"',
+                "[[pcbs.mounts]]",
+                'kind = "tx_dd"',
+                'selector_mode = "index"',
+                "selector_index = 2",
+                "[[pcbs.mounts]]",
+                'kind = "tx_dd"',
+                'selector_mode = "index"',
+                "selector_index = 3",
+                "[[pcbs.mounts]]",
+                'kind = "tx_vertical"',
+                'selector_mode = "all"',
             ]
         ),
         encoding="utf-8",
@@ -253,8 +352,13 @@ def test_run_creates_manifest_and_is_deterministic(tmp_path: Path, monkeypatch: 
     assert first["selected_group_geometry"] == second["selected_group_geometry"]
     assert first["selected_coil_groups"] == second["selected_coil_groups"]
     assert first["selected_pcbs"] == second["selected_pcbs"]
-    assert first["retry_attempt"] == 0
-    assert first["retry_count"] == 0
+    assert first["selected_parameters"]["tx_vertical_outer_x"] == first["selected_parameters"]["tx_dd_outer_x"]
+    pcbs_by_id = {pcb["id"]: pcb for pcb in first["selected_pcbs"]}
+    tx_z_delta = float(pcbs_by_id["tx_main_1"]["position"][2]) - float(pcbs_by_id["tx_main_0"]["position"][2])
+    assert tx_z_delta in (3.0, 4.75, 6.5, 8.25, 10.0)
+    assert tx_z_delta >= 3.0
+    assert first["retry_attempt"] >= 0
+    assert first["retry_count"] == first["retry_attempt"]
     assert len(first["selected_group_geometry"]) == 3
     assert {entry["kind"] for entry in first["selected_group_geometry"]} == {"tx_dd", "tx_vertical", "rx_dd"}
     assert first["manifest_path"].endswith(f"manifest_{first['design_id']}.json")
@@ -381,11 +485,11 @@ def test_legacy_trace_gap_keys_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 def test_unsupported_spec_version_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "old_spec_version.toml"
     _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.1.8"', 'spec_version = "0.1.6"', 1)
+    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.0"', 'spec_version = "0.1.6"', 1)
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("5" * 40))
 
-    with pytest.raises(ValueError, match=r"spec_version must be '0\.1\.8'"):
+    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.0'"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -408,6 +512,18 @@ def test_feasibility_constraint_blocks_infeasible_tx_vertical(tmp_path: Path) ->
     toml_path = tmp_path / "feasibility_fail.toml"
     _write_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace(
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_dd.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.tx_dd.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
     raw = raw.replace(
         "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 20, 20]",
         "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
@@ -433,7 +549,7 @@ def test_feasibility_constraint_blocks_infeasible_tx_vertical(tmp_path: Path) ->
     toml_path.write_text(raw, encoding="utf-8")
 
     spec, _ = load_toml_bytes(toml_path)
-    with pytest.raises(SelectionConstraintError, match="tx_vertical_feasible_turns_for_active_group"):
+    with pytest.raises(SelectionConstraintError, match=r"tx_vertical_turn_count_within_feasible_max|tx_vertical_feasible_turns_for_active_group"):
         resolve_selection(spec=spec, seed=2, attempt=0)
 
 
@@ -494,6 +610,10 @@ def test_repro_mode_frozen_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         lambda m: f"range = [{m.group(1)}, {m.group(2)}, {m.group(2)}, 1]",
         raw,
     )
+    raw = raw.replace(
+        "[coil_shape.tx_vertical.outer_x]\nrange = [false, -1, -1, 1]",
+        "[coil_shape.tx_vertical.outer_x]\nrange = [false, -1, -1, -1]",
+    )
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("8" * 40))
     manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=3, backend="hfss"))
@@ -507,7 +627,7 @@ def test_removed_path_errors_on_018(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     raw += "\n[coil_shape.outer_x]\nrange = [false, 10.0, 10.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("9" * 40))
-    with pytest.raises(ValueError, match="Removed path in spec_version 0.1.8"):
+    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.0"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -522,5 +642,106 @@ def test_ratio_hard_check_failure_contains_details(tmp_path: Path) -> None:
     raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 2, 2, 1]")
     toml_path.write_text(raw, encoding="utf-8")
     spec, _ = load_toml_bytes(toml_path)
-    with pytest.raises(SelectionConstraintError, match="path=coil_spacing.tx_dd_pair_spacing_ratio"):
+    with pytest.raises(SelectionConstraintError, match="Constraint tx_dd_pair_fits_region failed"):
+        resolve_selection(spec=spec, seed=1, attempt=0)
+
+
+def test_tx_main_1_relative_z_requires_spacing_path(tmp_path: Path) -> None:
+    toml_path = tmp_path / "missing_pcb_spacing.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    start = raw.index("[pcb_spacing.tx_main_1_z_from_tx_main_0_mm]")
+    end = raw.index("\n\n[constraints]")
+    toml_path.write_text(raw[:start] + raw[end + 2 :], encoding="utf-8")
+    spec, _ = load_toml_bytes(toml_path)
+    with pytest.raises(ValueError, match=r"Missing required path: pcb_spacing\.tx_main_1_z_from_tx_main_0_mm"):
+        resolve_selection(spec=spec, seed=1, attempt=0)
+
+
+def test_tx_main_1_absolute_z_rejects_relative_fields(tmp_path: Path) -> None:
+    toml_path = tmp_path / "tx_main_1_absolute_with_relative_fields.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        'z_mode = "relative_to_pcb"',
+        'z_mode = "absolute"',
+        1,
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    spec, _ = load_toml_bytes(toml_path)
+    with pytest.raises(ValueError, match=r"absolute z_mode must not set z_relative_base_id or z_delta_path"):
+        resolve_selection(spec=spec, seed=1, attempt=0)
+
+
+def test_relative_z_mode_requires_base_and_delta_path(tmp_path: Path) -> None:
+    toml_path = tmp_path / "relative_z_missing_fields.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace('z_mode = "absolute"', 'z_mode = "relative_to_pcb"', 1)
+    start = raw.index('z_relative_base_id = "tx_main_0"')
+    end = raw.index("\n[[pcbs.mounts]]", start)
+    raw = raw[:start] + raw[end + 1 :]
+    toml_path.write_text(raw, encoding="utf-8")
+    spec, _ = load_toml_bytes(toml_path)
+    with pytest.raises(ValueError, match=r"z_relative_base_id must be non-empty string"):
+        resolve_selection(spec=spec, seed=1, attempt=0)
+
+
+def test_derived_dummy_path_maps_to_tx_dd_outer_x(tmp_path: Path) -> None:
+    toml_path = tmp_path / "derived_dummy_ok.toml"
+    _write_toml(toml_path, outer_x=123.0)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.tx_vertical.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.rx_dd.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.rx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    spec, _ = load_toml_bytes(toml_path)
+    selected, _, _, _, _ = resolve_selection(spec=spec, seed=1, attempt=0)
+    assert float(selected["tx_dd_outer_x"]) == pytest.approx(123.0)
+    assert float(selected["tx_vertical_outer_x"]) == pytest.approx(123.0)
+
+
+def test_derived_path_requires_dummy_range_literal(tmp_path: Path) -> None:
+    toml_path = tmp_path / "derived_dummy_bad_literal.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        "[coil_shape.tx_vertical.outer_x]\nrange = [false, -1, -1, -1]",
+        "[coil_shape.tx_vertical.outer_x]\nrange = [false, 60.0, 60.0, 1]",
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    spec, _ = load_toml_bytes(toml_path)
+    with pytest.raises(ValueError, match=r"coil_shape\.tx_vertical\.outer_x\.range for derived path must be exactly"):
+        resolve_selection(spec=spec, seed=1, attempt=0)
+
+
+def test_non_derived_path_rejects_dummy_marker(tmp_path: Path) -> None:
+    toml_path = tmp_path / "non_derived_dummy_bad.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        "[coil_shape.rx_dd.outer_y]\nrange = [false, 80.0, 80.0, 1]",
+        "[coil_shape.rx_dd.outer_y]\nrange = [false, -1, -1, -1]",
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    spec, _ = load_toml_bytes(toml_path)
+    with pytest.raises(ValueError, match=r"coil_shape\.rx_dd\.outer_y\.range uses reserved derived marker"):
         resolve_selection(spec=spec, seed=1, attempt=0)
