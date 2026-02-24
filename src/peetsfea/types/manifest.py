@@ -18,10 +18,16 @@ class ManifestSpec(TypedDict):
 
 
 class SelectedParameters(TypedDict):
-    outer_x: float
-    outer_y: float
+    tx_dd_outer_x: float
+    tx_dd_outer_y: float
+    tx_vertical_outer_x: float
+    tx_vertical_outer_y: float
+    rx_dd_outer_x: float
+    rx_dd_outer_y: float
     inner_margin_x: float
     inner_margin_y: float
+    tx_dd_pair_spacing_ratio: float
+    rx_dd_pair_spacing_ratio: float
     tx_dd_pair_spacing_mm: float
     rx_dd_pair_spacing_mm: float
     tx_vertical_span_mm: float
@@ -106,6 +112,7 @@ class Manifest(TypedDict):
     seed: int
     retry_attempt: int
     retry_count: int
+    repro_mode: Literal["sampled_toml", "frozen_toml", "manifest_json"]
     backend: str
     selected_parameters: SelectedParameters
     selected_parameters_max: SelectedParametersMax
@@ -222,6 +229,45 @@ class SceneObjectEntry(TypedDict):
     non_model: bool
 
 
+class EmReadyObjects(TypedDict):
+    tx_conductors: list[str]
+    rx_conductors: list[str]
+    fr4_objects: list[str]
+    scene_bbox_source_objects: list[str]
+
+
+class EmEndpoints(TypedDict):
+    tx: list[GroupEndpointEntry]
+    rx: list[GroupEndpointEntry]
+
+
+class EmContext(TypedDict):
+    dd_mirror_plane: str
+    rx_plane: str
+    tx_vertical_plane: str
+    source: str
+    object_names: list[str]
+
+
+class EmPolicy(TypedDict):
+    radiation_margin_mm: float
+    setup_frequency_hz: float
+    sweep_start_hz: float
+    sweep_stop_hz: float
+    validation_gate: str
+
+
+class EmPipelineResult(TypedDict):
+    groups: dict[str, list[str]]
+    series: dict[str, list[str]]
+    subtract: dict[str, list[str]]
+    boundary: dict[str, str]
+    ports: dict[str, list[str]]
+    analysis: dict[str, float | str]
+    post_templates: list[str]
+    validation_report: dict[str, str | bool]
+
+
 class GeometryMetadata(TypedDict):
     design_id: str
     design_unique_hash: str
@@ -231,6 +277,7 @@ class GeometryMetadata(TypedDict):
     seed: int
     retry_attempt: int
     retry_count: int
+    repro_mode: Literal["sampled_toml", "frozen_toml", "manifest_json"]
     selected_parameters: SelectedParameters
     selected_parameters_max: SelectedParametersMax
     selected_group_geometry: list[GroupGeometryParams]
@@ -243,5 +290,10 @@ class GeometryMetadata(TypedDict):
     unite_groups: UniteGroups
     group_endpoints: list[GroupEndpointEntry]
     coil_polarity: list[CoilPolaritySpec]
+    em_ready_objects: EmReadyObjects
+    em_endpoints: EmEndpoints
+    em_context: EmContext
+    em_policy: EmPolicy
+    em_pipeline_result: EmPipelineResult
     scene_objects: list[SceneObjectEntry]
     debug: GeometryDebug

@@ -182,12 +182,19 @@ def _manifest(tmp_path: Path) -> Manifest:
         "seed": 1,
         "retry_attempt": 0,
         "retry_count": 0,
+        "repro_mode": "manifest_json",
         "backend": "hfss",
         "selected_parameters": {
-            "outer_x": 48.0,
-            "outer_y": 48.0,
+            "tx_dd_outer_x": 48.0,
+            "tx_dd_outer_y": 48.0,
+            "tx_vertical_outer_x": 48.0,
+            "tx_vertical_outer_y": 48.0,
+            "rx_dd_outer_x": 48.0,
+            "rx_dd_outer_y": 48.0,
             "inner_margin_x": 2.0,
             "inner_margin_y": 2.0,
+            "tx_dd_pair_spacing_ratio": 0.3,
+            "rx_dd_pair_spacing_ratio": 0.3,
             "tx_dd_pair_spacing_mm": 60.0,
             "rx_dd_pair_spacing_mm": 60.0,
             "tx_vertical_span_mm": 10.0,
@@ -289,7 +296,7 @@ def _manifest(tmp_path: Path) -> Manifest:
             "close_on_exit": True,
         },
         "spec": {
-            "spec_version": "0.1.7",
+            "spec_version": "0.1.8",
             "design_name": "square_test",
             "units": "mm",
         },
@@ -482,7 +489,7 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert len(metadata["debug"]["cad_probe"]) == 15
 
     assert len(fake.modeler.polyline_calls) == 3
-    assert fake.design_vars["spec_outer_x"] == "48.0mm"
+    assert fake.design_vars["spec_tx_dd_outer_x"] == "48.0mm"
     assert fake.design_vars["spec_fr4_er"] == "4.4"
     assert fake.design_vars["group_geom_tx_dd_turn_count_max"] == "5"
     assert fake.design_vars["pcb_tx_main_0_position_z_mm"] == "0.0mm"
@@ -607,12 +614,12 @@ def test_tx_dd_large_requested_turns_are_clipped_to_fit(tmp_path: Path, monkeypa
     expected_turns = min(
         manifest["selected_group_geometry"][0]["turn_count_max"],
         geom._max_feasible_turns(
-            manifest["selected_parameters"]["outer_x"],
+            manifest["selected_parameters"]["tx_dd_outer_x"],
             manifest["selected_group_geometry"][0]["trace"],
             manifest["selected_group_geometry"][0]["gap"],
         ),
         geom._max_feasible_turns(
-            manifest["selected_parameters"]["outer_y"],
+            manifest["selected_parameters"]["tx_dd_outer_y"],
             manifest["selected_group_geometry"][0]["trace"],
             manifest["selected_group_geometry"][0]["gap"],
         ),
@@ -687,7 +694,7 @@ def test_tx_dd_four_coils_use_two_layers_when_selected_count_four(
     region_min_y = scene_by_kind["tx_region_dd"]["origin_xyz"][1]
     region_max_y = region_min_y + scene_by_kind["tx_region_dd"]["size_xyz"][1]
     region_center_y = (region_min_y + region_max_y) / 2.0
-    outer_y = metadata["selected_parameters"]["outer_y"]
+    outer_y = metadata["selected_parameters"]["tx_dd_outer_y"]
     pair_center_distance = outer_y + 25.0
     expected_y = sorted([region_center_y - (pair_center_distance / 2.0), region_center_y + (pair_center_distance / 2.0)])
 
