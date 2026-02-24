@@ -98,6 +98,11 @@ def _map_xy_points_to_zx(points: list[list[float]], *, x_center: float, y_const:
     return [[x_center + point[0], y_const, z_center + point[1]] for point in points]
 
 
+def _mirror_xy_points_about_x_axis(points: list[list[float]]) -> list[list[float]]:
+    # Mirror around local X-axis (y -> -y) so paired DD coils have opposite winding.
+    return [[point[0], -point[1], point[2]] for point in points]
+
+
 def _bounds_from_scene_entry(entry: SceneObjectEntry) -> tuple[_Point3, _Point3]:
     ox, oy, oz = entry["origin_xyz"]
     sx, sy, sz = entry["size_xyz"]
@@ -253,6 +258,12 @@ def _build_polarity(kind: str, side: Literal["left", "right", "center"]) -> tupl
     if side == "left":
         return ("ccw", "out_of_wall")
     return ("cw", "into_wall")
+
+
+def _dd_instance_points(base_points: list[list[float]], *, mirror_winding: bool) -> list[list[float]]:
+    if not mirror_winding:
+        return base_points
+    return _mirror_xy_points_about_x_axis(base_points)
 
 
 def _create_non_model_box(
@@ -863,6 +874,7 @@ def _assign_design_variables(hfss: Hfss, manifest: Manifest) -> None:
     for geometry in manifest["selected_group_geometry"]:
         kind = geometry["kind"]
         hfss[_sanitize_var_name(f"group_geom_{kind}_turn_count_max")] = _var_expr("turn_count_max", geometry["turn_count_max"])
+        hfss[_sanitize_var_name(f"group_geom_{kind}_band_ratio")] = _var_expr("band_ratio", geometry["band_ratio"])
         hfss[_sanitize_var_name(f"group_geom_{kind}_trace_mm")] = _var_expr("trace_mm", geometry["trace"])
         hfss[_sanitize_var_name(f"group_geom_{kind}_gap_mm")] = _var_expr("gap_mm", geometry["gap"])
 
@@ -1024,9 +1036,11 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                             region_max_y=tx_dd_region_max[1],
                         )
                         off_y = tx_dd_instance_center_y - tx_dd_center_y
+                        tx_dd_local_slot = instance_index % 2
+                        tx_dd_points = _dd_instance_points(base_points, mirror_winding=(tx_dd_local_slot == 0))
                         tx_dd_anchor_z = tx_dd_region_max[2] - tx_dd_top_clearance - cu_thickness
                         top_points = _translate_points(
-                            base_points,
+                            tx_dd_points,
                             dx=tx_dd_center_x + transform["dx"],
                             dy=tx_dd_instance_center_y + transform["dy"],
                             dz=tx_dd_anchor_z - board_z + transform["dz"] + off_z,
@@ -1046,8 +1060,9 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                         rx_anchor_x = rx_region_max[0] - rx_face_clearance - cu_thickness
                         # Bottom-anchor contract: coil bottom touches RX region minimum Z.
                         rx_center_z = rx_region_min[2] + (outer_y / 2.0) + 1e-6
+                        rx_dd_points = _dd_instance_points(base_points, mirror_winding=(off_y < 0.0))
                         translated_xy = _translate_points(
-                            base_points,
+                            rx_dd_points,
                             dx=0.0,
                             dy=0.0,
                             dz=0.0,
@@ -1183,11 +1198,19 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                         }
                     )
 
-        grouped_plane_bboxes: dict[tuple[str, Literal["XY", "YZ", "ZX"]], list[float]] = {}
+        eps_len = 1e-6
+        grouped_plane_bboxes: dict[tuple[str, Literal["XY", "YZ", "ZX"], int], list[float]] = {}
         for board_id, plane, bbox in coil_plane_bboxes:
             if len(bbox) < 6:
                 continue
-            key = (board_id, plane)
+            if plane == "XY":
+                axis_center = (bbox[2] + bbox[5]) / 2.0
+            elif plane == "YZ":
+                axis_center = (bbox[0] + bbox[3]) / 2.0
+            else:  # ZX
+                axis_center = (bbox[1] + bbox[4]) / 2.0
+            layer_key = int(round(axis_center / eps_len))
+            key = (board_id, plane, layer_key)
             existing = grouped_plane_bboxes.get(key)
             if existing is None:
                 grouped_plane_bboxes[key] = list(bbox[:6])
@@ -1199,13 +1222,12 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                 existing[4] = max(existing[4], bbox[4])
                 existing[5] = max(existing[5], bbox[5])
 
-        eps_len = 1e-6
-        for (board_id, plane), bbox in grouped_plane_bboxes.items():
+        for layer_idx, ((board_id, plane, _), bbox) in enumerate(sorted(grouped_plane_bboxes.items())):
             min_x, min_y, min_z, max_x, max_y, max_z = bbox
             span_x = max(max_x - min_x, eps_len)
             span_y = max(max_y - min_y, eps_len)
             span_z = max(max_z - min_z, eps_len)
-            if plane == "XY": 
+            if plane == "XY":
                 origin = [min_x, min_y, min_z - pcb_thickness]
                 sizes = [span_x, span_y, pcb_thickness]
             elif plane == "YZ":
@@ -1215,7 +1237,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                 origin = [min_x, min_y - pcb_thickness, min_z]
                 sizes = [span_x, pcb_thickness, span_z]
 
-            substrate_name = f"fr4_{board_id}_{plane.lower()}_{design_id}"
+            substrate_name = f"fr4_{board_id}_{plane.lower()}_{layer_idx}_{design_id}"
             substrate = cast(
                 Object3d,
                 modeler.create_box(

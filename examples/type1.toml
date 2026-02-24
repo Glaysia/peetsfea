@@ -8,7 +8,7 @@
 # Numeric range convention:
 #   range = [is_integer, start, end, count]
 
-spec_version = "0.1.6"
+spec_version = "0.1.7"
 
 [design]
 units = "mm"
@@ -114,32 +114,37 @@ range = [false, 0.0, 15.0, 8]
 # Group-specific geometry free variables.
 # One key = one meaning: no shared global turns/trace/gap key across groups.
 # Geometry derives from:
-#   pitch_mm = band_thickness_mm / turn_count_max
+#   effective_outer_y =
+#     - tx_vertical: min(outer_y, tx.region.z_parts.vertical_z_mm)
+#     - tx_dd/rx_dd: outer_y
+#   base_outer = min(outer_x, effective_outer_y)
+#   band_mm  = band_ratio * base_outer
+#   pitch_mm = band_mm / turn_count_max
 #   trace_mm = pitch_mm * metal_ratio
 #   gap_mm   = pitch_mm * (1 - metal_ratio)
 # where `metal_ratio` is the metal occupancy ratio per equal pitch cell.
 # Resolver selects each path once per attempt and reuses it across internal consumers.
 # If constraints fail, deterministic retry uses attempt offset (same seed => same retry sequence).
 [coil_groups_params.tx_dd.turn_count_max]
-range = [true, 1, 20, 40]
-[coil_groups_params.tx_dd.band_thickness_mm]
-range = [false, 8.0, 48.0, 65]
+range = [true, 3, 20, 18]
+[coil_groups_params.tx_dd.band_ratio]
+range = [false, 0.1, 0.4, 25]
 [coil_groups_params.tx_dd.metal_ratio]
-range = [false, 0.15, 0.85, 71]
+range = [false, 0.15, 0.60, 25]
 
 [coil_groups_params.tx_vertical.turn_count_max]
-range = [true, 1, 20, 40]
-[coil_groups_params.tx_vertical.band_thickness_mm]
-range = [false, 8.0, 48.0, 65]
+range = [true, 3, 20, 18]
+[coil_groups_params.tx_vertical.band_ratio]
+range = [false, 0.1, 0.4, 25]
 [coil_groups_params.tx_vertical.metal_ratio]
-range = [false, 0.15, 0.85, 71]
+range = [false, 0.15, 0.60, 25]
 
 [coil_groups_params.rx_dd.turn_count_max]
-range = [true, 1, 20, 20]
-[coil_groups_params.rx_dd.band_thickness_mm]
-range = [false, 8.0, 44.0, 65]
+range = [true, 3, 20, 18]
+[coil_groups_params.rx_dd.band_ratio]
+range = [false, 0.1, 0.4, 25]
 [coil_groups_params.rx_dd.metal_ratio]
-range = [false, 0.15, 0.85, 71]
+range = [false, 0.15, 0.60, 25]
 
 # ----------------------------------------------------------------------------
 # Lifted fixed design values (count=1 for TOML SSOT contract)
@@ -330,6 +335,33 @@ message = "TX coil outer_x must be < tx.region.outer_w_mm"
 lhs = { path = "outer_x" }
 op = "<"
 rhs = { path = "tx_region_outer_w_mm" }
+
+# Geometry feasibility gate: active tx_vertical groups must fit at least one turn.
+[[constraints.rules]]
+id = "tx_vertical_feasible_turns_for_active_group"
+kind = "comparison"
+message = "tx_vertical active group must support >=1 feasible turn in capped vertical zone"
+lhs = { func = "feasible_turns(tx_vertical,outer_x,outer_y,tx_region_vertical_z_mm)" }
+op = ">="
+rhs = { func = "active_group(tx_vertical)" }
+
+# Geometry feasibility gate: active tx_dd groups must fit at least one turn.
+[[constraints.rules]]
+id = "tx_dd_feasible_turns_for_active_group"
+kind = "comparison"
+message = "tx_dd active group must support >=1 feasible turn"
+lhs = { func = "feasible_turns(tx_dd,outer_x,outer_y,outer_y)" }
+op = ">="
+rhs = { func = "active_group(tx_dd)" }
+
+# Geometry feasibility gate: active rx_dd groups must fit at least one turn.
+[[constraints.rules]]
+id = "rx_dd_feasible_turns_for_active_group"
+kind = "comparison"
+message = "rx_dd active group must support >=1 feasible turn"
+lhs = { func = "feasible_turns(rx_dd,outer_x,outer_y,outer_y)" }
+op = ">="
+rhs = { func = "active_group(rx_dd)" }
 
 # Aggregate bound: total selected coils capped at 10 for supported scene complexity.
 [[constraints.rules]]

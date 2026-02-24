@@ -25,7 +25,7 @@ from peetsfea.types.manifest import (
 
 
 MAX_ATTEMPTS = 64
-SUPPORTED_SPEC_VERSION = "0.1.6"
+SUPPORTED_SPEC_VERSION = "0.1.7"
 
 
 @dataclass(frozen=True)

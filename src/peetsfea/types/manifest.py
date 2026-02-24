@@ -82,7 +82,7 @@ class ResolvedCoilGroup(TypedDict):
 class GroupGeometryParams(TypedDict):
     kind: Literal["tx_dd", "tx_vertical", "rx_dd"]
     turn_count_max: int
-    band_thickness_mm: float
+    band_ratio: float
     metal_ratio: float
     trace: float
     gap: float

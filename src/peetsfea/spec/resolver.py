@@ -170,26 +170,32 @@ def _parse_string_value_at_path(root: TOMLTable, dotted_path: str, *, allowed: s
     return raw_value
 
 
-def _resolve_group_geometry(spec: TOMLTable, seed: int, attempt: int, context: SamplingContext) -> list[GroupGeometryParams]:
+def _resolve_group_geometry(
+    spec: TOMLTable,
+    seed: int,
+    attempt: int,
+    context: SamplingContext,
+    selected_params: SelectedParameters,
+) -> list[GroupGeometryParams]:
     groups_table = require_table(spec.get("coil_groups_params"), "coil_groups_params")
     required_kinds = set(GROUP_KIND_ORDER)
     if set(groups_table.keys()) != required_kinds:
         raise ValueError("coil_groups_params must contain exactly {tx_dd, tx_vertical, rx_dd}")
 
-    selected: list[GroupGeometryParams] = []
+    selected_geometry: list[GroupGeometryParams] = []
     for idx, kind in enumerate(GROUP_KIND_ORDER):
         kind_root = f"coil_groups_params.{kind}"
         kind_table = require_table(groups_table.get(kind), kind_root)
-        if set(kind_table.keys()) != {"turn_count_max", "band_thickness_mm", "metal_ratio"}:
-            raise ValueError(f"{kind_root} must contain only ['turn_count_max', 'band_thickness_mm', 'metal_ratio']")
+        if set(kind_table.keys()) != {"turn_count_max", "band_ratio", "metal_ratio"}:
+            raise ValueError(f"{kind_root} must contain only ['turn_count_max', 'band_ratio', 'metal_ratio']")
 
         offset = GROUP_GEOMETRY_OFFSET_BASE + (idx * 10)
         turns = _select_range_value(
             spec, f"{kind_root}.turn_count_max", expect_integer=True, seed=seed, offset=offset, attempt=attempt, context=context
         )
-        band_thickness_mm = _select_range_value(
+        band_ratio = _select_range_value(
             spec,
-            f"{kind_root}.band_thickness_mm",
+            f"{kind_root}.band_ratio",
             expect_integer=False,
             seed=seed,
             offset=offset + 1,
@@ -206,32 +212,39 @@ def _resolve_group_geometry(spec: TOMLTable, seed: int, attempt: int, context: S
             context=context,
         )
         n_turns = int(turns)
-        band = float(band_thickness_mm)
+        band_ratio_float = float(band_ratio)
         ratio = float(metal_ratio)
         if n_turns < 1:
             raise ValueError(f"{kind_root}.turn_count_max must be >= 1")
-        if band <= 0:
-            raise ValueError(f"{kind_root}.band_thickness_mm must be > 0")
+        if band_ratio_float <= 0 or band_ratio_float >= 1:
+            raise ValueError(f"{kind_root}.band_ratio must be > 0 and < 1")
         if ratio <= 0 or ratio >= 1:
             raise ValueError(f"{kind_root}.metal_ratio must be > 0 and < 1")
-        pitch = band / float(n_turns)
+        outer_x = float(selected_params["outer_x"])
+        outer_y = float(selected_params["outer_y"])
+        effective_outer_y = min(outer_y, float(selected_params["tx_region_vertical_z_mm"])) if kind == "tx_vertical" else outer_y
+        base_outer = min(outer_x, effective_outer_y)
+        if base_outer <= 0:
+            raise ValueError(f"{kind_root}.base_outer (derived) must be > 0")
+        band_mm = band_ratio_float * base_outer
+        pitch = band_mm / float(n_turns)
         trace = pitch * ratio
         gap = pitch * (1.0 - ratio)
         if trace <= 0:
             raise ValueError(f"{kind_root}.trace (derived) must be > 0")
         if gap < 0:
             raise ValueError(f"{kind_root}.gap (derived) must be >= 0")
-        selected.append(
+        selected_geometry.append(
             {
                 "kind": cast(Literal["tx_dd", "tx_vertical", "rx_dd"], kind),
                 "turn_count_max": n_turns,
-                "band_thickness_mm": band,
+                "band_ratio": band_ratio_float,
                 "metal_ratio": ratio,
                 "trace": trace,
                 "gap": gap,
             }
         )
-    return selected
+    return selected_geometry
 
 
 def _parse_group_transforms(group: TOMLTable, field_name: str) -> list[dict[str, float]]:
@@ -491,14 +504,19 @@ class FuncRef(TypedDict):
     func: str
 
 
+ComparableRef: TypeAlias = PathRef | FuncRef
+OperandRef: TypeAlias = PathRef | ValueRef | FuncRef
+GroupKind: TypeAlias = Literal["tx_dd", "tx_vertical", "rx_dd"]
+
+
 class ComparisonRule(TypedDict):
     id: str
     kind: Literal["comparison"]
     message: str
     enabled: bool
-    lhs: PathRef
+    lhs: ComparableRef
     op: Literal["<", "<=", ">", ">=", "=="]
-    rhs: PathRef | ValueRef | FuncRef
+    rhs: OperandRef
 
 
 class RangeRule(TypedDict):
@@ -550,7 +568,19 @@ def _parse_value_ref(value: TOMLValue, dotted_path: str) -> ValueRef:
     raise ValueError(f"{dotted_path}.value must be number|string")
 
 
-def _parse_rhs_ref(value: TOMLValue, dotted_path: str) -> PathRef | ValueRef | FuncRef:
+def _parse_comparable_ref(value: TOMLValue, dotted_path: str) -> ComparableRef:
+    table = require_table(value, dotted_path)
+    if set(table.keys()) != {"path"} and set(table.keys()) != {"func"}:
+        raise ValueError(f"{dotted_path} must have exactly one of ['path'], ['func']")
+    if "path" in table:
+        return _parse_path_ref(value, dotted_path)
+    raw_func = table.get("func")
+    if not isinstance(raw_func, str) or raw_func == "":
+        raise ValueError(f"{dotted_path}.func must be non-empty string")
+    return {"func": raw_func}
+
+
+def _parse_rhs_ref(value: TOMLValue, dotted_path: str) -> OperandRef:
     table = require_table(value, dotted_path)
     if set(table.keys()) != {"path"} and set(table.keys()) != {"value"} and set(table.keys()) != {"func"}:
         raise ValueError(f"{dotted_path} must have exactly one of ['path'], ['value'], ['func']")
@@ -594,7 +624,7 @@ def _parse_rule(raw_rule: TOMLValue, idx: int) -> ConstraintRule:
         if op not in ("<", "<=", ">", ">=", "=="):
             raise ValueError(f"{dotted}.op must be one of ['<','<=','>','>=','==']")
         op_lit = cast(Literal["<", "<=", ">", ">=", "=="], op)
-        lhs = _parse_path_ref(table["lhs"], f"{dotted}.lhs")
+        lhs = _parse_comparable_ref(table["lhs"], f"{dotted}.lhs")
         rhs = _parse_rhs_ref(table["rhs"], f"{dotted}.rhs")
         return {"id": raw_id, "kind": "comparison", "message": raw_message, "enabled": enabled, "lhs": lhs, "op": op_lit, "rhs": rhs}
 
@@ -685,13 +715,62 @@ def _compare(lhs: float | str, rhs: float | str, op: Literal["<", "<=", ">", ">=
     return False
 
 
-def _resolve_selected_numeric_path(selected: SelectedParameters, path: str) -> float:
+def _max_feasible_turns(outer: float, trace: float, gap: float) -> int:
+    pitch = trace + gap
+    if pitch <= 0:
+        return 0
+    raw = (outer + (2.0 * gap)) / (2.0 * pitch)
+    return max(0, int(math.floor(raw - 1e-12)))
+
+
+def _parse_group_kind(text: str, *, field_name: str) -> GroupKind:
+    if text not in GROUP_KIND_ORDER:
+        raise ValueError(f"{field_name} must be one of {list(GROUP_KIND_ORDER)}")
+    return cast(GroupKind, text)
+
+
+def _resolve_selected_numeric_path(
+    selected: SelectedParameters,
+    group_geometry_by_kind: dict[GroupKind, GroupGeometryParams],
+    coil_groups_by_kind: dict[GroupKind, ResolvedCoilGroup],
+    path: str,
+) -> float:
     if path == "tx_region_leftover_z_mm":
         return (
             float(selected["tx_region_thickness_mm"])
             - float(selected["tx_region_vertical_z_mm"])
             - float(selected["tx_region_dd_z_mm"])
         )
+    if path.startswith("selected_group_geometry."):
+        parts = path.split(".")
+        if len(parts) != 3:
+            raise ValueError(f"Unknown constraint path: {path}")
+        kind = _parse_group_kind(parts[1], field_name="selected_group_geometry kind")
+        field = parts[2]
+        group = group_geometry_by_kind.get(kind)
+        if group is None:
+            raise ValueError(f"Unknown selected_group_geometry kind: {kind}")
+        raw = group.get(field)
+        if raw is None:
+            raise ValueError(f"Unknown constraint path: {path}")
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            raise ValueError(f"Constraint path '{path}' is not numeric")
+        return float(raw)
+    if path.startswith("selected_coil_groups."):
+        parts = path.split(".")
+        if len(parts) != 3:
+            raise ValueError(f"Unknown constraint path: {path}")
+        kind = _parse_group_kind(parts[1], field_name="selected_coil_groups kind")
+        field = parts[2]
+        group = coil_groups_by_kind.get(kind)
+        if group is None:
+            raise ValueError(f"Unknown selected_coil_groups kind: {kind}")
+        raw = group.get(field)
+        if raw is None:
+            raise ValueError(f"Unknown constraint path: {path}")
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            raise ValueError(f"Constraint path '{path}' is not numeric")
+        return float(raw)
     value = selected.get(path)
     if value is None:
         raise ValueError(f"Unknown constraint path: {path}")
@@ -700,9 +779,16 @@ def _resolve_selected_numeric_path(selected: SelectedParameters, path: str) -> f
     return float(value)
 
 
-def _resolve_selected_comparable_path(selected: SelectedParameters, path: str) -> float | str:
+def _resolve_selected_comparable_path(
+    selected: SelectedParameters,
+    group_geometry_by_kind: dict[GroupKind, GroupGeometryParams],
+    coil_groups_by_kind: dict[GroupKind, ResolvedCoilGroup],
+    path: str,
+) -> float | str:
     if path == "tx_region_leftover_z_mm":
-        return _resolve_selected_numeric_path(selected, path)
+        return _resolve_selected_numeric_path(selected, group_geometry_by_kind, coil_groups_by_kind, path)
+    if path.startswith("selected_group_geometry.") or path.startswith("selected_coil_groups."):
+        return _resolve_selected_numeric_path(selected, group_geometry_by_kind, coil_groups_by_kind, path)
     value = selected.get(path)
     if value is None:
         raise ValueError(f"Unknown constraint path: {path}")
@@ -713,44 +799,148 @@ def _resolve_selected_comparable_path(selected: SelectedParameters, path: str) -
     raise ValueError(f"Constraint path '{path}' is not comparable")
 
 
-def _resolve_value_ref(selected: SelectedParameters, value_ref: PathRef | ValueRef | FuncRef) -> float | str:
-    if "path" in value_ref:
-        path_ref = cast(PathRef, value_ref)
-        return _resolve_selected_comparable_path(selected, path_ref["path"])
-    if "value" in value_ref:
-        scalar_ref = cast(ValueRef, value_ref)
-        return scalar_ref["value"]
-    func_ref = cast(FuncRef, value_ref)
-    func_text = func_ref["func"]
-    if func_text.startswith("min(") and func_text.endswith(")"):
-        body = func_text[4:-1]
-        parts = [part.strip() for part in body.split(",")]
+def _parse_func_call(func_text: str) -> tuple[str, list[str]]:
+    if not func_text.endswith(")") or "(" not in func_text:
+        raise ValueError("rhs.func must be a call expression like name(arg,...)")
+    open_idx = func_text.find("(")
+    name = func_text[:open_idx].strip()
+    body = func_text[open_idx + 1 : -1]
+    parts = [part.strip() for part in body.split(",")] if body.strip() else []
+    if name == "":
+        raise ValueError("rhs.func function name cannot be empty")
+    return name, parts
+
+
+def _resolve_func_ref(
+    *,
+    selected: SelectedParameters,
+    group_geometry_by_kind: dict[GroupKind, GroupGeometryParams],
+    coil_groups_by_kind: dict[GroupKind, ResolvedCoilGroup],
+    func_text: str,
+) -> tuple[float, str | None]:
+    name, parts = _parse_func_call(func_text)
+    if name == "min":
         if len(parts) != 2 or any(part == "" for part in parts):
             raise ValueError("rhs.func min() must have 2 path arguments")
-        return min(_resolve_selected_numeric_path(selected, parts[0]), _resolve_selected_numeric_path(selected, parts[1]))
-    if func_text.startswith("sub(") and func_text.endswith(")"):
-        body = func_text[4:-1]
-        parts = [part.strip() for part in body.split(",")]
+        return min(
+            _resolve_selected_numeric_path(selected, group_geometry_by_kind, coil_groups_by_kind, parts[0]),
+            _resolve_selected_numeric_path(selected, group_geometry_by_kind, coil_groups_by_kind, parts[1]),
+        ), None
+    if name == "sub":
         if len(parts) != 3 or any(part == "" for part in parts):
             raise ValueError("rhs.func sub() must have 3 path arguments")
-        return _resolve_selected_numeric_path(selected, parts[0]) - _resolve_selected_numeric_path(selected, parts[1]) - _resolve_selected_numeric_path(selected, parts[2])
-    raise ValueError("rhs.func supports only min(path_a,path_b) and sub(path_a,path_b,path_c)")
+        return (
+            _resolve_selected_numeric_path(selected, group_geometry_by_kind, coil_groups_by_kind, parts[0])
+            - _resolve_selected_numeric_path(selected, group_geometry_by_kind, coil_groups_by_kind, parts[1])
+            - _resolve_selected_numeric_path(selected, group_geometry_by_kind, coil_groups_by_kind, parts[2])
+        ), None
+    if name == "active_group":
+        if len(parts) != 1 or parts[0] == "":
+            raise ValueError("rhs.func active_group() must have 1 group kind argument")
+        kind = _parse_group_kind(parts[0], field_name="active_group kind")
+        group = coil_groups_by_kind.get(kind)
+        if group is None:
+            raise ValueError(f"active_group unknown kind: {kind}")
+        return (1.0 if int(group["selected_count"]) > 0 else 0.0), None
+    if name == "feasible_turns":
+        if len(parts) != 4 or any(part == "" for part in parts):
+            raise ValueError(
+                "rhs.func feasible_turns() must have 4 arguments: "
+                "kind, outer_x_path, outer_y_path, outer_cap_y_path"
+            )
+        kind = _parse_group_kind(parts[0], field_name="feasible_turns kind")
+        group_geometry = group_geometry_by_kind.get(kind)
+        if group_geometry is None:
+            raise ValueError(f"feasible_turns unknown geometry kind: {kind}")
+        turns = int(group_geometry["turn_count_max"])
+        trace = float(group_geometry["trace"])
+        gap = float(group_geometry["gap"])
+        outer_x = _resolve_selected_numeric_path(selected, group_geometry_by_kind, coil_groups_by_kind, parts[1])
+        outer_y = _resolve_selected_numeric_path(selected, group_geometry_by_kind, coil_groups_by_kind, parts[2])
+        cap_y = _resolve_selected_numeric_path(selected, group_geometry_by_kind, coil_groups_by_kind, parts[3])
+        available_outer_y = min(outer_y, cap_y)
+        feasible_turns = min(
+            turns,
+            _max_feasible_turns(outer_x, trace, gap),
+            _max_feasible_turns(available_outer_y, trace, gap),
+        )
+        debug = (
+            f"func=feasible_turns kind={kind} turns={turns} trace={trace} gap={gap} "
+            f"outer_x={outer_x} outer_y={outer_y} cap_y={cap_y} available_outer_y={available_outer_y} "
+            f"feasible_turns={feasible_turns}"
+        )
+        return float(feasible_turns), debug
+    raise ValueError(
+        "rhs.func supports only "
+        "min(path_a,path_b), sub(path_a,path_b,path_c), active_group(kind), "
+        "feasible_turns(kind,outer_x_path,outer_y_path,outer_cap_y_path)"
+    )
 
 
-def _evaluate_constraints(rules: list[ConstraintRule], selected: SelectedParameters, coil_groups: list[ResolvedCoilGroup]) -> None:
+def _resolve_operand_ref(
+    *,
+    selected: SelectedParameters,
+    group_geometry_by_kind: dict[GroupKind, GroupGeometryParams],
+    coil_groups_by_kind: dict[GroupKind, ResolvedCoilGroup],
+    value_ref: OperandRef | ComparableRef,
+) -> tuple[float | str, str | None]:
+    if "path" in value_ref:
+        path_ref = cast(PathRef, value_ref)
+        return (
+            _resolve_selected_comparable_path(selected, group_geometry_by_kind, coil_groups_by_kind, path_ref["path"]),
+            None,
+        )
+    if "value" in value_ref:
+        scalar_ref = cast(ValueRef, value_ref)
+        return scalar_ref["value"], None
+    func_ref = cast(FuncRef, value_ref)
+    return _resolve_func_ref(
+        selected=selected,
+        group_geometry_by_kind=group_geometry_by_kind,
+        coil_groups_by_kind=coil_groups_by_kind,
+        func_text=func_ref["func"],
+    )
+
+
+def _evaluate_constraints(
+    rules: list[ConstraintRule],
+    selected: SelectedParameters,
+    coil_groups: list[ResolvedCoilGroup],
+    group_geometry: list[GroupGeometryParams],
+) -> None:
+    group_geometry_by_kind: dict[GroupKind, GroupGeometryParams] = {entry["kind"]: entry for entry in group_geometry}
+    coil_groups_by_kind: dict[GroupKind, ResolvedCoilGroup] = {entry["kind"]: entry for entry in coil_groups}
     for rule in rules:
         if not rule["enabled"]:
             continue
         if rule["kind"] == "comparison":
-            lhs_value = _resolve_selected_comparable_path(selected, rule["lhs"]["path"])
-            rhs_value = _resolve_value_ref(selected, rule["rhs"])
+            lhs_value, lhs_debug = _resolve_operand_ref(
+                selected=selected,
+                group_geometry_by_kind=group_geometry_by_kind,
+                coil_groups_by_kind=coil_groups_by_kind,
+                value_ref=rule["lhs"],
+            )
+            rhs_value, rhs_debug = _resolve_operand_ref(
+                selected=selected,
+                group_geometry_by_kind=group_geometry_by_kind,
+                coil_groups_by_kind=coil_groups_by_kind,
+                value_ref=rule["rhs"],
+            )
             if not _compare(lhs_value, rhs_value, rule["op"]):
+                extra_parts = [part for part in (lhs_debug, rhs_debug) if part is not None]
+                extra_debug = f", debug=({' | '.join(extra_parts)})" if extra_parts else ""
                 raise SelectionConstraintError(
-                    f"Constraint {rule['id']} failed: {rule['message']} (lhs={lhs_value}, rhs={rhs_value})"
+                    f"Constraint {rule['id']} failed: {rule['message']} "
+                    f"(lhs={lhs_value}, rhs={rhs_value}{extra_debug})"
                 )
             continue
         if rule["kind"] == "range":
-            target_value = _resolve_selected_numeric_path(selected, rule["target"]["path"])
+            target_value = _resolve_selected_numeric_path(
+                selected,
+                group_geometry_by_kind,
+                coil_groups_by_kind,
+                rule["target"]["path"],
+            )
             if rule["min"] is not None:
                 min_value = float(rule["min"]["value"])
                 min_ok = target_value >= min_value if rule["inclusive_min"] else target_value > min_value
@@ -774,9 +964,14 @@ def _evaluate_constraints(rules: list[ConstraintRule], selected: SelectedParamet
             )
 
 
-def _validate_constraints(spec: TOMLTable, selected: SelectedParameters, coil_groups: list[ResolvedCoilGroup]) -> None:
+def _validate_constraints(
+    spec: TOMLTable,
+    selected: SelectedParameters,
+    coil_groups: list[ResolvedCoilGroup],
+    group_geometry: list[GroupGeometryParams],
+) -> None:
     rules = _parse_constraints(spec)
-    _evaluate_constraints(rules, selected, coil_groups)
+    _evaluate_constraints(rules, selected, coil_groups, group_geometry)
 
 
 def _resolve_selection(
@@ -843,10 +1038,10 @@ def _resolve_selection(
         "rx_region_thickness_mm": float(raw_max["rx_region_thickness_mm"]),
     }
     groups = _resolve_coil_groups(spec, seed, attempt, selected, context)
-    group_geometry = _resolve_group_geometry(spec, seed, attempt, context)
+    group_geometry = _resolve_group_geometry(spec, seed, attempt, context, selected)
     pcbs = _resolve_pcbs(spec, seed, attempt, context)
     _validate_mounts(groups, pcbs)
-    _validate_constraints(spec, selected, groups)
+    _validate_constraints(spec, selected, groups, group_geometry)
     return selected, selected_max, groups, group_geometry, pcbs
 
 

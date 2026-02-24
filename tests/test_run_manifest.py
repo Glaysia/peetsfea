@@ -6,13 +6,15 @@ import re
 import pytest
 
 import peetsfea.pipeline.run_design as runner
+from peetsfea.spec.loader import load_toml_bytes
+from peetsfea.spec.resolver import SelectionConstraintError, resolve_selection
 
 
 def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.0, outer_y: float = 120.0) -> None:
     path.write_text(
         "\n".join(
             [
-                'spec_version = "0.1.6"',
+                'spec_version = "0.1.7"',
                 "",
                 "[design]",
                 'units = "mm"',
@@ -78,22 +80,22 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
                 "",
                 "[coil_groups_params.tx_dd.turn_count_max]",
                 "range = [true, 1, 20, 20]",
-                "[coil_groups_params.tx_dd.band_thickness_mm]",
-                "range = [false, 8.0, 48.0, 65]",
+                "[coil_groups_params.tx_dd.band_ratio]",
+                "range = [false, 0.1, 0.9, 81]",
                 "[coil_groups_params.tx_dd.metal_ratio]",
                 "range = [false, 0.15, 0.85, 71]",
                 "",
                 "[coil_groups_params.tx_vertical.turn_count_max]",
                 "range = [true, 1, 20, 20]",
-                "[coil_groups_params.tx_vertical.band_thickness_mm]",
-                "range = [false, 8.0, 48.0, 65]",
+                "[coil_groups_params.tx_vertical.band_ratio]",
+                "range = [false, 0.1, 0.9, 81]",
                 "[coil_groups_params.tx_vertical.metal_ratio]",
                 "range = [false, 0.15, 0.85, 71]",
                 "",
                 "[coil_groups_params.rx_dd.turn_count_max]",
                 "range = [true, 1, 20, 20]",
-                "[coil_groups_params.rx_dd.band_thickness_mm]",
-                "range = [false, 8.0, 44.0, 65]",
+                "[coil_groups_params.rx_dd.band_ratio]",
+                "range = [false, 0.1, 0.9, 81]",
                 "[coil_groups_params.rx_dd.metal_ratio]",
                 "range = [false, 0.15, 0.85, 71]",
                 "",
@@ -341,17 +343,17 @@ def test_invalid_metal_ratio_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
-def test_invalid_band_thickness_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "bad_band_thickness.toml"
+def test_invalid_band_ratio_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "bad_band_ratio.toml"
     _write_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8").replace(
-        "[coil_groups_params.tx_dd.band_thickness_mm]\nrange = [false, 8.0, 48.0, 65]",
-        "[coil_groups_params.tx_dd.band_thickness_mm]\nrange = [false, 0.0, 0.0, 1]",
+        "[coil_groups_params.tx_dd.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.tx_dd.band_ratio]\nrange = [false, 0.0, 0.0, 1]",
     )
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("6" * 40))
 
-    with pytest.raises(ValueError, match=r"coil_groups_params\.tx_dd\.band_thickness_mm must be > 0"):
+    with pytest.raises(ValueError, match=r"coil_groups_params\.tx_dd\.band_ratio must be > 0 and < 1"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -359,7 +361,7 @@ def test_legacy_trace_gap_keys_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     toml_path = tmp_path / "legacy_trace_gap.toml"
     _write_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8")
-    raw = raw.replace("[coil_groups_params.tx_dd.band_thickness_mm]", "[coil_groups_params.tx_dd.trace]", 1)
+    raw = raw.replace("[coil_groups_params.tx_dd.band_ratio]", "[coil_groups_params.tx_dd.trace]", 1)
     raw = raw.replace("[coil_groups_params.tx_dd.metal_ratio]", "[coil_groups_params.tx_dd.gap]", 1)
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("4" * 40))
@@ -371,11 +373,11 @@ def test_legacy_trace_gap_keys_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 def test_unsupported_spec_version_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "old_spec_version.toml"
     _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.1.6"', 'spec_version = "0.1.6"', 1)
+    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.1.7"', 'spec_version = "0.1.6"', 1)
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("5" * 40))
 
-    with pytest.raises(ValueError, match=r"spec_version must be '0\.1\.6'"):
+    with pytest.raises(ValueError, match=r"spec_version must be '0\.1\.7'"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -392,3 +394,76 @@ def test_retry_attempt_advances_until_constraint_satisfied(tmp_path: Path, monke
     manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
     assert manifest["retry_attempt"] > 0
     assert manifest["retry_count"] == manifest["retry_attempt"]
+
+
+def test_feasibility_constraint_blocks_infeasible_tx_vertical(tmp_path: Path) -> None:
+    toml_path = tmp_path / "feasibility_fail.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.tx_vertical.band_ratio]\nrange = [false, 0.9, 0.9, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.85, 0.85, 1]",
+    )
+    raw = raw.replace("count_range = [true, 0, 4, 5]", "count_range = [true, 1, 1, 1]")
+    raw += (
+        "\n[[constraints.rules]]\n"
+        "id = \"tx_vertical_feasible_turns_for_active_group\"\n"
+        "kind = \"comparison\"\n"
+        "message = \"tx_vertical active group must support >=1 feasible turn in capped vertical zone\"\n"
+        "lhs = { func = \"feasible_turns(tx_vertical,outer_x,outer_y,tx_region_vertical_z_mm)\" }\n"
+        "op = \">=\"\n"
+        "rhs = { func = \"active_group(tx_vertical)\" }\n"
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+
+    spec, _ = load_toml_bytes(toml_path)
+    with pytest.raises(SelectionConstraintError, match="tx_vertical_feasible_turns_for_active_group"):
+        resolve_selection(spec=spec, seed=2, attempt=0)
+
+
+def test_feasibility_constraint_allows_retry_to_find_valid_case(tmp_path: Path) -> None:
+    toml_path = tmp_path / "feasibility_retry.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.tx_vertical.band_ratio]\nrange = [false, 0.2, 0.9, 2]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.85, 0.85, 1]",
+    )
+    raw = raw.replace("count_range = [true, 0, 4, 5]", "count_range = [true, 1, 1, 1]")
+    raw += (
+        "\n[[constraints.rules]]\n"
+        "id = \"tx_vertical_feasible_turns_for_active_group\"\n"
+        "kind = \"comparison\"\n"
+        "message = \"tx_vertical active group must support >=1 feasible turn in capped vertical zone\"\n"
+        "lhs = { func = \"feasible_turns(tx_vertical,outer_x,outer_y,tx_region_vertical_z_mm)\" }\n"
+        "op = \">=\"\n"
+        "rhs = { func = \"active_group(tx_vertical)\" }\n"
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+
+    spec, _ = load_toml_bytes(toml_path)
+    with pytest.raises(SelectionConstraintError):
+        resolve_selection(spec=spec, seed=2, attempt=0)
+
+    selected, _, groups, geometries, _ = resolve_selection(spec=spec, seed=2, attempt=1)
+    groups_by_kind = {group["kind"]: group for group in groups}
+    assert int(groups_by_kind["tx_vertical"]["selected_count"]) == 1
+    geom_by_kind = {geom["kind"]: geom for geom in geometries}
+    assert float(geom_by_kind["tx_vertical"]["band_ratio"]) == pytest.approx(0.2)
+    assert float(selected["tx_region_vertical_z_mm"]) > 0.0

@@ -133,9 +133,12 @@ python run.py
   - `rx_dd_pair_spacing_mm`: Y축 RX DD 페어의 edge-to-edge gap(mm)
 - 그룹별 자유변수는 `[coil_groups_params.<kind>]` 아래에서 독립 정의한다.
   - 고정 그룹 키: `tx_dd`, `tx_vertical`, `rx_dd`
-  - 각 그룹은 `turn_count_max`, `band_thickness_mm`, `metal_ratio`를 각각 별도 range로 가진다.
+  - 각 그룹은 `turn_count_max`, `band_ratio`, `metal_ratio`를 각각 별도 range로 가진다.
   - `trace/gap`는 입력값이 아니라 파생값이다.
-    - `pitch_mm = band_thickness_mm / turn_count_max`
+    - `effective_outer_y = min(outer_y, tx_region_vertical_z_mm)` for `tx_vertical`, else `outer_y`
+    - `base_outer = min(outer_x, effective_outer_y)`
+    - `band_mm = band_ratio * base_outer`
+    - `pitch_mm = band_mm / turn_count_max`
     - `trace = pitch_mm * metal_ratio`
     - `gap = pitch_mm * (1 - metal_ratio)`
   - 동일 TOML+seed면 그룹별 선택값(`selected_group_geometry`)도 결정론적으로 동일하다.
@@ -143,7 +146,7 @@ python run.py
   - `kind = "comparison"`: `lhs.path`와 `rhs.path|rhs.value|rhs.func`를 `op`로 비교
   - `kind = "range"`: `target.path`를 `min/max`로 범위 제한
   - `kind = "aggregate"`: 현재는 `agg = "sum_group_selected_count"` 지원
-  - `rhs.func`는 `min(path_a,path_b)`, `sub(path_a,path_b,path_c)`만 지원
+  - `rhs.func`는 `min(...)`, `sub(...)`, `active_group(kind)`, `feasible_turns(kind,outer_x_path,outer_y_path,outer_cap_y_path)`를 지원
   - `constraints.rules`는 필수이며 누락/빈 값이면 실행 전 실패한다.
   - 목적은 GA/딥러닝 샘플러가 동일 TOML 제약을 사전 필터에 재사용하는 것이다.
 - 하드코딩 설계값은 TOML로 승격 중이며, 1차로 다음 섹션이 추가됐다.

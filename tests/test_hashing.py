@@ -55,9 +55,9 @@ def _selected_parameters() -> SelectedParameters:
 
 def _selected_group_geometry() -> list[GroupGeometryParams]:
     return [
-        {"kind": "tx_dd", "turn_count_max": 6, "band_thickness_mm": 9.0, "metal_ratio": 2.0 / 3.0, "trace": 1.0, "gap": 0.5},
-        {"kind": "tx_vertical", "turn_count_max": 4, "band_thickness_mm": 5.2, "metal_ratio": 0.9 / 1.3, "trace": 0.9, "gap": 0.4},
-        {"kind": "rx_dd", "turn_count_max": 7, "band_thickness_mm": 9.8, "metal_ratio": 1.1 / 1.4, "trace": 1.1, "gap": 0.3},
+        {"kind": "tx_dd", "turn_count_max": 6, "band_ratio": 0.3, "metal_ratio": 2.0 / 3.0, "trace": 1.0, "gap": 0.5},
+        {"kind": "tx_vertical", "turn_count_max": 4, "band_ratio": 0.25, "metal_ratio": 0.9 / 1.3, "trace": 0.9, "gap": 0.4},
+        {"kind": "rx_dd", "turn_count_max": 7, "band_ratio": 0.35, "metal_ratio": 1.1 / 1.4, "trace": 1.1, "gap": 0.3},
     ]
 
 
