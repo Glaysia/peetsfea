@@ -131,6 +131,13 @@ python run.py
 - 기본 TOML 예시: `examples/type1.toml` (grouped 구조)
   - `coil_shape.tx_dd|tx_vertical|rx_dd.outer_x/outer_y`: 그룹별 코일 외곽 치수
   - `tx_dd_pair_spacing_mm`, `rx_dd_pair_spacing_mm`는 ratio에서 파생되는 내부 추적값
+  - 파생 변수 더미 표기: `range = [false, -1, -1, -1]`
+    - 더미 표기를 사용하는 경로는 샘플링하지 않고 코드에서 파생해야 한다.
+    - 현재 매핑: `coil_shape.tx_vertical.outer_x -> coil_shape.tx_dd.outer_x`
+  - PCB Z 파생 규칙:
+    - `pcbs[].z_mode`는 `absolute | relative_to_pcb`를 사용한다.
+    - `relative_to_pcb`일 때 최종 z는 `<base>.z + sample(z_delta_path)`로 파생한다.
+    - 기본 예시: `tx_main_1`은 `z_relative_base_id="tx_main_0"`, `z_delta_path="pcb_spacing.tx_main_1_z_from_tx_main_0_mm"`.
 - 그룹별 자유변수는 `[coil_groups_params.<kind>]` 아래에서 독립 정의한다.
   - 고정 그룹 키: `tx_dd`, `tx_vertical`, `rx_dd`
   - 각 그룹은 `turn_count_max`, `band_ratio`, `metal_ratio`를 각각 별도 range로 가진다.
@@ -146,7 +153,7 @@ python run.py
   - `kind = "comparison"`: `lhs.path`와 `rhs.path|rhs.value|rhs.func`를 `op`로 비교
   - `kind = "range"`: `target.path`를 `min/max`로 범위 제한
   - `kind = "aggregate"`: 현재는 `agg = "sum_group_selected_count"` 지원
-  - `rhs.func`는 `min(...)`, `sub(...)`, `active_group(kind)`, `feasible_turns(kind,outer_x_path,outer_y_path,outer_cap_y_path)`를 지원
+  - `rhs.func`는 `add(...)`, `mul(...)`, `min(...)`, `max(...)`, `sub(...)`, `active_group(kind)`, `feasible_turns(...)`, `feasible_turns_max(...)`, `max_mount_selector_index(kind)`, `max_supported_mount_index(kind)`를 지원
   - `constraints.rules`는 필수이며 누락/빈 값이면 실행 전 실패한다.
   - 목적은 GA/딥러닝 샘플러가 동일 TOML 제약을 사전 필터에 재사용하는 것이다.
 - 하드코딩 설계값은 TOML로 승격 중이며, 1차로 다음 섹션이 추가됐다.

@@ -28,6 +28,7 @@ from peetsfea.types.manifest import (
     GroupGeometryParams,
     GroupObjects,
     Manifest,
+    ResolvedPcbMount,
     PitchCheckEntry,
     RegionViolation,
     SelectedParameters,
@@ -227,15 +228,15 @@ def _coil_instance_offset(kind: str, instance_index: int, instance_count: int, s
     return (0.0, 0.0, 0.0)
 
 
-def _mount_allows_instance(mounts: list[str], kind: str, instance_index: int) -> bool:
-    token_prefix = f"{kind}:"
+def _mount_allows_instance(mounts: list[ResolvedPcbMount], kind: str, instance_index: int) -> bool:
     for mount in mounts:
-        if not mount.startswith(token_prefix):
+        if mount["kind"] != kind:
             continue
-        selector = mount.split(":", 1)[1]
-        if selector == "*":
+        selector_mode = mount["selector_mode"]
+        selector_index = mount["selector_index"]
+        if selector_mode == "all":
             return True
-        if selector.isdigit() and int(selector) == instance_index:
+        if selector_mode == "index" and selector_index == instance_index:
             return True
     return False
 
@@ -1005,7 +1006,6 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                 trace = geometry["trace"]
                 gap = geometry["gap"]
                 base_points: list[list[float]] | None = None
-                effective_turns = turns
                 if turns < 1:
                     raise ValueError(f"selected_group_geometry.{kind}.turn_count_max must be >= 1")
                 if trace <= 0:
@@ -1023,16 +1023,20 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                         _max_feasible_turns(active_outer_x, trace, gap),
                         _max_feasible_turns(active_outer_y, trace, gap),
                     )
-                    effective_turns = min(turns, max_turns)
-                    if effective_turns < 1:
+                    if max_turns < 1:
                         raise ValueError(
                             f"Invalid geometry for {kind}: cannot fit at least one turn on both X/Y axes "
                             f"(turns={turns}, trace={trace}, gap={gap})"
                         )
+                    if turns > max_turns:
+                        raise ValueError(
+                            f"Infeasible turn_count_max for {kind}: requested={turns}, feasible_max={max_turns} "
+                            f"(outer_x={active_outer_x}, outer_y={active_outer_y}, trace={trace}, gap={gap})"
+                        )
                     base_points = [
                         list(point)
                         for point in _build_rect_spiral_centerline_absolute(
-                            turns=effective_turns,
+                            turns=turns,
                             outer_x=active_outer_x,
                             outer_y=active_outer_y,
                             trace=trace,
@@ -1106,20 +1110,25 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                         off_x, off_y, off_z = _coil_instance_offset(kind, instance_index, instance_count, spacing_mm)
                         tx_vertical_zone_h = tx_vertical_region_max[2] - tx_vertical_region_min[2]
                         tx_vertical_outer_y = min(tx_vertical_outer_y, tx_vertical_zone_h)
-                        tx_vertical_turns = min(
-                            turns,
+                        tx_vertical_max_turns = min(
                             _max_feasible_turns(tx_vertical_outer_x, trace, gap),
                             _max_feasible_turns(tx_vertical_outer_y, trace, gap),
                         )
-                        if tx_vertical_turns < 1:
+                        if tx_vertical_max_turns < 1:
                             raise ValueError(
                                 "tx_vertical cannot fit in tx_region_vertical "
                                 f"(available_outer_x={tx_vertical_outer_x}, available_outer_y={tx_vertical_outer_y})"
                             )
+                        if turns > tx_vertical_max_turns:
+                            raise ValueError(
+                                "Infeasible turn_count_max for tx_vertical: "
+                                f"requested={turns}, feasible_max={tx_vertical_max_turns} "
+                                f"(outer_x={tx_vertical_outer_x}, outer_y={tx_vertical_outer_y}, trace={trace}, gap={gap})"
+                            )
                         tx_vertical_points = [
                             list(point)
                             for point in _build_rect_spiral_centerline_absolute(
-                                turns=tx_vertical_turns,
+                                turns=turns,
                                 outer_x=tx_vertical_outer_x,
                                 outer_y=tx_vertical_outer_y,
                                 trace=trace,
@@ -1292,13 +1301,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
 
     eps = 1e-6
     debug_geometry = group_geometry_by_kind["tx_dd"]
-    debug_turns = min(
-        debug_geometry["turn_count_max"],
-        _max_feasible_turns(tx_dd_outer_x, debug_geometry["trace"], debug_geometry["gap"]),
-        _max_feasible_turns(tx_dd_outer_y, debug_geometry["trace"], debug_geometry["gap"]),
-    )
-    if debug_turns < 1:
-        debug_turns = 1
+    debug_turns = debug_geometry["turn_count_max"]
     debug_centerline_vertices = _build_rect_spiral_centerline_absolute(
         turns=debug_turns,
         outer_x=tx_dd_outer_x,

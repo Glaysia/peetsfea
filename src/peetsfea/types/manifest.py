@@ -54,6 +54,7 @@ class SelectedParameters(TypedDict):
     rx_region_bottom_from_tv_mm: float
     tx_dd_top_clearance_mm: float
     rx_face_clearance_mm: float
+    tx_main_1_z_from_tx_main_0_mm: float
     dd_mirror_plane: Literal["XZ"]
     rx_plane: Literal["YZ"]
     tx_vertical_plane: Literal["ZX"]
@@ -94,13 +95,22 @@ class GroupGeometryParams(TypedDict):
     gap: float
 
 
+class ResolvedPcbMount(TypedDict):
+    kind: Literal["tx_dd", "tx_vertical", "rx_dd"]
+    selector_mode: Literal["all", "index"]
+    selector_index: int | None
+
+
 class ResolvedPcbInstance(TypedDict):
     id: str
     role: Literal["tx", "rx"]
     position: tuple[float, float, float]
     rotation_deg: float
     present: bool
-    mounts: list[str]
+    z_mode: Literal["absolute", "relative_to_pcb"]
+    z_relative_base_id: str | None
+    z_delta_path: str | None
+    mounts: list[ResolvedPcbMount]
 
 
 class Manifest(TypedDict):
