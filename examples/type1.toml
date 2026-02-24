@@ -8,7 +8,7 @@
 # Numeric range convention:
 #   range = [is_integer, start, end, count]
 
-spec_version = "0.2.0"
+spec_version = "0.2.1"
 
 [design]
 units = "mm"
@@ -123,10 +123,10 @@ range = [false, 0.0, 0.12, 25]
 # RX DD pair spacing ratio to rx.region.outer_h_mm.
 range = [false, 0.0, 0.03, 25]
 
-[coil_spacing.tx_vertical_span_mm]
-# Total Y-axis spread for tx_vertical coil centers (ZX-plane normal axis).
-# For n>=2, centers are evenly spaced with delta=span/(n-1) over [-span/2, +span/2].
-range = [false, 0.0, 15.0, 8]
+[coil_spacing.tx_vertical_center_gap_mm]
+# Adjacent center-to-center spacing for tx_vertical coils (ZX-plane normal axis, Y direction).
+# tx_vertical_span_mm is derived in resolver: center_gap * max(0, selected_count - 1).
+range = [false, 1.62, 15.0, 8]
 
 # Group-specific geometry free variables.
 # One key = one meaning: no shared global turns/trace/gap key across groups.
@@ -145,21 +145,21 @@ range = [false, 0.0, 15.0, 8]
 [coil_groups_params.tx_dd.turn_count_max]
 range = [true, 3, 12, 10]
 [coil_groups_params.tx_dd.band_ratio]
-range = [false, 0.1, 0.35, 45]
+range = [false, 0.1, 0.35, 20]
 [coil_groups_params.tx_dd.metal_ratio]
 range = [false, 0.15, 0.60, 25]
 
 [coil_groups_params.tx_vertical.turn_count_max]
-range = [true, 3, 9, 7]
+range = [true, 3, 6, 4]
 [coil_groups_params.tx_vertical.band_ratio]
-range = [false, 0.1, 0.35, 45]
+range = [false, 0.35, 0.5, 20]
 [coil_groups_params.tx_vertical.metal_ratio]
-range = [false, 0.35, 0.75, 25]
+range = [false, 0.45, 0.75, 25]
 
 [coil_groups_params.rx_dd.turn_count_max]
 range = [true, 3, 12, 10]
 [coil_groups_params.rx_dd.band_ratio]
-range = [false, 0.1, 0.35, 45]
+range = [false, 0.1, 0.35, 20]
 [coil_groups_params.rx_dd.metal_ratio]
 range = [false, 0.15, 0.60, 25]
 
@@ -300,13 +300,13 @@ lhs = { path = "rx_dd_pair_spacing_ratio" }
 op = "<="
 rhs = { value = 0.03 }
 
-# Vertical span is bounded in [0, 15] mm for supported arrangement modes.
+# Vertical center gap is bounded in [1.62, 15] mm for supported arrangement modes.
 [[constraints.rules]]
-id = "tx_vertical_span_range"
+id = "tx_vertical_center_gap_range"
 kind = "range"
-message = "tx_vertical_span_mm must be in [0,15]"
-target = { path = "tx_vertical_span_mm" }
-min = { value = 0.0 }
+message = "tx_vertical_center_gap_mm must be in [1.62,15]"
+target = { path = "tx_vertical_center_gap_mm" }
+min = { value = 1.62 }
 max = { value = 15.0 }
 inclusive_min = true
 inclusive_max = true
@@ -630,7 +630,7 @@ instance_transforms = [
 
 [[coil_groups]]
 kind = "tx_vertical"
-count_range = [true, 0, 4, 5]
+count_range = [true, 0, 7, 8]
 instance_transforms = [
   { dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 },
 ]

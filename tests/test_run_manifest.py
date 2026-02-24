@@ -14,7 +14,7 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
     path.write_text(
         "\n".join(
             [
-                'spec_version = "0.2.0"',
+                'spec_version = "0.2.1"',
                 "",
                 "[design]",
                 'units = "mm"',
@@ -83,8 +83,8 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
                 "range = [false, 0.0, 0.12, 6]",
                 "[coil_spacing.rx_dd_pair_spacing_ratio]",
                 "range = [false, 0.0, 0.03, 8]",
-                "[coil_spacing.tx_vertical_span_mm]",
-                "range = [false, 0.0, 15.0, 4]",
+                "[coil_spacing.tx_vertical_center_gap_mm]",
+                "range = [false, 1.62, 15.0, 4]",
                 "",
                 "[coil_groups_params.tx_dd.turn_count_max]",
                 "range = [true, 1, 20, 20]",
@@ -187,11 +187,11 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
                 "rhs = { value = 0.03 }",
                 "",
                 "[[constraints.rules]]",
-                'id = "tx_vertical_span_range"',
+                'id = "tx_vertical_center_gap_range"',
                 'kind = "range"',
-                'message = "tx_vertical_span_mm must be in [0,15]"',
-                'target = { path = "tx_vertical_span_mm" }',
-                "min = { value = 0.0 }",
+                'message = "tx_vertical_center_gap_mm must be in [1.62,15]"',
+                'target = { path = "tx_vertical_center_gap_mm" }',
+                "min = { value = 1.62 }",
                 "max = { value = 15.0 }",
                 "inclusive_min = true",
                 "inclusive_max = true",
@@ -259,7 +259,7 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
                 "",
                 "[[coil_groups]]",
                 'kind = "tx_vertical"',
-                "count_range = [true, 0, 4, 5]",
+                "count_range = [true, 0, 7, 8]",
                 "instance_transforms = [{ dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 }]",
                 "",
                 "[[coil_groups]]",
@@ -485,11 +485,11 @@ def test_legacy_trace_gap_keys_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 def test_unsupported_spec_version_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "old_spec_version.toml"
     _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.0"', 'spec_version = "0.1.6"', 1)
+    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.1"', 'spec_version = "0.1.6"', 1)
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("5" * 40))
 
-    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.0'"):
+    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.1'"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -529,6 +529,30 @@ def test_feasibility_constraint_blocks_infeasible_tx_vertical(tmp_path: Path) ->
         "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_dd.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.tx_dd.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.rx_dd.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.rx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
+    raw = raw.replace(
         "[coil_groups_params.tx_vertical.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
         "[coil_groups_params.tx_vertical.band_ratio]\nrange = [false, 0.9, 0.9, 1]",
     )
@@ -536,7 +560,7 @@ def test_feasibility_constraint_blocks_infeasible_tx_vertical(tmp_path: Path) ->
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.85, 0.85, 1]",
     )
-    raw = raw.replace("count_range = [true, 0, 4, 5]", "count_range = [true, 1, 1, 1]")
+    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 1, 1, 1]")
     raw += (
         "\n[[constraints.rules]]\n"
         "id = \"tx_vertical_feasible_turns_for_active_group\"\n"
@@ -562,6 +586,30 @@ def test_feasibility_constraint_allows_retry_to_find_valid_case(tmp_path: Path) 
         "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_dd.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.tx_dd.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.rx_dd.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.rx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
+    raw = raw.replace(
         "[coil_groups_params.tx_vertical.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
         "[coil_groups_params.tx_vertical.band_ratio]\nrange = [false, 0.2, 0.9, 2]",
     )
@@ -569,7 +617,7 @@ def test_feasibility_constraint_allows_retry_to_find_valid_case(tmp_path: Path) 
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.85, 0.85, 1]",
     )
-    raw = raw.replace("count_range = [true, 0, 4, 5]", "count_range = [true, 1, 1, 1]")
+    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 1, 1, 1]")
     raw += (
         "\n[[constraints.rules]]\n"
         "id = \"tx_vertical_feasible_turns_for_active_group\"\n"
@@ -591,6 +639,99 @@ def test_feasibility_constraint_allows_retry_to_find_valid_case(tmp_path: Path) 
     geom_by_kind = {geom["kind"]: geom for geom in geometries}
     assert float(geom_by_kind["tx_vertical"]["band_ratio"]) == pytest.approx(0.2)
     assert float(selected["tx_region_vertical_z_mm"]) > 0.0
+
+
+def test_tx_vertical_center_gap_range_fails(tmp_path: Path) -> None:
+    toml_path = tmp_path / "tx_vertical_center_gap_fail.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 7, 7, 1]")
+    raw = raw.replace("rhs = { value = 10.0 }", "rhs = { value = 20.0 }", 1)
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_dd.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.tx_dd.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.rx_dd.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.rx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
+    raw = raw.replace(
+        "[coil_spacing.tx_vertical_center_gap_mm]\nrange = [false, 1.62, 15.0, 4]",
+        "[coil_spacing.tx_vertical_center_gap_mm]\nrange = [false, 1.5, 1.5, 1]",
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+
+    spec, _ = load_toml_bytes(toml_path)
+    with pytest.raises(SelectionConstraintError, match=r"Constraint tx_vertical_center_gap_range failed"):
+        resolve_selection(spec=spec, seed=1, attempt=0)
+
+
+def test_tx_vertical_span_is_derived_from_center_gap_and_count(tmp_path: Path) -> None:
+    toml_path = tmp_path / "tx_vertical_span_derived.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 7, 7, 1]")
+    raw = raw.replace("rhs = { value = 10.0 }", "rhs = { value = 20.0 }", 1)
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_dd.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.tx_dd.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.rx_dd.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.rx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
+    raw = raw.replace(
+        "[coil_spacing.tx_vertical_center_gap_mm]\nrange = [false, 1.62, 15.0, 4]",
+        "[coil_spacing.tx_vertical_center_gap_mm]\nrange = [false, 1.62, 1.62, 1]",
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+
+    spec, _ = load_toml_bytes(toml_path)
+    selected, _, groups, _, _ = resolve_selection(spec=spec, seed=1, attempt=0)
+    groups_by_kind = {group["kind"]: group for group in groups}
+    assert int(groups_by_kind["tx_vertical"]["selected_count"]) == 7
+    assert float(selected["tx_vertical_center_gap_mm"]) == pytest.approx(1.62)
+    assert float(selected["tx_vertical_span_mm"]) == pytest.approx(9.72)
 
 
 def test_repro_mode_sampled_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -620,14 +761,25 @@ def test_repro_mode_frozen_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert manifest["repro_mode"] == "frozen_toml"
 
 
-def test_removed_path_errors_on_018(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_removed_path_errors_on_021(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "removed_path.toml"
     _write_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8")
     raw += "\n[coil_shape.outer_x]\nrange = [false, 10.0, 10.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("9" * 40))
-    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.0"):
+    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.1"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_tx_vertical_span_removed_path_errors_on_021(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "removed_tx_vertical_span_path.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw += "\n[coil_spacing.tx_vertical_span_mm]\nrange = [false, 3.0, 3.0, 1]\n"
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("a" * 40))
+    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.1: coil_spacing\.tx_vertical_span_mm"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -702,6 +854,7 @@ def test_derived_dummy_path_maps_to_tx_dd_outer_x(tmp_path: Path) -> None:
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
     )
+    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 1, 1, 1]")
     raw = raw.replace(
         "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
         "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",

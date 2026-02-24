@@ -28,7 +28,7 @@ SCALAR_RANGE_SPECS: tuple[tuple[str, str, bool], ...] = (
     ("coil_shape.inner_margin_y", "inner_margin_y", False),
     ("coil_spacing.tx_dd_pair_spacing_ratio", "tx_dd_pair_spacing_ratio", False),
     ("coil_spacing.rx_dd_pair_spacing_ratio", "rx_dd_pair_spacing_ratio", False),
-    ("coil_spacing.tx_vertical_span_mm", "tx_vertical_span_mm", False),
+    ("coil_spacing.tx_vertical_center_gap_mm", "tx_vertical_center_gap_mm", False),
     ("tv.width_mm", "tv_width_mm", False),
     ("tv.height_mm", "tv_height_mm", False),
     ("tv.thickness_mm", "tv_thickness_mm", False),
@@ -77,6 +77,7 @@ REMOVED_PATHS: tuple[str, ...] = (
     "coil_shape.outer_y",
     "coil_spacing.tx_dd_pair_spacing_mm",
     "coil_spacing.rx_dd_pair_spacing_mm",
+    "coil_spacing.tx_vertical_span_mm",
 )
 
 DERIVED_RANGE_PATHS: dict[str, str] = {
@@ -90,7 +91,7 @@ def _reject_removed_paths(spec: TOMLTable) -> None:
             _read_path(spec, path)
         except ValueError:
             continue
-        raise ValueError(f"Removed path in spec_version 0.2.0: {path}")
+        raise ValueError(f"Removed path in spec_version 0.2.1: {path}")
 
 
 def _read_range_definition(root: TOMLTable, dotted_path: str) -> list[TOMLValue]:
@@ -383,8 +384,8 @@ def _parse_group_count(
         return value, value
     if kind == "tx_vertical":
         value = _select_count_field(group, "count_range", seed, offset, attempt, context, f"{key_prefix}.count_range")
-        if value < 0 or value > 4:
-            raise ValueError("tx_vertical count_range must resolve to [0,4]")
+        if value < 0 or value > 7:
+            raise ValueError("tx_vertical count_range must resolve to [0,7]")
         return value, value
     if kind == "rx_dd":
         value = _select_count_field(group, "count_fixed", seed, offset, attempt, context, f"{key_prefix}.count_fixed")
@@ -436,11 +437,6 @@ def _resolve_coil_groups(
 
     resolved: list[ResolvedCoilGroup] = []
     seen_kinds: set[str] = set()
-    spacing_by_kind = {
-        "tx_dd": selected["tx_dd_pair_spacing_mm"],
-        "tx_vertical": selected["tx_vertical_span_mm"],
-        "rx_dd": selected["rx_dd_pair_spacing_mm"],
-    }
     for idx, raw_group in enumerate(raw_groups):
         if not isinstance(raw_group, dict):
             raise ValueError(f"coil_groups[{idx}] must be a table/object")
@@ -454,12 +450,19 @@ def _resolve_coil_groups(
         requested_count, selected_count = _parse_group_count(
             group, kind, seed, GROUP_OFFSET_BASE + idx, attempt, context, f"coil_groups[{idx}]"
         )
+        if kind == "tx_vertical":
+            spacing_mm = float(selected["tx_vertical_center_gap_mm"]) * float(max(0, selected_count - 1))
+            selected["tx_vertical_span_mm"] = spacing_mm
+        elif kind == "tx_dd":
+            spacing_mm = float(selected["tx_dd_pair_spacing_mm"])
+        else:
+            spacing_mm = float(selected["rx_dd_pair_spacing_mm"])
         resolved.append(
             {
                 "kind": kind,  # type: ignore[typeddict-item]
                 "requested_count": requested_count,
                 "selected_count": selected_count,
-                "spacing_mm": float(spacing_by_kind[kind]),
+                "spacing_mm": spacing_mm,
                 "instance_transforms": transforms,
             }
         )
@@ -1094,8 +1097,10 @@ def _mounts_for_kind(pcbs: list[ResolvedPcbInstance], kind: GroupKind) -> list[R
 
 def _max_supported_instances(kind: GroupKind, coil_groups_by_kind: dict[GroupKind, ResolvedCoilGroup]) -> int:
     hard_limit: int
-    if kind in ("tx_dd", "tx_vertical"):
+    if kind == "tx_dd":
         hard_limit = 4
+    elif kind == "tx_vertical":
+        hard_limit = 7
     else:
         hard_limit = 2
     group = coil_groups_by_kind.get(kind)
@@ -1367,9 +1372,11 @@ def _resolve_selection(
         "inner_margin_y": float(raw["inner_margin_y"]),
         "tx_dd_pair_spacing_ratio": float(raw["tx_dd_pair_spacing_ratio"]),
         "rx_dd_pair_spacing_ratio": float(raw["rx_dd_pair_spacing_ratio"]),
+        "tx_vertical_center_gap_mm": float(raw["tx_vertical_center_gap_mm"]),
         "tx_dd_pair_spacing_mm": float(raw["tx_dd_pair_spacing_ratio"]) * float(raw["tx_region_outer_h_mm"]),
         "rx_dd_pair_spacing_mm": float(raw["rx_dd_pair_spacing_ratio"]) * float(raw["rx_region_outer_h_mm"]),
-        "tx_vertical_span_mm": float(raw["tx_vertical_span_mm"]),
+        # Derived after tx_vertical selected_count is resolved in _resolve_coil_groups().
+        "tx_vertical_span_mm": 0.0,
         "tv_width_mm": float(raw["tv_width_mm"]),
         "tv_height_mm": float(raw["tv_height_mm"]),
         "tv_thickness_mm": float(raw["tv_thickness_mm"]),
