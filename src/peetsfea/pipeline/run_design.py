@@ -26,7 +26,7 @@ from peetsfea.types.manifest import (
 
 
 MAX_ATTEMPTS = 64
-SUPPORTED_SPEC_VERSION = "0.2.0"
+SUPPORTED_SPEC_VERSION = "0.2.1"
 
 
 def _collect_range_nodes(value: object) -> list[list[object]]:

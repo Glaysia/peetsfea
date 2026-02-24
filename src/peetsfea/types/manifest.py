@@ -28,6 +28,8 @@ class SelectedParameters(TypedDict):
     inner_margin_y: float
     tx_dd_pair_spacing_ratio: float
     rx_dd_pair_spacing_ratio: float
+    tx_vertical_center_gap_mm: float
+    # Derived from tx_vertical_center_gap_mm * max(0, tx_vertical selected_count - 1).
     tx_dd_pair_spacing_mm: float
     rx_dd_pair_spacing_mm: float
     tx_vertical_span_mm: float
