@@ -154,6 +154,24 @@ class _FakeHfss:
         self.release_args = (close_projects, close_desktop)
 
 
+def _turn_sign_xy(points: list[list[float]]) -> float:
+    assert len(points) >= 3
+    ax = points[1][0] - points[0][0]
+    ay = points[1][1] - points[0][1]
+    bx = points[2][0] - points[1][0]
+    by = points[2][1] - points[1][1]
+    return (ax * by) - (ay * bx)
+
+
+def _turn_sign_yz(points: list[list[float]]) -> float:
+    assert len(points) >= 3
+    ay = points[1][1] - points[0][1]
+    az = points[1][2] - points[0][2]
+    by = points[2][1] - points[1][1]
+    bz = points[2][2] - points[1][2]
+    return (ay * bz) - (az * by)
+
+
 def _manifest(tmp_path: Path) -> Manifest:
     return {
         "design_id": "abcd1234_eeeeeeee_1_0",
@@ -241,9 +259,9 @@ def _manifest(tmp_path: Path) -> Manifest:
             },
         ],
         "selected_group_geometry": [
-            {"kind": "tx_dd", "turn_count_max": 5, "band_thickness_mm": 7.5, "metal_ratio": 2.0 / 3.0, "trace": 1.0, "gap": 0.5},
-            {"kind": "tx_vertical", "turn_count_max": 4, "band_thickness_mm": 5.2, "metal_ratio": 0.9 / 1.3, "trace": 0.9, "gap": 0.4},
-            {"kind": "rx_dd", "turn_count_max": 6, "band_thickness_mm": 8.4, "metal_ratio": 1.1 / 1.4, "trace": 1.1, "gap": 0.3},
+            {"kind": "tx_dd", "turn_count_max": 5, "band_ratio": 0.3, "metal_ratio": 2.0 / 3.0, "trace": 1.0, "gap": 0.5},
+            {"kind": "tx_vertical", "turn_count_max": 4, "band_ratio": 0.25, "metal_ratio": 0.9 / 1.3, "trace": 0.9, "gap": 0.4},
+            {"kind": "rx_dd", "turn_count_max": 6, "band_ratio": 0.35, "metal_ratio": 1.1 / 1.4, "trace": 1.1, "gap": 0.3},
         ],
         "selected_pcbs": [
             {
@@ -271,7 +289,7 @@ def _manifest(tmp_path: Path) -> Manifest:
             "close_on_exit": True,
         },
         "spec": {
-            "spec_version": "0.1.6",
+            "spec_version": "0.1.7",
             "design_name": "square_test",
             "units": "mm",
         },
@@ -516,6 +534,9 @@ def test_tx_vertical_span_distributes_on_y_and_stays_in_vertical_z_region(
         assert z_min >= (region_min_z - eps)
         assert z_max <= (region_max_z + eps)
 
+    fr4_boxes = [call for call in fake.modeler.box_calls if str(call["name"]).startswith("fr4_")]
+    assert len(fr4_boxes) == 4
+
 
 def test_build_square_spiral_invalid_params(tmp_path: Path) -> None:
     bad = _manifest(tmp_path)
@@ -630,6 +651,14 @@ def test_tx_dd_two_coils_use_single_layer_when_selected_count_two(
     assert len(tx_dd_probes) == 2
     z_centers = [((probe["bbox"][2] + probe["bbox"][5]) / 2.0) for probe in tx_dd_probes]
     assert z_centers[0] == pytest.approx(z_centers[1], abs=1e-6)
+    tx_dd_calls = sorted(
+        [call for call in fake.modeler.polyline_calls if str(call["name"]).startswith("coil_tx_dd_")],
+        key=lambda call: str(call["name"]),
+    )
+    assert len(tx_dd_calls) == 2
+    sign_a = _turn_sign_xy(tx_dd_calls[0]["points"])  # type: ignore[arg-type]
+    sign_b = _turn_sign_xy(tx_dd_calls[1]["points"])  # type: ignore[arg-type]
+    assert sign_a * sign_b < 0.0
 
 
 def test_tx_dd_four_coils_use_two_layers_when_selected_count_four(
@@ -693,6 +722,14 @@ def test_rx_dd_edge_gap_zero_means_touching_edges(tmp_path: Path, monkeypatch: p
     assert len(rx_dd_probes) == 2
     y_gap = rx_dd_probes[1]["bbox"][1] - rx_dd_probes[0]["bbox"][4]
     assert y_gap == pytest.approx(metadata["selected_group_geometry"][2]["trace"], abs=1e-6)
+    rx_dd_calls = sorted(
+        [call for call in fake.modeler.polyline_calls if str(call["name"]).startswith("coil_rx_dd_")],
+        key=lambda call: str(call["name"]),
+    )
+    assert len(rx_dd_calls) == 2
+    sign_a = _turn_sign_yz(rx_dd_calls[0]["points"])  # type: ignore[arg-type]
+    sign_b = _turn_sign_yz(rx_dd_calls[1]["points"])  # type: ignore[arg-type]
+    assert sign_a * sign_b < 0.0
 
 
 def test_rx_dd_edge_gap_five_mm(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
