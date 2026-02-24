@@ -17,12 +17,16 @@ Number: TypeAlias = int | float
 SamplingContext: TypeAlias = dict[str, Number]
 
 SCALAR_RANGE_SPECS: tuple[tuple[str, str, bool], ...] = (
-    ("coil_shape.outer_x", "outer_x", False),
-    ("coil_shape.outer_y", "outer_y", False),
+    ("coil_shape.tx_dd.outer_x", "tx_dd_outer_x", False),
+    ("coil_shape.tx_dd.outer_y", "tx_dd_outer_y", False),
+    ("coil_shape.tx_vertical.outer_x", "tx_vertical_outer_x", False),
+    ("coil_shape.tx_vertical.outer_y", "tx_vertical_outer_y", False),
+    ("coil_shape.rx_dd.outer_x", "rx_dd_outer_x", False),
+    ("coil_shape.rx_dd.outer_y", "rx_dd_outer_y", False),
     ("coil_shape.inner_margin_x", "inner_margin_x", False),
     ("coil_shape.inner_margin_y", "inner_margin_y", False),
-    ("coil_spacing.tx_dd_pair_spacing_mm", "tx_dd_pair_spacing_mm", False),
-    ("coil_spacing.rx_dd_pair_spacing_mm", "rx_dd_pair_spacing_mm", False),
+    ("coil_spacing.tx_dd_pair_spacing_ratio", "tx_dd_pair_spacing_ratio", False),
+    ("coil_spacing.rx_dd_pair_spacing_ratio", "rx_dd_pair_spacing_ratio", False),
     ("coil_spacing.tx_vertical_span_mm", "tx_vertical_span_mm", False),
     ("tv.width_mm", "tv_width_mm", False),
     ("tv.height_mm", "tv_height_mm", False),
@@ -63,6 +67,23 @@ ATTEMPT_STRIDE = 1009
 
 class SelectionConstraintError(ValueError):
     pass
+
+
+REMOVED_PATHS: tuple[str, ...] = (
+    "coil_shape.outer_x",
+    "coil_shape.outer_y",
+    "coil_spacing.tx_dd_pair_spacing_mm",
+    "coil_spacing.rx_dd_pair_spacing_mm",
+)
+
+
+def _reject_removed_paths(spec: TOMLTable) -> None:
+    for path in REMOVED_PATHS:
+        try:
+            _read_path(spec, path)
+        except ValueError:
+            continue
+        raise ValueError(f"Removed path in spec_version 0.1.8: {path}")
 
 def _build_candidates(is_integer: bool, start: float, end: float, count: int) -> Sequence[Number]:
     raw_values: list[float]
@@ -220,8 +241,15 @@ def _resolve_group_geometry(
             raise ValueError(f"{kind_root}.band_ratio must be > 0 and < 1")
         if ratio <= 0 or ratio >= 1:
             raise ValueError(f"{kind_root}.metal_ratio must be > 0 and < 1")
-        outer_x = float(selected_params["outer_x"])
-        outer_y = float(selected_params["outer_y"])
+        if kind == "tx_dd":
+            outer_x = float(selected_params["tx_dd_outer_x"])
+            outer_y = float(selected_params["tx_dd_outer_y"])
+        elif kind == "tx_vertical":
+            outer_x = float(selected_params["tx_vertical_outer_x"])
+            outer_y = float(selected_params["tx_vertical_outer_y"])
+        else:
+            outer_x = float(selected_params["rx_dd_outer_x"])
+            outer_y = float(selected_params["rx_dd_outer_y"])
         effective_outer_y = min(outer_y, float(selected_params["tx_region_vertical_z_mm"])) if kind == "tx_vertical" else outer_y
         base_outer = min(outer_x, effective_outer_y)
         if base_outer <= 0:
@@ -735,6 +763,11 @@ def _resolve_selected_numeric_path(
     coil_groups_by_kind: dict[GroupKind, ResolvedCoilGroup],
     path: str,
 ) -> float:
+    alias_path: dict[str, str] = {
+        "outer_x": "tx_dd_outer_x",
+        "outer_y": "tx_dd_outer_y",
+    }
+    normalized_path = alias_path.get(path, path)
     if path == "tx_region_leftover_z_mm":
         return (
             float(selected["tx_region_thickness_mm"])
@@ -771,7 +804,7 @@ def _resolve_selected_numeric_path(
         if isinstance(raw, bool) or not isinstance(raw, (int, float)):
             raise ValueError(f"Constraint path '{path}' is not numeric")
         return float(raw)
-    value = selected.get(path)
+    value = selected.get(normalized_path)
     if value is None:
         raise ValueError(f"Unknown constraint path: {path}")
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -785,11 +818,16 @@ def _resolve_selected_comparable_path(
     coil_groups_by_kind: dict[GroupKind, ResolvedCoilGroup],
     path: str,
 ) -> float | str:
+    alias_path: dict[str, str] = {
+        "outer_x": "tx_dd_outer_x",
+        "outer_y": "tx_dd_outer_y",
+    }
+    normalized_path = alias_path.get(path, path)
     if path == "tx_region_leftover_z_mm":
         return _resolve_selected_numeric_path(selected, group_geometry_by_kind, coil_groups_by_kind, path)
     if path.startswith("selected_group_geometry.") or path.startswith("selected_coil_groups."):
         return _resolve_selected_numeric_path(selected, group_geometry_by_kind, coil_groups_by_kind, path)
-    value = selected.get(path)
+    value = selected.get(normalized_path)
     if value is None:
         raise ValueError(f"Unknown constraint path: {path}")
     if isinstance(value, bool):
@@ -974,9 +1012,53 @@ def _validate_constraints(
     _evaluate_constraints(rules, selected, coil_groups, group_geometry)
 
 
+def _validate_ratio_and_spacing_constraints(
+    *,
+    selected: SelectedParameters,
+    groups: list[ResolvedCoilGroup],
+) -> None:
+    eps = 1e-12
+    tx_ratio = float(selected["tx_dd_pair_spacing_ratio"])
+    rx_ratio = float(selected["rx_dd_pair_spacing_ratio"])
+    if tx_ratio < -eps or tx_ratio > (0.12 + eps):
+        raise SelectionConstraintError(
+            f"ratio out of range (path=coil_spacing.tx_dd_pair_spacing_ratio, ratio={tx_ratio}, "
+            "spacing_mm=n/a, lhs=n/a, rhs=[0.0,0.12])"
+        )
+    if rx_ratio < -eps or rx_ratio > (0.03 + eps):
+        raise SelectionConstraintError(
+            f"ratio out of range (path=coil_spacing.rx_dd_pair_spacing_ratio, ratio={rx_ratio}, "
+            "spacing_mm=n/a, lhs=n/a, rhs=[0.0,0.03])"
+        )
+    by_kind = {group["kind"]: group for group in groups}
+    tx_group = by_kind.get("tx_dd")
+    rx_group = by_kind.get("rx_dd")
+    if tx_group is not None and int(tx_group["selected_count"]) > 0:
+        spacing_mm = float(selected["tx_dd_pair_spacing_mm"])
+        lhs = (2.0 * float(selected["tx_dd_outer_y"])) + spacing_mm
+        rhs = float(selected["tx_region_outer_h_mm"])
+        if lhs > rhs:
+            raise SelectionConstraintError(
+                "selection hard check failed "
+                "(path=coil_spacing.tx_dd_pair_spacing_ratio, "
+                f"ratio={tx_ratio}, spacing_mm={spacing_mm}, lhs={lhs}, rhs={rhs})"
+            )
+    if rx_group is not None and int(rx_group["selected_count"]) > 0:
+        spacing_mm = float(selected["rx_dd_pair_spacing_mm"])
+        lhs = (2.0 * float(selected["rx_dd_outer_x"])) + spacing_mm
+        rhs = float(selected["rx_region_outer_w_mm"])
+        if lhs > rhs:
+            raise SelectionConstraintError(
+                "selection hard check failed "
+                "(path=coil_spacing.rx_dd_pair_spacing_ratio, "
+                f"ratio={rx_ratio}, spacing_mm={spacing_mm}, lhs={lhs}, rhs={rhs})"
+            )
+
+
 def _resolve_selection(
     spec: TOMLTable, seed: int, attempt: int = 0
 ) -> tuple[SelectedParameters, SelectedParametersMax, list[ResolvedCoilGroup], list[GroupGeometryParams], list[ResolvedPcbInstance]]:
+    _reject_removed_paths(spec)
     context: SamplingContext = {}
     raw = _resolve_selected_scalars(spec, seed, attempt, context)
     raw_max = _resolve_selected_max_scalars(spec)
@@ -985,12 +1067,18 @@ def _resolve_selection(
     tx_vertical_plane = _parse_string_value_at_path(spec, "coil_placement.tx_vertical_plane", allowed={"ZX"})
 
     selected: SelectedParameters = {
-        "outer_x": float(raw["outer_x"]),
-        "outer_y": float(raw["outer_y"]),
+        "tx_dd_outer_x": float(raw["tx_dd_outer_x"]),
+        "tx_dd_outer_y": float(raw["tx_dd_outer_y"]),
+        "tx_vertical_outer_x": float(raw["tx_vertical_outer_x"]),
+        "tx_vertical_outer_y": float(raw["tx_vertical_outer_y"]),
+        "rx_dd_outer_x": float(raw["rx_dd_outer_x"]),
+        "rx_dd_outer_y": float(raw["rx_dd_outer_y"]),
         "inner_margin_x": float(raw["inner_margin_x"]),
         "inner_margin_y": float(raw["inner_margin_y"]),
-        "tx_dd_pair_spacing_mm": float(raw["tx_dd_pair_spacing_mm"]),
-        "rx_dd_pair_spacing_mm": float(raw["rx_dd_pair_spacing_mm"]),
+        "tx_dd_pair_spacing_ratio": float(raw["tx_dd_pair_spacing_ratio"]),
+        "rx_dd_pair_spacing_ratio": float(raw["rx_dd_pair_spacing_ratio"]),
+        "tx_dd_pair_spacing_mm": float(raw["tx_dd_pair_spacing_ratio"]) * float(raw["tx_region_outer_h_mm"]),
+        "rx_dd_pair_spacing_mm": float(raw["rx_dd_pair_spacing_ratio"]) * float(raw["rx_region_outer_h_mm"]),
         "tx_vertical_span_mm": float(raw["tx_vertical_span_mm"]),
         "tv_width_mm": float(raw["tv_width_mm"]),
         "tv_height_mm": float(raw["tv_height_mm"]),
@@ -1003,8 +1091,7 @@ def _resolve_selection(
         "tx_region_dd_z_mm": float(raw["tx_region_dd_z_mm"]),
         "rx_region_outer_w_mm": float(raw["rx_region_outer_w_mm"]),
         "rx_region_outer_h_mm": float(raw["rx_region_outer_h_mm"]),
-        # RX actual thickness is forced to max thickness for deterministic zone alignment.
-        "rx_region_thickness_mm": float(raw_max["rx_region_thickness_mm"]),
+        "rx_region_thickness_mm": float(raw["rx_region_thickness_mm"]),
         "wall_thickness_mm": float(raw["wall_thickness_mm"]),
         "wall_size_y_mm": float(raw["wall_size_y_mm"]),
         "wall_size_z_mm": float(raw["wall_size_z_mm"]),
@@ -1040,6 +1127,7 @@ def _resolve_selection(
     groups = _resolve_coil_groups(spec, seed, attempt, selected, context)
     group_geometry = _resolve_group_geometry(spec, seed, attempt, context, selected)
     pcbs = _resolve_pcbs(spec, seed, attempt, context)
+    _validate_ratio_and_spacing_constraints(selected=selected, groups=groups)
     _validate_mounts(groups, pcbs)
     _validate_constraints(spec, selected, groups, group_geometry)
     return selected, selected_max, groups, group_geometry, pcbs

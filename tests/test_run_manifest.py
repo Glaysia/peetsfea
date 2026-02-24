@@ -10,11 +10,11 @@ from peetsfea.spec.loader import load_toml_bytes
 from peetsfea.spec.resolver import SelectionConstraintError, resolve_selection
 
 
-def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.0, outer_y: float = 120.0) -> None:
+def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.0, outer_y: float = 80.0) -> None:
     path.write_text(
         "\n".join(
             [
-                'spec_version = "0.1.7"',
+                'spec_version = "0.1.8"',
                 "",
                 "[design]",
                 'units = "mm"',
@@ -63,18 +63,26 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
                 "[floor.size_y_mm]",
                 "range = [false, 5000.0, 5000.0, 1]",
                 "",
-                "[coil_shape.outer_x]",
+                "[coil_shape.tx_dd.outer_x]",
                 f"range = [false, {outer_x:.1f}, {outer_x:.1f}, 1]",
-                "[coil_shape.outer_y]",
+                "[coil_shape.tx_dd.outer_y]",
+                f"range = [false, {outer_y:.1f}, {outer_y:.1f}, 1]",
+                "[coil_shape.tx_vertical.outer_x]",
+                f"range = [false, {outer_x:.1f}, {outer_x:.1f}, 1]",
+                "[coil_shape.tx_vertical.outer_y]",
+                f"range = [false, {outer_y:.1f}, {outer_y:.1f}, 1]",
+                "[coil_shape.rx_dd.outer_x]",
+                "range = [false, 100.0, 100.0, 1]",
+                "[coil_shape.rx_dd.outer_y]",
                 f"range = [false, {outer_y:.1f}, {outer_y:.1f}, 1]",
                 "[coil_shape.inner_margin_x]",
                 "range = [false, 2.0, 2.0, 1]",
                 "[coil_shape.inner_margin_y]",
                 "range = [false, 2.0, 2.0, 1]",
-                "[coil_spacing.tx_dd_pair_spacing_mm]",
-                "range = [false, 2.0, 25.0, 6]",
-                "[coil_spacing.rx_dd_pair_spacing_mm]",
-                "range = [false, 0.0, 5.0, 8]",
+                "[coil_spacing.tx_dd_pair_spacing_ratio]",
+                "range = [false, 0.0, 0.12, 6]",
+                "[coil_spacing.rx_dd_pair_spacing_ratio]",
+                "range = [false, 0.0, 0.03, 8]",
                 "[coil_spacing.tx_vertical_span_mm]",
                 "range = [false, 0.0, 15.0, 4]",
                 "",
@@ -146,16 +154,16 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
                 "[[constraints.rules]]",
                 'id = "tx_dd_spacing_positive"',
                 'kind = "comparison"',
-                'message = "tx_dd_pair_spacing_mm must be > 0"',
-                'lhs = { path = "tx_dd_pair_spacing_mm" }',
-                'op = ">"',
+                'message = "tx_dd_pair_spacing_ratio must be >= 0"',
+                'lhs = { path = "tx_dd_pair_spacing_ratio" }',
+                'op = ">="',
                 "rhs = { value = 0.0 }",
                 "",
                 "[[constraints.rules]]",
                 'id = "rx_dd_spacing_positive"',
                 'kind = "comparison"',
-                'message = "rx_dd_pair_spacing_mm must be >= 0"',
-                'lhs = { path = "rx_dd_pair_spacing_mm" }',
+                'message = "rx_dd_pair_spacing_ratio must be >= 0"',
+                'lhs = { path = "rx_dd_pair_spacing_ratio" }',
                 'op = ">="',
                 "rhs = { value = 0.0 }",
                 "",
@@ -373,11 +381,11 @@ def test_legacy_trace_gap_keys_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 def test_unsupported_spec_version_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "old_spec_version.toml"
     _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.1.7"', 'spec_version = "0.1.6"', 1)
+    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.1.8"', 'spec_version = "0.1.6"', 1)
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("5" * 40))
 
-    with pytest.raises(ValueError, match=r"spec_version must be '0\.1\.7'"):
+    with pytest.raises(ValueError, match=r"spec_version must be '0\.1\.8'"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -385,8 +393,8 @@ def test_retry_attempt_advances_until_constraint_satisfied(tmp_path: Path, monke
     toml_path = tmp_path / "retry.toml"
     _write_toml(toml_path, outer_x=140.0)
     raw = toml_path.read_text(encoding="utf-8").replace(
-        "[coil_shape.outer_x]\nrange = [false, 140.0, 140.0, 1]",
-        "[coil_shape.outer_x]\nrange = [false, 120.0, 320.0, 2]",
+        "[coil_shape.tx_dd.outer_x]\nrange = [false, 140.0, 140.0, 1]",
+        "[coil_shape.tx_dd.outer_x]\nrange = [false, 120.0, 320.0, 2]",
     )
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("2" * 40))
@@ -467,3 +475,52 @@ def test_feasibility_constraint_allows_retry_to_find_valid_case(tmp_path: Path) 
     geom_by_kind = {geom["kind"]: geom for geom in geometries}
     assert float(geom_by_kind["tx_vertical"]["band_ratio"]) == pytest.approx(0.2)
     assert float(selected["tx_region_vertical_z_mm"]) > 0.0
+
+
+def test_repro_mode_sampled_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "sampled.toml"
+    _write_toml(toml_path)
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("7" * 40))
+    manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=3, backend="hfss"))
+    assert manifest["repro_mode"] == "sampled_toml"
+
+
+def test_repro_mode_frozen_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "frozen.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = re.sub(
+        r"range = \[(true|false), ([^,]+), [^,]+, [0-9]+\]",
+        lambda m: f"range = [{m.group(1)}, {m.group(2)}, {m.group(2)}, 1]",
+        raw,
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("8" * 40))
+    manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=3, backend="hfss"))
+    assert manifest["repro_mode"] == "frozen_toml"
+
+
+def test_removed_path_errors_on_018(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "removed_path.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw += "\n[coil_shape.outer_x]\nrange = [false, 10.0, 10.0, 1]\n"
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("9" * 40))
+    with pytest.raises(ValueError, match="Removed path in spec_version 0.1.8"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_ratio_hard_check_failure_contains_details(tmp_path: Path) -> None:
+    toml_path = tmp_path / "ratio_fail.toml"
+    _write_toml(toml_path, tx_region_h=200.0, outer_y=120.0)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace(
+        "[coil_spacing.tx_dd_pair_spacing_ratio]\nrange = [false, 0.0, 0.12, 6]",
+        "[coil_spacing.tx_dd_pair_spacing_ratio]\nrange = [false, 0.12, 0.12, 1]",
+    )
+    raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 2, 2, 1]")
+    toml_path.write_text(raw, encoding="utf-8")
+    spec, _ = load_toml_bytes(toml_path)
+    with pytest.raises(SelectionConstraintError, match="path=coil_spacing.tx_dd_pair_spacing_ratio"):
+        resolve_selection(spec=spec, seed=1, attempt=0)

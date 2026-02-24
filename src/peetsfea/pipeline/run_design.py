@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+from typing import Literal, Mapping, cast
 
 from peetsfea.identity.hashing import (
     compose_design_id,
@@ -25,7 +26,34 @@ from peetsfea.types.manifest import (
 
 
 MAX_ATTEMPTS = 64
-SUPPORTED_SPEC_VERSION = "0.1.7"
+SUPPORTED_SPEC_VERSION = "0.1.8"
+
+
+def _collect_range_nodes(value: object) -> list[list[object]]:
+    nodes: list[list[object]] = []
+    if isinstance(value, dict):
+        maybe_range = value.get("range")
+        if isinstance(maybe_range, list):
+            nodes.append(maybe_range)
+        for child in value.values():
+            nodes.extend(_collect_range_nodes(child))
+    elif isinstance(value, list):
+        for child in value:
+            nodes.extend(_collect_range_nodes(child))
+    return nodes
+
+
+def _detect_repro_mode(spec: Mapping[str, object]) -> Literal["sampled_toml", "frozen_toml"]:
+    range_nodes = _collect_range_nodes(spec)
+    if not range_nodes:
+        return "sampled_toml"
+    for entry in range_nodes:
+        if len(entry) != 4:
+            return "sampled_toml"
+        _, start, end, count = entry
+        if count != 1 or start != end:
+            return "sampled_toml"
+    return "frozen_toml"
 
 
 @dataclass(frozen=True)
@@ -61,6 +89,7 @@ def run(config: RunConfig) -> Manifest:
     backend_tool = require_str(backend.get("tool"), "backend.tool")
     if backend_tool != "hfss":
         raise ValueError("backend.tool must be 'hfss' for this MVP")
+    repro_mode = cast(Literal["sampled_toml", "frozen_toml"], _detect_repro_mode(spec))
 
     selected_parameters: SelectedParameters | None = None
     selected_parameters_max: SelectedParametersMax | None = None
@@ -115,6 +144,7 @@ def run(config: RunConfig) -> Manifest:
         "seed": config.seed,
         "retry_attempt": retry_attempt,
         "retry_count": retry_count,
+        "repro_mode": repro_mode,  # sampled_toml | frozen_toml
         "backend": config.backend,
         "selected_parameters": selected_parameters,
         "selected_parameters_max": selected_parameters_max,

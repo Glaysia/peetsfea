@@ -10,10 +10,16 @@ from peetsfea.types.manifest import GroupGeometryParams, ResolvedCoilGroup, Reso
 
 def _selected_parameters() -> SelectedParameters:
     return {
-        "outer_x": 40.0,
-        "outer_y": 40.0,
+        "tx_dd_outer_x": 40.0,
+        "tx_dd_outer_y": 40.0,
+        "tx_vertical_outer_x": 40.0,
+        "tx_vertical_outer_y": 40.0,
+        "rx_dd_outer_x": 40.0,
+        "rx_dd_outer_y": 40.0,
         "inner_margin_x": 2.0,
         "inner_margin_y": 2.0,
+        "tx_dd_pair_spacing_ratio": 0.1,
+        "rx_dd_pair_spacing_ratio": 0.02,
         "tx_dd_pair_spacing_mm": 40.0,
         "rx_dd_pair_spacing_mm": 40.0,
         "tx_vertical_span_mm": 10.0,

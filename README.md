@@ -129,14 +129,14 @@ python run.py
 ```
 - VS Code launch(`Run run.py from run/`)는 pre-launch task로 `run/aedt/`를 먼저 비운 뒤 실행한다.
 - 기본 TOML 예시: `examples/type1.toml` (grouped 구조)
-  - `tx_dd_pair_spacing_mm`: XZ 거울대칭 TX DD 페어의 추가 중심간 여유(mm)
-  - `rx_dd_pair_spacing_mm`: Y축 RX DD 페어의 edge-to-edge gap(mm)
+  - `coil_shape.tx_dd|tx_vertical|rx_dd.outer_x/outer_y`: 그룹별 코일 외곽 치수
+  - `tx_dd_pair_spacing_mm`, `rx_dd_pair_spacing_mm`는 ratio에서 파생되는 내부 추적값
 - 그룹별 자유변수는 `[coil_groups_params.<kind>]` 아래에서 독립 정의한다.
   - 고정 그룹 키: `tx_dd`, `tx_vertical`, `rx_dd`
   - 각 그룹은 `turn_count_max`, `band_ratio`, `metal_ratio`를 각각 별도 range로 가진다.
   - `trace/gap`는 입력값이 아니라 파생값이다.
-    - `effective_outer_y = min(outer_y, tx_region_vertical_z_mm)` for `tx_vertical`, else `outer_y`
-    - `base_outer = min(outer_x, effective_outer_y)`
+    - `effective_outer_y = min(<group>.outer_y, tx_region_vertical_z_mm)` for `tx_vertical`, else `<group>.outer_y`
+    - `base_outer = min(<group>.outer_x, effective_outer_y)`
     - `band_mm = band_ratio * base_outer`
     - `pitch_mm = band_mm / turn_count_max`
     - `trace = pitch_mm * metal_ratio`
@@ -167,6 +167,7 @@ python run.py
 6) `toml_hash + commit + selected_parameters + selected_group_geometry + selected_coil_groups + selected_pcbs`의 SHA-256 앞 8글자로 `design_unique_hash` 생성
 7) `design_id = <design_unique_hash>_<toml_space_hash>_<seed>_<attempt>` 조합
 8) `<ansys_run_dir>/<design_id>.aedt`, `geometry_metadata_<design_id>.json`, `manifest_<design_id>.json` 저장
+  - `manifest/metadata.repro_mode`: `sampled_toml | frozen_toml | manifest_json`
 
 ## 기여
 아직 초기 단계다. 아이디어/요구사항/스펙 제안은 언제든 환영한다.

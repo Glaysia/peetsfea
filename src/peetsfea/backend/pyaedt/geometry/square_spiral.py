@@ -10,11 +10,18 @@ from ansys.aedt.core import Hfss
 from ansys.aedt.core.modeler.cad.object_3d import Object3d
 from ansys.aedt.core.modeler.modeler_3d import Modeler3D
 
+from peetsfea.backend.pyaedt.em_pipeline import default_em_policy, run_em_pipeline
+from peetsfea.backend.pyaedt.em_pipeline.contracts import EmPipelineInput
 from peetsfea.types.manifest import (
     AxisCheckEntry,
     CadProbe,
     CoilPolaritySpec,
     CornerDebugEntry,
+    EmContext,
+    EmEndpoints,
+    EmPipelineResult,
+    EmPolicy,
+    EmReadyObjects,
     GeometryDebug,
     GeometryMetadata,
     GroupEndpointEntry,
@@ -801,6 +808,11 @@ def _build_geometry_metadata(
     unite_groups: UniteGroups,
     group_endpoints: list[GroupEndpointEntry],
     coil_polarity: list[CoilPolaritySpec],
+    em_ready_objects: EmReadyObjects,
+    em_endpoints: EmEndpoints,
+    em_context: EmContext,
+    em_policy: EmPolicy,
+    em_pipeline_result: EmPipelineResult,
     scene_objects: list[SceneObjectEntry],
     debug: GeometryDebug,
 ) -> GeometryMetadata:
@@ -813,6 +825,7 @@ def _build_geometry_metadata(
         "seed": manifest["seed"],
         "retry_attempt": manifest["retry_attempt"],
         "retry_count": manifest["retry_count"],
+        "repro_mode": manifest["repro_mode"],
         "selected_parameters": manifest["selected_parameters"],
         "selected_parameters_max": manifest["selected_parameters_max"],
         "selected_group_geometry": manifest["selected_group_geometry"],
@@ -825,6 +838,11 @@ def _build_geometry_metadata(
         "unite_groups": unite_groups,
         "group_endpoints": group_endpoints,
         "coil_polarity": coil_polarity,
+        "em_ready_objects": em_ready_objects,
+        "em_endpoints": em_endpoints,
+        "em_context": em_context,
+        "em_policy": em_policy,
+        "em_pipeline_result": em_pipeline_result,
         "scene_objects": scene_objects,
         "debug": debug,
     }
@@ -889,9 +907,14 @@ def _assign_design_variables(hfss: Hfss, manifest: Manifest) -> None:
 
 
 def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
+    manifest["repro_mode"] = "manifest_json"
     selected = manifest["selected_parameters"]
-    outer_x = selected["outer_x"]
-    outer_y = selected["outer_y"]
+    tx_dd_outer_x = selected["tx_dd_outer_x"]
+    tx_dd_outer_y = selected["tx_dd_outer_y"]
+    tx_vertical_outer_x = selected["tx_vertical_outer_x"]
+    tx_vertical_outer_y = selected["tx_vertical_outer_y"]
+    rx_dd_outer_x = selected["rx_dd_outer_x"]
+    rx_dd_outer_y = selected["rx_dd_outer_y"]
     pcb_thickness = selected["pcb_thickness"]
     cu_thickness = selected["cu_thickness"]
     fr4_er = selected["fr4_er"]
@@ -948,6 +971,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     scene_objects: list[SceneObjectEntry] = []
     placement_violations: list[RegionViolation] = []
     coil_plane_bboxes: list[tuple[str, Literal["XY", "YZ", "ZX"], list[float]]] = []
+    fr4_object_names: list[str] = []
 
     try:
         scene_names, scene_probes, scene_objects = _create_scene_non_model_objects(
@@ -962,11 +986,10 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
         tx_dd_region_min, tx_dd_region_max = _bounds_from_scene_entry(scene_by_kind["tx_region_dd"])
         tx_vertical_region_min, tx_vertical_region_max = _bounds_from_scene_entry(scene_by_kind["tx_region_vertical"])
         rx_region_min, rx_region_max = _bounds_from_scene_entry(scene_by_kind["rx_region_actual"])
-        # Keep TX coils attached to the YZ plane side (minimum X of TX region)
-        # so TX-RX distance is minimized even when outer_x is small.
-        tx_dd_center_x = tx_dd_region_min[0] + (outer_x / 2.0)
+        # Keep TX coils attached to the YZ plane side (minimum X of TX region).
+        tx_dd_center_x = tx_dd_region_min[0] + (tx_dd_outer_x / 2.0)
         tx_dd_center_y = (tx_dd_region_min[1] + tx_dd_region_max[1]) / 2.0
-        tx_vertical_center_x = tx_vertical_region_min[0] + (outer_x / 2.0)
+        tx_vertical_center_x = tx_vertical_region_min[0] + (tx_vertical_outer_x / 2.0)
         tx_vertical_center_y = (tx_vertical_region_min[1] + tx_vertical_region_max[1]) / 2.0
         rx_center_y = (rx_region_min[1] + rx_region_max[1]) / 2.0
 
@@ -990,9 +1013,15 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                 if gap < 0:
                     raise ValueError(f"selected_group_geometry.{kind}.gap must be >= 0")
                 if kind != "tx_vertical":
+                    if kind == "tx_dd":
+                        active_outer_x = tx_dd_outer_x
+                        active_outer_y = tx_dd_outer_y
+                    else:
+                        active_outer_x = rx_dd_outer_x
+                        active_outer_y = rx_dd_outer_y
                     max_turns = min(
-                        _max_feasible_turns(outer_x, trace, gap),
-                        _max_feasible_turns(outer_y, trace, gap),
+                        _max_feasible_turns(active_outer_x, trace, gap),
+                        _max_feasible_turns(active_outer_y, trace, gap),
                     )
                     effective_turns = min(turns, max_turns)
                     if effective_turns < 1:
@@ -1004,8 +1033,8 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                         list(point)
                         for point in _build_rect_spiral_centerline_absolute(
                             turns=effective_turns,
-                            outer_x=outer_x,
-                            outer_y=outer_y,
+                            outer_x=active_outer_x,
+                            outer_y=active_outer_y,
                             trace=trace,
                             gap=gap,
                             z=0.0,
@@ -1030,7 +1059,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                             instance_count=instance_count,
                             instance_index=instance_index,
                             pair_clearance_mm=spacing_mm,
-                            outer_y=outer_y,
+                            outer_y=tx_dd_outer_y,
                             region_center_y=tx_dd_center_y,
                             region_min_y=tx_dd_region_min[1],
                             region_max_y=tx_dd_region_max[1],
@@ -1050,7 +1079,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                         off_y = _rx_dd_center_offset_y(
                             instance_index=instance_index,
                             instance_count=instance_count,
-                            outer_x=outer_x,
+                            outer_x=rx_dd_outer_x,
                             edge_gap_mm=spacing_mm,
                         )
                         if abs(transform["dz"]) > 1e-12:
@@ -1059,7 +1088,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                             raise ValueError("rx_dd transform dx must be 0 for +X face-anchor contract")
                         rx_anchor_x = rx_region_max[0] - rx_face_clearance - cu_thickness
                         # Bottom-anchor contract: coil bottom touches RX region minimum Z.
-                        rx_center_z = rx_region_min[2] + (outer_y / 2.0) + 1e-6
+                        rx_center_z = rx_region_min[2] + (rx_dd_outer_y / 2.0) + 1e-6
                         rx_dd_points = _dd_instance_points(base_points, mirror_winding=(off_y < 0.0))
                         translated_xy = _translate_points(
                             rx_dd_points,
@@ -1076,22 +1105,22 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                     elif kind == "tx_vertical":
                         off_x, off_y, off_z = _coil_instance_offset(kind, instance_index, instance_count, spacing_mm)
                         tx_vertical_zone_h = tx_vertical_region_max[2] - tx_vertical_region_min[2]
-                        tx_vertical_outer_y = min(outer_y, tx_vertical_zone_h)
+                        tx_vertical_outer_y = min(tx_vertical_outer_y, tx_vertical_zone_h)
                         tx_vertical_turns = min(
                             turns,
-                            _max_feasible_turns(outer_x, trace, gap),
+                            _max_feasible_turns(tx_vertical_outer_x, trace, gap),
                             _max_feasible_turns(tx_vertical_outer_y, trace, gap),
                         )
                         if tx_vertical_turns < 1:
                             raise ValueError(
                                 "tx_vertical cannot fit in tx_region_vertical "
-                                f"(available_outer_x={outer_x}, available_outer_y={tx_vertical_outer_y})"
+                                f"(available_outer_x={tx_vertical_outer_x}, available_outer_y={tx_vertical_outer_y})"
                             )
                         tx_vertical_points = [
                             list(point)
                             for point in _build_rect_spiral_centerline_absolute(
                                 turns=tx_vertical_turns,
-                                outer_x=outer_x,
+                                outer_x=tx_vertical_outer_x,
                                 outer_y=tx_vertical_outer_y,
                                 trace=trace,
                                 gap=gap,
@@ -1247,7 +1276,9 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                     material="FR4_epoxy",
                 ),
             )
-            object_names.append(_object_name(substrate, substrate_name))
+            substrate_object_name = _object_name(substrate, substrate_name)
+            object_names.append(substrate_object_name)
+            fr4_object_names.append(substrate_object_name)
             cad_probe.append(_probe_cad_object(substrate, substrate_name))
 
         hfss.save_project(str(aedt_path))
@@ -1263,15 +1294,15 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     debug_geometry = group_geometry_by_kind["tx_dd"]
     debug_turns = min(
         debug_geometry["turn_count_max"],
-        _max_feasible_turns(outer_x, debug_geometry["trace"], debug_geometry["gap"]),
-        _max_feasible_turns(outer_y, debug_geometry["trace"], debug_geometry["gap"]),
+        _max_feasible_turns(tx_dd_outer_x, debug_geometry["trace"], debug_geometry["gap"]),
+        _max_feasible_turns(tx_dd_outer_y, debug_geometry["trace"], debug_geometry["gap"]),
     )
     if debug_turns < 1:
         debug_turns = 1
     debug_centerline_vertices = _build_rect_spiral_centerline_absolute(
         turns=debug_turns,
-        outer_x=outer_x,
-        outer_y=outer_y,
+        outer_x=tx_dd_outer_x,
+        outer_y=tx_dd_outer_y,
         trace=debug_geometry["trace"],
         gap=debug_geometry["gap"],
         z=0.0,
@@ -1294,6 +1325,31 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     print(f"[geometry] axis_aligned={axis_aligned} pitch_max_delta={pitch_max_delta:.9f}")
     print(f"[geometry] top_bbox={top_bbox}")
 
+    em_ready_objects: EmReadyObjects = {
+        "tx_conductors": sorted(group_objects["tx_dd"] + group_objects["tx_vertical"]),
+        "rx_conductors": sorted(group_objects["rx_dd"]),
+        "fr4_objects": sorted(fr4_object_names),
+        "scene_bbox_source_objects": sorted([entry["name"] for entry in scene_objects]),
+    }
+    em_endpoints: EmEndpoints = {
+        "tx": [entry for entry in group_endpoints if entry["group_kind"] in ("tx_dd", "tx_vertical")],
+        "rx": [entry for entry in group_endpoints if entry["group_kind"] == "rx_dd"],
+    }
+    em_context: EmContext = {
+        "dd_mirror_plane": selected["dd_mirror_plane"],
+        "rx_plane": selected["rx_plane"],
+        "tx_vertical_plane": selected["tx_vertical_plane"],
+        "source": "type1_geometry",
+        "object_names": sorted(object_names),
+    }
+    em_policy: EmPolicy = default_em_policy()
+    em_input: EmPipelineInput = {
+        "ready_objects": em_ready_objects,
+        "endpoints": em_endpoints,
+        "context": em_context,
+    }
+    em_pipeline_result = run_em_pipeline(hfss, modeler, em_input, em_policy)
+
     metadata = _build_geometry_metadata(
         manifest=manifest,
         aedt_path=aedt_path,
@@ -1306,6 +1362,11 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
         },
         group_endpoints=group_endpoints,
         coil_polarity=coil_polarity,
+        em_ready_objects=em_ready_objects,
+        em_endpoints=em_endpoints,
+        em_context=em_context,
+        em_policy=em_policy,
+        em_pipeline_result=em_pipeline_result,
         scene_objects=scene_objects,
         debug=debug,
     )
