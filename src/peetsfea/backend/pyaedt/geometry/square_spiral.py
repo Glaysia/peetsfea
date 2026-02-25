@@ -42,6 +42,8 @@ from peetsfea.types.manifest import (
 _Point2 = tuple[float, float]
 _Point3 = tuple[float, float, float]
 _GroupInstanceKey = tuple[str, str, int]
+_BoardKey = tuple[str, int]
+_TxVerticalLinkNode = tuple[int, str, _Point3, _Point3, float, float]
 
 
 def _build_rect_spiral_centerline_absolute(turns: int, outer_x: float, outer_y: float, trace: float, gap: float, z: float) -> list[_Point3]:
@@ -1333,6 +1335,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     txdd_right_a_points: dict[int, tuple[_Point3, float]] = {}
     txdd_right_object_names: dict[int, str] = {}
     txdd_bridge_object_name: str | None = None
+    tx_vertical_nodes_by_board: dict[_BoardKey, list[_TxVerticalLinkNode]] = {}
 
     try:
         scene_names, scene_probes, scene_objects = _create_scene_non_model_objects(
@@ -1819,6 +1822,132 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                             "b_field_direction": b_field_direction,
                         }
                     )
+                    if kind == "tx_vertical":
+                        y_center = (probe["bbox"][1] + probe["bbox"][4]) / 2.0
+                        board_key: _BoardKey = (pcb["id"], board_idx)
+                        board_nodes = tx_vertical_nodes_by_board.setdefault(board_key, [])
+                        board_nodes.append((instance_index, obj_name, start_xyz, end_xyz, y_center, trace))
+
+        for (board_id, board_idx), nodes in tx_vertical_nodes_by_board.items():
+            if len(nodes) < 2:
+                continue
+            sorted_nodes = sorted(nodes, key=lambda node: node[4])
+            for idx in range(len(sorted_nodes) - 1):
+                (
+                    source_index,
+                    _source_name,
+                    _source_start_xyz,
+                    source_end_xyz,
+                    _source_y_center,
+                    source_trace,
+                ) = sorted_nodes[idx]
+                (
+                    target_index,
+                    _target_name,
+                    target_start_xyz,
+                    _target_end_xyz,
+                    _target_y_center,
+                    target_trace,
+                ) = sorted_nodes[idx + 1]
+                if abs(source_trace - target_trace) > 1e-9:
+                    raise ValueError(
+                        "tx_vertical bridge trace mismatch between adjacent nodes "
+                        f"(board_id={board_id}, source_index={source_index}, target_index={target_index}, "
+                        f"source_trace={source_trace}, target_trace={target_trace})"
+                    )
+                bridge_trace = source_trace
+                # Keep bridge centerline safely inside tx_region_vertical in X so rectangular section
+                # expansion does not escape the region at the YZ-side boundary.
+                x_margin = bridge_trace
+                min_x_allowed = tx_vertical_region_min[0] + x_margin
+                max_x_allowed = tx_vertical_region_max[0] - x_margin
+                if min_x_allowed > max_x_allowed:
+                    raise ValueError(
+                        "tx_vertical bridge x-margin exceeds region width "
+                        f"(min_x_allowed={min_x_allowed}, max_x_allowed={max_x_allowed}, bridge_trace={bridge_trace})"
+                    )
+                source_bridge_x = min(max(source_end_xyz[0], min_x_allowed), max_x_allowed)
+                target_bridge_x = min(max(target_start_xyz[0], min_x_allowed), max_x_allowed)
+                start_bridge_point = (source_bridge_x, source_end_xyz[1], source_end_xyz[2])
+                end_bridge_point = (target_bridge_x, target_start_xyz[1], target_start_xyz[2])
+                half = bridge_trace / 2.0
+                bridge_sheet_points = [
+                    [start_bridge_point[0] - half, start_bridge_point[1], start_bridge_point[2]],
+                    [start_bridge_point[0] + half, start_bridge_point[1], start_bridge_point[2]],
+                    [end_bridge_point[0] + half, end_bridge_point[1], end_bridge_point[2]],
+                    [end_bridge_point[0] - half, end_bridge_point[1], end_bridge_point[2]],
+                ]
+                bridge_name = (
+                    f"bridge_tx_vertical_link_g{source_index}_to_g{target_index}_"
+                    f"b{board_idx}_{design_id}"
+                )
+                bridge_created = modeler.create_polyline(
+                    points=bridge_sheet_points,
+                    name=bridge_name,
+                    material="copper",
+                    close_surface=True,
+                )
+                if not bridge_created:
+                    raise ValueError(
+                        "tx_vertical bridge rectangle loop creation failed "
+                        f"(name={bridge_name}, source_index={source_index}, target_index={target_index})"
+                    )
+                bridge_loop_obj = cast(Object3d, bridge_created)
+                bridge_loop_name = _object_name(bridge_loop_obj, bridge_name)
+                try:
+                    covered = modeler.cover_lines(assignment=bridge_loop_name)  # type: ignore[misc]
+                except TypeError:
+                    covered = modeler.cover_lines(bridge_loop_name)  # type: ignore[misc]
+                if not covered:
+                    raise ValueError(
+                        "tx_vertical bridge cover_lines failed "
+                        f"(name={bridge_name}, source_index={source_index}, target_index={target_index})"
+                    )
+                if isinstance(covered, list):
+                    first = covered[0] if covered else bridge_loop_name
+                    bridge_sheet_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), bridge_loop_name)
+                elif isinstance(covered, str):
+                    bridge_sheet_name = covered
+                else:
+                    bridge_sheet_name = _object_name(cast(Object3d, covered), bridge_loop_name)
+                try:
+                    thickened = modeler.thicken_sheet(assignment=bridge_sheet_name, thickness=cu_thickness)  # type: ignore[misc]
+                except TypeError:
+                    thickened = modeler.thicken_sheet(bridge_sheet_name, cu_thickness)  # type: ignore[misc]
+                if not thickened:
+                    raise ValueError(
+                        "tx_vertical bridge thicken failed "
+                        f"(name={bridge_name}, thickness={cu_thickness})"
+                    )
+                if isinstance(thickened, list):
+                    first = thickened[0] if thickened else bridge_sheet_name
+                    bridge_obj_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), bridge_sheet_name)
+                    bridge_obj = cast(Object3d, bridge_loop_obj)
+                elif isinstance(thickened, str):
+                    bridge_obj_name = thickened
+                    bridge_obj = cast(Object3d, bridge_loop_obj)
+                else:
+                    bridge_obj = cast(Object3d, thickened)
+                    bridge_obj_name = _object_name(bridge_obj, bridge_sheet_name)
+                object_names.append(bridge_obj_name)
+                group_objects["tx_vertical"].append(bridge_obj_name)
+                bridge_probe = _probe_cad_object(bridge_obj, bridge_name)
+                cad_probe.append(bridge_probe)
+                coil_plane_bboxes.append((board_id, "ZX", bridge_probe["bbox"]))
+                bridge_violations = _bbox_violations(
+                    object_name=bridge_obj_name,
+                    bbox=bridge_probe["bbox"],
+                    region_kind="tx_region_vertical",
+                    region_min=tx_vertical_region_min,
+                    region_max=tx_vertical_region_max,
+                )
+                if bridge_violations:
+                    placement_violations.extend(bridge_violations)
+                    first = bridge_violations[0]
+                    raise ValueError(
+                        f"Coil placement out of region for {first['object_name']} in {first['region_kind']} "
+                        f"(axis={first['axis']}, overflow_mm={first['overflow_mm']})"
+                    )
 
         if 0 in txdd_right_a_points and 1 in txdd_right_a_points:
             lower_a, lower_trace = txdd_right_a_points[0]
@@ -1904,7 +2033,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
             if len(bbox) < 6:
                 continue
             if plane == "ZX" and board_id in tx_board_ids:
-                # TX vertical coils share one substrate per board/plane regardless of Y offsets.
+                # TX vertical + bridge copper share one ZX substrate per board.
                 layer_key = 0
             elif plane == "XY":
                 axis_center = (bbox[2] + bbox[5]) / 2.0

@@ -33,8 +33,10 @@ class _FakeObject:
 class _FakeModeler:
     def __init__(self) -> None:
         self.polyline_calls: list[dict[str, object]] = []
+        self.cover_calls: list[dict[str, object]] = []
         self.cylinder_calls: list[dict[str, object]] = []
         self.box_calls: list[dict[str, object]] = []
+        self.thicken_calls: list[dict[str, object]] = []
         self.subtract_calls: list[dict[str, object]] = []
         self.unite_calls: list[dict[str, object]] = []
         self.duplicate_mirror_calls: list[dict[str, object]] = []
@@ -220,6 +222,31 @@ class _FakeModeler:
             }
         )
         return True
+
+    def cover_lines(self, assignment: str | _FakeObject) -> _FakeObject:
+        name = assignment.name if isinstance(assignment, _FakeObject) else assignment
+        if name not in self.objects:
+            raise ValueError(f"Unknown polyline object for cover_lines: {name}")
+        self.cover_calls.append({"assignment": name})
+        return self.objects[name]
+
+    def thicken_sheet(
+        self,
+        assignment: str | _FakeObject,
+        thickness: float,
+    ) -> _FakeObject:
+        name = assignment.name if isinstance(assignment, _FakeObject) else assignment
+        if name not in self.objects:
+            raise ValueError(f"Unknown sheet object for thicken: {name}")
+        obj = self.objects[name]
+        bbox = obj.bounding_box
+        half = thickness / 2.0
+        thickened_bbox = [bbox[0], bbox[1] - half, bbox[2], bbox[3], bbox[4] + half, bbox[5]]
+        self.thicken_calls.append({"assignment": name, "thickness": thickness})
+        edge_samples = [((thickened_bbox[0] + thickened_bbox[3]) / 2.0, (thickened_bbox[1] + thickened_bbox[4]) / 2.0)]
+        thickened_obj = _FakeObject(name, thickened_bbox, edge_samples, points=obj.points)
+        self.objects[name] = thickened_obj
+        return thickened_obj
 
     def unite(self, assignment: str | _FakeObject | list[str | _FakeObject]) -> _FakeObject | list[str]:
         assignments = assignment if isinstance(assignment, list) else [assignment]
@@ -811,6 +838,8 @@ def test_tx_vertical_three_instances_middle_touches_x_axis_and_others_are_symmet
     scene_by_kind = {entry["kind"]: entry for entry in metadata["scene_objects"]}
     vertical_region = scene_by_kind["tx_region_vertical"]
     region_center_y = vertical_region["origin_xyz"][1] + (vertical_region["size_xyz"][1] / 2.0)
+    region_min_x = vertical_region["origin_xyz"][0]
+    region_max_x = vertical_region["origin_xyz"][0] + vertical_region["size_xyz"][0]
     trace = next(entry for entry in metadata["selected_group_geometry"] if entry["kind"] == "tx_vertical")["trace"]
     tx_vertical_probes = sorted(
         (
@@ -826,6 +855,44 @@ def test_tx_vertical_three_instances_middle_touches_x_axis_and_others_are_symmet
     assert y_centers[1] == pytest.approx(region_center_y + (trace / 2.0), abs=1e-6)
     assert y_centers[2] == pytest.approx(region_center_y + 10.0, abs=1e-6)
     assert y_centers[0] == pytest.approx(2.0 * region_center_y - y_centers[2], abs=1e-6)
+
+    endpoints = sorted(
+        [entry for entry in metadata["group_endpoints"] if entry["group_kind"] == "tx_vertical"],
+        key=lambda entry: (entry["start_xyz"][1] + entry["end_xyz"][1]) / 2.0,
+    )
+    assert len(endpoints) == 3
+    bridge_calls = sorted(
+        [
+            call
+            for call in fake.modeler.polyline_calls
+            if str(call["name"]).startswith("bridge_tx_vertical_link_")
+        ],
+        key=lambda call: str(call["name"]),
+    )
+    assert len(bridge_calls) == 2
+    assert len(fake.modeler.cover_calls) == 2
+    assert len(fake.modeler.thicken_calls) == 2
+    for idx, bridge_call in enumerate(bridge_calls):
+        expected_start = endpoints[idx]["end_xyz"]
+        expected_end = endpoints[idx + 1]["start_xyz"]
+        x_margin = trace
+        min_x_allowed = region_min_x + x_margin
+        max_x_allowed = region_max_x - x_margin
+        expected_start_x = min(max(expected_start[0], min_x_allowed), max_x_allowed)
+        expected_end_x = min(max(expected_end[0], min_x_allowed), max_x_allowed)
+        points = cast(list[list[float]], bridge_call["points"])
+        assert len(points) == 4
+        start_center_x = (points[0][0] + points[1][0]) / 2.0
+        end_center_x = (points[2][0] + points[3][0]) / 2.0
+        assert start_center_x == pytest.approx(expected_start_x, abs=1e-6)
+        assert points[0][1] == pytest.approx(expected_start[1], abs=1e-6)
+        assert points[0][2] == pytest.approx(expected_start[2], abs=1e-6)
+        assert end_center_x == pytest.approx(expected_end_x, abs=1e-6)
+        assert points[2][1] == pytest.approx(expected_end[1], abs=1e-6)
+        assert points[2][2] == pytest.approx(expected_end[2], abs=1e-6)
+        assert fake.modeler.thicken_calls[idx]["thickness"] == pytest.approx(
+            metadata["selected_parameters"]["cu_thickness"], abs=1e-9
+        )
 
 
 def test_tx_vertical_single_instance_middle_copper_outer_edge_touches_x_axis(
@@ -843,6 +910,14 @@ def test_tx_vertical_single_instance_middle_copper_outer_edge_touches_x_axis(
     )
     y_center = (tx_vertical_probe["bbox"][1] + tx_vertical_probe["bbox"][4]) / 2.0
     assert y_center == pytest.approx(region_center_y + (trace / 2.0), abs=1e-6)
+    bridge_calls = [
+        call
+        for call in fake.modeler.polyline_calls
+        if str(call["name"]).startswith("bridge_tx_vertical_link_")
+    ]
+    assert len(bridge_calls) == 0
+    assert len(fake.modeler.cover_calls) == 0
+    assert len(fake.modeler.thicken_calls) == 0
 
 
 def test_tx_vertical_offset_rejects_invalid_count_or_negative_d() -> None:
