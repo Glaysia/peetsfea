@@ -110,6 +110,11 @@ values = [8, 10, 12, 14]
 3) `.aedt + geometry metadata JSON` 저장
 4) 출력 산출물 경로는 하드코딩된 `run/aedt/`를 사용
 
+### 리팩토링된 모듈 경로
+- Geometry 엔트리포인트: `peetsfea.backend.pyaedt.geometry.build.build_square_spiral_from_manifest`
+- Resolver 엔트리포인트: `peetsfea.spec.resolver.resolve_selection`, `peetsfea.spec.resolver.resolve_selected_parameters`
+- Candidate builder 공개 경로: `peetsfea.spec.resolver.sampling.build_candidates`
+
 ### Geometry generation contract (centerline-first)
 - 사각 스파이럴은 `copper outer edge/corner` 기준으로 centerline을 먼저 절대좌표로 생성한다.
 - 모든 세그먼트는 축 정렬(axis-aligned)이며, turn pitch는 `trace + gap`으로 고정된다.

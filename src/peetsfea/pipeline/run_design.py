@@ -14,7 +14,8 @@ from peetsfea.identity.hashing import (
     get_git_commit,
 )
 from peetsfea.spec.loader import load_toml_bytes, require_str, require_table
-from peetsfea.spec.resolver import SelectionConstraintError, _build_candidates, resolve_selection
+from peetsfea.spec.resolver import SelectionConstraintError, resolve_selection
+from peetsfea.spec.resolver.sampling import build_candidates as _build_candidates
 from peetsfea.types.manifest import (
     GroupGeometryParams,
     Manifest,
@@ -191,4 +192,4 @@ def run(config: RunConfig) -> Manifest:
     return manifest
 
 
-__all__ = ["RunConfig", "run", "_build_candidates"]
+__all__ = ["RunConfig", "run"]
