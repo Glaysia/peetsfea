@@ -123,6 +123,14 @@ def _required_pair_spacing_mm(kind: Literal["tx_dd", "rx_dd"], outer_x: float, o
     return outer_x
 
 
+def _validate_rxdd_single_layer_count(instance_count: int) -> None:
+    if instance_count != 2:
+        raise ValueError(
+            "rx_dd single-layer contract violation: only selected_count=2 is supported "
+            f"(actual={instance_count})"
+        )
+
+
 def _tx_dd_center_y_and_layer(
     *,
     instance_count: int,
@@ -357,6 +365,34 @@ def _apply_txdd_right_endpoint_rule(
     # Lower layer first by Z center, then deterministic key tie-break.
     _set_labels(right_candidates[0][3], "c", "A")
     _set_labels(right_candidates[1][3], "A", "d")
+
+
+def _apply_rxdd_endpoint_rule(
+    group_endpoints: list[GroupEndpointEntry],
+    coil_polarity: list[CoilPolaritySpec],
+) -> None:
+    endpoint_by_key = {_group_endpoint_key(entry): entry for entry in group_endpoints}
+    for polarity_entry in coil_polarity:
+        if polarity_entry["group_kind"] != "rx_dd":
+            continue
+        key = _coil_polarity_key(polarity_entry)
+        endpoint_entry = endpoint_by_key.get(key)
+        if endpoint_entry is None:
+            continue
+        side = polarity_entry["instance_side"]
+        if side == "left":
+            endpoint_entry["start_label"] = "C"
+            endpoint_entry["end_label"] = "b"
+            continue
+        if side == "right":
+            endpoint_entry["start_label"] = "a"
+            endpoint_entry["end_label"] = "D"
+            continue
+        raise ValueError(
+            "rx_dd endpoint contract violation: instance_side must be left or right "
+            f"(actual={side}, board_id={polarity_entry['board_id']}, "
+            f"instance_index={polarity_entry['group_instance_index']})"
+        )
 
 
 def _txdd_right_points(

@@ -38,6 +38,37 @@ def _create_thickened_sheet_from_points(
     sheet_name: str,
     thickness: float,
 ) -> tuple[str, Object3d]:
+    sheet_covered_name, sheet_loop_obj = _create_sheet_from_points(
+        modeler=modeler,
+        sheet_points=sheet_points,
+        sheet_name=sheet_name,
+    )
+    try:
+        thickened = modeler.thicken_sheet(assignment=sheet_covered_name, thickness=thickness)  # type: ignore[misc]
+    except TypeError:
+        thickened = modeler.thicken_sheet(sheet_covered_name, thickness)  # type: ignore[misc]
+    if not thickened:
+        raise ValueError(f"Sheet thicken failed (name={sheet_name}, thickness={thickness})")
+
+    if isinstance(thickened, list):
+        first = thickened[0] if thickened else sheet_covered_name
+        thickened_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), sheet_covered_name)
+        thickened_obj = cast(Object3d, sheet_loop_obj)
+    elif isinstance(thickened, str):
+        thickened_name = thickened
+        thickened_obj = cast(Object3d, sheet_loop_obj)
+    else:
+        thickened_obj = cast(Object3d, thickened)
+        thickened_name = _object_name(thickened_obj, sheet_covered_name)
+    return thickened_name, thickened_obj
+
+
+def _create_sheet_from_points(
+    *,
+    modeler: Modeler3D,
+    sheet_points: list[list[float]],
+    sheet_name: str,
+) -> tuple[str, Object3d]:
     sheet_created = modeler.create_polyline(points=sheet_points, name=sheet_name, material="copper", close_surface=True)
     if not sheet_created:
         raise ValueError(f"Sheet loop creation failed (name={sheet_name})")
@@ -58,25 +89,7 @@ def _create_thickened_sheet_from_points(
         sheet_covered_name = covered
     else:
         sheet_covered_name = _object_name(cast(Object3d, covered), sheet_loop_name)
-
-    try:
-        thickened = modeler.thicken_sheet(assignment=sheet_covered_name, thickness=thickness)  # type: ignore[misc]
-    except TypeError:
-        thickened = modeler.thicken_sheet(sheet_covered_name, thickness)  # type: ignore[misc]
-    if not thickened:
-        raise ValueError(f"Sheet thicken failed (name={sheet_name}, thickness={thickness})")
-
-    if isinstance(thickened, list):
-        first = thickened[0] if thickened else sheet_covered_name
-        thickened_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), sheet_covered_name)
-        thickened_obj = cast(Object3d, sheet_loop_obj)
-    elif isinstance(thickened, str):
-        thickened_name = thickened
-        thickened_obj = cast(Object3d, sheet_loop_obj)
-    else:
-        thickened_obj = cast(Object3d, thickened)
-        thickened_name = _object_name(thickened_obj, sheet_covered_name)
-    return thickened_name, thickened_obj
+    return sheet_covered_name, sheet_loop_obj
 
 
 def _sheet_points_from_edge_pair(*, dd_edge: _Edge2P, vertical_edge: _Edge2P) -> list[list[float]]:

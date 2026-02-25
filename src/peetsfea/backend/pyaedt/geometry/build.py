@@ -31,6 +31,7 @@ from .debug_checks import _bbox_violations, _build_geometry_debug
 from .design_vars import _assign_design_variables
 from .metadata import _build_geometry_metadata
 from .placement_rules import (
+    _apply_rxdd_endpoint_rule,
     _apply_txdd_right_endpoint_rule,
     _build_polarity,
     _coil_instance_offset,
@@ -43,6 +44,7 @@ from .placement_rules import (
     _tx_dd_center_y_and_layer,
     _txdd_right_layer_rank_by_z,
     _txdd_right_points,
+    _validate_rxdd_single_layer_count,
 )
 from .scene_objects import _bounds_from_scene_entry, _create_scene_non_model_objects
 from .spiral_points import (
@@ -305,6 +307,8 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                 transforms = group["instance_transforms"]
                 transform = transforms[0] if transforms else {"dx": 0.0, "dy": 0.0, "dz": 0.0, "rot_deg": 0.0}
                 txdd_right_layer_rank: dict[int, int] = {}
+                if kind == "rx_dd":
+                    _validate_rxdd_single_layer_count(instance_count)
                 if kind == "rx_dd" and spacing_mm < 0:
                     raise ValueError(f"rx_dd edge gap must be >= 0 (actual={spacing_mm})")
                 if kind == "tx_dd" and instance_count == 4:
@@ -879,6 +883,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     print(f"[geometry] axis_aligned={axis_aligned} pitch_max_delta={pitch_max_delta:.9f}")
     print(f"[geometry] top_bbox={top_bbox}")
     _apply_txdd_right_endpoint_rule(group_endpoints, coil_polarity)
+    _apply_rxdd_endpoint_rule(group_endpoints, coil_polarity)
 
     em_ready_objects, em_endpoints, em_context = build_em_artifacts(
         selected=cast(dict[str, object], selected),

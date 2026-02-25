@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import math
+from typing import cast
 
 import pytest
+from ansys.aedt.core.modeler.cad.object_3d import Object3d
+from ansys.aedt.core.modeler.modeler_3d import Modeler3D
 
 from peetsfea.backend.pyaedt.geometry.build_rx_dd import (
+    _create_sheet_from_points,
+    _create_thickened_sheet_from_points,
     _sheet_points_from_edge_pair,
     _tx_dd_xy_tools,
     _txdd_left_a_edge_from_points,
@@ -14,6 +19,52 @@ from peetsfea.backend.pyaedt.geometry.build import _edge_points_at_path_end
 
 _Point3 = tuple[float, float, float]
 _Edge2P = tuple[_Point3, _Point3]
+
+
+class _DummyCadObject:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+class _MockSheetModeler:
+    def __init__(
+        self,
+        *,
+        create_result: object,
+        cover_result: object,
+        thicken_result: object,
+        cover_accepts_assignment: bool = True,
+        thicken_accepts_assignment: bool = True,
+    ) -> None:
+        self.create_result = create_result
+        self.cover_result = cover_result
+        self.thicken_result = thicken_result
+        self.cover_accepts_assignment = cover_accepts_assignment
+        self.thicken_accepts_assignment = thicken_accepts_assignment
+        self.last_create_kwargs: dict[str, object] | None = None
+        self.last_cover_assignment: str | None = None
+        self.last_thicken_assignment: str | None = None
+        self.last_thickness: float | None = None
+
+    def create_polyline(self, **kwargs: object) -> object:
+        self.last_create_kwargs = kwargs
+        return self.create_result
+
+    def cover_lines(self, *args: object, **kwargs: object) -> object:
+        if (not self.cover_accepts_assignment) and ("assignment" in kwargs):
+            raise TypeError("assignment keyword not supported")
+        assignment = kwargs.get("assignment", args[0] if args else None)
+        self.last_cover_assignment = str(assignment) if assignment is not None else None
+        return self.cover_result
+
+    def thicken_sheet(self, *args: object, **kwargs: object) -> object:
+        if (not self.thicken_accepts_assignment) and ("assignment" in kwargs):
+            raise TypeError("assignment keyword not supported")
+        assignment = kwargs.get("assignment", args[0] if args else None)
+        thickness = kwargs.get("thickness", args[1] if len(args) > 1 else None)
+        self.last_thicken_assignment = str(assignment) if assignment is not None else None
+        self.last_thickness = float(thickness) if isinstance(thickness, (int, float)) else None
+        return self.thicken_result
 
 
 def _legacy_sheet_points_from_edge_pair(*, dd_edge: _Edge2P, vertical_edge: _Edge2P) -> list[list[float]]:
@@ -129,3 +180,79 @@ def test_tx_dd_xy_tools_returns_empty_when_all_map_and_fallback_names_dead() -> 
         group_objects={"tx_dd": ["fallback_dead"], "tx_vertical": [], "rx_dd": []},
     )
     assert tools == []
+
+
+def test_create_sheet_from_points_returns_covered_name_and_loop_object() -> None:
+    modeler = _MockSheetModeler(
+        create_result=_DummyCadObject("sheet_loop_obj"),
+        cover_result="sheet_covered_obj",
+        thicken_result=None,
+        cover_accepts_assignment=False,
+    )
+    covered_name, loop_obj = _create_sheet_from_points(
+        modeler=cast(Modeler3D, modeler),
+        sheet_points=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        sheet_name="sheet_name",
+    )
+    assert covered_name == "sheet_covered_obj"
+    assert cast(Object3d, loop_obj).name == "sheet_loop_obj"
+    assert modeler.last_create_kwargs is not None
+    assert modeler.last_create_kwargs["material"] == "copper"
+    assert modeler.last_create_kwargs["close_surface"] is True
+    assert modeler.last_cover_assignment == "sheet_loop_obj"
+
+
+def test_create_sheet_from_points_raises_when_loop_creation_fails() -> None:
+    modeler = _MockSheetModeler(
+        create_result=None,
+        cover_result=None,
+        thicken_result=None,
+    )
+    with pytest.raises(ValueError, match=r"Sheet loop creation failed \(name=sheet_name\)"):
+        _create_sheet_from_points(
+            modeler=cast(Modeler3D, modeler),
+            sheet_points=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            sheet_name="sheet_name",
+        )
+
+
+def test_create_sheet_from_points_raises_when_cover_lines_fails() -> None:
+    modeler = _MockSheetModeler(
+        create_result=_DummyCadObject("sheet_loop_obj"),
+        cover_result=None,
+        thicken_result=None,
+    )
+    with pytest.raises(ValueError, match=r"Sheet cover_lines failed \(name=sheet_name\)"):
+        _create_sheet_from_points(
+            modeler=cast(Modeler3D, modeler),
+            sheet_points=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            sheet_name="sheet_name",
+        )
+
+
+def test_create_thickened_sheet_from_points_uses_create_sheet_and_keeps_thicken_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, list[list[float]], str]] = []
+
+    def _fake_create_sheet_from_points(*, modeler: Modeler3D, sheet_points: list[list[float]], sheet_name: str) -> tuple[str, Object3d]:
+        calls.append((str(modeler), sheet_points, sheet_name))
+        return "covered_sheet_name", cast(Object3d, _DummyCadObject("sheet_loop_obj"))
+
+    monkeypatch.setattr("peetsfea.backend.pyaedt.geometry.build_rx_dd._create_sheet_from_points", _fake_create_sheet_from_points)
+    modeler = _MockSheetModeler(
+        create_result=None,
+        cover_result=None,
+        thicken_result=None,
+    )
+    with pytest.raises(ValueError, match=r"Sheet thicken failed \(name=bridge_sheet, thickness=0.2\)"):
+        _create_thickened_sheet_from_points(
+            modeler=cast(Modeler3D, modeler),
+            sheet_points=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            sheet_name="bridge_sheet",
+            thickness=0.2,
+        )
+    assert len(calls) == 1
+    _, called_points, called_name = calls[0]
+    assert called_name == "bridge_sheet"
+    assert called_points == [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
