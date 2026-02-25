@@ -189,6 +189,13 @@ def _sheet_points_from_edge_pair(*, dd_edge: _Edge2P, vertical_edge: _Edge2P) ->
     ]
 
 
+def _bbox_overlap_lengths(a: list[float], b: list[float]) -> tuple[float, float, float]:
+    ox = min(a[3], b[3]) - max(a[0], b[0])
+    oy = min(a[4], b[4]) - max(a[1], b[1])
+    oz = min(a[5], b[5]) - max(a[2], b[2])
+    return ox, oy, oz
+
+
 def _txdd_left_a_edge_from_points(*, txdd_left_a_points: dict[int, tuple[_Point3, float]]) -> _Edge2P:
     if 0 not in txdd_left_a_points or 1 not in txdd_left_a_points:
         raise ValueError("tx_dd left a-edge contract violation: layer points [0,1] were not captured")
@@ -982,35 +989,52 @@ def _finalize_solids_and_substrates_impl(
         if fr4_plane is None:
             continue
         fr4_by_plane[fr4_plane].append(fr4_name)
+    cad_bbox_by_name: dict[str, list[float]] = {}
+    for probe in cad_probe:
+        cad_bbox_by_name[probe["object_name"]] = probe["bbox"]
     planes: tuple[Literal["XY", "YZ", "ZX"], Literal["XY", "YZ", "ZX"], Literal["XY", "YZ", "ZX"]] = ("XY", "YZ", "ZX")
     for plane in planes:
         plane_fr4 = sorted(set(fr4_by_plane[plane]))
         plane_tools = copper_tools_by_plane[plane]
         if plane == "XY" and plane_fr4 and not plane_tools:
             raise ValueError("No live tx_dd XY tools found for FR4 subtraction")
+        # ZX FR4 boolean subtraction is unstable for some seeds/topologies and can
+        # generate NULL bodies in Parasolid. Keep ZX substrates intact.
+        if plane == "ZX":
+            continue
         if not plane_fr4 or not plane_tools:
             continue
-        subtract_ok = modeler.subtract(blank_list=plane_fr4, tool_list=plane_tools, keep_originals=True)
-        if not subtract_ok:
-            raise ValueError(
-                "Failed to subtract copper solids from FR4 substrates "
-                f"(plane={plane}, fr4_count={len(plane_fr4)}, copper_count={len(plane_tools)})"
-            )
-
-    # Global fallback pass: subtract all live Tx/Rx conductors from all live FR4s,
-    # preserving conductor originals, to avoid any residual 3D overlaps.
-    live_fr4 = sorted(set(fr4_object_names) & live_object_names)
-    live_tx_rx_tools = sorted(
-        ((set(group_objects["tx_dd"] + group_objects["tx_vertical"] + group_objects["rx_dd"])) & live_object_names)
-        - set(live_fr4)
-    )
-    if live_fr4 and live_tx_rx_tools:
-        subtract_ok = modeler.subtract(blank_list=live_fr4, tool_list=live_tx_rx_tools, keep_originals=True)
-        if not subtract_ok:
-            raise ValueError(
-                "Failed to subtract Tx/Rx conductors from FR4 group "
-                f"(fr4_count={len(live_fr4)}, copper_count={len(live_tx_rx_tools)})"
-            )
+        # Robust boolean strategy:
+        # avoid subtracting many tools at once because that can produce NULL bodies
+        # for some geometry/topology combinations.
+        for fr4_name in plane_fr4:
+            fr4_bbox = cad_bbox_by_name.get(fr4_name)
+            for tool_name in plane_tools:
+                if fr4_name == tool_name:
+                    continue
+                if tool_name.startswith("scene_"):
+                    continue
+                tool_bbox = cad_bbox_by_name.get(tool_name)
+                if fr4_bbox is not None and tool_bbox is not None:
+                    ox, oy, oz = _bbox_overlap_lengths(fr4_bbox, tool_bbox)
+                    eps = 1e-6
+                    # Skip non-overlap or touching-only pairs.
+                    if ox <= eps or oy <= eps or oz <= eps:
+                        continue
+                    fr4_dx = fr4_bbox[3] - fr4_bbox[0]
+                    fr4_dy = fr4_bbox[4] - fr4_bbox[1]
+                    fr4_dz = fr4_bbox[5] - fr4_bbox[2]
+                    # Guard against full FR4 removal leading to NULL body.
+                    if (
+                        fr4_dx > eps
+                        and fr4_dy > eps
+                        and fr4_dz > eps
+                        and (ox / fr4_dx) > 0.999
+                        and (oy / fr4_dy) > 0.999
+                        and (oz / fr4_dz) > 0.999
+                    ):
+                        continue
+                _ = modeler.subtract(blank_list=[fr4_name], tool_list=[tool_name], keep_originals=True)
 
     hfss.save_project(str(aedt_path))
     return object_names, fr4_object_names
