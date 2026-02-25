@@ -68,6 +68,32 @@ def _rxdd_back_stub_bridge_edge(*, anchor_xyz: _Point3, trace: float) -> _Edge2P
     return p0, p1
 
 
+def _auto_identify_ports_direct(
+    *,
+    hfss: Hfss,
+    face_id: int,
+    reference_conductor_name: str,
+    port_name: str,
+    sheet_name: str,
+    board_id: str,
+    context: str,
+) -> None:
+    assert hfss.oboundary is not None, "HFSS boundary module is not initialized"
+    try:
+        hfss.oboundary.AutoIdentifyPorts(
+            ["NAME:Faces", int(face_id)],
+            False,
+            ["NAME:ReferenceConductors", reference_conductor_name],
+            port_name,
+            True,
+        )
+    except Exception as exc:
+        raise ValueError(
+            f"{context} failed in AutoIdentifyPorts "
+            f"(port={port_name}, sheet={sheet_name}, reference={reference_conductor_name}, board_id={board_id})"
+        ) from exc
+
+
 def _txdd_start_stub_port_edge(*, anchor_xyz: _Point3, trace: float) -> _Edge2P:
     if trace <= 0.0:
         raise ValueError(f"tx_dd start stub port trace must be > 0 (actual={trace})")
@@ -234,6 +260,9 @@ def _finalize_solids_and_substrates_impl(
     rxdd_dc_stub_edges: dict[str, _Edge2P] = {}
     rxdd_dc_source_names: dict[str, str] = {}
     txdd_start_stub_port_edges_by_board: dict[str, list[_Edge2P]] = {}
+    txdd_start_stub_reference_names_by_board: dict[str, list[str]] = {}
+    rxdd_start_stub_edge_by_name: dict[str, _Edge2P] = {}
+    rxdd_start_stub_board_by_name: dict[str, str] = {}
 
     def _resolve_replaced_name(name: str) -> str:
         current = name
@@ -267,27 +296,8 @@ def _finalize_solids_and_substrates_impl(
         object_names.append(stub_object_name)
         group_objects["rx_dd"].append(stub_object_name)
         cad_probe.append(_probe_cad_object(stub_obj, stub_name))
-
-        stub_united_name = safe_unite(
-            modeler=modeler,
-            targets=[source_object_name, stub_object_name],
-            fallback_name=source_object_name,
-            error_context="rx_dd back stub with source coil",
-        )
-
-        group_objects["rx_dd"] = [name for name in group_objects["rx_dd"] if name != stub_object_name]
-        object_names = [name for name in object_names if name != stub_object_name]
-        group_objects["rx_dd"] = [stub_united_name if name == source_object_name else name for name in group_objects["rx_dd"]]
-        object_names = [stub_united_name if name == source_object_name else name for name in object_names]
-        if stub_united_name not in group_objects["rx_dd"]:
-            group_objects["rx_dd"].append(stub_united_name)
-        if stub_united_name not in object_names:
-            object_names.append(stub_united_name)
-        for old_name, mapped_name in list(rxdd_name_replacements.items()):
-            if mapped_name == source_object_name:
-                rxdd_name_replacements[old_name] = stub_united_name
-        rxdd_name_replacements[source_object_name] = stub_united_name
-        rxdd_name_replacements[source_object_name_raw] = stub_united_name
+        rxdd_start_stub_edge_by_name[stub_object_name] = _rxdd_back_stub_bridge_edge(anchor_xyz=anchor_xyz, trace=trace)
+        rxdd_start_stub_board_by_name[stub_object_name] = board_id
 
         if endpoint_label in ("c", "d"):
             if endpoint_label in rxdd_dc_stub_edges:
@@ -394,6 +404,7 @@ def _finalize_solids_and_substrates_impl(
             txdd_start_stub_port_edges_by_board.setdefault(board_id, []).append(
                 _txdd_start_stub_port_edge(anchor_xyz=start_xyz, trace=trace)
             )
+            txdd_start_stub_reference_names_by_board.setdefault(board_id, []).append(stub_object_name)
 
     for board_id, port_edges in sorted(txdd_start_stub_port_edges_by_board.items()):
         if len(port_edges) != 2:
@@ -424,6 +435,90 @@ def _finalize_solids_and_substrates_impl(
             raise
         object_names.append(start_port_sheet_obj_name)
         cad_probe.append(_probe_cad_object(start_port_sheet_obj, start_port_sheet_name))
+        reference_conductors = txdd_start_stub_reference_names_by_board.get(board_id, [])
+        if len(reference_conductors) < 1:
+            raise ValueError(
+                "tx_dd start port reference conductor contract violation: expected at least 1 start stub per board "
+                f"(board_id={board_id}, actual={len(reference_conductors)})"
+            )
+        start_port_faces = modeler.get_object_faces(start_port_sheet_obj_name)
+        if not start_port_faces:
+            raise ValueError(
+                "tx_dd start port assignment failed: no sheet faces were found "
+                f"(sheet={start_port_sheet_obj_name}, board_id={board_id})"
+            )
+        # Match the direct HFSS COM invocation pattern (BoundarySetup.AutoIdentifyPorts)
+        # using one deterministic reference conductor from the generated start stubs.
+        reference_conductor_name = sorted(reference_conductors)[0]
+        start_port_name = "1"
+        _auto_identify_ports_direct(
+            hfss=hfss,
+            face_id=int(start_port_faces[0]),
+            reference_conductor_name=reference_conductor_name,
+            port_name=start_port_name,
+            sheet_name=start_port_sheet_obj_name,
+            board_id=board_id,
+            context="tx_dd start port assignment",
+        )
+    if rxdd_start_stub_edge_by_name:
+        sorted_rxdd_stub_names = sorted(rxdd_start_stub_edge_by_name)
+        if len(sorted_rxdd_stub_names) < 2:
+            raise ValueError(
+                "rx_dd start port sheet contract violation: expected at least 2 rx_dd back stubs overall "
+                f"(actual={len(sorted_rxdd_stub_names)})"
+            )
+        selected_rxdd_stub_names = sorted_rxdd_stub_names[:2]
+        start_port_sheet_points = _sheet_points_from_edge_pair(
+            dd_edge=rxdd_start_stub_edge_by_name[selected_rxdd_stub_names[0]],
+            vertical_edge=rxdd_start_stub_edge_by_name[selected_rxdd_stub_names[1]],
+        )
+        start_port_sheet_name = f"sheet_rx_dd_start_ports_{design_id}"
+        try:
+            start_port_sheet_obj_name, start_port_sheet_obj = _create_sheet_from_points(
+                modeler=modeler,
+                sheet_points=start_port_sheet_points,
+                sheet_name=start_port_sheet_name,
+            )
+        except ValueError as exc:
+            message = str(exc)
+            if message.startswith("Sheet loop creation failed"):
+                raise ValueError(
+                    "rx_dd start port sheet rectangle loop creation failed "
+                    f"(name={start_port_sheet_name})"
+                ) from exc
+            if message.startswith("Sheet cover_lines failed"):
+                raise ValueError(
+                    "rx_dd start port sheet cover_lines failed "
+                    f"(name={start_port_sheet_name})"
+                ) from exc
+            raise
+        object_names.append(start_port_sheet_obj_name)
+        cad_probe.append(_probe_cad_object(start_port_sheet_obj, start_port_sheet_name))
+        start_port_faces = modeler.get_object_faces(start_port_sheet_obj_name)
+        if not start_port_faces:
+            raise ValueError(
+                "rx_dd start port assignment failed: no sheet faces were found "
+                f"(sheet={start_port_sheet_obj_name})"
+            )
+        reference_conductor_name = selected_rxdd_stub_names[0]
+        board_id_context = ",".join(
+            sorted(
+                {
+                    rxdd_start_stub_board_by_name[selected_rxdd_stub_names[0]],
+                    rxdd_start_stub_board_by_name[selected_rxdd_stub_names[1]],
+                }
+            )
+        )
+        start_port_name = "2"
+        _auto_identify_ports_direct(
+            hfss=hfss,
+            face_id=int(start_port_faces[0]),
+            reference_conductor_name=reference_conductor_name,
+            port_name=start_port_name,
+            sheet_name=start_port_sheet_obj_name,
+            board_id=board_id_context,
+            context="rx_dd start port assignment",
+        )
 
     for (board_id, board_idx), nodes in tx_vertical_nodes_by_board.items():
         if len(nodes) < 2:
