@@ -1,0 +1,47 @@
+[project]
+name = "peetsfea"
+version = "0.2.3"
+description = "Spec-first deterministic device design with Pyaedt."
+readme = "README.md"
+requires-python = "==3.12"
+license = { text = "GPL-3.0-only" }
+dependencies = [
+  "pyaedt>=0.24.1",
+  "dearpygui>=2.1.1",
+  "cadquery>=2.6.1",
+  "sympy>=1.14.0",
+  "pyvista>=0.46.5"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "pytest-cov",
+  "ruff",
+  "mypy",
+  "pyright",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/peetsfea"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_configs = true
+ignore_missing_imports = true
+check_untyped_defs = true
+disallow_incomplete_defs = false
+disallow_untyped_defs = false
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+include = ["src", "tests", "run.py"]
+exclude = ["ref", "**/__pycache__"]
+typeCheckingMode = "basic"
+reportMissingImports = "none"
+reportMissingModuleSource = "none"

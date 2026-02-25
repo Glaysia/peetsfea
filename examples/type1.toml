@@ -1,0 +1,819 @@
+# peetsfea primary TOML (`run/type1.toml` symlinks to this file)
+# ----------------------------------------------------------------------------
+# Phase 1 spec-remodel target structure.
+# IMPORTANT:
+# - Keep comments rich and explicit in this file.
+# - When adding/changing fields, always add 1-2 lines describing intent/constraints.
+# - Treat comments as part of the spec contract for future maintainers/agents.
+# Numeric range convention:
+#   range = [is_integer, start, end, count]
+
+spec_version = "0.2.3"
+
+[design]
+units = "mm"
+
+[backend]
+tool = "hfss"
+
+# ----------------------------------------------------------------------------
+# Non-model scene/envelope sizes
+
+[tv.width_mm]
+range = [false, 1842.0, 1842.0, 1]
+
+[tv.height_mm]
+range = [false, 1055.0, 1055.0, 1]
+
+[tv.thickness_mm]
+# TV panel thickness (updated to 9mm class).
+range = [false, 9.0, 9.0, 1]
+
+[tv.base_z_mm]
+# TV bottom elevation from floor (z=0 reference plane).
+range = [false, 600.0, 600.0, 1]
+
+[tx.region.outer_w_mm]
+range = [false, 160.0, 160.0, 1]
+
+[tx.region.outer_h_mm]
+range = [false, 280.0, 280.0, 1]
+
+[tx.region.thickness_mm]
+range = [false, 90.0, 90.0, 1]
+
+[tx.region.z_parts.vertical_z_mm]
+# Top zone in TX max region for vertical-coil allocation.
+range = [false, 15.0, 45.0, 14]
+
+[tx.region.z_parts.dd_z_mm]
+# Middle zone in TX max region for DD-coil allocation.
+range = [false, 15.0, 45.0, 14]
+# Bottom leftover is implicit:
+# leftover_z = tx.region.thickness_mm - vertical_z_mm - dd_z_mm
+
+[rx.region.outer_w_mm]
+range = [false, 560.0, 560.0, 1]
+
+[rx.region.outer_h_mm]
+range = [false, 360.0, 360.0, 1]
+
+[rx.region.thickness_mm]
+# RX region thickness is fixed to 4mm for wall-aligned placement baseline.
+range = [false, 4.0, 4.0, 1]
+
+[wall.thickness_mm]
+range = [false, 200.0, 200.0, 1]
+
+[wall.size_y_mm]
+range = [false, 4000.0, 4000.0, 1]
+
+[wall.size_z_mm]
+range = [false, 3000.0, 3000.0, 1]
+
+[floor.thickness_mm]
+range = [false, 300.0, 300.0, 1]
+
+[floor.size_x_mm]
+range = [false, 5000.0, 5000.0, 1]
+
+[floor.size_y_mm]
+range = [false, 5000.0, 5000.0, 1]
+
+# ----------------------------------------------------------------------------
+# Grouped coil geometry controls
+
+[coil_shape.tx_dd.outer_x]
+# TX DD outer X span.
+range = [false, 60.0, 158.0, 10]
+
+[coil_shape.tx_dd.outer_y]
+# TX DD outer Y span.
+range = [false, 60.0, 130.0, 40]
+
+[coil_shape.tx_vertical.outer_x]
+# Derived dummy marker: tx_vertical outer_x is not sampled.
+# It is derived from coil_shape.tx_dd.outer_x in resolver.
+range = [false, -1, -1, -1]
+
+[coil_shape.tx_vertical.outer_y]
+# TX vertical outer Y span.
+range = [false, 60.0, 130.0, 40]
+
+[coil_shape.rx_dd.outer_x]
+# RX DD outer X span.
+range = [false, 60.0, 158.0, 10]
+
+[coil_shape.rx_dd.outer_y]
+# RX DD outer Y span.
+range = [false, 60.0, 130.0, 40]
+
+[coil_shape.inner_margin_x]
+range = [false, 2.0, 8.0, 8]
+
+[coil_shape.inner_margin_y]
+range = [false, 2.0, 8.0, 8]
+
+# Grouped coil spacing controls
+[coil_spacing.tx_dd_pair_spacing_ratio]
+# TX DD pair spacing ratio to tx.region.outer_h_mm.
+range = [false, 0.0, 0.12, 25]
+
+[coil_spacing.rx_dd_pair_spacing_ratio]
+# RX DD pair spacing ratio to rx.region.outer_h_mm.
+range = [false, 0.0, 0.03, 25]
+
+[coil_spacing.tx_vertical_center_gap_mm]
+# Adjacent center-to-center spacing for tx_vertical coils (ZX-plane normal axis, Y direction).
+# tx_vertical_span_mm is derived in resolver: center_gap * max(0, selected_count - 1).
+range = [false, 1.62, 15.0, 8]
+
+# Group-specific geometry free variables.
+# One key = one meaning: no shared global turns/trace/gap key across groups.
+# Geometry derives from:
+#   effective_outer_y =
+#     - tx_vertical: min(outer_y, tx.region.z_parts.vertical_z_mm)
+#     - tx_dd/rx_dd: outer_y
+#   base_outer = min(outer_x, effective_outer_y)
+#   band_mm  = band_ratio * base_outer
+#   pitch_mm = band_mm / turn_count_max
+#   trace_mm = pitch_mm * metal_ratio
+#   gap_mm   = pitch_mm * (1 - metal_ratio)
+# where `metal_ratio` is the metal occupancy ratio per equal pitch cell.
+# Resolver selects each path once per attempt and reuses it across internal consumers.
+# If constraints fail, deterministic retry uses attempt offset (same seed => same retry sequence).
+[coil_groups_params.tx_dd.turn_count_max]
+range = [true, 3, 12, 10]
+[coil_groups_params.tx_dd.band_ratio]
+range = [false, 0.1, 0.35, 20]
+[coil_groups_params.tx_dd.metal_ratio]
+range = [false, 0.15, 0.60, 25]
+
+[coil_groups_params.tx_vertical.turn_count_max]
+range = [true, 3, 6, 4]
+[coil_groups_params.tx_vertical.band_ratio]
+range = [false, 0.35, 0.5, 20]
+[coil_groups_params.tx_vertical.metal_ratio]
+range = [false, 0.45, 0.75, 25]
+
+[coil_groups_params.rx_dd.turn_count_max]
+range = [true, 3, 12, 10]
+[coil_groups_params.rx_dd.band_ratio]
+range = [false, 0.1, 0.35, 20]
+[coil_groups_params.rx_dd.metal_ratio]
+range = [false, 0.15, 0.60, 25]
+
+# ----------------------------------------------------------------------------
+# Lifted fixed design values (count=1 for TOML SSOT contract)
+# These were previously hardcoded in resolver/geometry and are declared here
+# so optimizers and data pipelines can see a single source of truth.
+
+[coil_material.via_diameter_mm]
+# Via diameter for coil feed-through (mm). Non-positive values are invalid.
+range = [false, 0.5, 0.5, 1]
+
+[coil_material.pcb_thickness_mm]
+# PCB dielectric thickness (mm). Must stay > 0 for geometry generation.
+range = [false, 1.6, 1.6, 1]
+
+[coil_material.cu_thickness_mm]
+# Copper trace thickness (mm). Must stay > 0.
+range = [false, 0.035, 0.035, 1]
+
+[coil_material.fr4_er]
+# FR4 relative permittivity. Must be > 1.0 for physical meaning.
+range = [false, 4.4, 4.4, 1]
+
+[scene_anchor.shelf_height_mm]
+# Shelf top height from floor (mm) where TX region starts.
+range = [false, 400.0, 400.0, 1]
+
+[scene_anchor.shelf_min_size_x_mm]
+# Minimum shelf size in +X (mm) to ensure scene envelope availability.
+range = [false, 350.0, 350.0, 1]
+
+[scene_anchor.rx_region_bottom_from_tv_mm]
+# RX region bottom offset from TV base plane (mm), must be >= 0.
+range = [false, 1.0, 1.0, 1]
+
+[coil_placement.tx_dd_top_clearance_mm]
+# Clearance from TX DD zone top face to DD coil top (mm), must be >= 0.
+range = [false, 0.0, 0.0, 1]
+
+[coil_placement.rx_face_clearance_mm]
+# Clearance from RX +X face (TV side) to RX DD coil face (mm), must be >= 0.
+range = [false, 0.0, 0.0, 1]
+
+[coil_placement.dd_mirror_plane]
+# DD mirror plane contract for pair symmetry.
+value = "XZ"
+
+[coil_placement.rx_plane]
+# RX coil placement plane contract (vertical to floor).
+value = "YZ"
+
+[coil_placement.tx_vertical_plane]
+# TX vertical coil plane contract (parallel to ZX plane).
+value = "ZX"
+
+[pcb_spacing.tx_main_1_z_from_tx_main_0_mm]
+# Relative Z spacing from tx_main_0 to tx_main_1 (mm).
+# tx_main_1 uses position.z = -1 dummy marker and resolver derives final z from this range.
+range = [false, 2.5, 3.5, 5]
+
+# ----------------------------------------------------------------------------
+# Declarative constraints (SSOT for preflight validity checks)
+# Rule format:
+# - kind = "comparison": lhs.path <op> rhs.path|rhs.value|rhs.func
+# - kind = "range": min/max bounds for target.path
+# - kind = "aggregate": aggregate over selected groups
+
+[constraints]
+
+# Physical sanity: coil outer_x must be positive (mm), else geometry build is blocked.
+[[constraints.rules]]
+id = "outer_x_positive"
+kind = "comparison"
+message = "outer_x must be > 0"
+lhs = { path = "outer_x" }
+op = ">"
+rhs = { value = 0.0 }
+
+# Physical sanity: coil outer_y must be positive (mm), else geometry build is blocked.
+[[constraints.rules]]
+id = "outer_y_positive"
+kind = "comparison"
+message = "outer_y must be > 0"
+lhs = { path = "outer_y" }
+op = ">"
+rhs = { value = 0.0 }
+
+# Inner margin must be non-negative (mm), negative margin is physically invalid.
+[[constraints.rules]]
+id = "inner_margin_x_non_negative"
+kind = "comparison"
+message = "inner_margin_x must be >= 0"
+lhs = { path = "inner_margin_x" }
+op = ">="
+rhs = { value = 0.0 }
+
+# Inner margin must be non-negative (mm), negative margin is physically invalid.
+[[constraints.rules]]
+id = "inner_margin_y_non_negative"
+kind = "comparison"
+message = "inner_margin_y must be >= 0"
+lhs = { path = "inner_margin_y" }
+op = ">="
+rhs = { value = 0.0 }
+
+# TX DD mirrored-pair clearance must be positive (mm).
+[[constraints.rules]]
+id = "tx_dd_spacing_positive"
+kind = "comparison"
+message = "tx_dd_pair_spacing_mm must be > 0"
+lhs = { path = "tx_dd_pair_spacing_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+[[constraints.rules]]
+id = "tx_dd_spacing_ratio_upper_bound"
+kind = "comparison"
+message = "tx_dd_pair_spacing_ratio must be <= 0.12"
+lhs = { path = "tx_dd_pair_spacing_ratio" }
+op = "<="
+rhs = { value = 0.12 }
+
+# RX DD pair edge gap must be non-negative (mm).
+[[constraints.rules]]
+id = "rx_dd_spacing_positive"
+kind = "comparison"
+message = "rx_dd_pair_spacing_mm must be >= 0"
+lhs = { path = "rx_dd_pair_spacing_mm" }
+op = ">="
+rhs = { value = 0.0 }
+
+[[constraints.rules]]
+id = "rx_dd_spacing_ratio_upper_bound"
+kind = "comparison"
+message = "rx_dd_pair_spacing_ratio must be <= 0.03"
+lhs = { path = "rx_dd_pair_spacing_ratio" }
+op = "<="
+rhs = { value = 0.03 }
+
+# Vertical center gap is bounded in [1.62, 15] mm for supported arrangement modes.
+[[constraints.rules]]
+id = "tx_vertical_center_gap_range"
+kind = "range"
+message = "tx_vertical_center_gap_mm must be in [1.62,15]"
+target = { path = "tx_vertical_center_gap_mm" }
+min = { value = 1.62 }
+max = { value = 15.0 }
+inclusive_min = true
+inclusive_max = true
+
+# TX region outer dimensions must be positive (mm); invalid envelope otherwise.
+[[constraints.rules]]
+id = "tx_region_outer_w_positive"
+kind = "comparison"
+message = "tx_region_outer_w_mm must be > 0"
+lhs = { path = "tx_region_outer_w_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+# TX region outer dimensions must be positive (mm); invalid envelope otherwise.
+[[constraints.rules]]
+id = "tx_region_outer_h_positive"
+kind = "comparison"
+message = "tx_region_outer_h_mm must be > 0"
+lhs = { path = "tx_region_outer_h_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+# TX region thickness must be positive (mm), else layer stack is impossible.
+[[constraints.rules]]
+id = "tx_region_thickness_positive"
+kind = "comparison"
+message = "tx_region_thickness_mm must be > 0"
+lhs = { path = "tx_region_thickness_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+# Vertical/DD zone thickness must be positive (mm), else placement fails.
+[[constraints.rules]]
+id = "tx_region_vertical_z_positive"
+kind = "comparison"
+message = "tx_region_vertical_z_mm must be > 0"
+lhs = { path = "tx_region_vertical_z_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+# Vertical/DD zone thickness must be positive (mm), else placement fails.
+[[constraints.rules]]
+id = "tx_region_dd_z_positive"
+kind = "comparison"
+message = "tx_region_dd_z_mm must be > 0"
+lhs = { path = "tx_region_dd_z_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+# leftover_z = thickness - vertical_z - dd_z must be non-negative (mm).
+[[constraints.rules]]
+id = "tx_region_leftover_non_negative"
+kind = "comparison"
+message = "tx.region.leftover_z_mm computed negative; reduce vertical_z/dd_z or increase tx.region.thickness_mm"
+lhs = { path = "tx_region_leftover_z_mm" }
+op = ">="
+rhs = { value = 0.0 }
+
+# Coil outer must fit TX region width (mm), otherwise layout does not fit.
+[[constraints.rules]]
+id = "coil_outer_x_fits_tx_region"
+kind = "comparison"
+message = "TX coil outer_x must be < tx.region.outer_w_mm"
+lhs = { path = "outer_x" }
+op = "<"
+rhs = { path = "tx_region_outer_w_mm" }
+
+# Placement feasibility gate: tx_dd pair must fit tx region height.
+[[constraints.rules]]
+id = "tx_dd_pair_fits_region"
+kind = "comparison"
+message = "2*tx_dd_outer_y + tx_dd_pair_spacing_mm must be <= tx_region_outer_h_mm"
+lhs = { func = "add(mul(2,tx_dd_outer_y),tx_dd_pair_spacing_mm)" }
+op = "<="
+rhs = { path = "tx_region_outer_h_mm" }
+
+# Placement feasibility gate: rx_dd pair must fit rx region width.
+[[constraints.rules]]
+id = "rx_dd_pair_fits_region"
+kind = "comparison"
+message = "2*rx_dd_outer_x + rx_dd_pair_spacing_mm must be <= rx_region_outer_w_mm"
+lhs = { func = "add(mul(2,rx_dd_outer_x),rx_dd_pair_spacing_mm)" }
+op = "<="
+rhs = { path = "rx_region_outer_w_mm" }
+
+# Geometry feasibility gate: requested turns must not exceed feasible turns for tx_vertical.
+[[constraints.rules]]
+id = "tx_vertical_turn_count_within_feasible_max"
+kind = "comparison"
+message = "tx_vertical turn_count_max must be <= feasible_turns_max under capped vertical zone"
+lhs = { path = "selected_group_geometry.tx_vertical.turn_count_max" }
+op = "<="
+rhs = { func = "feasible_turns_max(tx_vertical,outer_x,outer_y,tx_region_vertical_z_mm)" }
+
+[[constraints.rules]]
+id = "tx_dd_turn_count_within_feasible_max"
+kind = "comparison"
+message = "tx_dd turn_count_max must be <= feasible_turns_max"
+lhs = { path = "selected_group_geometry.tx_dd.turn_count_max" }
+op = "<="
+rhs = { func = "feasible_turns_max(tx_dd,outer_x,outer_y,outer_y)" }
+
+[[constraints.rules]]
+id = "rx_dd_turn_count_within_feasible_max"
+kind = "comparison"
+message = "rx_dd turn_count_max must be <= feasible_turns_max"
+lhs = { path = "selected_group_geometry.rx_dd.turn_count_max" }
+op = "<="
+rhs = { func = "feasible_turns_max(rx_dd,outer_x,outer_y,outer_y)" }
+
+# Aggregate bound: total selected coils capped at 10 for supported scene complexity.
+[[constraints.rules]]
+id = "max_total_selected_coils"
+kind = "aggregate"
+message = "Total selected coil count must be <= 10"
+agg = "sum_group_selected_count"
+op = "<="
+rhs = { value = 10.0 }
+
+# Material constraint from TOML SSOT.
+[[constraints.rules]]
+id = "pcb_thickness_positive"
+kind = "comparison"
+message = "pcb_thickness_mm must be > 0"
+enabled = true
+lhs = { path = "pcb_thickness_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+# Material constraint from TOML SSOT.
+[[constraints.rules]]
+id = "cu_thickness_positive"
+kind = "comparison"
+message = "cu_thickness_mm must be > 0"
+enabled = true
+lhs = { path = "cu_thickness_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+# Material constraint from TOML SSOT.
+[[constraints.rules]]
+id = "via_diameter_positive"
+kind = "comparison"
+message = "via_diameter_mm must be > 0"
+enabled = true
+lhs = { path = "via_diameter_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+# Material constraint from TOML SSOT.
+[[constraints.rules]]
+id = "fr4_er_gt_one"
+kind = "comparison"
+message = "fr4_er must be > 1.0"
+enabled = true
+lhs = { path = "fr4_er" }
+op = ">"
+rhs = { value = 1.0 }
+
+# Scene anchor constraint from TOML SSOT.
+[[constraints.rules]]
+id = "shelf_height_positive"
+kind = "comparison"
+message = "shelf_height_mm must be > 0"
+enabled = true
+lhs = { path = "shelf_height_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+# Scene anchor constraint from TOML SSOT.
+[[constraints.rules]]
+id = "shelf_min_size_x_positive"
+kind = "comparison"
+message = "shelf_min_size_x_mm must be > 0"
+enabled = true
+lhs = { path = "shelf_min_size_x_mm" }
+op = ">"
+rhs = { value = 0.0 }
+
+# Scene anchor constraint from TOML SSOT.
+[[constraints.rules]]
+id = "rx_region_bottom_from_tv_non_negative"
+kind = "comparison"
+message = "rx_region_bottom_from_tv_mm must be >= 0"
+enabled = true
+lhs = { path = "rx_region_bottom_from_tv_mm" }
+op = ">="
+rhs = { value = 0.0 }
+
+# Placement clearance constraint from TOML SSOT.
+[[constraints.rules]]
+id = "tx_dd_top_clearance_non_negative"
+kind = "comparison"
+message = "tx_dd_top_clearance_mm must be >= 0"
+enabled = true
+lhs = { path = "tx_dd_top_clearance_mm" }
+op = ">="
+rhs = { value = 0.0 }
+
+# Placement clearance constraint from TOML SSOT.
+[[constraints.rules]]
+id = "rx_face_clearance_non_negative"
+kind = "comparison"
+message = "rx_face_clearance_mm must be >= 0"
+enabled = true
+lhs = { path = "rx_face_clearance_mm" }
+op = ">="
+rhs = { value = 0.0 }
+
+# Placement feasibility constraint in TX DD region.
+[[constraints.rules]]
+id = "tx_dd_top_clearance_within_dd_zone"
+kind = "comparison"
+message = "tx_dd_top_clearance_mm must be <= tx_region_dd_z_mm"
+enabled = true
+lhs = { path = "tx_dd_top_clearance_mm" }
+op = "<="
+rhs = { path = "tx_region_dd_z_mm" }
+
+# Placement feasibility constraint in RX region.
+[[constraints.rules]]
+id = "rx_face_clearance_within_rx_thickness"
+kind = "comparison"
+message = "rx_face_clearance_mm must be <= rx_region_thickness_mm"
+enabled = true
+lhs = { path = "rx_face_clearance_mm" }
+op = "<="
+rhs = { path = "rx_region_thickness_mm" }
+
+# TX vertical coil plane is fixed by product requirement.
+[[constraints.rules]]
+id = "tx_vertical_plane_fixed_zx"
+kind = "comparison"
+message = "tx_vertical_plane must be ZX"
+enabled = true
+lhs = { path = "tx_vertical_plane" }
+op = "=="
+rhs = { value = "ZX" }
+
+[[constraints.rules]]
+id = "tx_dd_mount_index_in_range"
+kind = "comparison"
+message = "tx_dd mount index must be <= max supported index"
+enabled = true
+lhs = { func = "max_mount_selector_index(tx_dd)" }
+op = "<="
+rhs = { func = "max_supported_mount_index(tx_dd)" }
+
+[[constraints.rules]]
+id = "tx_vertical_mount_index_in_range"
+kind = "comparison"
+message = "tx_vertical mount index must be <= max supported index"
+enabled = true
+lhs = { func = "max_mount_selector_index(tx_vertical)" }
+op = "<="
+rhs = { func = "max_supported_mount_index(tx_vertical)" }
+
+[[constraints.rules]]
+id = "rx_dd_mount_index_in_range"
+kind = "comparison"
+message = "rx_dd mount index must be <= max supported index"
+enabled = true
+lhs = { func = "max_mount_selector_index(rx_dd)" }
+op = "<="
+rhs = { func = "max_supported_mount_index(rx_dd)" }
+
+[[constraints.rules]]
+id = "tx_main_1_z_mode_relative"
+kind = "comparison"
+message = "tx_main_1 z_mode must be relative_to_pcb"
+enabled = true
+lhs = { path = "selected_pcbs.tx_main_1.z_mode" }
+op = "=="
+rhs = { value = "relative_to_pcb" }
+
+[[constraints.rules]]
+id = "tx_main_1_z_base_id"
+kind = "comparison"
+message = "tx_main_1 z_relative_base_id must be tx_main_0"
+enabled = true
+lhs = { path = "selected_pcbs.tx_main_1.z_relative_base_id" }
+op = "=="
+rhs = { value = "tx_main_0" }
+
+[[constraints.rules]]
+id = "tx_main_1_z_delta_path"
+kind = "comparison"
+message = "tx_main_1 z_delta_path must be pcb_spacing.tx_main_1_z_from_tx_main_0_mm"
+enabled = true
+lhs = { path = "selected_pcbs.tx_main_1.z_delta_path" }
+op = "=="
+rhs = { value = "pcb_spacing.tx_main_1_z_from_tx_main_0_mm" }
+
+[[constraints.rules]]
+id = "tx_main_0_z_mode_absolute"
+kind = "comparison"
+message = "tx_main_0 z_mode must be absolute"
+enabled = true
+lhs = { path = "selected_pcbs.tx_main_0.z_mode" }
+op = "=="
+rhs = { value = "absolute" }
+
+[[constraints.rules]]
+id = "rx_main_0_z_mode_absolute"
+kind = "comparison"
+message = "rx_main_0 z_mode must be absolute"
+enabled = true
+lhs = { path = "selected_pcbs.rx_main_0.z_mode" }
+op = "=="
+rhs = { value = "absolute" }
+
+[[constraints.rules]]
+id = "tx_vertical_0_z_mode_absolute"
+kind = "comparison"
+message = "tx_vertical_0 z_mode must be absolute"
+enabled = true
+lhs = { path = "selected_pcbs.tx_vertical_0.z_mode" }
+op = "=="
+rhs = { value = "absolute" }
+
+[[constraints.rules]]
+id = "tx_vertical_has_single_all_mount"
+kind = "comparison"
+message = "tx_vertical all mounts must be exactly one (dedicated tx_vertical_0 host)"
+enabled = true
+lhs = { path = "selected_mounts.tx_vertical.all_mount_count" }
+op = "=="
+rhs = { value = 1.0 }
+
+[[constraints.rules]]
+id = "tx_vertical_has_no_index_mount"
+kind = "comparison"
+message = "tx_vertical index mounts must be zero (dedicated tx_vertical_0 host)"
+enabled = true
+lhs = { path = "selected_mounts.tx_vertical.index_mount_count" }
+op = "=="
+rhs = { value = 0.0 }
+
+[[constraints.rules]]
+id = "tx_opt_0_present_forced_false"
+kind = "comparison"
+message = "tx_opt_0 present must be 0 in fixed topology mode"
+enabled = true
+lhs = { path = "selected_pcbs.tx_opt_0.present" }
+op = "=="
+rhs = { value = 0.0 }
+
+[[constraints.rules]]
+id = "tx_opt_1_present_forced_false"
+kind = "comparison"
+message = "tx_opt_1 present must be 0 in fixed topology mode"
+enabled = true
+lhs = { path = "selected_pcbs.tx_opt_1.present" }
+op = "=="
+rhs = { value = 0.0 }
+
+[[constraints.rules]]
+id = "rx_opt_0_present_forced_false"
+kind = "comparison"
+message = "rx_opt_0 present must be 0 in fixed topology mode"
+enabled = true
+lhs = { path = "selected_pcbs.rx_opt_0.present" }
+op = "=="
+rhs = { value = 0.0 }
+
+[[constraints.rules]]
+id = "rx_opt_1_present_forced_false"
+kind = "comparison"
+message = "rx_opt_1 present must be 0 in fixed topology mode"
+enabled = true
+lhs = { path = "selected_pcbs.rx_opt_1.present" }
+op = "=="
+rhs = { value = 0.0 }
+
+# ----------------------------------------------------------------------------
+# Coil groups
+
+[[coil_groups]]
+kind = "tx_dd"
+count_mode = [true, 2, 4, 2]
+instance_transforms = [
+  { dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 },
+]
+
+[[coil_groups]]
+kind = "tx_vertical"
+count_range = [true, 0, 7, 8]
+instance_transforms = [
+  { dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 },
+]
+
+[[coil_groups]]
+kind = "rx_dd"
+count_fixed = [true, 2, 2, 1]
+instance_transforms = [
+  { dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 180.0 },
+]
+
+# ----------------------------------------------------------------------------
+# PCB instances (9 total: 5 always-on + 4 optional)
+# - 0.2.3 fixed-topology mode:
+#   coil count is primary, PCB present/mounts are normalized to this topology.
+# - tx_vertical uses dedicated host board tx_vertical_0.
+# - optional boards remain in spec for compatibility but are forced inactive.
+
+[[pcbs]]
+id = "tx_main_0"
+role = "tx"
+position = [0.0, 0.0, 0.0]
+rotation_deg = 0.0
+present = [true, 1, 1, 1]
+z_mode = "absolute"
+[[pcbs.mounts]]
+kind = "tx_dd"
+selector_mode = "index"
+selector_index = 0
+[[pcbs.mounts]]
+kind = "tx_dd"
+selector_mode = "index"
+selector_index = 1
+
+[[pcbs]]
+id = "tx_main_1"
+role = "tx"
+# Relative-z mode: final z = tx_main_0.position_z + sampled(z_delta_path).
+position = [0.0, 0.0, 0.0]
+rotation_deg = 0.0
+present = [true, 1, 1, 1]
+z_mode = "relative_to_pcb"
+z_relative_base_id = "tx_main_0"
+z_delta_path = "pcb_spacing.tx_main_1_z_from_tx_main_0_mm"
+[[pcbs.mounts]]
+kind = "tx_dd"
+selector_mode = "index"
+selector_index = 2
+[[pcbs.mounts]]
+kind = "tx_dd"
+selector_mode = "index"
+selector_index = 3
+
+[[pcbs]]
+id = "tx_vertical_0"
+role = "tx"
+position = [0.0, 0.0, 0.0]
+rotation_deg = 0.0
+present = [true, 1, 1, 1]
+z_mode = "absolute"
+[[pcbs.mounts]]
+kind = "tx_vertical"
+selector_mode = "all"
+
+[[pcbs]]
+id = "rx_main_0"
+role = "rx"
+position = [0.0, 0.0, 110.0]
+rotation_deg = 0.0
+present = [true, 1, 1, 1]
+z_mode = "absolute"
+[[pcbs.mounts]]
+kind = "rx_dd"
+selector_mode = "index"
+selector_index = 0
+
+[[pcbs]]
+id = "rx_main_1"
+role = "rx"
+position = [0.0, 0.0, 112.0]
+rotation_deg = 0.0
+present = [true, 1, 1, 1]
+z_mode = "absolute"
+[[pcbs.mounts]]
+kind = "rx_dd"
+selector_mode = "index"
+selector_index = 1
+
+[[pcbs]]
+id = "tx_opt_0"
+role = "tx"
+position = [40.0, 0.0, 0.0]
+rotation_deg = 0.0
+present = [true, 0, 0, 1]
+z_mode = "absolute"
+mounts = []
+
+[[pcbs]]
+id = "tx_opt_1"
+role = "tx"
+position = [-40.0, 0.0, 0.0]
+rotation_deg = 0.0
+present = [true, 0, 0, 1]
+z_mode = "absolute"
+mounts = []
+
+[[pcbs]]
+id = "rx_opt_0"
+role = "rx"
+position = [40.0, 0.0, 110.0]
+rotation_deg = 0.0
+present = [true, 0, 0, 1]
+z_mode = "absolute"
+mounts = []
+
+[[pcbs]]
+id = "rx_opt_1"
+role = "rx"
+position = [-40.0, 0.0, 110.0]
+rotation_deg = 0.0
+present = [true, 0, 0, 1]
+z_mode = "absolute"
+mounts = []
