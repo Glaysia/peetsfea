@@ -68,6 +68,17 @@ def _rxdd_back_stub_bridge_edge(*, anchor_xyz: _Point3, trace: float) -> _Edge2P
     return p0, p1
 
 
+def _txdd_start_stub_port_edge(*, anchor_xyz: _Point3, trace: float) -> _Edge2P:
+    if trace <= 0.0:
+        raise ValueError(f"tx_dd start stub port trace must be > 0 (actual={trace})")
+    half_trace = trace / 2.0
+    z_bottom = anchor_xyz[2] - TX_DD_START_STUB_DOWN_MM
+    # Use one deterministic bottom-face edge (min-Y side) for 4-point sheet creation.
+    p0: _Point3 = (anchor_xyz[0] - half_trace, anchor_xyz[1] - half_trace, z_bottom)
+    p1: _Point3 = (anchor_xyz[0] + half_trace, anchor_xyz[1] - half_trace, z_bottom)
+    return p0, p1
+
+
 def _create_thickened_sheet_from_points(
     *,
     modeler: Modeler3D,
@@ -222,6 +233,7 @@ def _finalize_solids_and_substrates_impl(
     rxdd_name_replacements: dict[str, str] = {}
     rxdd_dc_stub_edges: dict[str, _Edge2P] = {}
     rxdd_dc_source_names: dict[str, str] = {}
+    txdd_start_stub_port_edges_by_board: dict[str, list[_Edge2P]] = {}
 
     def _resolve_replaced_name(name: str) -> str:
         current = name
@@ -379,28 +391,39 @@ def _finalize_solids_and_substrates_impl(
             object_names.append(stub_object_name)
             group_objects["tx_dd"].append(stub_object_name)
             cad_probe.append(_probe_cad_object(stub_obj, stub_name))
-
-            stub_united_name = safe_unite(
-                modeler=modeler,
-                targets=[source_object_name, stub_object_name],
-                fallback_name=source_object_name,
-                error_context="tx_dd start stub with source coil",
+            txdd_start_stub_port_edges_by_board.setdefault(board_id, []).append(
+                _txdd_start_stub_port_edge(anchor_xyz=start_xyz, trace=trace)
             )
 
-            group_objects["tx_dd"] = [name for name in group_objects["tx_dd"] if name != stub_object_name]
-            object_names = [name for name in object_names if name != stub_object_name]
-            group_objects["tx_dd"] = [stub_united_name if name == source_object_name else name for name in group_objects["tx_dd"]]
-            object_names = [stub_united_name if name == source_object_name else name for name in object_names]
-            if stub_united_name not in group_objects["tx_dd"]:
-                group_objects["tx_dd"].append(stub_united_name)
-            if stub_united_name not in object_names:
-                object_names.append(stub_united_name)
-            for layer_key, layer_object_name in list(txdd_right_object_names.items()):
-                if layer_object_name == source_object_name:
-                    txdd_right_object_names[layer_key] = stub_united_name
-            for layer_key, layer_object_name in list(txdd_left_object_names.items()):
-                if layer_object_name == source_object_name:
-                    txdd_left_object_names[layer_key] = stub_united_name
+    for board_id, port_edges in sorted(txdd_start_stub_port_edges_by_board.items()):
+        if len(port_edges) != 2:
+            raise ValueError(
+                "tx_dd start port sheet contract violation: expected exactly 2 start stubs per board "
+                f"(board_id={board_id}, actual={len(port_edges)})"
+            )
+        start_port_sheet_points = _sheet_points_from_edge_pair(dd_edge=port_edges[0], vertical_edge=port_edges[1])
+        start_port_sheet_name = f"sheet_tx_dd_start_ports_{board_id}_{design_id}"
+        try:
+            start_port_sheet_obj_name, start_port_sheet_obj = _create_sheet_from_points(
+                modeler=modeler,
+                sheet_points=start_port_sheet_points,
+                sheet_name=start_port_sheet_name,
+            )
+        except ValueError as exc:
+            message = str(exc)
+            if message.startswith("Sheet loop creation failed"):
+                raise ValueError(
+                    "tx_dd start port sheet rectangle loop creation failed "
+                    f"(name={start_port_sheet_name}, board_id={board_id})"
+                ) from exc
+            if message.startswith("Sheet cover_lines failed"):
+                raise ValueError(
+                    "tx_dd start port sheet cover_lines failed "
+                    f"(name={start_port_sheet_name}, board_id={board_id})"
+                ) from exc
+            raise
+        object_names.append(start_port_sheet_obj_name)
+        cad_probe.append(_probe_cad_object(start_port_sheet_obj, start_port_sheet_name))
 
     for (board_id, board_idx), nodes in tx_vertical_nodes_by_board.items():
         if len(nodes) < 2:
