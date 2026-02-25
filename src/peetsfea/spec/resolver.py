@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Literal, Sequence, TypedDict, TypeAlias, cast
 
 from peetsfea.spec.loader import TOMLTable, TOMLValue, require_table
@@ -84,6 +85,71 @@ DERIVED_RANGE_PATHS: dict[str, str] = {
     "coil_shape.tx_vertical.outer_x": "coil_shape.tx_dd.outer_x",
 }
 
+PcbMountSpec: TypeAlias = tuple[Literal["tx_dd", "tx_vertical", "rx_dd"], Literal["all", "index"], int | None]
+
+
+class _FixedPcbRule(TypedDict):
+    role: Literal["tx", "rx"]
+    present: bool
+    mounts: tuple[PcbMountSpec, ...]
+
+
+FIXED_PCB_ORDER: tuple[str, ...] = (
+    "tx_main_0",
+    "tx_main_1",
+    "tx_vertical_0",
+    "rx_main_0",
+    "rx_main_1",
+    "tx_opt_0",
+    "tx_opt_1",
+    "rx_opt_0",
+    "rx_opt_1",
+)
+
+FIXED_PCB_RULES: dict[str, _FixedPcbRule] = {
+    "tx_main_0": {
+        "role": "tx",
+        "present": True,
+        "mounts": (
+            ("tx_dd", "index", 0),
+            ("tx_dd", "index", 1),
+        ),
+    },
+    "tx_main_1": {
+        "role": "tx",
+        "present": True,
+        "mounts": (
+            ("tx_dd", "index", 2),
+            ("tx_dd", "index", 3),
+        ),
+    },
+    "tx_vertical_0": {
+        "role": "tx",
+        "present": True,
+        "mounts": (
+            ("tx_vertical", "all", None),
+        ),
+    },
+    "rx_main_0": {
+        "role": "rx",
+        "present": True,
+        "mounts": (
+            ("rx_dd", "index", 0),
+        ),
+    },
+    "rx_main_1": {
+        "role": "rx",
+        "present": True,
+        "mounts": (
+            ("rx_dd", "index", 1),
+        ),
+    },
+    "tx_opt_0": {"role": "tx", "present": False, "mounts": ()},
+    "tx_opt_1": {"role": "tx", "present": False, "mounts": ()},
+    "rx_opt_0": {"role": "rx", "present": False, "mounts": ()},
+    "rx_opt_1": {"role": "rx", "present": False, "mounts": ()},
+}
+
 
 def _reject_removed_paths(spec: TOMLTable) -> None:
     for path in REMOVED_PATHS:
@@ -91,7 +157,7 @@ def _reject_removed_paths(spec: TOMLTable) -> None:
             _read_path(spec, path)
         except ValueError:
             continue
-        raise ValueError(f"Removed path in spec_version 0.2.1: {path}")
+        raise ValueError(f"Removed path in spec_version 0.2.2: {path}")
 
 
 def _read_range_definition(root: TOMLTable, dotted_path: str) -> list[TOMLValue]:
@@ -552,7 +618,10 @@ def _resolve_pcbs(spec: TOMLTable, seed: int, attempt: int, context: SamplingCon
         raw_rotation = pcb.get("rotation_deg")
         if isinstance(raw_rotation, bool) or not isinstance(raw_rotation, (int, float)):
             raise ValueError(f"pcbs[{idx}].rotation_deg must be number")
-        mounts = _parse_pcb_mounts(pcb.get("mounts"), f"pcbs[{idx}].mounts")
+        raw_mounts = pcb.get("mounts")
+        if raw_mounts is None:
+            raise ValueError(f"pcbs[{idx}].mounts must be a list")
+        mounts = _parse_pcb_mounts(raw_mounts, f"pcbs[{idx}].mounts")
         raw_present = pcb.get("present")
         if not isinstance(raw_present, list) or len(raw_present) != 4:
             raise ValueError(f"pcbs[{idx}].present must be [is_integer, start, end, count]")
@@ -635,6 +704,64 @@ def _resolve_pcbs(spec: TOMLTable, seed: int, attempt: int, context: SamplingCon
         x, y, _ = pcb["position"]
         pcb["position"] = (x, y, base["position"][2] + delta)
     return resolved
+
+
+def _mount_specs(mounts: list[ResolvedPcbMount]) -> tuple[PcbMountSpec, ...]:
+    return tuple((mount["kind"], mount["selector_mode"], mount["selector_index"]) for mount in mounts)
+
+
+def _mounts_from_specs(specs: tuple[PcbMountSpec, ...]) -> list[ResolvedPcbMount]:
+    out: list[ResolvedPcbMount] = []
+    for kind, selector_mode, selector_index in specs:
+        out.append({"kind": kind, "selector_mode": selector_mode, "selector_index": selector_index})
+    return out
+
+
+def _normalize_pcbs_fixed_topology(pcbs: list[ResolvedPcbInstance]) -> list[ResolvedPcbInstance]:
+    by_id: dict[str, ResolvedPcbInstance] = {pcb["id"]: pcb for pcb in pcbs}
+    missing = [pcb_id for pcb_id in FIXED_PCB_ORDER if pcb_id not in by_id]
+    extra = sorted(pcb_id for pcb_id in by_id.keys() if pcb_id not in FIXED_PCB_RULES)
+    if missing or extra:
+        detail_parts: list[str] = []
+        if missing:
+            detail_parts.append(f"missing={missing}")
+        if extra:
+            detail_parts.append(f"extra={extra}")
+        detail = ", ".join(detail_parts)
+        raise ValueError(
+            "spec_version 0.2.2 requires fixed pcbs topology ids "
+            f"{list(FIXED_PCB_ORDER)} ({detail})"
+        )
+
+    normalized: list[ResolvedPcbInstance] = []
+    for pcb_id in FIXED_PCB_ORDER:
+        pcb = by_id[pcb_id]
+        rule = FIXED_PCB_RULES[pcb_id]
+        if pcb["role"] != rule["role"]:
+            raise ValueError(
+                "spec_version 0.2.2 fixed topology requires "
+                f"pcbs.{pcb_id}.role='{rule['role']}' (actual={pcb['role']})"
+            )
+
+        expected_present = rule["present"]
+        if pcb["present"] != expected_present:
+            warnings.warn(
+                f"pcbs.{pcb_id}.present normalized to {expected_present} for spec_version 0.2.2 fixed topology",
+                UserWarning,
+                stacklevel=2,
+            )
+            pcb["present"] = expected_present
+
+        expected_mounts = rule["mounts"]
+        if _mount_specs(pcb["mounts"]) != expected_mounts:
+            warnings.warn(
+                f"pcbs.{pcb_id}.mounts normalized to fixed topology mapping for spec_version 0.2.2",
+                UserWarning,
+                stacklevel=2,
+            )
+            pcb["mounts"] = _mounts_from_specs(expected_mounts)
+        normalized.append(pcb)
+    return normalized
 
 
 def _resolve_selected_scalars(spec: TOMLTable, seed: int, attempt: int, context: SamplingContext) -> dict[str, Number]:
@@ -1425,6 +1552,7 @@ def _resolve_selection(
     groups = _resolve_coil_groups(spec, seed, attempt, selected, context)
     group_geometry = _resolve_group_geometry(spec, seed, attempt, context, selected)
     pcbs = _resolve_pcbs(spec, seed, attempt, context)
+    pcbs = _normalize_pcbs_fixed_topology(pcbs)
     _validate_constraints(spec, selected, groups, group_geometry, pcbs)
     return selected, selected_max, groups, group_geometry, pcbs
 

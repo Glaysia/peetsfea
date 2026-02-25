@@ -6,7 +6,8 @@ from typing import cast
 import pytest
 
 import peetsfea.backend.pyaedt.geometry.square_spiral as geom
-from peetsfea.types.manifest import CoilPolaritySpec, GeometryMetadata, GroupEndpointEntry, Manifest
+import peetsfea.spec.resolver as resolver
+from peetsfea.types.manifest import CoilPolaritySpec, GeometryMetadata, GroupEndpointEntry, Manifest, ResolvedPcbInstance
 
 
 class _FakePoint:
@@ -539,7 +540,7 @@ def _manifest(tmp_path: Path) -> Manifest:
             "close_on_exit": True,
         },
         "spec": {
-            "spec_version": "0.2.0",
+            "spec_version": "0.2.2",
             "design_name": "square_test",
             "units": "mm",
         },
@@ -964,6 +965,139 @@ def test_tx_vertical_multiple_instances_use_single_zx_fr4_per_tx_board(
     assert len(tx_zx_fr4) == 1
     assert len(tx_xy_fr4) == 1
     assert len(rx_yz_fr4) == 1
+
+
+def test_no_duplicate_tx_vertical_bboxes_after_fixed_topology_normalization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_coil_groups"][1]["requested_count"] = 2
+    manifest["selected_coil_groups"][1]["selected_count"] = 2
+    manifest["selected_coil_groups"][1]["spacing_mm"] = 10.0
+    manifest["selected_pcbs"] = [
+        {
+            "id": "tx_main_0",
+            "role": "tx",
+            "position": (0.0, 0.0, 0.0),
+            "rotation_deg": 0.0,
+            "present": True,
+            "z_mode": "absolute",
+            "z_relative_base_id": None,
+            "z_delta_path": None,
+            "mounts": [
+                {"kind": "tx_dd", "selector_mode": "index", "selector_index": 0},
+                {"kind": "tx_dd", "selector_mode": "index", "selector_index": 1},
+                {"kind": "tx_vertical", "selector_mode": "all", "selector_index": None},
+            ],
+        },
+        {
+            "id": "tx_main_1",
+            "role": "tx",
+            "position": (0.0, 0.0, 3.0),
+            "rotation_deg": 0.0,
+            "present": True,
+            "z_mode": "relative_to_pcb",
+            "z_relative_base_id": "tx_main_0",
+            "z_delta_path": "pcb_spacing.tx_main_1_z_from_tx_main_0_mm",
+            "mounts": [
+                {"kind": "tx_dd", "selector_mode": "index", "selector_index": 2},
+                {"kind": "tx_dd", "selector_mode": "index", "selector_index": 3},
+                {"kind": "tx_vertical", "selector_mode": "all", "selector_index": None},
+            ],
+        },
+        {
+            "id": "tx_vertical_0",
+            "role": "tx",
+            "position": (0.0, 0.0, 0.0),
+            "rotation_deg": 0.0,
+            "present": True,
+            "z_mode": "absolute",
+            "z_relative_base_id": None,
+            "z_delta_path": None,
+            "mounts": [],
+        },
+        {
+            "id": "rx_main_0",
+            "role": "rx",
+            "position": (0.0, 0.0, 110.0),
+            "rotation_deg": 0.0,
+            "present": True,
+            "z_mode": "absolute",
+            "z_relative_base_id": None,
+            "z_delta_path": None,
+            "mounts": [{"kind": "rx_dd", "selector_mode": "index", "selector_index": 0}],
+        },
+        {
+            "id": "rx_main_1",
+            "role": "rx",
+            "position": (0.0, 0.0, 112.0),
+            "rotation_deg": 0.0,
+            "present": True,
+            "z_mode": "absolute",
+            "z_relative_base_id": None,
+            "z_delta_path": None,
+            "mounts": [{"kind": "rx_dd", "selector_mode": "index", "selector_index": 1}],
+        },
+        {
+            "id": "tx_opt_0",
+            "role": "tx",
+            "position": (40.0, 0.0, 0.0),
+            "rotation_deg": 0.0,
+            "present": True,
+            "z_mode": "absolute",
+            "z_relative_base_id": None,
+            "z_delta_path": None,
+            "mounts": [{"kind": "tx_vertical", "selector_mode": "all", "selector_index": None}],
+        },
+        {
+            "id": "tx_opt_1",
+            "role": "tx",
+            "position": (-40.0, 0.0, 0.0),
+            "rotation_deg": 0.0,
+            "present": False,
+            "z_mode": "absolute",
+            "z_relative_base_id": None,
+            "z_delta_path": None,
+            "mounts": [],
+        },
+        {
+            "id": "rx_opt_0",
+            "role": "rx",
+            "position": (40.0, 0.0, 110.0),
+            "rotation_deg": 0.0,
+            "present": True,
+            "z_mode": "absolute",
+            "z_relative_base_id": None,
+            "z_delta_path": None,
+            "mounts": [{"kind": "rx_dd", "selector_mode": "index", "selector_index": 0}],
+        },
+        {
+            "id": "rx_opt_1",
+            "role": "rx",
+            "position": (-40.0, 0.0, 110.0),
+            "rotation_deg": 0.0,
+            "present": False,
+            "z_mode": "absolute",
+            "z_relative_base_id": None,
+            "z_delta_path": None,
+            "mounts": [],
+        },
+    ]
+
+    with pytest.warns(UserWarning):
+        normalized = resolver._normalize_pcbs_fixed_topology(cast(list[ResolvedPcbInstance], manifest["selected_pcbs"]))
+    manifest["selected_pcbs"] = normalized
+
+    metadata = geom.build_square_spiral_from_manifest(manifest)
+    tx_vertical_bboxes = [
+        tuple(round(coord, 6) for coord in probe["bbox"])
+        for probe in metadata["debug"]["cad_probe"]
+        if probe["object_name"].startswith("coil_tx_vertical_")
+    ]
+    assert len(tx_vertical_bboxes) == 2
+    assert len(set(tx_vertical_bboxes)) == len(tx_vertical_bboxes)
 
 
 def test_build_square_spiral_invalid_params(tmp_path: Path) -> None:

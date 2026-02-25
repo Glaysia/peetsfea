@@ -147,6 +147,11 @@ python run.py
     - `pcbs[].z_mode`는 `absolute | relative_to_pcb`를 사용한다.
     - `relative_to_pcb`일 때 최종 z는 `<base>.z + sample(z_delta_path)`로 파생한다.
     - 기본 예시: `tx_main_1`은 `z_relative_base_id="tx_main_0"`, `z_delta_path="pcb_spacing.tx_main_1_z_from_tx_main_0_mm"`.
+  - 0.2.2 고정 토폴로지 규칙:
+    - 코일 개수(`selected_coil_groups`)가 주도하고 PCB `present/mounts`는 정규화된다.
+    - `tx_vertical`은 전용 보드 `tx_vertical_0`에만 매핑된다.
+    - `tx_opt_*/rx_opt_*`는 호환 필드로 남기되 기본 경로에서 강제로 비활성(`present=false`, `mounts=[]`) 처리된다.
+    - 입력이 고정 규약과 다르면 `UserWarning`을 발생시키고 자동 보정한다.
 - 그룹별 자유변수는 `[coil_groups_params.<kind>]` 아래에서 독립 정의한다.
   - 고정 그룹 키: `tx_dd`, `tx_vertical`, `rx_dd`
   - 각 그룹은 `turn_count_max`, `band_ratio`, `metal_ratio`를 각각 별도 range로 가진다.
