@@ -239,6 +239,7 @@ def finalize_solids_and_substrates(
 
     eps_len = 1e-6
     grouped_plane_bboxes: dict[tuple[str, Literal["XY", "YZ", "ZX"], int], list[float]] = {}
+    fr4_plane_by_name: dict[str, Literal["XY", "YZ", "ZX"]] = {}
     for board_id, plane, bbox in coil_plane_bboxes:
         if len(bbox) < 6:
             continue
@@ -283,6 +284,7 @@ def finalize_solids_and_substrates(
         substrate_object_name = _object_name(substrate, substrate_name)
         object_names.append(substrate_object_name)
         fr4_object_names.append(substrate_object_name)
+        fr4_plane_by_name[substrate_object_name] = plane
         if plane == "ZX" and board_id in tx_board_ids:
             tx_zx_fr4_names.append(substrate_object_name)
         cad_probe.append(_probe_cad_object(substrate, substrate_name))
@@ -303,19 +305,37 @@ def finalize_solids_and_substrates(
         else:
             tx_zx_united_name = _object_name(cast(Object3d, tx_zx_unite_result), tx_zx_fr4_targets[0])
         fr4_object_names = [name for name in fr4_object_names if name not in tx_zx_fr4_targets[1:]]
+        for removed_name in tx_zx_fr4_targets[1:]:
+            fr4_plane_by_name.pop(removed_name, None)
         if tx_zx_united_name not in fr4_object_names:
             fr4_object_names.append(tx_zx_united_name)
+        fr4_plane_by_name[tx_zx_united_name] = "ZX"
         object_names = [name for name in object_names if name not in tx_zx_fr4_targets[1:]]
         if tx_zx_united_name not in object_names:
             object_names.append(tx_zx_united_name)
 
-    copper_tools = sorted(set(group_objects["tx_dd"] + group_objects["tx_vertical"] + group_objects["rx_dd"]))
-    if fr4_object_names and copper_tools:
-        subtract_ok = modeler.subtract(blank_list=fr4_object_names, tool_list=copper_tools, keep_originals=True)
+    copper_tools_by_plane: dict[Literal["XY", "YZ", "ZX"], list[str]] = {
+        "XY": sorted(set(group_objects["tx_dd"])),
+        "YZ": sorted(set(group_objects["rx_dd"])),
+        "ZX": sorted(set(group_objects["tx_vertical"])),
+    }
+    fr4_by_plane: dict[Literal["XY", "YZ", "ZX"], list[str]] = {"XY": [], "YZ": [], "ZX": []}
+    for fr4_name in fr4_object_names:
+        fr4_plane = fr4_plane_by_name.get(fr4_name)
+        if fr4_plane is None:
+            continue
+        fr4_by_plane[fr4_plane].append(fr4_name)
+    planes: tuple[Literal["XY", "YZ", "ZX"], Literal["XY", "YZ", "ZX"], Literal["XY", "YZ", "ZX"]] = ("XY", "YZ", "ZX")
+    for plane in planes:
+        plane_fr4 = sorted(set(fr4_by_plane[plane]))
+        plane_tools = copper_tools_by_plane[plane]
+        if not plane_fr4 or not plane_tools:
+            continue
+        subtract_ok = modeler.subtract(blank_list=plane_fr4, tool_list=plane_tools, keep_originals=True)
         if not subtract_ok:
             raise ValueError(
                 "Failed to subtract copper solids from FR4 substrates "
-                f"(fr4_count={len(fr4_object_names)}, copper_count={len(copper_tools)})"
+                f"(plane={plane}, fr4_count={len(plane_fr4)}, copper_count={len(plane_tools)})"
             )
 
     hfss.save_project(str(aedt_path))
@@ -341,9 +361,9 @@ def build_em_artifacts(
         "rx": [entry for entry in group_endpoints if entry["group_kind"] == "rx_dd"],
     }
     em_context: EmContext = {
-        "dd_mirror_plane": selected["dd_mirror_plane"],
-        "rx_plane": selected["rx_plane"],
-        "tx_vertical_plane": selected["tx_vertical_plane"],
+        "dd_mirror_plane": cast(str, selected["dd_mirror_plane"]),
+        "rx_plane": cast(str, selected["rx_plane"]),
+        "tx_vertical_plane": cast(str, selected["tx_vertical_plane"]),
         "source": "type1_geometry",
         "object_names": sorted(object_names),
     }
