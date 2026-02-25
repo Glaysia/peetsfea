@@ -57,6 +57,16 @@ def _rxdd_back_stub_origin_and_sizes(*, anchor_xyz: _Point3, trace: float) -> tu
     return origin, sizes
 
 
+def _rxdd_back_stub_bridge_edge(*, anchor_xyz: _Point3, trace: float) -> _Edge2P:
+    if trace <= 0.0:
+        raise ValueError(f"rx_dd back stub bridge trace must be > 0 (actual={trace})")
+    x_at_back = anchor_xyz[0] + (RX_DD_BACK_STUB_AXIS_SIGN_X * RX_DD_BACK_STUB_LEN_MM)
+    half_trace = trace / 2.0
+    p0: _Point3 = (x_at_back, anchor_xyz[1] - half_trace, anchor_xyz[2] - half_trace)
+    p1: _Point3 = (x_at_back, anchor_xyz[1] - half_trace, anchor_xyz[2] + half_trace)
+    return p0, p1
+
+
 def _create_thickened_sheet_from_points(
     *,
     modeler: Modeler3D,
@@ -209,6 +219,8 @@ def finalize_solids_and_substrates(
     )
 
     rxdd_name_replacements: dict[str, str] = {}
+    rxdd_dc_stub_edges: dict[str, _Edge2P] = {}
+    rxdd_dc_source_names: dict[str, str] = {}
 
     def _resolve_replaced_name(name: str) -> str:
         current = name
@@ -275,6 +287,93 @@ def finalize_solids_and_substrates(
                 rxdd_name_replacements[old_name] = stub_united_name
         rxdd_name_replacements[source_object_name] = stub_united_name
         rxdd_name_replacements[source_object_name_raw] = stub_united_name
+
+        if endpoint_label in ("c", "d"):
+            if endpoint_label in rxdd_dc_stub_edges:
+                raise ValueError(
+                    "rx_dd d/c bridge contract violation: duplicate stub endpoint captured "
+                    f"(endpoint={endpoint_label}, board_id={board_id}, instance_index={instance_index})"
+                )
+            rxdd_dc_stub_edges[endpoint_label] = _rxdd_back_stub_bridge_edge(anchor_xyz=anchor_xyz, trace=trace)
+            rxdd_dc_source_names[endpoint_label] = source_object_name_raw
+
+    has_c = "c" in rxdd_dc_stub_edges
+    has_d = "d" in rxdd_dc_stub_edges
+    if has_c != has_d:
+        raise ValueError(
+            "rx_dd d/c bridge contract violation: both c and d stub edges must be present together "
+            f"(has_c={has_c}, has_d={has_d})"
+        )
+    if has_c and has_d:
+        c_edge = rxdd_dc_stub_edges["c"]
+        d_edge = rxdd_dc_stub_edges["d"]
+        c_object_name = _resolve_replaced_name(rxdd_dc_source_names["c"])
+        d_object_name = _resolve_replaced_name(rxdd_dc_source_names["d"])
+        c_exists = (c_object_name in object_names) or (c_object_name in group_objects["rx_dd"])
+        d_exists = (d_object_name in object_names) or (d_object_name in group_objects["rx_dd"])
+        if not c_exists or not d_exists:
+            raise ValueError(
+                "rx_dd d/c bridge source object missing "
+                f"(c_source={c_object_name}, d_source={d_object_name})"
+            )
+
+        dc_bridge_sheet_points = _sheet_points_from_edge_pair(dd_edge=d_edge, vertical_edge=c_edge)
+        dc_bridge_name = f"bridge_rx_dd_d_to_c_{design_id}"
+        try:
+            dc_bridge_obj_name, dc_bridge_obj = _create_thickened_sheet_from_points(
+                modeler=modeler,
+                sheet_points=dc_bridge_sheet_points,
+                sheet_name=dc_bridge_name,
+                thickness=(cu_thickness * 4.0),
+            )
+        except ValueError as exc:
+            message = str(exc)
+            if message.startswith("Sheet loop creation failed"):
+                raise ValueError(f"rx_dd d/c bridge rectangle loop creation failed (name={dc_bridge_name})") from exc
+            if message.startswith("Sheet cover_lines failed"):
+                raise ValueError(f"rx_dd d/c bridge cover_lines failed (name={dc_bridge_name})") from exc
+            if message.startswith("Sheet thicken failed"):
+                raise ValueError(
+                    "rx_dd d/c bridge thicken failed "
+                    f"(name={dc_bridge_name}, thickness={cu_thickness * 4.0})"
+                ) from exc
+            raise
+
+        object_names.append(dc_bridge_obj_name)
+        group_objects["rx_dd"].append(dc_bridge_obj_name)
+        cad_probe.append(_probe_cad_object(dc_bridge_obj, dc_bridge_name))
+
+        rxdd_unite_targets = sorted(set([d_object_name, c_object_name, dc_bridge_obj_name]))
+        if len(rxdd_unite_targets) > 1:
+            try:
+                rxdd_unite_result = modeler.unite(assignment=rxdd_unite_targets)  # type: ignore[misc]
+            except TypeError:
+                rxdd_unite_result = modeler.unite(rxdd_unite_targets)  # type: ignore[misc]
+            if not rxdd_unite_result:
+                raise ValueError(
+                    "Failed to unite rx_dd c/d bridge with source coils "
+                    f"(targets={rxdd_unite_targets})"
+                )
+            if isinstance(rxdd_unite_result, list):
+                first = rxdd_unite_result[0] if rxdd_unite_result else rxdd_unite_targets[0]
+                rxdd_united_name = (
+                    first if isinstance(first, str) else _object_name(cast(Object3d, first), rxdd_unite_targets[0])
+                )
+            elif isinstance(rxdd_unite_result, str):
+                rxdd_united_name = rxdd_unite_result
+            else:
+                rxdd_united_name = _object_name(cast(Object3d, rxdd_unite_result), rxdd_unite_targets[0])
+            group_objects["rx_dd"] = [name for name in group_objects["rx_dd"] if name not in rxdd_unite_targets[1:]]
+            if rxdd_united_name not in group_objects["rx_dd"]:
+                group_objects["rx_dd"].append(rxdd_united_name)
+            object_names = [name for name in object_names if name not in rxdd_unite_targets[1:]]
+            if rxdd_united_name not in object_names:
+                object_names.append(rxdd_united_name)
+            for old_name, mapped_name in list(rxdd_name_replacements.items()):
+                if mapped_name in rxdd_unite_targets:
+                    rxdd_name_replacements[old_name] = rxdd_united_name
+            for target_name in rxdd_unite_targets:
+                rxdd_name_replacements[target_name] = rxdd_united_name
 
     for board_id, stub_sources in sorted(txdd_start_stub_sources.items()):
         for stub_idx, stub_source in enumerate(stub_sources):
