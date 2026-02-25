@@ -3,15 +3,15 @@ from __future__ import annotations
 import pytest
 
 from peetsfea.backend.pyaedt.geometry.placement_rules import (
-    _build_rxdd_right_points_a_to_D_cw,
+    _build_rxdd_right_points_A_to_d_cw,
     _current_direction_from_xy_points,
     _instance_side,
     _validate_rxdd_single_layer_count,
 )
 
 
-def test_build_rxdd_right_points_a_to_D_cw_is_clockwise() -> None:
-    points = _build_rxdd_right_points_a_to_D_cw(
+def test_build_rxdd_right_points_A_to_d_cw_is_clockwise() -> None:
+    points = _build_rxdd_right_points_A_to_d_cw(
         turns=3,
         outer_x=120.0,
         outer_y=80.0,
@@ -22,7 +22,7 @@ def test_build_rxdd_right_points_a_to_D_cw_is_clockwise() -> None:
 
 
 def test_rx_world_y_mirror_from_right_path_is_counter_clockwise() -> None:
-    right_points = _build_rxdd_right_points_a_to_D_cw(
+    right_points = _build_rxdd_right_points_A_to_d_cw(
         turns=2,
         outer_x=100.0,
         outer_y=60.0,
