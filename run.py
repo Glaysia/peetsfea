@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import sys
 from pathlib import Path
 
 from peetsfea import RunConfig, build_square_spiral_from_manifest, run
@@ -41,7 +42,7 @@ def run_one(seed: int) -> bool:
         seed=seed,
         backend="hfss",
         non_graphical=True,
-        close_on_exit=False,
+        close_on_exit=True,
     )
     run_dir = Path(config.ansys_run_dir)
     manifest: Manifest | None = None
@@ -69,7 +70,16 @@ RUN_MODE = MANY
 # RUN_MODE = SINGLE
 
 if __name__ == "__main__":
-    if RUN_MODE == MANY:
+    cli_seed: int | None = None
+    if len(sys.argv) > 1:
+        try:
+            cli_seed = int(sys.argv[1])
+        except ValueError as exc:
+            raise SystemExit(f"Invalid seed '{sys.argv[1]}'. Usage: python run.py [seed]") from exc
+
+    if cli_seed is not None:
+        run_one(cli_seed)
+    elif RUN_MODE == MANY:
         failed_seeds: list[int] = []
         for seed in range(100):
             ok = run_one(seed)
