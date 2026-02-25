@@ -44,6 +44,12 @@ This document defines the project rules for coding agents working in this reposi
 - Determinism tests are required; Pyaedt integration tests are optional.
 - Run commands from the `run/` directory when executing scripts/tests to avoid polluting the repo root with generated artifacts.
 - Prefer output paths under `run/` for manifests, AEDT files, logs, and temporary execution artifacts.
+- When running `run.py` for AEDT geometry/debug flows, follow `.vscode/launch.json` contract.
+- Do not run `run.py` directly from arbitrary cwd without the pre-launch cleanup step.
+- Required sequence:
+  - Run the `prepare-run-debug` task first (this clears `run/aedt/`).
+  - Then launch `Run run.py from run/` with `cwd=run/`.
+- Rationale: stale `run/aedt/*.aedt.lock` files can cause HFSS startup/open failures.
 
 ## File layout (planned)
 - `peetsfea/`: library code

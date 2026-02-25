@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from peetsfea.backend.pyaedt.geometry.build import _append_rxdd_back_stub_sources_if_needed
 from peetsfea.backend.pyaedt.geometry.build_rx_dd import (
+    _rxdd_back_stub_bridge_edge,
     _rxdd_back_stub_origin_and_sizes,
     _rxdd_back_stub_sort_key,
 )
@@ -81,3 +84,13 @@ def test_append_rxdd_back_stub_sources_for_rxdd_left_and_right() -> None:
         ("rx_main", 0, "A", start_xyz, trace, source_object_name),
         ("rx_main", 0, "d", end_xyz, trace, source_object_name),
     ]
+
+
+def test_rxdd_back_stub_bridge_edge_uses_back_face_with_two_points() -> None:
+    edge = _rxdd_back_stub_bridge_edge(anchor_xyz=(10.0, 20.0, 30.0), trace=2.0)
+    assert edge == ((7.0, 19.0, 29.0), (7.0, 19.0, 31.0))
+
+
+def test_rxdd_back_stub_bridge_edge_rejects_non_positive_trace() -> None:
+    with pytest.raises(ValueError, match=r"trace must be > 0"):
+        _rxdd_back_stub_bridge_edge(anchor_xyz=(1.0, 2.0, 3.0), trace=0.0)
