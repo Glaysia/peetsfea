@@ -131,6 +131,34 @@ def _validate_rxdd_single_layer_count(instance_count: int) -> None:
         )
 
 
+def _build_rxdd_right_points_a_to_D_cw(
+    *,
+    turns: int,
+    outer_x: float,
+    outer_y: float,
+    trace: float,
+    gap: float,
+) -> list[list[float]]:
+    points = [
+        list(point)
+        for point in _build_rect_spiral_centerline_absolute(
+            turns=turns,
+            outer_x=outer_x,
+            outer_y=outer_y,
+            trace=trace,
+            gap=gap,
+            z=0.0,
+        )
+    ]
+    direction = _current_direction_from_xy_points(points)
+    if direction != "cw":
+        raise ValueError(
+            "rx_dd right endpoint contract violation: a->D path must be clockwise "
+            f"(actual_direction={direction})"
+        )
+    return points
+
+
 def _tx_dd_center_y_and_layer(
     *,
     instance_count: int,
@@ -365,34 +393,6 @@ def _apply_txdd_right_endpoint_rule(
     # Lower layer first by Z center, then deterministic key tie-break.
     _set_labels(right_candidates[0][3], "c", "A")
     _set_labels(right_candidates[1][3], "A", "d")
-
-
-def _apply_rxdd_endpoint_rule(
-    group_endpoints: list[GroupEndpointEntry],
-    coil_polarity: list[CoilPolaritySpec],
-) -> None:
-    endpoint_by_key = {_group_endpoint_key(entry): entry for entry in group_endpoints}
-    for polarity_entry in coil_polarity:
-        if polarity_entry["group_kind"] != "rx_dd":
-            continue
-        key = _coil_polarity_key(polarity_entry)
-        endpoint_entry = endpoint_by_key.get(key)
-        if endpoint_entry is None:
-            continue
-        side = polarity_entry["instance_side"]
-        if side == "left":
-            endpoint_entry["start_label"] = "C"
-            endpoint_entry["end_label"] = "b"
-            continue
-        if side == "right":
-            endpoint_entry["start_label"] = "a"
-            endpoint_entry["end_label"] = "D"
-            continue
-        raise ValueError(
-            "rx_dd endpoint contract violation: instance_side must be left or right "
-            f"(actual={side}, board_id={polarity_entry['board_id']}, "
-            f"instance_index={polarity_entry['group_instance_index']})"
-        )
 
 
 def _txdd_right_points(

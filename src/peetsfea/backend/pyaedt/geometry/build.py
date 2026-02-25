@@ -21,6 +21,7 @@ from peetsfea.types.manifest import (
     Manifest,
     RegionViolation,
     SceneObjectEntry,
+    TerminalLabel,
 )
 
 from .cad_probe import _object_name, _probe_cad_object, _probe_from_points
@@ -31,8 +32,8 @@ from .debug_checks import _bbox_violations, _build_geometry_debug
 from .design_vars import _assign_design_variables
 from .metadata import _build_geometry_metadata
 from .placement_rules import (
-    _apply_rxdd_endpoint_rule,
     _apply_txdd_right_endpoint_rule,
+    _build_rxdd_right_points_a_to_D_cw,
     _build_polarity,
     _coil_instance_offset,
     _current_direction_from_xy_points,
@@ -48,7 +49,6 @@ from .placement_rules import (
 )
 from .scene_objects import _bounds_from_scene_entry, _create_scene_non_model_objects
 from .spiral_points import (
-    _dd_instance_points,
     _build_rect_spiral_centerline_absolute,
     _map_xy_points_to_yz,
     _map_xy_points_to_zx,
@@ -307,10 +307,19 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                 transforms = group["instance_transforms"]
                 transform = transforms[0] if transforms else {"dx": 0.0, "dy": 0.0, "dz": 0.0, "rot_deg": 0.0}
                 txdd_right_layer_rank: dict[int, int] = {}
+                rxdd_right_local_points: list[list[float]] | None = None
                 if kind == "rx_dd":
                     _validate_rxdd_single_layer_count(instance_count)
                 if kind == "rx_dd" and spacing_mm < 0:
                     raise ValueError(f"rx_dd edge gap must be >= 0 (actual={spacing_mm})")
+                if kind == "rx_dd":
+                    rxdd_right_local_points = _build_rxdd_right_points_a_to_D_cw(
+                        turns=turns,
+                        outer_x=rx_dd_outer_x,
+                        outer_y=rx_dd_outer_y,
+                        trace=trace,
+                        gap=gap,
+                    )
                 if kind == "tx_dd" and instance_count == 4:
                     tx_dd_anchor_z = tx_dd_region_max[2] - tx_dd_top_clearance - cu_thickness
                     txdd_right_layer_rank = _txdd_right_layer_rank_by_z(
@@ -626,7 +635,6 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                     off_y = 0.0
                     off_z = 0.0
                     if kind == "rx_dd":
-                        assert base_points is not None
                         off_y = _rx_dd_center_offset_y(
                             instance_index=instance_index,
                             instance_count=instance_count,
@@ -640,7 +648,17 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                         rx_anchor_x = rx_region_max[0] - rx_face_clearance - cu_thickness
                         # Bottom-anchor contract: coil bottom touches RX region minimum Z.
                         rx_center_z = rx_region_min[2] + (rx_dd_outer_y / 2.0) + 1e-6
-                        rx_dd_points = _dd_instance_points(base_points, mirror_winding=(off_y < 0.0))
+                        axis_y = rx_center_y + transform["dy"]
+                        pair_offset_y = abs(off_y)
+                        rx_side = _instance_side(kind, (0.0, off_y, 0.0))
+                        if rx_side == "center":
+                            raise ValueError(
+                                "rx_dd side contract violation: instance side must be left or right "
+                                f"(instance_index={instance_index}, off_y={off_y})"
+                            )
+                        if rxdd_right_local_points is None:
+                            raise ValueError("rx_dd right path contract violation: right template points missing")
+                        rx_dd_points = [point[:] for point in rxdd_right_local_points]
                         translated_xy = _translate_points(
                             rx_dd_points,
                             dx=0.0,
@@ -650,9 +668,11 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                         top_points = _map_xy_points_to_yz(
                             translated_xy,
                             x_const=rx_anchor_x + transform["dx"] + off_x,
-                            y_center=rx_center_y + transform["dy"] + off_y,
+                            y_center=axis_y + pair_offset_y,
                             z_center=rx_center_z + transform["dz"] + off_z,
                         )
+                        if rx_side == "left":
+                            top_points = [[point[0], (2.0 * axis_y) - point[1], point[2]] for point in top_points]
                     elif kind == "tx_vertical":
                         off_x, off_y, off_z = _coil_instance_offset(
                             kind,
@@ -761,6 +781,16 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
 
                     start_xyz = cast(_Point3, tuple(float(v) for v in top_points[0]))
                     end_xyz = cast(_Point3, tuple(float(v) for v in top_points[-1]))
+                    side = _instance_side(kind, (off_x, off_y, off_z))
+                    start_label: TerminalLabel = "A"
+                    end_label: TerminalLabel = "a"
+                    if kind == "rx_dd":
+                        if side == "right":
+                            start_label = "a"
+                            end_label = "D"
+                        elif side == "left":
+                            start_label = "b"
+                            end_label = "C"
                     group_endpoints.append(
                         {
                             "group_kind": kind,
@@ -768,13 +798,24 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                             "board_id": pcb["id"],
                             "start_xyz": start_xyz,
                             "end_xyz": end_xyz,
-                            "start_label": "A",
-                            "end_label": "a",
+                            "start_label": start_label,
+                            "end_label": end_label,
                             "present": True,
                         }
                     )
-                    side = _instance_side(kind, (off_x, off_y, off_z))
-                    current_direction, b_field_direction = _build_polarity(kind, side)
+                    default_current_direction, b_field_direction = _build_polarity(kind, side)
+                    if kind == "rx_dd":
+                        yz_projected = [[point[1], point[2], 0.0] for point in top_points]
+                        current_direction = _current_direction_from_xy_points(yz_projected) or default_current_direction
+                    else:
+                        current_direction = _current_direction_from_xy_points(top_points) or default_current_direction
+                    if kind == "rx_dd":
+                        expected = "cw" if side == "right" else "ccw"
+                        if current_direction != expected:
+                            raise ValueError(
+                                "rx_dd current direction contract violation "
+                                f"(instance_index={instance_index}, side={side}, actual={current_direction}, expected={expected})"
+                            )
                     coil_polarity.append(
                         {
                             "group_kind": kind,
@@ -883,7 +924,6 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     print(f"[geometry] axis_aligned={axis_aligned} pitch_max_delta={pitch_max_delta:.9f}")
     print(f"[geometry] top_bbox={top_bbox}")
     _apply_txdd_right_endpoint_rule(group_endpoints, coil_polarity)
-    _apply_rxdd_endpoint_rule(group_endpoints, coil_polarity)
 
     em_ready_objects, em_endpoints, em_context = build_em_artifacts(
         selected=cast(dict[str, object], selected),
