@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Literal, cast
 
-from ansys.aedt.core import Hfss
 from ansys.aedt.core.modeler.cad.object_3d import Object3d
 from ansys.aedt.core.modeler.modeler_3d import Modeler3D
 
@@ -13,11 +13,7 @@ from peetsfea.backend.pyaedt.em_pipeline.contracts import EmPipelineInput
 from peetsfea.types.manifest import (
     CadProbe,
     CoilPolaritySpec,
-    EmContext,
-    EmEndpoints,
-    EmPipelineResult,
     EmPolicy,
-    EmReadyObjects,
     GeometryMetadata,
     GroupEndpointEntry,
     GroupGeometryParams,
@@ -59,9 +55,113 @@ from .spiral_points import (
 )
 
 _Point3 = tuple[float, float, float]
+_Edge2P = tuple[_Point3, _Point3]
 _BoardKey = tuple[str, int]
-_TxVerticalLinkNode = tuple[int, str, _Point3, _Point3, float, float]
+_TxVerticalLinkNode = tuple[int, str, _Point3, _Point3, float, float, _Edge2P, _Edge2P]
 _TxDdStartStubSource = tuple[_Point3, float, str]
+
+
+def _edge_points_at_path_end(*, points: list[list[float]], trace: float) -> _Edge2P:
+    if len(points) < 2:
+        raise ValueError("Cannot compute end edge from path with fewer than 2 points")
+    prev = points[-2]
+    end = points[-1]
+    dx = end[0] - prev[0]
+    dy = end[1] - prev[1]
+    seg_len = math.hypot(dx, dy)
+    if seg_len <= 1e-12:
+        raise ValueError("Cannot compute end edge from zero-length final segment")
+    nx = -dy / seg_len
+    ny = dx / seg_len
+    half_trace = trace / 2.0
+    p0: _Point3 = (end[0] + (nx * half_trace), end[1] + (ny * half_trace), end[2])
+    p1: _Point3 = (end[0] - (nx * half_trace), end[1] - (ny * half_trace), end[2])
+    return p0, p1
+
+
+def _edge_points_at_tx_vertical_terminal(*, points: list[list[float]], trace: float) -> _Edge2P:
+    if len(points) < 2:
+        raise ValueError("Cannot compute tx_vertical terminal edge from path with fewer than 2 points")
+    start = points[0]
+    end = points[-1]
+    choose_start = (start[2] > end[2]) or (abs(start[2] - end[2]) <= 1e-12 and start[0] < end[0])
+    if choose_start:
+        terminal = start
+        neighbor = points[1]
+    else:
+        terminal = end
+        neighbor = points[-2]
+    dx = terminal[0] - neighbor[0]
+    dz = terminal[2] - neighbor[2]
+    seg_len = math.hypot(dx, dz)
+    if seg_len <= 1e-12:
+        raise ValueError("Cannot compute tx_vertical terminal edge from zero-length terminal segment")
+    nx = -dz / seg_len
+    nz = dx / seg_len
+    half_trace = trace / 2.0
+    p0: _Point3 = (terminal[0] + (nx * half_trace), terminal[1], terminal[2] + (nz * half_trace))
+    p1: _Point3 = (terminal[0] - (nx * half_trace), terminal[1], terminal[2] - (nz * half_trace))
+    return p0, p1
+
+
+def _edge_points_at_tx_vertical_opposite_terminal(*, points: list[list[float]], trace: float) -> _Edge2P:
+    if len(points) < 2:
+        raise ValueError("Cannot compute tx_vertical opposite terminal edge from path with fewer than 2 points")
+    start = points[0]
+    end = points[-1]
+    choose_start = (start[2] > end[2]) or (abs(start[2] - end[2]) <= 1e-12 and start[0] < end[0])
+    if choose_start:
+        terminal = end
+        neighbor = points[-2]
+    else:
+        terminal = start
+        neighbor = points[1]
+    dx = terminal[0] - neighbor[0]
+    dz = terminal[2] - neighbor[2]
+    seg_len = math.hypot(dx, dz)
+    if seg_len <= 1e-12:
+        raise ValueError("Cannot compute tx_vertical opposite terminal edge from zero-length terminal segment")
+    nx = -dz / seg_len
+    nz = dx / seg_len
+    half_trace = trace / 2.0
+    p0: _Point3 = (terminal[0] + (nx * half_trace), terminal[1], terminal[2] + (nz * half_trace))
+    p1: _Point3 = (terminal[0] - (nx * half_trace), terminal[1], terminal[2] - (nz * half_trace))
+    return p0, p1
+
+
+def _tx_vertical_bridge_edges_from_node(
+    *,
+    start_xyz: _Point3,
+    end_xyz: _Point3,
+    trace: float,
+    tx_vertical_region_min: _Point3,
+    tx_vertical_region_max: _Point3,
+) -> tuple[_Edge2P, _Edge2P]:
+    half = trace / 2.0
+    min_x_allowed = tx_vertical_region_min[0] + half
+    max_x_allowed = tx_vertical_region_max[0] - half
+    if min_x_allowed > max_x_allowed:
+        raise ValueError(
+            "tx_vertical bridge x-margin exceeds region width "
+            f"(min_x_allowed={min_x_allowed}, max_x_allowed={max_x_allowed}, bridge_trace={trace})"
+        )
+    source_dx = end_xyz[0] - start_xyz[0]
+    source_anchor_x = start_xyz[0] if abs(source_dx) <= 1e-9 else start_xyz[0] + math.copysign(half, source_dx)
+    target_dx = start_xyz[0] - end_xyz[0]
+    target_anchor_x = end_xyz[0] if abs(target_dx) <= 1e-9 else end_xyz[0] + math.copysign(half, target_dx)
+    source_bridge_x = min(max(source_anchor_x, min_x_allowed), max_x_allowed)
+    target_bridge_x = min(max(target_anchor_x, min_x_allowed), max_x_allowed)
+    source_bridge_x = min(max(source_bridge_x, min_x_allowed), max_x_allowed)
+    target_bridge_x = min(max(target_bridge_x + trace, min_x_allowed), max_x_allowed)
+    bridge_out_edge: _Edge2P = (
+        (source_bridge_x, start_xyz[1], start_xyz[2] - half),
+        (source_bridge_x, start_xyz[1], start_xyz[2] + half),
+    )
+    bridge_in_edge: _Edge2P = (
+        (target_bridge_x, end_xyz[1], end_xyz[2] - half),
+        (target_bridge_x, end_xyz[1], end_xyz[2] + half),
+    )
+    return bridge_out_edge, bridge_in_edge
 
 
 def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
@@ -120,6 +220,15 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     txdd_left_object_names: dict[int, str] = {}
     txdd_start_stub_sources: dict[str, list[_TxDdStartStubSource]] = {}
     tx_vertical_nodes_by_board: dict[_BoardKey, list[_TxVerticalLinkNode]] = {}
+    txdd_global_right_d_edge: _Edge2P | None = None
+    txdd_global_right_d_object_name: str | None = None
+    txdd_global_right_d_selection_key: tuple[float, str, int] | None = None
+    txdd_global_left_a_edge: _Edge2P | None = None
+    txdd_global_left_a_object_name: str | None = None
+    tx_vertical_global_outer_right_edge: _Edge2P | None = None
+    tx_vertical_global_outer_left_edge: _Edge2P | None = None
+    tx_vertical_outer_right_selection_key: tuple[float, str, int] | None = None
+    tx_vertical_outer_left_selection_key: tuple[float, str, int] | None = None
 
     try:
         scene_names, scene_probes, scene_objects = _create_scene_non_model_objects(
@@ -312,6 +421,14 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                             )
                         right_obj = cast(Object3d, right_created)
                         right_obj_name = _object_name(right_obj, right_name)
+                        capture_dd_right_d_edge = (instance_count == 2) or (instance_count == 4 and right_layer_index == 1)
+                        if capture_dd_right_d_edge:
+                            d_edge_points = _edge_points_at_path_end(points=right_top_points, trace=trace)
+                            selection_key = (-right_center_y, pcb["id"], right_index)
+                            if txdd_global_right_d_selection_key is None or selection_key < txdd_global_right_d_selection_key:
+                                txdd_global_right_d_selection_key = selection_key
+                                txdd_global_right_d_edge = d_edge_points
+                                txdd_global_right_d_object_name = right_obj_name
                         object_names.append(right_obj_name)
                         if instance_count == 2 and right_index == 1:
                             txdd_start_stub_sources.setdefault(pcb["id"], []).append(
@@ -401,6 +518,18 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                                 right_top_points,
                                 axis_y=tx_dd_center_y + transform["dy"],
                             )
+                            capture_dd_left_a_edge = (instance_count == 2) or (instance_count == 4 and right_layer_index == 1)
+                            if capture_dd_left_a_edge:
+                                left_a_edge_points = _edge_points_at_path_end(points=left_top_points, trace=trace)
+                                if txdd_global_left_a_edge is not None:
+                                    prev_object_name = txdd_global_left_a_object_name
+                                    raise ValueError(
+                                        "tx_dd global left a-edge must be unique for tx_dd_left_a->tx_vertical bridge contract "
+                                        f"(existing: object_name={prev_object_name}; "
+                                        f"new: board_id={pcb['id']}, instance_index={right_index}, object_name={left_obj_name})"
+                                    )
+                                txdd_global_left_a_edge = left_a_edge_points
+                                txdd_global_left_a_object_name = left_obj_name
                             if instance_count == 2:
                                 txdd_start_stub_sources.setdefault(pcb["id"], []).append(
                                     (
@@ -654,9 +783,34 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                     )
                     if kind == "tx_vertical":
                         y_center = (probe["bbox"][1] + probe["bbox"][4]) / 2.0
+                        terminal_edge = _edge_points_at_tx_vertical_terminal(points=top_points, trace=trace)
+                        opposite_terminal_edge = _edge_points_at_tx_vertical_opposite_terminal(points=top_points, trace=trace)
+                        bridge_out_edge, bridge_in_edge = _tx_vertical_bridge_edges_from_node(
+                            start_xyz=start_xyz,
+                            end_xyz=end_xyz,
+                            trace=trace,
+                            tx_vertical_region_min=tx_vertical_region_min,
+                            tx_vertical_region_max=tx_vertical_region_max,
+                        )
+                        right_key = (-y_center, pcb["id"], instance_index)
+                        if (
+                            tx_vertical_outer_right_selection_key is None
+                            or right_key < tx_vertical_outer_right_selection_key
+                        ):
+                            tx_vertical_outer_right_selection_key = right_key
+                            tx_vertical_global_outer_right_edge = terminal_edge
+                        left_key = (y_center, pcb["id"], instance_index)
+                        if (
+                            tx_vertical_outer_left_selection_key is None
+                            or left_key < tx_vertical_outer_left_selection_key
+                        ):
+                            tx_vertical_outer_left_selection_key = left_key
+                            tx_vertical_global_outer_left_edge = opposite_terminal_edge
                         board_key: _BoardKey = (pcb["id"], board_idx)
                         board_nodes = tx_vertical_nodes_by_board.setdefault(board_key, [])
-                        board_nodes.append((instance_index, obj_name, start_xyz, end_xyz, y_center, trace))
+                        board_nodes.append(
+                            (instance_index, obj_name, start_xyz, end_xyz, y_center, trace, bridge_out_edge, bridge_in_edge)
+                        )
 
         object_names, fr4_object_names = finalize_solids_and_substrates(
             modeler=modeler,
@@ -681,6 +835,12 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
             coil_plane_bboxes=coil_plane_bboxes,
             fr4_object_names=fr4_object_names,
             tx_zx_fr4_names=tx_zx_fr4_names,
+            txdd_global_right_d_edge=txdd_global_right_d_edge,
+            txdd_global_right_d_object_name=txdd_global_right_d_object_name,
+            txdd_global_left_a_edge=txdd_global_left_a_edge,
+            txdd_global_left_a_object_name=txdd_global_left_a_object_name,
+            tx_vertical_global_outer_right_edge=tx_vertical_global_outer_right_edge,
+            tx_vertical_global_outer_left_edge=tx_vertical_global_outer_left_edge,
         )
     except Exception as exc:
         raise RuntimeError(f"Failed to build geometry with Pyaedt: {exc}") from exc
@@ -721,7 +881,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     _apply_txdd_right_endpoint_rule(group_endpoints, coil_polarity)
 
     em_ready_objects, em_endpoints, em_context = build_em_artifacts(
-        selected=selected,
+        selected=cast(dict[str, object], selected),
         object_names=object_names,
         group_objects=group_objects,
         group_endpoints=group_endpoints,
