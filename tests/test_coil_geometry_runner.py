@@ -746,13 +746,29 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert all(call["non_model"] is True for call in scene_boxes)
     fr4_boxes = [call for call in fake.modeler.box_calls if str(call["name"]).startswith("fr4_")]
     assert len(fr4_boxes) == 3
-    assert len(fake.modeler.subtract_calls) == 1
-    subtract_call = fake.modeler.subtract_calls[0]
-    assert len(cast(list[str], subtract_call["blank_list"])) == len(fr4_boxes)
-    assert any(str(name).startswith("coil_tx_dd_") for name in cast(list[str], subtract_call["tool_list"]))
-    assert any(str(name).startswith("coil_tx_vertical_") for name in cast(list[str], subtract_call["tool_list"]))
-    assert any(str(name).startswith("coil_rx_dd_") for name in cast(list[str], subtract_call["tool_list"]))
-    assert cast(bool, subtract_call["keep_originals"]) is True
+    assert len(fake.modeler.subtract_calls) == 3
+    subtract_by_plane: dict[str, dict[str, object]] = {}
+    for call in fake.modeler.subtract_calls:
+        blanks = cast(list[str], call["blank_list"])
+        assert len(blanks) == 1
+        blank_name = blanks[0]
+        if "_xy_" in blank_name:
+            subtract_by_plane["xy"] = call
+        elif "_yz_" in blank_name:
+            subtract_by_plane["yz"] = call
+        elif "_zx_" in blank_name:
+            subtract_by_plane["zx"] = call
+        else:
+            raise AssertionError(f"Unexpected FR4 name pattern: {blank_name}")
+        assert cast(bool, call["keep_originals"]) is True
+
+    assert set(subtract_by_plane.keys()) == {"xy", "yz", "zx"}
+    assert all(str(name).startswith("coil_tx_dd_") for name in cast(list[str], subtract_by_plane["xy"]["tool_list"]))
+    assert all(str(name).startswith("coil_rx_dd_") for name in cast(list[str], subtract_by_plane["yz"]["tool_list"]))
+    assert all(
+        str(name).startswith("coil_tx_vertical_")
+        for name in cast(list[str], subtract_by_plane["zx"]["tool_list"])
+    )
 
 
 def test_tx_vertical_span_distributes_on_y_and_stays_in_vertical_z_region(
