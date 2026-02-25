@@ -12,6 +12,7 @@ from peetsfea.types.manifest import (
     ResolvedPcbInstance,
     ResolvedPcbMount,
     SceneObjectEntry,
+    TerminalLabel,
 )
 
 from .debug_checks import _compute_pitch_checks
@@ -328,6 +329,14 @@ def _apply_txdd_right_endpoint_rule(
 
     if not right_candidates:
         return
+    # Single-layer tx_dd (selected_count=2) always uses the right endpoint path C->d.
+    # In this topology, every right instance index is 1, even if multiple boards contribute.
+    if all(candidate[2] == 1 for candidate in right_candidates):
+        for _, _, _, key in right_candidates:
+            endpoint_entry = endpoint_by_key[key]
+            endpoint_entry["start_label"] = "C"
+            endpoint_entry["end_label"] = "d"
+        return
     if len(right_candidates) > 2:
         raise ValueError(
             "tx_dd right endpoint contract violation: expected 1 or 2 right candidates "
@@ -453,5 +462,3 @@ def _txdd_right_layer_rank_by_z(
         rows[0][2]: 0,  # lower z -> c->A
         rows[1][2]: 1,  # upper z -> A->d
     }
-
-
