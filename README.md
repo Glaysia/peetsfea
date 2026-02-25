@@ -206,5 +206,32 @@ python run.py
 8) `<ansys_run_dir>/<design_id>.aedt`, `geometry_metadata_<design_id>.json`, `manifest_<design_id>.json` 저장
   - `manifest/metadata.repro_mode`: `sampled_toml | frozen_toml | manifest_json`
 
+## Internal Architecture (0.2.2)
+### Geometry Build Pipeline
+- 엔트리포인트 `build_square_spiral_from_manifest`는 다음 오케스트레이션 단계로 분리되어 동작한다.
+  - `_prepare_runtime`: manifest/prelude 검증과 런타임 컨텍스트 구성
+  - `_build_scene`: scene non-model 오브젝트 생성 + region/center 계산
+  - `_build_all_coils`: 그룹별 코일 생성기(`tx_dd`, `tx_vertical`, `rx_dd`) 호출
+  - `_finalize_geometry`: 브리지/스텁/FR4/subtract/final save 수행
+  - `_build_and_save_metadata`: 디버그/EM pipeline/metadata JSON 저장
+- 내부 상태는 `GeometryRuntimeContext`, `GeometryBuildState`, `FinalizeInputs` 타입으로 관리한다.
+
+### Finalize Pipeline
+- `finalize_solids_and_substrates`는 공개 함수(얇은 진입점)이며 내부 구현에서 단계적으로 브리지/유나이트/FR4/subtract를 수행한다.
+- 반복되는 `modeler.unite` 호출은 `safe_unite(modeler, targets, fallback_name, error_context)`를 사용해 통일한다.
+
+### Resolver Dispatch
+- 제약식 경로 해석은 prefix 기반 dispatch(`selected_group_geometry`, `selected_coil_groups`, `selected_pcbs`, `selected_mounts`, scalar)로 분리했다.
+- 함수식 해석(`rhs.func`)은 `FUNC_DISPATCH` 형태의 딕셔너리 기반 핸들러로 평가한다.
+
+### Local Quality Gates
+- 기본 검증 명령:
+```bash
+cd run
+../.venv/bin/pytest -q ../tests
+../.venv/bin/pyright ../src ../tests ../run.py
+../.venv/bin/mypy ../src ../tests ../run.py
+```
+
 ## 기여
 아직 초기 단계다. 아이디어/요구사항/스펙 제안은 언제든 환영한다.

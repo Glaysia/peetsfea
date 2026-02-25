@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict
 
+Plane = Literal["XY", "YZ", "ZX"]
+
 
 class ManifestInputs(TypedDict):
     ansys_executable_path: str

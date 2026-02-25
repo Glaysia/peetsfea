@@ -21,6 +21,7 @@ from peetsfea.types.manifest import (
 
 from .cad_probe import _object_name, _probe_cad_object
 from .debug_checks import _bbox_violations
+from .solid_ops import safe_unite
 
 
 _Point3 = tuple[float, float, float]
@@ -179,7 +180,7 @@ def _tx_dd_xy_tools(
     return sorted(name for name in set(group_objects["tx_dd"]) if name in live_object_names)
 
 
-def finalize_solids_and_substrates(
+def _finalize_solids_and_substrates_impl(
     *,
     modeler: Modeler3D,
     hfss: Hfss,
@@ -255,24 +256,12 @@ def finalize_solids_and_substrates(
         group_objects["rx_dd"].append(stub_object_name)
         cad_probe.append(_probe_cad_object(stub_obj, stub_name))
 
-        try:
-            stub_unite_result = modeler.unite(assignment=[source_object_name, stub_object_name])  # type: ignore[misc]
-        except TypeError:
-            stub_unite_result = modeler.unite([source_object_name, stub_object_name])  # type: ignore[misc]
-        if not stub_unite_result:
-            raise ValueError(
-                "Failed to unite rx_dd back stub with source coil "
-                f"(source={source_object_name}, stub={stub_object_name})"
-            )
-        if isinstance(stub_unite_result, list):
-            first = stub_unite_result[0] if stub_unite_result else source_object_name
-            stub_united_name = (
-                first if isinstance(first, str) else _object_name(cast(Object3d, first), source_object_name)
-            )
-        elif isinstance(stub_unite_result, str):
-            stub_united_name = stub_unite_result
-        else:
-            stub_united_name = _object_name(cast(Object3d, stub_unite_result), source_object_name)
+        stub_united_name = safe_unite(
+            modeler=modeler,
+            targets=[source_object_name, stub_object_name],
+            fallback_name=source_object_name,
+            error_context="rx_dd back stub with source coil",
+        )
 
         group_objects["rx_dd"] = [name for name in group_objects["rx_dd"] if name != stub_object_name]
         object_names = [name for name in object_names if name != stub_object_name]
@@ -345,24 +334,12 @@ def finalize_solids_and_substrates(
 
         rxdd_unite_targets = sorted(set([d_object_name, c_object_name, dc_bridge_obj_name]))
         if len(rxdd_unite_targets) > 1:
-            try:
-                rxdd_unite_result = modeler.unite(assignment=rxdd_unite_targets)  # type: ignore[misc]
-            except TypeError:
-                rxdd_unite_result = modeler.unite(rxdd_unite_targets)  # type: ignore[misc]
-            if not rxdd_unite_result:
-                raise ValueError(
-                    "Failed to unite rx_dd c/d bridge with source coils "
-                    f"(targets={rxdd_unite_targets})"
-                )
-            if isinstance(rxdd_unite_result, list):
-                first = rxdd_unite_result[0] if rxdd_unite_result else rxdd_unite_targets[0]
-                rxdd_united_name = (
-                    first if isinstance(first, str) else _object_name(cast(Object3d, first), rxdd_unite_targets[0])
-                )
-            elif isinstance(rxdd_unite_result, str):
-                rxdd_united_name = rxdd_unite_result
-            else:
-                rxdd_united_name = _object_name(cast(Object3d, rxdd_unite_result), rxdd_unite_targets[0])
+            rxdd_united_name = safe_unite(
+                modeler=modeler,
+                targets=rxdd_unite_targets,
+                fallback_name=rxdd_unite_targets[0],
+                error_context="rx_dd c/d bridge with source coils",
+            )
             group_objects["rx_dd"] = [name for name in group_objects["rx_dd"] if name not in rxdd_unite_targets[1:]]
             if rxdd_united_name not in group_objects["rx_dd"]:
                 group_objects["rx_dd"].append(rxdd_united_name)
@@ -403,24 +380,12 @@ def finalize_solids_and_substrates(
             group_objects["tx_dd"].append(stub_object_name)
             cad_probe.append(_probe_cad_object(stub_obj, stub_name))
 
-            try:
-                stub_unite_result = modeler.unite(assignment=[source_object_name, stub_object_name])  # type: ignore[misc]
-            except TypeError:
-                stub_unite_result = modeler.unite([source_object_name, stub_object_name])  # type: ignore[misc]
-            if not stub_unite_result:
-                raise ValueError(
-                    "Failed to unite tx_dd start stub with source coil "
-                    f"(source={source_object_name}, stub={stub_object_name})"
-                )
-            if isinstance(stub_unite_result, list):
-                first = stub_unite_result[0] if stub_unite_result else source_object_name
-                stub_united_name = (
-                    first if isinstance(first, str) else _object_name(cast(Object3d, first), source_object_name)
-                )
-            elif isinstance(stub_unite_result, str):
-                stub_united_name = stub_unite_result
-            else:
-                stub_united_name = _object_name(cast(Object3d, stub_unite_result), source_object_name)
+            stub_united_name = safe_unite(
+                modeler=modeler,
+                targets=[source_object_name, stub_object_name],
+                fallback_name=source_object_name,
+                error_context="tx_dd start stub with source coil",
+            )
 
             group_objects["tx_dd"] = [name for name in group_objects["tx_dd"] if name != stub_object_name]
             object_names = [name for name in object_names if name != stub_object_name]
@@ -556,19 +521,12 @@ def finalize_solids_and_substrates(
 
     if txdd_bridge_object_name is not None and 0 in txdd_right_object_names and 1 in txdd_right_object_names:
         txdd_unite_targets = [txdd_right_object_names[0], txdd_bridge_object_name, txdd_right_object_names[1]]
-        try:
-            unite_result = modeler.unite(assignment=txdd_unite_targets)  # type: ignore[misc]
-        except TypeError:
-            unite_result = modeler.unite(txdd_unite_targets)  # type: ignore[misc]
-        if not unite_result:
-            raise ValueError("Failed to unite tx_dd right-layer bridge group " f"(targets={txdd_unite_targets})")
-        if isinstance(unite_result, list):
-            first = unite_result[0] if unite_result else txdd_unite_targets[0]
-            united_object_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), txdd_unite_targets[0])
-        elif isinstance(unite_result, str):
-            united_object_name = unite_result
-        else:
-            united_object_name = _object_name(cast(Object3d, unite_result), txdd_unite_targets[0])
+        united_object_name = safe_unite(
+            modeler=modeler,
+            targets=txdd_unite_targets,
+            fallback_name=txdd_unite_targets[0],
+            error_context="tx_dd right-layer bridge group",
+        )
         group_objects["tx_dd"] = [name for name in group_objects["tx_dd"] if name not in txdd_unite_targets[1:]]
         if united_object_name not in group_objects["tx_dd"]:
             group_objects["tx_dd"].append(united_object_name)
@@ -616,19 +574,12 @@ def finalize_solids_and_substrates(
 
     if txdd_left_bridge_object_name is not None and 0 in txdd_left_object_names and 1 in txdd_left_object_names:
         txdd_left_unite_targets = [txdd_left_object_names[0], txdd_left_bridge_object_name, txdd_left_object_names[1]]
-        try:
-            left_unite_result = modeler.unite(assignment=txdd_left_unite_targets)  # type: ignore[misc]
-        except TypeError:
-            left_unite_result = modeler.unite(txdd_left_unite_targets)  # type: ignore[misc]
-        if not left_unite_result:
-            raise ValueError("Failed to unite tx_dd left-layer bridge group " f"(targets={txdd_left_unite_targets})")
-        if isinstance(left_unite_result, list):
-            first = left_unite_result[0] if left_unite_result else txdd_left_unite_targets[0]
-            left_united_object_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), txdd_left_unite_targets[0])
-        elif isinstance(left_unite_result, str):
-            left_united_object_name = left_unite_result
-        else:
-            left_united_object_name = _object_name(cast(Object3d, left_unite_result), txdd_left_unite_targets[0])
+        left_united_object_name = safe_unite(
+            modeler=modeler,
+            targets=txdd_left_unite_targets,
+            fallback_name=txdd_left_unite_targets[0],
+            error_context="tx_dd left-layer bridge group",
+        )
         group_objects["tx_dd"] = [name for name in group_objects["tx_dd"] if name not in txdd_left_unite_targets[1:]]
         if left_united_object_name not in group_objects["tx_dd"]:
             group_objects["tx_dd"].append(left_united_object_name)
@@ -640,19 +591,12 @@ def finalize_solids_and_substrates(
 
     tx_vertical_unite_targets = sorted(set(group_objects["tx_vertical"]))
     if len(tx_vertical_unite_targets) > 1:
-        try:
-            tx_vertical_unite_result = modeler.unite(assignment=tx_vertical_unite_targets)  # type: ignore[misc]
-        except TypeError:
-            tx_vertical_unite_result = modeler.unite(tx_vertical_unite_targets)  # type: ignore[misc]
-        if not tx_vertical_unite_result:
-            raise ValueError("Failed to unite tx_vertical group " f"(targets={tx_vertical_unite_targets})")
-        if isinstance(tx_vertical_unite_result, list):
-            first = tx_vertical_unite_result[0] if tx_vertical_unite_result else tx_vertical_unite_targets[0]
-            tx_vertical_united_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), tx_vertical_unite_targets[0])
-        elif isinstance(tx_vertical_unite_result, str):
-            tx_vertical_united_name = tx_vertical_unite_result
-        else:
-            tx_vertical_united_name = _object_name(cast(Object3d, tx_vertical_unite_result), tx_vertical_unite_targets[0])
+        tx_vertical_united_name = safe_unite(
+            modeler=modeler,
+            targets=tx_vertical_unite_targets,
+            fallback_name=tx_vertical_unite_targets[0],
+            error_context="tx_vertical group",
+        )
         group_objects["tx_vertical"] = [tx_vertical_united_name]
         object_names = [name for name in object_names if name not in tx_vertical_unite_targets[1:]]
         if tx_vertical_united_name not in object_names:
@@ -699,22 +643,12 @@ def finalize_solids_and_substrates(
         raise ValueError("tx_dd global right d-edge object name was not captured")
     tx_connect_unite_targets = sorted(set([txdd_right_d_object_name_active] + group_objects["tx_vertical"]))
     if len(tx_connect_unite_targets) > 1:
-        try:
-            tx_connect_unite_result = modeler.unite(assignment=tx_connect_unite_targets)  # type: ignore[misc]
-        except TypeError:
-            tx_connect_unite_result = modeler.unite(tx_connect_unite_targets)  # type: ignore[misc]
-        if not tx_connect_unite_result:
-            raise ValueError(
-                "Failed to unite tx_dd right coil, dd_to_vertical bridge, and tx_vertical group "
-                f"(targets={tx_connect_unite_targets})"
-            )
-        if isinstance(tx_connect_unite_result, list):
-            first = tx_connect_unite_result[0] if tx_connect_unite_result else tx_connect_unite_targets[0]
-            tx_connect_united_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), tx_connect_unite_targets[0])
-        elif isinstance(tx_connect_unite_result, str):
-            tx_connect_united_name = tx_connect_unite_result
-        else:
-            tx_connect_united_name = _object_name(cast(Object3d, tx_connect_unite_result), tx_connect_unite_targets[0])
+        tx_connect_united_name = safe_unite(
+            modeler=modeler,
+            targets=tx_connect_unite_targets,
+            fallback_name=tx_connect_unite_targets[0],
+            error_context="tx_dd right coil + dd_to_vertical bridge + tx_vertical group",
+        )
         group_objects["tx_vertical"] = [tx_connect_united_name]
         object_names = [name for name in object_names if name not in tx_connect_unite_targets[1:]]
         if tx_connect_united_name not in object_names:
@@ -773,24 +707,12 @@ def finalize_solids_and_substrates(
         raise ValueError("tx_dd global left a-edge contract violation: object name was not captured")
     tx_left_connect_unite_targets = sorted(set([txdd_left_a_object_name_active] + group_objects["tx_vertical"]))
     if len(tx_left_connect_unite_targets) > 1:
-        try:
-            tx_left_connect_unite_result = modeler.unite(assignment=tx_left_connect_unite_targets)  # type: ignore[misc]
-        except TypeError:
-            tx_left_connect_unite_result = modeler.unite(tx_left_connect_unite_targets)  # type: ignore[misc]
-        if not tx_left_connect_unite_result:
-            raise ValueError(
-                "Failed to unite tx_dd left a coil, dd_left_a_to_vertical bridge, and tx_vertical group "
-                f"(targets={tx_left_connect_unite_targets})"
-            )
-        if isinstance(tx_left_connect_unite_result, list):
-            first = tx_left_connect_unite_result[0] if tx_left_connect_unite_result else tx_left_connect_unite_targets[0]
-            tx_left_connect_united_name = (
-                first if isinstance(first, str) else _object_name(cast(Object3d, first), tx_left_connect_unite_targets[0])
-            )
-        elif isinstance(tx_left_connect_unite_result, str):
-            tx_left_connect_united_name = tx_left_connect_unite_result
-        else:
-            tx_left_connect_united_name = _object_name(cast(Object3d, tx_left_connect_unite_result), tx_left_connect_unite_targets[0])
+        tx_left_connect_united_name = safe_unite(
+            modeler=modeler,
+            targets=tx_left_connect_unite_targets,
+            fallback_name=tx_left_connect_unite_targets[0],
+            error_context="tx_dd left a coil + dd_left_a_to_vertical bridge + tx_vertical group",
+        )
         group_objects["tx_vertical"] = [tx_left_connect_united_name]
         object_names = [name for name in object_names if name not in tx_left_connect_unite_targets[1:]]
         if tx_left_connect_united_name not in object_names:
@@ -862,19 +784,12 @@ def finalize_solids_and_substrates(
 
     if len(tx_zx_fr4_names) > 1:
         tx_zx_fr4_targets = sorted(set(tx_zx_fr4_names))
-        try:
-            tx_zx_unite_result = modeler.unite(assignment=tx_zx_fr4_targets)  # type: ignore[misc]
-        except TypeError:
-            tx_zx_unite_result = modeler.unite(tx_zx_fr4_targets)  # type: ignore[misc]
-        if not tx_zx_unite_result:
-            raise ValueError("Failed to unite tx ZX FR4 group " f"(targets={tx_zx_fr4_targets})")
-        if isinstance(tx_zx_unite_result, list):
-            first = tx_zx_unite_result[0] if tx_zx_unite_result else tx_zx_fr4_targets[0]
-            tx_zx_united_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), tx_zx_fr4_targets[0])
-        elif isinstance(tx_zx_unite_result, str):
-            tx_zx_united_name = tx_zx_unite_result
-        else:
-            tx_zx_united_name = _object_name(cast(Object3d, tx_zx_unite_result), tx_zx_fr4_targets[0])
+        tx_zx_united_name = safe_unite(
+            modeler=modeler,
+            targets=tx_zx_fr4_targets,
+            fallback_name=tx_zx_fr4_targets[0],
+            error_context="tx ZX FR4 group",
+        )
         fr4_object_names = [name for name in fr4_object_names if name not in tx_zx_fr4_targets[1:]]
         for removed_name in tx_zx_fr4_targets[1:]:
             fr4_plane_by_name.pop(removed_name, None)
@@ -924,6 +839,71 @@ def finalize_solids_and_substrates(
 
     hfss.save_project(str(aedt_path))
     return object_names, fr4_object_names
+
+
+def finalize_solids_and_substrates(
+    *,
+    modeler: Modeler3D,
+    hfss: Hfss,
+    aedt_path: Path,
+    design_id: str,
+    cu_thickness: float,
+    pcb_thickness: float,
+    tx_board_ids: set[str],
+    tx_vertical_nodes_by_board: dict[_BoardKey, list[_TxVerticalLinkNode]],
+    tx_vertical_region_min: _Point3,
+    tx_vertical_region_max: _Point3,
+    txdd_right_a_points: dict[int, tuple[_Point3, float]],
+    txdd_right_object_names: dict[int, str],
+    txdd_left_a_points: dict[int, tuple[_Point3, float]],
+    txdd_left_object_names: dict[int, str],
+    txdd_start_stub_sources: dict[str, list[_TxDdStartStubSource]],
+    rxdd_back_stub_sources: list[_RxDdBackStubSource],
+    group_objects: GroupObjects,
+    object_names: list[str],
+    cad_probe: list[CadProbe],
+    placement_violations: list[RegionViolation],
+    coil_plane_bboxes: list[tuple[str, Literal["XY", "YZ", "ZX"], list[float]]],
+    fr4_object_names: list[str],
+    tx_zx_fr4_names: list[str],
+    txdd_global_right_d_edge: _Edge2P | None,
+    txdd_global_right_d_object_name: str | None,
+    txdd_global_left_a_edge: _Edge2P | None,
+    txdd_global_left_a_object_name: str | None,
+    tx_vertical_global_outer_right_edge: _Edge2P | None,
+    tx_vertical_global_outer_left_edge: _Edge2P | None,
+) -> tuple[list[str], list[str]]:
+    return _finalize_solids_and_substrates_impl(
+        modeler=modeler,
+        hfss=hfss,
+        aedt_path=aedt_path,
+        design_id=design_id,
+        cu_thickness=cu_thickness,
+        pcb_thickness=pcb_thickness,
+        tx_board_ids=tx_board_ids,
+        tx_vertical_nodes_by_board=tx_vertical_nodes_by_board,
+        tx_vertical_region_min=tx_vertical_region_min,
+        tx_vertical_region_max=tx_vertical_region_max,
+        txdd_right_a_points=txdd_right_a_points,
+        txdd_right_object_names=txdd_right_object_names,
+        txdd_left_a_points=txdd_left_a_points,
+        txdd_left_object_names=txdd_left_object_names,
+        txdd_start_stub_sources=txdd_start_stub_sources,
+        rxdd_back_stub_sources=rxdd_back_stub_sources,
+        group_objects=group_objects,
+        object_names=object_names,
+        cad_probe=cad_probe,
+        placement_violations=placement_violations,
+        coil_plane_bboxes=coil_plane_bboxes,
+        fr4_object_names=fr4_object_names,
+        tx_zx_fr4_names=tx_zx_fr4_names,
+        txdd_global_right_d_edge=txdd_global_right_d_edge,
+        txdd_global_right_d_object_name=txdd_global_right_d_object_name,
+        txdd_global_left_a_edge=txdd_global_left_a_edge,
+        txdd_global_left_a_object_name=txdd_global_left_a_object_name,
+        tx_vertical_global_outer_right_edge=tx_vertical_global_outer_right_edge,
+        tx_vertical_global_outer_left_edge=tx_vertical_global_outer_left_edge,
+    )
 
 
 def build_em_artifacts(

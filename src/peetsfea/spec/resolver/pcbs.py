@@ -70,9 +70,9 @@ def resolve_pcbs(spec: TOMLTable, seed: int, attempt: int, context: SamplingCont
     for idx, raw_pcb in enumerate(raw_pcbs):
         if not isinstance(raw_pcb, dict):
             raise ValueError(f"pcbs[{idx}] must be a table/object")
-        pcb = raw_pcb
-        raw_id = pcb.get("id")
-        raw_role = pcb.get("role")
+        raw_pcb_table = raw_pcb
+        raw_id = raw_pcb_table.get("id")
+        raw_role = raw_pcb_table.get("role")
         if not isinstance(raw_id, str) or not raw_id:
             raise ValueError(f"pcbs[{idx}].id must be non-empty string")
         if raw_id in ids:
@@ -82,18 +82,18 @@ def resolve_pcbs(spec: TOMLTable, seed: int, attempt: int, context: SamplingCont
             raise ValueError(f"pcbs[{idx}].role must be 'tx' or 'rx'")
         role = cast(Literal["tx", "rx"], raw_role)
 
-        raw_position = pcb.get("position")
+        raw_position = raw_pcb_table.get("position")
         if raw_position is None:
             raise ValueError(f"pcbs[{idx}].position must be [x, y, z]")
         position = parse_position(raw_position, f"pcbs[{idx}].position")
-        raw_rotation = pcb.get("rotation_deg")
+        raw_rotation = raw_pcb_table.get("rotation_deg")
         if isinstance(raw_rotation, bool) or not isinstance(raw_rotation, (int, float)):
             raise ValueError(f"pcbs[{idx}].rotation_deg must be number")
-        raw_mounts = pcb.get("mounts")
+        raw_mounts = raw_pcb_table.get("mounts")
         if raw_mounts is None:
             raise ValueError(f"pcbs[{idx}].mounts must be a list")
         mounts = parse_pcb_mounts(raw_mounts, f"pcbs[{idx}].mounts")
-        raw_present = pcb.get("present")
+        raw_present = raw_pcb_table.get("present")
         if not isinstance(raw_present, list) or len(raw_present) != 4:
             raise ValueError(f"pcbs[{idx}].present must be [is_integer, start, end, count]")
         is_integer, start, end, count = raw_present
@@ -113,12 +113,12 @@ def resolve_pcbs(spec: TOMLTable, seed: int, attempt: int, context: SamplingCont
             present = bool(int(sample_candidate(candidates, seed=seed, offset=PCB_OFFSET_BASE + idx, attempt=attempt)))
             context[present_key] = int(present)
 
-        raw_z_mode = pcb.get("z_mode")
+        raw_z_mode = raw_pcb_table.get("z_mode")
         if raw_z_mode not in ("absolute", "relative_to_pcb"):
             raise ValueError(f"pcbs[{idx}].z_mode must be 'absolute' or 'relative_to_pcb'")
         z_mode = cast(Literal["absolute", "relative_to_pcb"], raw_z_mode)
-        raw_z_relative_base_id = pcb.get("z_relative_base_id")
-        raw_z_delta_path = pcb.get("z_delta_path")
+        raw_z_relative_base_id = raw_pcb_table.get("z_relative_base_id")
+        raw_z_delta_path = raw_pcb_table.get("z_delta_path")
         z_relative_base_id: str | None = None
         z_delta_path: str | None = None
         if z_mode == "absolute":
@@ -148,14 +148,16 @@ def resolve_pcbs(spec: TOMLTable, seed: int, attempt: int, context: SamplingCont
             }
         )
 
-    by_id = {pcb["id"]: pcb for pcb in resolved}
-    for idx, pcb in enumerate(resolved):
-        if pcb["z_mode"] != "relative_to_pcb":
+    by_id: dict[str, ResolvedPcbInstance] = {resolved_pcb["id"]: resolved_pcb for resolved_pcb in resolved}
+    for idx, resolved_pcb in enumerate(resolved):
+        if resolved_pcb["z_mode"] != "relative_to_pcb":
             continue
-        base_id = pcb["z_relative_base_id"]
-        delta_path = pcb["z_delta_path"]
-        assert base_id is not None
-        assert delta_path is not None
+        base_id = resolved_pcb["z_relative_base_id"]
+        delta_path = resolved_pcb["z_delta_path"]
+        if base_id is None or delta_path is None:
+            raise ValueError(
+                f"pcbs[{idx}] relative_to_pcb requires z_relative_base_id and z_delta_path"
+            )
         base = by_id.get(base_id)
         if base is None:
             raise ValueError(f"pcbs[{idx}].z_relative_base_id references unknown pcb id: {base_id}")
@@ -172,8 +174,8 @@ def resolve_pcbs(spec: TOMLTable, seed: int, attempt: int, context: SamplingCont
                 context=context,
             )
         )
-        x, y, _ = pcb["position"]
-        pcb["position"] = (x, y, base["position"][2] + delta)
+        x, y, _ = resolved_pcb["position"]
+        resolved_pcb["position"] = (x, y, base["position"][2] + delta)
     return resolved
 
 
