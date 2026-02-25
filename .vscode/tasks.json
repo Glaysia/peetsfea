@@ -13,7 +13,7 @@
     {
       "label": "clean-run-aedt",
       "type": "shell",
-      "command": "mkdir -p /home/harry/Projects/PythonProjects/peetsfea/run/aedt && find /home/harry/Projects/PythonProjects/peetsfea/run/aedt -mindepth 1 -maxdepth 1 -exec rm -rf {} +",
+      "command": "mkdir -p ${workspaceFolder}/run/aedt && find ${workspaceFolder}/run/aedt -mindepth 1 -maxdepth 1 -exec rm -rf {} +",
       "problemMatcher": []
     },
     {
