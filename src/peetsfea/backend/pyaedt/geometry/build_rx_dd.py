@@ -33,6 +33,7 @@ _RxDdBackStubSource = tuple[str, int, str, _Point3, float, str]
 TX_DD_START_STUB_DOWN_MM = 3.0
 RX_DD_BACK_STUB_LEN_MM = 3.0
 RX_DD_BACK_STUB_AXIS_SIGN_X = -1.0
+FR4_SUBTRACT_OVERLAP_MM = 0.1
 
 
 def _rxdd_back_stub_sort_key(source: _RxDdBackStubSource) -> tuple[str, int, str]:
@@ -189,11 +190,29 @@ def _sheet_points_from_edge_pair(*, dd_edge: _Edge2P, vertical_edge: _Edge2P) ->
     ]
 
 
-def _bbox_overlap_lengths(a: list[float], b: list[float]) -> tuple[float, float, float]:
-    ox = min(a[3], b[3]) - max(a[0], b[0])
-    oy = min(a[4], b[4]) - max(a[1], b[1])
-    oz = min(a[5], b[5]) - max(a[2], b[2])
-    return ox, oy, oz
+def _fr4_box_from_plane_bbox(
+    *,
+    plane: Literal["XY", "YZ", "ZX"],
+    bbox: list[float],
+    pcb_thickness: float,
+    overlap_mm: float,
+    eps_len: float,
+) -> tuple[list[float], list[float]]:
+    min_x, min_y, min_z, max_x, max_y, max_z = bbox
+    span_x = max(max_x - min_x, eps_len)
+    span_y = max(max_y - min_y, eps_len)
+    span_z = max(max_z - min_z, eps_len)
+    if plane == "XY":
+        origin = [min_x - overlap_mm, min_y - overlap_mm, min_z - pcb_thickness - overlap_mm]
+        # Apply overlap in plane only. Keep FR4 thickness axis unchanged to avoid FR4-FR4 intersections.
+        sizes = [span_x + (2.0 * overlap_mm), span_y + (2.0 * overlap_mm), max(pcb_thickness, eps_len)]
+    elif plane == "YZ":
+        origin = [min_x - pcb_thickness - overlap_mm, min_y - overlap_mm, min_z - overlap_mm]
+        sizes = [max(pcb_thickness, eps_len), span_y + (2.0 * overlap_mm), span_z + (2.0 * overlap_mm)]
+    else:
+        origin = [min_x - overlap_mm, min_y - pcb_thickness - overlap_mm, min_z - overlap_mm]
+        sizes = [span_x + (2.0 * overlap_mm), max(pcb_thickness, eps_len), span_z + (2.0 * overlap_mm)]
+    return origin, sizes
 
 
 def _txdd_left_a_edge_from_points(*, txdd_left_a_points: dict[int, tuple[_Point3, float]]) -> _Edge2P:
@@ -769,133 +788,134 @@ def _finalize_solids_and_substrates_impl(
         if tx_vertical_united_name not in object_names:
             object_names.append(tx_vertical_united_name)
 
-    if txdd_global_right_d_edge is None:
-        raise ValueError("tx_dd global right d-edge points were not captured")
-    if tx_vertical_global_outer_right_edge is None:
-        raise ValueError("tx_vertical global outer-right edge points were not captured")
-    dd_to_vertical_sheet_points = _sheet_points_from_edge_pair(
-        dd_edge=txdd_global_right_d_edge,
-        vertical_edge=tx_vertical_global_outer_right_edge,
-    )
-    dd_to_vertical_bridge_name = f"bridge_tx_dd_to_tx_vertical_{design_id}"
-    try:
-        dd_to_vertical_obj_name, dd_to_vertical_obj = _create_thickened_sheet_from_points(
-            modeler=modeler,
-            sheet_points=dd_to_vertical_sheet_points,
-            sheet_name=dd_to_vertical_bridge_name,
-            thickness=(cu_thickness * 4.0),
+    if tx_vertical_unite_targets:
+        if txdd_global_right_d_edge is None:
+            raise ValueError("tx_dd global right d-edge points were not captured")
+        if tx_vertical_global_outer_right_edge is None:
+            raise ValueError("tx_vertical global outer-right edge points were not captured")
+        dd_to_vertical_sheet_points = _sheet_points_from_edge_pair(
+            dd_edge=txdd_global_right_d_edge,
+            vertical_edge=tx_vertical_global_outer_right_edge,
         )
-    except ValueError as exc:
-        message = str(exc)
-        if message.startswith("Sheet loop creation failed"):
-            raise ValueError(
-                "tx_dd_to_tx_vertical bridge rectangle loop creation failed "
-                f"(name={dd_to_vertical_bridge_name})"
-            ) from exc
-        if message.startswith("Sheet cover_lines failed"):
-            raise ValueError(
-                "tx_dd_to_tx_vertical bridge cover_lines failed "
-                f"(name={dd_to_vertical_bridge_name})"
-            ) from exc
-        if message.startswith("Sheet thicken failed"):
-            raise ValueError(
-                "tx_dd_to_tx_vertical bridge thicken failed "
-                f"(name={dd_to_vertical_bridge_name}, thickness={cu_thickness * 4.0})"
-            ) from exc
-        raise
-    object_names.append(dd_to_vertical_obj_name)
-    group_objects["tx_vertical"].append(dd_to_vertical_obj_name)
-    cad_probe.append(_probe_cad_object(dd_to_vertical_obj, dd_to_vertical_bridge_name))
-    if txdd_right_d_object_name_active is None:
-        raise ValueError("tx_dd global right d-edge object name was not captured")
-    tx_connect_unite_targets = sorted(set([txdd_right_d_object_name_active] + group_objects["tx_vertical"]))
-    if len(tx_connect_unite_targets) > 1:
-        tx_connect_united_name = safe_unite(
-            modeler=modeler,
-            targets=tx_connect_unite_targets,
-            fallback_name=tx_connect_unite_targets[0],
-            error_context="tx_dd right coil + dd_to_vertical bridge + tx_vertical group",
-        )
-        group_objects["tx_vertical"] = [tx_connect_united_name]
-        object_names = [name for name in object_names if name not in tx_connect_unite_targets[1:]]
-        if tx_connect_united_name not in object_names:
-            object_names.append(tx_connect_united_name)
-        if txdd_right_d_object_name_active is not None:
-            _replace_object_name_in_map(
-                txdd_right_object_names,
-                old_name=txdd_right_d_object_name_active,
-                new_name=tx_connect_united_name,
+        dd_to_vertical_bridge_name = f"bridge_tx_dd_to_tx_vertical_{design_id}"
+        try:
+            dd_to_vertical_obj_name, dd_to_vertical_obj = _create_thickened_sheet_from_points(
+                modeler=modeler,
+                sheet_points=dd_to_vertical_sheet_points,
+                sheet_name=dd_to_vertical_bridge_name,
+                thickness=(cu_thickness * 4.0),
             )
-            _replace_object_name_in_map(
-                txdd_left_object_names,
-                old_name=txdd_right_d_object_name_active,
-                new_name=tx_connect_united_name,
+        except ValueError as exc:
+            message = str(exc)
+            if message.startswith("Sheet loop creation failed"):
+                raise ValueError(
+                    "tx_dd_to_tx_vertical bridge rectangle loop creation failed "
+                    f"(name={dd_to_vertical_bridge_name})"
+                ) from exc
+            if message.startswith("Sheet cover_lines failed"):
+                raise ValueError(
+                    "tx_dd_to_tx_vertical bridge cover_lines failed "
+                    f"(name={dd_to_vertical_bridge_name})"
+                ) from exc
+            if message.startswith("Sheet thicken failed"):
+                raise ValueError(
+                    "tx_dd_to_tx_vertical bridge thicken failed "
+                    f"(name={dd_to_vertical_bridge_name}, thickness={cu_thickness * 4.0})"
+                ) from exc
+            raise
+        object_names.append(dd_to_vertical_obj_name)
+        group_objects["tx_vertical"].append(dd_to_vertical_obj_name)
+        cad_probe.append(_probe_cad_object(dd_to_vertical_obj, dd_to_vertical_bridge_name))
+        if txdd_right_d_object_name_active is None:
+            raise ValueError("tx_dd global right d-edge object name was not captured")
+        tx_connect_unite_targets = sorted(set([txdd_right_d_object_name_active] + group_objects["tx_vertical"]))
+        if len(tx_connect_unite_targets) > 1:
+            tx_connect_united_name = safe_unite(
+                modeler=modeler,
+                targets=tx_connect_unite_targets,
+                fallback_name=tx_connect_unite_targets[0],
+                error_context="tx_dd right coil + dd_to_vertical bridge + tx_vertical group",
             )
-            txdd_right_d_object_name_active = tx_connect_united_name
+            group_objects["tx_vertical"] = [tx_connect_united_name]
+            object_names = [name for name in object_names if name not in tx_connect_unite_targets[1:]]
+            if tx_connect_united_name not in object_names:
+                object_names.append(tx_connect_united_name)
+            if txdd_right_d_object_name_active is not None:
+                _replace_object_name_in_map(
+                    txdd_right_object_names,
+                    old_name=txdd_right_d_object_name_active,
+                    new_name=tx_connect_united_name,
+                )
+                _replace_object_name_in_map(
+                    txdd_left_object_names,
+                    old_name=txdd_right_d_object_name_active,
+                    new_name=tx_connect_united_name,
+                )
+                txdd_right_d_object_name_active = tx_connect_united_name
 
-    if tx_vertical_global_outer_left_edge is None:
-        raise ValueError("tx_vertical global outer-left edge contract violation: points were not captured")
-    if txdd_global_left_a_edge is None:
-        raise ValueError("tx_dd global left a-edge contract violation: points were not captured")
-    dd_left_to_vertical_sheet_points = _sheet_points_from_edge_pair(
-        dd_edge=txdd_global_left_a_edge,
-        vertical_edge=tx_vertical_global_outer_left_edge,
-    )
-    dd_left_to_vertical_bridge_name = f"bridge_tx_dd_left_a_to_tx_vertical_{design_id}"
-    try:
-        dd_left_to_vertical_obj_name, dd_left_to_vertical_obj = _create_thickened_sheet_from_points(
-            modeler=modeler,
-            sheet_points=dd_left_to_vertical_sheet_points,
-            sheet_name=dd_left_to_vertical_bridge_name,
-            thickness=(cu_thickness * 4.0),
+        if tx_vertical_global_outer_left_edge is None:
+            raise ValueError("tx_vertical global outer-left edge contract violation: points were not captured")
+        if txdd_global_left_a_edge is None:
+            raise ValueError("tx_dd global left a-edge contract violation: points were not captured")
+        dd_left_to_vertical_sheet_points = _sheet_points_from_edge_pair(
+            dd_edge=txdd_global_left_a_edge,
+            vertical_edge=tx_vertical_global_outer_left_edge,
         )
-    except ValueError as exc:
-        message = str(exc)
-        if message.startswith("Sheet loop creation failed"):
-            raise ValueError(
-                "tx_dd_left_a_to_tx_vertical bridge rectangle loop creation failed "
-                f"(name={dd_left_to_vertical_bridge_name})"
-            ) from exc
-        if message.startswith("Sheet cover_lines failed"):
-            raise ValueError(
-                "tx_dd_left_a_to_tx_vertical bridge cover_lines failed "
-                f"(name={dd_left_to_vertical_bridge_name})"
-            ) from exc
-        if message.startswith("Sheet thicken failed"):
-            raise ValueError(
-                "tx_dd_left_a_to_tx_vertical bridge thicken failed "
-                f"(name={dd_left_to_vertical_bridge_name}, thickness={cu_thickness * 4.0})"
-            ) from exc
-        raise
-    object_names.append(dd_left_to_vertical_obj_name)
-    group_objects["tx_vertical"].append(dd_left_to_vertical_obj_name)
-    cad_probe.append(_probe_cad_object(dd_left_to_vertical_obj, dd_left_to_vertical_bridge_name))
-    if txdd_left_a_object_name_active is None:
-        raise ValueError("tx_dd global left a-edge contract violation: object name was not captured")
-    tx_left_connect_unite_targets = sorted(set([txdd_left_a_object_name_active] + group_objects["tx_vertical"]))
-    if len(tx_left_connect_unite_targets) > 1:
-        tx_left_connect_united_name = safe_unite(
-            modeler=modeler,
-            targets=tx_left_connect_unite_targets,
-            fallback_name=tx_left_connect_unite_targets[0],
-            error_context="tx_dd left a coil + dd_left_a_to_vertical bridge + tx_vertical group",
-        )
-        group_objects["tx_vertical"] = [tx_left_connect_united_name]
-        object_names = [name for name in object_names if name not in tx_left_connect_unite_targets[1:]]
-        if tx_left_connect_united_name not in object_names:
-            object_names.append(tx_left_connect_united_name)
-        if txdd_left_a_object_name_active is not None:
-            _replace_object_name_in_map(
-                txdd_right_object_names,
-                old_name=txdd_left_a_object_name_active,
-                new_name=tx_left_connect_united_name,
+        dd_left_to_vertical_bridge_name = f"bridge_tx_dd_left_a_to_tx_vertical_{design_id}"
+        try:
+            dd_left_to_vertical_obj_name, dd_left_to_vertical_obj = _create_thickened_sheet_from_points(
+                modeler=modeler,
+                sheet_points=dd_left_to_vertical_sheet_points,
+                sheet_name=dd_left_to_vertical_bridge_name,
+                thickness=(cu_thickness * 4.0),
             )
-            _replace_object_name_in_map(
-                txdd_left_object_names,
-                old_name=txdd_left_a_object_name_active,
-                new_name=tx_left_connect_united_name,
+        except ValueError as exc:
+            message = str(exc)
+            if message.startswith("Sheet loop creation failed"):
+                raise ValueError(
+                    "tx_dd_left_a_to_tx_vertical bridge rectangle loop creation failed "
+                    f"(name={dd_left_to_vertical_bridge_name})"
+                ) from exc
+            if message.startswith("Sheet cover_lines failed"):
+                raise ValueError(
+                    "tx_dd_left_a_to_tx_vertical bridge cover_lines failed "
+                    f"(name={dd_left_to_vertical_bridge_name})"
+                ) from exc
+            if message.startswith("Sheet thicken failed"):
+                raise ValueError(
+                    "tx_dd_left_a_to_tx_vertical bridge thicken failed "
+                    f"(name={dd_left_to_vertical_bridge_name}, thickness={cu_thickness * 4.0})"
+                ) from exc
+            raise
+        object_names.append(dd_left_to_vertical_obj_name)
+        group_objects["tx_vertical"].append(dd_left_to_vertical_obj_name)
+        cad_probe.append(_probe_cad_object(dd_left_to_vertical_obj, dd_left_to_vertical_bridge_name))
+        if txdd_left_a_object_name_active is None:
+            raise ValueError("tx_dd global left a-edge contract violation: object name was not captured")
+        tx_left_connect_unite_targets = sorted(set([txdd_left_a_object_name_active] + group_objects["tx_vertical"]))
+        if len(tx_left_connect_unite_targets) > 1:
+            tx_left_connect_united_name = safe_unite(
+                modeler=modeler,
+                targets=tx_left_connect_unite_targets,
+                fallback_name=tx_left_connect_unite_targets[0],
+                error_context="tx_dd left a coil + dd_left_a_to_vertical bridge + tx_vertical group",
             )
-            txdd_left_a_object_name_active = tx_left_connect_united_name
+            group_objects["tx_vertical"] = [tx_left_connect_united_name]
+            object_names = [name for name in object_names if name not in tx_left_connect_unite_targets[1:]]
+            if tx_left_connect_united_name not in object_names:
+                object_names.append(tx_left_connect_united_name)
+            if txdd_left_a_object_name_active is not None:
+                _replace_object_name_in_map(
+                    txdd_right_object_names,
+                    old_name=txdd_left_a_object_name_active,
+                    new_name=tx_left_connect_united_name,
+                )
+                _replace_object_name_in_map(
+                    txdd_left_object_names,
+                    old_name=txdd_left_a_object_name_active,
+                    new_name=tx_left_connect_united_name,
+                )
+                txdd_left_a_object_name_active = tx_left_connect_united_name
 
     eps_len = 1e-6
     grouped_plane_bboxes: dict[tuple[str, Literal["XY", "YZ", "ZX"], int], list[float]] = {}
@@ -925,19 +945,13 @@ def _finalize_solids_and_substrates_impl(
             existing[5] = max(existing[5], bbox[5])
 
     for layer_idx, ((board_id, plane, _), bbox) in enumerate(sorted(grouped_plane_bboxes.items())):
-        min_x, min_y, min_z, max_x, max_y, max_z = bbox
-        span_x = max(max_x - min_x, eps_len)
-        span_y = max(max_y - min_y, eps_len)
-        span_z = max(max_z - min_z, eps_len)
-        if plane == "XY":
-            origin = [min_x, min_y, min_z - pcb_thickness]
-            sizes = [span_x, span_y, pcb_thickness]
-        elif plane == "YZ":
-            origin = [min_x - pcb_thickness, min_y, min_z]
-            sizes = [pcb_thickness, span_y, span_z]
-        else:
-            origin = [min_x, min_y - pcb_thickness, min_z]
-            sizes = [span_x, pcb_thickness, span_z]
+        origin, sizes = _fr4_box_from_plane_bbox(
+            plane=plane,
+            bbox=bbox,
+            pcb_thickness=pcb_thickness,
+            overlap_mm=FR4_SUBTRACT_OVERLAP_MM,
+            eps_len=eps_len,
+        )
 
         substrate_name = f"fr4_{board_id}_{plane.lower()}_{layer_idx}_{design_id}"
         substrate = cast(Object3d, modeler.create_box(origin=origin, sizes=sizes, name=substrate_name, material="FR4_epoxy"))
@@ -989,52 +1003,25 @@ def _finalize_solids_and_substrates_impl(
         if fr4_plane is None:
             continue
         fr4_by_plane[fr4_plane].append(fr4_name)
-    cad_bbox_by_name: dict[str, list[float]] = {}
-    for probe in cad_probe:
-        cad_bbox_by_name[probe["object_name"]] = probe["bbox"]
     planes: tuple[Literal["XY", "YZ", "ZX"], Literal["XY", "YZ", "ZX"], Literal["XY", "YZ", "ZX"]] = ("XY", "YZ", "ZX")
     for plane in planes:
         plane_fr4 = sorted(set(fr4_by_plane[plane]))
         plane_tools = copper_tools_by_plane[plane]
         if plane == "XY" and plane_fr4 and not plane_tools:
             raise ValueError("No live tx_dd XY tools found for FR4 subtraction")
-        # ZX FR4 boolean subtraction is unstable for some seeds/topologies and can
-        # generate NULL bodies in Parasolid. Keep ZX substrates intact.
-        if plane == "ZX":
-            continue
         if not plane_fr4 or not plane_tools:
             continue
-        # Robust boolean strategy:
-        # avoid subtracting many tools at once because that can produce NULL bodies
-        # for some geometry/topology combinations.
         for fr4_name in plane_fr4:
-            fr4_bbox = cad_bbox_by_name.get(fr4_name)
             for tool_name in plane_tools:
                 if fr4_name == tool_name:
                     continue
-                if tool_name.startswith("scene_"):
-                    continue
-                tool_bbox = cad_bbox_by_name.get(tool_name)
-                if fr4_bbox is not None and tool_bbox is not None:
-                    ox, oy, oz = _bbox_overlap_lengths(fr4_bbox, tool_bbox)
-                    eps = 1e-6
-                    # Skip non-overlap or touching-only pairs.
-                    if ox <= eps or oy <= eps or oz <= eps:
-                        continue
-                    fr4_dx = fr4_bbox[3] - fr4_bbox[0]
-                    fr4_dy = fr4_bbox[4] - fr4_bbox[1]
-                    fr4_dz = fr4_bbox[5] - fr4_bbox[2]
-                    # Guard against full FR4 removal leading to NULL body.
-                    if (
-                        fr4_dx > eps
-                        and fr4_dy > eps
-                        and fr4_dz > eps
-                        and (ox / fr4_dx) > 0.999
-                        and (oy / fr4_dy) > 0.999
-                        and (oz / fr4_dz) > 0.999
-                    ):
-                        continue
-                _ = modeler.subtract(blank_list=[fr4_name], tool_list=[tool_name], keep_originals=True)
+                subtract_ok = modeler.subtract(blank_list=[fr4_name], tool_list=[tool_name], keep_originals=True)
+                if not subtract_ok:
+                    raise ValueError(
+                        "Failed to subtract copper solid from FR4 substrate "
+                        f"(plane={plane}, fr4_name={fr4_name}, tool_name={tool_name}, "
+                        f"overlap_mm={FR4_SUBTRACT_OVERLAP_MM})"
+                    )
 
     hfss.save_project(str(aedt_path))
     return object_names, fr4_object_names

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import pytest
+from typing import Literal, cast
 
 from peetsfea.backend.pyaedt.geometry.build import _append_rxdd_back_stub_sources_if_needed
 from peetsfea.backend.pyaedt.geometry.build_rx_dd import (
+    FR4_SUBTRACT_OVERLAP_MM,
+    _fr4_box_from_plane_bbox,
     _rxdd_back_stub_bridge_edge,
     _rxdd_back_stub_origin_and_sizes,
     _rxdd_back_stub_sort_key,
@@ -105,3 +108,39 @@ def test_txdd_start_stub_port_edge_uses_bottom_face_with_two_points() -> None:
 def test_txdd_start_stub_port_edge_rejects_non_positive_trace() -> None:
     with pytest.raises(ValueError, match=r"trace must be > 0"):
         _txdd_start_stub_port_edge(anchor_xyz=(1.0, 2.0, 3.0), trace=0.0)
+
+
+@pytest.mark.parametrize(
+    ("plane", "expected_origin", "expected_sizes"),
+    [
+        ("XY", [0.9, 1.9, 1.3], [10.2, 20.2, 1.6]),
+        ("YZ", [-0.7, 1.9, 2.9], [1.6, 20.2, 0.7]),
+        ("ZX", [0.9, 0.3, 2.9], [10.2, 1.6, 0.7]),
+    ],
+)
+def test_fr4_box_from_plane_bbox_applies_0p1mm_overlap_all_planes(
+    plane: str, expected_origin: list[float], expected_sizes: list[float]
+) -> None:
+    origin, sizes = _fr4_box_from_plane_bbox(
+        plane=cast(Literal["XY", "YZ", "ZX"], plane),
+        bbox=[1.0, 2.0, 3.0, 11.0, 22.0, 3.5],
+        pcb_thickness=1.6,
+        overlap_mm=FR4_SUBTRACT_OVERLAP_MM,
+        eps_len=1e-6,
+    )
+    assert origin == pytest.approx(expected_origin)
+    assert sizes == pytest.approx(expected_sizes)
+
+
+def test_fr4_box_from_plane_bbox_keeps_positive_thickness_via_overlap() -> None:
+    origin, sizes = _fr4_box_from_plane_bbox(
+        plane="XY",
+        bbox=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        pcb_thickness=0.0,
+        overlap_mm=FR4_SUBTRACT_OVERLAP_MM,
+        eps_len=1e-6,
+    )
+    assert origin == pytest.approx([-0.1, -0.1, -0.1])
+    assert sizes[0] > 0.0
+    assert sizes[1] > 0.0
+    assert sizes[2] > 0.0
