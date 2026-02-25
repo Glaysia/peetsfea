@@ -8,7 +8,7 @@
 # Numeric range convention:
 #   range = [is_integer, start, end, count]
 
-spec_version = "0.2.1"
+spec_version = "0.2.2"
 
 [design]
 units = "mm"
@@ -618,6 +618,69 @@ lhs = { path = "selected_pcbs.rx_main_0.z_mode" }
 op = "=="
 rhs = { value = "absolute" }
 
+[[constraints.rules]]
+id = "tx_vertical_0_z_mode_absolute"
+kind = "comparison"
+message = "tx_vertical_0 z_mode must be absolute"
+enabled = true
+lhs = { path = "selected_pcbs.tx_vertical_0.z_mode" }
+op = "=="
+rhs = { value = "absolute" }
+
+[[constraints.rules]]
+id = "tx_vertical_has_single_all_mount"
+kind = "comparison"
+message = "tx_vertical all mounts must be exactly one (dedicated tx_vertical_0 host)"
+enabled = true
+lhs = { path = "selected_mounts.tx_vertical.all_mount_count" }
+op = "=="
+rhs = { value = 1.0 }
+
+[[constraints.rules]]
+id = "tx_vertical_has_no_index_mount"
+kind = "comparison"
+message = "tx_vertical index mounts must be zero (dedicated tx_vertical_0 host)"
+enabled = true
+lhs = { path = "selected_mounts.tx_vertical.index_mount_count" }
+op = "=="
+rhs = { value = 0.0 }
+
+[[constraints.rules]]
+id = "tx_opt_0_present_forced_false"
+kind = "comparison"
+message = "tx_opt_0 present must be 0 in fixed topology mode"
+enabled = true
+lhs = { path = "selected_pcbs.tx_opt_0.present" }
+op = "=="
+rhs = { value = 0.0 }
+
+[[constraints.rules]]
+id = "tx_opt_1_present_forced_false"
+kind = "comparison"
+message = "tx_opt_1 present must be 0 in fixed topology mode"
+enabled = true
+lhs = { path = "selected_pcbs.tx_opt_1.present" }
+op = "=="
+rhs = { value = 0.0 }
+
+[[constraints.rules]]
+id = "rx_opt_0_present_forced_false"
+kind = "comparison"
+message = "rx_opt_0 present must be 0 in fixed topology mode"
+enabled = true
+lhs = { path = "selected_pcbs.rx_opt_0.present" }
+op = "=="
+rhs = { value = 0.0 }
+
+[[constraints.rules]]
+id = "rx_opt_1_present_forced_false"
+kind = "comparison"
+message = "rx_opt_1 present must be 0 in fixed topology mode"
+enabled = true
+lhs = { path = "selected_pcbs.rx_opt_1.present" }
+op = "=="
+rhs = { value = 0.0 }
+
 # ----------------------------------------------------------------------------
 # Coil groups
 
@@ -643,8 +706,11 @@ instance_transforms = [
 ]
 
 # ----------------------------------------------------------------------------
-# PCB instances (8 total: 4 always-on + 4 optional)
-# present follows integer range contract: 0/1
+# PCB instances (9 total: 5 always-on + 4 optional)
+# - 0.2.2 fixed-topology mode:
+#   coil count is primary, PCB present/mounts are normalized to this topology.
+# - tx_vertical uses dedicated host board tx_vertical_0.
+# - optional boards remain in spec for compatibility but are forced inactive.
 
 [[pcbs]]
 id = "tx_main_0"
@@ -661,9 +727,6 @@ selector_index = 0
 kind = "tx_dd"
 selector_mode = "index"
 selector_index = 1
-[[pcbs.mounts]]
-kind = "tx_vertical"
-selector_mode = "all"
 
 [[pcbs]]
 id = "tx_main_1"
@@ -683,6 +746,14 @@ selector_index = 2
 kind = "tx_dd"
 selector_mode = "index"
 selector_index = 3
+
+[[pcbs]]
+id = "tx_vertical_0"
+role = "tx"
+position = [0.0, 0.0, 0.0]
+rotation_deg = 0.0
+present = [true, 1, 1, 1]
+z_mode = "absolute"
 [[pcbs.mounts]]
 kind = "tx_vertical"
 selector_mode = "all"
@@ -716,43 +787,33 @@ id = "tx_opt_0"
 role = "tx"
 position = [40.0, 0.0, 0.0]
 rotation_deg = 0.0
-present = [true, 0, 1, 2]
+present = [true, 0, 0, 1]
 z_mode = "absolute"
-[[pcbs.mounts]]
-kind = "tx_vertical"
-selector_mode = "all"
+mounts = []
 
 [[pcbs]]
 id = "tx_opt_1"
 role = "tx"
 position = [-40.0, 0.0, 0.0]
 rotation_deg = 0.0
-present = [true, 0, 1, 2]
+present = [true, 0, 0, 1]
 z_mode = "absolute"
-[[pcbs.mounts]]
-kind = "tx_vertical"
-selector_mode = "all"
+mounts = []
 
 [[pcbs]]
 id = "rx_opt_0"
 role = "rx"
 position = [40.0, 0.0, 110.0]
 rotation_deg = 0.0
-present = [true, 0, 1, 2]
+present = [true, 0, 0, 1]
 z_mode = "absolute"
-[[pcbs.mounts]]
-kind = "rx_dd"
-selector_mode = "index"
-selector_index = 0
+mounts = []
 
 [[pcbs]]
 id = "rx_opt_1"
 role = "rx"
 position = [-40.0, 0.0, 110.0]
 rotation_deg = 0.0
-present = [true, 0, 1, 2]
+present = [true, 0, 0, 1]
 z_mode = "absolute"
-[[pcbs.mounts]]
-kind = "rx_dd"
-selector_mode = "index"
-selector_index = 1
+mounts = []

@@ -20,6 +20,7 @@ def _selected_parameters() -> SelectedParameters:
         "inner_margin_y": 2.0,
         "tx_dd_pair_spacing_ratio": 0.1,
         "rx_dd_pair_spacing_ratio": 0.02,
+        "tx_vertical_center_gap_mm": 10.0,
         "tx_dd_pair_spacing_mm": 40.0,
         "rx_dd_pair_spacing_mm": 40.0,
         "tx_vertical_span_mm": 10.0,

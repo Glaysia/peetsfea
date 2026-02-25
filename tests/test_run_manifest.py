@@ -14,7 +14,7 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
     path.write_text(
         "\n".join(
             [
-                'spec_version = "0.2.1"',
+                'spec_version = "0.2.2"',
                 "",
                 "[design]",
                 'units = "mm"',
@@ -282,25 +282,6 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
                 'kind = "tx_dd"',
                 'selector_mode = "index"',
                 "selector_index = 1",
-                "[[pcbs.mounts]]",
-                'kind = "tx_vertical"',
-                'selector_mode = "all"',
-                "",
-                "[[pcbs]]",
-                'id = "rx_main_0"',
-                'role = "rx"',
-                "position = [0.0, 0.0, 110.0]",
-                "rotation_deg = 0.0",
-                "present = [true, 1, 1, 1]",
-                'z_mode = "absolute"',
-                "[[pcbs.mounts]]",
-                'kind = "rx_dd"',
-                'selector_mode = "index"',
-                "selector_index = 0",
-                "[[pcbs.mounts]]",
-                'kind = "rx_dd"',
-                'selector_mode = "index"',
-                "selector_index = 1",
                 "",
                 "[[pcbs]]",
                 'id = "tx_main_1"',
@@ -319,9 +300,77 @@ def _write_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float = 140.
                 'kind = "tx_dd"',
                 'selector_mode = "index"',
                 "selector_index = 3",
+                "",
+                "[[pcbs]]",
+                'id = "tx_vertical_0"',
+                'role = "tx"',
+                "position = [0.0, 0.0, 0.0]",
+                "rotation_deg = 0.0",
+                "present = [true, 1, 1, 1]",
+                'z_mode = "absolute"',
                 "[[pcbs.mounts]]",
                 'kind = "tx_vertical"',
                 'selector_mode = "all"',
+                "",
+                "[[pcbs]]",
+                'id = "rx_main_0"',
+                'role = "rx"',
+                "position = [0.0, 0.0, 110.0]",
+                "rotation_deg = 0.0",
+                "present = [true, 1, 1, 1]",
+                'z_mode = "absolute"',
+                "[[pcbs.mounts]]",
+                'kind = "rx_dd"',
+                'selector_mode = "index"',
+                "selector_index = 0",
+                "",
+                "[[pcbs]]",
+                'id = "rx_main_1"',
+                'role = "rx"',
+                "position = [0.0, 0.0, 112.0]",
+                "rotation_deg = 0.0",
+                "present = [true, 1, 1, 1]",
+                'z_mode = "absolute"',
+                "[[pcbs.mounts]]",
+                'kind = "rx_dd"',
+                'selector_mode = "index"',
+                "selector_index = 1",
+                "",
+                "[[pcbs]]",
+                'id = "tx_opt_0"',
+                'role = "tx"',
+                "position = [40.0, 0.0, 0.0]",
+                "rotation_deg = 0.0",
+                "present = [true, 0, 0, 1]",
+                'z_mode = "absolute"',
+                "mounts = []",
+                "",
+                "[[pcbs]]",
+                'id = "tx_opt_1"',
+                'role = "tx"',
+                "position = [-40.0, 0.0, 0.0]",
+                "rotation_deg = 0.0",
+                "present = [true, 0, 0, 1]",
+                'z_mode = "absolute"',
+                "mounts = []",
+                "",
+                "[[pcbs]]",
+                'id = "rx_opt_0"',
+                'role = "rx"',
+                "position = [40.0, 0.0, 110.0]",
+                "rotation_deg = 0.0",
+                "present = [true, 0, 0, 1]",
+                'z_mode = "absolute"',
+                "mounts = []",
+                "",
+                "[[pcbs]]",
+                'id = "rx_opt_1"',
+                'role = "rx"',
+                "position = [-40.0, 0.0, 110.0]",
+                "rotation_deg = 0.0",
+                "present = [true, 0, 0, 1]",
+                'z_mode = "absolute"',
+                "mounts = []",
             ]
         ),
         encoding="utf-8",
@@ -485,11 +534,11 @@ def test_legacy_trace_gap_keys_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 def test_unsupported_spec_version_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "old_spec_version.toml"
     _write_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.1"', 'spec_version = "0.1.6"', 1)
+    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.2"', 'spec_version = "0.1.6"', 1)
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("5" * 40))
 
-    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.1'"):
+    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.2'"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -768,7 +817,7 @@ def test_removed_path_errors_on_021(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     raw += "\n[coil_shape.outer_x]\nrange = [false, 10.0, 10.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("9" * 40))
-    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.1"):
+    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.2"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -779,7 +828,7 @@ def test_tx_vertical_span_removed_path_errors_on_021(tmp_path: Path, monkeypatch
     raw += "\n[coil_spacing.tx_vertical_span_mm]\nrange = [false, 3.0, 3.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("a" * 40))
-    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.1: coil_spacing\.tx_vertical_span_mm"):
+    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.2: coil_spacing\.tx_vertical_span_mm"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -898,3 +947,124 @@ def test_non_derived_path_rejects_dummy_marker(tmp_path: Path) -> None:
     spec, _ = load_toml_bytes(toml_path)
     with pytest.raises(ValueError, match=r"coil_shape\.rx_dd\.outer_y\.range uses reserved derived marker"):
         resolve_selection(spec=spec, seed=1, attempt=0)
+
+
+def test_pcb_normalization_autocorrects_and_warns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "pcb_normalization_warns.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace(
+        "[[pcbs]]\nid = \"tx_main_0\"\nrole = \"tx\"\nposition = [0.0, 0.0, 0.0]\nrotation_deg = 0.0\npresent = [true, 1, 1, 1]\nz_mode = \"absolute\"\n[[pcbs.mounts]]\nkind = \"tx_dd\"\nselector_mode = \"index\"\nselector_index = 0\n[[pcbs.mounts]]\nkind = \"tx_dd\"\nselector_mode = \"index\"\nselector_index = 1",
+        "[[pcbs]]\nid = \"tx_main_0\"\nrole = \"tx\"\nposition = [0.0, 0.0, 0.0]\nrotation_deg = 0.0\npresent = [true, 0, 0, 1]\nz_mode = \"absolute\"\n[[pcbs.mounts]]\nkind = \"tx_dd\"\nselector_mode = \"index\"\nselector_index = 0\n[[pcbs.mounts]]\nkind = \"tx_dd\"\nselector_mode = \"index\"\nselector_index = 1\n[[pcbs.mounts]]\nkind = \"tx_vertical\"\nselector_mode = \"all\"",
+        1,
+    )
+    raw = raw.replace(
+        "[[pcbs]]\nid = \"tx_opt_0\"\nrole = \"tx\"\nposition = [40.0, 0.0, 0.0]\nrotation_deg = 0.0\npresent = [true, 0, 0, 1]\nz_mode = \"absolute\"\nmounts = []",
+        "[[pcbs]]\nid = \"tx_opt_0\"\nrole = \"tx\"\nposition = [40.0, 0.0, 0.0]\nrotation_deg = 0.0\npresent = [true, 1, 1, 1]\nz_mode = \"absolute\"\n[[pcbs.mounts]]\nkind = \"tx_vertical\"\nselector_mode = \"all\"",
+        1,
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("e" * 40))
+
+    with pytest.warns(UserWarning) as captured:
+        manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+    pcbs = manifest["selected_pcbs"]
+
+    messages = [str(w.message) for w in captured]
+    assert any("pcbs.tx_main_0.present normalized" in message for message in messages)
+    assert any("pcbs.tx_main_0.mounts normalized" in message for message in messages)
+    assert any("pcbs.tx_opt_0.present normalized" in message for message in messages)
+    assert any("pcbs.tx_opt_0.mounts normalized" in message for message in messages)
+
+    pcbs_by_id = {pcb["id"]: pcb for pcb in pcbs}
+    assert pcbs_by_id["tx_main_0"]["present"] is True
+    assert pcbs_by_id["tx_opt_0"]["present"] is False
+    assert pcbs_by_id["tx_opt_0"]["mounts"] == []
+
+
+def test_tx_vertical_single_host_after_normalization(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "tx_vertical_single_host.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace(
+        "[[pcbs]]\nid = \"tx_main_0\"\nrole = \"tx\"\nposition = [0.0, 0.0, 0.0]\nrotation_deg = 0.0\npresent = [true, 1, 1, 1]\nz_mode = \"absolute\"\n[[pcbs.mounts]]\nkind = \"tx_dd\"\nselector_mode = \"index\"\nselector_index = 0\n[[pcbs.mounts]]\nkind = \"tx_dd\"\nselector_mode = \"index\"\nselector_index = 1",
+        "[[pcbs]]\nid = \"tx_main_0\"\nrole = \"tx\"\nposition = [0.0, 0.0, 0.0]\nrotation_deg = 0.0\npresent = [true, 1, 1, 1]\nz_mode = \"absolute\"\n[[pcbs.mounts]]\nkind = \"tx_dd\"\nselector_mode = \"index\"\nselector_index = 0\n[[pcbs.mounts]]\nkind = \"tx_dd\"\nselector_mode = \"index\"\nselector_index = 1\n[[pcbs.mounts]]\nkind = \"tx_vertical\"\nselector_mode = \"all\"",
+        1,
+    )
+    raw = raw.replace(
+        "[[pcbs]]\nid = \"tx_main_1\"\nrole = \"tx\"\nposition = [0.0, 0.0, 0.0]\nrotation_deg = 0.0\npresent = [true, 1, 1, 1]\nz_mode = \"relative_to_pcb\"\nz_relative_base_id = \"tx_main_0\"\nz_delta_path = \"pcb_spacing.tx_main_1_z_from_tx_main_0_mm\"\n[[pcbs.mounts]]\nkind = \"tx_dd\"\nselector_mode = \"index\"\nselector_index = 2\n[[pcbs.mounts]]\nkind = \"tx_dd\"\nselector_mode = \"index\"\nselector_index = 3",
+        "[[pcbs]]\nid = \"tx_main_1\"\nrole = \"tx\"\nposition = [0.0, 0.0, 0.0]\nrotation_deg = 0.0\npresent = [true, 1, 1, 1]\nz_mode = \"relative_to_pcb\"\nz_relative_base_id = \"tx_main_0\"\nz_delta_path = \"pcb_spacing.tx_main_1_z_from_tx_main_0_mm\"\n[[pcbs.mounts]]\nkind = \"tx_dd\"\nselector_mode = \"index\"\nselector_index = 2\n[[pcbs.mounts]]\nkind = \"tx_dd\"\nselector_mode = \"index\"\nselector_index = 3\n[[pcbs.mounts]]\nkind = \"tx_vertical\"\nselector_mode = \"all\"",
+        1,
+    )
+    raw = raw.replace(
+        "[[pcbs]]\nid = \"tx_vertical_0\"\nrole = \"tx\"\nposition = [0.0, 0.0, 0.0]\nrotation_deg = 0.0\npresent = [true, 1, 1, 1]\nz_mode = \"absolute\"\n[[pcbs.mounts]]\nkind = \"tx_vertical\"\nselector_mode = \"all\"",
+        "[[pcbs]]\nid = \"tx_vertical_0\"\nrole = \"tx\"\nposition = [0.0, 0.0, 0.0]\nrotation_deg = 0.0\npresent = [true, 1, 1, 1]\nz_mode = \"absolute\"\nmounts = []",
+        1,
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("c" * 40))
+
+    with pytest.warns(UserWarning):
+        manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+    pcbs = manifest["selected_pcbs"]
+
+    tx_vertical_mount_hosts = [
+        pcb["id"]
+        for pcb in pcbs
+        if any(mount["kind"] == "tx_vertical" for mount in pcb["mounts"])
+    ]
+    assert tx_vertical_mount_hosts == ["tx_vertical_0"]
+
+
+def test_optional_boards_forced_off(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "optional_boards_forced_off.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace(
+        "[[pcbs]]\nid = \"tx_opt_0\"\nrole = \"tx\"\nposition = [40.0, 0.0, 0.0]\nrotation_deg = 0.0\npresent = [true, 0, 0, 1]\nz_mode = \"absolute\"\nmounts = []",
+        "[[pcbs]]\nid = \"tx_opt_0\"\nrole = \"tx\"\nposition = [40.0, 0.0, 0.0]\nrotation_deg = 0.0\npresent = [true, 1, 1, 1]\nz_mode = \"absolute\"\n[[pcbs.mounts]]\nkind = \"tx_vertical\"\nselector_mode = \"all\"",
+        1,
+    )
+    raw = raw.replace(
+        "[[pcbs]]\nid = \"rx_opt_0\"\nrole = \"rx\"\nposition = [40.0, 0.0, 110.0]\nrotation_deg = 0.0\npresent = [true, 0, 0, 1]\nz_mode = \"absolute\"\nmounts = []",
+        "[[pcbs]]\nid = \"rx_opt_0\"\nrole = \"rx\"\nposition = [40.0, 0.0, 110.0]\nrotation_deg = 0.0\npresent = [true, 1, 1, 1]\nz_mode = \"absolute\"\n[[pcbs.mounts]]\nkind = \"rx_dd\"\nselector_mode = \"index\"\nselector_index = 0",
+        1,
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("b" * 40))
+
+    with pytest.warns(UserWarning):
+        manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+    pcbs = manifest["selected_pcbs"]
+
+    pcbs_by_id = {pcb["id"]: pcb for pcb in pcbs}
+    assert pcbs_by_id["tx_opt_0"]["present"] is False
+    assert pcbs_by_id["tx_opt_0"]["mounts"] == []
+    assert pcbs_by_id["rx_opt_0"]["present"] is False
+    assert pcbs_by_id["rx_opt_0"]["mounts"] == []
+
+
+def test_determinism_with_pcb_normalization(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "determinism_with_normalization.toml"
+    _write_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace(
+        "present = [true, 0, 0, 1]",
+        "present = [true, 0, 1, 2]",
+        4,
+    )
+    raw = raw.replace(
+        "mounts = []",
+        "[[pcbs.mounts]]\nkind = \"tx_vertical\"\nselector_mode = \"all\"",
+        1,
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("d" * 40))
+
+    with pytest.warns(UserWarning):
+        first = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=17, backend="hfss"))
+    with pytest.warns(UserWarning):
+        second = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=17, backend="hfss"))
+
+    assert first["design_id"] == second["design_id"]
+    assert first["selected_pcbs"] == second["selected_pcbs"]
