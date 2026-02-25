@@ -24,7 +24,7 @@ def run_em_pipeline(
     subtract = build_subtract(groups)
     boundary = build_boundary(hfss, modeler, em_policy)
     ports = build_ports(hfss, modeler, em_input)
-    analysis = build_analysis(em_policy)
+    analysis = build_analysis(hfss, em_policy)
     post_templates = build_post_templates()
     result: EmPipelineResult = {
         "groups": groups,
