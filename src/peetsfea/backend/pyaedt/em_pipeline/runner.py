@@ -19,13 +19,11 @@ def run_em_pipeline(
     em_input: EmPipelineInput,
     em_policy: EmPolicy,
 ) -> EmPipelineResult:
-    del hfss
-    del modeler
     groups = build_groups(em_input)
     series = build_series(groups)
     subtract = build_subtract(groups)
     boundary = build_boundary(em_policy)
-    ports = build_ports(em_input)
+    ports = build_ports(hfss, modeler, em_input)
     analysis = build_analysis(em_policy)
     post_templates = build_post_templates()
     result: EmPipelineResult = {

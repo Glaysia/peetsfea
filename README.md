@@ -137,6 +137,16 @@ values = [8, 10, 12, 14]
 - 하층/상층 판정은 endpoint `z_center=(start_z+end_z)/2` 오름차순으로 결정한다.
 - 이번 단계 제외 범위: `tx_dd` 좌측, `tx_vertical`, `rx_dd`, 리드/유나이트 확장
 
+### RxDD endpoint 계약 (TX 스타일 매핑)
+- 기준 뷰는 `+X` 정면이며, 이 기준에서 `오른쪽=+Y`, `위=+Z`로 본다.
+- `rx_dd`는 단층만 지원하며 `selected_count=2`가 아니면 실패한다.
+- `geometry_metadata.group_endpoints[*]`의 `rx_dd` 라벨 규칙:
+  - left(`off_y < 0`): `C -> b`
+  - right(`off_y > 0`): `a -> D`
+- `geometry_metadata.coil_polarity[*]` 방향 규칙:
+  - left: `ccw`
+  - right: `cw`
+
 - 실행:
 ```bash
 python run.py
