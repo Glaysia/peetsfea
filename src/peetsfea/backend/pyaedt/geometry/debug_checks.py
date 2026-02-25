@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Literal
+from typing import Literal, cast
 
 from ansys.aedt.core.modeler.cad.object_3d import Object3d
 
@@ -248,5 +248,4 @@ def _build_geometry_debug(
         "violations": violations,
         "eps": eps,
     }
-
 
