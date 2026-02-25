@@ -29,16 +29,19 @@ from peetsfea.types.manifest import (
     GroupObjects,
     Manifest,
     ResolvedPcbMount,
+    ResolvedPcbInstance,
     PitchCheckEntry,
     RegionViolation,
     SelectedParameters,
     SelectedParametersMax,
     SceneObjectEntry,
+    TerminalLabel,
     UniteGroups,
 )
 
 _Point2 = tuple[float, float]
 _Point3 = tuple[float, float, float]
+_GroupInstanceKey = tuple[str, str, int]
 
 
 def _build_rect_spiral_centerline_absolute(turns: int, outer_x: float, outer_y: float, trace: float, gap: float, z: float) -> list[_Point3]:
@@ -109,6 +112,127 @@ def _map_xy_points_to_zx(points: list[list[float]], *, x_center: float, y_const:
 def _mirror_xy_points_about_x_axis(points: list[list[float]]) -> list[list[float]]:
     # Mirror around local X-axis (y -> -y) so paired DD coils have opposite winding.
     return [[point[0], -point[1], point[2]] for point in points]
+
+
+def _mirror_points_about_y_axis_line(points: list[list[float]], *, axis_y: float) -> list[list[float]]:
+    # Mirror around world X-axis line at Y=axis_y (equivalent to y -> 2*axis_y - y).
+    return [[point[0], (2.0 * axis_y) - point[1], point[2]] for point in points]
+
+
+def _probe_from_points(object_name: str, points: list[list[float]]) -> CadProbe:
+    if not points:
+        return {"object_name": object_name, "bbox": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "edge_samples_xy": []}
+    xs = [point[0] for point in points]
+    ys = [point[1] for point in points]
+    zs = [point[2] for point in points]
+    edge_samples: list[_Point2] = []
+    for idx in range(min(max(0, len(points) - 1), 8)):
+        edge_samples.append(
+            (
+                (points[idx][0] + points[idx + 1][0]) / 2.0,
+                (points[idx][1] + points[idx + 1][1]) / 2.0,
+            )
+        )
+    return {
+        "object_name": object_name,
+        "bbox": [min(xs), min(ys), min(zs), max(xs), max(ys), max(zs)],
+        "edge_samples_xy": edge_samples,
+    }
+
+
+def _axis_aligned_segments_intersect_2d(a0: _Point2, a1: _Point2, b0: _Point2, b1: _Point2, eps: float) -> bool:
+    ax0, ay0 = a0
+    ax1, ay1 = a1
+    bx0, by0 = b0
+    bx1, by1 = b1
+    a_vertical = abs(ax0 - ax1) <= eps
+    b_vertical = abs(bx0 - bx1) <= eps
+    if a_vertical and b_vertical:
+        if abs(ax0 - bx0) > eps:
+            return False
+        a_min, a_max = sorted((ay0, ay1))
+        b_min, b_max = sorted((by0, by1))
+        return max(a_min, b_min) <= (min(a_max, b_max) + eps)
+    if (not a_vertical) and (not b_vertical):
+        if abs(ay0 - by0) > eps:
+            return False
+        a_min, a_max = sorted((ax0, ax1))
+        b_min, b_max = sorted((bx0, bx1))
+        return max(a_min, b_min) <= (min(a_max, b_max) + eps)
+    if a_vertical:
+        v_x = ax0
+        v_min, v_max = sorted((ay0, ay1))
+        h_y = by0
+        h_min, h_max = sorted((bx0, bx1))
+    else:
+        v_x = bx0
+        v_min, v_max = sorted((by0, by1))
+        h_y = ay0
+        h_min, h_max = sorted((ax0, ax1))
+    return (h_min - eps) <= v_x <= (h_max + eps) and (v_min - eps) <= h_y <= (v_max + eps)
+
+
+def _find_txdd_right_inner_c_index(base_points: list[list[float]]) -> int:
+    bottom_right_candidates = [
+        (idx, abs(point[0]), abs(point[1]))
+        for idx, point in enumerate(base_points)
+        if point[0] > 0.0 and point[1] < 0.0
+    ]
+    if not bottom_right_candidates:
+        raise ValueError("tx_dd right endpoint contract violation: cannot locate inner bottom-right anchor for c->A")
+    min_abs_x = min(candidate[1] for candidate in bottom_right_candidates)
+    min_x_candidates = [candidate for candidate in bottom_right_candidates if abs(candidate[1] - min_abs_x) <= 1e-9]
+    min_abs_y = min(candidate[2] for candidate in min_x_candidates)
+    min_xy_candidates = [candidate for candidate in min_x_candidates if abs(candidate[2] - min_abs_y) <= 1e-9]
+    return max(candidate[0] for candidate in min_xy_candidates)
+
+
+def _validate_txdd_right_points(
+    points: list[list[float]],
+    *,
+    trace: float,
+    gap: float,
+) -> None:
+    if len(points) < 2:
+        raise ValueError("tx_dd right endpoint contract violation: generated centerline is too short")
+    eps = 1e-9
+    for idx in range(len(points) - 1):
+        p0 = points[idx]
+        p1 = points[idx + 1]
+        dx = p1[0] - p0[0]
+        dy = p1[1] - p0[1]
+        if abs(dx) <= eps and abs(dy) <= eps:
+            raise ValueError("tx_dd right endpoint contract violation: zero-length segment generated")
+        if abs(dx) > eps and abs(dy) > eps:
+            raise ValueError("tx_dd right endpoint contract violation: non-axis-aligned segment generated")
+    for idx in range(1, len(points) - 1):
+        p_prev = points[idx - 1]
+        p_curr = points[idx]
+        p_next = points[idx + 1]
+        vx1 = p_curr[0] - p_prev[0]
+        vy1 = p_curr[1] - p_prev[1]
+        vx2 = p_next[0] - p_curr[0]
+        vy2 = p_next[1] - p_curr[1]
+        if abs(vx1 + vx2) <= eps and abs(vy1 + vy2) <= eps:
+            raise ValueError("tx_dd right endpoint contract violation: immediate backtracking segment generated")
+    segments: list[tuple[_Point2, _Point2]] = [
+        ((points[idx][0], points[idx][1]), (points[idx + 1][0], points[idx + 1][1]))
+        for idx in range(len(points) - 1)
+    ]
+    for idx in range(len(segments)):
+        for jdx in range(idx + 1, len(segments)):
+            if jdx <= idx + 1:
+                continue
+            a0, a1 = segments[idx]
+            b0, b1 = segments[jdx]
+            if _axis_aligned_segments_intersect_2d(a0, a1, b0, b1, eps):
+                raise ValueError(
+                    "tx_dd right endpoint contract violation: non-adjacent self-crossing segment generated"
+                )
+    tuple_points = [cast(_Point3, (float(p[0]), float(p[1]), float(p[2]))) for p in points]
+    pitch_checks = _compute_pitch_checks(tuple_points, trace=trace, gap=gap, eps=1e-6)
+    if any(check["delta"] > 1e-6 for check in pitch_checks):
+        raise ValueError("tx_dd right endpoint contract violation: pitch consistency check failed")
 
 
 def _bounds_from_scene_entry(entry: SceneObjectEntry) -> tuple[_Point3, _Point3]:
@@ -268,10 +392,186 @@ def _build_polarity(kind: str, side: Literal["left", "right", "center"]) -> tupl
     return ("cw", "into_wall")
 
 
+def _group_endpoint_key(entry: GroupEndpointEntry) -> _GroupInstanceKey:
+    return (entry["group_kind"], entry["board_id"], entry["group_instance_index"])
+
+
+def _coil_polarity_key(entry: CoilPolaritySpec) -> _GroupInstanceKey:
+    return (entry["group_kind"], entry["board_id"], entry["group_instance_index"])
+
+
+def _endpoint_z_center(entry: GroupEndpointEntry) -> float:
+    return (entry["start_xyz"][2] + entry["end_xyz"][2]) / 2.0
+
+
+def _current_direction_from_xy_points(points: list[list[float]], *, eps: float = 1e-9) -> Literal["cw", "ccw"] | None:
+    if len(points) < 3:
+        return None
+    for idx in range(1, len(points) - 1):
+        vx1 = points[idx][0] - points[idx - 1][0]
+        vy1 = points[idx][1] - points[idx - 1][1]
+        vx2 = points[idx + 1][0] - points[idx][0]
+        vy2 = points[idx + 1][1] - points[idx][1]
+        cross = (vx1 * vy2) - (vy1 * vx2)
+        if abs(cross) <= eps:
+            continue
+        return "ccw" if cross > 0.0 else "cw"
+    return None
+
+
+def _apply_txdd_right_endpoint_rule(
+    group_endpoints: list[GroupEndpointEntry],
+    coil_polarity: list[CoilPolaritySpec],
+) -> None:
+    endpoint_by_key = {_group_endpoint_key(entry): entry for entry in group_endpoints}
+
+    right_candidates: list[tuple[float, str, int, _GroupInstanceKey]] = []
+    for polarity_entry in coil_polarity:
+        if polarity_entry["group_kind"] != "tx_dd" or polarity_entry["instance_side"] != "right":
+            continue
+        key = _coil_polarity_key(polarity_entry)
+        endpoint_entry = endpoint_by_key.get(key)
+        if endpoint_entry is None:
+            continue
+        right_candidates.append(
+            (
+                _endpoint_z_center(endpoint_entry),
+                polarity_entry["board_id"],
+                polarity_entry["group_instance_index"],
+                key,
+            )
+        )
+
+    if not right_candidates:
+        return
+    if len(right_candidates) > 2:
+        raise ValueError(
+            "tx_dd right endpoint contract violation: expected 1 or 2 right candidates "
+            f"(actual={len(right_candidates)})"
+        )
+
+    right_candidates.sort(key=lambda item: (item[0], item[1], item[2]))
+
+    def _set_labels(key: _GroupInstanceKey, start_label: TerminalLabel, end_label: TerminalLabel) -> None:
+        endpoint_entry = endpoint_by_key[key]
+        endpoint_entry["start_label"] = start_label
+        endpoint_entry["end_label"] = end_label
+
+    if len(right_candidates) == 1:
+        _set_labels(right_candidates[0][3], "C", "d")
+        return
+
+    # Lower layer first by Z center, then deterministic key tie-break.
+    _set_labels(right_candidates[0][3], "c", "A")
+    _set_labels(right_candidates[1][3], "A", "C")
+
+
 def _dd_instance_points(base_points: list[list[float]], *, mirror_winding: bool) -> list[list[float]]:
     if not mirror_winding:
         return base_points
     return _mirror_xy_points_about_x_axis(base_points)
+
+
+def _txdd_right_points(
+    *,
+    turns: int,
+    outer_x: float,
+    outer_y: float,
+    trace: float,
+    gap: float,
+    instance_count: int,
+    layer_index: int | None,
+) -> list[list[float]]:
+    base = [
+        list(point)
+        for point in _build_rect_spiral_centerline_absolute(
+            turns=turns,
+            outer_x=outer_x,
+            outer_y=outer_y,
+            trace=trace,
+            gap=gap,
+            z=0.0,
+        )
+    ]
+    if instance_count == 2:
+        # Single layer right: C -> d.
+        points = base[2:]
+        if len(points) < 2:
+            raise ValueError("tx_dd right endpoint contract violation: C->d path is too short")
+        _validate_txdd_right_points(points, trace=trace, gap=gap)
+        return points
+    if instance_count != 4:
+        raise ValueError(f"tx_dd selected_count must be 2 or 4 for right endpoint rule (actual={instance_count})")
+    if layer_index not in (0, 1):
+        raise ValueError(f"tx_dd right endpoint rule requires layer index 0 or 1 (actual={layer_index})")
+    if layer_index == 0:
+        # Lower layer right: c -> A.
+        c_index = _find_txdd_right_inner_c_index(base)
+        points = [point[:] for point in reversed(base[: c_index + 1])]
+        if len(points) < 2:
+            raise ValueError("tx_dd right endpoint contract violation: c->A path is too short")
+        _validate_txdd_right_points(points, trace=trace, gap=gap)
+        return points
+    # Upper layer right: A -> D -> ... -> C.
+    mirrored_x = [[-point[0], point[1], point[2]] for point in base]
+    outer_a = base[0]
+    a_index = next(
+        (
+            idx
+            for idx, point in enumerate(mirrored_x)
+            if abs(point[0] - outer_a[0]) <= 1e-9 and abs(point[1] - outer_a[1]) <= 1e-9
+        ),
+        None,
+    )
+    if a_index is None:
+        raise ValueError("tx_dd right endpoint contract violation: cannot locate outer A anchor for A->D->...->C")
+    rotated = mirrored_x[a_index:] + mirrored_x[:a_index]
+    c_index = _find_txdd_right_inner_c_index(rotated)
+    points = [point[:] for point in rotated[: c_index + 1]]
+    _validate_txdd_right_points(points, trace=trace, gap=gap)
+    return points
+
+
+def _txdd_right_layer_rank_by_z(
+    *,
+    selected_pcbs: list[ResolvedPcbInstance],
+    instance_count: int,
+    transform_dz: float,
+    tx_dd_anchor_z: float,
+) -> dict[int, int]:
+    if instance_count != 4:
+        return {}
+    rows: list[tuple[float, str, int]] = []
+    for instance_index in range(instance_count):
+        if instance_index % 2 == 0:
+            continue
+        candidates: list[tuple[str, float]] = []
+        for pcb in selected_pcbs:
+            if not pcb["present"]:
+                continue
+            mounts = pcb["mounts"]
+            if _mount_allows_instance(mounts, "tx_dd", instance_index):
+                board_id = pcb["id"]
+                board_z = pcb["position"][2]
+                final_z = tx_dd_anchor_z - board_z + transform_dz
+                candidates.append((board_id, final_z))
+        if len(candidates) != 1:
+            raise ValueError(
+                "tx_dd right endpoint contract violation: each right instance must map to exactly one mounted board "
+                f"(instance_index={instance_index}, candidates={len(candidates)})"
+            )
+        board_id, z_center = candidates[0]
+        rows.append((z_center, board_id, instance_index))
+    if len(rows) != 2:
+        raise ValueError(
+            "tx_dd right endpoint contract violation: expected exactly 2 right instances for selected_count=4 "
+            f"(actual={len(rows)})"
+        )
+    rows.sort(key=lambda item: (item[0], item[1], item[2]))
+    return {
+        rows[0][2]: 0,  # lower z -> c->A
+        rows[1][2]: 1,  # upper z -> A->d
+    }
 
 
 def _create_non_model_box(
@@ -1048,37 +1348,233 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                 spacing_mm = group["spacing_mm"]
                 transforms = group["instance_transforms"]
                 transform = transforms[0] if transforms else {"dx": 0.0, "dy": 0.0, "dz": 0.0, "rot_deg": 0.0}
+                txdd_right_layer_rank: dict[int, int] = {}
                 if kind == "rx_dd" and spacing_mm < 0:
                     raise ValueError(f"rx_dd edge gap must be >= 0 (actual={spacing_mm})")
+                if kind == "tx_dd" and instance_count == 4:
+                    tx_dd_anchor_z = tx_dd_region_max[2] - tx_dd_top_clearance - cu_thickness
+                    txdd_right_layer_rank = _txdd_right_layer_rank_by_z(
+                        selected_pcbs=selected_pcbs,
+                        instance_count=instance_count,
+                        transform_dz=transform["dz"],
+                        tx_dd_anchor_z=tx_dd_anchor_z,
+                    )
 
                 for instance_index in range(instance_count):
-                    if not _mount_allows_instance(pcb["mounts"], kind, instance_index):
-                        continue
-                    off_x = 0.0
-                    off_y = 0.0
-                    off_z = 0.0
                     if kind == "tx_dd":
                         assert base_points is not None
-                        tx_dd_instance_center_y, _ = _tx_dd_center_y_and_layer(
+                        local_slot = instance_index % 2
+                        if local_slot == 0:
+                            _tx_dd_center_y_and_layer(
+                                instance_count=instance_count,
+                                instance_index=instance_index,
+                                pair_clearance_mm=spacing_mm,
+                                outer_y=tx_dd_outer_y,
+                                region_center_y=tx_dd_center_y,
+                                region_min_y=tx_dd_region_min[1],
+                                region_max_y=tx_dd_region_max[1],
+                            )
+                            right_index = instance_index + 1
+                            _tx_dd_center_y_and_layer(
+                                instance_count=instance_count,
+                                instance_index=right_index,
+                                pair_clearance_mm=spacing_mm,
+                                outer_y=tx_dd_outer_y,
+                                region_center_y=tx_dd_center_y,
+                                region_min_y=tx_dd_region_min[1],
+                                region_max_y=tx_dd_region_max[1],
+                            )
+                            left_mounted = _mount_allows_instance(pcb["mounts"], kind, instance_index)
+                            right_mounted = right_index < instance_count and _mount_allows_instance(
+                                pcb["mounts"], kind, right_index
+                            )
+                            if left_mounted and not right_mounted:
+                                raise ValueError(
+                                    "tx_dd mirror source missing: left instance is mounted without matching right "
+                                    f"(board_id={pcb['id']}, left_index={instance_index}, right_index={right_index})"
+                                )
+                            continue
+                        if not _mount_allows_instance(pcb["mounts"], kind, instance_index):
+                            continue
+
+                        right_index = instance_index
+                        left_index = right_index - 1
+                        right_center_y, tx_dd_layer_index = _tx_dd_center_y_and_layer(
                             instance_count=instance_count,
-                            instance_index=instance_index,
+                            instance_index=right_index,
                             pair_clearance_mm=spacing_mm,
                             outer_y=tx_dd_outer_y,
                             region_center_y=tx_dd_center_y,
                             region_min_y=tx_dd_region_min[1],
                             region_max_y=tx_dd_region_max[1],
                         )
-                        off_y = tx_dd_instance_center_y - tx_dd_center_y
-                        tx_dd_local_slot = instance_index % 2
-                        tx_dd_points = _dd_instance_points(base_points, mirror_winding=(tx_dd_local_slot == 0))
+                        right_layer_index = txdd_right_layer_rank.get(right_index, tx_dd_layer_index)
+                        tx_dd_points = _txdd_right_points(
+                            turns=turns,
+                            outer_x=tx_dd_outer_x,
+                            outer_y=tx_dd_outer_y,
+                            trace=trace,
+                            gap=gap,
+                            instance_count=instance_count,
+                            layer_index=right_layer_index,
+                        )
                         tx_dd_anchor_z = tx_dd_region_max[2] - tx_dd_top_clearance - cu_thickness
-                        top_points = _translate_points(
+                        right_top_points = _translate_points(
                             tx_dd_points,
                             dx=tx_dd_center_x + transform["dx"],
-                            dy=tx_dd_instance_center_y + transform["dy"],
-                            dz=tx_dd_anchor_z - board_z + transform["dz"] + off_z,
+                            dy=right_center_y + transform["dy"],
+                            dz=tx_dd_anchor_z - board_z + transform["dz"],
                         )
-                    elif kind == "rx_dd":
+                        right_name = f"coil_{kind}_g{right_index}_b{board_idx}_{design_id}"
+                        right_created = modeler.create_polyline(
+                            points=right_top_points,
+                            name=right_name,
+                            material="copper",
+                            xsection_type="Rectangle",
+                            xsection_width=trace,  # type: ignore
+                            xsection_height=cu_thickness,  # type: ignore
+                        )
+                        if not right_created:
+                            raise ValueError(
+                                "tx_dd right polyline creation failed "
+                                f"(name={right_name}, points={len(right_top_points)}, group_kind={kind})"
+                            )
+                        right_obj = cast(Object3d, right_created)
+                        right_obj_name = _object_name(right_obj, right_name)
+                        object_names.append(right_obj_name)
+                        right_probe = _probe_cad_object(right_obj, right_name)
+                        cad_probe.append(right_probe)
+                        coil_plane_bboxes.append((pcb["id"], "XY", right_probe["bbox"]))
+                        right_violations = _bbox_violations(
+                            object_name=right_obj_name,
+                            bbox=right_probe["bbox"],
+                            region_kind="tx_region_dd",
+                            region_min=tx_dd_region_min,
+                            region_max=tx_dd_region_max,
+                        )
+                        if right_violations:
+                            placement_violations.extend(right_violations)
+                            first = right_violations[0]
+                            raise ValueError(
+                                f"Coil placement out of region for {first['object_name']} in {first['region_kind']} "
+                                f"(axis={first['axis']}, overflow_mm={first['overflow_mm']})"
+                            )
+                        group_objects[kind].append(right_obj_name)
+                        right_start_xyz = cast(_Point3, tuple(float(v) for v in right_top_points[0]))
+                        right_end_xyz = cast(_Point3, tuple(float(v) for v in right_top_points[-1]))
+                        group_endpoints.append(
+                            {
+                                "group_kind": kind,
+                                "group_instance_index": right_index,
+                                "board_id": pcb["id"],
+                                "start_xyz": right_start_xyz,
+                                "end_xyz": right_end_xyz,
+                                "start_label": "A",
+                                "end_label": "a",
+                                "present": True,
+                            }
+                        )
+                        right_off_y = right_center_y - tx_dd_center_y
+                        right_side = _instance_side(kind, (0.0, right_off_y, 0.0))
+                        default_right_current_direction, right_b_field_direction = _build_polarity(kind, right_side)
+                        right_current_direction = _current_direction_from_xy_points(right_top_points) or default_right_current_direction
+                        coil_polarity.append(
+                            {
+                                "group_kind": kind,
+                                "group_instance_index": right_index,
+                                "board_id": pcb["id"],
+                                "instance_side": right_side,
+                                "current_direction": right_current_direction,
+                                "b_field_direction": right_b_field_direction,
+                            }
+                        )
+
+                        if _mount_allows_instance(pcb["mounts"], kind, left_index):
+                            mirror_origin = [
+                                tx_dd_center_x + transform["dx"],
+                                tx_dd_center_y + transform["dy"],
+                                tx_dd_anchor_z - board_z + transform["dz"],
+                            ]
+                            mirrored_created = modeler.duplicate_and_mirror(
+                                assignment=right_obj_name,
+                                origin=mirror_origin,
+                                vector=[0.0, 1.0, 0.0],
+                                duplicate_assignment=True,
+                            )
+                            if not isinstance(mirrored_created, list) or len(mirrored_created) != 1:
+                                raise ValueError(
+                                    "tx_dd mirror creation failed: expected exactly one mirrored object "
+                                    f"(board_id={pcb['id']}, right_index={right_index}, result={mirrored_created})"
+                                )
+                            left_obj_name = str(mirrored_created[0])
+                            object_names.append(left_obj_name)
+                            left_top_points = _mirror_points_about_y_axis_line(
+                                right_top_points,
+                                axis_y=tx_dd_center_y + transform["dy"],
+                            )
+                            left_probe = _probe_from_points(left_obj_name, left_top_points)
+                            cad_probe.append(left_probe)
+                            coil_plane_bboxes.append((pcb["id"], "XY", left_probe["bbox"]))
+                            left_violations = _bbox_violations(
+                                object_name=left_obj_name,
+                                bbox=left_probe["bbox"],
+                                region_kind="tx_region_dd",
+                                region_min=tx_dd_region_min,
+                                region_max=tx_dd_region_max,
+                            )
+                            if left_violations:
+                                placement_violations.extend(left_violations)
+                                first = left_violations[0]
+                                raise ValueError(
+                                    f"Coil placement out of region for {first['object_name']} in {first['region_kind']} "
+                                    f"(axis={first['axis']}, overflow_mm={first['overflow_mm']})"
+                                )
+                            group_objects[kind].append(left_obj_name)
+                            left_start_xyz = cast(_Point3, tuple(float(v) for v in left_top_points[0]))
+                            left_end_xyz = cast(_Point3, tuple(float(v) for v in left_top_points[-1]))
+                            group_endpoints.append(
+                                {
+                                    "group_kind": kind,
+                                    "group_instance_index": left_index,
+                                    "board_id": pcb["id"],
+                                    "start_xyz": left_start_xyz,
+                                    "end_xyz": left_end_xyz,
+                                    "start_label": "A",
+                                    "end_label": "a",
+                                    "present": True,
+                                }
+                            )
+                            left_center_y, _ = _tx_dd_center_y_and_layer(
+                                instance_count=instance_count,
+                                instance_index=left_index,
+                                pair_clearance_mm=spacing_mm,
+                                outer_y=tx_dd_outer_y,
+                                region_center_y=tx_dd_center_y,
+                                region_min_y=tx_dd_region_min[1],
+                                region_max_y=tx_dd_region_max[1],
+                            )
+                            left_off_y = left_center_y - tx_dd_center_y
+                            left_side = _instance_side(kind, (0.0, left_off_y, 0.0))
+                            default_left_current_direction, left_b_field_direction = _build_polarity(kind, left_side)
+                            left_current_direction = _current_direction_from_xy_points(left_top_points) or default_left_current_direction
+                            coil_polarity.append(
+                                {
+                                    "group_kind": kind,
+                                    "group_instance_index": left_index,
+                                    "board_id": pcb["id"],
+                                    "instance_side": left_side,
+                                    "current_direction": left_current_direction,
+                                    "b_field_direction": left_b_field_direction,
+                                }
+                            )
+                        continue
+
+                    if not _mount_allows_instance(pcb["mounts"], kind, instance_index):
+                        continue
+                    off_x = 0.0
+                    off_y = 0.0
+                    off_z = 0.0
+                    if kind == "rx_dd":
                         assert base_points is not None
                         off_y = _rx_dd_center_offset_y(
                             instance_index=instance_index,
@@ -1154,37 +1650,32 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                             dz=board_z + transform["dz"] + off_z,
                         )
                     top_name = f"coil_{kind}_g{instance_index}_b{board_idx}_{design_id}"
-                    top_obj = cast(
-                        Object3d,
-                        modeler.create_polyline(
-                            points=top_points,
-                            name=top_name,
-                            material="copper",
-                            xsection_type="Rectangle",
-                            xsection_width=trace, # type: ignore
-                            xsection_height=cu_thickness, # type: ignore
-                        ),
+                    top_created = modeler.create_polyline(
+                        points=top_points,
+                        name=top_name,
+                        material="copper",
+                        xsection_type="Rectangle",
+                        xsection_width=trace, # type: ignore
+                        xsection_height=cu_thickness, # type: ignore
                     )
+                    if not top_created:
+                        raise ValueError(
+                            "tx_dd right polyline creation failed "
+                            f"(name={top_name}, points={len(top_points)}, group_kind={kind})"
+                        )
+                    top_obj = cast(Object3d, top_created)
                     obj_name = _object_name(top_obj, top_name)
                     object_names.append(obj_name)
                     probe = _probe_cad_object(top_obj, top_name)
                     cad_probe.append(probe)
-                    if kind == "tx_dd":
-                        plane: Literal["XY", "YZ", "ZX"] = "XY"
-                    elif kind == "rx_dd":
-                        plane = "YZ"
-                    else:
-                        plane = "ZX"
-                    coil_plane_bboxes.append((pcb["id"], plane, probe["bbox"]))
-                    if kind == "tx_dd":
-                        violations = _bbox_violations(
-                            object_name=obj_name,
-                            bbox=probe["bbox"],
-                            region_kind="tx_region_dd",
-                            region_min=tx_dd_region_min,
-                            region_max=tx_dd_region_max,
-                        )
+                    if kind == "rx_dd":
+                        plane: Literal["XY", "YZ", "ZX"] = "YZ"
                     elif kind == "tx_vertical":
+                        plane = "ZX"
+                    else:
+                        plane = "XY"
+                    coil_plane_bboxes.append((pcb["id"], plane, probe["bbox"]))
+                    if kind == "tx_vertical":
                         violations = _bbox_violations(
                             object_name=obj_name,
                             bbox=probe["bbox"],
@@ -1220,6 +1711,8 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                             "board_id": pcb["id"],
                             "start_xyz": start_xyz,
                             "end_xyz": end_xyz,
+                            "start_label": "A",
+                            "end_label": "a",
                             "present": True,
                         }
                     )
@@ -1327,6 +1820,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     print(f"[geometry] constraints_ok={debug['constraints_ok']}")
     print(f"[geometry] axis_aligned={axis_aligned} pitch_max_delta={pitch_max_delta:.9f}")
     print(f"[geometry] top_bbox={top_bbox}")
+    _apply_txdd_right_endpoint_rule(group_endpoints, coil_polarity)
 
     em_ready_objects: EmReadyObjects = {
         "tx_conductors": sorted(group_objects["tx_dd"] + group_objects["tx_vertical"]),
