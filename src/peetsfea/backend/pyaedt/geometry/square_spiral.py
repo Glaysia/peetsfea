@@ -1836,7 +1836,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                 (
                     source_index,
                     _source_name,
-                    _source_start_xyz,
+                    source_start_xyz,
                     source_end_xyz,
                     _source_y_center,
                     source_trace,
@@ -1845,7 +1845,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                     target_index,
                     _target_name,
                     target_start_xyz,
-                    _target_end_xyz,
+                    target_end_xyz,
                     _target_y_center,
                     target_trace,
                 ) = sorted_nodes[idx + 1]
@@ -1866,10 +1866,10 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                         "tx_vertical bridge x-margin exceeds region width "
                         f"(min_x_allowed={min_x_allowed}, max_x_allowed={max_x_allowed}, bridge_trace={bridge_trace})"
                     )
-                source_bridge_x = min(max(source_end_xyz[0], min_x_allowed), max_x_allowed)
-                target_bridge_x = min(max(target_start_xyz[0], min_x_allowed), max_x_allowed)
-                start_bridge_point = (source_bridge_x, source_end_xyz[1], source_end_xyz[2])
-                end_bridge_point = (target_bridge_x, target_start_xyz[1], target_start_xyz[2])
+                source_bridge_x = min(max(source_start_xyz[0], min_x_allowed), max_x_allowed)
+                target_bridge_x = min(max(target_end_xyz[0], min_x_allowed), max_x_allowed)
+                start_bridge_point = (source_bridge_x, source_start_xyz[1], source_start_xyz[2])
+                end_bridge_point = (target_bridge_x, target_end_xyz[1], target_end_xyz[2])
                 half = bridge_trace / 2.0
                 bridge_sheet_points = [
                     [start_bridge_point[0], start_bridge_point[1], start_bridge_point[2] - half],
@@ -1933,7 +1933,6 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                 group_objects["tx_vertical"].append(bridge_obj_name)
                 bridge_probe = _probe_cad_object(bridge_obj, bridge_name)
                 cad_probe.append(bridge_probe)
-                coil_plane_bboxes.append((board_id, "ZX", bridge_probe["bbox"]))
                 bridge_violations = _bbox_violations(
                     object_name=bridge_obj_name,
                     bbox=bridge_probe["bbox"],
@@ -2032,10 +2031,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
         for board_id, plane, bbox in coil_plane_bboxes:
             if len(bbox) < 6:
                 continue
-            if plane == "ZX" and board_id in tx_board_ids:
-                # TX vertical + bridge copper share one ZX substrate per board.
-                layer_key = 0
-            elif plane == "XY":
+            if plane == "XY":
                 axis_center = (bbox[2] + bbox[5]) / 2.0
                 layer_key = int(round(axis_center / eps_len))
             elif plane == "YZ":

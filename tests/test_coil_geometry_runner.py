@@ -794,7 +794,7 @@ def test_tx_vertical_span_distributes_on_y_and_stays_in_vertical_z_region(
         assert z_max <= (region_max_z + eps)
 
     fr4_boxes = [call for call in fake.modeler.box_calls if str(call["name"]).startswith("fr4_")]
-    assert len(fr4_boxes) == 3
+    assert len(fr4_boxes) == 4
 
 
 def test_tx_vertical_four_instances_follow_half_step_pattern(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -874,8 +874,8 @@ def test_tx_vertical_three_instances_middle_touches_x_axis_and_others_are_symmet
     assert len(fake.modeler.cover_calls) == 2
     assert len(fake.modeler.thicken_calls) == 2
     for idx, bridge_call in enumerate(bridge_calls):
-        expected_start = endpoints[idx]["end_xyz"]
-        expected_end = endpoints[idx + 1]["start_xyz"]
+        expected_start = endpoints[idx]["start_xyz"]
+        expected_end = endpoints[idx + 1]["end_xyz"]
         x_margin = trace
         min_x_allowed = region_min_x + x_margin
         max_x_allowed = region_max_x - x_margin
@@ -932,7 +932,7 @@ def test_tx_vertical_offset_rejects_invalid_count_or_negative_d() -> None:
         geom._coil_instance_offset("tx_vertical", instance_index=0, instance_count=2, spacing_mm=-1.0, trace_mm=0.8)
 
 
-def test_tx_vertical_multiple_instances_use_single_zx_fr4_per_tx_board(
+def test_tx_vertical_multiple_instances_copy_zx_fr4_per_vertical_coil(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake = _FakeHfss()
@@ -966,7 +966,7 @@ def test_tx_vertical_multiple_instances_use_single_zx_fr4_per_tx_board(
         ]
     )
 
-    assert len(tx_zx_fr4) == 1
+    assert len(tx_zx_fr4) == 3
     assert len(tx_xy_fr4) == 1
     assert len(rx_yz_fr4) == 1
 
