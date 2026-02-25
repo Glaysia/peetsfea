@@ -14,10 +14,45 @@ from peetsfea.backend.pyaedt.em_pipeline.contracts import EmPipelineInput
 class _FakeHfss:
     def __init__(self) -> None:
         self.radiation_assigned_faces: list[int] = []
+        self.setup_names: list[str] = []
+        self.deleted_setups: list[str] = []
+        self.inserted_setup_types: list[str] = []
+        self.inserted_setup_payloads: list[list[object]] = []
+        self.inserted_sweep_setup_names: list[str] = []
+        self.inserted_sweep_payloads: list[list[object]] = []
+        self.odesign = self._Design(self)
+
+    class _AnalysisModule:
+        def __init__(self, parent: "_FakeHfss") -> None:
+            self._parent = parent
+
+        def InsertSetup(self, setup_type: str, props: list[object]) -> None:
+            self._parent.inserted_setup_types.append(setup_type)
+            self._parent.inserted_setup_payloads.append(props)
+            if "Setup1" not in self._parent.setup_names:
+                self._parent.setup_names.append("Setup1")
+
+        def InsertFrequencySweep(self, setup_name: str, props: list[object]) -> None:
+            self._parent.inserted_sweep_setup_names.append(setup_name)
+            self._parent.inserted_sweep_payloads.append(props)
+
+    class _Design:
+        def __init__(self, parent: "_FakeHfss") -> None:
+            self._parent = parent
+
+        def GetModule(self, name: str) -> "_FakeHfss._AnalysisModule":
+            if name != "AnalysisSetup":
+                raise ValueError(f"unexpected module: {name}")
+            return _FakeHfss._AnalysisModule(self._parent)
 
     def assign_radiation_boundary_to_faces(self, assignment: int, name: str | None = None) -> bool:
         _ = name
         self.radiation_assigned_faces.append(assignment)
+        return True
+
+    def delete_setup(self, name: str) -> bool:
+        self.deleted_setups.append(name)
+        self.setup_names = [setup for setup in self.setup_names if setup != name]
         return True
 
 
@@ -100,6 +135,8 @@ def test_run_em_pipeline_returns_full_contract() -> None:
     }
     assert result["validation_report"]["ok"] is True
     assert sorted(fake_hfss.radiation_assigned_faces) == [10, 11, 12, 13, 14, 15]
+    assert fake_hfss.inserted_setup_types == ["HfssDriven"]
+    assert fake_hfss.inserted_sweep_setup_names == ["Setup1"]
 
 
 def test_run_em_pipeline_hard_fail_validation() -> None:
