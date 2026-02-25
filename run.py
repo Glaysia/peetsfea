@@ -6,6 +6,7 @@ from pathlib import Path
 from peetsfea import RunConfig, build_square_spiral_from_manifest, run
 from peetsfea.types.manifest import Manifest
 
+cwd = Path(__file__).parent.resolve()
 
 def _safe_remove(path: Path) -> None:
     if path.is_dir():
@@ -35,11 +36,11 @@ def _cleanup_failed_design_files(*, run_dir: Path, design_id: str | None, manife
 def run_one(seed: int) -> bool:
     config = RunConfig(
         ansys_executable_path="/opt/ansys_inc/v252/AnsysEM",
-        ansys_run_dir="/home/harry/Projects/PythonProjects/peetsfea/run/aedt",
-        toml_path="/home/harry/Projects/PythonProjects/peetsfea/run/type1.toml",
+        ansys_run_dir=f"{cwd}/run/aedt",
+        toml_path=f"{cwd}/run/type1.toml",
         seed=seed,
         backend="hfss",
-        non_graphical=False,
+        non_graphical=True,
         close_on_exit=False,
     )
     run_dir = Path(config.ansys_run_dir)
@@ -70,7 +71,7 @@ RUN_MODE = MANY
 if __name__ == "__main__":
     if RUN_MODE == MANY:
         failed_seeds: list[int] = []
-        for seed in range(95, 152):
+        for seed in range(100):
             ok = run_one(seed)
             if not ok:
                 failed_seeds.append(seed)
