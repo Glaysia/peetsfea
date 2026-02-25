@@ -131,7 +131,7 @@ def _validate_rxdd_single_layer_count(instance_count: int) -> None:
         )
 
 
-def _build_rxdd_right_points_a_to_D_cw(
+def _build_rxdd_right_points_A_to_d_cw(
     *,
     turns: int,
     outer_x: float,
@@ -153,7 +153,7 @@ def _build_rxdd_right_points_a_to_D_cw(
     direction = _current_direction_from_xy_points(points)
     if direction != "cw":
         raise ValueError(
-            "rx_dd right endpoint contract violation: a->D path must be clockwise "
+            "rx_dd right endpoint contract violation: A->d path must be clockwise "
             f"(actual_direction={direction})"
         )
     return points

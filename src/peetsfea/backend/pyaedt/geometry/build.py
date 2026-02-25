@@ -33,7 +33,7 @@ from .design_vars import _assign_design_variables
 from .metadata import _build_geometry_metadata
 from .placement_rules import (
     _apply_txdd_right_endpoint_rule,
-    _build_rxdd_right_points_a_to_D_cw,
+    _build_rxdd_right_points_A_to_d_cw,
     _build_polarity,
     _coil_instance_offset,
     _current_direction_from_xy_points,
@@ -313,7 +313,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                 if kind == "rx_dd" and spacing_mm < 0:
                     raise ValueError(f"rx_dd edge gap must be >= 0 (actual={spacing_mm})")
                 if kind == "rx_dd":
-                    rxdd_right_local_points = _build_rxdd_right_points_a_to_D_cw(
+                    rxdd_right_local_points = _build_rxdd_right_points_A_to_d_cw(
                         turns=turns,
                         outer_x=rx_dd_outer_x,
                         outer_y=rx_dd_outer_y,
@@ -786,11 +786,11 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                     end_label: TerminalLabel = "a"
                     if kind == "rx_dd":
                         if side == "right":
-                            start_label = "a"
-                            end_label = "D"
+                            start_label = "A"
+                            end_label = "d"
                         elif side == "left":
-                            start_label = "b"
-                            end_label = "C"
+                            start_label = "B"
+                            end_label = "c"
                     group_endpoints.append(
                         {
                             "group_kind": kind,
@@ -804,13 +804,15 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                         }
                     )
                     default_current_direction, b_field_direction = _build_polarity(kind, side)
+                    expected_right_direction: Literal["cw", "ccw"] = "cw"
+                    expected_left_direction: Literal["cw", "ccw"] = "ccw"
                     if kind == "rx_dd":
                         yz_projected = [[point[1], point[2], 0.0] for point in top_points]
                         current_direction = _current_direction_from_xy_points(yz_projected) or default_current_direction
                     else:
                         current_direction = _current_direction_from_xy_points(top_points) or default_current_direction
                     if kind == "rx_dd":
-                        expected = "cw" if side == "right" else "ccw"
+                        expected = expected_right_direction if side == "right" else expected_left_direction
                         if current_direction != expected:
                             raise ValueError(
                                 "rx_dd current direction contract violation "

@@ -95,8 +95,8 @@ def _input() -> EmPipelineInput:
                     "board_id": "rx_main_0",
                     "start_xyz": (0.0, 0.0, 0.0),
                     "end_xyz": (1.0, 0.0, 0.0),
-                    "start_label": "a",
-                    "end_label": "D",
+                    "start_label": "A",
+                    "end_label": "d",
                     "present": True,
                 }
             ],
