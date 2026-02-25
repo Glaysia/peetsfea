@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import shutil
+import sys
 from pathlib import Path
 
 from peetsfea import RunConfig, build_square_spiral_from_manifest, run
 from peetsfea.types.manifest import Manifest
 
+cwd = Path(__file__).parent.resolve()
 
 def _safe_remove(path: Path) -> None:
     if path.is_dir():
@@ -35,12 +37,12 @@ def _cleanup_failed_design_files(*, run_dir: Path, design_id: str | None, manife
 def run_one(seed: int) -> bool:
     config = RunConfig(
         ansys_executable_path="/opt/ansys_inc/v252/AnsysEM",
-        ansys_run_dir="/home/harry/Projects/PythonProjects/peetsfea/run/aedt",
-        toml_path="/home/harry/Projects/PythonProjects/peetsfea/run/type1.toml",
+        ansys_run_dir=f"{cwd}/run/aedt",
+        toml_path=f"{cwd}/run/type1.toml",
         seed=seed,
         backend="hfss",
-        non_graphical=False,
-        close_on_exit=False,
+        non_graphical=True,
+        close_on_exit=True,
     )
     run_dir = Path(config.ansys_run_dir)
     manifest: Manifest | None = None
@@ -68,9 +70,18 @@ RUN_MODE = MANY
 # RUN_MODE = SINGLE
 
 if __name__ == "__main__":
-    if RUN_MODE == MANY:
+    cli_seed: int | None = None
+    if len(sys.argv) > 1:
+        try:
+            cli_seed = int(sys.argv[1])
+        except ValueError as exc:
+            raise SystemExit(f"Invalid seed '{sys.argv[1]}'. Usage: python run.py [seed]") from exc
+
+    if cli_seed is not None:
+        run_one(cli_seed)
+    elif RUN_MODE == MANY:
         failed_seeds: list[int] = []
-        for seed in range(95, 152):
+        for seed in range(100):
             ok = run_one(seed)
             if not ok:
                 failed_seeds.append(seed)
