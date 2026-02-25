@@ -61,6 +61,7 @@ from .spiral_points import (
 _Point3 = tuple[float, float, float]
 _BoardKey = tuple[str, int]
 _TxVerticalLinkNode = tuple[int, str, _Point3, _Point3, float, float]
+_TxDdStartStubSource = tuple[_Point3, float, str]
 
 
 def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
@@ -115,7 +116,9 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     tx_zx_fr4_names: list[str] = []
     txdd_right_a_points: dict[int, tuple[_Point3, float]] = {}
     txdd_right_object_names: dict[int, str] = {}
-    txdd_bridge_object_name: str | None = None
+    txdd_left_a_points: dict[int, tuple[_Point3, float]] = {}
+    txdd_left_object_names: dict[int, str] = {}
+    txdd_start_stub_sources: dict[str, list[_TxDdStartStubSource]] = {}
     tx_vertical_nodes_by_board: dict[_BoardKey, list[_TxVerticalLinkNode]] = {}
 
     try:
@@ -263,6 +266,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                             layer_index=right_layer_index,
                         )
                         raw_right_a_local: _Point3 | None = None
+                        right_a_point: _Point3 | None = None
                         if instance_count == 4 and right_layer_index in (0, 1):
                             raw_right_a_source = tx_dd_points[-1] if right_layer_index == 0 else tx_dd_points[0]
                             raw_right_a_local = cast(_Point3, tuple(float(v) for v in raw_right_a_source))
@@ -309,6 +313,22 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                         right_obj = cast(Object3d, right_created)
                         right_obj_name = _object_name(right_obj, right_name)
                         object_names.append(right_obj_name)
+                        if instance_count == 2 and right_index == 1:
+                            txdd_start_stub_sources.setdefault(pcb["id"], []).append(
+                                (
+                                    cast(_Point3, tuple(float(v) for v in right_top_points[0])),
+                                    trace,
+                                    right_obj_name,
+                                )
+                            )
+                        elif instance_count == 4 and right_layer_index == 0:
+                            txdd_start_stub_sources.setdefault(pcb["id"], []).append(
+                                (
+                                    cast(_Point3, tuple(float(v) for v in right_top_points[0])),
+                                    trace,
+                                    right_obj_name,
+                                )
+                            )
                         if instance_count == 4 and right_layer_index in (0, 1):
                             txdd_right_object_names[right_layer_index] = right_obj_name
                         right_probe = _probe_cad_object(right_obj, right_name)
@@ -381,6 +401,35 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                                 right_top_points,
                                 axis_y=tx_dd_center_y + transform["dy"],
                             )
+                            if instance_count == 2:
+                                txdd_start_stub_sources.setdefault(pcb["id"], []).append(
+                                    (
+                                        cast(_Point3, tuple(float(v) for v in left_top_points[0])),
+                                        trace,
+                                        left_obj_name,
+                                    )
+                                )
+                            elif instance_count == 4 and right_layer_index == 0:
+                                txdd_start_stub_sources.setdefault(pcb["id"], []).append(
+                                    (
+                                        cast(_Point3, tuple(float(v) for v in left_top_points[0])),
+                                        trace,
+                                        left_obj_name,
+                                    )
+                                )
+                            if instance_count == 4 and right_layer_index in (0, 1):
+                                txdd_left_object_names[right_layer_index] = left_obj_name
+                                if right_a_point is None:
+                                    raise ValueError(
+                                        "tx_dd left layer bridge contract violation: right A anchor missing "
+                                        f"(layer_index={right_layer_index})"
+                                    )
+                                left_a_point = (
+                                    right_a_point[0],
+                                    (2.0 * (tx_dd_center_y + transform["dy"])) - right_a_point[1],
+                                    right_a_point[2],
+                                )
+                                txdd_left_a_points[right_layer_index] = (cast(_Point3, left_a_point), trace)
                             left_probe = _probe_from_points(left_obj_name, left_top_points)
                             cad_probe.append(left_probe)
                             coil_plane_bboxes.append((pcb["id"], "XY", left_probe["bbox"]))
@@ -622,6 +671,9 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
             tx_vertical_region_max=tx_vertical_region_max,
             txdd_right_a_points=txdd_right_a_points,
             txdd_right_object_names=txdd_right_object_names,
+            txdd_left_a_points=txdd_left_a_points,
+            txdd_left_object_names=txdd_left_object_names,
+            txdd_start_stub_sources=txdd_start_stub_sources,
             group_objects=group_objects,
             object_names=object_names,
             cad_probe=cad_probe,
