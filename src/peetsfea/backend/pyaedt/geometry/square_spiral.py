@@ -1332,6 +1332,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     placement_violations: list[RegionViolation] = []
     coil_plane_bboxes: list[tuple[str, Literal["XY", "YZ", "ZX"], list[float]]] = []
     fr4_object_names: list[str] = []
+    tx_zx_fr4_names: list[str] = []
     txdd_right_a_points: dict[int, tuple[_Point3, float]] = {}
     txdd_right_object_names: dict[int, str] = {}
     txdd_bridge_object_name: str | None = None
@@ -1858,7 +1859,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                 bridge_trace = source_trace
                 # Keep bridge centerline safely inside tx_region_vertical in X so rectangular section
                 # expansion does not escape the region at the YZ-side boundary.
-                x_margin = bridge_trace
+                x_margin = bridge_trace / 2.0
                 min_x_allowed = tx_vertical_region_min[0] + x_margin
                 max_x_allowed = tx_vertical_region_max[0] - x_margin
                 if min_x_allowed > max_x_allowed:
@@ -1866,11 +1867,21 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                         "tx_vertical bridge x-margin exceeds region width "
                         f"(min_x_allowed={min_x_allowed}, max_x_allowed={max_x_allowed}, bridge_trace={bridge_trace})"
                     )
-                source_bridge_x = min(max(source_start_xyz[0], min_x_allowed), max_x_allowed)
-                target_bridge_x = min(max(target_end_xyz[0], min_x_allowed), max_x_allowed)
+                half = bridge_trace / 2.0
+                source_dx = source_end_xyz[0] - source_start_xyz[0]
+                if abs(source_dx) <= 1e-9:
+                    source_anchor_x = source_start_xyz[0]
+                else:
+                    source_anchor_x = source_start_xyz[0] + math.copysign(half, source_dx)
+                target_dx = target_start_xyz[0] - target_end_xyz[0]
+                if abs(target_dx) <= 1e-9:
+                    target_anchor_x = target_end_xyz[0]
+                else:
+                    target_anchor_x = target_end_xyz[0] + math.copysign(half, target_dx)
+                source_bridge_x = min(max(source_anchor_x, min_x_allowed), max_x_allowed)
+                target_bridge_x = min(max(target_anchor_x, min_x_allowed), max_x_allowed)
                 start_bridge_point = (source_bridge_x, source_start_xyz[1], source_start_xyz[2])
                 end_bridge_point = (target_bridge_x, target_end_xyz[1], target_end_xyz[2])
-                half = bridge_trace / 2.0
                 bridge_sheet_points = [
                     [start_bridge_point[0], start_bridge_point[1], start_bridge_point[2] - half],
                     [start_bridge_point[0], start_bridge_point[1], start_bridge_point[2] + half],
@@ -1911,13 +1922,13 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                 else:
                     bridge_sheet_name = _object_name(cast(Object3d, covered), bridge_loop_name)
                 try:
-                    thickened = modeler.thicken_sheet(assignment=bridge_sheet_name, thickness=cu_thickness)  # type: ignore[misc]
+                    thickened = modeler.thicken_sheet(assignment=bridge_sheet_name, thickness=(cu_thickness * 4.0))  # type: ignore[misc]
                 except TypeError:
-                    thickened = modeler.thicken_sheet(bridge_sheet_name, cu_thickness)  # type: ignore[misc]
+                    thickened = modeler.thicken_sheet(bridge_sheet_name, (cu_thickness * 4.0))  # type: ignore[misc]
                 if not thickened:
                     raise ValueError(
                         "tx_vertical bridge thicken failed "
-                        f"(name={bridge_name}, thickness={cu_thickness})"
+                        f"(name={bridge_name}, thickness={cu_thickness * 4.0})"
                     )
                 if isinstance(thickened, list):
                     first = thickened[0] if thickened else bridge_sheet_name
@@ -2026,6 +2037,31 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
             if united_object_name not in object_names:
                 object_names.append(united_object_name)
 
+        tx_vertical_unite_targets = sorted(set(group_objects["tx_vertical"]))
+        if len(tx_vertical_unite_targets) > 1:
+            try:
+                tx_vertical_unite_result = modeler.unite(assignment=tx_vertical_unite_targets)  # type: ignore[misc]
+            except TypeError:
+                tx_vertical_unite_result = modeler.unite(tx_vertical_unite_targets)  # type: ignore[misc]
+            if not tx_vertical_unite_result:
+                raise ValueError(
+                    "Failed to unite tx_vertical group "
+                    f"(targets={tx_vertical_unite_targets})"
+                )
+            if isinstance(tx_vertical_unite_result, list):
+                first = tx_vertical_unite_result[0] if tx_vertical_unite_result else tx_vertical_unite_targets[0]
+                tx_vertical_united_name = (
+                    first if isinstance(first, str) else _object_name(cast(Object3d, first), tx_vertical_unite_targets[0])
+                )
+            elif isinstance(tx_vertical_unite_result, str):
+                tx_vertical_united_name = tx_vertical_unite_result
+            else:
+                tx_vertical_united_name = _object_name(cast(Object3d, tx_vertical_unite_result), tx_vertical_unite_targets[0])
+            group_objects["tx_vertical"] = [tx_vertical_united_name]
+            object_names = [name for name in object_names if name not in tx_vertical_unite_targets[1:]]
+            if tx_vertical_united_name not in object_names:
+                object_names.append(tx_vertical_united_name)
+
         eps_len = 1e-6
         grouped_plane_bboxes: dict[tuple[str, Literal["XY", "YZ", "ZX"], int], list[float]] = {}
         for board_id, plane, bbox in coil_plane_bboxes:
@@ -2080,7 +2116,34 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
             substrate_object_name = _object_name(substrate, substrate_name)
             object_names.append(substrate_object_name)
             fr4_object_names.append(substrate_object_name)
+            if plane == "ZX" and board_id in tx_board_ids:
+                tx_zx_fr4_names.append(substrate_object_name)
             cad_probe.append(_probe_cad_object(substrate, substrate_name))
+
+        if len(tx_zx_fr4_names) > 1:
+            tx_zx_fr4_targets = sorted(set(tx_zx_fr4_names))
+            try:
+                tx_zx_unite_result = modeler.unite(assignment=tx_zx_fr4_targets)  # type: ignore[misc]
+            except TypeError:
+                tx_zx_unite_result = modeler.unite(tx_zx_fr4_targets)  # type: ignore[misc]
+            if not tx_zx_unite_result:
+                raise ValueError(
+                    "Failed to unite tx ZX FR4 group "
+                    f"(targets={tx_zx_fr4_targets})"
+                )
+            if isinstance(tx_zx_unite_result, list):
+                first = tx_zx_unite_result[0] if tx_zx_unite_result else tx_zx_fr4_targets[0]
+                tx_zx_united_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), tx_zx_fr4_targets[0])
+            elif isinstance(tx_zx_unite_result, str):
+                tx_zx_united_name = tx_zx_unite_result
+            else:
+                tx_zx_united_name = _object_name(cast(Object3d, tx_zx_unite_result), tx_zx_fr4_targets[0])
+            fr4_object_names = [name for name in fr4_object_names if name not in tx_zx_fr4_targets[1:]]
+            if tx_zx_united_name not in fr4_object_names:
+                fr4_object_names.append(tx_zx_united_name)
+            object_names = [name for name in object_names if name not in tx_zx_fr4_targets[1:]]
+            if tx_zx_united_name not in object_names:
+                object_names.append(tx_zx_united_name)
 
         copper_tools = sorted(set(group_objects["tx_dd"] + group_objects["tx_vertical"] + group_objects["rx_dd"]))
         if fr4_object_names and copper_tools:
