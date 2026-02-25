@@ -140,12 +140,10 @@ values = [8, 10, 12, 14]
 ### RxDD endpoint 계약 (TX 스타일 매핑)
 - 기준 뷰는 `+X` 정면이며, 이 기준에서 `오른쪽=+Y`, `위=+Z`로 본다.
 - `rx_dd`는 단층만 지원하며 `selected_count=2`가 아니면 실패한다.
-- `geometry_metadata.group_endpoints[*]`의 `rx_dd` 라벨 규칙:
-  - left(`off_y < 0`): `C -> b`
-  - right(`off_y > 0`): `a -> D`
-- `geometry_metadata.coil_polarity[*]` 방향 규칙:
-  - left: `ccw`
-  - right: `cw`
+- `rx_dd`는 우측 기준 경로 생성 계약을 사용한다:
+  - right(`off_y > 0`): `a -> D`, `cw`
+  - left(`off_y < 0`): right 경로를 월드 Y 중심축(`y = rx_center_y + dy`)으로 반사한 대칭, `b -> C`, `ccw`
+- 라벨은 후처리 덮어쓰기가 아니라 코일 생성 시점 계약으로 기록한다.
 
 - 실행:
 ```bash

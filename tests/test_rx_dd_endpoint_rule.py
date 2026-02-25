@@ -1,80 +1,52 @@
 from __future__ import annotations
 
-from typing import Literal
-
 import pytest
 
 from peetsfea.backend.pyaedt.geometry.placement_rules import (
-    _apply_rxdd_endpoint_rule,
-    _build_polarity,
+    _build_rxdd_right_points_a_to_D_cw,
+    _current_direction_from_xy_points,
     _instance_side,
     _validate_rxdd_single_layer_count,
 )
-from peetsfea.types.manifest import CoilPolaritySpec, GroupEndpointEntry
 
 
-def _rx_endpoint(*, instance_index: int, board_id: str = "rx_main_0") -> GroupEndpointEntry:
-    return {
-        "group_kind": "rx_dd",
-        "group_instance_index": instance_index,
-        "board_id": board_id,
-        "start_xyz": (0.0, 0.0, 0.0),
-        "end_xyz": (1.0, 0.0, 0.0),
-        "start_label": "A",
-        "end_label": "a",
-        "present": True,
-    }
+def test_build_rxdd_right_points_a_to_D_cw_is_clockwise() -> None:
+    points = _build_rxdd_right_points_a_to_D_cw(
+        turns=3,
+        outer_x=120.0,
+        outer_y=80.0,
+        trace=1.2,
+        gap=0.3,
+    )
+    assert _current_direction_from_xy_points(points) == "cw"
 
 
-def _rx_polarity(
-    *,
-    instance_index: int,
-    side: Literal["left", "right", "center"],
-    current_direction: Literal["cw", "ccw"] = "cw",
-    board_id: str = "rx_main_0",
-) -> CoilPolaritySpec:
-    return {
-        "group_kind": "rx_dd",
-        "group_instance_index": instance_index,
-        "board_id": board_id,
-        "instance_side": side,
-        "current_direction": current_direction,
-        "b_field_direction": "into_wall",
-    }
+def test_rx_world_y_mirror_from_right_path_is_counter_clockwise() -> None:
+    right_points = _build_rxdd_right_points_a_to_D_cw(
+        turns=2,
+        outer_x=100.0,
+        outer_y=60.0,
+        trace=1.0,
+        gap=0.25,
+    )
+    x_const = 42.0
+    axis_y = 10.0
+    pair_offset = 30.0
+    z_center = 200.0
 
+    right_world = [[x_const, axis_y + pair_offset + point[0], z_center + point[1]] for point in right_points]
+    left_world = [[point[0], (2.0 * axis_y) - point[1], point[2]] for point in right_world]
 
-def test_apply_rxdd_endpoint_rule_maps_left_and_right_labels() -> None:
-    endpoints = [_rx_endpoint(instance_index=0), _rx_endpoint(instance_index=1)]
-    polarity: list[CoilPolaritySpec] = [
-        _rx_polarity(instance_index=0, side="left", current_direction="ccw"),
-        _rx_polarity(instance_index=1, side="right", current_direction="cw"),
-    ]
+    assert len(left_world) == len(right_world)
+    for right, left in zip(right_world, left_world, strict=True):
+        assert left[0] == pytest.approx(right[0], abs=1e-9)
+        assert left[1] == pytest.approx((2.0 * axis_y) - right[1], abs=1e-9)
+        assert left[2] == pytest.approx(right[2], abs=1e-9)
 
-    _apply_rxdd_endpoint_rule(endpoints, polarity)
-
-    by_index = {entry["group_instance_index"]: entry for entry in endpoints}
-    assert by_index[0]["start_label"] == "C"
-    assert by_index[0]["end_label"] == "b"
-    assert by_index[1]["start_label"] == "a"
-    assert by_index[1]["end_label"] == "D"
-
-
-def test_apply_rxdd_endpoint_rule_supports_single_side_only_input() -> None:
-    endpoints = [_rx_endpoint(instance_index=0)]
-    polarity: list[CoilPolaritySpec] = [_rx_polarity(instance_index=0, side="left", current_direction="ccw")]
-
-    _apply_rxdd_endpoint_rule(endpoints, polarity)
-
-    assert endpoints[0]["start_label"] == "C"
-    assert endpoints[0]["end_label"] == "b"
-
-
-def test_apply_rxdd_endpoint_rule_rejects_center_side() -> None:
-    endpoints = [_rx_endpoint(instance_index=0)]
-    polarity: list[CoilPolaritySpec] = [_rx_polarity(instance_index=0, side="center")]
-
-    with pytest.raises(ValueError, match=r"instance_side must be left or right"):
-        _apply_rxdd_endpoint_rule(endpoints, polarity)
+    right_projected = [[point[1], point[2], 0.0] for point in right_world]
+    left_projected = [[point[1], point[2], 0.0] for point in left_world]
+    assert _current_direction_from_xy_points(right_projected) == "cw"
+    assert _current_direction_from_xy_points(left_projected) == "ccw"
 
 
 @pytest.mark.parametrize("instance_count", [1, 3, 4])
@@ -87,14 +59,8 @@ def test_validate_rxdd_single_layer_count_accepts_two() -> None:
     _validate_rxdd_single_layer_count(2)
 
 
-def test_rx_side_axis_convention_and_direction_contract() -> None:
+def test_rx_side_axis_convention_matches_plus_x_view() -> None:
     left_side = _instance_side("rx_dd", (0.0, -1.0, 0.0))
     right_side = _instance_side("rx_dd", (0.0, 1.0, 0.0))
-
     assert left_side == "left"
     assert right_side == "right"
-
-    left_direction, _ = _build_polarity("rx_dd", left_side)
-    right_direction, _ = _build_polarity("rx_dd", right_side)
-    assert left_direction == "ccw"
-    assert right_direction == "cw"
