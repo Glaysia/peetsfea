@@ -883,14 +883,18 @@ def test_tx_vertical_three_instances_middle_touches_x_axis_and_others_are_symmet
         expected_end_x = min(max(expected_end[0], min_x_allowed), max_x_allowed)
         points = cast(list[list[float]], bridge_call["points"])
         assert len(points) == 4
-        start_center_x = (points[0][0] + points[1][0]) / 2.0
-        end_center_x = (points[2][0] + points[3][0]) / 2.0
-        assert start_center_x == pytest.approx(expected_start_x, abs=1e-6)
+        assert points[0][0] == pytest.approx(expected_start_x, abs=1e-6)
+        assert points[1][0] == pytest.approx(expected_start_x, abs=1e-6)
         assert points[0][1] == pytest.approx(expected_start[1], abs=1e-6)
-        assert points[0][2] == pytest.approx(expected_start[2], abs=1e-6)
-        assert end_center_x == pytest.approx(expected_end_x, abs=1e-6)
+        assert points[1][1] == pytest.approx(expected_start[1], abs=1e-6)
+        assert abs(points[1][2] - points[0][2]) == pytest.approx(trace, abs=1e-6)
+        assert ((points[0][2] + points[1][2]) / 2.0) == pytest.approx(expected_start[2], abs=1e-6)
+        assert points[2][0] == pytest.approx(expected_end_x, abs=1e-6)
+        assert points[3][0] == pytest.approx(expected_end_x, abs=1e-6)
         assert points[2][1] == pytest.approx(expected_end[1], abs=1e-6)
-        assert points[2][2] == pytest.approx(expected_end[2], abs=1e-6)
+        assert points[3][1] == pytest.approx(expected_end[1], abs=1e-6)
+        assert abs(points[2][2] - points[3][2]) == pytest.approx(trace, abs=1e-6)
+        assert ((points[2][2] + points[3][2]) / 2.0) == pytest.approx(expected_end[2], abs=1e-6)
         assert fake.modeler.thicken_calls[idx]["thickness"] == pytest.approx(
             metadata["selected_parameters"]["cu_thickness"], abs=1e-9
         )

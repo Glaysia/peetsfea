@@ -1872,10 +1872,10 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                 end_bridge_point = (target_bridge_x, target_start_xyz[1], target_start_xyz[2])
                 half = bridge_trace / 2.0
                 bridge_sheet_points = [
-                    [start_bridge_point[0] - half, start_bridge_point[1], start_bridge_point[2]],
-                    [start_bridge_point[0] + half, start_bridge_point[1], start_bridge_point[2]],
-                    [end_bridge_point[0] + half, end_bridge_point[1], end_bridge_point[2]],
-                    [end_bridge_point[0] - half, end_bridge_point[1], end_bridge_point[2]],
+                    [start_bridge_point[0], start_bridge_point[1], start_bridge_point[2] - half],
+                    [start_bridge_point[0], start_bridge_point[1], start_bridge_point[2] + half],
+                    [end_bridge_point[0], end_bridge_point[1], end_bridge_point[2] + half],
+                    [end_bridge_point[0], end_bridge_point[1], end_bridge_point[2] - half],
                 ]
                 bridge_name = (
                     f"bridge_tx_vertical_link_g{source_index}_to_g{target_index}_"
