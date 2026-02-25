@@ -22,7 +22,7 @@ def run_em_pipeline(
     groups = build_groups(em_input)
     series = build_series(groups)
     subtract = build_subtract(groups)
-    boundary = build_boundary(em_policy)
+    boundary = build_boundary(hfss, modeler, em_policy)
     ports = build_ports(hfss, modeler, em_input)
     analysis = build_analysis(em_policy)
     post_templates = build_post_templates()

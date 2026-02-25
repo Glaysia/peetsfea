@@ -12,11 +12,32 @@ from peetsfea.backend.pyaedt.em_pipeline.contracts import EmPipelineInput
 
 
 class _FakeHfss:
-    pass
+    def __init__(self) -> None:
+        self.radiation_assigned_faces: list[int] = []
+
+    def assign_radiation_boundary_to_faces(self, assignment: int, name: str | None = None) -> bool:
+        _ = name
+        self.radiation_assigned_faces.append(assignment)
+        return True
 
 
 class _FakeModeler:
-    pass
+    def __init__(self) -> None:
+        self.created_region_name: str | None = None
+
+    class _Region:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+    def create_region(self, pad_value: int, pad_type: str, name: str) -> "_FakeModeler._Region":
+        _ = (pad_value, pad_type)
+        self.created_region_name = name
+        return _FakeModeler._Region(name)
+
+    def get_object_faces(self, assignment: str) -> list[int]:
+        if assignment != self.created_region_name:
+            return []
+        return [10, 11, 12, 13, 14, 15]
 
 
 def _input() -> EmPipelineInput:
@@ -64,7 +85,9 @@ def _input() -> EmPipelineInput:
 
 
 def test_run_em_pipeline_returns_full_contract() -> None:
-    result = run_em_pipeline(cast(Hfss, _FakeHfss()), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
+    fake_hfss = _FakeHfss()
+    fake_modeler = _FakeModeler()
+    result = run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, fake_modeler), _input(), default_em_policy())
     assert set(result.keys()) == {
         "groups",
         "series",
@@ -76,6 +99,7 @@ def test_run_em_pipeline_returns_full_contract() -> None:
         "validation_report",
     }
     assert result["validation_report"]["ok"] is True
+    assert sorted(fake_hfss.radiation_assigned_faces) == [10, 11, 12, 13, 14, 15]
 
 
 def test_run_em_pipeline_hard_fail_validation() -> None:
