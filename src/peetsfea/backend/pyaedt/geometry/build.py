@@ -61,6 +61,26 @@ _Edge2P = tuple[_Point3, _Point3]
 _BoardKey = tuple[str, int]
 _TxVerticalLinkNode = tuple[int, str, _Point3, _Point3, float, float, _Edge2P, _Edge2P]
 _TxDdStartStubSource = tuple[_Point3, float, str]
+_RxDdBackStubSource = tuple[str, int, str, _Point3, float, str]
+
+
+def _append_rxdd_back_stub_sources_if_needed(
+    *,
+    kind: str,
+    board_id: str,
+    instance_index: int,
+    start_xyz: _Point3,
+    end_xyz: _Point3,
+    start_label: TerminalLabel,
+    end_label: TerminalLabel,
+    trace: float,
+    source_object_name: str,
+    storage: list[_RxDdBackStubSource],
+) -> None:
+    if kind != "rx_dd":
+        return
+    storage.append((board_id, instance_index, str(start_label), start_xyz, trace, source_object_name))
+    storage.append((board_id, instance_index, str(end_label), end_xyz, trace, source_object_name))
 
 
 def _edge_points_at_path_end(*, points: list[list[float]], trace: float) -> _Edge2P:
@@ -221,6 +241,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     txdd_left_a_points: dict[int, tuple[_Point3, float]] = {}
     txdd_left_object_names: dict[int, str] = {}
     txdd_start_stub_sources: dict[str, list[_TxDdStartStubSource]] = {}
+    rxdd_back_stub_sources: list[_RxDdBackStubSource] = []
     tx_vertical_nodes_by_board: dict[_BoardKey, list[_TxVerticalLinkNode]] = {}
     txdd_global_right_d_edge: _Edge2P | None = None
     txdd_global_right_d_object_name: str | None = None
@@ -803,6 +824,18 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                             "present": True,
                         }
                     )
+                    _append_rxdd_back_stub_sources_if_needed(
+                        kind=kind,
+                        board_id=pcb["id"],
+                        instance_index=instance_index,
+                        start_xyz=start_xyz,
+                        end_xyz=end_xyz,
+                        start_label=start_label,
+                        end_label=end_label,
+                        trace=trace,
+                        source_object_name=obj_name,
+                        storage=rxdd_back_stub_sources,
+                    )
                     default_current_direction, b_field_direction = _build_polarity(kind, side)
                     expected_right_direction: Literal["cw", "ccw"] = "cw"
                     expected_left_direction: Literal["cw", "ccw"] = "ccw"
@@ -875,6 +908,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
             txdd_left_a_points=txdd_left_a_points,
             txdd_left_object_names=txdd_left_object_names,
             txdd_start_stub_sources=txdd_start_stub_sources,
+            rxdd_back_stub_sources=rxdd_back_stub_sources,
             group_objects=group_objects,
             object_names=object_names,
             cad_probe=cad_probe,

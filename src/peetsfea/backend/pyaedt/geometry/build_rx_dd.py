@@ -28,7 +28,33 @@ _Edge2P = tuple[_Point3, _Point3]
 _BoardKey = tuple[str, int]
 _TxVerticalLinkNode = tuple[int, str, _Point3, _Point3, float, float, _Edge2P, _Edge2P]
 _TxDdStartStubSource = tuple[_Point3, float, str]
+_RxDdBackStubSource = tuple[str, int, str, _Point3, float, str]
 TX_DD_START_STUB_DOWN_MM = 3.0
+RX_DD_BACK_STUB_LEN_MM = 3.0
+RX_DD_BACK_STUB_AXIS_SIGN_X = -1.0
+
+
+def _rxdd_back_stub_sort_key(source: _RxDdBackStubSource) -> tuple[str, int, str]:
+    board_id, instance_index, endpoint_label, *_ = source
+    return board_id, instance_index, endpoint_label
+
+
+def _rxdd_back_stub_origin_and_sizes(*, anchor_xyz: _Point3, trace: float) -> tuple[list[float], list[float]]:
+    length = RX_DD_BACK_STUB_LEN_MM
+    if trace <= 0.0:
+        raise ValueError(f"rx_dd back stub trace must be > 0 (actual={trace})")
+    if abs(RX_DD_BACK_STUB_AXIS_SIGN_X + 1.0) > 1e-12:
+        raise ValueError(
+            "rx_dd back stub axis contract violation: RX_DD_BACK_STUB_AXIS_SIGN_X must be -1.0 "
+            f"(actual={RX_DD_BACK_STUB_AXIS_SIGN_X})"
+        )
+    origin = [
+        anchor_xyz[0] + (RX_DD_BACK_STUB_AXIS_SIGN_X * length),
+        anchor_xyz[1] - (trace / 2.0),
+        anchor_xyz[2] - (trace / 2.0),
+    ]
+    sizes = [length, trace, trace]
+    return origin, sizes
 
 
 def _create_thickened_sheet_from_points(
@@ -160,6 +186,7 @@ def finalize_solids_and_substrates(
     txdd_left_a_points: dict[int, tuple[_Point3, float]],
     txdd_left_object_names: dict[int, str],
     txdd_start_stub_sources: dict[str, list[_TxDdStartStubSource]],
+    rxdd_back_stub_sources: list[_RxDdBackStubSource],
     group_objects: GroupObjects,
     object_names: list[str],
     cad_probe: list[CadProbe],
@@ -180,6 +207,75 @@ def finalize_solids_and_substrates(
     txdd_left_a_object_name_active = (
         txdd_global_left_a_object_name or txdd_left_object_names.get(1) or txdd_left_object_names.get(0)
     )
+
+    rxdd_name_replacements: dict[str, str] = {}
+
+    def _resolve_replaced_name(name: str) -> str:
+        current = name
+        for _ in range(10):
+            next_name = rxdd_name_replacements.get(current)
+            if next_name is None or next_name == current:
+                return current
+            current = next_name
+        raise ValueError(f"rx_dd replacement chain too deep (name={name})")
+
+    sorted_rxdd_back_stub_sources = sorted(rxdd_back_stub_sources, key=_rxdd_back_stub_sort_key)
+    for board_id, instance_index, endpoint_label, anchor_xyz, trace, source_object_name_raw in sorted_rxdd_back_stub_sources:
+        source_object_name = _resolve_replaced_name(source_object_name_raw)
+        source_exists = (source_object_name in object_names) or (source_object_name in group_objects["rx_dd"])
+        if not source_exists:
+            raise ValueError(
+                "rx_dd back stub source object missing "
+                f"(board_id={board_id}, instance_index={instance_index}, endpoint={endpoint_label}, "
+                f"source={source_object_name}, source_raw={source_object_name_raw})"
+            )
+        stub_origin, stub_sizes = _rxdd_back_stub_origin_and_sizes(anchor_xyz=anchor_xyz, trace=trace)
+        stub_name = f"stub_rx_dd_back_{endpoint_label}_{board_id}_g{instance_index}_{design_id}"
+        stub_created = modeler.create_box(origin=stub_origin, sizes=stub_sizes, name=stub_name, material="copper")
+        if not stub_created:
+            raise ValueError(
+                "rx_dd back stub creation failed "
+                f"(name={stub_name}, source={source_object_name}, origin={stub_origin}, sizes={stub_sizes})"
+            )
+        stub_obj = cast(Object3d, stub_created)
+        stub_object_name = _object_name(stub_obj, stub_name)
+        object_names.append(stub_object_name)
+        group_objects["rx_dd"].append(stub_object_name)
+        cad_probe.append(_probe_cad_object(stub_obj, stub_name))
+
+        try:
+            stub_unite_result = modeler.unite(assignment=[source_object_name, stub_object_name])  # type: ignore[misc]
+        except TypeError:
+            stub_unite_result = modeler.unite([source_object_name, stub_object_name])  # type: ignore[misc]
+        if not stub_unite_result:
+            raise ValueError(
+                "Failed to unite rx_dd back stub with source coil "
+                f"(source={source_object_name}, stub={stub_object_name})"
+            )
+        if isinstance(stub_unite_result, list):
+            first = stub_unite_result[0] if stub_unite_result else source_object_name
+            stub_united_name = (
+                first if isinstance(first, str) else _object_name(cast(Object3d, first), source_object_name)
+            )
+        elif isinstance(stub_unite_result, str):
+            stub_united_name = stub_unite_result
+        else:
+            stub_united_name = _object_name(cast(Object3d, stub_unite_result), source_object_name)
+
+        group_objects["rx_dd"] = [name for name in group_objects["rx_dd"] if name != stub_object_name]
+        object_names = [name for name in object_names if name != stub_object_name]
+        group_objects["rx_dd"] = [stub_united_name if name == source_object_name else name for name in group_objects["rx_dd"]]
+        object_names = [stub_united_name if name == source_object_name else name for name in object_names]
+        if stub_united_name not in group_objects["rx_dd"]:
+            group_objects["rx_dd"].append(stub_united_name)
+        if stub_united_name not in object_names:
+            object_names.append(stub_united_name)
+        for old_name, mapped_name in list(rxdd_name_replacements.items()):
+            if mapped_name == source_object_name:
+                rxdd_name_replacements[old_name] = stub_united_name
+        rxdd_name_replacements[source_object_name] = stub_united_name
+        rxdd_name_replacements[source_object_name_raw] = stub_united_name
+
     for board_id, stub_sources in sorted(txdd_start_stub_sources.items()):
         for stub_idx, stub_source in enumerate(stub_sources):
             start_xyz, trace, source_object_name = stub_source
