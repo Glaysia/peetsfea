@@ -26,6 +26,56 @@ from .debug_checks import _bbox_violations
 _Point3 = tuple[float, float, float]
 _BoardKey = tuple[str, int]
 _TxVerticalLinkNode = tuple[int, str, _Point3, _Point3, float, float]
+_TxDdStartStubSource = tuple[_Point3, float, str]
+TX_DD_START_STUB_DOWN_MM = 3.0
+
+
+def _create_thickened_sheet_from_points(
+    *,
+    modeler: Modeler3D,
+    sheet_points: list[list[float]],
+    sheet_name: str,
+    thickness: float,
+) -> tuple[str, Object3d]:
+    sheet_created = modeler.create_polyline(points=sheet_points, name=sheet_name, material="copper", close_surface=True)
+    if not sheet_created:
+        raise ValueError(f"Sheet loop creation failed (name={sheet_name})")
+
+    sheet_loop_obj = cast(Object3d, sheet_created)
+    sheet_loop_name = _object_name(sheet_loop_obj, sheet_name)
+    try:
+        covered = modeler.cover_lines(assignment=sheet_loop_name)  # type: ignore[misc]
+    except TypeError:
+        covered = modeler.cover_lines(sheet_loop_name)  # type: ignore[misc]
+    if not covered:
+        raise ValueError(f"Sheet cover_lines failed (name={sheet_name})")
+
+    if isinstance(covered, list):
+        first = covered[0] if covered else sheet_loop_name
+        sheet_covered_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), sheet_loop_name)
+    elif isinstance(covered, str):
+        sheet_covered_name = covered
+    else:
+        sheet_covered_name = _object_name(cast(Object3d, covered), sheet_loop_name)
+
+    try:
+        thickened = modeler.thicken_sheet(assignment=sheet_covered_name, thickness=thickness)  # type: ignore[misc]
+    except TypeError:
+        thickened = modeler.thicken_sheet(sheet_covered_name, thickness)  # type: ignore[misc]
+    if not thickened:
+        raise ValueError(f"Sheet thicken failed (name={sheet_name}, thickness={thickness})")
+
+    if isinstance(thickened, list):
+        first = thickened[0] if thickened else sheet_covered_name
+        thickened_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), sheet_covered_name)
+        thickened_obj = cast(Object3d, sheet_loop_obj)
+    elif isinstance(thickened, str):
+        thickened_name = thickened
+        thickened_obj = cast(Object3d, sheet_loop_obj)
+    else:
+        thickened_obj = cast(Object3d, thickened)
+        thickened_name = _object_name(thickened_obj, sheet_covered_name)
+    return thickened_name, thickened_obj
 
 
 def finalize_solids_and_substrates(
@@ -42,6 +92,9 @@ def finalize_solids_and_substrates(
     tx_vertical_region_max: _Point3,
     txdd_right_a_points: dict[int, tuple[_Point3, float]],
     txdd_right_object_names: dict[int, str],
+    txdd_left_a_points: dict[int, tuple[_Point3, float]],
+    txdd_left_object_names: dict[int, str],
+    txdd_start_stub_sources: dict[str, list[_TxDdStartStubSource]],
     group_objects: GroupObjects,
     object_names: list[str],
     cad_probe: list[CadProbe],
@@ -51,6 +104,69 @@ def finalize_solids_and_substrates(
     tx_zx_fr4_names: list[str],
 ) -> tuple[list[str], list[str]]:
     txdd_bridge_object_name: str | None = None
+    txdd_left_bridge_object_name: str | None = None
+    for board_id, stub_sources in sorted(txdd_start_stub_sources.items()):
+        for stub_idx, stub_source in enumerate(stub_sources):
+            start_xyz, trace, source_object_name = stub_source
+            source_exists = (source_object_name in object_names) or (source_object_name in group_objects["tx_dd"])
+            if not source_exists:
+                raise ValueError(
+                    "tx_dd start stub source object missing "
+                    f"(board_id={board_id}, source={source_object_name})"
+                )
+            stub_origin = [
+                start_xyz[0] - (trace / 2.0),
+                start_xyz[1] - (trace / 2.0),
+                start_xyz[2] - TX_DD_START_STUB_DOWN_MM,
+            ]
+            stub_sizes = [trace, trace, TX_DD_START_STUB_DOWN_MM]
+            stub_name = f"stub_tx_dd_start_down_{board_id}_{stub_idx}_{design_id}"
+            stub_created = modeler.create_box(origin=stub_origin, sizes=stub_sizes, name=stub_name, material="copper")
+            if not stub_created:
+                raise ValueError(
+                    "tx_dd start stub creation failed "
+                    f"(name={stub_name}, source={source_object_name}, origin={stub_origin}, sizes={stub_sizes})"
+                )
+            stub_obj = cast(Object3d, stub_created)
+            stub_object_name = _object_name(stub_obj, stub_name)
+            object_names.append(stub_object_name)
+            group_objects["tx_dd"].append(stub_object_name)
+            cad_probe.append(_probe_cad_object(stub_obj, stub_name))
+
+            try:
+                stub_unite_result = modeler.unite(assignment=[source_object_name, stub_object_name])  # type: ignore[misc]
+            except TypeError:
+                stub_unite_result = modeler.unite([source_object_name, stub_object_name])  # type: ignore[misc]
+            if not stub_unite_result:
+                raise ValueError(
+                    "Failed to unite tx_dd start stub with source coil "
+                    f"(source={source_object_name}, stub={stub_object_name})"
+                )
+            if isinstance(stub_unite_result, list):
+                first = stub_unite_result[0] if stub_unite_result else source_object_name
+                stub_united_name = (
+                    first if isinstance(first, str) else _object_name(cast(Object3d, first), source_object_name)
+                )
+            elif isinstance(stub_unite_result, str):
+                stub_united_name = stub_unite_result
+            else:
+                stub_united_name = _object_name(cast(Object3d, stub_unite_result), source_object_name)
+
+            group_objects["tx_dd"] = [name for name in group_objects["tx_dd"] if name != stub_object_name]
+            object_names = [name for name in object_names if name != stub_object_name]
+            group_objects["tx_dd"] = [stub_united_name if name == source_object_name else name for name in group_objects["tx_dd"]]
+            object_names = [stub_united_name if name == source_object_name else name for name in object_names]
+            if stub_united_name not in group_objects["tx_dd"]:
+                group_objects["tx_dd"].append(stub_united_name)
+            if stub_united_name not in object_names:
+                object_names.append(stub_united_name)
+            for layer_key, layer_object_name in list(txdd_right_object_names.items()):
+                if layer_object_name == source_object_name:
+                    txdd_right_object_names[layer_key] = stub_united_name
+            for layer_key, layer_object_name in list(txdd_left_object_names.items()):
+                if layer_object_name == source_object_name:
+                    txdd_left_object_names[layer_key] = stub_united_name
+
     for (board_id, board_idx), nodes in tx_vertical_nodes_by_board.items():
         if len(nodes) < 2:
             continue
@@ -94,6 +210,10 @@ def finalize_solids_and_substrates(
             target_anchor_x = target_end_xyz[0] if abs(target_dx) <= 1e-9 else target_end_xyz[0] + math.copysign(half, target_dx)
             source_bridge_x = min(max(source_anchor_x, min_x_allowed), max_x_allowed)
             target_bridge_x = min(max(target_anchor_x, min_x_allowed), max_x_allowed)
+            # Bridge contact is nudged +X by trace/4 to compensate observed slight underreach.
+            
+            source_bridge_x = min(max(source_bridge_x , min_x_allowed), max_x_allowed)
+            target_bridge_x = min(max(target_bridge_x+bridge_trace , min_x_allowed), max_x_allowed)
             start_bridge_point = (source_bridge_x, source_start_xyz[1], source_start_xyz[2])
             end_bridge_point = (target_bridge_x, target_end_xyz[1], target_end_xyz[2])
             bridge_sheet_points = [
@@ -103,46 +223,31 @@ def finalize_solids_and_substrates(
                 [end_bridge_point[0], end_bridge_point[1], end_bridge_point[2] - half],
             ]
             bridge_name = f"bridge_tx_vertical_link_g{source_index}_to_g{target_index}_b{board_idx}_{design_id}"
-            bridge_created = modeler.create_polyline(points=bridge_sheet_points, name=bridge_name, material="copper", close_surface=True)
-            if not bridge_created:
-                raise ValueError(
-                    "tx_vertical bridge rectangle loop creation failed "
-                    f"(name={bridge_name}, source_index={source_index}, target_index={target_index})"
-                )
-            bridge_loop_obj = cast(Object3d, bridge_created)
-            bridge_loop_name = _object_name(bridge_loop_obj, bridge_name)
             try:
-                covered = modeler.cover_lines(assignment=bridge_loop_name)  # type: ignore[misc]
-            except TypeError:
-                covered = modeler.cover_lines(bridge_loop_name)  # type: ignore[misc]
-            if not covered:
-                raise ValueError(
-                    "tx_vertical bridge cover_lines failed "
-                    f"(name={bridge_name}, source_index={source_index}, target_index={target_index})"
+                bridge_obj_name, bridge_obj = _create_thickened_sheet_from_points(
+                    modeler=modeler,
+                    sheet_points=bridge_sheet_points,
+                    sheet_name=bridge_name,
+                    thickness=(cu_thickness * 4.0),
                 )
-            if isinstance(covered, list):
-                first = covered[0] if covered else bridge_loop_name
-                bridge_sheet_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), bridge_loop_name)
-            elif isinstance(covered, str):
-                bridge_sheet_name = covered
-            else:
-                bridge_sheet_name = _object_name(cast(Object3d, covered), bridge_loop_name)
-            try:
-                thickened = modeler.thicken_sheet(assignment=bridge_sheet_name, thickness=(cu_thickness * 4.0))  # type: ignore[misc]
-            except TypeError:
-                thickened = modeler.thicken_sheet(bridge_sheet_name, (cu_thickness * 4.0))  # type: ignore[misc]
-            if not thickened:
-                raise ValueError("tx_vertical bridge thicken failed " f"(name={bridge_name}, thickness={cu_thickness * 4.0})")
-            if isinstance(thickened, list):
-                first = thickened[0] if thickened else bridge_sheet_name
-                bridge_obj_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), bridge_sheet_name)
-                bridge_obj = cast(Object3d, bridge_loop_obj)
-            elif isinstance(thickened, str):
-                bridge_obj_name = thickened
-                bridge_obj = cast(Object3d, bridge_loop_obj)
-            else:
-                bridge_obj = cast(Object3d, thickened)
-                bridge_obj_name = _object_name(bridge_obj, bridge_sheet_name)
+            except ValueError as exc:
+                message = str(exc)
+                if message.startswith("Sheet loop creation failed"):
+                    raise ValueError(
+                        "tx_vertical bridge rectangle loop creation failed "
+                        f"(name={bridge_name}, source_index={source_index}, target_index={target_index})"
+                    ) from exc
+                if message.startswith("Sheet cover_lines failed"):
+                    raise ValueError(
+                        "tx_vertical bridge cover_lines failed "
+                        f"(name={bridge_name}, source_index={source_index}, target_index={target_index})"
+                    ) from exc
+                if message.startswith("Sheet thicken failed"):
+                    raise ValueError(
+                        "tx_vertical bridge thicken failed "
+                        f"(name={bridge_name}, thickness={cu_thickness * 4.0})"
+                    ) from exc
+                raise
             object_names.append(bridge_obj_name)
             group_objects["tx_vertical"].append(bridge_obj_name)
             bridge_probe = _probe_cad_object(bridge_obj, bridge_name)
@@ -216,6 +321,64 @@ def finalize_solids_and_substrates(
         object_names = [name for name in object_names if name not in txdd_unite_targets[1:]]
         if united_object_name not in object_names:
             object_names.append(united_object_name)
+
+    if 0 in txdd_left_a_points and 1 in txdd_left_a_points:
+        lower_a, lower_trace = txdd_left_a_points[0]
+        upper_a, upper_trace = txdd_left_a_points[1]
+        if abs(lower_trace - upper_trace) > 1e-9:
+            raise ValueError(
+                "tx_dd left layer bridge contract violation: lower/upper A trace must match "
+                f"(lower_trace={lower_trace}, upper_trace={upper_trace})"
+            )
+        bridge_trace = lower_trace
+        alignment_eps = 1e-6
+        if abs(lower_a[0] - upper_a[0]) > alignment_eps or abs(lower_a[1] - upper_a[1]) > alignment_eps:
+            raise ValueError(
+                "tx_dd left layer bridge contract violation: raw A anchors are not aligned "
+                f"(lower_A={lower_a}, upper_A={upper_a})"
+            )
+        bridge_height = abs(upper_a[2] - lower_a[2])
+        if bridge_height <= 1e-9:
+            raise ValueError("tx_dd left layer bridge contract violation: bridge height must be > 0")
+        bridge_center_x = (lower_a[0] + upper_a[0]) / 2.0
+        bridge_center_y = (lower_a[1] + upper_a[1]) / 2.0
+        bridge_origin = [bridge_center_x - (bridge_trace / 2.0), bridge_center_y - (bridge_trace / 2.0), min(lower_a[2], upper_a[2])]
+        bridge_sizes = [bridge_trace, bridge_trace, bridge_height]
+        bridge_name = f"bridge_tx_dd_left_a_link_{design_id}"
+        bridge_created = modeler.create_box(origin=bridge_origin, sizes=bridge_sizes, name=bridge_name, material="copper")
+        if not bridge_created:
+            raise ValueError(
+                "tx_dd left layer bridge creation failed "
+                f"(name={bridge_name}, origin={bridge_origin}, sizes={bridge_sizes})"
+            )
+        bridge_obj = cast(Object3d, bridge_created)
+        bridge_object_name = _object_name(bridge_obj, bridge_name)
+        txdd_left_bridge_object_name = bridge_object_name
+        object_names.append(bridge_object_name)
+        group_objects["tx_dd"].append(bridge_object_name)
+        cad_probe.append(_probe_cad_object(bridge_obj, bridge_name))
+
+    if txdd_left_bridge_object_name is not None and 0 in txdd_left_object_names and 1 in txdd_left_object_names:
+        txdd_left_unite_targets = [txdd_left_object_names[0], txdd_left_bridge_object_name, txdd_left_object_names[1]]
+        try:
+            left_unite_result = modeler.unite(assignment=txdd_left_unite_targets)  # type: ignore[misc]
+        except TypeError:
+            left_unite_result = modeler.unite(txdd_left_unite_targets)  # type: ignore[misc]
+        if not left_unite_result:
+            raise ValueError("Failed to unite tx_dd left-layer bridge group " f"(targets={txdd_left_unite_targets})")
+        if isinstance(left_unite_result, list):
+            first = left_unite_result[0] if left_unite_result else txdd_left_unite_targets[0]
+            left_united_object_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), txdd_left_unite_targets[0])
+        elif isinstance(left_unite_result, str):
+            left_united_object_name = left_unite_result
+        else:
+            left_united_object_name = _object_name(cast(Object3d, left_unite_result), txdd_left_unite_targets[0])
+        group_objects["tx_dd"] = [name for name in group_objects["tx_dd"] if name not in txdd_left_unite_targets[1:]]
+        if left_united_object_name not in group_objects["tx_dd"]:
+            group_objects["tx_dd"].append(left_united_object_name)
+        object_names = [name for name in object_names if name not in txdd_left_unite_targets[1:]]
+        if left_united_object_name not in object_names:
+            object_names.append(left_united_object_name)
 
     tx_vertical_unite_targets = sorted(set(group_objects["tx_vertical"]))
     if len(tx_vertical_unite_targets) > 1:
