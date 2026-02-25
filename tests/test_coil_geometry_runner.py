@@ -35,6 +35,8 @@ class _FakeModeler:
         self.polyline_calls: list[dict[str, object]] = []
         self.cylinder_calls: list[dict[str, object]] = []
         self.box_calls: list[dict[str, object]] = []
+        self.subtract_calls: list[dict[str, object]] = []
+        self.unite_calls: list[dict[str, object]] = []
         self.duplicate_mirror_calls: list[dict[str, object]] = []
         self.objects: dict[str, _FakeObject] = {}
 
@@ -201,6 +203,49 @@ class _FakeModeler:
         )
         self.objects[new_name] = mirrored_obj
         return [new_name]
+
+    def subtract(
+        self,
+        blank_list: str | _FakeObject | list[str | _FakeObject],
+        tool_list: str | _FakeObject | list[str | _FakeObject],
+        keep_originals: bool = True,
+    ) -> bool:
+        blanks = blank_list if isinstance(blank_list, list) else [blank_list]
+        tools = tool_list if isinstance(tool_list, list) else [tool_list]
+        self.subtract_calls.append(
+            {
+                "blank_list": [item.name if isinstance(item, _FakeObject) else item for item in blanks],
+                "tool_list": [item.name if isinstance(item, _FakeObject) else item for item in tools],
+                "keep_originals": keep_originals,
+            }
+        )
+        return True
+
+    def unite(self, assignment: str | _FakeObject | list[str | _FakeObject]) -> _FakeObject | list[str]:
+        assignments = assignment if isinstance(assignment, list) else [assignment]
+        names = [item.name if isinstance(item, _FakeObject) else item for item in assignments]
+        self.unite_calls.append({"assignment": names[:]})
+        if not names:
+            return []
+        keep_name = str(names[0])
+        existing = [self.objects[str(name)] for name in names if str(name) in self.objects]
+        if not existing:
+            return [keep_name]
+        min_x = min(obj.bounding_box[0] for obj in existing)
+        min_y = min(obj.bounding_box[1] for obj in existing)
+        min_z = min(obj.bounding_box[2] for obj in existing)
+        max_x = max(obj.bounding_box[3] for obj in existing)
+        max_y = max(obj.bounding_box[4] for obj in existing)
+        max_z = max(obj.bounding_box[5] for obj in existing)
+        merged_points: list[list[float]] = []
+        for obj in existing:
+            if obj.points:
+                merged_points.extend(obj.points)
+        merged = _FakeObject(keep_name, [min_x, min_y, min_z, max_x, max_y, max_z], [(min_x, min_y)], points=merged_points)
+        self.objects[keep_name] = merged
+        for name in names[1:]:
+            self.objects.pop(str(name), None)
+        return merged
 
 
 class _FakeHfss:
@@ -672,6 +717,13 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert all(call["non_model"] is True for call in scene_boxes)
     fr4_boxes = [call for call in fake.modeler.box_calls if str(call["name"]).startswith("fr4_")]
     assert len(fr4_boxes) == 3
+    assert len(fake.modeler.subtract_calls) == 1
+    subtract_call = fake.modeler.subtract_calls[0]
+    assert len(cast(list[str], subtract_call["blank_list"])) == len(fr4_boxes)
+    assert any(str(name).startswith("coil_tx_dd_") for name in cast(list[str], subtract_call["tool_list"]))
+    assert any(str(name).startswith("coil_tx_vertical_") for name in cast(list[str], subtract_call["tool_list"]))
+    assert any(str(name).startswith("coil_rx_dd_") for name in cast(list[str], subtract_call["tool_list"]))
+    assert cast(bool, subtract_call["keep_originals"]) is True
 
 
 def test_tx_vertical_span_distributes_on_y_and_stays_in_vertical_z_region(
@@ -714,7 +766,129 @@ def test_tx_vertical_span_distributes_on_y_and_stays_in_vertical_z_region(
         assert z_max <= (region_max_z + eps)
 
     fr4_boxes = [call for call in fake.modeler.box_calls if str(call["name"]).startswith("fr4_")]
-    assert len(fr4_boxes) == 4
+    assert len(fr4_boxes) == 3
+
+
+def test_tx_vertical_four_instances_follow_half_step_pattern(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_coil_groups"][1]["requested_count"] = 4
+    manifest["selected_coil_groups"][1]["selected_count"] = 4
+    manifest["selected_coil_groups"][1]["spacing_mm"] = 30.0  # d = 10
+
+    metadata = geom.build_square_spiral_from_manifest(manifest)
+    scene_by_kind = {entry["kind"]: entry for entry in metadata["scene_objects"]}
+    vertical_region = scene_by_kind["tx_region_vertical"]
+    region_center_y = vertical_region["origin_xyz"][1] + (vertical_region["size_xyz"][1] / 2.0)
+    tx_vertical_probes = sorted(
+        (
+            probe
+            for probe in metadata["debug"]["cad_probe"]
+            if probe["object_name"].startswith("coil_tx_vertical_")
+        ),
+        key=lambda probe: probe["object_name"],
+    )
+    assert len(tx_vertical_probes) == 4
+    y_centers = sorted((probe["bbox"][1] + probe["bbox"][4]) / 2.0 for probe in tx_vertical_probes)
+    assert y_centers[0] == pytest.approx(region_center_y - 15.0, abs=1e-6)
+    assert y_centers[1] == pytest.approx(region_center_y - 5.0, abs=1e-6)
+    assert y_centers[2] == pytest.approx(region_center_y + 5.0, abs=1e-6)
+    assert y_centers[3] == pytest.approx(region_center_y + 15.0, abs=1e-6)
+
+
+def test_tx_vertical_three_instances_middle_touches_x_axis_and_others_are_symmetric(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_coil_groups"][1]["requested_count"] = 3
+    manifest["selected_coil_groups"][1]["selected_count"] = 3
+    manifest["selected_coil_groups"][1]["spacing_mm"] = 20.0  # d = 10
+
+    metadata = geom.build_square_spiral_from_manifest(manifest)
+    scene_by_kind = {entry["kind"]: entry for entry in metadata["scene_objects"]}
+    vertical_region = scene_by_kind["tx_region_vertical"]
+    region_center_y = vertical_region["origin_xyz"][1] + (vertical_region["size_xyz"][1] / 2.0)
+    trace = next(entry for entry in metadata["selected_group_geometry"] if entry["kind"] == "tx_vertical")["trace"]
+    tx_vertical_probes = sorted(
+        (
+            probe
+            for probe in metadata["debug"]["cad_probe"]
+            if probe["object_name"].startswith("coil_tx_vertical_")
+        ),
+        key=lambda probe: probe["object_name"],
+    )
+    assert len(tx_vertical_probes) == 3
+    y_centers = sorted((probe["bbox"][1] + probe["bbox"][4]) / 2.0 for probe in tx_vertical_probes)
+    assert y_centers[0] == pytest.approx(region_center_y - 10.0, abs=1e-6)
+    assert y_centers[1] == pytest.approx(region_center_y + (trace / 2.0), abs=1e-6)
+    assert y_centers[2] == pytest.approx(region_center_y + 10.0, abs=1e-6)
+    assert y_centers[0] == pytest.approx(2.0 * region_center_y - y_centers[2], abs=1e-6)
+
+
+def test_tx_vertical_single_instance_middle_copper_outer_edge_touches_x_axis(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    metadata = geom.build_square_spiral_from_manifest(_manifest(tmp_path))
+    scene_by_kind = {entry["kind"]: entry for entry in metadata["scene_objects"]}
+    vertical_region = scene_by_kind["tx_region_vertical"]
+    region_center_y = vertical_region["origin_xyz"][1] + (vertical_region["size_xyz"][1] / 2.0)
+    trace = next(entry for entry in metadata["selected_group_geometry"] if entry["kind"] == "tx_vertical")["trace"]
+    tx_vertical_probe = next(
+        probe for probe in metadata["debug"]["cad_probe"] if probe["object_name"].startswith("coil_tx_vertical_")
+    )
+    y_center = (tx_vertical_probe["bbox"][1] + tx_vertical_probe["bbox"][4]) / 2.0
+    assert y_center == pytest.approx(region_center_y + (trace / 2.0), abs=1e-6)
+
+
+def test_tx_vertical_offset_rejects_invalid_count_or_negative_d() -> None:
+    with pytest.raises(ValueError, match="selected_count must be >= 1"):
+        geom._coil_instance_offset("tx_vertical", instance_index=0, instance_count=0, spacing_mm=0.0, trace_mm=0.8)
+    with pytest.raises(ValueError, match="center gap d must be >= 0"):
+        geom._coil_instance_offset("tx_vertical", instance_index=0, instance_count=2, spacing_mm=-1.0, trace_mm=0.8)
+
+
+def test_tx_vertical_multiple_instances_use_single_zx_fr4_per_tx_board(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_coil_groups"][1]["requested_count"] = 3
+    manifest["selected_coil_groups"][1]["selected_count"] = 3
+    manifest["selected_coil_groups"][1]["spacing_mm"] = 12.0
+
+    metadata = geom.build_square_spiral_from_manifest(manifest)
+
+    tx_zx_fr4 = sorted(
+        [
+            name
+            for name in metadata["em_ready_objects"]["fr4_objects"]
+            if name.startswith("fr4_tx_main_0_zx_")
+        ]
+    )
+    rx_yz_fr4 = sorted(
+        [
+            name
+            for name in metadata["em_ready_objects"]["fr4_objects"]
+            if name.startswith("fr4_rx_main_0_yz_")
+        ]
+    )
+    tx_xy_fr4 = sorted(
+        [
+            name
+            for name in metadata["em_ready_objects"]["fr4_objects"]
+            if name.startswith("fr4_tx_main_0_xy_")
+        ]
+    )
+
+    assert len(tx_zx_fr4) == 1
+    assert len(tx_xy_fr4) == 1
+    assert len(rx_yz_fr4) == 1
 
 
 def test_build_square_spiral_invalid_params(tmp_path: Path) -> None:
@@ -736,6 +910,31 @@ def test_pitch_checks_with_zero_gap() -> None:
     for check in checks:
         assert check["pitch_measured"] == pytest.approx(1.0)
         assert check["delta"] <= 1e-6
+
+
+def test_tx_dd_endpoint_extension_is_half_trace() -> None:
+    raw_points = geom._txdd_right_points(
+        turns=5,
+        outer_x=48.0,
+        outer_y=48.0,
+        trace=1.0,
+        gap=0.5,
+        instance_count=2,
+        layer_index=None,
+    )
+    extended_points = geom._extend_endpoints(raw_points, extension=0.5)
+    start_delta = (
+        ((extended_points[0][0] - raw_points[0][0]) ** 2)
+        + ((extended_points[0][1] - raw_points[0][1]) ** 2)
+        + ((extended_points[0][2] - raw_points[0][2]) ** 2)
+    ) ** 0.5
+    end_delta = (
+        ((extended_points[-1][0] - raw_points[-1][0]) ** 2)
+        + ((extended_points[-1][1] - raw_points[-1][1]) ** 2)
+        + ((extended_points[-1][2] - raw_points[-1][2]) ** 2)
+    ) ** 0.5
+    assert start_delta == pytest.approx(0.5)
+    assert end_delta == pytest.approx(0.5)
 
 
 def test_tx_dd_symmetric_precheck_fails_for_tx_dd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -924,12 +1123,62 @@ def test_tx_dd_four_coils_use_two_layers_when_selected_count_four(
         key=lambda probe: probe["object_name"],
     )
     assert len(tx_dd_probes) == 4
+    bridge_names = [name for name in metadata["group_objects"]["tx_dd"] if name.startswith("bridge_tx_dd_a_link_")]
+    assert len(bridge_names) == 0
+    assert len(fake.modeler.unite_calls) == 1
+    unite_assignment = cast(list[str], fake.modeler.unite_calls[0]["assignment"])
+    assert len(unite_assignment) == 3
+    assert sum(1 for name in unite_assignment if str(name).startswith("coil_tx_dd_")) == 2
+    assert any(str(name).startswith("bridge_tx_dd_a_link_") for name in unite_assignment)
+    right_united_name = str(unite_assignment[0])
+    assert right_united_name in metadata["group_objects"]["tx_dd"]
+    assert all(str(name) not in metadata["group_objects"]["tx_dd"] for name in unite_assignment[1:])
+    bridge_probe = next(
+        probe for probe in metadata["debug"]["cad_probe"] if str(probe["object_name"]).startswith("bridge_tx_dd_a_link_")
+    )
+    bridge_bbox = bridge_probe["bbox"]
+    bridge_trace = metadata["selected_group_geometry"][0]["trace"]
+    assert (bridge_bbox[3] - bridge_bbox[0]) == pytest.approx(bridge_trace)
+    assert (bridge_bbox[4] - bridge_bbox[1]) == pytest.approx(bridge_trace)
+    assert (bridge_bbox[5] - bridge_bbox[2]) >= 3.0
+    tx_dd_geom = next(entry for entry in metadata["selected_group_geometry"] if entry["kind"] == "tx_dd")
+    lower_local_a = geom._txdd_right_points(
+        turns=tx_dd_geom["turn_count_max"],
+        outer_x=metadata["selected_parameters"]["tx_dd_outer_x"],
+        outer_y=metadata["selected_parameters"]["tx_dd_outer_y"],
+        trace=tx_dd_geom["trace"],
+        gap=tx_dd_geom["gap"],
+        instance_count=4,
+        layer_index=0,
+    )[-1]
+    upper_local_a = geom._txdd_right_points(
+        turns=tx_dd_geom["turn_count_max"],
+        outer_x=metadata["selected_parameters"]["tx_dd_outer_x"],
+        outer_y=metadata["selected_parameters"]["tx_dd_outer_y"],
+        trace=tx_dd_geom["trace"],
+        gap=tx_dd_geom["gap"],
+        instance_count=4,
+        layer_index=1,
+    )[0]
+    tx_dd_center_x = scene_by_kind["tx_region_dd"]["origin_xyz"][0] + (metadata["selected_parameters"]["tx_dd_outer_x"] / 2.0)
+    transform = manifest["selected_coil_groups"][0]["instance_transforms"][0]
+    right_center_y = expected_y[1]
+    lower_world_a_x = tx_dd_center_x + transform["dx"] + lower_local_a[0]
+    lower_world_a_y = right_center_y + transform["dy"] + lower_local_a[1]
+    upper_world_a_x = tx_dd_center_x + transform["dx"] + upper_local_a[0]
+    upper_world_a_y = right_center_y + transform["dy"] + upper_local_a[1]
+    assert lower_world_a_x == pytest.approx(upper_world_a_x, abs=1e-6)
+    assert lower_world_a_y == pytest.approx(upper_world_a_y, abs=1e-6)
+    bridge_center_x = (bridge_bbox[0] + bridge_bbox[3]) / 2.0
+    bridge_center_y = (bridge_bbox[1] + bridge_bbox[4]) / 2.0
+    assert bridge_center_x == pytest.approx(lower_world_a_x, abs=1e-6)
+    assert bridge_center_y == pytest.approx(lower_world_a_y, abs=1e-6)
     y_centers = sorted((probe["bbox"][1] + probe["bbox"][4]) / 2.0 for probe in tx_dd_probes)
-    assert y_centers[0] == pytest.approx(expected_y[0], abs=1e-6)
-    assert y_centers[1] == pytest.approx(expected_y[0], abs=1e-6)
-    # C->a partial path can slightly shift right-coil bbox center upward/downward.
+    assert y_centers[0] == pytest.approx(expected_y[0], abs=0.5)
+    assert y_centers[1] == pytest.approx(expected_y[0], abs=0.5)
+    # Endpoint extension and partial path can slightly shift right-coil bbox center upward/downward.
     assert y_centers[2] == pytest.approx(expected_y[1], abs=1.0)
-    assert y_centers[3] == pytest.approx(expected_y[1], abs=1e-6)
+    assert y_centers[3] == pytest.approx(expected_y[1], abs=0.5)
     z_centers = sorted((probe["bbox"][2] + probe["bbox"][5]) / 2.0 for probe in tx_dd_probes)
     assert z_centers[1] == pytest.approx(z_centers[0], abs=1e-6)
     assert z_centers[3] == pytest.approx(z_centers[2], abs=1e-6)
@@ -993,7 +1242,7 @@ def test_tx_dd_right_only_rule_for_two_layers_orders_by_z_center(
     assert right_entries[0][3]["end_label"] == "A"
     assert right_entries[0][4]["current_direction"] == "ccw"
     assert right_entries[1][3]["start_label"] == "A"
-    assert right_entries[1][3]["end_label"] == "C"
+    assert right_entries[1][3]["end_label"] == "d"
     assert right_entries[1][4]["current_direction"] == "ccw"
     right_calls = [
         call

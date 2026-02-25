@@ -341,14 +341,37 @@ def _rx_dd_center_offset_y(instance_index: int, instance_count: int, outer_x: fl
     return (instance_index - center) * pair_center_distance
 
 
-def _coil_instance_offset(kind: str, instance_index: int, instance_count: int, spacing_mm: float) -> _Point3:
+def _coil_instance_offset(
+    kind: str,
+    instance_index: int,
+    instance_count: int,
+    spacing_mm: float,
+    *,
+    trace_mm: float | None = None,
+) -> _Point3:
     if kind == "tx_vertical":
-        if instance_count <= 1:
-            return (0.0, 0.0, 0.0)
-        delta = spacing_mm / float(instance_count - 1)
-        start = -spacing_mm / 2.0
-        # tx_vertical span is distributed along the ZX-plane normal (Y axis).
-        return (0.0, start + (instance_index * delta), 0.0)
+        if instance_count <= 0:
+            raise ValueError(f"tx_vertical selected_count must be >= 1 (actual={instance_count})")
+        if instance_index < 0 or instance_index >= instance_count:
+            raise ValueError(
+                f"tx_vertical instance index out of range (instance_index={instance_index}, instance_count={instance_count})"
+            )
+        denom = max(1, instance_count - 1)
+        d = spacing_mm / float(denom)
+        if d < 0.0:
+            raise ValueError(f"tx_vertical center gap d must be >= 0 (actual={d})")
+        if instance_count % 2 == 0:
+            # Even count: centers follow +-d/2, +-3d/2, ... around X-axis.
+            center = (instance_count - 1) / 2.0
+            return (0.0, (float(instance_index) - center) * d, 0.0)
+        edge_half_thickness = (trace_mm / 2.0) if trace_mm is not None else 0.0
+        mid = instance_count // 2
+        rel = instance_index - mid
+        if rel == 0:
+            # Odd count: middle copper outer edge touches the X-axis.
+            return (0.0, edge_half_thickness, 0.0)
+        sign = -1.0 if rel < 0 else 1.0
+        return (0.0, sign * (abs(rel) * d), 0.0)
     return (0.0, 0.0, 0.0)
 
 
@@ -419,6 +442,36 @@ def _current_direction_from_xy_points(points: list[list[float]], *, eps: float =
     return None
 
 
+def _extend_endpoints(points: list[list[float]], *, extension: float) -> list[list[float]]:
+    if extension <= 0.0 or len(points) < 2:
+        return [point[:] for point in points]
+
+    extended = [point[:] for point in points]
+    start = extended[0]
+    start_next = extended[1]
+    start_dx = start[0] - start_next[0]
+    start_dy = start[1] - start_next[1]
+    start_dz = start[2] - start_next[2]
+    start_len = math.sqrt((start_dx * start_dx) + (start_dy * start_dy) + (start_dz * start_dz))
+    if start_len > 0.0:
+        start[0] += (start_dx / start_len) * extension
+        start[1] += (start_dy / start_len) * extension
+        start[2] += (start_dz / start_len) * extension
+
+    end = extended[-1]
+    end_prev = extended[-2]
+    end_dx = end[0] - end_prev[0]
+    end_dy = end[1] - end_prev[1]
+    end_dz = end[2] - end_prev[2]
+    end_len = math.sqrt((end_dx * end_dx) + (end_dy * end_dy) + (end_dz * end_dz))
+    if end_len > 0.0:
+        end[0] += (end_dx / end_len) * extension
+        end[1] += (end_dy / end_len) * extension
+        end[2] += (end_dz / end_len) * extension
+
+    return extended
+
+
 def _apply_txdd_right_endpoint_rule(
     group_endpoints: list[GroupEndpointEntry],
     coil_polarity: list[CoilPolaritySpec],
@@ -463,7 +516,7 @@ def _apply_txdd_right_endpoint_rule(
 
     # Lower layer first by Z center, then deterministic key tie-break.
     _set_labels(right_candidates[0][3], "c", "A")
-    _set_labels(right_candidates[1][3], "A", "C")
+    _set_labels(right_candidates[1][3], "A", "d")
 
 
 def _dd_instance_points(base_points: list[list[float]], *, mirror_winding: bool) -> list[list[float]]:
@@ -512,7 +565,7 @@ def _txdd_right_points(
             raise ValueError("tx_dd right endpoint contract violation: c->A path is too short")
         _validate_txdd_right_points(points, trace=trace, gap=gap)
         return points
-    # Upper layer right: A -> D -> ... -> C.
+    # Upper layer right: A -> D -> ... -> d.
     mirrored_x = [[-point[0], point[1], point[2]] for point in base]
     outer_a = base[0]
     a_index = next(
@@ -524,10 +577,13 @@ def _txdd_right_points(
         None,
     )
     if a_index is None:
-        raise ValueError("tx_dd right endpoint contract violation: cannot locate outer A anchor for A->D->...->C")
+        raise ValueError("tx_dd right endpoint contract violation: cannot locate outer A anchor for A->D->...->d")
     rotated = mirrored_x[a_index:] + mirrored_x[:a_index]
     c_index = _find_txdd_right_inner_c_index(rotated)
-    points = [point[:] for point in rotated[: c_index + 1]]
+    d_index = c_index - 1
+    if d_index < 1:
+        raise ValueError("tx_dd right endpoint contract violation: A->D->...->d path is too short")
+    points = [point[:] for point in rotated[: d_index + 1]]
     _validate_txdd_right_points(points, trace=trace, gap=gap)
     return points
 
@@ -1252,6 +1308,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     selected_groups = manifest["selected_coil_groups"]
     selected_group_geometry = manifest["selected_group_geometry"]
     selected_pcbs = manifest["selected_pcbs"]
+    tx_board_ids: set[str] = {pcb["id"] for pcb in selected_pcbs if pcb["role"] == "tx"}
     group_geometry_by_kind: dict[Literal["tx_dd", "tx_vertical", "rx_dd"], GroupGeometryParams] = {
         entry["kind"]: entry for entry in selected_group_geometry
     }
@@ -1273,6 +1330,9 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     placement_violations: list[RegionViolation] = []
     coil_plane_bboxes: list[tuple[str, Literal["XY", "YZ", "ZX"], list[float]]] = []
     fr4_object_names: list[str] = []
+    txdd_right_a_points: dict[int, tuple[_Point3, float]] = {}
+    txdd_right_object_names: dict[int, str] = {}
+    txdd_bridge_object_name: str | None = None
 
     try:
         scene_names, scene_probes, scene_objects = _create_scene_non_model_objects(
@@ -1418,13 +1478,36 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                             instance_count=instance_count,
                             layer_index=right_layer_index,
                         )
+                        raw_right_a_local: _Point3 | None = None
+                        if instance_count == 4 and right_layer_index in (0, 1):
+                            raw_right_a_source = tx_dd_points[-1] if right_layer_index == 0 else tx_dd_points[0]
+                            raw_right_a_local = cast(_Point3, tuple(float(v) for v in raw_right_a_source))
+                        tx_dd_points = _extend_endpoints(tx_dd_points, extension=(trace / 2.0))
                         tx_dd_anchor_z = tx_dd_region_max[2] - tx_dd_top_clearance - cu_thickness
+                        tx_dd_dx = tx_dd_center_x + transform["dx"]
+                        tx_dd_dy = right_center_y + transform["dy"]
+                        tx_dd_dz = tx_dd_anchor_z - board_z + transform["dz"]
                         right_top_points = _translate_points(
                             tx_dd_points,
-                            dx=tx_dd_center_x + transform["dx"],
-                            dy=right_center_y + transform["dy"],
-                            dz=tx_dd_anchor_z - board_z + transform["dz"],
+                            dx=tx_dd_dx,
+                            dy=tx_dd_dy,
+                            dz=tx_dd_dz,
                         )
+                        if instance_count == 4 and right_layer_index in (0, 1):
+                            if raw_right_a_local is None:
+                                raise ValueError(
+                                    "tx_dd layer bridge contract violation: raw right A anchor was not captured "
+                                    f"(layer_index={right_layer_index})"
+                                )
+                            right_a_point = (
+                                raw_right_a_local[0] + tx_dd_dx,
+                                raw_right_a_local[1] + tx_dd_dy,
+                                raw_right_a_local[2] + tx_dd_dz,
+                            )
+                            txdd_right_a_points[right_layer_index] = (
+                                cast(_Point3, right_a_point),
+                                trace,
+                            )
                         right_name = f"coil_{kind}_g{right_index}_b{board_idx}_{design_id}"
                         right_created = modeler.create_polyline(
                             points=right_top_points,
@@ -1442,6 +1525,8 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                         right_obj = cast(Object3d, right_created)
                         right_obj_name = _object_name(right_obj, right_name)
                         object_names.append(right_obj_name)
+                        if instance_count == 4 and right_layer_index in (0, 1):
+                            txdd_right_object_names[right_layer_index] = right_obj_name
                         right_probe = _probe_cad_object(right_obj, right_name)
                         cad_probe.append(right_probe)
                         coil_plane_bboxes.append((pcb["id"], "XY", right_probe["bbox"]))
@@ -1603,7 +1688,13 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                             z_center=rx_center_z + transform["dz"] + off_z,
                         )
                     elif kind == "tx_vertical":
-                        off_x, off_y, off_z = _coil_instance_offset(kind, instance_index, instance_count, spacing_mm)
+                        off_x, off_y, off_z = _coil_instance_offset(
+                            kind,
+                            instance_index,
+                            instance_count,
+                            spacing_mm,
+                            trace_mm=trace,
+                        )
                         tx_vertical_zone_h = tx_vertical_region_max[2] - tx_vertical_region_min[2]
                         tx_vertical_outer_y = min(tx_vertical_outer_y, tx_vertical_zone_h)
                         tx_vertical_max_turns = min(
@@ -1729,18 +1820,101 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
                         }
                     )
 
+        if 0 in txdd_right_a_points and 1 in txdd_right_a_points:
+            lower_a, lower_trace = txdd_right_a_points[0]
+            upper_a, upper_trace = txdd_right_a_points[1]
+            if abs(lower_trace - upper_trace) > 1e-9:
+                raise ValueError(
+                    "tx_dd layer bridge contract violation: lower/upper A trace must match "
+                    f"(lower_trace={lower_trace}, upper_trace={upper_trace})"
+                )
+            bridge_trace = lower_trace
+            alignment_eps = 1e-6
+            if abs(lower_a[0] - upper_a[0]) > alignment_eps or abs(lower_a[1] - upper_a[1]) > alignment_eps:
+                raise ValueError(
+                    "tx_dd layer bridge contract violation: raw A anchors are not aligned "
+                    f"(lower_A={lower_a}, upper_A={upper_a})"
+                )
+            bridge_height = abs(upper_a[2] - lower_a[2])
+            if bridge_height <= 1e-9:
+                raise ValueError("tx_dd layer bridge contract violation: bridge height must be > 0")
+            bridge_center_x = (lower_a[0] + upper_a[0]) / 2.0
+            bridge_center_y = (lower_a[1] + upper_a[1]) / 2.0
+            bridge_origin = [
+                bridge_center_x - (bridge_trace / 2.0),
+                bridge_center_y - (bridge_trace / 2.0),
+                min(lower_a[2], upper_a[2]),
+            ]
+            bridge_sizes = [bridge_trace, bridge_trace, bridge_height]
+            bridge_name = f"bridge_tx_dd_a_link_{design_id}"
+            bridge_created = modeler.create_box(
+                origin=bridge_origin,
+                sizes=bridge_sizes,
+                name=bridge_name,
+                material="copper",
+            )
+            if not bridge_created:
+                raise ValueError(
+                    "tx_dd layer bridge creation failed "
+                    f"(name={bridge_name}, origin={bridge_origin}, sizes={bridge_sizes})"
+                )
+            bridge_obj = cast(Object3d, bridge_created)
+            bridge_object_name = _object_name(bridge_obj, bridge_name)
+            txdd_bridge_object_name = bridge_object_name
+            object_names.append(bridge_object_name)
+            group_objects["tx_dd"].append(bridge_object_name)
+            cad_probe.append(_probe_cad_object(bridge_obj, bridge_name))
+
+        if txdd_bridge_object_name is not None and 0 in txdd_right_object_names and 1 in txdd_right_object_names:
+            txdd_unite_targets = [
+                txdd_right_object_names[0],
+                txdd_bridge_object_name,
+                txdd_right_object_names[1],
+            ]
+            try:
+                unite_result = modeler.unite(assignment=txdd_unite_targets)  # type: ignore[misc]
+            except TypeError:
+                unite_result = modeler.unite(txdd_unite_targets)  # type: ignore[misc]
+
+            if not unite_result:
+                raise ValueError(
+                    "Failed to unite tx_dd right-layer bridge group "
+                    f"(targets={txdd_unite_targets})"
+                )
+
+            if isinstance(unite_result, list):
+                first = unite_result[0] if unite_result else txdd_unite_targets[0]
+                united_object_name = first if isinstance(first, str) else _object_name(cast(Object3d, first), txdd_unite_targets[0])
+            elif isinstance(unite_result, str):
+                united_object_name = unite_result
+            else:
+                united_object_name = _object_name(cast(Object3d, unite_result), txdd_unite_targets[0])
+
+            group_objects["tx_dd"] = [name for name in group_objects["tx_dd"] if name not in txdd_unite_targets[1:]]
+            if united_object_name not in group_objects["tx_dd"]:
+                group_objects["tx_dd"].append(united_object_name)
+
+            object_names = [name for name in object_names if name not in txdd_unite_targets[1:]]
+            if united_object_name not in object_names:
+                object_names.append(united_object_name)
+
         eps_len = 1e-6
         grouped_plane_bboxes: dict[tuple[str, Literal["XY", "YZ", "ZX"], int], list[float]] = {}
         for board_id, plane, bbox in coil_plane_bboxes:
             if len(bbox) < 6:
                 continue
-            if plane == "XY":
+            if plane == "ZX" and board_id in tx_board_ids:
+                # TX vertical coils share one substrate per board/plane regardless of Y offsets.
+                layer_key = 0
+            elif plane == "XY":
                 axis_center = (bbox[2] + bbox[5]) / 2.0
+                layer_key = int(round(axis_center / eps_len))
             elif plane == "YZ":
                 axis_center = (bbox[0] + bbox[3]) / 2.0
+                layer_key = int(round(axis_center / eps_len))
             else:  # ZX
                 axis_center = (bbox[1] + bbox[4]) / 2.0
-            layer_key = int(round(axis_center / eps_len))
+                layer_key = int(round(axis_center / eps_len))
             key = (board_id, plane, layer_key)
             existing = grouped_plane_bboxes.get(key)
             if existing is None:
@@ -1782,6 +1956,15 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
             object_names.append(substrate_object_name)
             fr4_object_names.append(substrate_object_name)
             cad_probe.append(_probe_cad_object(substrate, substrate_name))
+
+        copper_tools = sorted(set(group_objects["tx_dd"] + group_objects["tx_vertical"] + group_objects["rx_dd"]))
+        if fr4_object_names and copper_tools:
+            subtract_ok = modeler.subtract(blank_list=fr4_object_names, tool_list=copper_tools, keep_originals=True)
+            if not subtract_ok:
+                raise ValueError(
+                    "Failed to subtract copper solids from FR4 substrates "
+                    f"(fr4_count={len(fr4_object_names)}, copper_count={len(copper_tools)})"
+                )
 
         hfss.save_project(str(aedt_path))
     except Exception as exc:

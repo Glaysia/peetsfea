@@ -164,6 +164,7 @@ python run.py
   - `kind = "aggregate"`: 현재는 `agg = "sum_group_selected_count"` 지원
   - `rhs.func`는 `add(...)`, `mul(...)`, `min(...)`, `max(...)`, `sub(...)`, `active_group(kind)`, `feasible_turns(...)`, `feasible_turns_max(...)`, `max_mount_selector_index(kind)`, `max_supported_mount_index(kind)`를 지원
   - `tx_vertical`의 자유도는 `tx_vertical_center_gap_mm`이며, resolver는 `tx_vertical_span_mm = center_gap * max(0, selected_count - 1)`로 파생한다.
+  - `tx_vertical` 배치 규칙: 짝수 개수는 `±d/2, ±3d/2 ...`(`d = tx_vertical_center_gap_mm`), 홀수 개수는 가운데 코일 외곽이 X축에 접하고 나머지는 X축 대칭으로 배치한다.
   - `tx_vertical_center_gap_range` 규칙으로 `tx_vertical_center_gap_mm >= 1.62`를 강제한다.
   - `constraints.rules`는 필수이며 누락/빈 값이면 실행 전 실패한다.
   - 목적은 GA/딥러닝 샘플러가 동일 TOML 제약을 사전 필터에 재사용하는 것이다.
