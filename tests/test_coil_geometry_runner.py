@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import cast
 
@@ -875,12 +876,18 @@ def test_tx_vertical_three_instances_middle_touches_x_axis_and_others_are_symmet
     assert len(fake.modeler.thicken_calls) == 2
     for idx, bridge_call in enumerate(bridge_calls):
         expected_start = endpoints[idx]["start_xyz"]
+        source_end = endpoints[idx]["end_xyz"]
+        target_start = endpoints[idx + 1]["start_xyz"]
         expected_end = endpoints[idx + 1]["end_xyz"]
-        x_margin = trace
+        x_margin = trace / 2.0
         min_x_allowed = region_min_x + x_margin
         max_x_allowed = region_max_x - x_margin
-        expected_start_x = min(max(expected_start[0], min_x_allowed), max_x_allowed)
-        expected_end_x = min(max(expected_end[0], min_x_allowed), max_x_allowed)
+        source_dx = source_end[0] - expected_start[0]
+        source_anchor_x = expected_start[0] if abs(source_dx) <= 1e-9 else (expected_start[0] + math.copysign(x_margin, source_dx))
+        target_dx = target_start[0] - expected_end[0]
+        target_anchor_x = expected_end[0] if abs(target_dx) <= 1e-9 else (expected_end[0] + math.copysign(x_margin, target_dx))
+        expected_start_x = min(max(source_anchor_x, min_x_allowed), max_x_allowed)
+        expected_end_x = min(max(target_anchor_x, min_x_allowed), max_x_allowed)
         points = cast(list[list[float]], bridge_call["points"])
         assert len(points) == 4
         assert points[0][0] == pytest.approx(expected_start_x, abs=1e-6)
@@ -896,7 +903,7 @@ def test_tx_vertical_three_instances_middle_touches_x_axis_and_others_are_symmet
         assert abs(points[2][2] - points[3][2]) == pytest.approx(trace, abs=1e-6)
         assert ((points[2][2] + points[3][2]) / 2.0) == pytest.approx(expected_end[2], abs=1e-6)
         assert fake.modeler.thicken_calls[idx]["thickness"] == pytest.approx(
-            metadata["selected_parameters"]["cu_thickness"], abs=1e-9
+            metadata["selected_parameters"]["cu_thickness"] * 4.0, abs=1e-9
         )
 
 
@@ -966,9 +973,10 @@ def test_tx_vertical_multiple_instances_copy_zx_fr4_per_vertical_coil(
         ]
     )
 
-    assert len(tx_zx_fr4) == 3
+    assert len(tx_zx_fr4) == 1
     assert len(tx_xy_fr4) == 1
     assert len(rx_yz_fr4) == 1
+    assert len(metadata["group_objects"]["tx_vertical"]) == 1
 
 
 def test_no_duplicate_tx_vertical_bboxes_after_fixed_topology_normalization(
@@ -1338,8 +1346,13 @@ def test_tx_dd_four_coils_use_two_layers_when_selected_count_four(
     assert len(tx_dd_probes) == 4
     bridge_names = [name for name in metadata["group_objects"]["tx_dd"] if name.startswith("bridge_tx_dd_a_link_")]
     assert len(bridge_names) == 0
-    assert len(fake.modeler.unite_calls) == 1
-    unite_assignment = cast(list[str], fake.modeler.unite_calls[0]["assignment"])
+    txdd_unite_calls = [
+        cast(list[str], call["assignment"])
+        for call in fake.modeler.unite_calls
+        if any(str(name).startswith("bridge_tx_dd_a_link_") for name in cast(list[str], call["assignment"]))
+    ]
+    assert len(txdd_unite_calls) == 1
+    unite_assignment = txdd_unite_calls[0]
     assert len(unite_assignment) == 3
     assert sum(1 for name in unite_assignment if str(name).startswith("coil_tx_dd_")) == 2
     assert any(str(name).startswith("bridge_tx_dd_a_link_") for name in unite_assignment)
