@@ -677,15 +677,21 @@ def finalize_solids_and_substrates(
         if tx_zx_united_name not in object_names:
             object_names.append(tx_zx_united_name)
 
-    copper_tools_by_plane: dict[Literal["XY", "YZ", "ZX"], list[str]] = {
-        "XY": _tx_dd_xy_tools(
+    live_object_names = set(object_names)
+    tx_tools = sorted(
+        name for name in set(group_objects["tx_dd"] + group_objects["tx_vertical"]) if name in live_object_names
+    )
+    if not tx_tools:
+        tx_tools = _tx_dd_xy_tools(
             txdd_right_object_names=txdd_right_object_names,
             txdd_left_object_names=txdd_left_object_names,
             group_objects=group_objects,
-            live_object_names=set(object_names),
-        ),
+            live_object_names=live_object_names,
+        )
+    copper_tools_by_plane: dict[Literal["XY", "YZ", "ZX"], list[str]] = {
+        "XY": tx_tools,
         "YZ": sorted(set(group_objects["rx_dd"])),
-        "ZX": sorted(set(group_objects["tx_vertical"])),
+        "ZX": tx_tools,
     }
     fr4_by_plane: dict[Literal["XY", "YZ", "ZX"], list[str]] = {"XY": [], "YZ": [], "ZX": []}
     for fr4_name in fr4_object_names:
