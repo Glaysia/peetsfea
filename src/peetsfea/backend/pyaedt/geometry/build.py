@@ -322,6 +322,26 @@ def _finalize_geometry(
     state.fr4_object_names = fr4_object_names
 
 
+def _create_major_device_groups(modeler: Modeler3D, state: GeometryBuildState) -> None:
+    tx_objects = sorted(set(state.group_objects["tx_dd"] + state.group_objects["tx_vertical"]))
+    rx_objects = sorted(set(state.group_objects["rx_dd"]))
+    fr4_objects = sorted(set(state.fr4_object_names))
+    group_specs = (
+        ("Tx", tx_objects),
+        ("Rx", rx_objects),
+        ("Fr4", fr4_objects),
+    )
+    for group_name, object_names in group_specs:
+        if not object_names:
+            continue
+        created_group_name = modeler.create_group(objects=object_names, group_name=group_name)
+        if not created_group_name:
+            raise ValueError(
+                "Failed to create major device group "
+                f"(group={group_name}, object_count={len(object_names)})"
+            )
+
+
 def _build_and_save_metadata(
     ctx: GeometryRuntimeContext,
     state: GeometryBuildState,
@@ -361,6 +381,7 @@ def _build_and_save_metadata(
     _apply_txdd_right_endpoint_rule(state.group_endpoints, state.coil_polarity)
 
     modeler = cast(Modeler3D, hfss.modeler)
+    _create_major_device_groups(modeler, state)
     em_ready_objects, em_endpoints, em_context = build_em_artifacts(
         selected=cast(dict[str, object], ctx.selected),
         object_names=state.object_names,

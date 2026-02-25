@@ -94,6 +94,14 @@ def _auto_identify_ports_direct(
         ) from exc
 
 
+def _is_rxdd_connect_stub_endpoint(endpoint_label: str) -> bool:
+    return endpoint_label in ("c", "d")
+
+
+def _is_rxdd_port_stub_endpoint(endpoint_label: str) -> bool:
+    return endpoint_label in ("A", "B")
+
+
 def _txdd_start_stub_port_edge(*, anchor_xyz: _Point3, trace: float) -> _Edge2P:
     if trace <= 0.0:
         raise ValueError(f"tx_dd start stub port trace must be > 0 (actual={trace})")
@@ -296,10 +304,26 @@ def _finalize_solids_and_substrates_impl(
         object_names.append(stub_object_name)
         group_objects["rx_dd"].append(stub_object_name)
         cad_probe.append(_probe_cad_object(stub_obj, stub_name))
-        rxdd_start_stub_edge_by_name[stub_object_name] = _rxdd_back_stub_bridge_edge(anchor_xyz=anchor_xyz, trace=trace)
-        rxdd_start_stub_board_by_name[stub_object_name] = board_id
-
-        if endpoint_label in ("c", "d"):
+        if _is_rxdd_connect_stub_endpoint(endpoint_label):
+            stub_united_name = safe_unite(
+                modeler=modeler,
+                targets=[source_object_name, stub_object_name],
+                fallback_name=source_object_name,
+                error_context="rx_dd back connect-stub with source coil",
+            )
+            group_objects["rx_dd"] = [name for name in group_objects["rx_dd"] if name != stub_object_name]
+            object_names = [name for name in object_names if name != stub_object_name]
+            group_objects["rx_dd"] = [stub_united_name if name == source_object_name else name for name in group_objects["rx_dd"]]
+            object_names = [stub_united_name if name == source_object_name else name for name in object_names]
+            if stub_united_name not in group_objects["rx_dd"]:
+                group_objects["rx_dd"].append(stub_united_name)
+            if stub_united_name not in object_names:
+                object_names.append(stub_united_name)
+            for old_name, mapped_name in list(rxdd_name_replacements.items()):
+                if mapped_name == source_object_name:
+                    rxdd_name_replacements[old_name] = stub_united_name
+            rxdd_name_replacements[source_object_name] = stub_united_name
+            rxdd_name_replacements[source_object_name_raw] = stub_united_name
             if endpoint_label in rxdd_dc_stub_edges:
                 raise ValueError(
                     "rx_dd d/c bridge contract violation: duplicate stub endpoint captured "
@@ -307,6 +331,17 @@ def _finalize_solids_and_substrates_impl(
                 )
             rxdd_dc_stub_edges[endpoint_label] = _rxdd_back_stub_bridge_edge(anchor_xyz=anchor_xyz, trace=trace)
             rxdd_dc_source_names[endpoint_label] = source_object_name_raw
+        else:
+            # Keep the source conductor unchanged and carve overlap volume out of port stubs only.
+            subtract_ok = modeler.subtract(blank_list=[stub_object_name], tool_list=[source_object_name], keep_originals=True)
+            if not subtract_ok:
+                raise ValueError(
+                    "rx_dd back port-stub subtract-from-source failed "
+                    f"(stub={stub_object_name}, source={source_object_name}, board_id={board_id}, endpoint={endpoint_label})"
+                )
+            if _is_rxdd_port_stub_endpoint(endpoint_label):
+                rxdd_start_stub_edge_by_name[stub_object_name] = _rxdd_back_stub_bridge_edge(anchor_xyz=anchor_xyz, trace=trace)
+                rxdd_start_stub_board_by_name[stub_object_name] = board_id
 
     has_c = "c" in rxdd_dc_stub_edges
     has_d = "d" in rxdd_dc_stub_edges
@@ -401,6 +436,13 @@ def _finalize_solids_and_substrates_impl(
             object_names.append(stub_object_name)
             group_objects["tx_dd"].append(stub_object_name)
             cad_probe.append(_probe_cad_object(stub_obj, stub_name))
+            # Keep the source conductor unchanged and carve overlap volume out of the stub.
+            subtract_ok = modeler.subtract(blank_list=[stub_object_name], tool_list=[source_object_name], keep_originals=True)
+            if not subtract_ok:
+                raise ValueError(
+                    "tx_dd start stub subtract-from-source failed "
+                    f"(stub={stub_object_name}, source={source_object_name}, board_id={board_id})"
+                )
             txdd_start_stub_port_edges_by_board.setdefault(board_id, []).append(
                 _txdd_start_stub_port_edge(anchor_xyz=start_xyz, trace=trace)
             )
@@ -953,6 +995,21 @@ def _finalize_solids_and_substrates_impl(
             raise ValueError(
                 "Failed to subtract copper solids from FR4 substrates "
                 f"(plane={plane}, fr4_count={len(plane_fr4)}, copper_count={len(plane_tools)})"
+            )
+
+    # Global fallback pass: subtract all live Tx/Rx conductors from all live FR4s,
+    # preserving conductor originals, to avoid any residual 3D overlaps.
+    live_fr4 = sorted(set(fr4_object_names) & live_object_names)
+    live_tx_rx_tools = sorted(
+        ((set(group_objects["tx_dd"] + group_objects["tx_vertical"] + group_objects["rx_dd"])) & live_object_names)
+        - set(live_fr4)
+    )
+    if live_fr4 and live_tx_rx_tools:
+        subtract_ok = modeler.subtract(blank_list=live_fr4, tool_list=live_tx_rx_tools, keep_originals=True)
+        if not subtract_ok:
+            raise ValueError(
+                "Failed to subtract Tx/Rx conductors from FR4 group "
+                f"(fr4_count={len(live_fr4)}, copper_count={len(live_tx_rx_tools)})"
             )
 
     hfss.save_project(str(aedt_path))
