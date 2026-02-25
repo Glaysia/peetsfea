@@ -1299,6 +1299,44 @@ def test_tx_dd_right_only_rule_for_single_layer_labels_and_winding_metadata(
     assert polarity[left_key]["current_direction"] == _direction_from_xy_points(left_points)
 
 
+def test_tx_dd_single_layer_right_labels_remain_c_to_d_with_two_tx_boards(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_coil_groups"][0]["selected_count"] = 2
+    manifest["selected_coil_groups"][0]["requested_count"] = 2
+    manifest["selected_coil_groups"][0]["spacing_mm"] = 25.0
+    manifest["selected_pcbs"].append(
+        {
+            "id": "tx_main_1",
+            "role": "tx",
+            "position": (0.0, 0.0, 3.0),
+            "rotation_deg": 0.0,
+            "present": True,
+            "z_mode": "absolute",
+            "z_relative_base_id": None,
+            "z_delta_path": None,
+            "mounts": [
+                {"kind": "tx_dd", "selector_mode": "index", "selector_index": 0},
+                {"kind": "tx_dd", "selector_mode": "index", "selector_index": 1},
+                {"kind": "tx_vertical", "selector_mode": "all", "selector_index": None},
+            ],
+        }
+    )
+
+    metadata = geom.build_square_spiral_from_manifest(manifest)
+    endpoints = _endpoint_map(metadata)
+    right_entries = [
+        entry for key, entry in endpoints.items() if key[0] == "tx_dd" and key[2] == 1 and entry["present"] is True
+    ]
+    assert len(right_entries) == 2
+    for entry in right_entries:
+        assert entry["start_label"] == "C"
+        assert entry["end_label"] == "d"
+
+
 def test_tx_dd_left_only_mount_fails_without_mirror_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
