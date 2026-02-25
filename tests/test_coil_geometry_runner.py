@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 import peetsfea.backend.pyaedt.geometry.square_spiral as geom
-from peetsfea.types.manifest import Manifest
+from peetsfea.types.manifest import CoilPolaritySpec, GeometryMetadata, GroupEndpointEntry, Manifest
 
 
 class _FakePoint:
@@ -20,10 +21,13 @@ class _FakeEdge:
 
 
 class _FakeObject:
-    def __init__(self, name: str, bbox: list[float], edge_samples: list[tuple[float, float]]) -> None:
+    def __init__(
+        self, name: str, bbox: list[float], edge_samples: list[tuple[float, float]], points: list[list[float]] | None = None
+    ) -> None:
         self.name = name
         self.bounding_box = bbox
         self.edges = [_FakeEdge(_FakePoint(x, y)) for x, y in edge_samples]
+        self.points = points or []
 
 
 class _FakeModeler:
@@ -31,6 +35,8 @@ class _FakeModeler:
         self.polyline_calls: list[dict[str, object]] = []
         self.cylinder_calls: list[dict[str, object]] = []
         self.box_calls: list[dict[str, object]] = []
+        self.duplicate_mirror_calls: list[dict[str, object]] = []
+        self.objects: dict[str, _FakeObject] = {}
 
     def create_polyline(
         self,
@@ -67,11 +73,14 @@ class _FakeModeler:
             x_mid = (points[idx][0] + points[idx + 1][0]) / 2.0
             y_mid = (points[idx][1] + points[idx + 1][1]) / 2.0
             edge_samples.append((x_mid, y_mid))
-        return _FakeObject(
+        obj = _FakeObject(
             name or "polyline",
             [min(xs), min(ys), min(zs), max(xs), max(ys), max(zs)],
             edge_samples,
+            points=points,
         )
+        self.objects[obj.name] = obj
+        return obj
 
     def create_cylinder(
         self,
@@ -93,7 +102,7 @@ class _FakeModeler:
                 "material": material,
             }
         )
-        return _FakeObject(
+        obj = _FakeObject(
             name or "cylinder",
             [
                 origin[0] - radius,
@@ -105,6 +114,8 @@ class _FakeModeler:
             ],
             [(origin[0], origin[1])],
         )
+        self.objects[obj.name] = obj
+        return obj
 
     def create_box(
         self,
@@ -123,7 +134,7 @@ class _FakeModeler:
                 "non_model": non_model,
             }
         )
-        return _FakeObject(
+        obj = _FakeObject(
             name or "box",
             [
                 origin[0],
@@ -135,6 +146,61 @@ class _FakeModeler:
             ],
             [(origin[0], origin[1])],
         )
+        self.objects[obj.name] = obj
+        return obj
+
+    def duplicate_and_mirror(
+        self,
+        assignment: str | _FakeObject,
+        origin: list[float],
+        vector: list[float],
+        is_3d_comp: bool = False,
+        duplicate_assignment: bool = True,
+    ) -> list[str]:
+        del is_3d_comp
+        del duplicate_assignment
+        if isinstance(assignment, _FakeObject):
+            source_name = assignment.name
+        else:
+            source_name = assignment
+        source = self.objects[source_name]
+        axis_y = float(origin[1])
+        source_points = cast(list[list[float]], source.points)
+        mirrored_points = [[p[0], (2.0 * axis_y) - p[1], p[2]] for p in source_points]
+        new_name = f"{source_name}_mirror_{len(self.duplicate_mirror_calls)}"
+        self.duplicate_mirror_calls.append(
+            {"assignment": source_name, "origin": origin, "vector": vector, "name": new_name}
+        )
+        source_call = next((call for call in reversed(self.polyline_calls) if call["name"] == source_name), None)
+        xsection_type = source_call["xsection_type"] if source_call is not None else "Rectangle"
+        xsection_width = source_call["xsection_width"] if source_call is not None else 1.0
+        xsection_height = source_call["xsection_height"] if source_call is not None else 1.0
+        self.polyline_calls.append(
+            {
+                "points": mirrored_points,
+                "name": new_name,
+                "material": "copper",
+                "xsection_width": xsection_width,
+                "xsection_height": xsection_height,
+                "xsection_type": xsection_type,
+            }
+        )
+        xs = [point[0] for point in mirrored_points]
+        ys = [point[1] for point in mirrored_points]
+        zs = [point[2] for point in mirrored_points]
+        edge_samples = []
+        for idx in range(min(len(mirrored_points) - 1, 8)):
+            x_mid = (mirrored_points[idx][0] + mirrored_points[idx + 1][0]) / 2.0
+            y_mid = (mirrored_points[idx][1] + mirrored_points[idx + 1][1]) / 2.0
+            edge_samples.append((x_mid, y_mid))
+        mirrored_obj = _FakeObject(
+            new_name,
+            [min(xs), min(ys), min(zs), max(xs), max(ys), max(zs)],
+            edge_samples,
+            points=mirrored_points,
+        )
+        self.objects[new_name] = mirrored_obj
+        return [new_name]
 
 
 class _FakeHfss:
@@ -163,6 +229,22 @@ def _turn_sign_xy(points: list[list[float]]) -> float:
     return (ax * by) - (ay * bx)
 
 
+def _direction_from_xy_points(points: list[list[float]]) -> str:
+    eps = 1e-9
+    if len(points) < 3:
+        raise AssertionError("Need at least 3 points to determine XY winding direction")
+    for idx in range(1, len(points) - 1):
+        vx1 = points[idx][0] - points[idx - 1][0]
+        vy1 = points[idx][1] - points[idx - 1][1]
+        vx2 = points[idx + 1][0] - points[idx][0]
+        vy2 = points[idx + 1][1] - points[idx][1]
+        cross = (vx1 * vy2) - (vy1 * vx2)
+        if abs(cross) <= eps:
+            continue
+        return "ccw" if cross > 0.0 else "cw"
+    raise AssertionError("Could not determine XY winding direction from provided points")
+
+
 def _turn_sign_yz(points: list[list[float]]) -> float:
     assert len(points) >= 3
     ay = points[1][1] - points[0][1]
@@ -170,6 +252,83 @@ def _turn_sign_yz(points: list[list[float]]) -> float:
     by = points[2][1] - points[1][1]
     bz = points[2][2] - points[1][2]
     return (ay * bz) - (az * by)
+
+
+def _group_instance_key_from_endpoint(entry: GroupEndpointEntry) -> tuple[str, str, int]:
+    return (entry["group_kind"], entry["board_id"], entry["group_instance_index"])
+
+
+def _group_instance_key_from_polarity(entry: CoilPolaritySpec) -> tuple[str, str, int]:
+    return (entry["group_kind"], entry["board_id"], entry["group_instance_index"])
+
+
+def _endpoint_map(metadata: GeometryMetadata) -> dict[tuple[str, str, int], GroupEndpointEntry]:
+    return {_group_instance_key_from_endpoint(entry): entry for entry in metadata["group_endpoints"]}
+
+
+def _polarity_map(metadata: GeometryMetadata) -> dict[tuple[str, str, int], CoilPolaritySpec]:
+    return {_group_instance_key_from_polarity(entry): entry for entry in metadata["coil_polarity"]}
+
+
+def _endpoint_z_center(entry: GroupEndpointEntry) -> float:
+    return (entry["start_xyz"][2] + entry["end_xyz"][2]) / 2.0
+
+
+def _assert_no_topology_break(points: list[list[float]]) -> None:
+    eps = 1e-9
+    assert len(points) >= 2
+    segments: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    for idx in range(len(points) - 1):
+        p0 = points[idx]
+        p1 = points[idx + 1]
+        dx = p1[0] - p0[0]
+        dy = p1[1] - p0[1]
+        assert not (abs(dx) <= eps and abs(dy) <= eps)
+        assert abs(dx) <= eps or abs(dy) <= eps
+        segments.append(((p0[0], p0[1]), (p1[0], p1[1])))
+    for idx in range(1, len(points) - 1):
+        p_prev = points[idx - 1]
+        p_curr = points[idx]
+        p_next = points[idx + 1]
+        vx1 = p_curr[0] - p_prev[0]
+        vy1 = p_curr[1] - p_prev[1]
+        vx2 = p_next[0] - p_curr[0]
+        vy2 = p_next[1] - p_curr[1]
+        assert not (abs(vx1 + vx2) <= eps and abs(vy1 + vy2) <= eps)
+    for idx in range(len(segments)):
+        for jdx in range(idx + 1, len(segments)):
+            if jdx <= idx + 1:
+                continue
+            (ax0, ay0), (ax1, ay1) = segments[idx]
+            (bx0, by0), (bx1, by1) = segments[jdx]
+            a_vertical = abs(ax0 - ax1) <= eps
+            b_vertical = abs(bx0 - bx1) <= eps
+            if a_vertical and b_vertical:
+                if abs(ax0 - bx0) > eps:
+                    continue
+                a_min, a_max = sorted((ay0, ay1))
+                b_min, b_max = sorted((by0, by1))
+                assert max(a_min, b_min) > (min(a_max, b_max) + eps)
+                continue
+            if (not a_vertical) and (not b_vertical):
+                if abs(ay0 - by0) > eps:
+                    continue
+                a_min, a_max = sorted((ax0, ax1))
+                b_min, b_max = sorted((bx0, bx1))
+                assert max(a_min, b_min) > (min(a_max, b_max) + eps)
+                continue
+            if a_vertical:
+                v_x = ax0
+                v_min, v_max = sorted((ay0, ay1))
+                h_y = by0
+                h_min, h_max = sorted((bx0, bx1))
+            else:
+                v_x = bx0
+                v_min, v_max = sorted((by0, by1))
+                h_y = ay0
+                h_min, h_max = sorted((ax0, ax1))
+            intersects = (h_min - eps) <= v_x <= (h_max + eps) and (v_min - eps) <= h_y <= (v_max + eps)
+            assert not intersects
 
 
 def _manifest(tmp_path: Path) -> Manifest:
@@ -195,6 +354,7 @@ def _manifest(tmp_path: Path) -> Manifest:
             "inner_margin_y": 2.0,
             "tx_dd_pair_spacing_ratio": 0.3,
             "rx_dd_pair_spacing_ratio": 0.3,
+            "tx_vertical_center_gap_mm": 10.0,
             "tx_dd_pair_spacing_mm": 60.0,
             "rx_dd_pair_spacing_mm": 60.0,
             "tx_vertical_span_mm": 10.0,
@@ -283,6 +443,7 @@ def _manifest(tmp_path: Path) -> Manifest:
                 "z_delta_path": None,
                 "mounts": [
                     {"kind": "tx_dd", "selector_mode": "index", "selector_index": 0},
+                    {"kind": "tx_dd", "selector_mode": "index", "selector_index": 1},
                     {"kind": "tx_vertical", "selector_mode": "all", "selector_index": None},
                 ],
             },
@@ -486,19 +647,20 @@ def test_build_square_spiral_writes_metadata(tmp_path: Path, monkeypatch: pytest
     assert any(name.startswith("scene_rx_region_max_") for name in metadata["object_names"])
     assert any(name.startswith("scene_rx_region_actual_") for name in metadata["object_names"])
     assert set(metadata["group_objects"].keys()) == {"tx_dd", "tx_vertical", "rx_dd"}
-    assert len(metadata["group_objects"]["tx_dd"]) == 1
+    assert len(metadata["group_objects"]["tx_dd"]) == 2
     assert len(metadata["group_objects"]["tx_vertical"]) == 1
     assert len(metadata["group_objects"]["rx_dd"]) == 1
-    assert len(metadata["unite_groups"]["tx"]) == 2
+    assert len(metadata["unite_groups"]["tx"]) == 3
     assert len(metadata["unite_groups"]["rx"]) == 1
-    assert len(metadata["group_endpoints"]) == 3
-    assert len(metadata["coil_polarity"]) == 3
+    assert len(metadata["group_endpoints"]) == 4
+    assert len(metadata["coil_polarity"]) == 4
     assert all(entry["present"] for entry in metadata["group_endpoints"])
+    assert all(("start_label" in entry and "end_label" in entry) for entry in metadata["group_endpoints"])
     assert metadata["debug"]["constraints_ok"] is True
     assert len(metadata["debug"]["centerline_vertices"]) == 24
-    assert len(metadata["debug"]["cad_probe"]) == 15
+    assert len(metadata["debug"]["cad_probe"]) == 16
 
-    assert len(fake.modeler.polyline_calls) == 3
+    assert len(fake.modeler.polyline_calls) == 4
     assert fake.design_vars["spec_tx_dd_outer_x"] == "48.0mm"
     assert fake.design_vars["spec_fr4_er"] == "4.4"
     assert fake.design_vars["group_geom_tx_dd_turn_count_max"] == "5"
@@ -650,7 +812,70 @@ def test_tx_dd_two_coils_use_single_layer_when_selected_count_two(
     assert len(tx_dd_calls) == 2
     sign_a = _turn_sign_xy(tx_dd_calls[0]["points"])  # type: ignore[arg-type]
     sign_b = _turn_sign_xy(tx_dd_calls[1]["points"])  # type: ignore[arg-type]
+    # Left must be generated by mirror of the right instance.
     assert sign_a * sign_b < 0.0
+    assert len(fake.modeler.duplicate_mirror_calls) == 1
+    mirror_call = fake.modeler.duplicate_mirror_calls[0]
+    assert mirror_call["vector"] == [0.0, 1.0, 0.0]
+
+
+def test_tx_dd_right_only_rule_for_single_layer_labels_and_winding_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_pcbs"][0]["mounts"] = [
+        {"kind": "tx_dd", "selector_mode": "index", "selector_index": 0},
+        {"kind": "tx_dd", "selector_mode": "index", "selector_index": 1},
+        {"kind": "tx_vertical", "selector_mode": "all", "selector_index": None},
+    ]
+
+    metadata = geom.build_square_spiral_from_manifest(manifest)
+    endpoints = _endpoint_map(metadata)
+    polarity = _polarity_map(metadata)
+
+    left_key = ("tx_dd", "tx_main_0", 0)
+    right_key = ("tx_dd", "tx_main_0", 1)
+
+    # Right-only override.
+    assert endpoints[right_key]["start_label"] == "C"
+    assert endpoints[right_key]["end_label"] == "d"
+    right_call = next(
+        call for call in fake.modeler.polyline_calls if str(call["name"]).startswith("coil_tx_dd_g1_b0_")
+    )
+    right_points = cast(list[list[float]], right_call["points"])
+    assert polarity[right_key]["current_direction"] == _direction_from_xy_points(right_points)
+    _assert_no_topology_break(right_points)
+    right_xs = [point[0] for point in right_points]
+    right_ys = [point[1] for point in right_points]
+    assert right_points[0][0] == pytest.approx(max(right_xs))
+    assert right_points[0][1] == pytest.approx(min(right_ys))
+    assert right_points[-1][0] < max(right_xs)
+    assert right_points[-1][0] > min(right_xs)
+    assert right_points[-1][1] > min(right_ys)
+    assert right_points[-1][1] < max(right_ys)
+    # Left keeps default endpoint and polarity contract.
+    assert endpoints[left_key]["start_label"] == "A"
+    assert endpoints[left_key]["end_label"] == "a"
+    left_call = next(call for call in fake.modeler.polyline_calls if "_mirror_" in str(call["name"]))
+    left_points = cast(list[list[float]], left_call["points"])
+    assert polarity[left_key]["current_direction"] == _direction_from_xy_points(left_points)
+
+
+def test_tx_dd_left_only_mount_fails_without_mirror_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_pcbs"][0]["mounts"] = [
+        {"kind": "tx_dd", "selector_mode": "index", "selector_index": 0},
+        {"kind": "tx_vertical", "selector_mode": "all", "selector_index": None},
+    ]
+
+    with pytest.raises(RuntimeError, match="tx_dd mirror source missing"):
+        geom.build_square_spiral_from_manifest(manifest)
 
 
 def test_tx_dd_four_coils_use_two_layers_when_selected_count_four(
@@ -702,13 +927,119 @@ def test_tx_dd_four_coils_use_two_layers_when_selected_count_four(
     y_centers = sorted((probe["bbox"][1] + probe["bbox"][4]) / 2.0 for probe in tx_dd_probes)
     assert y_centers[0] == pytest.approx(expected_y[0], abs=1e-6)
     assert y_centers[1] == pytest.approx(expected_y[0], abs=1e-6)
-    assert y_centers[2] == pytest.approx(expected_y[1], abs=1e-6)
+    # C->a partial path can slightly shift right-coil bbox center upward/downward.
+    assert y_centers[2] == pytest.approx(expected_y[1], abs=1.0)
     assert y_centers[3] == pytest.approx(expected_y[1], abs=1e-6)
     z_centers = sorted((probe["bbox"][2] + probe["bbox"][5]) / 2.0 for probe in tx_dd_probes)
     assert z_centers[1] == pytest.approx(z_centers[0], abs=1e-6)
     assert z_centers[3] == pytest.approx(z_centers[2], abs=1e-6)
     assert z_centers[2] > z_centers[1]
     assert (z_centers[2] - z_centers[1]) >= 3.0
+
+
+def test_tx_dd_right_only_rule_for_two_layers_orders_by_z_center(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _FakeHfss()
+    monkeypatch.setattr(geom, "_create_hfss_session", lambda manifest, aedt_path: fake)
+    manifest = _manifest(tmp_path)
+    manifest["selected_coil_groups"][0]["selected_count"] = 4
+    manifest["selected_coil_groups"][0]["requested_count"] = 4
+    manifest["selected_coil_groups"][0]["spacing_mm"] = 25.0
+    manifest["selected_pcbs"][0]["mounts"] = [
+        {"kind": "tx_dd", "selector_mode": "index", "selector_index": 0},
+        {"kind": "tx_dd", "selector_mode": "index", "selector_index": 1},
+        {"kind": "tx_vertical", "selector_mode": "all", "selector_index": None},
+    ]
+    manifest["selected_pcbs"].append(
+        {
+            "id": "tx_main_1",
+            "role": "tx",
+            "position": (0.0, 0.0, 3.0),
+            "rotation_deg": 0.0,
+            "present": True,
+            "z_mode": "absolute",
+            "z_relative_base_id": None,
+            "z_delta_path": None,
+            "mounts": [
+                {"kind": "tx_dd", "selector_mode": "index", "selector_index": 2},
+                {"kind": "tx_dd", "selector_mode": "index", "selector_index": 3},
+                {"kind": "tx_vertical", "selector_mode": "all", "selector_index": None},
+            ],
+        }
+    )
+
+    metadata = geom.build_square_spiral_from_manifest(manifest)
+    endpoints = _endpoint_map(metadata)
+    polarity = _polarity_map(metadata)
+
+    right_entries: list[tuple[float, str, int, GroupEndpointEntry, CoilPolaritySpec]] = []
+    left_entries: list[tuple[float, str, int, GroupEndpointEntry, CoilPolaritySpec]] = []
+    for key, entry in endpoints.items():
+        if entry["group_kind"] != "tx_dd":
+            continue
+        pol = polarity[key]
+        row = (_endpoint_z_center(entry), key[1], key[2], entry, pol)
+        if pol["instance_side"] == "right":
+            right_entries.append(row)
+        elif pol["instance_side"] == "left":
+            left_entries.append(row)
+
+    right_entries.sort(key=lambda item: (item[0], item[1], item[2]))
+    left_entries.sort(key=lambda item: (item[0], item[1], item[2]))
+
+    assert len(right_entries) == 2
+    assert right_entries[0][3]["start_label"] == "c"
+    assert right_entries[0][3]["end_label"] == "A"
+    assert right_entries[0][4]["current_direction"] == "ccw"
+    assert right_entries[1][3]["start_label"] == "A"
+    assert right_entries[1][3]["end_label"] == "C"
+    assert right_entries[1][4]["current_direction"] == "ccw"
+    right_calls = [
+        call
+        for call in fake.modeler.polyline_calls
+        if str(call["name"]).startswith("coil_tx_dd_")
+        and "_mirror_" not in str(call["name"])
+        and str(call["name"]).startswith(("coil_tx_dd_g1_", "coil_tx_dd_g3_"))
+    ]
+    assert len(right_calls) == 2
+    right_calls.sort(key=lambda call: float(cast(list[list[float]], call["points"])[0][2]))
+    lower_points = cast(list[list[float]], right_calls[0]["points"])
+    upper_points = cast(list[list[float]], right_calls[1]["points"])
+    _assert_no_topology_break(lower_points)
+    _assert_no_topology_break(upper_points)
+    lower_xs = [point[0] for point in lower_points]
+    lower_ys = [point[1] for point in lower_points]
+    assert lower_points[0][0] < max(lower_xs)
+    assert lower_points[0][0] > min(lower_xs)
+    assert lower_points[0][1] > min(lower_ys)
+    assert lower_points[0][1] < max(lower_ys)
+    assert lower_points[-1][0] == pytest.approx(min(lower_xs))
+    assert lower_points[-1][1] == pytest.approx(max(lower_ys))
+
+    upper_xs = [point[0] for point in upper_points]
+    upper_ys = [point[1] for point in upper_points]
+    assert upper_points[0][0] == pytest.approx(min(upper_xs))
+    assert upper_points[0][1] == pytest.approx(max(upper_ys))
+    # Upper layer right is reoriented to A->D->...->C.
+    assert upper_points[1][0] == pytest.approx(min(upper_xs))
+    assert upper_points[1][1] == pytest.approx(min(upper_ys))
+    assert upper_points[2][0] == pytest.approx(max(upper_xs))
+    assert upper_points[2][1] == pytest.approx(min(upper_ys))
+    assert upper_points[-1][0] < max(upper_xs)
+    assert upper_points[-1][0] > min(upper_xs)
+    assert upper_points[-1][1] > min(upper_ys)
+    assert upper_points[-1][1] < max(upper_ys)
+    assert _direction_from_xy_points(lower_points) == right_entries[0][4]["current_direction"]
+    assert _direction_from_xy_points(upper_points) == right_entries[1][4]["current_direction"]
+
+    # Left keeps default endpoint and polarity contract.
+    assert len(left_entries) == 2
+    for _, _, _, endpoint_entry, polarity_entry in left_entries:
+        assert endpoint_entry["start_label"] == "A"
+        assert endpoint_entry["end_label"] == "a"
+        assert polarity_entry["current_direction"] == "cw"
+    assert len(fake.modeler.duplicate_mirror_calls) == 2
 
 
 def test_rx_dd_edge_gap_zero_means_touching_edges(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -123,6 +123,15 @@ values = [8, 10, 12, 14]
   - `debug.constraints_ok`
   - `debug.in_region_ok`, `debug.violations` (영역 포함성 검사)
 
+### TxDD 우측-only 단계 계약
+- 이번 단계는 `tx_dd` 우측(right) endpoint 규칙만 적용한다.
+- `geometry_metadata.group_endpoints[*]`에 `start_label`, `end_label`이 기록된다.
+- 규칙:
+  - `tx_dd selected_count=2`(1층): 우측 코일 `C -> d`, 전류 방향 `ccw`
+  - `tx_dd selected_count=4`(2층): 우측 하층/상층 순서로 `c -> A`, `A -> d`, 둘 다 `ccw`
+- 하층/상층 판정은 endpoint `z_center=(start_z+end_z)/2` 오름차순으로 결정한다.
+- 이번 단계 제외 범위: `tx_dd` 좌측, `tx_vertical`, `rx_dd`, 리드/유나이트 확장
+
 - 실행:
 ```bash
 python run.py

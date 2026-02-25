@@ -203,12 +203,17 @@ class UniteGroups(TypedDict):
     rx: list[str]
 
 
+TerminalLabel = Literal["A", "B", "C", "D", "a", "b", "c", "d"]
+
+
 class GroupEndpointEntry(TypedDict):
     group_kind: Literal["tx_dd", "tx_vertical", "rx_dd"]
     group_instance_index: int
     board_id: str
     start_xyz: tuple[float, float, float]
     end_xyz: tuple[float, float, float]
+    start_label: TerminalLabel
+    end_label: TerminalLabel
     present: bool
 
 
