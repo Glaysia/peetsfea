@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-from peetsfea.types.manifest import EmContext, EmEndpoints, EmPolicy, EmReadyObjects
+from peetsfea.types.manifest import EmContext, EmEndpoints, EmPolicy, EmReadyObjects, PostTemplateResult
 
 
 class EmPipelineInput(TypedDict):
@@ -18,7 +18,7 @@ class EmPipelineResult(TypedDict):
     boundary: dict[str, str]
     ports: dict[str, list[str]]
     analysis: dict[str, float | str]
-    post_templates: list[str]
+    post_templates: list[PostTemplateResult]
     validation_report: dict[str, str | bool]
 
 

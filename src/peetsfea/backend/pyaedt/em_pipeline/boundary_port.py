@@ -46,6 +46,6 @@ def build_boundary(hfss: Hfss, modeler: Modeler3D, policy: EmPolicy) -> dict[str
 def build_ports(hfss: Hfss, modeler: Modeler3D, em_input: EmPipelineInput) -> dict[str, list[str]]:
     _ = (hfss, modeler)
     endpoints = em_input["endpoints"]
-    tx_ports = [f"tx_port_{idx}" for idx, _ in enumerate(endpoints["tx"])]
-    rx_ports = [f"rx_port_{idx}" for idx, _ in enumerate(endpoints["rx"])]
+    tx_ports = ["TX_TML"] if endpoints["tx"] else []
+    rx_ports = ["RX_TML"] if endpoints["rx"] else []
     return {"tx": tx_ports, "rx": rx_ports}

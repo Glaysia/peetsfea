@@ -25,7 +25,7 @@ def run_em_pipeline(
     boundary = build_boundary(hfss, modeler, em_policy)
     ports = build_ports(hfss, modeler, em_input)
     analysis = build_analysis(hfss, em_policy)
-    post_templates = build_post_templates()
+    post_templates = build_post_templates(hfss)
     result: EmPipelineResult = {
         "groups": groups,
         "series": series,
