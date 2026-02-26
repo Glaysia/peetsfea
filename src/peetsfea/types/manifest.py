@@ -17,6 +17,7 @@ class ManifestSpec(TypedDict):
     spec_version: str
     design_name: str
     units: str
+    simulation: EmPolicy
 
 
 class SelectedParameters(TypedDict):

@@ -47,9 +47,16 @@ class _TraceProvider(Protocol):
     ) -> list[str]: ...
 
 
+def _format_frequency_mhz(frequency_hz: float) -> str:
+    frequency_mhz = frequency_hz / 1.0e6
+    return f"{frequency_mhz:g}MHz"
+
+
 def build_analysis(hfss: Hfss, policy: EmPolicy) -> dict[str, float | str]:
-    _ = policy
     setup_name = "Setup1"
+    setup_frequency_hz = policy["setup_frequency_hz"]
+    sweep_start_hz = policy["sweep_start_hz"]
+    sweep_stop_hz = policy["sweep_stop_hz"]
     if setup_name in hfss.setup_names:
         hfss.delete_setup(setup_name)
     design = hfss.odesign
@@ -62,7 +69,7 @@ def build_analysis(hfss: Hfss, policy: EmPolicy) -> dict[str, float | str]:
             "SolveType:=",
             "Single",
             "Frequency:=",
-            "6.78MHz",
+            _format_frequency_mhz(setup_frequency_hz),
             "MaxDeltaS:=",
             0.001,
             "UseMatrixConv:=",
@@ -141,9 +148,9 @@ def build_analysis(hfss: Hfss, policy: EmPolicy) -> dict[str, float | str]:
             "RangeType:=",
             "LogScale",
             "RangeStart:=",
-            "1MHz",
+            _format_frequency_mhz(sweep_start_hz),
             "RangeEnd:=",
-            "45MHz",
+            _format_frequency_mhz(sweep_stop_hz),
             "RangeCount:=",
             401,
             "RangeSamples:=",
@@ -186,10 +193,10 @@ def build_analysis(hfss: Hfss, policy: EmPolicy) -> dict[str, float | str]:
     )
     return {
         "setup_name": setup_name,
-        "setup_frequency_hz": 6.78e6,
+        "setup_frequency_hz": setup_frequency_hz,
         "sweep_name": "Sweep",
-        "sweep_start_hz": 1.0e6,
-        "sweep_stop_hz": 45.0e6,
+        "sweep_start_hz": sweep_start_hz,
+        "sweep_stop_hz": sweep_stop_hz,
     }
 
 

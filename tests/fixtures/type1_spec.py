@@ -7,13 +7,20 @@ def write_type1_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float =
     path.write_text(
         "\n".join(
             [
-                'spec_version = "0.2.5"',
+                'spec_version = "0.2.6"',
                 "",
                 "[design]",
                 'units = "mm"',
                 "",
                 "[backend]",
                 'tool = "hfss"',
+                "",
+                "[simulation]",
+                "radiation_margin_mm = 3500.0",
+                "setup_frequency_hz = 6.78e6",
+                "sweep_start_hz = 1.0e6",
+                "sweep_stop_hz = 45.0e6",
+                'validation_gate = "hard_fail"',
                 "",
                 "[tv.width_mm]",
                 "range = [false, 1200.0, 1200.0, 1]",

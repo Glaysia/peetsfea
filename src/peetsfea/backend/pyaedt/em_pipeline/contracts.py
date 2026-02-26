@@ -27,6 +27,6 @@ def default_em_policy() -> EmPolicy:
         "radiation_margin_mm": 3500.0,
         "setup_frequency_hz": 6.78e6,
         "sweep_start_hz": 1.0e6,
-        "sweep_stop_hz": 42.0e6,
+        "sweep_stop_hz": 45.0e6,
         "validation_gate": "hard_fail",
     }

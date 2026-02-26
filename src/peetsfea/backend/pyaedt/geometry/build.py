@@ -8,7 +8,7 @@ from typing import Literal, cast
 from ansys.aedt.core import Hfss
 from ansys.aedt.core.modeler.modeler_3d import Modeler3D
 
-from peetsfea.backend.pyaedt.em_pipeline import default_em_policy, run_em_pipeline
+from peetsfea.backend.pyaedt.em_pipeline import run_em_pipeline
 from peetsfea.backend.pyaedt.em_pipeline.contracts import EmPipelineInput
 from peetsfea.types.manifest import EmPolicy, GeometryMetadata, GroupGeometryParams, Manifest, SceneObjectEntry, TerminalLabel
 
@@ -390,7 +390,7 @@ def _build_and_save_metadata(
         scene_objects=state.scene_objects,
     )
     em_ready_objects["fr4_objects"] = sorted(state.fr4_object_names)
-    em_policy: EmPolicy = default_em_policy()
+    em_policy: EmPolicy = manifest["spec"]["simulation"]
     em_input: EmPipelineInput = {
         "ready_objects": em_ready_objects,
         "endpoints": em_endpoints,

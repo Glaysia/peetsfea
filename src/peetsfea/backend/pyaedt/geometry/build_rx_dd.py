@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, Protocol, cast
 
 from ansys.aedt.core import Hfss
 from ansys.aedt.core.modeler.cad.object_3d import Object3d
@@ -34,6 +34,17 @@ TX_DD_START_STUB_DOWN_MM = 3.0
 RX_DD_BACK_STUB_LEN_MM = 3.0
 RX_DD_BACK_STUB_AXIS_SIGN_X = -1.0
 FR4_SUBTRACT_OVERLAP_MM = 0.1
+
+
+class _BoundaryModule(Protocol):
+    def AutoIdentifyPorts(
+        self,
+        faces: list[object],
+        is_wave_port: bool,
+        reference_conductors: list[object],
+        port_name: str,
+        renormalize: bool,
+    ) -> None: ...
 
 
 def _rxdd_back_stub_sort_key(source: _RxDdBackStubSource) -> tuple[str, int, str]:
@@ -79,9 +90,10 @@ def _auto_identify_ports_direct(
     board_id: str,
     context: str,
 ) -> None:
-    assert hfss.oboundary is not None, "HFSS boundary module is not initialized"
+    boundary_module = cast(_BoundaryModule | None, hfss.oboundary)
+    assert boundary_module is not None, "HFSS boundary module is not initialized"
     try:
-        hfss.oboundary.AutoIdentifyPorts(
+        boundary_module.AutoIdentifyPorts(
             ["NAME:Faces", int(face_id)],
             False,
             ["NAME:ReferenceConductors", reference_conductor_name],
