@@ -17,6 +17,7 @@ class EmPipelineResult(TypedDict):
     subtract: dict[str, list[str]]
     boundary: dict[str, str]
     ports: dict[str, list[str]]
+    sources: dict[str, str]
     analysis: dict[str, float | str]
     post_templates: list[PostTemplateResult]
     validation_report: dict[str, str | bool]
