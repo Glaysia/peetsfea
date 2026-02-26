@@ -22,12 +22,14 @@ class _FakeHfss:
         self.inserted_sweep_payloads: list[list[object]] = []
         self.created_output_variables: list[tuple[str, str, str | None]] = []
         self.created_reports: list[dict[str, object]] = []
+        self.edited_sources_payloads: list[list[object]] = []
         self.available_traces: list[str] = [
             "S(TX_TML,TX_TML)",
             "S(TX_TML,RX_TML)",
             "S(RX_TML,TX_TML)",
             "S(RX_TML,RX_TML)",
         ]
+        self.excitation_names: list[str] = []
         self.odesign = self._Design(self)
         self.post = self._Post(self)
 
@@ -79,11 +81,20 @@ class _FakeHfss:
         def __init__(self, parent: "_FakeHfss") -> None:
             self._parent = parent
 
+        class _SolutionsModule:
+            def __init__(self, parent: "_FakeHfss") -> None:
+                self._parent = parent
+
+            def EditSources(self, payload: list[object]) -> None:
+                self._parent.edited_sources_payloads.append(payload)
+
         def GetModule(self, name: str) -> object:
             if name == "AnalysisSetup":
                 return _FakeHfss._AnalysisModule(self._parent)
             if name == "ReportSetup":
                 return _FakeHfss._ReportSetupModule(self._parent)
+            if name == "Solutions":
+                return _FakeHfss._Design._SolutionsModule(self._parent)
             raise ValueError(f"unexpected module: {name}")
 
     class _Post:
@@ -215,6 +226,7 @@ def test_run_em_pipeline_returns_full_contract() -> None:
         "subtract",
         "boundary",
         "ports",
+        "sources",
         "analysis",
         "post_templates",
         "validation_report",
@@ -225,6 +237,9 @@ def test_run_em_pipeline_returns_full_contract() -> None:
     assert sorted(fake_hfss.radiation_assigned_faces) == [10, 11, 12, 13, 14, 15]
     assert result["boundary"]["offset_type"] == "Absolute Offset"
     assert result["boundary"]["offset_value"] == "3500.0"
+    assert result["sources"]["rx_phase_deg"] == "90deg"
+    assert result["sources"]["tx_phase_deg"] == "0deg"
+    assert fake_hfss.edited_sources_payloads
     assert fake_hfss.inserted_setup_types == ["HfssDriven"]
     assert fake_hfss.inserted_sweep_setup_names == ["Setup1"]
     assert [name for name, _, _ in fake_hfss.created_output_variables] == [
@@ -397,3 +412,17 @@ def test_run_em_pipeline_uses_adaptive_policy_keys_only_for_exposed_numbers() ->
     assert 47 in setup_payload
     assert 2 in setup_payload
     assert 3 in setup_payload
+
+
+def test_run_em_pipeline_falls_back_to_stub_rxdd_source_name_for_90deg_phase() -> None:
+    fake_hfss = _FakeHfss()
+    fake_hfss.excitation_names = [
+        "TX_TML",
+        "stub_rxdd_rx_main_1_g1_A_T1",
+    ]
+    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
+    assert fake_hfss.edited_sources_payloads
+    sources_payload = fake_hfss.edited_sources_payloads[0]
+    payload_text = str(sources_payload)
+    assert "stub_rxdd_rx_main_1_g1_A_T1" in payload_text
+    assert "90deg" in payload_text
