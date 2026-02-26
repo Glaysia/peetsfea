@@ -81,7 +81,7 @@ if __name__ == "__main__":
         run_one(cli_seed)
     elif RUN_MODE == MANY:
         failed_seeds: list[int] = []
-        for seed in range(100):
+        for seed in range(95,100):
             ok = run_one(seed)
             if not ok:
                 failed_seeds.append(seed)

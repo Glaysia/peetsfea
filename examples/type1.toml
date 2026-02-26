@@ -383,6 +383,16 @@ lhs = { func = "add(mul(2,tx_dd_outer_y),tx_dd_pair_spacing_mm)" }
 op = "<="
 rhs = { path = "tx_region_outer_h_mm" }
 
+# Bridge-side ordering guard: reject samples where DD-right falls left of vertical-right.
+# If tx_vertical is not active (selected_count=0), this rule is treated as pass.
+[[constraints.rules]]
+id = "tx_bridge_right_y_margin"
+kind = "comparison"
+message = "tx_dd right representative y must be >= tx_vertical right representative y + 1.0mm"
+lhs = { func = "tx_bridge_right_y_margin_ok(1.0)" }
+op = "=="
+rhs = { value = 1.0 }
+
 # Placement feasibility gate: rx_dd pair must fit rx region width.
 [[constraints.rules]]
 id = "rx_dd_pair_fits_region"

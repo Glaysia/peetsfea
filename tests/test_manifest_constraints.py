@@ -6,9 +6,64 @@ import re
 import pytest
 
 import peetsfea.pipeline.run_design as runner
+import peetsfea.spec.resolver.constraints_eval as constraints_eval
 from peetsfea.spec.loader import load_toml_bytes
 from peetsfea.spec.resolver import SelectionConstraintError, resolve_selection
 from tests.fixtures.type1_spec import write_type1_toml
+
+
+def _append_tx_bridge_margin_rule(raw: str, *, margin_mm: float = 1.0) -> str:
+    return raw + (
+        "\n[[constraints.rules]]\n"
+        "id = \"tx_bridge_right_margin\"\n"
+        "kind = \"comparison\"\n"
+        "message = \"tx_dd right representative y must be >= tx_vertical right representative y + margin\"\n"
+        f"lhs = {{ func = \"tx_bridge_right_y_margin_ok({margin_mm})\" }}\n"
+        "op = \"==\"\n"
+        "rhs = { value = 1.0 }\n"
+    )
+
+
+def _stabilize_group_geometry_sampling(raw: str) -> str:
+    out = raw
+    out = out.replace(
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    out = out.replace(
+        "[coil_groups_params.tx_dd.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.tx_dd.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    out = out.replace(
+        "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
+    out = out.replace(
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    out = out.replace(
+        "[coil_groups_params.tx_vertical.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.tx_vertical.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    out = out.replace(
+        "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
+    out = out.replace(
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
+    )
+    out = out.replace(
+        "[coil_groups_params.rx_dd.band_ratio]\nrange = [false, 0.1, 0.9, 81]",
+        "[coil_groups_params.rx_dd.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    out = out.replace(
+        "[coil_groups_params.rx_dd.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
+        "[coil_groups_params.rx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
+    return out
+
 
 def test_tx_region_constraint_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "bad_geom.toml"
@@ -191,3 +246,176 @@ def test_ratio_hard_check_failure_contains_details(tmp_path: Path) -> None:
     with pytest.raises(SelectionConstraintError, match="Constraint tx_dd_pair_fits_region failed"):
         resolve_selection(spec=spec, seed=1, attempt=0)
 
+
+def test_tx_bridge_right_margin_rule_passes_when_dd_is_right_enough(tmp_path: Path) -> None:
+    toml_path = tmp_path / "tx_bridge_right_margin_pass.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = _stabilize_group_geometry_sampling(raw)
+    raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 2, 2, 1]")
+    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 1, 1, 1]")
+    raw = _append_tx_bridge_margin_rule(raw, margin_mm=1.0)
+    toml_path.write_text(raw, encoding="utf-8")
+
+    spec, _ = load_toml_bytes(toml_path)
+    resolve_selection(spec=spec, seed=1, attempt=0)
+
+
+def test_tx_bridge_right_margin_rule_fails_when_dd_is_left_of_vertical(tmp_path: Path) -> None:
+    toml_path = tmp_path / "tx_bridge_right_margin_fail.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = _stabilize_group_geometry_sampling(raw)
+    raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 2, 2, 1]")
+    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 1, 1, 1]")
+    raw = raw.replace(
+        "[[coil_groups]]\nkind = \"tx_dd\"\ncount_mode = [true, 2, 2, 1]\ninstance_transforms = [{ dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 }]",
+        "[[coil_groups]]\nkind = \"tx_dd\"\ncount_mode = [true, 2, 2, 1]\ninstance_transforms = [{ dx = 0.0, dy = -90.0, dz = 0.0, rot_deg = 0.0 }]",
+    )
+    raw = _append_tx_bridge_margin_rule(raw, margin_mm=1.0)
+    toml_path.write_text(raw, encoding="utf-8")
+
+    spec, _ = load_toml_bytes(toml_path)
+    with pytest.raises(
+        SelectionConstraintError,
+        match=r"Constraint tx_bridge_right_margin failed.*dd_right_edge_y=.*vertical_right_edge_y=",
+    ):
+        resolve_selection(spec=spec, seed=1, attempt=0)
+
+
+def test_tx_bridge_right_margin_rule_blocks_case_that_center_only_logic_would_allow(tmp_path: Path) -> None:
+    toml_path = tmp_path / "tx_bridge_right_margin_center_vs_edge_regression.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = _stabilize_group_geometry_sampling(raw)
+    raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 2, 2, 1]")
+    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 5, 5, 1]")
+    toml_path.write_text(raw, encoding="utf-8")
+
+    spec_without_rule, _ = load_toml_bytes(toml_path)
+    selected, _, groups, group_geometry, pcbs = resolve_selection(spec=spec_without_rule, seed=0, attempt=0)
+    groups_by_kind = {group["kind"]: group for group in groups}
+    geometry_by_kind = {entry["kind"]: entry for entry in group_geometry}
+    tx_dd_group = groups_by_kind["tx_dd"]
+    tx_vertical_group = groups_by_kind["tx_vertical"]
+    tx_vertical_geometry = geometry_by_kind["tx_vertical"]
+    tx_region_outer_h = float(selected["tx_region_outer_h_mm"])
+    tx_region_min_y = -tx_region_outer_h / 2.0
+    tx_region_max_y = tx_region_outer_h / 2.0
+    tx_region_center_y = (tx_region_min_y + tx_region_max_y) / 2.0
+
+    tx_dd_transform_dy = float(tx_dd_group["instance_transforms"][0]["dy"])
+    dd_center_candidate: float | None = None
+    dd_center_key: tuple[float, str, int] | None = None
+    for pcb in pcbs:
+        if not pcb["present"]:
+            continue
+        for instance_index in range(int(tx_dd_group["selected_count"])):
+            if instance_index % 2 == 0:
+                continue
+            if not constraints_eval._mount_allows_instance(pcb["mounts"], "tx_dd", instance_index):
+                continue
+            center_y, _ = constraints_eval._tx_dd_center_y_and_layer(
+                instance_count=int(tx_dd_group["selected_count"]),
+                instance_index=instance_index,
+                pair_clearance_mm=float(tx_dd_group["spacing_mm"]),
+                outer_y=float(selected["tx_dd_outer_y"]),
+                region_center_y=tx_region_center_y,
+                region_min_y=tx_region_min_y,
+                region_max_y=tx_region_max_y,
+            )
+            world_center_y = center_y + tx_dd_transform_dy
+            key = (-world_center_y, pcb["id"], instance_index)
+            if dd_center_key is None or key < dd_center_key:
+                dd_center_key = key
+                dd_center_candidate = world_center_y
+
+    tx_vertical_transform_dy = float(tx_vertical_group["instance_transforms"][0]["dy"])
+    vertical_center_candidate: float | None = None
+    vertical_center_key: tuple[float, str, int] | None = None
+    for pcb in pcbs:
+        if not pcb["present"]:
+            continue
+        for instance_index in range(int(tx_vertical_group["selected_count"])):
+            if not constraints_eval._mount_allows_instance(pcb["mounts"], "tx_vertical", instance_index):
+                continue
+            off_y = constraints_eval._tx_vertical_instance_offset_y(
+                instance_index=instance_index,
+                instance_count=int(tx_vertical_group["selected_count"]),
+                spacing_mm=float(tx_vertical_group["spacing_mm"]),
+                trace_mm=float(tx_vertical_geometry["trace"]),
+            )
+            world_center_y = tx_region_center_y + tx_vertical_transform_dy + off_y
+            key = (-world_center_y, pcb["id"], instance_index)
+            if vertical_center_key is None or key < vertical_center_key:
+                vertical_center_key = key
+                vertical_center_candidate = world_center_y
+
+    assert dd_center_candidate is not None
+    assert vertical_center_candidate is not None
+    assert dd_center_candidate >= (vertical_center_candidate + 1.0)
+
+    raw_with_rule = _append_tx_bridge_margin_rule(raw, margin_mm=1.0)
+    toml_path.write_text(raw_with_rule, encoding="utf-8")
+    spec_with_rule, _ = load_toml_bytes(toml_path)
+    with pytest.raises(
+        SelectionConstraintError,
+        match=r"Constraint tx_bridge_right_margin failed.*dd_right_edge_y=.*vertical_right_edge_y=",
+    ):
+        resolve_selection(spec=spec_with_rule, seed=0, attempt=0)
+
+
+def test_tx_bridge_right_margin_rule_skips_when_tx_vertical_is_zero(tmp_path: Path) -> None:
+    toml_path = tmp_path / "tx_bridge_right_margin_vertical_zero.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = _stabilize_group_geometry_sampling(raw)
+    raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 2, 2, 1]")
+    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 0, 0, 1]")
+    raw = raw.replace(
+        "[[coil_groups]]\nkind = \"tx_dd\"\ncount_mode = [true, 2, 2, 1]\ninstance_transforms = [{ dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 }]",
+        "[[coil_groups]]\nkind = \"tx_dd\"\ncount_mode = [true, 2, 2, 1]\ninstance_transforms = [{ dx = 0.0, dy = -120.0, dz = 0.0, rot_deg = 0.0 }]",
+    )
+    raw = _append_tx_bridge_margin_rule(raw, margin_mm=1.0)
+    toml_path.write_text(raw, encoding="utf-8")
+
+    spec, _ = load_toml_bytes(toml_path)
+    resolve_selection(spec=spec, seed=1, attempt=0)
+
+
+def test_tx_bridge_right_margin_rule_rejects_negative_margin(tmp_path: Path) -> None:
+    toml_path = tmp_path / "tx_bridge_right_margin_negative_margin.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = _stabilize_group_geometry_sampling(raw)
+    raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 2, 2, 1]")
+    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 1, 1, 1]")
+    raw = _append_tx_bridge_margin_rule(raw, margin_mm=-1.0)
+    toml_path.write_text(raw, encoding="utf-8")
+
+    spec, _ = load_toml_bytes(toml_path)
+    with pytest.raises(ValueError, match=r"margin_mm must be >= 0"):
+        resolve_selection(spec=spec, seed=1, attempt=0)
+
+
+def test_tx_bridge_right_margin_rule_requires_single_argument(tmp_path: Path) -> None:
+    toml_path = tmp_path / "tx_bridge_right_margin_bad_arity.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = _stabilize_group_geometry_sampling(raw)
+    raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 2, 2, 1]")
+    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 1, 1, 1]")
+    raw += (
+        "\n[[constraints.rules]]\n"
+        "id = \"tx_bridge_right_margin_bad_arity\"\n"
+        "kind = \"comparison\"\n"
+        "message = \"bad arity\"\n"
+        "lhs = { func = \"tx_bridge_right_y_margin_ok()\" }\n"
+        "op = \"==\"\n"
+        "rhs = { value = 1.0 }\n"
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+
+    spec, _ = load_toml_bytes(toml_path)
+    with pytest.raises(ValueError, match=r"must have 1 argument: margin_mm"):
+        resolve_selection(spec=spec, seed=1, attempt=0)
