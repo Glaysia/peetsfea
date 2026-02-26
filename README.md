@@ -78,6 +78,13 @@ setup_frequency_hz = 6.78e6
 sweep_start_hz = 1.0e6
 sweep_stop_hz = 45.0e6
 validation_gate = "hard_fail"
+max_delta_s = 0.001
+maximum_passes = 35
+minimum_passes = 9
+minimum_converged_passes = 13
+percent_refinement = 65
+basis_order = 1
+port_accuracy = 2
 
 [dataset]
 enabled = true
@@ -193,7 +200,9 @@ python run.py
   - `[coil_material]`: `via_diameter_mm`, `pcb_thickness_mm`, `cu_thickness_mm`, `fr4_er`
   - `[scene_anchor]`: `shelf_height_mm`, `shelf_min_size_x_mm`, `rx_region_bottom_from_tv_mm`
   - `[coil_placement]`: `tx_dd_top_clearance_mm`, `rx_face_clearance_mm`, `dd_mirror_plane`, `rx_plane`, `tx_vertical_plane`
-  - `[simulation]`: `radiation_margin_mm`, `setup_frequency_hz`, `sweep_start_hz`, `sweep_stop_hz`, `validation_gate`
+  - `[simulation]`: `radiation_margin_mm`, `setup_frequency_hz`, `sweep_start_hz`, `sweep_stop_hz`, `validation_gate`, `max_delta_s`, `maximum_passes`, `minimum_passes`, `minimum_converged_passes`, `percent_refinement`, `basis_order`, `port_accuracy`
+    - setup의 나머지 옵션은 코드 하드코딩을 유지하고, 위 핵심 adaptive 숫자만 TOML에서 조정한다.
+    - radiation region은 model bbox 기준 전방향 `Absolute Offset`(기본 `±3500mm`)으로 생성한다.
   - 현재는 TOML 계약 고정을 위해 대부분 `count=1`(또는 단일 문자열)로 선언한다.
 
 동작 요약:

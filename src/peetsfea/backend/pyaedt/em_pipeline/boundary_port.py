@@ -15,10 +15,15 @@ def _region_object_name(region: object) -> str:
 
 
 def build_boundary(hfss: Hfss, modeler: Modeler3D, policy: EmPolicy) -> dict[str, str]:
-    _ = policy
-    region = modeler.create_region(pad_value=750, pad_type="Percentage Offset", name="Region_750pct")
+    margin_mm = float(policy["radiation_margin_mm"])
+    pad_value_mm = int(round(margin_mm))
+    region = modeler.create_region(
+        pad_value=pad_value_mm,
+        pad_type="Absolute Offset",
+        name=f"Region_Abs_{pad_value_mm}mm",
+    )
     if not region:
-        raise ValueError("Failed to create region with 750% offset")
+        raise ValueError(f"Failed to create region with Absolute Offset margin={margin_mm}mm")
     region_name = _region_object_name(region)
     region_faces = modeler.get_object_faces(region_name)
     if len(region_faces) != 6:
@@ -27,7 +32,7 @@ def build_boundary(hfss: Hfss, modeler: Modeler3D, policy: EmPolicy) -> dict[str
             f"(region={region_name}, face_count={len(region_faces)})"
         )
     for idx, face_id in enumerate(region_faces):
-        rad_name = f"Rad_Region750_{idx}"
+        rad_name = f"Rad_RegionAbs_{idx}"
         boundary = hfss.assign_radiation_boundary_to_faces([face_id], name=rad_name)
         if not boundary:
             raise ValueError(
@@ -36,8 +41,8 @@ def build_boundary(hfss: Hfss, modeler: Modeler3D, policy: EmPolicy) -> dict[str
             )
     return {
         "type": "radiation",
-        "offset_type": "Percentage Offset",
-        "offset_value": "750",
+        "offset_type": "Absolute Offset",
+        "offset_value": str(margin_mm),
         "region_name": region_name,
         "face_count": str(len(region_faces)),
     }

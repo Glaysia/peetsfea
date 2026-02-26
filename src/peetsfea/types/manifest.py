@@ -275,6 +275,13 @@ class EmPolicy(TypedDict):
     sweep_start_hz: float
     sweep_stop_hz: float
     validation_gate: str
+    max_delta_s: float
+    maximum_passes: int
+    minimum_passes: int
+    minimum_converged_passes: int
+    percent_refinement: int
+    basis_order: int
+    port_accuracy: int
 
 
 class PostTemplateResult(TypedDict):
