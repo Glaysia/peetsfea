@@ -7,13 +7,27 @@ def write_type1_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float =
     path.write_text(
         "\n".join(
             [
-                'spec_version = "0.2.4"',
+                'spec_version = "0.2.6"',
                 "",
                 "[design]",
                 'units = "mm"',
                 "",
                 "[backend]",
                 'tool = "hfss"',
+                "",
+                "[simulation]",
+                "radiation_margin_mm = 3500.0",
+                "setup_frequency_hz = 6.78e6",
+                "sweep_start_hz = 1.0e6",
+                "sweep_stop_hz = 45.0e6",
+                'validation_gate = "hard_fail"',
+                "max_delta_s = 0.001",
+                "maximum_passes = 35",
+                "minimum_passes = 9",
+                "minimum_converged_passes = 13",
+                "percent_refinement = 65",
+                "basis_order = 1",
+                "port_accuracy = 2",
                 "",
                 "[tv.width_mm]",
                 "range = [false, 1200.0, 1200.0, 1]",
@@ -117,7 +131,7 @@ def write_type1_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float =
                 "range = [false, 1.0, 1.0, 1]",
                 "",
                 "[coil_placement.tx_dd_top_clearance_mm]",
-                "range = [false, 0.0, 0.0, 1]",
+                "range = [false, 0.1, 0.1, 1]",
                 "[coil_placement.rx_face_clearance_mm]",
                 "range = [false, 0.0, 0.0, 1]",
                 "[coil_placement.dd_mirror_plane]",
@@ -368,4 +382,3 @@ def write_type1_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float =
         ),
         encoding="utf-8",
     )
-

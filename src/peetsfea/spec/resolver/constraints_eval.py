@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Callable, Literal, cast
 
 from peetsfea.spec.loader import TOMLTable
@@ -255,6 +256,375 @@ def max_supported_instances(kind: GroupKind, coil_groups_by_kind: dict[GroupKind
     return max(selected, hard_limit)
 
 
+_Point3 = tuple[float, float, float]
+_Edge2P = tuple[_Point3, _Point3]
+
+
+def _mount_allows_instance(mounts: list[ResolvedPcbMount], kind: GroupKind, instance_index: int) -> bool:
+    for mount in mounts:
+        if mount["kind"] != kind:
+            continue
+        selector_mode = mount["selector_mode"]
+        selector_index = mount["selector_index"]
+        if selector_mode == "all":
+            return True
+        if selector_mode == "index" and selector_index == instance_index:
+            return True
+    return False
+
+
+def _tx_dd_center_y_and_layer(
+    *,
+    instance_count: int,
+    instance_index: int,
+    pair_clearance_mm: float,
+    outer_y: float,
+    region_center_y: float,
+    region_min_y: float,
+    region_max_y: float,
+) -> tuple[float, int]:
+    if instance_count not in (2, 4):
+        raise ValueError(f"tx_dd selected_count must be 2 or 4 (actual={instance_count})")
+    if instance_index < 0 or instance_index >= instance_count:
+        raise ValueError(f"tx_dd instance index out of range: {instance_index}")
+    half_outer_y = outer_y / 2.0
+    pair_center_distance = outer_y + pair_clearance_mm
+    half_center_distance = pair_center_distance / 2.0
+    local_slot = instance_index % 2
+    layer_index = 0 if instance_count == 2 else (instance_index // 2)
+    sign = -1.0 if local_slot == 0 else 1.0
+    center_y = region_center_y + (sign * half_center_distance)
+    if (center_y - half_outer_y) < region_min_y or (center_y + half_outer_y) > region_max_y:
+        raise ValueError(
+            "tx_dd symmetric placement out of region "
+            f"(pair_clearance_mm={pair_clearance_mm}, outer_y={outer_y}, "
+            f"instance_index={instance_index}, region_min_y={region_min_y}, region_max_y={region_max_y})"
+        )
+    return center_y, layer_index
+
+
+def _tx_vertical_instance_offset_y(*, instance_index: int, instance_count: int, spacing_mm: float, trace_mm: float) -> float:
+    if instance_count <= 0:
+        raise ValueError(f"tx_vertical selected_count must be >= 1 (actual={instance_count})")
+    if instance_index < 0 or instance_index >= instance_count:
+        raise ValueError(
+            f"tx_vertical instance index out of range (instance_index={instance_index}, instance_count={instance_count})"
+        )
+    denom = max(1, instance_count - 1)
+    d = spacing_mm / float(denom)
+    if d < 0.0:
+        raise ValueError(f"tx_vertical center gap d must be >= 0 (actual={d})")
+    if instance_count % 2 == 0:
+        center = (instance_count - 1) / 2.0
+        return (float(instance_index) - center) * d
+    edge_half_thickness = trace_mm / 2.0
+    mid = instance_count // 2
+    rel = instance_index - mid
+    if rel == 0:
+        return edge_half_thickness
+    sign = -1.0 if rel < 0 else 1.0
+    return sign * (abs(rel) * d)
+
+
+def _build_rect_spiral_centerline_absolute(
+    *, turns: int, outer_x: float, outer_y: float, trace: float, gap: float, z: float
+) -> list[_Point3]:
+    if turns < 1:
+        raise ValueError("turns must be >= 1")
+    if trace <= 0:
+        raise ValueError("trace must be > 0")
+    if gap < 0:
+        raise ValueError("gap must be >= 0")
+    pitch = trace + gap
+    half_trace = trace / 2.0
+    left = -(outer_x / 2.0) + half_trace
+    right = (outer_x / 2.0) - half_trace
+    top = (outer_y / 2.0) - half_trace
+    bottom = -(outer_y / 2.0) + half_trace
+    if left >= right or bottom >= top:
+        raise ValueError("centerline outer width must be > 0")
+    points: list[_Point3] = []
+    for turn_idx in range(turns):
+        left_k = left + (turn_idx * pitch)
+        right_k = right - (turn_idx * pitch)
+        top_k = top - (turn_idx * pitch)
+        bottom_k = bottom + (turn_idx * pitch)
+        if left_k >= right_k or bottom_k >= top_k:
+            raise ValueError("invalid spiral dimensions for requested turns")
+        if turn_idx == 0:
+            points.append((left_k, top_k, z))
+        points.append((right_k, top_k, z))
+        points.append((right_k, bottom_k, z))
+        points.append((left_k, bottom_k, z))
+        if turn_idx < turns - 1:
+            next_top = top - ((turn_idx + 1) * pitch)
+            next_left = left + ((turn_idx + 1) * pitch)
+            points.append((left_k, next_top, z))
+            points.append((next_left, next_top, z))
+    return points
+
+
+def _extend_endpoints(points: list[_Point3], *, extension: float) -> list[_Point3]:
+    if extension <= 0.0 or len(points) < 2:
+        return points[:]
+    extended = [point for point in points]
+    start = list(extended[0])
+    start_next = extended[1]
+    start_dx = start[0] - start_next[0]
+    start_dy = start[1] - start_next[1]
+    start_dz = start[2] - start_next[2]
+    start_len = math.sqrt((start_dx * start_dx) + (start_dy * start_dy) + (start_dz * start_dz))
+    if start_len > 0.0:
+        start[0] += (start_dx / start_len) * extension
+        start[1] += (start_dy / start_len) * extension
+        start[2] += (start_dz / start_len) * extension
+    end = list(extended[-1])
+    end_prev = extended[-2]
+    end_dx = end[0] - end_prev[0]
+    end_dy = end[1] - end_prev[1]
+    end_dz = end[2] - end_prev[2]
+    end_len = math.sqrt((end_dx * end_dx) + (end_dy * end_dy) + (end_dz * end_dz))
+    if end_len > 0.0:
+        end[0] += (end_dx / end_len) * extension
+        end[1] += (end_dy / end_len) * extension
+        end[2] += (end_dz / end_len) * extension
+    out = extended[:]
+    out[0] = (start[0], start[1], start[2])
+    out[-1] = (end[0], end[1], end[2])
+    return out
+
+
+def _edge_points_at_path_end(*, points: list[_Point3], trace: float) -> _Edge2P:
+    if len(points) < 2:
+        raise ValueError("Cannot compute end edge from path with fewer than 2 points")
+    end = points[-1]
+    prev = points[-2]
+    dx = end[0] - prev[0]
+    dy = end[1] - prev[1]
+    seg_len = math.hypot(dx, dy)
+    if seg_len <= 1e-12:
+        raise ValueError("Cannot compute end edge from zero-length final segment")
+    nx = -dy / seg_len
+    ny = dx / seg_len
+    half_trace = trace / 2.0
+    p0: _Point3 = (end[0] + (nx * half_trace), end[1] + (ny * half_trace), end[2])
+    p1: _Point3 = (end[0] - (nx * half_trace), end[1] - (ny * half_trace), end[2])
+    return p0, p1
+
+
+def _find_txdd_right_inner_c_index(base_points: list[_Point3]) -> int:
+    bottom_right_candidates = [
+        (idx, abs(point[0]), abs(point[1]))
+        for idx, point in enumerate(base_points)
+        if point[0] > 0.0 and point[1] < 0.0
+    ]
+    if not bottom_right_candidates:
+        raise ValueError("tx_dd right endpoint contract violation: cannot locate inner bottom-right anchor for c->A")
+    min_abs_x = min(candidate[1] for candidate in bottom_right_candidates)
+    min_x_candidates = [candidate for candidate in bottom_right_candidates if abs(candidate[1] - min_abs_x) <= 1e-9]
+    min_abs_y = min(candidate[2] for candidate in min_x_candidates)
+    min_xy_candidates = [candidate for candidate in min_x_candidates if abs(candidate[2] - min_abs_y) <= 1e-9]
+    return max(candidate[0] for candidate in min_xy_candidates)
+
+
+def _txdd_right_points(
+    *,
+    turns: int,
+    outer_x: float,
+    outer_y: float,
+    trace: float,
+    gap: float,
+    instance_count: int,
+    layer_index: int | None,
+) -> list[_Point3]:
+    base = _build_rect_spiral_centerline_absolute(
+        turns=turns,
+        outer_x=outer_x,
+        outer_y=outer_y,
+        trace=trace,
+        gap=gap,
+        z=0.0,
+    )
+    if instance_count == 2:
+        points = base[2:]
+        if len(points) < 2:
+            raise ValueError("tx_dd right endpoint contract violation: C->d path is too short")
+        return points
+    if instance_count != 4:
+        raise ValueError(f"tx_dd selected_count must be 2 or 4 for right endpoint rule (actual={instance_count})")
+    if layer_index not in (0, 1):
+        raise ValueError(f"tx_dd right endpoint rule requires layer index 0 or 1 (actual={layer_index})")
+    if layer_index == 0:
+        c_index = _find_txdd_right_inner_c_index(base)
+        points = [point for point in reversed(base[: c_index + 1])]
+        if len(points) < 2:
+            raise ValueError("tx_dd right endpoint contract violation: c->A path is too short")
+        return points
+    mirrored_x = [(-point[0], point[1], point[2]) for point in base]
+    outer_a = base[0]
+    a_index = next(
+        (
+            idx
+            for idx, point in enumerate(mirrored_x)
+            if abs(point[0] - outer_a[0]) <= 1e-9 and abs(point[1] - outer_a[1]) <= 1e-9
+        ),
+        None,
+    )
+    if a_index is None:
+        raise ValueError("tx_dd right endpoint contract violation: cannot locate outer A anchor for A->D->...->d")
+    rotated = mirrored_x[a_index:] + mirrored_x[:a_index]
+    c_index = _find_txdd_right_inner_c_index(rotated)
+    d_index = c_index - 1
+    if d_index < 1:
+        raise ValueError("tx_dd right endpoint contract violation: A->D->...->d path is too short")
+    return [point for point in rotated[: d_index + 1]]
+
+
+def _txdd_right_layer_rank_by_z(*, selected_pcbs: list[ResolvedPcbInstance], instance_count: int) -> dict[int, int]:
+    if instance_count != 4:
+        return {}
+    rows: list[tuple[float, str, int]] = []
+    for instance_index in range(instance_count):
+        if instance_index % 2 == 0:
+            continue
+        candidates: list[tuple[str, float]] = []
+        for pcb in selected_pcbs:
+            if not pcb["present"]:
+                continue
+            if _mount_allows_instance(pcb["mounts"], "tx_dd", instance_index):
+                candidates.append((pcb["id"], -float(pcb["position"][2])))
+        if len(candidates) != 1:
+            raise ValueError(
+                "tx_dd right endpoint contract violation: each right instance must map to exactly one mounted board "
+                f"(instance_index={instance_index}, candidates={len(candidates)})"
+            )
+        board_id, z_center = candidates[0]
+        rows.append((z_center, board_id, instance_index))
+    if len(rows) != 2:
+        raise ValueError(
+            "tx_dd right endpoint contract violation: expected exactly 2 right instances for selected_count=4 "
+            f"(actual={len(rows)})"
+        )
+    rows.sort(key=lambda item: (item[0], item[1], item[2]))
+    return {rows[0][2]: 0, rows[1][2]: 1}
+
+
+def _tx_bridge_representative_right_edge_y(
+    *,
+    selected: SelectedParameters,
+    group_geometry_by_kind: dict[GroupKind, GroupGeometryParams],
+    coil_groups_by_kind: dict[GroupKind, ResolvedCoilGroup],
+    pcbs: list[ResolvedPcbInstance],
+) -> tuple[float, float]:
+    tx_dd_group = coil_groups_by_kind.get("tx_dd")
+    if tx_dd_group is None:
+        raise ValueError("tx_bridge_right_y_margin_ok requires selected tx_dd group")
+    tx_vertical_group = coil_groups_by_kind.get("tx_vertical")
+    if tx_vertical_group is None:
+        raise ValueError("tx_bridge_right_y_margin_ok requires selected tx_vertical group")
+    tx_dd_geometry = group_geometry_by_kind.get("tx_dd")
+    if tx_dd_geometry is None:
+        raise ValueError("tx_bridge_right_y_margin_ok requires selected tx_dd geometry")
+    tx_vertical_geometry = group_geometry_by_kind.get("tx_vertical")
+    if tx_vertical_geometry is None:
+        raise ValueError("tx_bridge_right_y_margin_ok requires selected tx_vertical geometry")
+
+    tx_region_outer_h = float(selected["tx_region_outer_h_mm"])
+    tx_region_min_y = -tx_region_outer_h / 2.0
+    tx_region_max_y = tx_region_outer_h / 2.0
+    tx_region_center_y = (tx_region_min_y + tx_region_max_y) / 2.0
+
+    tx_dd_transforms = tx_dd_group["instance_transforms"]
+    tx_dd_transform_dy = tx_dd_transforms[0]["dy"] if tx_dd_transforms else 0.0
+    tx_dd_instance_count = int(tx_dd_group["selected_count"])
+    tx_dd_outer_y = float(selected["tx_dd_outer_y"])
+    tx_dd_spacing_mm = float(tx_dd_group["spacing_mm"])
+    tx_dd_turns = int(tx_dd_geometry["turn_count_max"])
+    tx_dd_outer_x = float(selected["tx_dd_outer_x"])
+    tx_dd_trace = float(tx_dd_geometry["trace"])
+    tx_dd_gap = float(tx_dd_geometry["gap"])
+    txdd_right_layer_rank = _txdd_right_layer_rank_by_z(selected_pcbs=pcbs, instance_count=tx_dd_instance_count)
+    dd_right_selection_key: tuple[float, str, int] | None = None
+    dd_right_edge_y: float | None = None
+    for pcb in pcbs:
+        if not pcb["present"]:
+            continue
+        for instance_index in range(tx_dd_instance_count):
+            if instance_index % 2 == 0:
+                continue
+            if not _mount_allows_instance(pcb["mounts"], "tx_dd", instance_index):
+                continue
+            center_y, tx_dd_layer_index = _tx_dd_center_y_and_layer(
+                instance_count=tx_dd_instance_count,
+                instance_index=instance_index,
+                pair_clearance_mm=tx_dd_spacing_mm,
+                outer_y=tx_dd_outer_y,
+                region_center_y=tx_region_center_y,
+                region_min_y=tx_region_min_y,
+                region_max_y=tx_region_max_y,
+            )
+            right_layer_index = txdd_right_layer_rank.get(instance_index, tx_dd_layer_index)
+            capture_dd_right_d_edge = (tx_dd_instance_count == 2) or (
+                tx_dd_instance_count == 4 and right_layer_index == 1
+            )
+            if not capture_dd_right_d_edge:
+                continue
+            right_points_local = _txdd_right_points(
+                turns=tx_dd_turns,
+                outer_x=tx_dd_outer_x,
+                outer_y=tx_dd_outer_y,
+                trace=tx_dd_trace,
+                gap=tx_dd_gap,
+                instance_count=tx_dd_instance_count,
+                layer_index=right_layer_index,
+            )
+            right_points_local = _extend_endpoints(right_points_local, extension=(tx_dd_trace / 2.0))
+            right_points = [
+                (point[0], point[1] + center_y + tx_dd_transform_dy, point[2]) for point in right_points_local
+            ]
+            d_edge = _edge_points_at_path_end(points=right_points, trace=tx_dd_trace)
+            candidate_edge_y = max(d_edge[0][1], d_edge[1][1])
+            y_center = center_y + tx_dd_transform_dy
+            selection_key = (-y_center, pcb["id"], instance_index)
+            if dd_right_selection_key is None or selection_key < dd_right_selection_key:
+                dd_right_selection_key = selection_key
+                dd_right_edge_y = candidate_edge_y
+    if dd_right_edge_y is None:
+        raise ValueError("tx_bridge_right_y_margin_ok cannot resolve tx_dd right representative edge Y")
+
+    tx_vertical_instance_count = int(tx_vertical_group["selected_count"])
+    if tx_vertical_instance_count <= 0:
+        raise ValueError(
+            "tx_bridge_right_y_margin_ok expected tx_vertical selected_count >= 1 while resolving representative edge Y"
+        )
+    tx_vertical_transforms = tx_vertical_group["instance_transforms"]
+    tx_vertical_transform_dy = tx_vertical_transforms[0]["dy"] if tx_vertical_transforms else 0.0
+    tx_vertical_spacing_mm = float(tx_vertical_group["spacing_mm"])
+    tx_vertical_trace = float(tx_vertical_geometry["trace"])
+    vertical_right_selection_key: tuple[float, str, int] | None = None
+    vertical_right_edge_y: float | None = None
+    for pcb in pcbs:
+        if not pcb["present"]:
+            continue
+        for instance_index in range(tx_vertical_instance_count):
+            if not _mount_allows_instance(pcb["mounts"], "tx_vertical", instance_index):
+                continue
+            off_y = _tx_vertical_instance_offset_y(
+                instance_index=instance_index,
+                instance_count=tx_vertical_instance_count,
+                spacing_mm=tx_vertical_spacing_mm,
+                trace_mm=tx_vertical_trace,
+            )
+            y_center = tx_region_center_y + tx_vertical_transform_dy + off_y
+            selection_key = (-y_center, pcb["id"], instance_index)
+            if vertical_right_selection_key is None or selection_key < vertical_right_selection_key:
+                vertical_right_selection_key = selection_key
+                vertical_right_edge_y = y_center
+    if vertical_right_edge_y is None:
+        raise ValueError("tx_bridge_right_y_margin_ok cannot resolve tx_vertical right representative edge Y")
+    return dd_right_edge_y, vertical_right_edge_y
+
+
 def eval_numeric_expr(
     *,
     selected: SelectedParameters,
@@ -385,6 +755,37 @@ def resolve_func_ref(
             return -1.0, None
         return float(max(cast(int, mount["selector_index"]) for mount in index_mounts)), None
 
+    def _handle_tx_bridge_right_y_margin_ok(parts_text: list[str]) -> tuple[float, str | None]:
+        if len(parts_text) != 1:
+            raise ValueError("rhs.func tx_bridge_right_y_margin_ok() must have 1 argument: margin_mm")
+        margin_mm, _ = eval_numeric_expr(
+            selected=selected,
+            group_geometry_by_kind=group_geometry_by_kind,
+            coil_groups_by_kind=coil_groups_by_kind,
+            pcbs=pcbs,
+            expr=parts_text[0],
+        )
+        if margin_mm < 0.0:
+            raise ValueError(f"rhs.func tx_bridge_right_y_margin_ok() margin_mm must be >= 0 (actual={margin_mm})")
+        tx_vertical_group = coil_groups_by_kind.get("tx_vertical")
+        if tx_vertical_group is None:
+            raise ValueError("rhs.func tx_bridge_right_y_margin_ok() requires tx_vertical group")
+        if int(tx_vertical_group["selected_count"]) == 0:
+            return 1.0, "func=tx_bridge_right_y_margin_ok skipped because tx_vertical.selected_count == 0"
+        dd_right_edge_y, vertical_right_edge_y = _tx_bridge_representative_right_edge_y(
+            selected=selected,
+            group_geometry_by_kind=group_geometry_by_kind,
+            coil_groups_by_kind=coil_groups_by_kind,
+            pcbs=pcbs,
+        )
+        ok = dd_right_edge_y >= (vertical_right_edge_y + margin_mm)
+        debug = (
+            "func=tx_bridge_right_y_margin_ok "
+            f"dd_right_edge_y={dd_right_edge_y} vertical_right_edge_y={vertical_right_edge_y} "
+            f"margin_mm={margin_mm} ok={ok}"
+        )
+        return (1.0 if ok else 0.0), debug
+
     func_dispatch: dict[str, Callable[[list[str]], tuple[float, str | None]]] = {
         "add": _handle_add,
         "mul": _handle_mul,
@@ -396,6 +797,7 @@ def resolve_func_ref(
         "feasible_turns_max": lambda values: _handle_feasible_turns(values, max_only=True),
         "max_supported_mount_index": _handle_max_supported_mount_index,
         "max_mount_selector_index": _handle_max_mount_selector_index,
+        "tx_bridge_right_y_margin_ok": _handle_tx_bridge_right_y_margin_ok,
     }
     handler = func_dispatch.get(name)
     if handler is None:
@@ -404,7 +806,8 @@ def resolve_func_ref(
             "add(...), mul(...), min(...), max(...), sub(...), active_group(kind), "
             "feasible_turns(kind,outer_x_path,outer_y_path,outer_cap_y_path), "
             "feasible_turns_max(kind,outer_x_path,outer_y_path,outer_cap_y_path), "
-            "max_supported_mount_index(kind), max_mount_selector_index(kind)"
+            "max_supported_mount_index(kind), max_mount_selector_index(kind), "
+            "tx_bridge_right_y_margin_ok(margin_mm)"
         )
     return handler(parts)
 

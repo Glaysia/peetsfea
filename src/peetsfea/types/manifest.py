@@ -17,6 +17,7 @@ class ManifestSpec(TypedDict):
     spec_version: str
     design_name: str
     units: str
+    simulation: EmPolicy
 
 
 class SelectedParameters(TypedDict):
@@ -274,6 +275,21 @@ class EmPolicy(TypedDict):
     sweep_start_hz: float
     sweep_stop_hz: float
     validation_gate: str
+    max_delta_s: float
+    maximum_passes: int
+    minimum_passes: int
+    minimum_converged_passes: int
+    percent_refinement: int
+    basis_order: int
+    port_accuracy: int
+
+
+class PostTemplateResult(TypedDict):
+    template_id: str
+    report_name: str
+    solution_name: str
+    traces: list[str]
+    output_variables: list[str]
 
 
 class EmPipelineResult(TypedDict):
@@ -282,8 +298,9 @@ class EmPipelineResult(TypedDict):
     subtract: dict[str, list[str]]
     boundary: dict[str, str]
     ports: dict[str, list[str]]
+    sources: dict[str, str]
     analysis: dict[str, float | str]
-    post_templates: list[str]
+    post_templates: list[PostTemplateResult]
     validation_report: dict[str, str | bool]
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, Protocol, cast
 
 from ansys.aedt.core import Hfss
 from ansys.aedt.core.modeler.cad.object_3d import Object3d
@@ -34,6 +34,17 @@ TX_DD_START_STUB_DOWN_MM = 3.0
 RX_DD_BACK_STUB_LEN_MM = 3.0
 RX_DD_BACK_STUB_AXIS_SIGN_X = -1.0
 FR4_SUBTRACT_OVERLAP_MM = 0.1
+
+
+class _BoundaryModule(Protocol):
+    def AutoIdentifyPorts(
+        self,
+        faces: list[object],
+        is_wave_port: bool,
+        reference_conductors: list[object],
+        port_name: str,
+        renormalize: bool,
+    ) -> None: ...
 
 
 def _rxdd_back_stub_sort_key(source: _RxDdBackStubSource) -> tuple[str, int, str]:
@@ -79,9 +90,10 @@ def _auto_identify_ports_direct(
     board_id: str,
     context: str,
 ) -> None:
-    assert hfss.oboundary is not None, "HFSS boundary module is not initialized"
+    boundary_module = cast(_BoundaryModule | None, hfss.oboundary)
+    assert boundary_module is not None, "HFSS boundary module is not initialized"
     try:
-        hfss.oboundary.AutoIdentifyPorts(
+        boundary_module.AutoIdentifyPorts(
             ["NAME:Faces", int(face_id)],
             False,
             ["NAME:ReferenceConductors", reference_conductor_name],
@@ -318,7 +330,7 @@ def _finalize_solids_and_substrates_impl(
                 f"source={source_object_name}, source_raw={source_object_name_raw})"
             )
         stub_origin, stub_sizes = _rxdd_back_stub_origin_and_sizes(anchor_xyz=anchor_xyz, trace=trace)
-        stub_name = f"stub_rx_dd_back_{endpoint_label}_{board_id}_g{instance_index}_{design_id}"
+        stub_name = f"stub_rxdd_{board_id}_g{instance_index}_{endpoint_label}"
         stub_created = modeler.create_box(origin=stub_origin, sizes=stub_sizes, name=stub_name, material="copper")
         if not stub_created:
             raise ValueError(
@@ -450,7 +462,7 @@ def _finalize_solids_and_substrates_impl(
                 start_xyz[2] - TX_DD_START_STUB_DOWN_MM,
             ]
             stub_sizes = [trace, trace, TX_DD_START_STUB_DOWN_MM]
-            stub_name = f"stub_tx_dd_start_down_{board_id}_{stub_idx}_{design_id}"
+            stub_name = f"stub_txdd_{board_id}_{stub_idx}"
             stub_created = modeler.create_box(origin=stub_origin, sizes=stub_sizes, name=stub_name, material="copper")
             if not stub_created:
                 raise ValueError(
@@ -481,7 +493,7 @@ def _finalize_solids_and_substrates_impl(
                 f"(board_id={board_id}, actual={len(port_edges)})"
             )
         start_port_sheet_points = _sheet_points_from_edge_pair(dd_edge=port_edges[0], vertical_edge=port_edges[1])
-        start_port_sheet_name = f"sheet_tx_dd_start_ports_{board_id}_{design_id}"
+        start_port_sheet_name = f"sheet_txdd_ports_{board_id}"
         try:
             start_port_sheet_obj_name, start_port_sheet_obj = _create_sheet_from_points(
                 modeler=modeler,
@@ -518,7 +530,7 @@ def _finalize_solids_and_substrates_impl(
         # Match the direct HFSS COM invocation pattern (BoundarySetup.AutoIdentifyPorts)
         # using one deterministic reference conductor from the generated start stubs.
         reference_conductor_name = sorted(reference_conductors)[0]
-        start_port_name = "1"
+        start_port_name = "TX_TML"
         _auto_identify_ports_direct(
             hfss=hfss,
             face_id=int(start_port_faces[0]),
@@ -540,7 +552,7 @@ def _finalize_solids_and_substrates_impl(
             dd_edge=rxdd_start_stub_edge_by_name[selected_rxdd_stub_names[0]],
             vertical_edge=rxdd_start_stub_edge_by_name[selected_rxdd_stub_names[1]],
         )
-        start_port_sheet_name = f"sheet_rx_dd_start_ports_{design_id}"
+        start_port_sheet_name = "sheet_rxdd_ports"
         try:
             start_port_sheet_obj_name, start_port_sheet_obj = _create_sheet_from_points(
                 modeler=modeler,
@@ -577,7 +589,7 @@ def _finalize_solids_and_substrates_impl(
                 }
             )
         )
-        start_port_name = "2"
+        start_port_name = "RX_TML"
         _auto_identify_ports_direct(
             hfss=hfss,
             face_id=int(start_port_faces[0]),

@@ -8,13 +8,28 @@
 # Numeric range convention:
 #   range = [is_integer, start, end, count]
 
-spec_version = "0.2.4"
+spec_version = "0.2.6"
 
 [design]
 units = "mm"
 
 [backend]
 tool = "hfss"
+
+[simulation]
+# EM policy: all values are in Hz/mm and consumed as SSOT by em_pipeline.
+radiation_margin_mm = 3500.0
+setup_frequency_hz = 6.78e6
+sweep_start_hz = 1.0e6
+sweep_stop_hz = 45.0e6
+validation_gate = "hard_fail"
+max_delta_s = 0.001
+maximum_passes = 35
+minimum_passes = 9
+minimum_converged_passes = 13
+percent_refinement = 65
+basis_order = 1
+port_accuracy = 2
 
 # ----------------------------------------------------------------------------
 # Non-model scene/envelope sizes
@@ -198,7 +213,7 @@ range = [false, 1.0, 1.0, 1]
 
 [coil_placement.tx_dd_top_clearance_mm]
 # Clearance from TX DD zone top face to DD coil top (mm), must be >= 0.
-range = [false, 0.0, 0.0, 1]
+range = [false, 0.1, 0.1, 1]
 
 [coil_placement.rx_face_clearance_mm]
 # Clearance from RX +X face (TV side) to RX DD coil face (mm), must be >= 0.
@@ -382,6 +397,16 @@ message = "2*tx_dd_outer_y + tx_dd_pair_spacing_mm must be <= tx_region_outer_h_
 lhs = { func = "add(mul(2,tx_dd_outer_y),tx_dd_pair_spacing_mm)" }
 op = "<="
 rhs = { path = "tx_region_outer_h_mm" }
+
+# Bridge-side ordering guard: reject samples where DD-right falls left of vertical-right.
+# If tx_vertical is not active (selected_count=0), this rule is treated as pass.
+[[constraints.rules]]
+id = "tx_bridge_right_y_margin"
+kind = "comparison"
+message = "tx_dd right representative y must be >= tx_vertical right representative y + 1.0mm"
+lhs = { func = "tx_bridge_right_y_margin_ok(1.0)" }
+op = "=="
+rhs = { value = 1.0 }
 
 # Placement feasibility gate: rx_dd pair must fit rx region width.
 [[constraints.rules]]
@@ -707,7 +732,7 @@ instance_transforms = [
 
 # ----------------------------------------------------------------------------
 # PCB instances (9 total: 5 always-on + 4 optional)
-# - 0.2.4 fixed-topology mode:
+# - 0.2.6 fixed-topology mode:
 #   coil count is primary, PCB present/mounts are normalized to this topology.
 # - tx_vertical uses dedicated host board tx_vertical_0.
 # - optional boards remain in spec for compatibility but are forced inactive.
