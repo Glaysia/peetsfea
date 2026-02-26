@@ -17,6 +17,7 @@ from peetsfea.spec.loader import load_toml_bytes, require_str, require_table
 from peetsfea.spec.resolver import SelectionConstraintError, resolve_selection
 from peetsfea.spec.resolver.sampling import build_candidates as _build_candidates
 from peetsfea.types.manifest import (
+    EmPolicy,
     GroupGeometryParams,
     Manifest,
     ResolvedCoilGroup,
@@ -26,7 +27,58 @@ from peetsfea.types.manifest import (
 )
 
 MAX_ATTEMPTS = 64
-SUPPORTED_SPEC_VERSION = "0.2.5"
+SUPPORTED_SPEC_VERSION = "0.2.6"
+
+
+def _require_number(value: object, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be number")
+    return float(value)
+
+
+def _parse_simulation_policy(spec: Mapping[str, object]) -> EmPolicy:
+    raw_simulation = spec.get("simulation")
+    if not isinstance(raw_simulation, dict):
+        raise ValueError("simulation must be a table/object")
+    simulation = raw_simulation
+    expected_keys = {
+        "radiation_margin_mm",
+        "setup_frequency_hz",
+        "sweep_start_hz",
+        "sweep_stop_hz",
+        "validation_gate",
+    }
+    missing_keys = sorted(expected_keys - set(simulation.keys()))
+    if missing_keys:
+        raise ValueError(f"simulation is missing required keys: {missing_keys}")
+    extra_keys = sorted(set(simulation.keys()) - expected_keys)
+    if extra_keys:
+        raise ValueError(f"simulation contains unsupported keys: {extra_keys}")
+
+    radiation_margin_mm = _require_number(simulation["radiation_margin_mm"], "simulation.radiation_margin_mm")
+    setup_frequency_hz = _require_number(simulation["setup_frequency_hz"], "simulation.setup_frequency_hz")
+    sweep_start_hz = _require_number(simulation["sweep_start_hz"], "simulation.sweep_start_hz")
+    sweep_stop_hz = _require_number(simulation["sweep_stop_hz"], "simulation.sweep_stop_hz")
+    raw_validation_gate = simulation["validation_gate"]
+    if not isinstance(raw_validation_gate, str):
+        raise ValueError("simulation.validation_gate must be string")
+    if raw_validation_gate != "hard_fail":
+        raise ValueError("simulation.validation_gate must be 'hard_fail'")
+    if radiation_margin_mm <= 0.0:
+        raise ValueError("simulation.radiation_margin_mm must be > 0")
+    if setup_frequency_hz <= 0.0:
+        raise ValueError("simulation.setup_frequency_hz must be > 0")
+    if sweep_start_hz <= 0.0:
+        raise ValueError("simulation.sweep_start_hz must be > 0")
+    if sweep_stop_hz <= sweep_start_hz:
+        raise ValueError("simulation.sweep_stop_hz must be > simulation.sweep_start_hz")
+    return {
+        "radiation_margin_mm": radiation_margin_mm,
+        "setup_frequency_hz": setup_frequency_hz,
+        "sweep_start_hz": sweep_start_hz,
+        "sweep_stop_hz": sweep_stop_hz,
+        "validation_gate": raw_validation_gate,
+    }
 
 
 def _collect_range_nodes(value: object) -> list[list[object]]:
@@ -110,6 +162,7 @@ def run(config: RunConfig) -> Manifest:
     backend_tool = require_str(backend.get("tool"), "backend.tool")
     if backend_tool != "hfss":
         raise ValueError("backend.tool must be 'hfss' for this MVP")
+    simulation = _parse_simulation_policy(spec)
     repro_mode = cast(Literal["sampled_toml", "frozen_toml"], _detect_repro_mode(spec))
 
     selected_parameters: SelectedParameters | None = None
@@ -183,6 +236,7 @@ def run(config: RunConfig) -> Manifest:
             "spec_version": spec_version,
             "design_name": design_name,
             "units": units,
+            "simulation": simulation,
         },
         "created_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "manifest_path": str(output_path),

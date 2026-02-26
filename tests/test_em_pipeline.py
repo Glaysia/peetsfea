@@ -90,9 +90,19 @@ class _FakeHfss:
         def __init__(self, parent: "_FakeHfss") -> None:
             self._parent = parent
 
-    def assign_radiation_boundary_to_faces(self, assignment: int, name: str | None = None) -> bool:
+    def assign_radiation_boundary_to_faces(self, assignment: object, name: str | None = None) -> bool:
         _ = name
-        self.radiation_assigned_faces.append(assignment)
+        if isinstance(assignment, list):
+            normalized = assignment[0] if assignment else -1
+        else:
+            normalized = assignment
+        if isinstance(normalized, bool):
+            face_id = int(normalized)
+        elif isinstance(normalized, (int, float, str)):
+            face_id = int(normalized)
+        else:
+            face_id = -1
+        self.radiation_assigned_faces.append(face_id)
         return True
 
     def delete_setup(self, name: str) -> bool:
@@ -338,3 +348,22 @@ def test_run_em_pipeline_normalizes_parenthesized_terminal_names() -> None:
 def test_build_ports_returns_endpoint_based_default_port_names() -> None:
     ports = build_ports(cast(Hfss, _FakeHfss()), cast(Modeler3D, _FakeModeler()), _input())
     assert ports == {"tx": ["TX_TML"], "rx": ["RX_TML"]}
+
+
+def test_run_em_pipeline_uses_policy_frequencies_for_setup_and_sweep() -> None:
+    fake_hfss = _FakeHfss()
+    policy = default_em_policy()
+    policy["setup_frequency_hz"] = 13.56e6
+    policy["sweep_start_hz"] = 2.5e6
+    policy["sweep_stop_hz"] = 60.0e6
+
+    result = run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), policy)
+
+    setup_payload = fake_hfss.inserted_setup_payloads[0]
+    sweep_payload = fake_hfss.inserted_sweep_payloads[0]
+    assert "13.56MHz" in setup_payload
+    assert "2.5MHz" in sweep_payload
+    assert "60MHz" in sweep_payload
+    assert result["analysis"]["setup_frequency_hz"] == 13.56e6
+    assert result["analysis"]["sweep_start_hz"] == 2.5e6
+    assert result["analysis"]["sweep_stop_hz"] == 60.0e6

@@ -73,8 +73,11 @@ pitch = 1.3
 wire = { diameter = 1.0, insulation = 0.1 }
 
 [simulation]
-solution = "frequency"
-frequency = 100e3
+radiation_margin_mm = 3500.0
+setup_frequency_hz = 6.78e6
+sweep_start_hz = 1.0e6
+sweep_stop_hz = 45.0e6
+validation_gate = "hard_fail"
 
 [dataset]
 enabled = true
@@ -160,7 +163,7 @@ python run.py
     - `pcbs[].z_mode`는 `absolute | relative_to_pcb`를 사용한다.
     - `relative_to_pcb`일 때 최종 z는 `<base>.z + sample(z_delta_path)`로 파생한다.
     - 기본 예시: `tx_main_1`은 `z_relative_base_id="tx_main_0"`, `z_delta_path="pcb_spacing.tx_main_1_z_from_tx_main_0_mm"`.
-  - 0.2.5 고정 토폴로지 규칙:
+  - 0.2.6 고정 토폴로지 규칙:
     - 코일 개수(`selected_coil_groups`)가 주도하고 PCB `present/mounts`는 정규화된다.
     - `tx_vertical`은 전용 보드 `tx_vertical_0`에만 매핑된다.
     - `tx_opt_*/rx_opt_*`는 호환 필드로 남기되 기본 경로에서 강제로 비활성(`present=false`, `mounts=[]`) 처리된다.
@@ -186,11 +189,11 @@ python run.py
   - `tx_vertical_center_gap_range` 규칙으로 `tx_vertical_center_gap_mm >= 1.62`를 강제한다.
   - `constraints.rules`는 필수이며 누락/빈 값이면 실행 전 실패한다.
   - 목적은 GA/딥러닝 샘플러가 동일 TOML 제약을 사전 필터에 재사용하는 것이다.
-- 하드코딩 설계값은 TOML로 승격 중이며, 1차로 다음 섹션이 추가됐다.
 - 하드코딩 설계값은 TOML로 승격되어 resolver/geometry 입력으로 직접 사용된다.
   - `[coil_material]`: `via_diameter_mm`, `pcb_thickness_mm`, `cu_thickness_mm`, `fr4_er`
   - `[scene_anchor]`: `shelf_height_mm`, `shelf_min_size_x_mm`, `rx_region_bottom_from_tv_mm`
   - `[coil_placement]`: `tx_dd_top_clearance_mm`, `rx_face_clearance_mm`, `dd_mirror_plane`, `rx_plane`, `tx_vertical_plane`
+  - `[simulation]`: `radiation_margin_mm`, `setup_frequency_hz`, `sweep_start_hz`, `sweep_stop_hz`, `validation_gate`
   - 현재는 TOML 계약 고정을 위해 대부분 `count=1`(또는 단일 문자열)로 선언한다.
 
 동작 요약:
@@ -206,7 +209,7 @@ python run.py
 8) `<ansys_run_dir>/<design_id>.aedt`, `geometry_metadata_<design_id>.json`, `manifest_<design_id>.json` 저장
   - `manifest/metadata.repro_mode`: `sampled_toml | frozen_toml | manifest_json`
 
-## Internal Architecture (0.2.5)
+## Internal Architecture (0.2.6)
 ### Geometry Build Pipeline
 - 엔트리포인트 `build_square_spiral_from_manifest`는 다음 오케스트레이션 단계로 분리되어 동작한다.
   - `_prepare_runtime`: manifest/prelude 검증과 런타임 컨텍스트 구성

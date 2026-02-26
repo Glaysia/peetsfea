@@ -8,13 +8,21 @@
 # Numeric range convention:
 #   range = [is_integer, start, end, count]
 
-spec_version = "0.2.5"
+spec_version = "0.2.6"
 
 [design]
 units = "mm"
 
 [backend]
 tool = "hfss"
+
+[simulation]
+# EM policy: all values are in Hz/mm and consumed as SSOT by em_pipeline.
+radiation_margin_mm = 3500.0
+setup_frequency_hz = 6.78e6
+sweep_start_hz = 1.0e6
+sweep_stop_hz = 45.0e6
+validation_gate = "hard_fail"
 
 # ----------------------------------------------------------------------------
 # Non-model scene/envelope sizes
@@ -717,7 +725,7 @@ instance_transforms = [
 
 # ----------------------------------------------------------------------------
 # PCB instances (9 total: 5 always-on + 4 optional)
-# - 0.2.5 fixed-topology mode:
+# - 0.2.6 fixed-topology mode:
 #   coil count is primary, PCB present/mounts are normalized to this topology.
 # - tx_vertical uses dedicated host board tx_vertical_0.
 # - optional boards remain in spec for compatibility but are forced inactive.

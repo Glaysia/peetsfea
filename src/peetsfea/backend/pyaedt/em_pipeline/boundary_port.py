@@ -28,7 +28,7 @@ def build_boundary(hfss: Hfss, modeler: Modeler3D, policy: EmPolicy) -> dict[str
         )
     for idx, face_id in enumerate(region_faces):
         rad_name = f"Rad_Region750_{idx}"
-        boundary = hfss.assign_radiation_boundary_to_faces(face_id, name=rad_name)
+        boundary = hfss.assign_radiation_boundary_to_faces([face_id], name=rad_name)
         if not boundary:
             raise ValueError(
                 "Failed to assign radiation boundary on region face "
