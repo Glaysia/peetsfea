@@ -134,7 +134,7 @@ def test_missing_simulation_section_fails(tmp_path: Path, monkeypatch: pytest.Mo
     toml_path = tmp_path / "missing_simulation.toml"
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8")
-    raw = re.sub(r"\[simulation\]\n(?:.*\n){5}", "", raw, count=1)
+    raw = re.sub(r"\[simulation\]\n(?:[^\n]*\n)+?\n", "", raw, count=1)
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("b" * 40))
 
@@ -176,4 +176,70 @@ def test_manifest_includes_simulation_policy(tmp_path: Path, monkeypatch: pytest
         "sweep_start_hz": 1.0e6,
         "sweep_stop_hz": 45.0e6,
         "validation_gate": "hard_fail",
+        "max_delta_s": 0.001,
+        "maximum_passes": 35,
+        "minimum_passes": 9,
+        "minimum_converged_passes": 13,
+        "percent_refinement": 65,
+        "basis_order": 1,
+        "port_accuracy": 2,
     }
+
+
+def test_missing_adaptive_key_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "missing_adaptive_key.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace("port_accuracy = 2\n", "", 1)
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("f" * 40))
+
+    with pytest.raises(ValueError, match=r"simulation is missing required keys: \['port_accuracy'\]"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_unknown_simulation_key_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "unknown_simulation_key.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        'validation_gate = "hard_fail"\n', 'validation_gate = "hard_fail"\nunsupported_knob = 1\n', 1
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("1" * 40))
+
+    with pytest.raises(ValueError, match=r"simulation contains unsupported keys: \['unsupported_knob'\]"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_invalid_adaptive_pass_constraints_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "invalid_adaptive_pass_constraints.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace("minimum_passes = 9", "minimum_passes = 40", 1)
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("2" * 40))
+
+    with pytest.raises(
+        ValueError, match=r"simulation pass constraints must satisfy maximum_passes >= minimum_passes >= 1"
+    ):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_invalid_minimum_converged_passes_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "invalid_minimum_converged.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace("minimum_converged_passes = 13", "minimum_converged_passes = 40", 1)
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("7" * 40))
+
+    with pytest.raises(ValueError, match=r"simulation.minimum_converged_passes must be <= simulation.maximum_passes"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_invalid_adaptive_type_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "invalid_adaptive_type.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace("basis_order = 1", 'basis_order = "1"', 1)
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("3" * 40))
+
+    with pytest.raises(ValueError, match="simulation.basis_order must be int"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))

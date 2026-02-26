@@ -142,13 +142,16 @@ class _FakeHfss:
 class _FakeModeler:
     def __init__(self) -> None:
         self.created_region_name: str | None = None
+        self.created_region_pad_value: float | None = None
+        self.created_region_pad_type: str | None = None
 
     class _Region:
         def __init__(self, name: str) -> None:
             self.name = name
 
     def create_region(self, pad_value: int, pad_type: str, name: str) -> "_FakeModeler._Region":
-        _ = (pad_value, pad_type)
+        self.created_region_pad_value = float(pad_value)
+        self.created_region_pad_type = pad_type
         self.created_region_name = name
         return _FakeModeler._Region(name)
 
@@ -217,7 +220,11 @@ def test_run_em_pipeline_returns_full_contract() -> None:
         "validation_report",
     }
     assert result["validation_report"]["ok"] is True
+    assert fake_modeler.created_region_pad_type == "Absolute Offset"
+    assert fake_modeler.created_region_pad_value == 3500.0
     assert sorted(fake_hfss.radiation_assigned_faces) == [10, 11, 12, 13, 14, 15]
+    assert result["boundary"]["offset_type"] == "Absolute Offset"
+    assert result["boundary"]["offset_value"] == "3500.0"
     assert fake_hfss.inserted_setup_types == ["HfssDriven"]
     assert fake_hfss.inserted_sweep_setup_names == ["Setup1"]
     assert [name for name, _, _ in fake_hfss.created_output_variables] == [
@@ -367,3 +374,26 @@ def test_run_em_pipeline_uses_policy_frequencies_for_setup_and_sweep() -> None:
     assert result["analysis"]["setup_frequency_hz"] == 13.56e6
     assert result["analysis"]["sweep_start_hz"] == 2.5e6
     assert result["analysis"]["sweep_stop_hz"] == 60.0e6
+
+
+def test_run_em_pipeline_uses_adaptive_policy_keys_only_for_exposed_numbers() -> None:
+    fake_hfss = _FakeHfss()
+    policy = default_em_policy()
+    policy["max_delta_s"] = 0.005
+    policy["maximum_passes"] = 22
+    policy["minimum_passes"] = 5
+    policy["minimum_converged_passes"] = 4
+    policy["percent_refinement"] = 47
+    policy["basis_order"] = 2
+    policy["port_accuracy"] = 3
+
+    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), policy)
+    setup_payload = fake_hfss.inserted_setup_payloads[0]
+
+    assert 0.005 in setup_payload
+    assert 22 in setup_payload
+    assert 5 in setup_payload
+    assert 4 in setup_payload
+    assert 47 in setup_payload
+    assert 2 in setup_payload
+    assert 3 in setup_payload
