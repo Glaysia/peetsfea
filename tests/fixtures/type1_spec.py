@@ -7,7 +7,7 @@ def write_type1_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float =
     path.write_text(
         "\n".join(
             [
-                'spec_version = "0.2.4"',
+                'spec_version = "0.2.5"',
                 "",
                 "[design]",
                 'units = "mm"',
@@ -117,7 +117,7 @@ def write_type1_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float =
                 "range = [false, 1.0, 1.0, 1]",
                 "",
                 "[coil_placement.tx_dd_top_clearance_mm]",
-                "range = [false, 0.0, 0.0, 1]",
+                "range = [false, 0.1, 0.1, 1]",
                 "[coil_placement.rx_face_clearance_mm]",
                 "range = [false, 0.0, 0.0, 1]",
                 "[coil_placement.dd_mirror_plane]",
@@ -368,4 +368,3 @@ def write_type1_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float =
         ),
         encoding="utf-8",
     )
-

@@ -8,7 +8,7 @@
 # Numeric range convention:
 #   range = [is_integer, start, end, count]
 
-spec_version = "0.2.4"
+spec_version = "0.2.5"
 
 [design]
 units = "mm"
@@ -198,7 +198,7 @@ range = [false, 1.0, 1.0, 1]
 
 [coil_placement.tx_dd_top_clearance_mm]
 # Clearance from TX DD zone top face to DD coil top (mm), must be >= 0.
-range = [false, 0.0, 0.0, 1]
+range = [false, 0.1, 0.1, 1]
 
 [coil_placement.rx_face_clearance_mm]
 # Clearance from RX +X face (TV side) to RX DD coil face (mm), must be >= 0.
@@ -707,7 +707,7 @@ instance_transforms = [
 
 # ----------------------------------------------------------------------------
 # PCB instances (9 total: 5 always-on + 4 optional)
-# - 0.2.4 fixed-topology mode:
+# - 0.2.5 fixed-topology mode:
 #   coil count is primary, PCB present/mounts are normalized to this topology.
 # - tx_vertical uses dedicated host board tx_vertical_0.
 # - optional boards remain in spec for compatibility but are forced inactive.

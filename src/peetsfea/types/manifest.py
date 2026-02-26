@@ -276,6 +276,14 @@ class EmPolicy(TypedDict):
     validation_gate: str
 
 
+class PostTemplateResult(TypedDict):
+    template_id: str
+    report_name: str
+    solution_name: str
+    traces: list[str]
+    output_variables: list[str]
+
+
 class EmPipelineResult(TypedDict):
     groups: dict[str, list[str]]
     series: dict[str, list[str]]
@@ -283,7 +291,7 @@ class EmPipelineResult(TypedDict):
     boundary: dict[str, str]
     ports: dict[str, list[str]]
     analysis: dict[str, float | str]
-    post_templates: list[str]
+    post_templates: list[PostTemplateResult]
     validation_report: dict[str, str | bool]
 
 

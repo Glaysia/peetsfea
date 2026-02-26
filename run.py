@@ -41,8 +41,8 @@ def run_one(seed: int) -> bool:
         toml_path=f"{cwd}/run/type1.toml",
         seed=seed,
         backend="hfss",
-        non_graphical=True,
-        close_on_exit=True,
+        non_graphical=False,
+        close_on_exit=False,
     )
     run_dir = Path(config.ansys_run_dir)
     manifest: Manifest | None = None
