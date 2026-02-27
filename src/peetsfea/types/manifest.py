@@ -11,6 +11,8 @@ class ManifestInputs(TypedDict):
     toml_path: str
     non_graphical: bool
     close_on_exit: bool
+    emit_manifest_json: bool
+    emit_geometry_metadata_json: bool
 
 
 class ManifestSpec(TypedDict):
@@ -137,7 +139,25 @@ class Manifest(TypedDict):
     inputs: ManifestInputs
     spec: ManifestSpec
     created_at_utc: str
-    manifest_path: str
+    manifest_path: str | None
+
+
+class ReproSnapshot(TypedDict):
+    toml_bytes: bytes
+
+
+class DatasetSnapshot(TypedDict):
+    toml_bytes: bytes
+
+
+class RunResult(TypedDict):
+    manifest: Manifest
+    source_toml_bytes: bytes
+    repro_snapshot: ReproSnapshot
+    dataset_snapshot: DatasetSnapshot
+    manifest_path: str | None
+    geometry_metadata_path: str | None
+    zip_path: str | None
 
 
 class AxisCheckEntry(TypedDict):

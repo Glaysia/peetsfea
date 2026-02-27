@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import re
 from typing import Literal, Mapping, cast
 
 from peetsfea.identity.hashing import (
@@ -13,21 +15,26 @@ from peetsfea.identity.hashing import (
     compute_toml_space_hash,
     get_git_commit,
 )
-from peetsfea.spec.loader import load_toml_bytes, require_str, require_table
-from peetsfea.spec.resolver import SelectionConstraintError, resolve_selection
+from peetsfea.pipeline.package_export import export_design_zip
+from peetsfea.spec.loader import TOMLTable, TOMLValue, load_toml_bytes, require_str, require_table
+from peetsfea.spec.resolver import SelectionConstraintError, resolve_selection_with_context
+from peetsfea.spec.resolver.constants import DERIVED_RANGE_PATHS
 from peetsfea.spec.resolver.sampling import build_candidates as _build_candidates
 from peetsfea.types.manifest import (
+    DatasetSnapshot,
     EmPolicy,
     GroupGeometryParams,
     Manifest,
+    ReproSnapshot,
     ResolvedCoilGroup,
     ResolvedPcbInstance,
+    RunResult,
     SelectedParameters,
     SelectedParametersMax,
 )
 
 MAX_ATTEMPTS = 64
-SUPPORTED_SPEC_VERSION = "0.2.6"
+SUPPORTED_SPEC_VERSION = "0.2.7"
 
 
 def _require_number(value: object, name: str) -> float:
@@ -173,6 +180,202 @@ def _detect_repro_mode(spec: Mapping[str, object]) -> Literal["sampled_toml", "f
     return "frozen_toml"
 
 
+def _format_number(value: int | float) -> str:
+    if isinstance(value, bool):
+        raise ValueError("boolean is not a number")
+    if isinstance(value, int):
+        return str(value)
+    return repr(float(value))
+
+
+def _format_key(key: str) -> str:
+    if re.fullmatch(r"[A-Za-z0-9_-]+", key):
+        return key
+    escaped = key.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _format_toml_value(value: TOMLValue) -> str:
+    if isinstance(value, str):
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return _format_number(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(_format_toml_value(cast(TOMLValue, item)) for item in value) + "]"
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for key, item in value.items():
+            parts.append(f"{_format_key(key)} = {_format_toml_value(cast(TOMLValue, item))}")
+        return "{ " + ", ".join(parts) + " }"
+    raise ValueError(f"Unsupported TOML value type: {type(value)}")
+
+
+def _is_array_of_tables(value: TOMLValue) -> bool:
+    return isinstance(value, list) and (len(value) == 0 or all(isinstance(item, dict) for item in value))
+
+
+def _render_table(lines: list[str], table: TOMLTable, prefix: str | None) -> None:
+    scalar_items: list[tuple[str, TOMLValue]] = []
+    table_items: list[tuple[str, TOMLTable]] = []
+    aot_items: list[tuple[str, list[TOMLTable]]] = []
+
+    for key, value in table.items():
+        if isinstance(value, dict):
+            table_items.append((key, cast(TOMLTable, value)))
+            continue
+        if _is_array_of_tables(cast(TOMLValue, value)):
+            aot_items.append((key, cast(list[TOMLTable], value)))
+            continue
+        scalar_items.append((key, cast(TOMLValue, value)))
+
+    for key, value in scalar_items:
+        lines.append(f"{_format_key(key)} = {_format_toml_value(value)}")
+
+    for key, child in table_items:
+        child_name = f"{prefix}.{key}" if prefix else key
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.append(f"[{child_name}]")
+        _render_table(lines, child, child_name)
+
+    for key, children in aot_items:
+        child_name = f"{prefix}.{key}" if prefix else key
+        for child in children:
+            if lines and lines[-1] != "":
+                lines.append("")
+            lines.append(f"[[{child_name}]]")
+            _render_table(lines, child, child_name)
+
+
+def _toml_dumps(table: TOMLTable) -> str:
+    lines: list[str] = []
+    _render_table(lines, table, None)
+    return "\n".join(lines).strip() + "\n"
+
+
+def _freeze_scalar_range(raw_range: list[TOMLValue], selected_value: int | float) -> list[TOMLValue]:
+    is_integer = raw_range[0]
+    if not isinstance(is_integer, bool):
+        raise ValueError("range[0] must be bool")
+    fixed_value: TOMLValue = int(selected_value) if is_integer else float(selected_value)
+    return [is_integer, fixed_value, fixed_value, 1]
+
+
+def _freeze_ranges_for_snapshot(
+    spec: TOMLTable,
+    selection_context: dict[str, int | float],
+) -> TOMLTable:
+    frozen = copy.deepcopy(spec)
+
+    def visit(node: TOMLValue, path: str) -> None:
+        if isinstance(node, dict):
+            if set(node.keys()) == {"range"}:
+                range_value = node.get("range")
+                if isinstance(range_value, list) and len(range_value) == 4:
+                    if path in DERIVED_RANGE_PATHS and _is_derived_dummy_range(cast(list[object], range_value)):
+                        return
+                    selected = selection_context.get(path)
+                    if selected is not None:
+                        node["range"] = _freeze_scalar_range(cast(list[TOMLValue], range_value), selected)
+                        return
+            for key, child in node.items():
+                child_path = f"{path}.{key}" if path else key
+                if isinstance(child, list) and len(child) == 4:
+                    selected = selection_context.get(child_path)
+                    if selected is not None:
+                        node[key] = _freeze_scalar_range(cast(list[TOMLValue], child), selected)
+                        continue
+                visit(cast(TOMLValue, child), child_path)
+            return
+        if isinstance(node, list):
+            for idx, item in enumerate(node):
+                item_path = f"{path}[{idx}]" if path else f"[{idx}]"
+                visit(cast(TOMLValue, item), item_path)
+
+    visit(frozen, "")
+    return frozen
+
+
+def _collect_range_entries(value: TOMLValue, path: str = "") -> list[tuple[str, list[TOMLValue]]]:
+    entries: list[tuple[str, list[TOMLValue]]] = []
+    if isinstance(value, dict):
+        if set(value.keys()) == {"range"}:
+            raw_range = value.get("range")
+            if isinstance(raw_range, list):
+                entries.append((path, cast(list[TOMLValue], raw_range)))
+        for key, child in value.items():
+            child_path = f"{path}.{key}" if path else key
+            entries.extend(_collect_range_entries(cast(TOMLValue, child), child_path))
+    elif isinstance(value, list):
+        for idx, child in enumerate(value):
+            child_path = f"{path}[{idx}]" if path else f"[{idx}]"
+            entries.extend(_collect_range_entries(cast(TOMLValue, child), child_path))
+    return entries
+
+
+def _resolve_dataset_input_value(
+    raw_range: list[TOMLValue],
+    selected: int | float | None,
+) -> TOMLValue | None:
+    if len(raw_range) != 4:
+        return None
+    is_integer = raw_range[0]
+    start = raw_range[1]
+    end = raw_range[2]
+    if not isinstance(is_integer, bool):
+        return None
+    if selected is not None:
+        return int(selected) if is_integer else float(selected)
+    if isinstance(start, bool) or isinstance(end, bool):
+        return None
+    if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
+        return None
+    if float(start) != float(end):
+        return None
+    return int(start) if is_integer else float(start)
+
+
+def _build_dataset_spec(
+    spec: TOMLTable,
+    selection_context: dict[str, int | float],
+    design_id: str,
+) -> TOMLTable:
+    input_parameters: list[TOMLValue] = []
+    for path, raw_range in _collect_range_entries(spec):
+        if len(raw_range) != 4:
+            continue
+        raw_count = raw_range[3]
+        if isinstance(raw_count, bool) or not isinstance(raw_count, int):
+            continue
+        if raw_count == 2:
+            continue
+        if path in DERIVED_RANGE_PATHS and _is_derived_dummy_range(cast(list[object], raw_range)):
+            continue
+        value = _resolve_dataset_input_value(raw_range, selection_context.get(path))
+        if value is None:
+            continue
+        input_parameters.append(cast(TOMLValue, {"path": path, "value": value}))
+
+    input_parameters.sort(
+        key=lambda item: cast(str, cast(dict[str, TOMLValue], item).get("path", ""))
+    )
+    constraints = spec.get("constraints")
+    constraints_table: TOMLTable = copy.deepcopy(cast(TOMLTable, constraints)) if isinstance(constraints, dict) else {}
+    dataset_spec: TOMLTable = {
+        "inputs": {"parameters": input_parameters},
+        "output": {"placeholder": -1},
+        "simulation": {"timeout_sec": 7200},
+        "artifacts": {"aedt_file": f"{design_id}.aedt"},
+        "constraints": constraints_table,
+    }
+    return dataset_spec
+
+
 @dataclass(frozen=True)
 class RunConfig:
     ansys_executable_path: str
@@ -182,9 +385,12 @@ class RunConfig:
     backend: str = "hfss"
     non_graphical: bool = True
     close_on_exit: bool = True
+    emit_manifest_json: bool = False
+    emit_geometry_metadata_json: bool = False
+    export_zip: bool = True
 
 
-def run(config: RunConfig) -> Manifest:
+def run(config: RunConfig) -> RunResult:
     repo_dir = Path(__file__).resolve().parents[2]
     commit_hash = get_git_commit(repo_dir)
 
@@ -214,6 +420,7 @@ def run(config: RunConfig) -> Manifest:
     selected_coil_groups: list[ResolvedCoilGroup] | None = None
     selected_group_geometry: list[GroupGeometryParams] | None = None
     selected_pcbs: list[ResolvedPcbInstance] | None = None
+    selection_context: dict[str, int | float] | None = None
     retry_attempt = 0
     retry_count = 0
     last_error = ""
@@ -225,7 +432,8 @@ def run(config: RunConfig) -> Manifest:
                 selected_coil_groups,
                 selected_group_geometry,
                 selected_pcbs,
-            ) = resolve_selection(spec=spec, seed=config.seed, attempt=attempt)
+                selection_context,
+            ) = resolve_selection_with_context(spec=spec, seed=config.seed, attempt=attempt)
             retry_attempt = attempt
             retry_count = attempt
             break
@@ -233,16 +441,19 @@ def run(config: RunConfig) -> Manifest:
             last_error = str(exc)
             continue
 
-    if selected_parameters is None or selected_parameters_max is None or selected_coil_groups is None or selected_group_geometry is None or selected_pcbs is None:
+    if (
+        selected_parameters is None
+        or selected_parameters_max is None
+        or selected_coil_groups is None
+        or selected_group_geometry is None
+        or selected_pcbs is None
+        or selection_context is None
+    ):
         raise RuntimeError(
             "No valid selection within max attempts "
             f"(seed={config.seed}, max_attempts={MAX_ATTEMPTS}, last_error={last_error})"
         )
-    assert selected_parameters is not None
-    assert selected_parameters_max is not None
-    assert selected_coil_groups is not None
-    assert selected_group_geometry is not None
-    assert selected_pcbs is not None
+
     toml_hash = compute_toml_hash(raw_toml)
     toml_space_hash = compute_toml_space_hash(toml_hash)
     design_unique_hash = compute_design_unique_hash(
@@ -250,9 +461,21 @@ def run(config: RunConfig) -> Manifest:
     )
     design_id = compose_design_id(design_unique_hash, toml_space_hash, config.seed, retry_attempt)
 
+    repro_spec = _freeze_ranges_for_snapshot(spec, selection_context)
+    dataset_spec = _build_dataset_spec(spec, selection_context, design_id)
+
+    source_toml_bytes = raw_toml
+    repro_snapshot: ReproSnapshot = {"toml_bytes": _toml_dumps(repro_spec).encode("utf-8")}
+    dataset_snapshot: DatasetSnapshot = {"toml_bytes": _toml_dumps(dataset_spec).encode("utf-8")}
+
     output_dir = Path(config.ansys_run_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"manifest_{design_id}.json"
+    manifest_output_path = output_dir / f"manifest_{design_id}.json"
+    geometry_metadata_output_path = output_dir / f"geometry_metadata_{design_id}.json"
+    manifest_path_str = str(manifest_output_path) if config.emit_manifest_json else None
+    geometry_metadata_path_str = str(geometry_metadata_output_path) if config.emit_geometry_metadata_json else None
+    aedt_output_path = output_dir / f"{design_id}.aedt"
+    zip_path_str: str | None = None
     manifest: Manifest = {
         "design_id": design_id,
         "design_unique_hash": design_unique_hash,
@@ -275,6 +498,8 @@ def run(config: RunConfig) -> Manifest:
             "toml_path": config.toml_path,
             "non_graphical": config.non_graphical,
             "close_on_exit": config.close_on_exit,
+            "emit_manifest_json": config.emit_manifest_json,
+            "emit_geometry_metadata_json": config.emit_geometry_metadata_json,
         },
         "spec": {
             "spec_version": spec_version,
@@ -283,11 +508,30 @@ def run(config: RunConfig) -> Manifest:
             "simulation": simulation,
         },
         "created_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-        "manifest_path": str(output_path),
+        "manifest_path": manifest_path_str,
     }
 
-    output_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    return manifest
+    if config.emit_manifest_json:
+        manifest_output_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    if config.export_zip and aedt_output_path.exists():
+        zip_path = export_design_zip(
+            design_id=design_id,
+            aedt_path=aedt_output_path,
+            repro_toml=repro_snapshot["toml_bytes"],
+            dataset_toml=dataset_snapshot["toml_bytes"],
+            source_toml=source_toml_bytes,
+            output_dir=output_dir,
+        )
+        zip_path_str = str(zip_path)
+    return {
+        "manifest": manifest,
+        "source_toml_bytes": source_toml_bytes,
+        "repro_snapshot": repro_snapshot,
+        "dataset_snapshot": dataset_snapshot,
+        "manifest_path": manifest_path_str,
+        "geometry_metadata_path": geometry_metadata_path_str,
+        "zip_path": zip_path_str,
+    }
 
 
 __all__ = ["RunConfig", "run"]

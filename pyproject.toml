@@ -45,3 +45,9 @@ exclude = ["ref", "**/__pycache__"]
 typeCheckingMode = "basic"
 reportMissingImports = "none"
 reportMissingModuleSource = "none"
+
+[tool.pytest.ini_options]
+markers = [
+  "contract: pure-Python acceptance/contract tests for default CI",
+  "pyaedt_integration: optional integration tests that require AEDT/Pyaedt runtime",
+]

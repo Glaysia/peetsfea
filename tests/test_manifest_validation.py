@@ -45,7 +45,7 @@ def test_old_profile_only_spec_fails(tmp_path: Path, monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("e" * 40))
 
     # Legacy profile block is ignored; new group geometry section remains mandatory/authoritative.
-    manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+    manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))["manifest"]
     assert len(manifest["selected_group_geometry"]) == 3
 
 def test_invalid_group_turn_count_range_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -102,11 +102,11 @@ def test_legacy_trace_gap_keys_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 def test_unsupported_spec_version_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "old_spec_version.toml"
     write_type1_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.6"', 'spec_version = "0.1.6"', 1)
+    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.7"', 'spec_version = "0.1.6"', 1)
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("5" * 40))
 
-    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.6'"):
+    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.7'"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 def test_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -116,7 +116,7 @@ def test_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     raw += "\n[coil_shape.outer_x]\nrange = [false, 10.0, 10.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("9" * 40))
-    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.6"):
+    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.7"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 def test_tx_vertical_span_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -126,7 +126,7 @@ def test_tx_vertical_span_removed_path_errors_on_026(tmp_path: Path, monkeypatch
     raw += "\n[coil_spacing.tx_vertical_span_mm]\nrange = [false, 3.0, 3.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("a" * 40))
-    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.6: coil_spacing\.tx_vertical_span_mm"):
+    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.7: coil_spacing\.tx_vertical_span_mm"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -169,7 +169,7 @@ def test_manifest_includes_simulation_policy(tmp_path: Path, monkeypatch: pytest
     write_type1_toml(toml_path)
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("e" * 40))
 
-    manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+    manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))["manifest"]
     assert manifest["spec"]["simulation"] == {
         "radiation_margin_mm": 3500.0,
         "setup_frequency_hz": 6.78e6,

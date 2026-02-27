@@ -170,7 +170,7 @@ python run.py
     - `pcbs[].z_mode`는 `absolute | relative_to_pcb`를 사용한다.
     - `relative_to_pcb`일 때 최종 z는 `<base>.z + sample(z_delta_path)`로 파생한다.
     - 기본 예시: `tx_main_1`은 `z_relative_base_id="tx_main_0"`, `z_delta_path="pcb_spacing.tx_main_1_z_from_tx_main_0_mm"`.
-  - 0.2.6 고정 토폴로지 규칙:
+  - 0.2.7 고정 토폴로지 규칙:
     - 코일 개수(`selected_coil_groups`)가 주도하고 PCB `present/mounts`는 정규화된다.
     - `tx_vertical`은 전용 보드 `tx_vertical_0`에만 매핑된다.
     - `tx_opt_*/rx_opt_*`는 호환 필드로 남기되 기본 경로에서 강제로 비활성(`present=false`, `mounts=[]`) 처리된다.
@@ -218,7 +218,7 @@ python run.py
 8) `<ansys_run_dir>/<design_id>.aedt`, `geometry_metadata_<design_id>.json`, `manifest_<design_id>.json` 저장
   - `manifest/metadata.repro_mode`: `sampled_toml | frozen_toml | manifest_json`
 
-## Internal Architecture (0.2.6)
+## Internal Architecture (0.2.7)
 ### Geometry Build Pipeline
 - 엔트리포인트 `build_square_spiral_from_manifest`는 다음 오케스트레이션 단계로 분리되어 동작한다.
   - `_prepare_runtime`: manifest/prelude 검증과 런타임 컨텍스트 구성

@@ -30,6 +30,20 @@ from .spiral_points import _build_rect_spiral_centerline_absolute
 _RxDdBackStubSource = tuple[str, int, str, Point3, float, str]
 
 
+def _emit_geometry_metadata_enabled(manifest: Manifest) -> bool:
+    inputs = manifest.get("inputs")
+    if not isinstance(inputs, dict):
+        return False
+    raw = inputs.get("emit_geometry_metadata_json")
+    return bool(raw) if isinstance(raw, bool) else False
+
+
+def _write_geometry_metadata_if_enabled(manifest: Manifest, metadata: GeometryMetadata, metadata_path: Path) -> None:
+    if not _emit_geometry_metadata_enabled(manifest):
+        return
+    metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _append_rxdd_back_stub_sources_if_needed(
     *,
     kind: str,
@@ -397,6 +411,8 @@ def _build_and_save_metadata(
         "context": em_context,
     }
     em_pipeline_result = run_em_pipeline(hfss, modeler, em_input, em_policy)
+    # Reports/post-processing artifacts are added during EM pipeline; persist them before packaging/export.
+    hfss.save_project(str(ctx.aedt_path))
 
     metadata = _build_geometry_metadata(
         manifest=manifest,
@@ -418,7 +434,7 @@ def _build_and_save_metadata(
         scene_objects=state.scene_objects,
         debug=debug,
     )
-    ctx.metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_geometry_metadata_if_enabled(manifest, metadata, ctx.metadata_path)
     return metadata
 
 

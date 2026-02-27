@@ -124,7 +124,7 @@ def test_pcb_normalization_autocorrects_and_warns(tmp_path: Path, monkeypatch: p
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("e" * 40))
 
     with pytest.warns(UserWarning) as captured:
-        manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+        manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))["manifest"]
     pcbs = manifest["selected_pcbs"]
 
     messages = [str(w.message) for w in captured]
@@ -161,7 +161,7 @@ def test_tx_vertical_single_host_after_normalization(tmp_path: Path, monkeypatch
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("c" * 40))
 
     with pytest.warns(UserWarning):
-        manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+        manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))["manifest"]
     pcbs = manifest["selected_pcbs"]
 
     tx_vertical_mount_hosts = [
@@ -189,7 +189,7 @@ def test_optional_boards_forced_off(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("b" * 40))
 
     with pytest.warns(UserWarning):
-        manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+        manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))["manifest"]
     pcbs = manifest["selected_pcbs"]
 
     pcbs_by_id = {pcb["id"]: pcb for pcb in pcbs}
