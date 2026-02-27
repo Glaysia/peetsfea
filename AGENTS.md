@@ -61,6 +61,8 @@ This document defines the project rules for coding agents working in this reposi
 ## Discord notifications (MCP)
 - Send a Discord message via `mcp__discord__discord_send` when work is finished.
 - Skip Discord notifications when total task time is under 5 minutes.
+- The 300-second rule is a notification threshold only, not a task time limit.
+- Do not split or rush work to stay under 300 seconds; send a notification only when the task actually takes 5 minutes or longer.
 - Do not estimate duration; compute it in shell seconds.
   - At start: `start_ts=$(date +%s)`
   - At end: `end_ts=$(date +%s); elapsed=$((end_ts-start_ts))`
