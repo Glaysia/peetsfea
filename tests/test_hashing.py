@@ -103,8 +103,8 @@ def test_compute_design_unique_hash_is_deterministic() -> None:
 
 def test_compose_design_id_format() -> None:
     design_id = compose_design_id("deadbeef", "cafebabe", -3, 2)
-    assert design_id == "deadbeef_cafebabe_-3_2"
-    assert re.fullmatch(r"[0-9a-f]{8}_[0-9a-f]{8}_-?[0-9]+_[0-9]+", design_id) is not None
+    assert design_id == "-3_deadbeef_cafebabe_2"
+    assert re.fullmatch(r"-?[0-9]+_[0-9a-f]{8}_[0-9a-f]{8}_[0-9]+", design_id) is not None
 
 
 def test_compute_toml_space_hash_rejects_bad_toml_hash() -> None:

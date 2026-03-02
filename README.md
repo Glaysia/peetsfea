@@ -14,12 +14,12 @@ TOML 스펙을 입력으로 받아 HFSS(AEDT)용 설계를 결정론적으로 �
 ## 이 프로젝트가 하는 일
 - 입력: TOML 스펙(`examples/type1.toml`)
 - 처리: 스펙 검증 + 파라미터 선택 + HFSS 설계 생성
-- 출력: `0.2.7` 기준 zip 산출물(`.aedt`, `.repro.toml`, `.dataset.toml`, `.source.toml`)
+- 출력: `0.2.8` 기준 zip 산출물(`.aedt`, `.repro.toml`, `.dataset.toml`, `.source.toml`)
 
 ## type1 설계 개요
 - `type1`은 TV/벽면 환경 IPT 기준에서 TX(`tx_dd`, `tx_vertical`)와 RX(`rx_dd`) 코일/PCB 배치를 생성하는 기본 설계다.
-- 기본 실행 결과는 HFSS 설계 + `0.2.7` zip 산출물 계약(`aedt/repro/dataset/source`)으로 정리된다.
-- 필수 제약/토폴로지 규칙은 `spec_version = "0.2.7"` 기준으로 고정된다.
+- 기본 실행 결과는 HFSS 설계 + `0.2.8` zip 산출물 계약(`aedt/repro/dataset/source`)으로 정리된다.
+- 필수 제약/토폴로지 규칙은 `spec_version = "0.2.8"` 기준으로 고정된다.
 - 상세 설명: [docs/type1.md](docs/type1.md)
 
 ## 빠른 시작
@@ -34,7 +34,7 @@ cd run
 
 기본 실행 예시는 `run.py`, 기본 스펙은 `examples/type1.toml`을 사용한다.
 
-## 0.2.7 출력 계약(중요)
+## 0.2.8 출력 계약(중요)
 - 기본 산출물 단위는 `<design_id>.zip`이다.
 - zip 내부는 아래 4개 파일로 고정된다.
   - `<design_id>.aedt`

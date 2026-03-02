@@ -7,7 +7,7 @@
 
 ## What It Generates
 - It generates an HFSS design file (`.aedt`).
-- It generates a `0.2.7` zip artifact.
+- It generates a `0.2.8` zip artifact.
 - The zip payload is fixed to these four files:
   - `<design_id>.aedt`: HFSS design body
   - `<design_id>.repro.toml`: single-design reproducibility snapshot (`count=1`)
@@ -18,7 +18,7 @@
 - `tv`, `tx.region`, `rx.region`: scene envelope and placement anchors
 - `coil_shape`, `coil_groups_params`: per-group coil geometry and derived controls
 - `constraints`: feasibility and topology validation rules for sampled selections
-- `pcbs`: fixed-topology normalization contract for `0.2.7`
+- `pcbs`: fixed-topology normalization contract for `0.2.8`
 
 ## Limits You Should Know
 - The contract focuses on design generation; simulation-result population is out of scope.

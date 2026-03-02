@@ -102,11 +102,11 @@ def test_legacy_trace_gap_keys_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 def test_unsupported_spec_version_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "old_spec_version.toml"
     write_type1_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.7"', 'spec_version = "0.1.6"', 1)
+    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.8"', 'spec_version = "0.1.6"', 1)
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("5" * 40))
 
-    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.7'"):
+    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.8'"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 def test_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -116,7 +116,7 @@ def test_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     raw += "\n[coil_shape.outer_x]\nrange = [false, 10.0, 10.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("9" * 40))
-    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.7"):
+    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.8"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 def test_tx_vertical_span_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -126,7 +126,7 @@ def test_tx_vertical_span_removed_path_errors_on_026(tmp_path: Path, monkeypatch
     raw += "\n[coil_spacing.tx_vertical_span_mm]\nrange = [false, 3.0, 3.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("a" * 40))
-    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.7: coil_spacing\.tx_vertical_span_mm"):
+    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.8: coil_spacing\.tx_vertical_span_mm"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 

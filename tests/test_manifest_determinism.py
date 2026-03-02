@@ -51,7 +51,7 @@ def test_run_creates_manifest_and_is_deterministic(tmp_path: Path, monkeypatch: 
     assert len(first["selected_group_geometry"]) == 3
     assert {entry["kind"] for entry in first["selected_group_geometry"]} == {"tx_dd", "tx_vertical", "rx_dd"}
     assert first["manifest_path"] is None
-    assert re.fullmatch(r"[0-9a-f]{8}_[0-9a-f]{8}_-?[0-9]+_[0-9]+", first["design_id"]) is not None
+    assert re.fullmatch(r"-?[0-9]+_[0-9a-f]{8}_[0-9a-f]{8}_[0-9]+", first["design_id"]) is not None
 
 
 def test_seed_changes_group_geometry_and_hash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

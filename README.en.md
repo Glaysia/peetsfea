@@ -14,12 +14,12 @@ Release notes are managed by version and language under `release-notes/`.
 ## What This Project Does
 - Input: TOML spec (`examples/type1.toml`)
 - Process: spec validation + parameter selection + HFSS design generation
-- Output: `0.2.7` zip contract (`.aedt`, `.repro.toml`, `.dataset.toml`, `.source.toml`)
+- Output: `0.2.8` zip contract (`.aedt`, `.repro.toml`, `.dataset.toml`, `.source.toml`)
 
 ## type1 Design Overview
 - `type1` is the baseline IPT design for TV/wall scenarios with TX (`tx_dd`, `tx_vertical`) and RX (`rx_dd`) coil/PCB layouts.
-- Default execution produces HFSS design output plus the `0.2.7` zip artifact contract (`aedt/repro/dataset/source`).
-- Required topology and constraints are pinned to `spec_version = "0.2.7"`.
+- Default execution produces HFSS design output plus the `0.2.8` zip artifact contract (`aedt/repro/dataset/source`).
+- Required topology and constraints are pinned to `spec_version = "0.2.8"`.
 - Full details: [docs/type1.en.md](docs/type1.en.md)
 
 ## Quick Start
@@ -34,7 +34,7 @@ cd run
 
 Default entrypoint is `run.py`, and the default runnable spec is `examples/type1.toml`.
 
-## 0.2.7 Output Contract (Important)
+## 0.2.8 Output Contract (Important)
 - Default output unit is `<design_id>.zip`.
 - Zip payload is fixed to 4 files:
   - `<design_id>.aedt`

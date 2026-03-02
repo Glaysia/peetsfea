@@ -62,4 +62,4 @@ def compute_design_unique_hash(
 def compose_design_id(unique_hash: str, toml_space_hash: str, seed: int, attempt: int) -> str:
     _require_lower_hex(unique_hash, 8, "unique_hash")
     _require_lower_hex(toml_space_hash, 8, "toml_space_hash")
-    return f"{unique_hash}_{toml_space_hash}_{seed}_{attempt}"
+    return f"{seed}_{unique_hash}_{toml_space_hash}_{attempt}"

@@ -7,7 +7,7 @@
 
 ## 무엇을 생성하나
 - HFSS 설계 파일(`.aedt`)을 생성한다.
-- `0.2.7` 기준 zip 산출물을 생성한다.
+- `0.2.8` 기준 zip 산출물을 생성한다.
 - zip payload는 아래 4개 파일로 고정된다.
   - `<design_id>.aedt`: HFSS 설계 본체
   - `<design_id>.repro.toml`: 단일 설계 재현용 스냅샷(`count=1` 고정)
@@ -18,7 +18,7 @@
 - `tv`, `tx.region`, `rx.region`: 장면/영역 크기와 배치 기준
 - `coil_shape`, `coil_groups_params`: 그룹별 코일 형상 및 파생 파라미터 제어
 - `constraints`: 샘플 선택/배치 가능성/토폴로지 제약 검증
-- `pcbs`: `0.2.7` 고정 토폴로지 계약에 따른 보드 present/mount 정규화
+- `pcbs`: `0.2.8` 고정 토폴로지 계약에 따른 보드 present/mount 정규화
 
 ## type1 사용 시 알아야 할 제한
 - 이 계약은 설계 생성 중심이며 시뮬레이션 결과 채움은 범위 밖이다.
