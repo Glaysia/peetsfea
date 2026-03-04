@@ -266,7 +266,7 @@ def write_type1_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float =
                 "",
                 "[[coil_groups]]",
                 'kind = "tx_vertical"',
-                "count_range = [true, 0, 7, 8]",
+                "count_range = [true, 1, 6, 6]",
                 "instance_transforms = [{ dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 }]",
                 "",
                 "[[coil_groups]]",

@@ -125,7 +125,7 @@ def test_feasibility_constraint_blocks_infeasible_tx_vertical(tmp_path: Path) ->
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.85, 0.85, 1]",
     )
-    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 1, 1, 1]")
+    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 1, 1, 1]")
     raw += (
         "\n[[constraints.rules]]\n"
         "id = \"tx_vertical_feasible_turns_for_active_group\"\n"
@@ -145,7 +145,7 @@ def test_tx_vertical_center_gap_range_fails(tmp_path: Path) -> None:
     toml_path = tmp_path / "tx_vertical_center_gap_fail.toml"
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8")
-    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 7, 7, 1]")
+    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 6, 6, 1]")
     raw = raw.replace("rhs = { value = 10.0 }", "rhs = { value = 20.0 }", 1)
     raw = raw.replace(
         "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 20, 20]",
@@ -189,7 +189,7 @@ def test_tx_vertical_span_is_derived_from_center_gap_and_count(tmp_path: Path) -
     toml_path = tmp_path / "tx_vertical_span_derived.toml"
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8")
-    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 7, 7, 1]")
+    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 6, 6, 1]")
     raw = raw.replace("rhs = { value = 10.0 }", "rhs = { value = 20.0 }", 1)
     raw = raw.replace(
         "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 20, 20]",
@@ -228,9 +228,9 @@ def test_tx_vertical_span_is_derived_from_center_gap_and_count(tmp_path: Path) -
     spec, _ = load_toml_bytes(toml_path)
     selected, _, groups, _, _ = resolve_selection(spec=spec, seed=1, attempt=0)
     groups_by_kind = {group["kind"]: group for group in groups}
-    assert int(groups_by_kind["tx_vertical"]["selected_count"]) == 7
+    assert int(groups_by_kind["tx_vertical"]["selected_count"]) == 6
     assert float(selected["tx_vertical_center_gap_mm"]) == pytest.approx(1.62)
-    assert float(selected["tx_vertical_span_mm"]) == pytest.approx(9.72)
+    assert float(selected["tx_vertical_span_mm"]) == pytest.approx(8.1)
 
 def test_ratio_hard_check_failure_contains_details(tmp_path: Path) -> None:
     toml_path = tmp_path / "ratio_fail.toml"
@@ -253,7 +253,7 @@ def test_tx_bridge_right_margin_rule_passes_when_dd_is_right_enough(tmp_path: Pa
     raw = toml_path.read_text(encoding="utf-8")
     raw = _stabilize_group_geometry_sampling(raw)
     raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 2, 2, 1]")
-    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 1, 1, 1]")
+    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 1, 1, 1]")
     raw = _append_tx_bridge_margin_rule(raw, margin_mm=1.0)
     toml_path.write_text(raw, encoding="utf-8")
 
@@ -267,7 +267,7 @@ def test_tx_bridge_right_margin_rule_fails_when_dd_is_left_of_vertical(tmp_path:
     raw = toml_path.read_text(encoding="utf-8")
     raw = _stabilize_group_geometry_sampling(raw)
     raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 2, 2, 1]")
-    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 1, 1, 1]")
+    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 1, 1, 1]")
     raw = raw.replace(
         "[[coil_groups]]\nkind = \"tx_dd\"\ncount_mode = [true, 2, 2, 1]\ninstance_transforms = [{ dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 }]",
         "[[coil_groups]]\nkind = \"tx_dd\"\ncount_mode = [true, 2, 2, 1]\ninstance_transforms = [{ dx = 0.0, dy = -90.0, dz = 0.0, rot_deg = 0.0 }]",
@@ -289,7 +289,7 @@ def test_tx_bridge_right_margin_rule_blocks_case_that_center_only_logic_would_al
     raw = toml_path.read_text(encoding="utf-8")
     raw = _stabilize_group_geometry_sampling(raw)
     raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 2, 2, 1]")
-    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 5, 5, 1]")
+    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 5, 5, 1]")
     toml_path.write_text(raw, encoding="utf-8")
 
     spec_without_rule, _ = load_toml_bytes(toml_path)
@@ -365,13 +365,13 @@ def test_tx_bridge_right_margin_rule_blocks_case_that_center_only_logic_would_al
         resolve_selection(spec=spec_with_rule, seed=0, attempt=0)
 
 
-def test_tx_bridge_right_margin_rule_skips_when_tx_vertical_is_zero(tmp_path: Path) -> None:
+def test_tx_vertical_count_zero_is_rejected(tmp_path: Path) -> None:
     toml_path = tmp_path / "tx_bridge_right_margin_vertical_zero.toml"
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8")
     raw = _stabilize_group_geometry_sampling(raw)
     raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 2, 2, 1]")
-    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 0, 0, 1]")
+    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 0, 0, 1]")
     raw = raw.replace(
         "[[coil_groups]]\nkind = \"tx_dd\"\ncount_mode = [true, 2, 2, 1]\ninstance_transforms = [{ dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 }]",
         "[[coil_groups]]\nkind = \"tx_dd\"\ncount_mode = [true, 2, 2, 1]\ninstance_transforms = [{ dx = 0.0, dy = -120.0, dz = 0.0, rot_deg = 0.0 }]",
@@ -380,7 +380,8 @@ def test_tx_bridge_right_margin_rule_skips_when_tx_vertical_is_zero(tmp_path: Pa
     toml_path.write_text(raw, encoding="utf-8")
 
     spec, _ = load_toml_bytes(toml_path)
-    resolve_selection(spec=spec, seed=1, attempt=0)
+    with pytest.raises(ValueError, match=r"tx_vertical count_range must resolve to \[1,6\]"):
+        resolve_selection(spec=spec, seed=1, attempt=0)
 
 
 def test_tx_bridge_right_margin_rule_rejects_negative_margin(tmp_path: Path) -> None:
@@ -389,7 +390,7 @@ def test_tx_bridge_right_margin_rule_rejects_negative_margin(tmp_path: Path) -> 
     raw = toml_path.read_text(encoding="utf-8")
     raw = _stabilize_group_geometry_sampling(raw)
     raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 2, 2, 1]")
-    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 1, 1, 1]")
+    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 1, 1, 1]")
     raw = _append_tx_bridge_margin_rule(raw, margin_mm=-1.0)
     toml_path.write_text(raw, encoding="utf-8")
 
@@ -404,7 +405,7 @@ def test_tx_bridge_right_margin_rule_requires_single_argument(tmp_path: Path) ->
     raw = toml_path.read_text(encoding="utf-8")
     raw = _stabilize_group_geometry_sampling(raw)
     raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 2, 2, 1]")
-    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 1, 1, 1]")
+    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 1, 1, 1]")
     raw += (
         "\n[[constraints.rules]]\n"
         "id = \"tx_bridge_right_margin_bad_arity\"\n"

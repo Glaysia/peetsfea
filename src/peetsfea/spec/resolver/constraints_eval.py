@@ -248,7 +248,7 @@ def max_supported_instances(kind: GroupKind, coil_groups_by_kind: dict[GroupKind
     if kind == "tx_dd":
         hard_limit = 4
     elif kind == "tx_vertical":
-        hard_limit = 7
+        hard_limit = 6
     else:
         hard_limit = 2
     group = coil_groups_by_kind.get(kind)
@@ -786,6 +786,41 @@ def resolve_func_ref(
         )
         return (1.0 if ok else 0.0), debug
 
+    def _handle_tx_bridge_no_pierce_ok(parts_text: list[str]) -> tuple[float, str | None]:
+        if len(parts_text) != 1:
+            raise ValueError("rhs.func tx_bridge_no_pierce_ok() must have 1 argument: clearance_mm")
+        clearance_mm, _ = eval_numeric_expr(
+            selected=selected,
+            group_geometry_by_kind=group_geometry_by_kind,
+            coil_groups_by_kind=coil_groups_by_kind,
+            pcbs=pcbs,
+            expr=parts_text[0],
+        )
+        if clearance_mm < 0.0:
+            raise ValueError(f"rhs.func tx_bridge_no_pierce_ok() clearance_mm must be >= 0 (actual={clearance_mm})")
+        tx_vertical_group = coil_groups_by_kind.get("tx_vertical")
+        if tx_vertical_group is None:
+            raise ValueError("rhs.func tx_bridge_no_pierce_ok() requires tx_vertical group")
+        if int(tx_vertical_group["selected_count"]) == 0:
+            return 1.0, "func=tx_bridge_no_pierce_ok skipped because tx_vertical.selected_count == 0"
+        tx_vertical_geometry = group_geometry_by_kind.get("tx_vertical")
+        if tx_vertical_geometry is None:
+            raise ValueError("rhs.func tx_bridge_no_pierce_ok() requires tx_vertical geometry")
+        dd_right_edge_y, vertical_right_center_y = _tx_bridge_representative_right_edge_y(
+            selected=selected,
+            group_geometry_by_kind=group_geometry_by_kind,
+            coil_groups_by_kind=coil_groups_by_kind,
+            pcbs=pcbs,
+        )
+        vertical_right_outer_edge_y = vertical_right_center_y + (float(tx_vertical_geometry["trace"]) / 2.0)
+        ok = dd_right_edge_y >= (vertical_right_outer_edge_y + clearance_mm)
+        debug = (
+            "func=tx_bridge_no_pierce_ok "
+            f"dd_right_edge_y={dd_right_edge_y} vertical_right_outer_edge_y={vertical_right_outer_edge_y} "
+            f"clearance_mm={clearance_mm} ok={ok}"
+        )
+        return (1.0 if ok else 0.0), debug
+
     func_dispatch: dict[str, Callable[[list[str]], tuple[float, str | None]]] = {
         "add": _handle_add,
         "mul": _handle_mul,
@@ -798,6 +833,7 @@ def resolve_func_ref(
         "max_supported_mount_index": _handle_max_supported_mount_index,
         "max_mount_selector_index": _handle_max_mount_selector_index,
         "tx_bridge_right_y_margin_ok": _handle_tx_bridge_right_y_margin_ok,
+        "tx_bridge_no_pierce_ok": _handle_tx_bridge_no_pierce_ok,
     }
     handler = func_dispatch.get(name)
     if handler is None:
@@ -807,7 +843,8 @@ def resolve_func_ref(
             "feasible_turns(kind,outer_x_path,outer_y_path,outer_cap_y_path), "
             "feasible_turns_max(kind,outer_x_path,outer_y_path,outer_cap_y_path), "
             "max_supported_mount_index(kind), max_mount_selector_index(kind), "
-            "tx_bridge_right_y_margin_ok(margin_mm)"
+            "tx_bridge_right_y_margin_ok(margin_mm), "
+            "tx_bridge_no_pierce_ok(clearance_mm)"
         )
     return handler(parts)
 

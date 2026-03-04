@@ -78,8 +78,8 @@ def parse_group_count(
         return value, value
     if kind == "tx_vertical":
         value = select_count_field(group, "count_range", seed, offset, attempt, context, f"{key_prefix}.count_range")
-        if value < 0 or value > 7:
-            raise ValueError("tx_vertical count_range must resolve to [0,7]")
+        if value < 1 or value > 6:
+            raise ValueError("tx_vertical count_range must resolve to [1,6]")
         return value, value
     if kind == "rx_dd":
         value = select_count_field(group, "count_fixed", seed, offset, attempt, context, f"{key_prefix}.count_fixed")

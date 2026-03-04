@@ -398,13 +398,13 @@ lhs = { func = "add(mul(2,tx_dd_outer_y),tx_dd_pair_spacing_mm)" }
 op = "<="
 rhs = { path = "tx_region_outer_h_mm" }
 
-# Bridge-side ordering guard: reject samples where DD-right falls left of vertical-right.
+# Bridge no-pierce guard: DD->vertical bridge endpoint must stay right of vertical copper outer edge.
 # If tx_vertical is not active (selected_count=0), this rule is treated as pass.
 [[constraints.rules]]
-id = "tx_bridge_right_y_margin"
+id = "tx_bridge_no_pierce"
 kind = "comparison"
-message = "tx_dd right representative y must be >= tx_vertical right representative y + 1.0mm"
-lhs = { func = "tx_bridge_right_y_margin_ok(1.0)" }
+message = "tx_dd right representative y must be >= tx_vertical right outer edge y + clearance"
+lhs = { func = "tx_bridge_no_pierce_ok(0.0)" }
 op = "=="
 rhs = { value = 1.0 }
 
@@ -718,7 +718,7 @@ instance_transforms = [
 
 [[coil_groups]]
 kind = "tx_vertical"
-count_range = [true, 0, 7, 8]
+count_range = [true, 1, 6, 6]
 instance_transforms = [
   { dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 },
 ]

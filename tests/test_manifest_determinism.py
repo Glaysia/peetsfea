@@ -121,7 +121,7 @@ def test_feasibility_constraint_allows_retry_to_find_valid_case(tmp_path: Path) 
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.85, 0.85, 1]",
     )
-    raw = raw.replace("count_range = [true, 0, 7, 8]", "count_range = [true, 1, 1, 1]")
+    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 1, 1, 1]")
     raw += (
         "\n[[constraints.rules]]\n"
         'id = "tx_vertical_feasible_turns_for_active_group"\n'

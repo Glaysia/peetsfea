@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = "==3.12"
 license = { text = "GPL-3.0-only" }
 dependencies = [
-  "pyaedt>=0.24.1",
+  "pyaedt[graphics]>=0.25.1",
   "dearpygui>=2.1.1",
   "cadquery>=2.6.1",
   "sympy>=1.14.0",
