@@ -6,15 +6,15 @@ from pathlib import Path
 
 from peetsfea import RunConfig, build_square_spiral_from_manifest, run
 from peetsfea.pipeline.package_export import export_design_zip
-from peetsfea.pipeline.uniform_seedset import generate_uniform_feasible_seeds
+from peetsfea.pipeline.uniform_seedset import iter_uniform_feasible_seeds
 from peetsfea.types.manifest import Manifest, RunResult
 
 cwd = Path(__file__).parent.resolve()
 
 UNIFORM_SEEDSET_ENABLED = True
 UNIFORM_SEED_START = 0
-UNIFORM_SEED_END = 10000
-UNIFORM_SEED_TARGET_COUNT = 30
+UNIFORM_SEED_END = 100000
+UNIFORM_SEED_TARGET_COUNT = 1000
 UNIFORM_SEED_MAX_ATTEMPTS = 64
 
 def _safe_remove(path: Path) -> None:
@@ -63,8 +63,8 @@ def run_one(seed: int) -> bool:
         toml_path=f"{cwd}/run/type1.toml",
         seed=seed,
         backend="hfss",
-        non_graphical=False,
-        close_on_exit=False,
+        non_graphical=True,
+        close_on_exit=True,
     )
     run_dir = Path(config.ansys_run_dir)
     result: RunResult | None = None
@@ -124,16 +124,20 @@ if __name__ == "__main__":
     elif RUN_MODE == MANY:
         failed_seeds: list[int] = []
         if UNIFORM_SEEDSET_ENABLED:
-            seeds = generate_uniform_feasible_seeds(
+            seeds = iter_uniform_feasible_seeds(
                 spec_path=Path(f"{cwd}/run/type1.toml"),
                 seed_start=UNIFORM_SEED_START,
                 seed_end=UNIFORM_SEED_END,
                 target_size=UNIFORM_SEED_TARGET_COUNT,
                 max_attempts=UNIFORM_SEED_MAX_ATTEMPTS,
             )
-            print(f"uniform seeds ({len(seeds)}): {seeds}")
+            print(
+                "uniform seed stream enabled "
+                f"(range=[{UNIFORM_SEED_START},{UNIFORM_SEED_END}), target={UNIFORM_SEED_TARGET_COUNT}, "
+                f"max_attempts={UNIFORM_SEED_MAX_ATTEMPTS})"
+            )
         else:
-            seeds = tuple(range(10000))
+            seeds = range(10000)
         for seed in seeds:
             ok = run_one(seed)
             if not ok:
