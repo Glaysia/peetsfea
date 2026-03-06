@@ -7,8 +7,8 @@
 
 ## What It Generates
 - It generates an HFSS design file (`.aedt`).
-- It generates a `0.2.8` zip artifact.
-- The zip payload is fixed to these four files:
+- Zip export is currently temporarily disabled.
+- These four payloads are still preserved as run snapshots:
   - `<design_id>.aedt`: HFSS design body
   - `<design_id>.repro.toml`: single-design reproducibility snapshot (`count=1`)
   - `<design_id>.dataset.toml`: dataset trace snapshot (`output.*=-1`, `timeout_sec=7200`)

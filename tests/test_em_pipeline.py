@@ -241,7 +241,7 @@ def test_run_em_pipeline_returns_full_contract() -> None:
     assert result["sources"]["tx_phase_deg"] == "0deg"
     assert fake_hfss.edited_sources_payloads
     assert fake_hfss.inserted_setup_types == ["HfssDriven"]
-    assert fake_hfss.inserted_sweep_setup_names == ["Setup1"]
+    assert fake_hfss.inserted_sweep_setup_names == []
     assert [name for name, _, _ in fake_hfss.created_output_variables] == [
         "Ltx",
         "Lrx",
@@ -250,31 +250,21 @@ def test_run_em_pipeline_returns_full_contract() -> None:
         "Qtx",
         "Qrx",
         "FOM",
-        "S11_mag",
-        "S21_mag",
-        "Z11_re",
-        "Z11_im",
-        "Z12_re",
-        "Z12_im",
-        "Z21_re",
-        "Z21_im",
-        "Z22_re",
-        "Z22_im",
-        "ImZtx",
-        "ImZrx",
     ]
     expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
-    assert "Z(" in expressions_by_name["Ltx"]
-    assert "Freq" in expressions_by_name["Ltx"]
-    assert fake_hfss.created_reports[0]["plot_name"] == "Output Variables Table 1"
+    assert "Zt(" in expressions_by_name["Ltx"]
+    assert "freq" in expressions_by_name["Ltx"]
+    assert fake_hfss.created_reports[0]["plot_name"] == "Output Variables Table1"
+    assert fake_hfss.created_reports[0]["report_category"] == "Terminal Solution Data"
     assert fake_hfss.created_reports[0]["plot_type"] == "Data Table"
-    assert fake_hfss.created_reports[0]["context"] == ["Domain:=", "Sweep"]
-    assert fake_hfss.created_reports[0]["variations"] == ["Freq:=", ["6.78MHz"]]
+    assert fake_hfss.created_reports[0]["context"] == []
+    assert fake_hfss.created_reports[0]["variations"] == ["Freq:=", ["All"]]
+    assert result["analysis"]["sweep_name"] == "disabled"
     assert result["post_templates"] == [
         {
             "template_id": "output_variables_table_1",
-            "report_name": "Output Variables Table 1",
-            "solution_name": "Setup1 : Sweep",
+            "report_name": "Output Variables Table1",
+            "solution_name": "Setup1 : LastAdaptive",
             "traces": [
                 "Ltx",
                 "Lrx",
@@ -283,18 +273,6 @@ def test_run_em_pipeline_returns_full_contract() -> None:
                 "Qtx",
                 "Qrx",
                 "FOM",
-                "S11_mag",
-                "S21_mag",
-                "Z11_re",
-                "Z11_im",
-                "Z12_re",
-                "Z12_im",
-                "Z21_re",
-                "Z21_im",
-                "Z22_re",
-                "Z22_im",
-                "ImZtx",
-                "ImZrx",
             ],
             "output_variables": [
                 "Ltx",
@@ -304,18 +282,6 @@ def test_run_em_pipeline_returns_full_contract() -> None:
                 "Qtx",
                 "Qrx",
                 "FOM",
-                "S11_mag",
-                "S21_mag",
-                "Z11_re",
-                "Z11_im",
-                "Z12_re",
-                "Z12_im",
-                "Z21_re",
-                "Z21_im",
-                "Z22_re",
-                "Z22_im",
-                "ImZtx",
-                "ImZrx",
             ],
         }
     ]
@@ -333,15 +299,14 @@ def test_run_em_pipeline_uses_numeric_ports_when_named_ports_are_unavailable() -
     fake_hfss.available_traces = ["S(1,1)", "S(1,2)", "S(2,1)", "S(2,2)"]
     run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
     expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
-    assert "Z(1,1)" in expressions_by_name["Ltx"]
-    assert "Z(2,2)" in expressions_by_name["Lrx"]
-    assert "S(1,2)" in expressions_by_name["S21_mag"]
+    assert "Zt(1,1)" in expressions_by_name["Ltx"]
+    assert "Zt(2,2)" in expressions_by_name["Lrx"]
 
 
 def test_run_em_pipeline_supports_terminal_style_st_traces_with_long_names() -> None:
     fake_hfss = _FakeHfss()
-    tx_term = "stub_rx_dd_back_B_rx_main_0_g0_7dbaea44_3af822c6_0_0_T1"
-    rx_term = "stub_tx_dd_start_A_tx_main_0_g0_7dbaea44_3af822c6_0_0_T1"
+    tx_term = "rxs_rx_main_0_0_B_T1"
+    rx_term = "txs_tx_main_0_0_T1"
     fake_hfss.available_traces = [
         f"St({tx_term},{tx_term})",
         f"St({tx_term},{rx_term})",
@@ -350,21 +315,32 @@ def test_run_em_pipeline_supports_terminal_style_st_traces_with_long_names() -> 
     ]
     run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
     expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
-    assert f"Z({tx_term},{tx_term})" in expressions_by_name["Ltx"]
-    assert f"Z({rx_term},{rx_term})" in expressions_by_name["Lrx"]
-    assert f"St({tx_term},{rx_term})" in expressions_by_name["S21_mag"]
+    assert f"Zt({tx_term},{tx_term})" in expressions_by_name["Ltx"]
+    assert f"Zt({rx_term},{rx_term})" in expressions_by_name["Lrx"]
+
+
+def test_run_em_pipeline_prefers_stub_excitation_names_for_post_variables() -> None:
+    fake_hfss = _FakeHfss()
+    fake_hfss.excitation_names = [
+        "txs_tx_main_1_1_T1",
+        "rxs_rx_main_1_1_A_T1",
+    ]
+    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
+    expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
+    assert "Zt(txs_tx_main_1_1_T1,txs_tx_main_1_1_T1)" in expressions_by_name["Ltx"]
+    assert "Zt(rxs_rx_main_1_1_A_T1,rxs_rx_main_1_1_A_T1)" in expressions_by_name["Lrx"]
+    assert "Zt(txs_tx_main_1_1_T1,rxs_rx_main_1_1_A_T1)" in expressions_by_name["M"]
 
 
 def test_run_em_pipeline_normalizes_parenthesized_terminal_names() -> None:
     fake_hfss = _FakeHfss()
     fake_hfss.available_traces = [
-        "St((stub_rxdd_rx_main_0_g0_B_T1,(stub_rxdd_rx_main_0_g0_B_T1))",
-        "St((stub_rxdd_rx_main_0_g0_B_T1,(stub_txdd_tx_main_0_0_T1))",
+        "St((rxs_rx_main_0_0_B_T1,(rxs_rx_main_0_0_B_T1))",
+        "St((rxs_rx_main_0_0_B_T1,(txs_tx_main_0_0_T1))",
     ]
     run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
     expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
-    assert "Z(stub_rxdd_rx_main_0_g0_B_T1,stub_rxdd_rx_main_0_g0_B_T1)" in expressions_by_name["Ltx"]
-    assert "St(stub_rxdd_rx_main_0_g0_B_T1,stub_txdd_tx_main_0_0_T1)" in expressions_by_name["S21_mag"]
+    assert "Zt(rxs_rx_main_0_0_B_T1,rxs_rx_main_0_0_B_T1)" in expressions_by_name["Ltx"]
 
 
 def test_build_ports_returns_endpoint_based_default_port_names() -> None:
@@ -372,7 +348,7 @@ def test_build_ports_returns_endpoint_based_default_port_names() -> None:
     assert ports == {"tx": ["TX_TML"], "rx": ["RX_TML"]}
 
 
-def test_run_em_pipeline_uses_policy_frequencies_for_setup_and_sweep() -> None:
+def test_run_em_pipeline_uses_policy_frequencies_for_setup_and_disabled_sweep_metadata() -> None:
     fake_hfss = _FakeHfss()
     policy = default_em_policy()
     policy["setup_frequency_hz"] = 13.56e6
@@ -382,11 +358,10 @@ def test_run_em_pipeline_uses_policy_frequencies_for_setup_and_sweep() -> None:
     result = run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), policy)
 
     setup_payload = fake_hfss.inserted_setup_payloads[0]
-    sweep_payload = fake_hfss.inserted_sweep_payloads[0]
     assert "13.56MHz" in setup_payload
-    assert "2.5MHz" in sweep_payload
-    assert "60MHz" in sweep_payload
+    assert fake_hfss.inserted_sweep_payloads == []
     assert result["analysis"]["setup_frequency_hz"] == 13.56e6
+    assert result["analysis"]["sweep_name"] == "disabled"
     assert result["analysis"]["sweep_start_hz"] == 2.5e6
     assert result["analysis"]["sweep_stop_hz"] == 60.0e6
 
@@ -418,11 +393,11 @@ def test_run_em_pipeline_falls_back_to_stub_rxdd_source_name_for_90deg_phase() -
     fake_hfss = _FakeHfss()
     fake_hfss.excitation_names = [
         "TX_TML",
-        "stub_rxdd_rx_main_1_g1_A_T1",
+        "rxs_rx_main_1_1_A_T1",
     ]
     run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
     assert fake_hfss.edited_sources_payloads
     sources_payload = fake_hfss.edited_sources_payloads[0]
     payload_text = str(sources_payload)
-    assert "stub_rxdd_rx_main_1_g1_A_T1" in payload_text
+    assert "rxs_rx_main_1_1_A_T1" in payload_text
     assert "90deg" in payload_text

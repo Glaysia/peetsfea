@@ -330,7 +330,9 @@ def _finalize_solids_and_substrates_impl(
                 f"source={source_object_name}, source_raw={source_object_name_raw})"
             )
         stub_origin, stub_sizes = _rxdd_back_stub_origin_and_sizes(anchor_xyz=anchor_xyz, trace=trace)
-        stub_name = f"stub_rxdd_{board_id}_g{instance_index}_{endpoint_label}"
+        # Keep the reference conductor name short because AEDT terminal names
+        # are derived from it and are reused by post-processing.
+        stub_name = f"rxs_{board_id}_{instance_index}_{endpoint_label}"
         stub_created = modeler.create_box(origin=stub_origin, sizes=stub_sizes, name=stub_name, material="copper")
         if not stub_created:
             raise ValueError(
@@ -462,7 +464,9 @@ def _finalize_solids_and_substrates_impl(
                 start_xyz[2] - TX_DD_START_STUB_DOWN_MM,
             ]
             stub_sizes = [trace, trace, TX_DD_START_STUB_DOWN_MM]
-            stub_name = f"stub_txdd_{board_id}_{stub_idx}"
+            # Keep the reference conductor name short because AEDT terminal names
+            # are derived from it and are reused by post-processing.
+            stub_name = f"txs_{board_id}_{stub_idx}"
             stub_created = modeler.create_box(origin=stub_origin, sizes=stub_sizes, name=stub_name, material="copper")
             if not stub_created:
                 raise ValueError(

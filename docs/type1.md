@@ -7,8 +7,8 @@
 
 ## 무엇을 생성하나
 - HFSS 설계 파일(`.aedt`)을 생성한다.
-- `0.2.8` 기준 zip 산출물을 생성한다.
-- zip payload는 아래 4개 파일로 고정된다.
+- zip 산출물은 현재 임시 비활성화 상태다.
+- 아래 4개 payload는 실행 스냅샷으로 유지된다.
   - `<design_id>.aedt`: HFSS 설계 본체
   - `<design_id>.repro.toml`: 단일 설계 재현용 스냅샷(`count=1` 고정)
   - `<design_id>.dataset.toml`: 데이터셋 입력 추적용 스냅샷(`output.*=-1`, `timeout_sec=7200`)

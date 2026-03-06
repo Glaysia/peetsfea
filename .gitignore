@@ -67,7 +67,8 @@ Thumbs.db
 
 
 batch.log
-run/batch.log
-run/aedt/*
+run*/batch.log
+run*/aedt/*
+
 
 tmp/*

@@ -47,13 +47,13 @@ def test_apply_sources_phase_uses_named_tx_rx_ports() -> None:
     assert "90deg" in payload_text
 
 
-def test_apply_sources_phase_falls_back_to_stub_rxdd_excitation() -> None:
-    fake_hfss = _FakeHfssForSources(["TX_TML", "stub_rxdd_rx_main_1_g1_A_T1"])
+def test_apply_sources_phase_falls_back_to_short_rx_stub_excitation() -> None:
+    fake_hfss = _FakeHfssForSources(["TX_TML", "rxs_rx_main_1_1_A_T1"])
     result = apply_sources_phase(cast(Hfss, fake_hfss), {"tx": ["TX_TML"], "rx": ["RX_TML"]})
 
-    assert result["rx_source_name"] == "stub_rxdd_rx_main_1_g1_A_T1"
+    assert result["rx_source_name"] == "rxs_rx_main_1_1_A_T1"
     assert fake_hfss.edited_sources_payloads
-    assert "stub_rxdd_rx_main_1_g1_A_T1" in str(fake_hfss.edited_sources_payloads[0])
+    assert "rxs_rx_main_1_1_A_T1" in str(fake_hfss.edited_sources_payloads[0])
 
 
 def test_apply_sources_phase_raises_when_rx_source_is_missing() -> None:

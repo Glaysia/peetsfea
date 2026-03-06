@@ -139,62 +139,12 @@ def build_analysis(hfss: Hfss, policy: EmPolicy) -> dict[str, float | str]:
             30,
         ],
     )
-    analysis_module.InsertFrequencySweep(
-        "Setup1",
-        [
-            "NAME:Sweep",
-            "IsEnabled:=",
-            True,
-            "RangeType:=",
-            "LogScale",
-            "RangeStart:=",
-            _format_frequency_mhz(sweep_start_hz),
-            "RangeEnd:=",
-            _format_frequency_mhz(sweep_stop_hz),
-            "RangeCount:=",
-            401,
-            "RangeSamples:=",
-            401,
-            "Type:=",
-            "Interpolating",
-            "SaveFields:=",
-            False,
-            "SaveRadFields:=",
-            False,
-            "InterpTolerance:=",
-            0.5,
-            "InterpMaxSolns:=",
-            250,
-            "InterpMinSolns:=",
-            0,
-            "InterpMinSubranges:=",
-            1,
-            "InterpUseS:=",
-            True,
-            "InterpUsePortImped:=",
-            True,
-            "InterpUsePropConst:=",
-            True,
-            "UseDerivativeConvergence:=",
-            False,
-            "InterpDerivTolerance:=",
-            0.2,
-            "UseFullBasis:=",
-            True,
-            "EnforcePassivity:=",
-            True,
-            "PassivityErrorTolerance:=",
-            0.0001,
-            "EnforceCausality:=",
-            False,
-            "SMatrixOnlySolveMode:=",
-            "Auto",
-        ],
-    )
+    # Frequency sweep creation is temporarily disabled. Keep policy values in the
+    # returned payload so downstream callers can still inspect the configured range.
     return {
         "setup_name": setup_name,
         "setup_frequency_hz": setup_frequency_hz,
-        "sweep_name": "Sweep",
+        "sweep_name": "disabled",
         "sweep_start_hz": sweep_start_hz,
         "sweep_stop_hz": sweep_stop_hz,
     }
@@ -212,6 +162,23 @@ def _extract_trace_terms(traces: list[str]) -> list[tuple[str, str, str]]:
         if function_name and port_0 and port_1:
             terms.append((function_name, port_0, port_1))
     return terms
+
+
+def _find_terminal_name(
+    *,
+    excitation_names: list[str],
+    exact_fallback: str,
+    regex_fallback: str,
+) -> str | None:
+    normalized_map: dict[str, str] = {
+        str(name).strip().strip("'\"").lstrip("(").rstrip(")"): str(name)
+        for name in excitation_names
+        if str(name).strip()
+    }
+    for normalized, raw in normalized_map.items():
+        if re.search(regex_fallback, normalized):
+            return raw
+    return normalized_map.get(exact_fallback)
 
 
 def _resolve_port_terms_for_expressions(hfss: Hfss) -> tuple[str, str, str]:
@@ -250,6 +217,18 @@ def _resolve_port_terms_for_expressions(hfss: Hfss) -> tuple[str, str, str]:
             ports.append(excitation_name)
 
     s_function = "St" if "St" in function_names else "S"
+    tx_terminal_name = _find_terminal_name(
+        excitation_names=normalized_excitation_names,
+        exact_fallback="TX_TML",
+        regex_fallback=r"^txs_.*_T1$",
+    )
+    rx_terminal_name = _find_terminal_name(
+        excitation_names=normalized_excitation_names,
+        exact_fallback="RX_TML",
+        regex_fallback=r"^rxs_.*_T1$",
+    )
+    if tx_terminal_name is not None and rx_terminal_name is not None:
+        return (tx_terminal_name, rx_terminal_name, s_function)
     if "TX_TML" in ports and "RX_TML" in ports:
         return ("TX_TML", "RX_TML", s_function)
     if "1" in ports and "2" in ports:
@@ -285,7 +264,7 @@ def build_post_templates(hfss: Hfss) -> list[PostTemplateResult]:
                     f"(name={output_variable['name']}, solution={template['solution_name']}, "
                     f"tx_port={tx_port_name}, rx_port={rx_port_name})"
                 )
-        context: list[object] = ["Domain:=", "Sweep"]
+        context: list[object] = []
         variations: list[object] = []
         for key, values in template["variations"].items():
             variations.extend([f"{key}:=", list(values)])

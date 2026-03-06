@@ -15,7 +15,6 @@ from peetsfea.identity.hashing import (
     compute_toml_space_hash,
     get_git_commit,
 )
-from peetsfea.pipeline.package_export import export_design_zip
 from peetsfea.spec.loader import TOMLTable, TOMLValue, load_toml_bytes, require_str, require_table
 from peetsfea.spec.resolver import SelectionConstraintError, resolve_selection_with_context
 from peetsfea.spec.resolver.constants import DERIVED_RANGE_PATHS
@@ -34,7 +33,7 @@ from peetsfea.types.manifest import (
 )
 
 MAX_ATTEMPTS = 64
-SUPPORTED_SPEC_VERSION = "0.2.8"
+SUPPORTED_SPEC_VERSION = "0.2.10"
 
 
 def _require_number(value: object, name: str) -> float:
@@ -513,16 +512,7 @@ def run(config: RunConfig) -> RunResult:
 
     if config.emit_manifest_json:
         manifest_output_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    if config.export_zip and aedt_output_path.exists():
-        zip_path = export_design_zip(
-            design_id=design_id,
-            aedt_path=aedt_output_path,
-            repro_toml=repro_snapshot["toml_bytes"],
-            dataset_toml=dataset_snapshot["toml_bytes"],
-            source_toml=source_toml_bytes,
-            output_dir=output_dir,
-        )
-        zip_path_str = str(zip_path)
+    # Zip export is temporarily disabled while keeping config/type compatibility.
     return {
         "manifest": manifest,
         "source_toml_bytes": source_toml_bytes,

@@ -5,16 +5,15 @@ import sys
 from pathlib import Path
 
 from peetsfea import RunConfig, build_square_spiral_from_manifest, run
-from peetsfea.pipeline.package_export import export_design_zip
 from peetsfea.pipeline.uniform_seedset import iter_uniform_feasible_seeds
 from peetsfea.types.manifest import Manifest, RunResult
 
 cwd = Path(__file__).parent.resolve()
 
 UNIFORM_SEEDSET_ENABLED = True
-UNIFORM_SEED_START = 0
-UNIFORM_SEED_END = 100000
-UNIFORM_SEED_TARGET_COUNT = 1000
+UNIFORM_SEED_START = 20000
+UNIFORM_SEED_END = 29999
+UNIFORM_SEED_TARGET_COUNT = 3000
 UNIFORM_SEED_MAX_ATTEMPTS = 64
 
 def _safe_remove(path: Path) -> None:
@@ -73,16 +72,8 @@ def run_one(seed: int) -> bool:
         result = run(config)
         manifest = result["manifest"]
         geometry = build_square_spiral_from_manifest(manifest)
-        if config.export_zip:
-            zip_path = export_design_zip(
-                design_id=manifest["design_id"],
-                aedt_path=Path(geometry["aedt_path"]),
-                repro_toml=result["repro_snapshot"]["toml_bytes"],
-                dataset_toml=result["dataset_snapshot"]["toml_bytes"],
-                source_toml=result["source_toml_bytes"],
-                output_dir=run_dir,
-            )
-            result["zip_path"] = str(zip_path)
+        # Zip export is temporarily disabled while keeping the public result contract.
+        result["zip_path"] = None
         print(geometry["aedt_path"])
         return True
     except Exception as exc:

@@ -53,14 +53,14 @@ def apply_sources_phase(hfss: Hfss, ports: dict[str, list[str]]) -> dict[str, st
         preferred_names=list(ports.get("tx", [])),
         excitation_names=excitation_names,
         exact_fallback="TX_TML",
-        regex_fallback=r"^stub_txdd.*_T1$",
+        regex_fallback=r"^txs_.*_T1$",
         role="tx",
     )
     rx_source_name = _find_excitation_name(
         preferred_names=list(ports.get("rx", [])),
         excitation_names=excitation_names,
         exact_fallback="RX_TML",
-        regex_fallback=r"^stub_rxdd.*_T1$",
+        regex_fallback=r"^rxs_.*_T1$",
         role="rx",
     )
 
