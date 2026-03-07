@@ -9,11 +9,13 @@
 - 동일한 설계 계약(TOML + seed)으로 여러 형상군(type1, type2, ...)을 안정적으로 생성한다.
 - Geometry/EM/Validation 계약을 타입 독립 인터페이스로 고정해 신규 타입 온보딩 비용을 줄인다.
 - 생성 결과는 재현 가능한 중간 산출물(설계 파일/manifest/repro 입력) 중심으로 관리한다.
+- 장기적으로 sampling ownership, replay safety, dataset ledger 계약을 타입 독립 공용 계층으로 고정한다.
 
 ## 고정 제약
 - Rx 패키지 물리 제약은 벽면 정렬/적층 순서/두께 예산 계약을 우선한다.
 - Tx-Rx 거리 제약(예: 110mm)과 같은 시스템 제약은 장기적으로도 preflight 단계에서 우선 검증한다.
 - Headless AEDT, deterministic sampling, 명시적 기본값 정책을 유지한다.
+- hidden dimension, heuristic replay 판정, normalized-away sampled value는 장기적으로 허용하지 않는다.
 
 ## 타입 확장 로드맵
 1. Type1 안정화
@@ -45,6 +47,8 @@
 - 실패 산출물과 로그를 구조화해 재시도/원인분석 루프를 자동화한다.
 - spec/docs/code 테스트를 동시에 갱신하는 문서-코드 동기화 규칙을 강제한다.
 - 지원/비지원 기능을 preflight에서 명시적으로 분리해 조기 실패시킨다.
+- sampling은 canonical ownership과 공통 selection API를 기준으로만 확장한다.
+- replay safety는 `repro.toml` exact replay와 `dataset.toml` sampled-coordinate ledger의 대응 관계로 관리한다.
 
 ## 의존성 및 선행조건
 - Python 3.12 + Pyaedt + AEDT 실행 환경.
@@ -56,3 +60,4 @@
 - spec-first + deterministic by default.
 - TOML은 설계 정의만 담당하고, 실행 토폴로지/머신 설정은 Python 코드에서 관리한다.
 - 하위호환은 자동 보정보다 명시적 버전 실패를 우선한다.
+- sampled dimension ordering은 우발적 path 정렬이 아니라 명시적 canonical ordering을 우선한다.

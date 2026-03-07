@@ -6,21 +6,22 @@ Core principle: same spec + same seed = same result.
 For Korean documentation, see [README.md](README.md).
 Release notes are managed by version and language under `release-notes/`.
 
-## Project-wide Goal
+## Project Goals
 - Standardize HFSS design generation from a single TOML spec contract.
-- Guarantee deterministic outcomes for the same spec/version/seed.
-- Keep one contract that scales from single-design generation to batch runs and dataset production.
+- Preserve reproducible design generation for the same spec/version/seed.
+- Keep single-design generation and dataset generation on the same contract surface.
 
-## What This Project Does
+## Current Documentation Baseline
+- The current documentation baseline is the planned `0.2.11` contract set.
+- This README is the public summary; detailed design notes live under `PLANS/`.
+- For implementation rules, see [AGENTS.md](AGENTS.md). For long-term principles, see [PLANS/LONGTERM_PLAN.md](PLANS/LONGTERM_PLAN.md). For the `0.2.11` index, see [PLANS/V0_2_11.md](PLANS/V0_2_11.md).
+
+## What This Project Intends To Guarantee
 - Input: TOML spec (`examples/type1.toml`)
-- Process: spec validation + parameter selection + HFSS design generation
+- Process: spec validation + deterministic selection + HFSS design generation
 - Output: HFSS design output plus snapshot data (`.aedt`, `.repro.toml`, `.dataset.toml`, `.source.toml`)
-
-## type1 Design Overview
-- `type1` is the baseline IPT design for TV/wall scenarios with TX (`tx_dd`, `tx_vertical`) and RX (`rx_dd`) coil/PCB layouts.
-- Default execution produces HFSS design output plus reproducibility/dataset snapshots.
-- Required topology and constraints are pinned to `spec_version = "0.2.8"`.
-- Full details: [docs/type1.en.md](docs/type1.en.md)
+- `repro.toml`: exact replay artifact for the realized design
+- `dataset.toml`: ledger artifact for sampled coordinates that affect the final design
 
 ## Quick Start
 1. Prepare Python 3.12 and AEDT runtime.
@@ -34,7 +35,7 @@ cd run
 
 Default entrypoint is `run.py`, and the default runnable spec is `examples/type1.toml`.
 
-## 0.2.8 Output Contract (Important)
+## Core Artifacts
 - Zip export is temporarily disabled.
 - The run result still keeps these four payloads as snapshots:
   - `<design_id>.aedt`
@@ -42,6 +43,23 @@ Default entrypoint is `run.py`, and the default runnable spec is `examples/type1
   - `<design_id>.dataset.toml`
   - `<design_id>.source.toml`
 - `manifest_<design_id>.json` and `geometry_metadata_<design_id>.json` are disabled by default (optional only).
+
+## Major Contracts Being Standardized In 0.2.11
+- Sampling ownership is managed only through canonical owners.
+- Alias/derived paths do not count as independent sampled dimensions.
+- `dataset.toml` and `repro.toml` have different roles, and replay safety is defined by their correspondence.
+- Detailed planning is split across the following documents:
+  - [PLANS/V0_2_11.md](PLANS/V0_2_11.md)
+  - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md)
+  - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_00B_SELECTION_API_SIMPLIFICATION_AND_REFACTOR.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_00B_SELECTION_API_SIMPLIFICATION_AND_REFACTOR.md)
+  - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_00C_REPLAY_DATASET_AND_SEEDSET_CONTRACT.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_00C_REPLAY_DATASET_AND_SEEDSET_CONTRACT.md)
+  - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_01_SPEC_AND_POLICY.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_01_SPEC_AND_POLICY.md)
+  - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_02_FERRITE_GEOMETRY_AND_METADATA.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_02_FERRITE_GEOMETRY_AND_METADATA.md)
+  - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_03_TESTS_AND_ACCEPTANCE.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_03_TESTS_AND_ACCEPTANCE.md)
+
+## type1 Reference Docs
+- Korean overview: [docs/type1.md](docs/type1.md)
+- English overview: [docs/type1.en.md](docs/type1.en.md)
 
 ## Compatibility Policy
 - Long-term backward compatibility is not guaranteed.

@@ -243,17 +243,57 @@ def test_run_em_pipeline_returns_full_contract() -> None:
     assert fake_hfss.inserted_setup_types == ["HfssDriven"]
     assert fake_hfss.inserted_sweep_setup_names == []
     assert [name for name, _, _ in fake_hfss.created_output_variables] == [
-        "Ltx",
-        "Lrx",
-        "M",
-        "k",
-        "Qtx",
-        "Qrx",
-        "FOM",
+        "Ltx_uH",
+        "Lrx_uH",
+        "M_uH",
+        "k_ratio",
+        "Qtx_ratio",
+        "Qrx_ratio",
+        "FOM_ratio",
+        "Rtx_ac_ohm",
+        "Rrx_ac_ohm",
+        "Xtx_ohm",
+        "Xrx_ohm",
+        "M_over_Ltx_ratio",
+        "M_over_Lrx_ratio",
+        "Gtx_S",
+        "Btx_S",
+        "Grx_S",
+        "Brx_S",
+        "S11_mag_ratio",
+        "S21_mag_ratio",
+        "S21_phase_deg",
     ]
     expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
-    assert "Zt(" in expressions_by_name["Ltx"]
-    assert "freq" in expressions_by_name["Ltx"]
+    assert "Zt(" in expressions_by_name["Ltx_uH"]
+    assert "freq" in expressions_by_name["Ltx_uH"]
+    assert "Zt(" in expressions_by_name["Lrx_uH"]
+    assert "freq" in expressions_by_name["Lrx_uH"]
+    assert "Zt(" in expressions_by_name["M_uH"]
+    assert "freq" in expressions_by_name["M_uH"]
+    assert "M_uH" in expressions_by_name["k_ratio"]
+    assert "Ltx_uH" in expressions_by_name["k_ratio"]
+    assert "Lrx_uH" in expressions_by_name["k_ratio"]
+    assert "im(Zt(" in expressions_by_name["Qtx_ratio"]
+    assert "re(Zt(" in expressions_by_name["Qtx_ratio"]
+    assert "im(Zt(" in expressions_by_name["Qrx_ratio"]
+    assert "re(Zt(" in expressions_by_name["Qrx_ratio"]
+    assert "k_ratio" in expressions_by_name["FOM_ratio"]
+    assert "Qtx_ratio" in expressions_by_name["FOM_ratio"]
+    assert "Qrx_ratio" in expressions_by_name["FOM_ratio"]
+    assert "re(Zt(" in expressions_by_name["Rtx_ac_ohm"]
+    assert "re(Zt(" in expressions_by_name["Rrx_ac_ohm"]
+    assert "im(Zt(" in expressions_by_name["Xtx_ohm"]
+    assert "im(Zt(" in expressions_by_name["Xrx_ohm"]
+    assert "M_uH/Ltx_uH" in expressions_by_name["M_over_Ltx_ratio"]
+    assert "M_uH/Lrx_uH" in expressions_by_name["M_over_Lrx_ratio"]
+    assert "re(Yt(" in expressions_by_name["Gtx_S"]
+    assert "im(Yt(" in expressions_by_name["Btx_S"]
+    assert "re(Yt(" in expressions_by_name["Grx_S"]
+    assert "im(Yt(" in expressions_by_name["Brx_S"]
+    assert "mag(S(" in expressions_by_name["S11_mag_ratio"]
+    assert "mag(S(" in expressions_by_name["S21_mag_ratio"]
+    assert "ang_deg_val(S(" in expressions_by_name["S21_phase_deg"]
     assert fake_hfss.created_reports[0]["plot_name"] == "Output Variables Table1"
     assert fake_hfss.created_reports[0]["report_category"] == "Terminal Solution Data"
     assert fake_hfss.created_reports[0]["plot_type"] == "Data Table"
@@ -266,22 +306,48 @@ def test_run_em_pipeline_returns_full_contract() -> None:
             "report_name": "Output Variables Table1",
             "solution_name": "Setup1 : LastAdaptive",
             "traces": [
-                "Ltx",
-                "Lrx",
-                "M",
-                "k",
-                "Qtx",
-                "Qrx",
-                "FOM",
+                "Ltx_uH",
+                "Lrx_uH",
+                "M_uH",
+                "k_ratio",
+                "Qtx_ratio",
+                "Qrx_ratio",
+                "FOM_ratio",
+                "Rtx_ac_ohm",
+                "Rrx_ac_ohm",
+                "Xtx_ohm",
+                "Xrx_ohm",
+                "M_over_Ltx_ratio",
+                "M_over_Lrx_ratio",
+                "Gtx_S",
+                "Btx_S",
+                "Grx_S",
+                "Brx_S",
+                "S11_mag_ratio",
+                "S21_mag_ratio",
+                "S21_phase_deg",
             ],
             "output_variables": [
-                "Ltx",
-                "Lrx",
-                "M",
-                "k",
-                "Qtx",
-                "Qrx",
-                "FOM",
+                "Ltx_uH",
+                "Lrx_uH",
+                "M_uH",
+                "k_ratio",
+                "Qtx_ratio",
+                "Qrx_ratio",
+                "FOM_ratio",
+                "Rtx_ac_ohm",
+                "Rrx_ac_ohm",
+                "Xtx_ohm",
+                "Xrx_ohm",
+                "M_over_Ltx_ratio",
+                "M_over_Lrx_ratio",
+                "Gtx_S",
+                "Btx_S",
+                "Grx_S",
+                "Brx_S",
+                "S11_mag_ratio",
+                "S21_mag_ratio",
+                "S21_phase_deg",
             ],
         }
     ]
@@ -299,8 +365,13 @@ def test_run_em_pipeline_uses_numeric_ports_when_named_ports_are_unavailable() -
     fake_hfss.available_traces = ["S(1,1)", "S(1,2)", "S(2,1)", "S(2,2)"]
     run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
     expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
-    assert "Zt(1,1)" in expressions_by_name["Ltx"]
-    assert "Zt(2,2)" in expressions_by_name["Lrx"]
+    assert "Zt(1,1)" in expressions_by_name["Ltx_uH"]
+    assert "Zt(2,2)" in expressions_by_name["Lrx_uH"]
+    assert "Yt(1,1)" in expressions_by_name["Gtx_S"]
+    assert "Yt(2,2)" in expressions_by_name["Grx_S"]
+    assert "S(1,1)" in expressions_by_name["S11_mag_ratio"]
+    assert "S(1,2)" in expressions_by_name["S21_mag_ratio"]
+    assert "S(1,2)" in expressions_by_name["S21_phase_deg"]
 
 
 def test_run_em_pipeline_supports_terminal_style_st_traces_with_long_names() -> None:
@@ -315,8 +386,13 @@ def test_run_em_pipeline_supports_terminal_style_st_traces_with_long_names() -> 
     ]
     run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
     expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
-    assert f"Zt({tx_term},{tx_term})" in expressions_by_name["Ltx"]
-    assert f"Zt({rx_term},{rx_term})" in expressions_by_name["Lrx"]
+    assert f"Zt({tx_term},{tx_term})" in expressions_by_name["Ltx_uH"]
+    assert f"Zt({rx_term},{rx_term})" in expressions_by_name["Lrx_uH"]
+    assert f"Yt({tx_term},{tx_term})" in expressions_by_name["Gtx_S"]
+    assert f"Yt({rx_term},{rx_term})" in expressions_by_name["Grx_S"]
+    assert f"St({tx_term},{tx_term})" in expressions_by_name["S11_mag_ratio"]
+    assert f"St({tx_term},{rx_term})" in expressions_by_name["S21_mag_ratio"]
+    assert f"St({tx_term},{rx_term})" in expressions_by_name["S21_phase_deg"]
 
 
 def test_run_em_pipeline_prefers_stub_excitation_names_for_post_variables() -> None:
@@ -327,9 +403,9 @@ def test_run_em_pipeline_prefers_stub_excitation_names_for_post_variables() -> N
     ]
     run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
     expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
-    assert "Zt(txs_tx_main_1_1_T1,txs_tx_main_1_1_T1)" in expressions_by_name["Ltx"]
-    assert "Zt(rxs_rx_main_1_1_A_T1,rxs_rx_main_1_1_A_T1)" in expressions_by_name["Lrx"]
-    assert "Zt(txs_tx_main_1_1_T1,rxs_rx_main_1_1_A_T1)" in expressions_by_name["M"]
+    assert "Zt(txs_tx_main_1_1_T1,txs_tx_main_1_1_T1)" in expressions_by_name["Ltx_uH"]
+    assert "Zt(rxs_rx_main_1_1_A_T1,rxs_rx_main_1_1_A_T1)" in expressions_by_name["Lrx_uH"]
+    assert "Zt(txs_tx_main_1_1_T1,rxs_rx_main_1_1_A_T1)" in expressions_by_name["M_uH"]
 
 
 def test_run_em_pipeline_normalizes_parenthesized_terminal_names() -> None:
@@ -340,7 +416,7 @@ def test_run_em_pipeline_normalizes_parenthesized_terminal_names() -> None:
     ]
     run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
     expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
-    assert "Zt(rxs_rx_main_0_0_B_T1,rxs_rx_main_0_0_B_T1)" in expressions_by_name["Ltx"]
+    assert "Zt(rxs_rx_main_0_0_B_T1,rxs_rx_main_0_0_B_T1)" in expressions_by_name["Ltx_uH"]
 
 
 def test_build_ports_returns_endpoint_based_default_port_names() -> None:

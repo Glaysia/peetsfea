@@ -4,7 +4,7 @@ version = "0.2.10"
 description = "Spec-first deterministic device design with Pyaedt."
 readme = "README.md"
 requires-python = "==3.12"
-license = { text = "GPL-3.0-only" }
+license = { text = "MIT" }
 dependencies = [
   "pyaedt[graphics]>=0.25.1",
   "dearpygui>=2.1.1",

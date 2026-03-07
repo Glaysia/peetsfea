@@ -11,9 +11,9 @@ from peetsfea.types.manifest import Manifest, RunResult
 cwd = Path(__file__).parent.resolve()
 
 UNIFORM_SEEDSET_ENABLED = True
-UNIFORM_SEED_START = 20000
-UNIFORM_SEED_END = 29999
-UNIFORM_SEED_TARGET_COUNT = 3000
+UNIFORM_SEED_START = 0
+UNIFORM_SEED_END = 999999
+UNIFORM_SEED_TARGET_COUNT = 50000
 UNIFORM_SEED_MAX_ATTEMPTS = 64
 
 def _safe_remove(path: Path) -> None:
@@ -62,8 +62,8 @@ def run_one(seed: int) -> bool:
         toml_path=f"{cwd}/run/type1.toml",
         seed=seed,
         backend="hfss",
-        non_graphical=True,
-        close_on_exit=True,
+        non_graphical=False,
+        close_on_exit=False,
     )
     run_dir = Path(config.ansys_run_dir)
     result: RunResult | None = None

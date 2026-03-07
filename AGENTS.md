@@ -30,6 +30,17 @@ This document defines the project rules for coding agents working in this reposi
 - Ensure (TOML + seed) deterministically maps to final parameters; treat this as a testable contract.
 - Preflight validation must report what is supported vs. unsupported before design generation.
 
+## Sampling and replay rules
+- Every independent sampled degree of freedom must have exactly one canonical owner.
+- New sampled fields must be registered once in a shared sampling registry; do not sample the same meaning from multiple paths.
+- Alias/derived paths must not own sampling; they may only reference a canonical owner.
+- Do not implement candidate generation or candidate selection outside the shared sampling API.
+- Values that are normalized away and do not affect the final design must stay fixed (`count=1` or equivalent fixed value).
+- `dataset.toml` is the sampled-coordinate ledger for effective sampled degrees of freedom only.
+- `repro.toml` must remain an exact replay artifact for the realized design.
+- If a sampled field is added or changed, update docs, replay tests, dataset coverage tests, and dimension-audit tests together.
+- Do not hardcode an example spec dimension count as a permanent contract; derive it from the registry/audit result.
+
 ## Spec rules
 - Use standard TOML only (no custom DSL).
 - Consider a spec version bump when adding new parameters.
