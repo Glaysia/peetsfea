@@ -23,7 +23,7 @@ from .group_builder_tx_dd import build_for_board as build_tx_dd_for_board
 from .group_builder_tx_vertical import build_for_board as build_tx_vertical_for_board
 from .metadata import _build_geometry_metadata
 from .placement_rules import _apply_txdd_right_endpoint_rule
-from .scene_objects import _bounds_from_scene_entry, _create_scene_non_model_objects
+from .scene_objects import _bounds_from_scene_entry, _create_ferrite_model_objects, _create_scene_non_model_objects
 from .spiral_points import _build_rect_spiral_centerline_absolute
 
 
@@ -239,6 +239,24 @@ def _build_scene(ctx: GeometryRuntimeContext, state: GeometryBuildState, modeler
     ctx.rx_center_y = (ctx.rx_region_min[1] + ctx.rx_region_max[1]) / 2.0
 
 
+def _build_ferrite(ctx: GeometryRuntimeContext, state: GeometryBuildState, modeler: Modeler3D, hfss: Hfss) -> None:
+    ferrite_names, ferrite_probes, ferrite_entries = _create_ferrite_model_objects(
+        modeler=modeler,
+        hfss=hfss,
+        design_id=ctx.design_id,
+        selected=ctx.selected,
+        scene_objects=state.scene_objects,
+        object_names=state.object_names,
+        coil_plane_bboxes=state.coil_plane_bboxes,
+        cad_probe=state.cad_probe,
+        tx_board_ids=ctx.tx_board_ids,
+    )
+    state.object_names.extend(ferrite_names)
+    state.cad_probe.extend(ferrite_probes)
+    state.scene_objects.extend(ferrite_entries)
+    state.group_objects["ferrite"].extend(ferrite_names)
+
+
 def _build_all_coils(ctx: GeometryRuntimeContext, state: GeometryBuildState, modeler: Modeler3D) -> FinalizeInputs:
     finalize_inputs = FinalizeInputs()
     for board_idx, pcb in enumerate(ctx.selected_pcbs):
@@ -343,6 +361,7 @@ def _create_major_device_groups(modeler: Modeler3D, state: GeometryBuildState) -
     group_specs = (
         ("Tx", tx_objects),
         ("Rx", rx_objects),
+        ("Ferrite", sorted(set(state.group_objects["ferrite"]))),
         ("Fr4", fr4_objects),
     )
     for group_name, object_names in group_specs:
@@ -423,6 +442,7 @@ def _build_and_save_metadata(
         unite_groups={
             "tx": sorted(state.group_objects["tx_dd"] + state.group_objects["tx_vertical"]),
             "rx": sorted(state.group_objects["rx_dd"]),
+            "ferrite": sorted(state.group_objects["ferrite"]),
         },
         group_endpoints=state.group_endpoints,
         coil_polarity=state.coil_polarity,
@@ -448,6 +468,7 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
         _build_scene(ctx, state, modeler)
         finalize_inputs = _build_all_coils(ctx, state, modeler)
         _finalize_geometry(ctx, state, finalize_inputs, modeler, hfss)
+        _build_ferrite(ctx, state, modeler, hfss)
         return _build_and_save_metadata(ctx, state, manifest, hfss)
     except Exception as exc:
         raise RuntimeError(f"Failed to build geometry with Pyaedt: {exc}") from exc

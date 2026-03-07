@@ -21,7 +21,7 @@ def _var_expr(name: str, value: int | float | str) -> str:
         return str(int(value))
     if name.endswith("_deg") or name.endswith("rotation_deg"):
         return f"{float(value)}deg"
-    if name == "fr4_er":
+    if name in {"fr4_er", "ferrite_relative_permeability"}:
         return str(float(value))
     return f"{float(value)}mm"
 
@@ -29,7 +29,9 @@ def _var_expr(name: str, value: int | float | str) -> str:
 def _assign_design_variables(hfss: Hfss, manifest: Manifest) -> None:
     selected = manifest["selected_parameters"]
     for key, value in selected.items():
-        if isinstance(value, (int, float)):
+        if isinstance(value, bool):
+            hfss[_sanitize_var_name(f"spec_{key}")] = "1" if value else "0"
+        elif isinstance(value, (int, float)):
             hfss[_sanitize_var_name(f"spec_{key}")] = _var_expr(key, value)
 
     for group in manifest["selected_coil_groups"]:
@@ -53,5 +55,4 @@ def _assign_design_variables(hfss: Hfss, manifest: Manifest) -> None:
         hfss[f"pcb_{pcb_id}_position_z_mm"] = _var_expr("position_z_mm", pos_z)
         hfss[f"pcb_{pcb_id}_rotation_deg"] = _var_expr("rotation_deg", pcb["rotation_deg"])
         hfss[f"pcb_{pcb_id}_present"] = "1" if pcb["present"] else "0"
-
 

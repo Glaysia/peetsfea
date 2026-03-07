@@ -142,6 +142,7 @@ def test_tx_dd_xy_tools_prefers_txdd_object_maps_over_group_objects() -> None:
             "tx_dd": ["bridge_tx_dd_to_tx_vertical", "bridge_tx_dd_left_a_to_tx_vertical"],
             "tx_vertical": ["bridge_tx_dd_left_a_to_tx_vertical"],
             "rx_dd": [],
+            "ferrite": [],
         },
     )
     assert tools == [
@@ -157,7 +158,7 @@ def test_tx_dd_xy_tools_falls_back_to_group_when_maps_empty() -> None:
         txdd_right_object_names={},
         txdd_left_object_names={},
         live_object_names={"coil_tx_dd_a", "coil_tx_dd_b"},
-        group_objects={"tx_dd": ["coil_tx_dd_a", "coil_tx_dd_a", "coil_tx_dd_b"], "tx_vertical": [], "rx_dd": []},
+        group_objects={"tx_dd": ["coil_tx_dd_a", "coil_tx_dd_a", "coil_tx_dd_b"], "tx_vertical": [], "rx_dd": [], "ferrite": []},
     )
     assert tools == ["coil_tx_dd_a", "coil_tx_dd_b"]
 
@@ -167,7 +168,7 @@ def test_tx_dd_xy_tools_filters_dead_names_from_maps() -> None:
         txdd_right_object_names={0: "right_live", 1: "right_dead"},
         txdd_left_object_names={0: "left_live", 1: "left_dead"},
         live_object_names={"right_live", "left_live"},
-        group_objects={"tx_dd": ["fallback_live"], "tx_vertical": [], "rx_dd": []},
+        group_objects={"tx_dd": ["fallback_live"], "tx_vertical": [], "rx_dd": [], "ferrite": []},
     )
     assert tools == ["left_live", "right_live"]
 
@@ -177,7 +178,7 @@ def test_tx_dd_xy_tools_returns_empty_when_all_map_and_fallback_names_dead() -> 
         txdd_right_object_names={0: "right_dead", 1: "right_dead_2"},
         txdd_left_object_names={0: "left_dead", 1: "left_dead_2"},
         live_object_names=set(),
-        group_objects={"tx_dd": ["fallback_dead"], "tx_vertical": [], "rx_dd": []},
+        group_objects={"tx_dd": ["fallback_dead"], "tx_vertical": [], "rx_dd": [], "ferrite": []},
     )
     assert tools == []
 

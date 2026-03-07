@@ -7,22 +7,24 @@ from pathlib import Path
 
 from peetsfea.spec.loader import TOMLTable
 from peetsfea.spec.loader import load_toml_bytes
-from peetsfea.spec.resolver import resolve_selection_with_context
+from peetsfea.spec.resolver import resolve_selection_result
+from peetsfea.spec.resolver.sampling import SamplingLedger
 from peetsfea.spec.resolver.types import SelectionConstraintError
+from .selection_snapshots import dataset_owner_paths, detect_repro_mode
 
 
 @dataclass(frozen=True)
 class FeasibleSeedPoint:
     seed: int
     attempt: int
-    context: dict[str, int | float]
+    sampling_ledger: SamplingLedger
 
 
 def _first_feasible_point(*, spec: TOMLTable, seed: int, max_attempts: int) -> FeasibleSeedPoint | None:
     for attempt in range(max_attempts):
         try:
-            _, _, _, _, _, context = resolve_selection_with_context(spec=spec, seed=seed, attempt=attempt)
-            return FeasibleSeedPoint(seed=seed, attempt=attempt, context=context)
+            result = resolve_selection_result(spec=spec, seed=seed, attempt=attempt)
+            return FeasibleSeedPoint(seed=seed, attempt=attempt, sampling_ledger=result.sampling_ledger)
         except SelectionConstraintError:
             continue
     return None
@@ -55,7 +57,7 @@ def _dist_sq(a: tuple[float, ...], b: tuple[float, ...]) -> float:
 
 
 def _raw_vector(point: FeasibleSeedPoint, keys: tuple[str, ...]) -> tuple[float, ...]:
-    return tuple(float(point.context[key]) for key in keys)
+    return point.sampling_ledger.as_float_vector(keys)
 
 
 def _update_minmax(mins: list[float], maxs: list[float], vector: tuple[float, ...]) -> None:
@@ -109,11 +111,14 @@ def iter_uniform_feasible_seed_points(
         seed_end=seed_end,
         max_attempts=max_attempts,
     )
+    spec, _ = load_toml_bytes(spec_path)
+    repro_mode = detect_repro_mode(spec)
+    keys = dataset_owner_paths(spec, repro_mode=repro_mode)
+
     first = next(feasible_iter, None)
     if first is None:
         raise RuntimeError("No feasible seed found in the requested seed range")
 
-    keys = tuple(sorted(first.context.keys()))
     selected_points: list[FeasibleSeedPoint] = [first]
     selected_vectors: list[tuple[float, ...]] = [_raw_vector(first, keys)]
     mins = list(selected_vectors[0])

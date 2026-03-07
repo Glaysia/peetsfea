@@ -7,7 +7,7 @@ from peetsfea.spec.loader import TOMLTable, TOMLValue
 from peetsfea.types.manifest import ResolvedPcbInstance, ResolvedPcbMount
 
 from .constants import FIXED_PCB_ORDER, FIXED_PCB_RULES, GROUP_KIND_ORDER, PCB_OFFSET_BASE, PCB_SPACING_OFFSET_BASE
-from .sampling import build_candidates, sample_candidate, select_range_value
+from .sampling import select_range_value
 from .types import PcbMountSpec, SamplingContext
 
 
@@ -96,22 +96,19 @@ def resolve_pcbs(spec: TOMLTable, seed: int, attempt: int, context: SamplingCont
         raw_present = raw_pcb_table.get("present")
         if not isinstance(raw_present, list) or len(raw_present) != 4:
             raise ValueError(f"pcbs[{idx}].present must be [is_integer, start, end, count]")
-        is_integer, start, end, count = raw_present
-        if is_integer is not True:
-            raise ValueError(f"pcbs[{idx}].present[0] (is_integer) must be true")
-        if any(isinstance(v, bool) for v in (start, end, count)):
-            raise ValueError(f"pcbs[{idx}].present values must be numeric")
-        if not isinstance(start, (int, float)) or not isinstance(end, (int, float)) or not isinstance(count, int):
-            raise ValueError(f"pcbs[{idx}].present must be [is_integer, start, end, count]")
-        candidates = build_candidates(True, float(start), float(end), count)
-        if not all(int(v) in (0, 1) for v in candidates):
-            raise ValueError(f"pcbs[{idx}].present candidates must be 0 or 1")
-        present_key = f"pcbs[{idx}].present"
-        if present_key in context:
-            present = bool(int(context[present_key]))
-        else:
-            present = bool(int(sample_candidate(candidates, seed=seed, offset=PCB_OFFSET_BASE + idx, attempt=attempt)))
-            context[present_key] = int(present)
+        present = bool(
+            int(
+                select_range_value(
+                    spec,
+                    f"pcbs[{idx}].present",
+                    expect_integer=True,
+                    seed=seed,
+                    offset=PCB_OFFSET_BASE + idx,
+                    attempt=attempt,
+                    context=context,
+                )
+            )
+        )
 
         raw_z_mode = raw_pcb_table.get("z_mode")
         if raw_z_mode not in ("absolute", "relative_to_pcb"):
@@ -202,7 +199,7 @@ def normalize_pcbs_fixed_topology(pcbs: list[ResolvedPcbInstance]) -> list[Resol
             detail_parts.append(f"extra={extra}")
         detail = ", ".join(detail_parts)
         raise ValueError(
-            "spec_version 0.2.10 requires fixed pcbs topology ids "
+            "spec_version 0.2.11 requires fixed pcbs topology ids "
             f"{list(FIXED_PCB_ORDER)} ({detail})"
         )
 
@@ -212,14 +209,14 @@ def normalize_pcbs_fixed_topology(pcbs: list[ResolvedPcbInstance]) -> list[Resol
         rule = FIXED_PCB_RULES[pcb_id]
         if pcb["role"] != rule["role"]:
             raise ValueError(
-                "spec_version 0.2.10 fixed topology requires "
+                "spec_version 0.2.11 fixed topology requires "
                 f"pcbs.{pcb_id}.role='{rule['role']}' (actual={pcb['role']})"
             )
 
         expected_present = rule["present"]
         if pcb["present"] != expected_present:
             warnings.warn(
-                f"pcbs.{pcb_id}.present normalized to {expected_present} for spec_version 0.2.10 fixed topology",
+                f"pcbs.{pcb_id}.present normalized to {expected_present} for spec_version 0.2.11 fixed topology",
                 UserWarning,
                 stacklevel=2,
             )
@@ -228,7 +225,7 @@ def normalize_pcbs_fixed_topology(pcbs: list[ResolvedPcbInstance]) -> list[Resol
         expected_mounts = rule["mounts"]
         if mount_specs(pcb["mounts"]) != expected_mounts:
             warnings.warn(
-                f"pcbs.{pcb_id}.mounts normalized to fixed topology mapping for spec_version 0.2.10",
+                f"pcbs.{pcb_id}.mounts normalized to fixed topology mapping for spec_version 0.2.11",
                 UserWarning,
                 stacklevel=2,
             )

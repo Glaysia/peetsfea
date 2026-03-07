@@ -56,6 +56,10 @@ class SelectedParameters(TypedDict):
     floor_thickness_mm: float
     floor_size_x_mm: float
     floor_size_y_mm: float
+    ferrite_present: bool
+    rx_ferrite_thickness_mm: float
+    tx_ferrite_thickness_mm: float
+    ferrite_relative_permeability: float
     shelf_height_mm: float
     shelf_min_size_x_mm: float
     rx_region_bottom_from_tv_mm: float
@@ -219,11 +223,13 @@ class GroupObjects(TypedDict):
     tx_dd: list[str]
     tx_vertical: list[str]
     rx_dd: list[str]
+    ferrite: list[str]
 
 
 class UniteGroups(TypedDict):
     tx: list[str]
     rx: list[str]
+    ferrite: list[str]
 
 
 TerminalLabel = Literal["A", "B", "C", "D", "a", "b", "c", "d"]
@@ -261,6 +267,8 @@ class SceneObjectEntry(TypedDict):
         "tx_region_dd",
         "rx_region_max",
         "rx_region_actual",
+        "rx_ferrite",
+        "tx_ferrite",
     ]
     present: bool
     origin_xyz: tuple[float, float, float]
@@ -272,6 +280,7 @@ class SceneObjectEntry(TypedDict):
 class EmReadyObjects(TypedDict):
     tx_conductors: list[str]
     rx_conductors: list[str]
+    ferrite_objects: list[str]
     fr4_objects: list[str]
     scene_bbox_source_objects: list[str]
 

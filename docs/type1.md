@@ -10,15 +10,16 @@
 - zip 산출물은 현재 임시 비활성화 상태다.
 - 아래 4개 payload는 실행 스냅샷으로 유지된다.
   - `<design_id>.aedt`: HFSS 설계 본체
-  - `<design_id>.repro.toml`: 단일 설계 재현용 스냅샷(`count=1` 고정)
-  - `<design_id>.dataset.toml`: 데이터셋 입력 추적용 스냅샷(`output.*=-1`, `timeout_sec=7200`)
+  - `<design_id>.repro.toml`: canonical sampled owner가 모두 동결된 exact replay 스냅샷
+  - `<design_id>.dataset.toml`: 최종 설계에 영향을 주는 canonical sampled owner만 담는 exact sampled-coordinate ledger(`output.*=-1`, `timeout_sec=7200`)
   - `<design_id>.source.toml`: 실행에 사용한 원본 TOML 복사본
 
 ## 입력 스펙에서 중요한 블록
 - `tv`, `tx.region`, `rx.region`: 장면/영역 크기와 배치 기준
+- `ferrite`: 전역 ferrite on/off와 coil-footprint 기준 RX/TX ferrite 두께, 재질 기본값
 - `coil_shape`, `coil_groups_params`: 그룹별 코일 형상 및 파생 파라미터 제어
 - `constraints`: 샘플 선택/배치 가능성/토폴로지 제약 검증
-- `pcbs`: `0.2.8` 고정 토폴로지 계약에 따른 보드 present/mount 정규화
+- `pcbs`: fixed-topology 계약에 따른 보드 present/mount 정규화. 정규화로 소거되는 field는 독립 sampled dimension으로 허용하지 않는다.
 
 ## type1 사용 시 알아야 할 제한
 - 이 계약은 설계 생성 중심이며 시뮬레이션 결과 채움은 범위 밖이다.

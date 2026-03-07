@@ -21,7 +21,7 @@ TOML 스펙을 입력으로 받아 HFSS(AEDT)용 설계를 결정론적으로 �
 - 처리: 스펙 검증 + deterministic selection + HFSS 설계 생성
 - 출력: HFSS 설계와 스냅샷 데이터(`.aedt`, `.repro.toml`, `.dataset.toml`, `.source.toml`)
 - `repro.toml`: realized design을 다시 실행할 수 있는 exact replay artifact
-- `dataset.toml`: 최종 설계에 영향을 주는 sampled coordinate를 추적하는 ledger artifact
+- `dataset.toml`: 최종 설계에 영향을 주는 canonical sampled owner coordinate를 담는 exact ledger artifact
 
 ## 빠른 시작
 1. Python 3.12와 AEDT 환경을 준비한다.
@@ -47,7 +47,10 @@ cd run
 ## 0.2.11에서 정리하는 큰 계약
 - sampling ownership은 canonical owner 기준으로만 관리한다.
 - alias/derived path는 독립 sampled dimension으로 세지지 않는다.
+- `dataset.toml`은 `coil_groups[*].count_*` 같은 inline sampled owner도 포함하고, derived alias와 fixed field는 제외한다.
 - `dataset.toml`과 `repro.toml`은 서로 다른 역할을 가지며, replay safety는 둘의 대응 관계로 관리한다.
+- ferrite는 전역 `ferrite.present` 플래그 하나로만 제어하고, RX/TX 모두 실제 코일 footprint 기준으로 배치하며 RX `2.0mm` / TX `2.0mm` / `mu_r=500`을 기본 spec 계약으로 둔다.
+- adaptive 기본값은 `percent_refinement=20`, `maximum_passes=20`, `max_delta_s=0.007` 기준으로 정리한다.
 - 세부 설계는 아래 문서로 분리되어 있다.
   - [PLANS/V0_2_11.md](PLANS/V0_2_11.md)
   - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md)

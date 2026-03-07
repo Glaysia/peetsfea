@@ -7,6 +7,8 @@ from typing import Any
 import pytest
 
 import peetsfea.pipeline.run_design as runner
+from peetsfea.pipeline.selection_snapshots import dataset_owner_paths, detect_repro_mode
+from peetsfea.spec.loader import load_toml_bytes
 from peetsfea.types.manifest import RunResult
 from tests.fixtures.type1_spec import write_type1_toml
 
@@ -86,19 +88,25 @@ def test_ac04_dataset_placeholders_and_timeout_and_aedt_file(tmp_path: Path, mon
     parameters = inputs.get("parameters")
     assert isinstance(parameters, list), "AC-04 dataset inputs.parameters must be a list"
 
-    source_spec = tomllib.loads(result["source_toml_bytes"].decode("utf-8"))
-    source_range_counts = {
-        path: int(raw_range[3])
-        for path, raw_range in _walk_ranges(source_spec)
-        if len(raw_range) == 4 and isinstance(raw_range[3], int)
-    }
-    assert len(parameters) > 0, "AC-04 dataset inputs.parameters must include count!=2 variables"
+    source_path = tmp_path / "source.toml"
+    source_path.write_bytes(result["source_toml_bytes"])
+    source_spec, _ = load_toml_bytes(source_path)
+    expected_paths = dataset_owner_paths(source_spec, repro_mode=detect_repro_mode(source_spec))
+
+    exported_paths: list[str] = []
+    assert len(parameters) > 0, "AC-04 dataset inputs.parameters must include effective sampled owners"
     for entry in parameters:
         assert isinstance(entry, dict), "AC-04 dataset inputs.parameters entries must be tables"
         path = entry.get("path")
         assert isinstance(path, str), "AC-04 dataset inputs.parameters.path must be string"
-        assert path in source_range_counts, f"AC-04 dataset input path not found in source: {path}"
-        assert source_range_counts[path] != 2, f"AC-04 dataset inputs must include only count!=2 variables: {path}"
+        exported_paths.append(path)
+
+    assert tuple(exported_paths) == expected_paths
+    assert "ferrite.present" in exported_paths
+    assert "coil_groups[0].count_mode" in exported_paths
+    assert "coil_groups[1].count_range" in exported_paths
+    assert "coil_shape.tx_vertical.outer_x" not in exported_paths
+    assert all(not path.startswith("pcbs[") or not path.endswith(".present") for path in exported_paths)
 
     constraints = dataset.get("constraints")
     assert isinstance(constraints, dict), "AC-04 dataset must include constraints table"
@@ -107,3 +115,19 @@ def test_ac04_dataset_placeholders_and_timeout_and_aedt_file(tmp_path: Path, mon
 def test_ac05_source_toml_is_byte_identical(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     result, _, _, source_bytes, _ = _build_snapshot_case(tmp_path, monkeypatch)
     assert result["source_toml_bytes"] == source_bytes, "AC-05 source snapshot must be byte-identical to input TOML"
+
+
+def test_repro_snapshot_replays_same_design_and_dataset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    result, _, dataset, _, _ = _build_snapshot_case(tmp_path, monkeypatch)
+
+    repro_path = tmp_path / "replay.repro.toml"
+    repro_path.write_bytes(result["repro_snapshot"]["toml_bytes"])
+    replayed = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(repro_path), seed=11, backend="hfss"))
+    replayed_dataset = tomllib.loads(replayed["dataset_snapshot"]["toml_bytes"].decode("utf-8"))
+
+    assert replayed["manifest"]["design_id"] == result["manifest"]["design_id"]
+    assert replayed["manifest"]["selected_parameters"] == result["manifest"]["selected_parameters"]
+    assert replayed["manifest"]["selected_group_geometry"] == result["manifest"]["selected_group_geometry"]
+    assert replayed["manifest"]["selected_coil_groups"] == result["manifest"]["selected_coil_groups"]
+    assert replayed["manifest"]["selected_pcbs"] == result["manifest"]["selected_pcbs"]
+    assert replayed_dataset["inputs"]["parameters"] == dataset["inputs"]["parameters"]

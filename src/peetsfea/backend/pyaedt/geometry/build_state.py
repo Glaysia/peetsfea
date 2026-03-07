@@ -30,7 +30,7 @@ RxDdBackStubSource = tuple[str, int, str, Point3, float, str]
 
 
 def _empty_group_objects() -> GroupObjects:
-    return cast(GroupObjects, {"tx_dd": [], "tx_vertical": [], "rx_dd": []})
+    return cast(GroupObjects, {"tx_dd": [], "tx_vertical": [], "rx_dd": [], "ferrite": []})
 
 
 @dataclass

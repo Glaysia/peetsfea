@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Literal, cast
+from typing import Iterable, Literal, cast
 
+from ansys.aedt.core import Hfss
 from ansys.aedt.core.modeler.cad.object_3d import Object3d
 from ansys.aedt.core.modeler.modeler_3d import Modeler3D
 
@@ -10,6 +11,9 @@ from peetsfea.types.manifest import CadProbe, SceneObjectEntry, SelectedParamete
 from .cad_probe import _object_name, _probe_cad_object
 
 _Point3 = tuple[float, float, float]
+_FerriteKind = Literal["rx_ferrite", "tx_ferrite"]
+_FERRITE_MATERIAL_NAME = "peetsfea_ferrite_mu500"
+_TX_FERRITE_GAP_MM = 1.0
 
 def _bounds_from_scene_entry(entry: SceneObjectEntry) -> tuple[_Point3, _Point3]:
     ox, oy, oz = entry["origin_xyz"]
@@ -58,6 +62,271 @@ def _create_non_model_box(
     except Exception:
         pass
     return obj
+
+
+def _create_model_box(
+    modeler: Modeler3D,
+    *,
+    origin: list[float],
+    sizes: list[float],
+    name: str,
+    material: str,
+) -> Object3d:
+    obj = cast(
+        Object3d,
+        modeler.create_box(
+            origin=origin,
+            sizes=sizes,
+            name=name,
+            material=material,
+        ),
+    )
+    try:
+        setattr(obj, "model", True)
+    except Exception:
+        pass
+    return obj
+
+
+def _ensure_ferrite_material(hfss: Hfss, relative_permeability: float) -> str:
+    materials = getattr(hfss, "materials", None)
+    if materials is None:
+        return _FERRITE_MATERIAL_NAME
+    try:
+        exists = bool(materials.exists_material(_FERRITE_MATERIAL_NAME))
+    except Exception:
+        exists = False
+    try:
+        material = (
+            materials.material_keys.get(_FERRITE_MATERIAL_NAME)
+            or materials.material_keys.get(_FERRITE_MATERIAL_NAME.lower())
+            if exists and hasattr(materials, "material_keys")
+            else None
+        )
+    except Exception:
+        material = None
+    if material is None:
+        try:
+            material = materials.add_material(_FERRITE_MATERIAL_NAME)
+        except Exception:
+            return _FERRITE_MATERIAL_NAME
+    try:
+        material.permeability = str(float(relative_permeability))
+    except Exception:
+        pass
+    try:
+        material.permittivity = "1.0"
+    except Exception:
+        pass
+    try:
+        material.conductivity = "0"
+    except Exception:
+        pass
+    try:
+        material.dielectric_loss_tangent = "0"
+    except Exception:
+        pass
+    try:
+        material.magnetic_loss_tangent = "0"
+    except Exception:
+        pass
+    return _FERRITE_MATERIAL_NAME
+
+
+def _union_bboxes(bboxes: Iterable[list[float]]) -> list[float]:
+    iterator = iter(bboxes)
+    try:
+        first = list(next(iterator)[:6])
+    except StopIteration as exc:
+        raise ValueError("Cannot union an empty bbox collection") from exc
+    union = first
+    for bbox in iterator:
+        union[0] = min(union[0], bbox[0])
+        union[1] = min(union[1], bbox[1])
+        union[2] = min(union[2], bbox[2])
+        union[3] = max(union[3], bbox[3])
+        union[4] = max(union[4], bbox[4])
+        union[5] = max(union[5], bbox[5])
+    return union
+
+
+def _placeholder_ferrite_spec(
+    *,
+    design_id: str,
+    kind: _FerriteKind,
+    plane: Literal["XY", "YZ"],
+) -> tuple[str, _FerriteKind, _Point3, _Point3, Literal["XY", "YZ"]]:
+    suffix = "rx" if kind == "rx_ferrite" else "tx"
+    return (f"ferrite_{suffix}_{design_id}", kind, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), plane)
+
+
+def _resolve_rx_ferrite_spec(
+    *,
+    design_id: str,
+    selected: SelectedParameters,
+    scene_objects: list[SceneObjectEntry],
+    coil_plane_bboxes: list[tuple[str, Literal["XY", "YZ", "ZX"], list[float]]],
+    strict: bool,
+) -> tuple[str, _FerriteKind, _Point3, _Point3, Literal["XY", "YZ"]]:
+    rx_bboxes = [bbox for _, plane, bbox in coil_plane_bboxes if plane == "YZ"]
+    if not rx_bboxes:
+        if strict:
+            raise ValueError("Ferrite requested but no RX YZ coil bbox was captured")
+        return _placeholder_ferrite_spec(design_id=design_id, kind="rx_ferrite", plane="YZ")
+    scene_by_kind = {entry["kind"]: entry for entry in scene_objects}
+    tv_entry = scene_by_kind.get("tv")
+    if tv_entry is None:
+        raise ValueError("scene_objects is missing the TV entry required for RX ferrite placement")
+    union = _union_bboxes(rx_bboxes)
+    thickness = float(selected["rx_ferrite_thickness_mm"])
+    ferrite_min_x = union[0] - thickness
+    ferrite_max_x = union[0]
+    tv_min, tv_max = _bounds_from_scene_entry(tv_entry)
+    if ferrite_min_x < (tv_min[0] - 1e-9) or ferrite_max_x > (tv_max[0] + 1e-9):
+        raise ValueError(
+            "RX ferrite must stay inside the TV envelope "
+            f"(ferrite_x=({ferrite_min_x}, {ferrite_max_x}), tv_x=({tv_min[0]}, {tv_max[0]}))"
+        )
+    origin_xyz: _Point3 = (ferrite_min_x, union[1], union[2])
+    size_xyz: _Point3 = (thickness, union[4] - union[1], union[5] - union[2])
+    return (f"ferrite_rx_{design_id}", "rx_ferrite", origin_xyz, size_xyz, "YZ")
+
+
+def _resolve_tx_ferrite_spec(
+    *,
+    design_id: str,
+    selected: SelectedParameters,
+    cad_probe: list[CadProbe],
+    tx_board_ids: set[str],
+    strict: bool,
+) -> tuple[str, _FerriteKind, _Point3, _Point3, Literal["XY", "YZ"]]:
+    tx_xy_fr4_bboxes = [
+        list(probe["bbox"][:6])
+        for probe in cad_probe
+        if any(probe["object_name"].startswith(f"fr4_{board_id}_xy_") for board_id in tx_board_ids)
+    ]
+    if not tx_xy_fr4_bboxes:
+        if strict:
+            raise ValueError("Ferrite requested but no TX XY FR4 bbox was captured")
+        return _placeholder_ferrite_spec(design_id=design_id, kind="tx_ferrite", plane="XY")
+    lowest_min_z = min(bbox[2] for bbox in tx_xy_fr4_bboxes)
+    lowest_layer_bboxes = [bbox for bbox in tx_xy_fr4_bboxes if abs(bbox[2] - lowest_min_z) <= 1e-6]
+    union = _union_bboxes(lowest_layer_bboxes)
+    thickness = float(selected["tx_ferrite_thickness_mm"])
+    top_z = union[2] - _TX_FERRITE_GAP_MM
+    origin_xyz: _Point3 = (union[0], union[1], top_z - thickness)
+    size_xyz: _Point3 = (union[3] - union[0], union[4] - union[1], thickness)
+    return (f"ferrite_tx_{design_id}", "tx_ferrite", origin_xyz, size_xyz, "XY")
+
+
+def _live_model_object_names(
+    *,
+    object_names: list[str],
+    scene_objects: list[SceneObjectEntry],
+    ferrite_names: set[str],
+) -> list[str]:
+    non_model_names = {entry["name"] for entry in scene_objects if entry["non_model"]}
+    return sorted({name for name in object_names if name not in non_model_names and name not in ferrite_names})
+
+
+def _create_ferrite_model_objects(
+    modeler: Modeler3D,
+    hfss: Hfss,
+    design_id: str,
+    selected: SelectedParameters,
+    scene_objects: list[SceneObjectEntry],
+    object_names: list[str],
+    coil_plane_bboxes: list[tuple[str, Literal["XY", "YZ", "ZX"], list[float]]],
+    cad_probe: list[CadProbe],
+    tx_board_ids: set[str],
+) -> tuple[list[str], list[CadProbe], list[SceneObjectEntry]]:
+    ferrite_present = bool(selected["ferrite_present"])
+    rx_ferrite_thickness = float(selected["rx_ferrite_thickness_mm"])
+    tx_ferrite_thickness = float(selected["tx_ferrite_thickness_mm"])
+    ferrite_relative_permeability = float(selected["ferrite_relative_permeability"])
+    rx_region_thickness = float(selected["rx_region_thickness_mm"])
+    pcb_thickness = float(selected["pcb_thickness_mm"])
+    if ferrite_relative_permeability <= 1.0:
+        raise ValueError("selected_parameters.ferrite_relative_permeability must be > 1.0")
+    if rx_ferrite_thickness <= 0.0:
+        raise ValueError("selected_parameters.rx_ferrite_thickness_mm must be > 0")
+    if tx_ferrite_thickness <= 0.0:
+        raise ValueError("selected_parameters.tx_ferrite_thickness_mm must be > 0")
+    if (rx_ferrite_thickness + pcb_thickness) > (rx_region_thickness + 1e-9):
+        raise ValueError(
+            "RX ferrite thickness plus pcb_thickness_mm must be <= rx_region_thickness_mm "
+            f"(rx_ferrite_thickness_mm={rx_ferrite_thickness}, pcb_thickness_mm={pcb_thickness}, rx_region_thickness_mm={rx_region_thickness})"
+        )
+
+    ferrite_specs: list[tuple[str, _FerriteKind, _Point3, _Point3, Literal["XY", "YZ"]]] = [
+        _resolve_rx_ferrite_spec(
+            design_id=design_id,
+            selected=selected,
+            scene_objects=scene_objects,
+            coil_plane_bboxes=coil_plane_bboxes,
+            strict=ferrite_present,
+        ),
+        _resolve_tx_ferrite_spec(
+            design_id=design_id,
+            selected=selected,
+            cad_probe=cad_probe,
+            tx_board_ids=tx_board_ids,
+            strict=ferrite_present,
+        ),
+    ]
+
+    entries: list[SceneObjectEntry] = []
+    if not ferrite_present:
+        for name, kind, origin_xyz, size_xyz, plane in ferrite_specs:
+            entries.append(
+                {
+                    "name": name,
+                    "kind": kind,
+                    "present": False,
+                    "origin_xyz": origin_xyz,
+                    "size_xyz": size_xyz,
+                    "plane": plane,
+                    "non_model": False,
+                }
+            )
+        return [], [], entries
+
+    material_name = _ensure_ferrite_material(hfss, ferrite_relative_permeability)
+    ferrite_names = {name for name, _, _, _, _ in ferrite_specs}
+    tool_names = _live_model_object_names(object_names=object_names, scene_objects=scene_objects, ferrite_names=ferrite_names)
+    if not tool_names:
+        raise ValueError("Ferrite requested but no live model objects were available for subtract cutouts")
+    names: list[str] = []
+    probes: list[CadProbe] = []
+    for name, kind, origin_xyz, size_xyz, plane in ferrite_specs:
+        obj = _create_model_box(
+            modeler,
+            origin=[origin_xyz[0], origin_xyz[1], origin_xyz[2]],
+            sizes=[size_xyz[0], size_xyz[1], size_xyz[2]],
+            name=name,
+            material=material_name,
+        )
+        obj_name = _object_name(obj, name)
+        subtract_ok = modeler.subtract(blank_list=[obj_name], tool_list=tool_names, keep_originals=True)
+        if not subtract_ok:
+            raise ValueError(
+                "Failed to subtract live model objects from ferrite "
+                f"(ferrite_name={obj_name}, tool_count={len(tool_names)})"
+            )
+        names.append(obj_name)
+        probes.append(_probe_cad_object(obj, name))
+        entries.append(
+            {
+                "name": obj_name,
+                "kind": kind,
+                "present": True,
+                "origin_xyz": origin_xyz,
+                "size_xyz": size_xyz,
+                "plane": plane,
+                "non_model": False,
+            }
+        )
+    return names, probes, entries
 
 
 def _create_scene_non_model_objects(
@@ -263,5 +532,3 @@ def _create_scene_non_model_objects(
             }
         )
     return names, probes, entries
-
-

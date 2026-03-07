@@ -158,12 +158,12 @@ def test_repro_mode_frozen_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8")
     raw = re.sub(
-        r"range = \[(true|false), ([^,]+), [^,]+, [0-9]+\]",
-        lambda m: f"range = [{m.group(1)}, {m.group(2)}, {m.group(2)}, 1]",
+        r"(range|count_mode|count_range|count_fixed|present) = \[(true|false), ([^,]+), [^,]+, [0-9]+\]",
+        lambda m: f"{m.group(1)} = [{m.group(2)}, {m.group(3)}, {m.group(3)}, 1]",
         raw,
     )
     raw = raw.replace(
-        "[coil_shape.tx_vertical.outer_x]\nrange = [false, -1, -1, 1]",
+        "[coil_shape.tx_vertical.outer_x]\nrange = [false, -1, -1, -1]",
         "[coil_shape.tx_vertical.outer_x]\nrange = [false, -1, -1, -1]",
     )
     toml_path.write_text(raw, encoding="utf-8")
@@ -172,8 +172,8 @@ def test_repro_mode_frozen_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert manifest["repro_mode"] == "frozen_toml"
 
 
-def test_determinism_with_pcb_normalization(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "determinism_with_normalization.toml"
+def test_hidden_dimension_pcb_normalization_is_rejected_in_preflight(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "hidden_dimension_with_normalization.toml"
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8")
     raw = raw.replace(
@@ -189,10 +189,5 @@ def test_determinism_with_pcb_normalization(tmp_path: Path, monkeypatch: pytest.
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("d" * 40))
 
-    with pytest.warns(UserWarning):
-        first = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=17, backend="hfss"))["manifest"]
-    with pytest.warns(UserWarning):
-        second = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=17, backend="hfss"))["manifest"]
-
-    assert first["design_id"] == second["design_id"]
-    assert first["selected_pcbs"] == second["selected_pcbs"]
+    with pytest.raises(ValueError, match=r"normalized-away sampled field must be fixed with count=1: pcbs\[\d+\]\.present"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=17, backend="hfss"))

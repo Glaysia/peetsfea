@@ -23,7 +23,7 @@ def reject_removed_paths(spec: TOMLTable) -> None:
             read_path(spec, path)
         except ValueError:
             continue
-        raise ValueError(f"Removed path in spec_version 0.2.10: {path}")
+        raise ValueError(f"Removed path in spec_version 0.2.11: {path}")
 
 
 def read_range_definition(root: TOMLTable, dotted_path: str) -> list[TOMLValue]:

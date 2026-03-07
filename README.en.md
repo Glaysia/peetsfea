@@ -21,7 +21,7 @@ Release notes are managed by version and language under `release-notes/`.
 - Process: spec validation + deterministic selection + HFSS design generation
 - Output: HFSS design output plus snapshot data (`.aedt`, `.repro.toml`, `.dataset.toml`, `.source.toml`)
 - `repro.toml`: exact replay artifact for the realized design
-- `dataset.toml`: ledger artifact for sampled coordinates that affect the final design
+- `dataset.toml`: exact ledger artifact for canonical sampled-owner coordinates that affect the final design
 
 ## Quick Start
 1. Prepare Python 3.12 and AEDT runtime.
@@ -47,7 +47,10 @@ Default entrypoint is `run.py`, and the default runnable spec is `examples/type1
 ## Major Contracts Being Standardized In 0.2.11
 - Sampling ownership is managed only through canonical owners.
 - Alias/derived paths do not count as independent sampled dimensions.
+- `dataset.toml` includes inline sampled owners such as `coil_groups[*].count_*`, while excluding derived aliases and fixed fields.
 - `dataset.toml` and `repro.toml` have different roles, and replay safety is defined by their correspondence.
+- Ferrite is controlled only by the global `ferrite.present` flag, follows the actual coil footprint on both RX and TX, and uses RX `2.0mm`, TX `2.0mm`, and `mu_r=500` as the baseline spec contract.
+- Adaptive defaults are standardized to `percent_refinement=20`, `maximum_passes=20`, and `max_delta_s=0.007`.
 - Detailed planning is split across the following documents:
   - [PLANS/V0_2_11.md](PLANS/V0_2_11.md)
   - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md)

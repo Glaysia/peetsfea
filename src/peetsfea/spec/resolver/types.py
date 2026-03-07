@@ -1,16 +1,39 @@
 from __future__ import annotations
 
-from typing import Literal, TypedDict, TypeAlias
+from collections.abc import MutableMapping
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal, TypedDict, TypeAlias
+
+from peetsfea.types.manifest import (
+    GroupGeometryParams,
+    ResolvedCoilGroup,
+    ResolvedPcbInstance,
+    SelectedParameters,
+    SelectedParametersMax,
+)
+
+if TYPE_CHECKING:
+    from .sampling import SamplingLedger
 
 
 Number: TypeAlias = int | float
-SamplingContext: TypeAlias = dict[str, Number]
+SamplingContext: TypeAlias = MutableMapping[str, Number]
 PcbMountSpec: TypeAlias = tuple[Literal["tx_dd", "tx_vertical", "rx_dd"], Literal["all", "index"], int | None]
 GroupKind: TypeAlias = Literal["tx_dd", "tx_vertical", "rx_dd"]
 
 
 class SelectionConstraintError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class SelectionResult:
+    selected_parameters: SelectedParameters
+    selected_parameters_max: SelectedParametersMax
+    selected_coil_groups: list[ResolvedCoilGroup]
+    selected_group_geometry: list[GroupGeometryParams]
+    selected_pcbs: list[ResolvedPcbInstance]
+    sampling_ledger: "SamplingLedger"
 
 
 class PathRef(TypedDict):

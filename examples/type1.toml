@@ -8,7 +8,7 @@
 # Numeric range convention:
 #   range = [is_integer, start, end, count]
 
-spec_version = "0.2.10"
+spec_version = "0.2.11"
 
 [design]
 units = "mm"
@@ -25,11 +25,11 @@ setup_frequency_hz = 6.78e6
 sweep_start_hz = 1.0e6
 sweep_stop_hz = 45.0e6
 validation_gate = "hard_fail"
-max_delta_s = 0.001
-maximum_passes = 35
+max_delta_s = 0.007
+maximum_passes = 20
 minimum_passes = 9
 minimum_converged_passes = 13
-percent_refinement = 65
+percent_refinement = 20
 basis_order = 1
 port_accuracy = 2
 
@@ -96,6 +96,25 @@ range = [false, 5000.0, 5000.0, 1]
 
 [floor.size_y_mm]
 range = [false, 5000.0, 5000.0, 1]
+
+# ----------------------------------------------------------------------------
+# Ferrite policy controls
+
+[ferrite.present]
+# Global ferrite toggle. 0 removes both RX/TX ferrite plates, 1 enables both.
+range = [true, 0, 1, 2]
+
+[ferrite.rx_thickness_mm]
+# RX ferrite is fixed as a 2.0mm plate behind the RX coil footprint inside the TV.
+range = [false, 2.0, 2.0, 1]
+
+[ferrite.tx_thickness_mm]
+# TX ferrite is fixed as a 2.0mm plate below the lowest TX XY coil layer with a 1.0mm gap.
+range = [false, 2.0, 2.0, 1]
+
+[ferrite.relative_permeability]
+# Idealized ferrite material baseline for 0.2.11 planning.
+range = [false, 500.0, 500.0, 1]
 
 # ----------------------------------------------------------------------------
 # Grouped coil geometry controls
@@ -236,7 +255,7 @@ value = "ZX"
 [pcb_spacing.tx_main_1_z_from_tx_main_0_mm]
 # Relative Z spacing from tx_main_0 to tx_main_1 (mm).
 # tx_main_1 uses position.z = -1 dummy marker and resolver derives final z from this range.
-range = [false, 2.5, 3.5, 5]
+range = [false, 4, 7, 5]
 
 # ----------------------------------------------------------------------------
 # Declarative constraints (SSOT for preflight validity checks)
@@ -734,7 +753,7 @@ instance_transforms = [
 
 # ----------------------------------------------------------------------------
 # PCB instances (9 total: 5 always-on + 4 optional)
-# - 0.2.10 fixed-topology mode:
+# - 0.2.11 fixed-topology mode:
 #   coil count is primary, PCB present/mounts are normalized to this topology.
 # - tx_vertical uses dedicated host board tx_vertical_0.
 # - optional boards remain in spec for compatibility but are forced inactive.

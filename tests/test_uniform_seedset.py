@@ -4,12 +4,14 @@ from pathlib import Path
 
 import pytest
 
+from peetsfea.pipeline.selection_snapshots import dataset_owner_paths, detect_repro_mode
 from peetsfea.pipeline.uniform_seedset import (
     generate_uniform_feasible_seed_points,
     generate_uniform_feasible_seeds,
     iter_uniform_feasible_seed_points,
     iter_uniform_feasible_seeds,
 )
+from peetsfea.spec.loader import load_toml_bytes
 
 
 def test_generate_uniform_feasible_seeds_is_deterministic() -> None:
@@ -34,7 +36,7 @@ def test_generate_uniform_feasible_seeds_is_deterministic() -> None:
     assert list(seeds_a) == sorted(seeds_a)
 
 
-def test_generate_uniform_feasible_seed_points_have_context() -> None:
+def test_generate_uniform_feasible_seed_points_have_sampling_ledger() -> None:
     spec_path = Path(__file__).resolve().parents[1] / "examples" / "type1.toml"
     points = generate_uniform_feasible_seed_points(
         spec_path=spec_path,
@@ -47,7 +49,7 @@ def test_generate_uniform_feasible_seed_points_have_context() -> None:
     for point in points:
         assert point.seed >= 0
         assert point.attempt >= 0
-        assert "coil_groups[1].count_range" in point.context
+        assert "coil_groups[1].count_range" in point.sampling_ledger
 
 
 def test_iter_uniform_feasible_seeds_is_deterministic() -> None:
@@ -119,6 +121,7 @@ def _min_pairwise_distance(points: list[tuple[float, ...]]) -> float:
 
 def test_window_size_increase_improves_or_matches_coverage_metric() -> None:
     spec_path = Path(__file__).resolve().parents[1] / "examples" / "type1.toml"
+    spec, _ = load_toml_bytes(spec_path)
     small_window = list(
         iter_uniform_feasible_seed_points(
             spec_path=spec_path,
@@ -140,7 +143,9 @@ def test_window_size_increase_improves_or_matches_coverage_metric() -> None:
         )
     )
 
-    keys = sorted(small_window[0].context.keys())
-    small_vectors = [tuple(float(point.context[key]) for key in keys) for point in small_window]
-    large_vectors = [tuple(float(point.context[key]) for key in keys) for point in large_window]
+    keys = dataset_owner_paths(spec, repro_mode=detect_repro_mode(spec))
+    assert "coil_shape.tx_vertical.outer_x" not in keys
+    assert "coil_groups[0].count_mode" in keys
+    small_vectors = [point.sampling_ledger.as_float_vector(keys) for point in small_window]
+    large_vectors = [point.sampling_ledger.as_float_vector(keys) for point in large_window]
     assert _min_pairwise_distance(large_vectors) >= _min_pairwise_distance(small_vectors)

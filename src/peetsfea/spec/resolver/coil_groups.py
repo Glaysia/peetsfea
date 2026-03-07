@@ -4,7 +4,7 @@ from peetsfea.spec.loader import TOMLTable
 from peetsfea.types.manifest import ResolvedCoilGroup, SelectedParameters
 
 from .constants import GROUP_KIND_ORDER, GROUP_OFFSET_BASE
-from .sampling import build_candidates, sample_candidate
+from .sampling import select_range_value
 from .types import SamplingContext
 
 
@@ -30,40 +30,28 @@ def parse_group_transforms(group: TOMLTable, field_name: str) -> list[dict[str, 
 
 
 def select_count_field(
-    group: TOMLTable,
-    field_name: str,
+    spec: TOMLTable,
+    dotted_path: str,
     seed: int,
     offset: int,
     attempt: int,
     context: SamplingContext,
-    path_key: str,
 ) -> int:
-    if path_key in context:
-        return int(context[path_key])
-    if field_name not in group:
-        raise ValueError(f"coil_groups.{field_name} is required")
-    raw_range = group.get(field_name)
-    if not isinstance(raw_range, list) or len(raw_range) != 4:
-        raise ValueError(f"coil_groups.{field_name} must be [is_integer, start, end, count]")
-    is_integer, start, end, count = raw_range
-    if not isinstance(is_integer, bool) or not is_integer:
-        raise ValueError(f"coil_groups.{field_name}[0] (is_integer) must be true")
-    if isinstance(start, bool) or not isinstance(start, (int, float)):
-        raise ValueError(f"coil_groups.{field_name}[1] (start) must be number")
-    if isinstance(end, bool) or not isinstance(end, (int, float)):
-        raise ValueError(f"coil_groups.{field_name}[2] (end) must be number")
-    if isinstance(count, bool) or not isinstance(count, int) or count < 1:
-        raise ValueError(f"coil_groups.{field_name}[3] (count) must be int >= 1")
-    candidates = build_candidates(is_integer=True, start=float(start), end=float(end), count=count)
-    if len(candidates) == 0:
-        raise ValueError(f"No candidates generated from coil_groups.{field_name}")
-    selected = int(sample_candidate(candidates, seed=seed, offset=offset, attempt=attempt))
-    context[path_key] = selected
-    return selected
+    return int(
+        select_range_value(
+            spec,
+            dotted_path,
+            expect_integer=True,
+            seed=seed,
+            offset=offset,
+            attempt=attempt,
+            context=context,
+        )
+    )
 
 
 def parse_group_count(
-    group: TOMLTable,
+    spec: TOMLTable,
     kind: str,
     seed: int,
     offset: int,
@@ -72,17 +60,17 @@ def parse_group_count(
     key_prefix: str,
 ) -> tuple[int, int]:
     if kind == "tx_dd":
-        value = select_count_field(group, "count_mode", seed, offset, attempt, context, f"{key_prefix}.count_mode")
+        value = select_count_field(spec, f"{key_prefix}.count_mode", seed, offset, attempt, context)
         if value not in (2, 4):
             raise ValueError("tx_dd count_mode must resolve to 2 or 4")
         return value, value
     if kind == "tx_vertical":
-        value = select_count_field(group, "count_range", seed, offset, attempt, context, f"{key_prefix}.count_range")
+        value = select_count_field(spec, f"{key_prefix}.count_range", seed, offset, attempt, context)
         if value < 1 or value > 6:
             raise ValueError("tx_vertical count_range must resolve to [1,6]")
         return value, value
     if kind == "rx_dd":
-        value = select_count_field(group, "count_fixed", seed, offset, attempt, context, f"{key_prefix}.count_fixed")
+        value = select_count_field(spec, f"{key_prefix}.count_fixed", seed, offset, attempt, context)
         if value != 2:
             raise ValueError("rx_dd count_fixed must resolve to 2")
         return value, value
@@ -109,7 +97,7 @@ def resolve_coil_groups(
         seen_kinds.add(kind)
         transforms = parse_group_transforms(group, "instance_transforms")
         requested_count, selected_count = parse_group_count(
-            group, kind, seed, GROUP_OFFSET_BASE + idx, attempt, context, f"coil_groups[{idx}]"
+            spec, kind, seed, GROUP_OFFSET_BASE + idx, attempt, context, f"coil_groups[{idx}]"
         )
         if kind == "tx_vertical":
             spacing_mm = float(selected["tx_vertical_center_gap_mm"]) * float(max(0, selected_count - 1))

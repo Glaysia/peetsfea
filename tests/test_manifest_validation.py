@@ -33,7 +33,7 @@ def test_missing_kind_subfield_fails(tmp_path: Path, monkeypatch: pytest.MonkeyP
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("d" * 40))
 
-    with pytest.raises(ValueError, match="coil_groups_params.rx_dd must contain only"):
+    with pytest.raises(ValueError, match=r"Unknown sampled field: coil_groups_params\.rx_dd\.metal_ratio_removed"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 def test_old_profile_only_spec_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -96,17 +96,17 @@ def test_legacy_trace_gap_keys_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("4" * 40))
 
-    with pytest.raises(ValueError, match=r"coil_groups_params\.tx_dd must contain only"):
+    with pytest.raises(ValueError, match=r"Unknown sampled field: coil_groups_params\.tx_dd\.trace"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 def test_unsupported_spec_version_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "old_spec_version.toml"
     write_type1_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.10"', 'spec_version = "0.1.6"', 1)
+    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.11"', 'spec_version = "0.1.6"', 1)
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("5" * 40))
 
-    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.8'"):
+    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.11'"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 def test_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -116,7 +116,7 @@ def test_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     raw += "\n[coil_shape.outer_x]\nrange = [false, 10.0, 10.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("9" * 40))
-    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.10"):
+    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.11"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 def test_tx_vertical_span_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -126,7 +126,7 @@ def test_tx_vertical_span_removed_path_errors_on_026(tmp_path: Path, monkeypatch
     raw += "\n[coil_spacing.tx_vertical_span_mm]\nrange = [false, 3.0, 3.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("a" * 40))
-    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.10: coil_spacing\.tx_vertical_span_mm"):
+    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.11: coil_spacing\.tx_vertical_span_mm"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -176,14 +176,82 @@ def test_manifest_includes_simulation_policy(tmp_path: Path, monkeypatch: pytest
         "sweep_start_hz": 1.0e6,
         "sweep_stop_hz": 45.0e6,
         "validation_gate": "hard_fail",
-        "max_delta_s": 0.001,
-        "maximum_passes": 35,
+        "max_delta_s": 0.007,
+        "maximum_passes": 20,
         "minimum_passes": 9,
         "minimum_converged_passes": 13,
-        "percent_refinement": 65,
+        "percent_refinement": 20,
         "basis_order": 1,
         "port_accuracy": 2,
     }
+
+
+def test_manifest_selected_parameters_include_ferrite_contract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "manifest_ferrite.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        "[ferrite.present]\nrange = [true, 0, 1, 2]",
+        "[ferrite.present]\nrange = [true, 0, 0, 1]",
+        1,
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("6" * 40))
+
+    selected = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))[
+        "manifest"
+    ]["selected_parameters"]
+    assert selected["ferrite_present"] is False
+    assert selected["rx_ferrite_thickness_mm"] == 2.0
+    assert selected["tx_ferrite_thickness_mm"] == 2.0
+    assert selected["ferrite_relative_permeability"] == 500.0
+
+
+def test_invalid_ferrite_present_candidates_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "invalid_ferrite_present.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        "[ferrite.present]\nrange = [true, 0, 1, 2]",
+        "[ferrite.present]\nrange = [true, 0, 2, 3]",
+        1,
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("8" * 40))
+
+    with pytest.raises(ValueError, match=r"ferrite\.present candidates must be 0 or 1"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_invalid_ferrite_relative_permeability_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "invalid_ferrite_mu.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        "[ferrite.relative_permeability]\nrange = [false, 500.0, 500.0, 1]",
+        "[ferrite.relative_permeability]\nrange = [false, 1.0, 1.0, 1]",
+        1,
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("0" * 40))
+
+    with pytest.raises(ValueError, match=r"ferrite\.relative_permeability must be > 1"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_rx_ferrite_thickness_budget_overflow_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "invalid_rx_ferrite_budget.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        "[ferrite.rx_thickness_mm]\nrange = [false, 2.0, 2.0, 1]",
+        "[ferrite.rx_thickness_mm]\nrange = [false, 3.0, 3.0, 1]",
+        1,
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("2" * 40))
+
+    with pytest.raises(
+        ValueError,
+        match=r"ferrite\.rx_thickness_mm \+ coil_material\.pcb_thickness_mm must be <= rx\.region\.thickness_mm",
+    ):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
 def test_missing_adaptive_key_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
