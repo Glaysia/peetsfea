@@ -2,13 +2,29 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run run.py from run/",
+      "name": "Run sample.py from run/",
       "type": "debugpy",
       "request": "launch",
       "python": "${workspaceFolder}/.venv/bin/python3",
-      "program": "${workspaceFolder}/run.py",
+      "program": "${workspaceFolder}/sample.py",
       "cwd": "${workspaceFolder}/run",
-      "preLaunchTask": "prepare-run-debug",
+      "env": {
+        "PEETSFEA_DEBUG": "1"
+      },
+      "preLaunchTask": "prepare-sample-debug",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Run build.py from run/",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/.venv/bin/python3",
+      "program": "${workspaceFolder}/build.py",
+      "cwd": "${workspaceFolder}/run",
+      "env": {
+        "PEETSFEA_DEBUG": "1"
+      },
+      "preLaunchTask": "prepare-build-debug",
       "console": "integratedTerminal"
     }
   ]

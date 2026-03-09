@@ -199,7 +199,7 @@ def normalize_pcbs_fixed_topology(pcbs: list[ResolvedPcbInstance]) -> list[Resol
             detail_parts.append(f"extra={extra}")
         detail = ", ".join(detail_parts)
         raise ValueError(
-            "spec_version 0.2.11 requires fixed pcbs topology ids "
+            "spec_version 0.2.12 requires fixed pcbs topology ids "
             f"{list(FIXED_PCB_ORDER)} ({detail})"
         )
 
@@ -209,14 +209,14 @@ def normalize_pcbs_fixed_topology(pcbs: list[ResolvedPcbInstance]) -> list[Resol
         rule = FIXED_PCB_RULES[pcb_id]
         if pcb["role"] != rule["role"]:
             raise ValueError(
-                "spec_version 0.2.11 fixed topology requires "
+                "spec_version 0.2.12 fixed topology requires "
                 f"pcbs.{pcb_id}.role='{rule['role']}' (actual={pcb['role']})"
             )
 
         expected_present = rule["present"]
         if pcb["present"] != expected_present:
             warnings.warn(
-                f"pcbs.{pcb_id}.present normalized to {expected_present} for spec_version 0.2.11 fixed topology",
+                f"pcbs.{pcb_id}.present normalized to {expected_present} for spec_version 0.2.12 fixed topology",
                 UserWarning,
                 stacklevel=2,
             )
@@ -225,7 +225,7 @@ def normalize_pcbs_fixed_topology(pcbs: list[ResolvedPcbInstance]) -> list[Resol
         expected_mounts = rule["mounts"]
         if mount_specs(pcb["mounts"]) != expected_mounts:
             warnings.warn(
-                f"pcbs.{pcb_id}.mounts normalized to fixed topology mapping for spec_version 0.2.11",
+                f"pcbs.{pcb_id}.mounts normalized to fixed topology mapping for spec_version 0.2.12",
                 UserWarning,
                 stacklevel=2,
             )

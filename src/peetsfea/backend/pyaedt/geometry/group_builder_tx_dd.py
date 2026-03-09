@@ -17,11 +17,12 @@ from .placement_rules import (
     _instance_side,
     _max_feasible_turns,
     _mount_allows_instance,
+    _realized_txdd_geometry,
     _tx_dd_center_y_and_layer,
     _txdd_right_layer_rank_by_z,
     _txdd_right_points,
 )
-from .spiral_points import _build_rect_spiral_centerline_absolute, _mirror_points_about_y_axis_line, _translate_points
+from .spiral_points import _mirror_points_about_y_axis_line, _translate_points
 
 
 def build_for_board(
@@ -66,19 +67,17 @@ def build_for_board(
             f"Infeasible turn_count_max for tx_dd: requested={turns}, feasible_max={max_turns} "
             f"(outer_x={ctx.tx_dd_outer_x}, outer_y={ctx.tx_dd_outer_y}, trace={trace}, gap={gap})"
         )
-
-    base_points = [
-        list(point)
-        for point in _build_rect_spiral_centerline_absolute(
+    instance_count = group["selected_count"]
+    for layer_index in ((0, 1) if instance_count == 4 else (0,)):
+        _realized_txdd_geometry(
             turns=turns,
             outer_x=ctx.tx_dd_outer_x,
             outer_y=ctx.tx_dd_outer_y,
             trace=trace,
             gap=gap,
-            z=0.0,
+            instance_count=instance_count,
+            layer_index=layer_index,
         )
-    ]
-    instance_count = group["selected_count"]
     spacing_mm = group["spacing_mm"]
     transforms = group["instance_transforms"]
     transform = transforms[0] if transforms else {"dx": 0.0, "dy": 0.0, "dz": 0.0, "rot_deg": 0.0}

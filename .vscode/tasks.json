@@ -17,7 +17,22 @@
       "problemMatcher": []
     },
     {
-      "label": "prepare-run-debug",
+      "label": "clean-run-toml",
+      "type": "shell",
+      "command": "mkdir -p ${workspaceFolder}/run/toml && find ${workspaceFolder}/run/toml -mindepth 1 -maxdepth 1 -exec rm -rf {} +",
+      "problemMatcher": []
+    },
+    {
+      "label": "prepare-sample-debug",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "install-dev-editable",
+        "clean-run-toml"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "prepare-build-debug",
       "dependsOrder": "sequence",
       "dependsOn": [
         "install-dev-editable",

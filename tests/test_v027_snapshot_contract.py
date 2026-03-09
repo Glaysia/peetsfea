@@ -125,9 +125,10 @@ def test_repro_snapshot_replays_same_design_and_dataset(tmp_path: Path, monkeypa
     replayed = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(repro_path), seed=11, backend="hfss"))
     replayed_dataset = tomllib.loads(replayed["dataset_snapshot"]["toml_bytes"].decode("utf-8"))
 
-    assert replayed["manifest"]["design_id"] == result["manifest"]["design_id"]
     assert replayed["manifest"]["selected_parameters"] == result["manifest"]["selected_parameters"]
     assert replayed["manifest"]["selected_group_geometry"] == result["manifest"]["selected_group_geometry"]
     assert replayed["manifest"]["selected_coil_groups"] == result["manifest"]["selected_coil_groups"]
     assert replayed["manifest"]["selected_pcbs"] == result["manifest"]["selected_pcbs"]
     assert replayed_dataset["inputs"]["parameters"] == dataset["inputs"]["parameters"]
+    assert replayed["manifest"]["toml_space_hash"] != result["manifest"]["toml_space_hash"]
+    assert replayed["manifest"]["design_id"] != result["manifest"]["design_id"]

@@ -79,6 +79,31 @@ def _freeze_scalar_range(raw_range: list[TOMLValue], selected_value: TOMLValue) 
     return [is_integer, selected_value, selected_value, 1]
 
 
+def freeze_sampled_ranges_only(source_spec: TOMLTable, repro_spec: TOMLTable) -> TOMLTable:
+    frozen = copy.deepcopy(source_spec)
+    registry = build_sampling_registry(source_spec)
+
+    for entry in iter_registry_entries_in_canonical_order(registry):
+        if is_sampling_entry_frozen(source_spec, entry):
+            continue
+        raw_range = read_sampling_entry_raw_range(frozen, entry)
+        selected_value = _coerce_frozen_range_value(entry, repro_spec)
+        write_sampling_entry_raw_range(frozen, entry, _freeze_scalar_range(raw_range, selected_value))
+
+    return frozen
+
+
+def require_frozen_sampling_spec(spec: TOMLTable) -> None:
+    registry = build_sampling_registry(spec)
+    for entry in iter_registry_entries_in_canonical_order(registry):
+        if is_sampling_entry_frozen(spec, entry):
+            continue
+        raise ValueError(
+            "Build input TOML must freeze every sampling owner to count=1 with identical bounds; "
+            f"first unfrozen owner: {entry.owner_path}"
+        )
+
+
 def freeze_ranges_for_snapshot(spec: TOMLTable, sampling_ledger: SamplingLedger) -> TOMLTable:
     frozen = copy.deepcopy(spec)
     registry = sampling_ledger.registry

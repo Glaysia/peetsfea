@@ -131,6 +131,51 @@ def _validate_rxdd_single_layer_count(instance_count: int) -> None:
         )
 
 
+def _realized_txdd_geometry(
+    *,
+    turns: int,
+    outer_x: float,
+    outer_y: float,
+    trace: float,
+    gap: float,
+    instance_count: int,
+    layer_index: int | None,
+) -> tuple[int, float, float]:
+    if turns < 1:
+        raise ValueError(f"tx_dd turn_count_max must be >= 1 (actual={turns})")
+    if instance_count == 2:
+        return turns, outer_x, outer_y
+    if instance_count != 4:
+        raise ValueError(f"tx_dd selected_count must be 2 or 4 (actual={instance_count})")
+    if layer_index not in (0, 1):
+        raise ValueError(f"tx_dd layer index must be 0 or 1 for selected_count=4 (actual={layer_index})")
+    if layer_index == 1:
+        return turns, outer_x, outer_y
+
+    pitch = trace + gap
+    if pitch <= 0.0:
+        raise ValueError(f"tx_dd pitch must be > 0 (trace={trace}, gap={gap})")
+    lower_outer_x = outer_x - pitch
+    lower_outer_y = outer_y - pitch
+    if lower_outer_x <= trace or lower_outer_y <= trace:
+        raise ValueError(
+            "tx_dd lower-layer interleave contract violation: one-pitch inset leaves no valid lower-layer width "
+            f"(outer_x={outer_x}, outer_y={outer_y}, trace={trace}, gap={gap}, "
+            f"lower_outer_x={lower_outer_x}, lower_outer_y={lower_outer_y})"
+        )
+    feasible_lower_turns = min(
+        _max_feasible_turns(lower_outer_x, trace, gap),
+        _max_feasible_turns(lower_outer_y, trace, gap),
+    )
+    if turns > feasible_lower_turns:
+        raise ValueError(
+            "tx_dd lower-layer interleave contract violation: requested turns do not fit after one-pitch inset "
+            f"(turns={turns}, feasible_lower_turns={feasible_lower_turns}, "
+            f"lower_outer_x={lower_outer_x}, lower_outer_y={lower_outer_y}, trace={trace}, gap={gap})"
+        )
+    return turns, lower_outer_x, lower_outer_y
+
+
 def _build_rxdd_right_points_A_to_d_cw(
     *,
     turns: int,
@@ -405,6 +450,15 @@ def _txdd_right_points(
     instance_count: int,
     layer_index: int | None,
 ) -> list[list[float]]:
+    turns, outer_x, outer_y = _realized_txdd_geometry(
+        turns=turns,
+        outer_x=outer_x,
+        outer_y=outer_y,
+        trace=trace,
+        gap=gap,
+        instance_count=instance_count,
+        layer_index=layer_index,
+    )
     base = [
         list(point)
         for point in _build_rect_spiral_centerline_absolute(
@@ -431,6 +485,16 @@ def _txdd_right_points(
         # Lower layer right: c -> A.
         c_index = _find_txdd_right_inner_c_index(base)
         points = [point[:] for point in reversed(base[: c_index + 1])]
+        upper_a = [
+            -(outer_x + (trace + gap)) / 2.0 + (trace / 2.0),
+            (outer_y + (trace + gap)) / 2.0 - (trace / 2.0),
+            0.0,
+        ]
+        last = points[-1]
+        if abs(last[0] - upper_a[0]) > 1e-9:
+            points.append([upper_a[0], last[1], last[2]])
+        if abs(points[-1][1] - upper_a[1]) > 1e-9:
+            points.append([upper_a[0], upper_a[1], upper_a[2]])
         if len(points) < 2:
             raise ValueError("tx_dd right endpoint contract violation: c->A path is too short")
         _validate_txdd_right_points(points, trace=trace, gap=gap)

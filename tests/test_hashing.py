@@ -105,6 +105,30 @@ def test_compute_design_unique_hash_is_deterministic() -> None:
     assert re.fullmatch(r"[0-9a-f]{4}", first) is not None
 
 
+def test_compute_design_unique_hash_changes_when_source_space_hash_input_changes() -> None:
+    selected = _selected_parameters()
+    group_geometry = _selected_group_geometry()
+    selected_coil_groups: list[ResolvedCoilGroup] = [
+        {"kind": "tx_dd", "requested_count": 2, "selected_count": 2, "spacing_mm": 5.0, "instance_transforms": []},
+    ]
+    selected_pcbs: list[ResolvedPcbInstance] = [
+        {
+            "id": "tx_main_0",
+            "role": "tx",
+            "position": (0.0, 0.0, 0.0),
+            "rotation_deg": 0.0,
+            "present": True,
+            "z_mode": "absolute",
+            "z_relative_base_id": None,
+            "z_delta_path": None,
+            "mounts": [{"kind": "tx_dd", "selector_mode": "index", "selector_index": 0}],
+        }
+    ]
+    first = compute_design_unique_hash("b" * 64, "c" * 40, selected, group_geometry, selected_coil_groups, selected_pcbs)
+    second = compute_design_unique_hash("d" * 64, "c" * 40, selected, group_geometry, selected_coil_groups, selected_pcbs)
+    assert first != second
+
+
 def test_compose_design_id_format() -> None:
     design_id = compose_design_id("dead", "cafe", -3, 2)
     assert design_id == "-000003_dead_cafe_2"

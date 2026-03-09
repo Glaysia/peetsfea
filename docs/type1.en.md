@@ -13,11 +13,13 @@
   - `<design_id>.repro.toml`: exact replay snapshot with all canonical sampled owners frozen
   - `<design_id>.dataset.toml`: exact sampled-coordinate ledger containing only canonical sampled owners that affect the final design (`output.*=-1`, `timeout_sec=7200`)
   - `<design_id>.source.toml`: byte-level copy of the input TOML used for the run
+- `design_id` follows `seed_uniqueHash_spaceHash_attempt`. `uniqueHash` is the realized design identity, while `spaceHash` is the original `source.toml` sampling-space identity.
 
 ## Important Input Spec Blocks
 - `tv`, `tx.region`, `rx.region`: scene envelope and placement anchors
 - `ferrite`: global ferrite on/off plus coil-footprint-based RX/TX ferrite thickness and material defaults
 - `coil_shape`, `coil_groups_params`: per-group coil geometry and derived controls
+- When `tx_dd` resolves to 4 instances (two stacked XY layers), the lower layer keeps the same turn count/trace/gap but uses a one-pitch smaller centerline box so its traces interleave near the upper-layer gap centers.
 - `constraints`: feasibility and topology validation rules for sampled selections
 - `pcbs`: fixed-topology normalization contract. Fields normalized away from the final design must not remain independent sampled dimensions.
 
@@ -28,5 +30,5 @@
 
 ## Quick Checkpoints
 - Input spec: `examples/type1.toml`
-- Run entrypoint: `run.py`
+- Run entrypoint: `sample.py` -> `build.py`
 - Default test path: run `../.venv/bin/pytest -q ../tests` from `run/`

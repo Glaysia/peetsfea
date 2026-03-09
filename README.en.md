@@ -12,9 +12,9 @@ Release notes are managed by version and language under `release-notes/`.
 - Keep single-design generation and dataset generation on the same contract surface.
 
 ## Current Documentation Baseline
-- The current documentation baseline is the planned `0.2.11` contract set.
+- The current documentation baseline is `0.2.12`.
 - This README is the public summary; detailed design notes live under `PLANS/`.
-- For implementation rules, see [AGENTS.md](AGENTS.md). For long-term principles, see [PLANS/LONGTERM_PLAN.md](PLANS/LONGTERM_PLAN.md). For the `0.2.11` index, see [PLANS/V0_2_11.md](PLANS/V0_2_11.md).
+- For implementation rules, see [AGENTS.md](AGENTS.md). For long-term principles, see [PLANS/LONGTERM_PLAN.md](PLANS/LONGTERM_PLAN.md). [PLANS/V0_2_11.md](PLANS/V0_2_11.md) remains the archived 0.2.11 planning index.
 
 ## What This Project Intends To Guarantee
 - Input: TOML spec (`examples/type1.toml`)
@@ -33,7 +33,7 @@ cd run
 ../.venv/bin/pytest -q ../tests
 ```
 
-Default entrypoint is `run.py`, and the default runnable spec is `examples/type1.toml`.
+Default execution is split across `sample.py` and `build.py`: `sample.py` writes resolved TOMLs plus `run/toml/manifest.json`, and `build.py` turns that manifest into AEDT files under `run/aedt/`. The default runnable spec is `examples/type1.toml`.
 
 ## Core Artifacts
 - Zip export is temporarily disabled.
@@ -44,11 +44,12 @@ Default entrypoint is `run.py`, and the default runnable spec is `examples/type1
   - `<design_id>.source.toml`
 - `manifest_<design_id>.json` and `geometry_metadata_<design_id>.json` are disabled by default (optional only).
 
-## Major Contracts Being Standardized In 0.2.11
+## Major Contracts In 0.2.12
 - Sampling ownership is managed only through canonical owners.
 - Alias/derived paths do not count as independent sampled dimensions.
 - `dataset.toml` includes inline sampled owners such as `coil_groups[*].count_*`, while excluding derived aliases and fixed fields.
 - `dataset.toml` and `repro.toml` have different roles, and replay safety is defined by their correspondence.
+- The last two `design_id` fragments have different meanings: `design_unique_hash` is the realized design identity, while `toml_space_hash` is the original `source.toml` sampling-space identity. `retry_attempt` is also reflected in the filename suffix.
 - Ferrite is controlled only by the global `ferrite.present` flag, follows the actual coil footprint on both RX and TX, and uses RX `2.0mm`, TX `2.0mm`, and `mu_r=500` as the baseline spec contract.
 - Adaptive defaults are standardized to `percent_refinement=20`, `maximum_passes=20`, and `max_delta_s=0.007`.
 - Detailed planning is split across the following documents:

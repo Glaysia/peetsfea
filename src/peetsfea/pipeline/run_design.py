@@ -36,7 +36,7 @@ from peetsfea.types.manifest import (
 )
 
 MAX_ATTEMPTS = 64
-SUPPORTED_SPEC_VERSION = "0.2.11"
+SUPPORTED_SPEC_VERSION = "0.2.12"
 
 
 def _require_number(value: object, name: str) -> float:
@@ -246,14 +246,15 @@ def run(config: RunConfig) -> RunResult:
         retry_count,
     ) = _select_feasible_result(spec, seed=config.seed)
 
+    source_toml_hash = compute_toml_hash(raw_toml)
     repro_spec = freeze_ranges_for_snapshot(spec, sampling_ledger)
     repro_toml_bytes = toml_dumps(repro_spec).encode("utf-8")
-    toml_hash = compute_toml_hash(repro_toml_bytes)
-    toml_space_hash = compute_toml_space_hash(toml_hash)
+    toml_hash = source_toml_hash
+    toml_space_hash = compute_toml_space_hash(source_toml_hash)
     design_unique_hash = compute_design_unique_hash(
-        toml_hash, commit_hash, selected_parameters, selected_group_geometry, selected_coil_groups, selected_pcbs
+        source_toml_hash, commit_hash, selected_parameters, selected_group_geometry, selected_coil_groups, selected_pcbs
     )
-    design_id = compose_design_id(design_unique_hash, toml_space_hash, config.seed, 0)
+    design_id = compose_design_id(design_unique_hash, toml_space_hash, config.seed, retry_attempt)
     dataset_spec = build_dataset_spec(spec, sampling_ledger, design_id, repro_mode)
 
     source_toml_bytes = raw_toml

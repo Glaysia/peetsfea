@@ -1,10 +1,6 @@
 {
-    "python.analysis.typeCheckingMode": "basic",
     "python-envs.pythonProjects": [],
     "workbench.editorAssociations": {
         "*.copilotmd": "vscode.markdown.preview.editor",
-        "*.parquet": "duckdb.dataFileViewer",
-        "*.csv": "duckdb.dataFileViewer",
-        "*.tsv": "duckdb.dataFileViewer"
     }
 }

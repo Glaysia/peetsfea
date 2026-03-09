@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -91,69 +90,52 @@ def _min_dist_sq_to_selected(
     return best
 
 
-def iter_uniform_feasible_seed_points(
+def _selection_keys(spec_path: Path) -> tuple[str, ...]:
+    spec, _ = load_toml_bytes(spec_path)
+    repro_mode = detect_repro_mode(spec)
+    return dataset_owner_paths(spec, repro_mode=repro_mode)
+
+
+def generate_eager_uniform_feasible_seed_points(
     *,
     spec_path: Path,
     seed_start: int,
     seed_end: int,
     target_size: int,
     max_attempts: int = 64,
-    window_size: int = 128,
-) -> Iterator[FeasibleSeedPoint]:
+) -> list[FeasibleSeedPoint]:
     if target_size < 1:
         raise ValueError(f"target_size must be >= 1 (got {target_size})")
-    if window_size < 1:
-        raise ValueError(f"window_size must be >= 1 (got {window_size})")
 
-    feasible_iter = iter_feasible_seed_points(
-        spec_path=spec_path,
-        seed_start=seed_start,
-        seed_end=seed_end,
-        max_attempts=max_attempts,
+    feasible_points = list(
+        iter_feasible_seed_points(
+            spec_path=spec_path,
+            seed_start=seed_start,
+            seed_end=seed_end,
+            max_attempts=max_attempts,
+        )
     )
-    spec, _ = load_toml_bytes(spec_path)
-    repro_mode = detect_repro_mode(spec)
-    keys = dataset_owner_paths(spec, repro_mode=repro_mode)
-
-    first = next(feasible_iter, None)
-    if first is None:
+    if len(feasible_points) == 0:
         raise RuntimeError("No feasible seed found in the requested seed range")
+    if len(feasible_points) < target_size:
+        raise RuntimeError(
+            "Insufficient feasible seeds for requested target size "
+            f"(selected={len(feasible_points)}, target={target_size}, range=[{seed_start},{seed_end}))"
+        )
 
-    selected_points: list[FeasibleSeedPoint] = [first]
-    selected_vectors: list[tuple[float, ...]] = [_raw_vector(first, keys)]
+    keys = _selection_keys(spec_path)
+    selected_points: list[FeasibleSeedPoint] = [feasible_points.pop(0)]
+    selected_vectors: list[tuple[float, ...]] = [_raw_vector(selected_points[0], keys)]
     mins = list(selected_vectors[0])
     maxs = list(selected_vectors[0])
-    yield first
+    print(f"[uniform] progress 1/{target_size} seed={selected_points[0].seed}")
 
-    yielded = 1
-    if yielded >= target_size:
-        return
-
-    buffer: deque[FeasibleSeedPoint] = deque()
-    exhausted = False
-
-    def _fill_buffer() -> None:
-        nonlocal exhausted
-        while len(buffer) < window_size and not exhausted:
-            item = next(feasible_iter, None)
-            if item is None:
-                exhausted = True
-                break
-            buffer.append(item)
-
-    while yielded < target_size:
-        _fill_buffer()
-        if len(buffer) == 0:
-            raise RuntimeError(
-                "Insufficient feasible seeds for requested target size "
-                f"(selected={yielded}, target={target_size}, range=[{seed_start},{seed_end}))"
-            )
-
+    while len(selected_points) < target_size:
         best_idx = -1
         best_score = -1.0
         best_seed = 0
         best_vector: tuple[float, ...] | None = None
-        for idx, point in enumerate(buffer):
+        for idx, point in enumerate(feasible_points):
             vector = _raw_vector(point, keys)
             cand_mins = mins[:]
             cand_maxs = maxs[:]
@@ -170,76 +152,29 @@ def iter_uniform_feasible_seed_points(
                 best_vector = vector
 
         assert best_idx >= 0
-        chosen = buffer[best_idx]
-        # Skip lower-score candidates currently in the lookahead window.
-        del buffer[best_idx]
-
+        chosen = feasible_points.pop(best_idx)
         selected_points.append(chosen)
         assert best_vector is not None
         selected_vectors.append(best_vector)
         _update_minmax(mins, maxs, best_vector)
-        yield chosen
-        yielded += 1
+        print(f"[uniform] progress {len(selected_points)}/{target_size} seed={chosen.seed}")
+
+    return sorted(selected_points, key=lambda point:point.seed)
 
 
-def iter_uniform_feasible_seeds(
+def generate_eager_uniform_feasible_seeds(
     *,
     spec_path: Path,
     seed_start: int,
     seed_end: int,
     target_size: int,
     max_attempts: int = 64,
-    window_size: int = 128,
-) -> Iterator[int]:
-    for point in iter_uniform_feasible_seed_points(
-        spec_path=spec_path,
-        seed_start=seed_start,
-        seed_end=seed_end,
-        target_size=target_size,
-        max_attempts=max_attempts,
-        window_size=window_size,
-    ):
-        yield point.seed
-
-
-def generate_uniform_feasible_seed_points(
-    *,
-    spec_path: Path,
-    seed_start: int,
-    seed_end: int,
-    target_size: int,
-    max_attempts: int = 64,
-    window_size: int = 128,
-) -> list[FeasibleSeedPoint]:
-    selected_points = list(
-        iter_uniform_feasible_seed_points(
-            spec_path=spec_path,
-            seed_start=seed_start,
-            seed_end=seed_end,
-            target_size=target_size,
-            max_attempts=max_attempts,
-            window_size=window_size,
-        )
-    )
-    selected_points.sort(key=lambda item: item.seed)
-    return selected_points
-
-
-def generate_uniform_feasible_seeds(
-    *,
-    spec_path: Path,
-    seed_start: int,
-    seed_end: int,
-    target_size: int,
-    max_attempts: int = 64,
-    window_size: int = 128,
 ) -> tuple[int, ...]:
-    points = generate_uniform_feasible_seed_points(
+    points = generate_eager_uniform_feasible_seed_points(
         spec_path=spec_path,
         seed_start=seed_start,
         seed_end=seed_end,
         target_size=target_size,
         max_attempts=max_attempts,
-        window_size=window_size,
     )
     return tuple(point.seed for point in points)

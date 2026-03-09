@@ -437,6 +437,15 @@ def _txdd_right_points(
     instance_count: int,
     layer_index: int | None,
 ) -> list[_Point3]:
+    turns, outer_x, outer_y = _realized_txdd_geometry(
+        turns=turns,
+        outer_x=outer_x,
+        outer_y=outer_y,
+        trace=trace,
+        gap=gap,
+        instance_count=instance_count,
+        layer_index=layer_index,
+    )
     base = _build_rect_spiral_centerline_absolute(
         turns=turns,
         outer_x=outer_x,
@@ -457,6 +466,16 @@ def _txdd_right_points(
     if layer_index == 0:
         c_index = _find_txdd_right_inner_c_index(base)
         points = [point for point in reversed(base[: c_index + 1])]
+        upper_a = (
+            -(outer_x + (trace + gap)) / 2.0 + (trace / 2.0),
+            (outer_y + (trace + gap)) / 2.0 - (trace / 2.0),
+            0.0,
+        )
+        last = points[-1]
+        if abs(last[0] - upper_a[0]) > 1e-9:
+            points.append((upper_a[0], last[1], last[2]))
+        if abs(points[-1][1] - upper_a[1]) > 1e-9:
+            points.append(upper_a)
         if len(points) < 2:
             raise ValueError("tx_dd right endpoint contract violation: c->A path is too short")
         return points
@@ -478,6 +497,51 @@ def _txdd_right_points(
     if d_index < 1:
         raise ValueError("tx_dd right endpoint contract violation: A->D->...->d path is too short")
     return [point for point in rotated[: d_index + 1]]
+
+
+def _realized_txdd_geometry(
+    *,
+    turns: int,
+    outer_x: float,
+    outer_y: float,
+    trace: float,
+    gap: float,
+    instance_count: int,
+    layer_index: int | None,
+) -> tuple[int, float, float]:
+    if turns < 1:
+        raise ValueError(f"tx_dd turn_count_max must be >= 1 (actual={turns})")
+    if instance_count == 2:
+        return turns, outer_x, outer_y
+    if instance_count != 4:
+        raise ValueError(f"tx_dd selected_count must be 2 or 4 (actual={instance_count})")
+    if layer_index not in (0, 1):
+        raise ValueError(f"tx_dd layer index must be 0 or 1 for selected_count=4 (actual={layer_index})")
+    if layer_index == 1:
+        return turns, outer_x, outer_y
+
+    pitch = trace + gap
+    if pitch <= 0.0:
+        raise ValueError(f"tx_dd pitch must be > 0 (trace={trace}, gap={gap})")
+    lower_outer_x = outer_x - pitch
+    lower_outer_y = outer_y - pitch
+    if lower_outer_x <= trace or lower_outer_y <= trace:
+        raise ValueError(
+            "tx_dd lower-layer interleave contract violation: one-pitch inset leaves no valid lower-layer width "
+            f"(outer_x={outer_x}, outer_y={outer_y}, trace={trace}, gap={gap}, "
+            f"lower_outer_x={lower_outer_x}, lower_outer_y={lower_outer_y})"
+        )
+    feasible_lower_turns = min(
+        max_feasible_turns(lower_outer_x, trace, gap),
+        max_feasible_turns(lower_outer_y, trace, gap),
+    )
+    if turns > feasible_lower_turns:
+        raise ValueError(
+            "tx_dd lower-layer interleave contract violation: requested turns do not fit after one-pitch inset "
+            f"(turns={turns}, feasible_lower_turns={feasible_lower_turns}, "
+            f"lower_outer_x={lower_outer_x}, lower_outer_y={lower_outer_y}, trace={trace}, gap={gap})"
+        )
+    return turns, lower_outer_x, lower_outer_y
 
 
 def _txdd_right_layer_rank_by_z(*, selected_pcbs: list[ResolvedPcbInstance], instance_count: int) -> dict[int, int]:
@@ -724,15 +788,25 @@ def resolve_func_ref(
         outer_x = resolve_selected_numeric_path(selected, group_geometry_by_kind, coil_groups_by_kind, pcbs, parts_text[1])
         outer_y = resolve_selected_numeric_path(selected, group_geometry_by_kind, coil_groups_by_kind, pcbs, parts_text[2])
         cap_y = resolve_selected_numeric_path(selected, group_geometry_by_kind, coil_groups_by_kind, pcbs, parts_text[3])
-        available_outer_y = min(outer_y, cap_y)
+        group_entry = coil_groups_by_kind.get(kind)
+        selected_count = int(group_entry["selected_count"]) if group_entry is not None else 0
+        realized_outer_x = outer_x
+        realized_outer_y = outer_y
+        if kind == "tx_dd" and selected_count == 4:
+            pitch = trace + gap
+            if pitch > 0.0:
+                realized_outer_x = max(0.0, outer_x - pitch)
+                realized_outer_y = max(0.0, outer_y - pitch)
+        available_outer_y = min(realized_outer_y, cap_y)
         feasible_turns_max = min(
-            max_feasible_turns(outer_x, trace, gap),
+            max_feasible_turns(realized_outer_x, trace, gap),
             max_feasible_turns(available_outer_y, trace, gap),
         )
         feasible_turns = min(turns, feasible_turns_max)
         debug = (
             f"func={'feasible_turns_max' if max_only else 'feasible_turns'} kind={kind} "
-            f"turns={turns} trace={trace} gap={gap} outer_x={outer_x} outer_y={outer_y} cap_y={cap_y} "
+            f"turns={turns} trace={trace} gap={gap} outer_x={outer_x} outer_y={outer_y} "
+            f"realized_outer_x={realized_outer_x} realized_outer_y={realized_outer_y} cap_y={cap_y} "
             f"available_outer_y={available_outer_y} feasible_turns_max={feasible_turns_max} feasible_turns={feasible_turns}"
         )
         return (float(feasible_turns_max), debug) if max_only else (float(feasible_turns), debug)

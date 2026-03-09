@@ -8,7 +8,7 @@
 # Numeric range convention:
 #   range = [is_integer, start, end, count]
 
-spec_version = "0.2.11"
+spec_version = "0.2.12"
 
 [design]
 units = "mm"
@@ -113,7 +113,7 @@ range = [false, 2.0, 2.0, 1]
 range = [false, 2.0, 2.0, 1]
 
 [ferrite.relative_permeability]
-# Idealized ferrite material baseline for 0.2.11 planning.
+# Idealized ferrite material baseline for 0.2.12 planning.
 range = [false, 500.0, 500.0, 1]
 
 # ----------------------------------------------------------------------------
@@ -179,21 +179,24 @@ range = [false, 1.62, 15.0, 8]
 # Resolver selects each path once per attempt and reuses it across internal consumers.
 # If constraints fail, deterministic retry uses attempt offset (same seed => same retry sequence).
 [coil_groups_params.tx_dd.turn_count_max]
-range = [true, 3, 12, 10]
+# When tx_dd resolves to 4 instances (two stacked XY layers), the lower layer
+# keeps the same realized turn count but uses a one-pitch smaller centerline
+# box so its trace centers align roughly with the upper-layer gap centers.
+range = [true, 3, 6, 10]
 [coil_groups_params.tx_dd.band_ratio]
 range = [false, 0.1, 0.35, 20]
 [coil_groups_params.tx_dd.metal_ratio]
 range = [false, 0.15, 0.60, 25]
 
 [coil_groups_params.tx_vertical.turn_count_max]
-range = [true, 3, 6, 4]
+range = [true, 3, 3, 4]
 [coil_groups_params.tx_vertical.band_ratio]
 range = [false, 0.35, 0.5, 20]
 [coil_groups_params.tx_vertical.metal_ratio]
 range = [false, 0.45, 0.75, 25]
 
 [coil_groups_params.rx_dd.turn_count_max]
-range = [true, 3, 12, 10]
+range = [true, 3, 6, 10]
 [coil_groups_params.rx_dd.band_ratio]
 range = [false, 0.1, 0.35, 20]
 [coil_groups_params.rx_dd.metal_ratio]
@@ -753,7 +756,7 @@ instance_transforms = [
 
 # ----------------------------------------------------------------------------
 # PCB instances (9 total: 5 always-on + 4 optional)
-# - 0.2.11 fixed-topology mode:
+# - 0.2.12 fixed-topology mode:
 #   coil count is primary, PCB present/mounts are normalized to this topology.
 # - tx_vertical uses dedicated host board tx_vertical_0.
 # - optional boards remain in spec for compatibility but are forced inactive.

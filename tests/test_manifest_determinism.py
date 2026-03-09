@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
 
 import pytest
 
 import peetsfea.pipeline.run_design as runner
+from peetsfea.identity.hashing import compute_toml_hash, compute_toml_space_hash
 from peetsfea.spec.loader import load_toml_bytes
 from peetsfea.spec.resolver import SelectionConstraintError, resolve_selection
 from tests.fixtures.type1_spec import write_type1_toml
@@ -48,6 +49,8 @@ def test_run_creates_manifest_and_is_deterministic(tmp_path: Path, monkeypatch: 
     assert tx_z_delta >= 3.0
     assert first["retry_attempt"] >= 0
     assert first["retry_count"] == first["retry_attempt"]
+    assert first["design_id"].split("_")[-1] == str(first["retry_attempt"])
+    assert first["toml_hash"] == compute_toml_hash(first_result["source_toml_bytes"])
     assert len(first["selected_group_geometry"]) == 3
     assert {entry["kind"] for entry in first["selected_group_geometry"]} == {"tx_dd", "tx_vertical", "rx_dd"}
     assert first["manifest_path"] is None
@@ -79,6 +82,23 @@ def test_retry_attempt_advances_until_constraint_satisfied(tmp_path: Path, monke
     manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))["manifest"]
     assert manifest["retry_attempt"] > 0
     assert manifest["retry_count"] == manifest["retry_attempt"]
+    assert manifest["design_id"].split("_")[-1] == str(manifest["retry_attempt"])
+
+
+def test_same_source_spec_keeps_space_hash_while_unique_hash_can_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "space.toml"
+    write_type1_toml(toml_path)
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("3" * 40))
+
+    first = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))["manifest"]
+    second = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=2, backend="hfss"))["manifest"]
+
+    expected_space_hash = compute_toml_space_hash(compute_toml_hash(toml_path.read_bytes()))
+    assert first["toml_space_hash"] == expected_space_hash
+    assert second["toml_space_hash"] == expected_space_hash
+    assert first["design_id"].split("_")[2] == expected_space_hash
+    assert second["design_id"].split("_")[2] == expected_space_hash
+    assert first["design_unique_hash"] != second["design_unique_hash"]
 
 
 def test_feasibility_constraint_allows_retry_to_find_valid_case(tmp_path: Path) -> None:
