@@ -102,7 +102,7 @@ def build_analysis(hfss: Hfss, policy: EmPolicy) -> dict[str, float | str]:
             "UseMaxTetIncrease:=",
             True,
             "MaxTetIncrease:=",
-            1000000,
+            700_000,
             "PortAccuracy:=",
             policy["port_accuracy"],
             "UseABCOnPort:=",

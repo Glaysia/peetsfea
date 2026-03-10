@@ -7,7 +7,7 @@ def write_type1_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float =
     path.write_text(
         "\n".join(
             [
-                'spec_version = "0.2.12"',
+                'spec_version = "0.2.13"',
                 "",
                 "[design]",
                 'units = "mm"',

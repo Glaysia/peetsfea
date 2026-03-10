@@ -36,7 +36,7 @@ from peetsfea.types.manifest import (
 )
 
 MAX_ATTEMPTS = 64
-SUPPORTED_SPEC_VERSION = "0.2.12"
+SUPPORTED_SPEC_VERSION = "0.2.13"
 
 
 def _require_number(value: object, name: str) -> float:

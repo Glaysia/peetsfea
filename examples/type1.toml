@@ -8,7 +8,7 @@
 # Numeric range convention:
 #   range = [is_integer, start, end, count]
 
-spec_version = "0.2.12"
+spec_version = "0.2.13"
 
 [design]
 units = "mm"
@@ -61,7 +61,7 @@ range = [false, 90.0, 90.0, 1]
 
 [tx.region.z_parts.vertical_z_mm]
 # Top zone in TX max region for vertical-coil allocation.
-range = [false, 15.0, 45.0, 14]
+range = [false, 3, 12, 10]
 
 [tx.region.z_parts.dd_z_mm]
 # Middle zone in TX max region for DD-coil allocation.
@@ -113,7 +113,7 @@ range = [false, 2.0, 2.0, 1]
 range = [false, 2.0, 2.0, 1]
 
 [ferrite.relative_permeability]
-# Idealized ferrite material baseline for 0.2.12 planning.
+# Idealized ferrite material baseline for 0.2.13 planning.
 range = [false, 500.0, 500.0, 1]
 
 # ----------------------------------------------------------------------------
@@ -756,7 +756,7 @@ instance_transforms = [
 
 # ----------------------------------------------------------------------------
 # PCB instances (9 total: 5 always-on + 4 optional)
-# - 0.2.12 fixed-topology mode:
+# - 0.2.13 fixed-topology mode:
 #   coil count is primary, PCB present/mounts are normalized to this topology.
 # - tx_vertical uses dedicated host board tx_vertical_0.
 # - optional boards remain in spec for compatibility but are forced inactive.

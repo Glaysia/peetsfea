@@ -1,6 +1,6 @@
 [project]
 name = "peetsfea"
-version = "0.2.12"
+version = "0.2.13"
 description = "Spec-first deterministic device design with Pyaedt."
 readme = "README.md"
 requires-python = "==3.12"

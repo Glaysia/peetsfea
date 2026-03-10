@@ -5,13 +5,15 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 from peetsfea.pipeline.run_batch import SampleManifestEntry, build_aedt_from_manifest_entry, load_sample_manifest
-
+from peetsfea import __version__
+from sample import EAGER_SEED_START
 cwd = Path(__file__).parent.resolve()
 
+
 ANSYS_EXECUTABLE_PATH = "/opt/ansys_inc/v252/AnsysEM"
-DEFAULT_SAMPLE_MANIFEST_PATH = cwd / "run" / "toml" / "manifest.json"
-ANSYS_RUN_DIR = cwd / "run" / "aedt"
-BUILD_WORKER_COUNT = 4
+DEFAULT_SAMPLE_MANIFEST_PATH = cwd / "run" / "toml" / f"toml_{__version__}_{EAGER_SEED_START}" /"manifest.json"
+ANSYS_RUN_DIR = cwd / "run" / "aedt" / f"aedt_{__version__}_{EAGER_SEED_START}"
+BUILD_WORKER_COUNT = 5
 
 
 def _is_debug_enabled() -> bool:

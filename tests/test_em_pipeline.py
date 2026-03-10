@@ -460,7 +460,7 @@ def test_default_em_policy_exposes_0211_adaptive_defaults_and_setup_payload() ->
     assert "UseMaxTetIncrease:=" in setup_payload
     assert True in setup_payload
     assert "MaxTetIncrease:=" in setup_payload
-    assert 1000000 in setup_payload
+    assert 700_000 in setup_payload
 
 
 def test_run_em_pipeline_uses_adaptive_policy_keys_only_for_exposed_numbers() -> None:

@@ -81,7 +81,7 @@ def test_sample_script_generates_resolved_tomls_and_manifest(tmp_path: Path, mon
 def test_build_debug_processes_full_manifest_sequentially(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     build_script = _load_script("build")
     source_toml_path = tmp_path / "source.toml"
-    source_toml_path.write_text("spec_version = \"0.2.12\"\n", encoding="utf-8")
+    source_toml_path.write_text("spec_version = \"0.2.13\"\n", encoding="utf-8")
     manifest_path = tmp_path / "manifest.json"
     entries = [
         _make_manifest_entry(design_id="000001_dead_cafe_0", toml_path=tmp_path / "a.toml", source_toml_path=source_toml_path),
@@ -106,7 +106,7 @@ def test_build_debug_processes_full_manifest_sequentially(tmp_path: Path, monkey
 def test_build_non_debug_uses_process_pool_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     build_script = _load_script("build")
     source_toml_path = tmp_path / "source.toml"
-    source_toml_path.write_text("spec_version = \"0.2.12\"\n", encoding="utf-8")
+    source_toml_path.write_text("spec_version = \"0.2.13\"\n", encoding="utf-8")
     manifest_path = tmp_path / "manifest.json"
     entries = [
         _make_manifest_entry(design_id="000001_dead_cafe_0", toml_path=tmp_path / "a.toml", source_toml_path=source_toml_path),

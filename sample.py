@@ -5,18 +5,20 @@ from pathlib import Path
 from peetsfea.pipeline.run_batch import SampleManifestEntry, generate_sample_artifact_for_seed, write_sample_manifest
 from peetsfea.pipeline.uniform_seedset import generate_eager_uniform_feasible_seed_points
 
+from peetsfea import __version__
 cwd = Path(__file__).parent.resolve()
+EAGER_SEED_START = 0
+EAGER_SEED_END = EAGER_SEED_START + 499
+EAGER_TARGET_COUNT = 100
+EAGER_MAX_ATTEMPTS = 64
 
 ANSYS_EXECUTABLE_PATH = "/opt/ansys_inc/v252/AnsysEM"
 SOURCE_TOML_PATH = cwd / "run" / "type1.toml"
-SAMPLE_OUTPUT_DIR = cwd / "run" / "toml"
+SAMPLE_OUTPUT_DIR = cwd / "run" / "toml" / f"toml_{__version__}_{EAGER_SEED_START}"
 SAMPLE_MANIFEST_PATH = SAMPLE_OUTPUT_DIR / "manifest.json"
-ANSYS_RUN_DIR = cwd / "run" / "aedt"
+ANSYS_RUN_DIR = cwd / "run" / "aedt" / f"aedt_{__version__}_{EAGER_SEED_START}"
 
-EAGER_SEED_START = 0
-EAGER_SEED_END = 500
-EAGER_TARGET_COUNT = 100
-EAGER_MAX_ATTEMPTS = 64
+
 
 
 def generate_sample_manifest() -> list[SampleManifestEntry]:
