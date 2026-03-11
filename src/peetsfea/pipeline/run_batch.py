@@ -127,6 +127,7 @@ def _apply_sample_identity(manifest: Manifest, entry: SampleManifestEntry, *, to
     manifest["retry_attempt"] = entry["retry_attempt"]
     manifest["retry_count"] = entry["retry_attempt"]
     manifest["inputs"]["toml_path"] = str(toml_path)
+    manifest["inputs"]["source_toml_path"] = entry["source_toml_path"]
 
 
 def build_aedt_from_manifest_entry(

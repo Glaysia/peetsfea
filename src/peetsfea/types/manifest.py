@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 Plane = Literal["XY", "YZ", "ZX"]
 
@@ -9,6 +9,7 @@ class ManifestInputs(TypedDict):
     ansys_executable_path: str
     ansys_run_dir: str
     toml_path: str
+    source_toml_path: NotRequired[str]
     non_graphical: bool
     close_on_exit: bool
     emit_manifest_json: bool

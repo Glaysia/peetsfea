@@ -2,11 +2,11 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run sample.py from run/",
+      "name": "Run multi_sample.py from run/",
       "type": "debugpy",
       "request": "launch",
       "python": "${workspaceFolder}/.venv/bin/python3",
-      "program": "${workspaceFolder}/sample.py",
+      "program": "${workspaceFolder}/multi_sample.py",
       "cwd": "${workspaceFolder}/run",
       "env": {
         "PEETSFEA_DEBUG": "1"
@@ -20,6 +20,19 @@
       "request": "launch",
       "python": "${workspaceFolder}/.venv/bin/python3",
       "program": "${workspaceFolder}/build.py",
+      "cwd": "${workspaceFolder}/run",
+      "env": {
+        "PEETSFEA_DEBUG": "1"
+      },
+      "preLaunchTask": "prepare-build-debug",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Run multi_build.py from run/",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/.venv/bin/python3",
+      "program": "${workspaceFolder}/multi_build.py",
       "cwd": "${workspaceFolder}/run",
       "env": {
         "PEETSFEA_DEBUG": "1"

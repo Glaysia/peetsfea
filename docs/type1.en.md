@@ -30,5 +30,5 @@
 
 ## Quick Checkpoints
 - Input spec: `examples/type1.toml`
-- Run entrypoint: `sample.py` -> `build.py`
+- Run entrypoint: `multi_sample.py` -> `build.py` or `multi_build.py`
 - Default test path: run `../.venv/bin/pytest -q ../tests` from `run/`

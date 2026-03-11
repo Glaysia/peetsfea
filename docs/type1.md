@@ -30,5 +30,5 @@
 
 ## 빠른 확인 포인트
 - 입력 스펙: `examples/type1.toml`
-- 실행 진입점: `sample.py` -> `build.py`
+- 실행 진입점: `multi_sample.py` -> `build.py` 또는 `multi_build.py`
 - 기본 테스트: `run/` 디렉터리에서 `../.venv/bin/pytest -q ../tests`

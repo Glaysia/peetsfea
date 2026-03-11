@@ -443,20 +443,22 @@ def test_run_em_pipeline_uses_policy_frequencies_for_setup_and_disabled_sweep_me
     assert result["analysis"]["sweep_stop_hz"] == 60.0e6
 
 
-def test_default_em_policy_exposes_0211_adaptive_defaults_and_setup_payload() -> None:
+def test_default_em_policy_exposes_0214_adaptive_defaults_and_setup_payload() -> None:
     fake_hfss = _FakeHfss()
     policy = default_em_policy()
 
     assert policy["max_delta_s"] == 0.007
-    assert policy["maximum_passes"] == 20
+    assert policy["maximum_passes"] == 15
+    assert policy["minimum_converged_passes"] == 10
     assert policy["percent_refinement"] == 20
 
     run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), policy)
     setup_payload = fake_hfss.inserted_setup_payloads[0]
 
     assert 0.007 in setup_payload
+    assert 15 in setup_payload
+    assert 10 in setup_payload
     assert 20 in setup_payload
-    assert setup_payload.count(20) >= 2
     assert "UseMaxTetIncrease:=" in setup_payload
     assert True in setup_payload
     assert "MaxTetIncrease:=" in setup_payload

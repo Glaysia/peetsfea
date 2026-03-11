@@ -12,7 +12,7 @@ TOML 스펙을 입력으로 받아 HFSS(AEDT)용 설계를 결정론적으로 �
 - 단일 설계 생성과 데이터셋 생성이 같은 계약 위에서 동작하도록 유지한다.
 
 ## 현재 문서 기준
-- 현재 문서 정리의 기준 릴리즈는 `0.2.13`다.
+- 현재 문서 정리의 기준 릴리즈는 `0.2.14`다.
 - 공개 요약은 이 README가 담당하고, 세부 설계는 `PLANS/` 문서가 담당한다.
 - 구현 규칙은 [AGENTS.md](AGENTS.md), 장기 원칙은 [PLANS/LONGTERM_PLAN.md](PLANS/LONGTERM_PLAN.md)를 참고한다. `PLANS/V0_2_11.md`는 0.2.11 계획 기록이다.
 
@@ -33,7 +33,7 @@ cd run
 ../.venv/bin/pytest -q ../tests
 ```
 
-기본 실행은 `sample.py`로 `run/toml/manifest.json`과 resolved TOML들을 만들고, 이어서 `build.py`로 `run/aedt/` 아래 AEDT를 생성한다. 기본 스펙은 `examples/type1.toml`을 사용한다.
+기본 실행은 `multi_sample.py`로 batch별 resolved TOML과 manifest를 만들고, 이어서 `build.py` 또는 `multi_build.py`로 `run/aedt/` 아래 AEDT를 생성한다. 기본 스펙은 `examples/type1.toml`을 사용한다.
 
 ## 핵심 산출물
 - zip 산출물은 현재 임시 비활성화 상태다.
@@ -44,14 +44,14 @@ cd run
   - `<design_id>.source.toml`
 - `manifest_<design_id>.json`, `geometry_metadata_<design_id>.json`은 기본 비활성이다(옵션으로만 생성).
 
-## 0.2.13 기준 큰 계약
+## 0.2.14 기준 큰 계약
 - sampling ownership은 canonical owner 기준으로만 관리한다.
 - alias/derived path는 독립 sampled dimension으로 세지지 않는다.
 - `dataset.toml`은 `coil_groups[*].count_*` 같은 inline sampled owner도 포함하고, derived alias와 fixed field는 제외한다.
 - `dataset.toml`과 `repro.toml`은 서로 다른 역할을 가지며, replay safety는 둘의 대응 관계로 관리한다.
 - `design_id`의 마지막 두 조각은 서로 다른 의미다: `design_unique_hash`는 realized design identity, `toml_space_hash`는 원본 `source.toml` sampling space identity다. `retry_attempt`도 파일명 suffix에 반영된다.
 - ferrite는 전역 `ferrite.present` 플래그 하나로만 제어하고, RX/TX 모두 실제 코일 footprint 기준으로 배치하며 RX `2.0mm` / TX `2.0mm` / `mu_r=500`을 기본 spec 계약으로 둔다.
-- adaptive 기본값은 `percent_refinement=20`, `maximum_passes=20`, `max_delta_s=0.007` 기준으로 정리한다.
+- adaptive 기본값은 `percent_refinement=20`, `maximum_passes=15`, `minimum_converged_passes=10`, `max_delta_s=0.007` 기준으로 정리한다.
 - 세부 설계는 아래 문서로 분리되어 있다.
   - [PLANS/V0_2_11.md](PLANS/V0_2_11.md)
   - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md)

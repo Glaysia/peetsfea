@@ -36,7 +36,7 @@ from peetsfea.types.manifest import (
 )
 
 MAX_ATTEMPTS = 64
-SUPPORTED_SPEC_VERSION = "0.2.13"
+SUPPORTED_SPEC_VERSION = "0.2.14"
 
 
 def _require_number(value: object, name: str) -> float:
@@ -289,6 +289,7 @@ def run(config: RunConfig) -> RunResult:
             "ansys_executable_path": config.ansys_executable_path,
             "ansys_run_dir": config.ansys_run_dir,
             "toml_path": config.toml_path,
+            "source_toml_path": config.toml_path,
             "non_graphical": config.non_graphical,
             "close_on_exit": config.close_on_exit,
             "emit_manifest_json": config.emit_manifest_json,

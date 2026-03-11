@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from ansys.aedt.core import Hfss
 
+from peetsfea.spec.loader import load_toml_bytes
+from peetsfea.spec.resolver.constants import SCALAR_RANGE_SPECS
+from peetsfea.spec.resolver.sampling import build_sampling_registry, is_sampling_entry_frozen, iter_registry_entries_in_canonical_order
 from peetsfea.types.manifest import Manifest
+
+
+_SELECTED_KEY_BY_OWNER_PATH: dict[str, str] = {path: key for path, key, _ in SCALAR_RANGE_SPECS}
+
 
 def _sanitize_var_name(name: str) -> str:
     chars: list[str] = []
@@ -26,33 +35,29 @@ def _var_expr(name: str, value: int | float | str) -> str:
     return f"{float(value)}mm"
 
 
-def _assign_design_variables(hfss: Hfss, manifest: Manifest) -> None:
+def _source_toml_path(manifest: Manifest) -> str:
+    inputs = manifest["inputs"]
+    return inputs.get("source_toml_path", inputs["toml_path"])
+
+
+def _free_scalar_selected_values(manifest: Manifest) -> list[tuple[str, int | float | bool]]:
     selected = manifest["selected_parameters"]
-    for key, value in selected.items():
+    source_spec, _ = load_toml_bytes(path=Path(_source_toml_path(manifest)))
+    registry = build_sampling_registry(source_spec)
+    free_values: list[tuple[str, int | float | bool]] = []
+    for entry in iter_registry_entries_in_canonical_order(registry):
+        selected_key = _SELECTED_KEY_BY_OWNER_PATH.get(entry.owner_path)
+        if selected_key is None:
+            continue
+        if is_sampling_entry_frozen(source_spec, entry):
+            continue
+        free_values.append((selected_key, selected[selected_key]))
+    return free_values
+
+
+def _assign_design_variables(hfss: Hfss, manifest: Manifest) -> None:
+    for key, value in _free_scalar_selected_values(manifest):
         if isinstance(value, bool):
             hfss[_sanitize_var_name(f"spec_{key}")] = "1" if value else "0"
         elif isinstance(value, (int, float)):
             hfss[_sanitize_var_name(f"spec_{key}")] = _var_expr(key, value)
-
-    for group in manifest["selected_coil_groups"]:
-        kind = group["kind"]
-        hfss[_sanitize_var_name(f"group_{kind}_requested_count")] = _var_expr("requested_count", group["requested_count"])
-        hfss[_sanitize_var_name(f"group_{kind}_selected_count")] = _var_expr("selected_count", group["selected_count"])
-        hfss[_sanitize_var_name(f"group_{kind}_spacing_mm")] = _var_expr("spacing_mm", group["spacing_mm"])
-
-    for geometry in manifest["selected_group_geometry"]:
-        kind = geometry["kind"]
-        hfss[_sanitize_var_name(f"group_geom_{kind}_turn_count_max")] = _var_expr("turn_count_max", geometry["turn_count_max"])
-        hfss[_sanitize_var_name(f"group_geom_{kind}_band_ratio")] = _var_expr("band_ratio", geometry["band_ratio"])
-        hfss[_sanitize_var_name(f"group_geom_{kind}_trace_mm")] = _var_expr("trace_mm", geometry["trace"])
-        hfss[_sanitize_var_name(f"group_geom_{kind}_gap_mm")] = _var_expr("gap_mm", geometry["gap"])
-
-    for pcb in manifest["selected_pcbs"]:
-        pcb_id = _sanitize_var_name(pcb["id"])
-        pos_x, pos_y, pos_z = pcb["position"]
-        hfss[f"pcb_{pcb_id}_position_x_mm"] = _var_expr("position_x_mm", pos_x)
-        hfss[f"pcb_{pcb_id}_position_y_mm"] = _var_expr("position_y_mm", pos_y)
-        hfss[f"pcb_{pcb_id}_position_z_mm"] = _var_expr("position_z_mm", pos_z)
-        hfss[f"pcb_{pcb_id}_rotation_deg"] = _var_expr("rotation_deg", pcb["rotation_deg"])
-        hfss[f"pcb_{pcb_id}_present"] = "1" if pcb["present"] else "0"
-
