@@ -5,7 +5,7 @@ from peetsfea.pipeline.run_batch import SampleManifestEntry
 from sample import SampleProfile, generate_sample_manifest, sample_manifest_path_for_seed_start
 
 SAMPLE_PROFILES: tuple[SampleProfile, ...] = (
-    SampleProfile(seed_start=0+500*i, seed_end=500+500*i, target_count=100) for i in range(10)
+    SampleProfile(seed_start=0+500*i, seed_end=500+500*i, target_count=100) for i in range(30)
     ) # type: ignore
 
 

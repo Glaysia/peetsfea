@@ -31,7 +31,7 @@ def default_em_policy() -> EmPolicy:
         "sweep_stop_hz": 45.0e6,
         "validation_gate": "hard_fail",
         "max_delta_s": 0.007,
-        "maximum_passes": 15,
+        "maximum_passes": 13,
         "minimum_passes": 9,
         "minimum_converged_passes": 10,
         "percent_refinement": 20,

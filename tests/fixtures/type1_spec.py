@@ -7,7 +7,7 @@ def write_type1_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float =
     path.write_text(
         "\n".join(
             [
-                'spec_version = "0.2.14"',
+                'spec_version = "0.2.15"',
                 "",
                 "[design]",
                 'units = "mm"',
@@ -22,7 +22,7 @@ def write_type1_toml(path: Path, *, tx_region_h: float = 200.0, outer_x: float =
                 "sweep_stop_hz = 45.0e6",
                 'validation_gate = "hard_fail"',
                 "max_delta_s = 0.007",
-                "maximum_passes = 15",
+                "maximum_passes = 13",
                 "minimum_passes = 9",
                 "minimum_converged_passes = 10",
                 "percent_refinement = 20",

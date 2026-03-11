@@ -12,7 +12,7 @@ Release notes are managed by version and language under `release-notes/`.
 - Keep single-design generation and dataset generation on the same contract surface.
 
 ## Current Documentation Baseline
-- The current documentation baseline is `0.2.14`.
+- The current documentation baseline is `0.2.15`.
 - This README is the public summary; detailed design notes live under `PLANS/`.
 - For implementation rules, see [AGENTS.md](AGENTS.md). For long-term principles, see [PLANS/LONGTERM_PLAN.md](PLANS/LONGTERM_PLAN.md). [PLANS/V0_2_11.md](PLANS/V0_2_11.md) remains the archived 0.2.11 planning index.
 
@@ -44,7 +44,7 @@ Default execution is split across `multi_sample.py` and `build.py`/`multi_build.
   - `<design_id>.source.toml`
 - `manifest_<design_id>.json` and `geometry_metadata_<design_id>.json` are disabled by default (optional only).
 
-## Major Contracts In 0.2.14
+## Major Contracts In 0.2.15
 - Sampling ownership is managed only through canonical owners.
 - Alias/derived paths do not count as independent sampled dimensions.
 - `dataset.toml` includes inline sampled owners such as `coil_groups[*].count_*`, while excluding derived aliases and fixed fields.

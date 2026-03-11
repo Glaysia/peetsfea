@@ -9,19 +9,20 @@ from ansys.aedt.core import Hfss
 import peetsfea.pipeline.run_design as runner
 from peetsfea.backend.pyaedt.geometry.design_vars import _assign_design_variables, _sanitize_var_name
 from peetsfea.spec.loader import load_toml_bytes
-from peetsfea.spec.resolver.constants import SCALAR_RANGE_SPECS
 from peetsfea.spec.resolver.sampling import build_sampling_registry, is_sampling_entry_frozen, iter_registry_entries_in_canonical_order
 from peetsfea.types.manifest import Manifest
 from tests.fixtures.type1_spec import write_type1_toml
+
+
+_EXAMPLE_TYPE1_TOML = Path(__file__).resolve().parents[1] / "examples" / "type1.toml"
 
 
 class _FakeHfss(dict[str, str]):
     pass
 
 
-def test_assign_design_variables_keeps_only_unfrozen_scalar_owners(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    toml_path = tmp_path / "type1.toml"
-    write_type1_toml(toml_path)
+def test_assign_design_variables_keeps_all_unfrozen_input_owners(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = _EXAMPLE_TYPE1_TOML
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("1" * 40))
     manifest = cast(
         Manifest,
@@ -33,22 +34,22 @@ def test_assign_design_variables_keeps_only_unfrozen_scalar_owners(tmp_path: Pat
 
     source_spec, _ = load_toml_bytes(toml_path)
     registry = build_sampling_registry(source_spec)
-    selected_key_by_owner_path = {path: key for path, key, _ in SCALAR_RANGE_SPECS}
     expected_names = {
-        _sanitize_var_name(f"spec_{selected_key_by_owner_path[entry.owner_path]}")
+        _sanitize_var_name(entry.owner_path)
         for entry in iter_registry_entries_in_canonical_order(registry)
-        if entry.owner_path in selected_key_by_owner_path and not is_sampling_entry_frozen(source_spec, entry)
+        if not is_sampling_entry_frozen(source_spec, entry)
     }
     assert set(fake_hfss.keys()) == expected_names
-    assert "spec_ferrite_present" in fake_hfss
-    assert fake_hfss["spec_ferrite_present"] in {"0", "1"}
-    assert "spec_tx_dd_pair_spacing_ratio" in fake_hfss
-    assert fake_hfss["spec_tx_dd_pair_spacing_ratio"].endswith("mm")
-    assert "spec_tv_width_mm" not in fake_hfss
-    assert "spec_tx_vertical_span_mm" not in fake_hfss
-    assert not any(name.startswith("group_") for name in fake_hfss)
-    assert not any(name.startswith("group_geom_") for name in fake_hfss)
-    assert not any(name.startswith("pcb_") for name in fake_hfss)
+    assert len(fake_hfss) == 25
+    assert fake_hfss["ferrite_present"] in {"0", "1"}
+    assert fake_hfss["coil_shape_tx_dd_outer_x"].endswith("mm")
+    assert fake_hfss["coil_groups_0__count_mode"].isdigit()
+    assert fake_hfss["coil_groups_1__count_range"].isdigit()
+    assert fake_hfss["coil_groups_params_tx_dd_turn_count_max"].isdigit()
+    assert fake_hfss["coil_groups_params_tx_dd_band_ratio"].endswith("mm")
+    assert "tv_width_mm" not in fake_hfss
+    assert "coil_shape_tx_vertical_outer_x" not in fake_hfss
+    assert "tx_dd_pair_spacing_mm" not in fake_hfss
 
 
 def test_run_manifest_records_source_toml_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -62,3 +63,27 @@ def test_run_manifest_records_source_toml_path(tmp_path: Path, monkeypatch: pyte
     )
 
     assert manifest["inputs"].get("source_toml_path") == str(toml_path)
+
+
+def test_assign_design_variables_reads_values_from_matching_manifest_sections(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    toml_path = _EXAMPLE_TYPE1_TOML
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("3" * 40))
+    manifest = cast(
+        Manifest,
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=11, backend="hfss"))["manifest"],
+    )
+    fake_hfss = _FakeHfss()
+
+    _assign_design_variables(cast(Hfss, fake_hfss), manifest)
+
+    tx_dd_group = next(entry for entry in manifest["selected_coil_groups"] if entry["kind"] == "tx_dd")
+    tx_vertical_group = next(entry for entry in manifest["selected_coil_groups"] if entry["kind"] == "tx_vertical")
+    tx_dd_geometry = next(entry for entry in manifest["selected_group_geometry"] if entry["kind"] == "tx_dd")
+
+    assert fake_hfss["coil_shape_tx_dd_outer_x"] == f"{manifest['selected_parameters']['tx_dd_outer_x']}mm"
+    assert fake_hfss["coil_groups_0__count_mode"] == str(tx_dd_group["requested_count"])
+    assert fake_hfss["coil_groups_1__count_range"] == str(tx_vertical_group["requested_count"])
+    assert fake_hfss["coil_groups_params_tx_dd_turn_count_max"] == str(tx_dd_geometry["turn_count_max"])
+    assert fake_hfss["coil_groups_params_tx_dd_band_ratio"] == f"{tx_dd_geometry['band_ratio']}mm"

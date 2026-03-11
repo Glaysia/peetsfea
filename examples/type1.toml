@@ -8,7 +8,7 @@
 # Numeric range convention:
 #   range = [is_integer, start, end, count]
 
-spec_version = "0.2.14"
+spec_version = "0.2.15"
 
 [design]
 units = "mm"
@@ -26,7 +26,7 @@ sweep_start_hz = 1.0e6
 sweep_stop_hz = 45.0e6
 validation_gate = "hard_fail"
 max_delta_s = 0.007
-maximum_passes = 15
+maximum_passes = 13
 minimum_passes = 9
 minimum_converged_passes = 10
 percent_refinement = 20
@@ -113,7 +113,7 @@ range = [false, 2.0, 2.0, 1]
 range = [false, 2.0, 2.0, 1]
 
 [ferrite.relative_permeability]
-# Idealized ferrite material baseline for 0.2.14 planning.
+# Idealized ferrite material baseline for 0.2.15 planning.
 range = [false, 500.0, 500.0, 1]
 
 # ----------------------------------------------------------------------------
@@ -756,7 +756,7 @@ instance_transforms = [
 
 # ----------------------------------------------------------------------------
 # PCB instances (9 total: 5 always-on + 4 optional)
-# - 0.2.14 fixed-topology mode:
+# - 0.2.15 fixed-topology mode:
 #   coil count is primary, PCB present/mounts are normalized to this topology.
 # - tx_vertical uses dedicated host board tx_vertical_0.
 # - optional boards remain in spec for compatibility but are forced inactive.
