@@ -40,16 +40,20 @@ def test_assign_design_variables_keeps_all_unfrozen_input_owners(tmp_path: Path,
         if not is_sampling_entry_frozen(source_spec, entry)
     }
     assert set(fake_hfss.keys()) == expected_names
-    assert len(fake_hfss) == 25
+    assert len(fake_hfss) == len(expected_names)
     assert fake_hfss["ferrite_present"] in {"0", "1"}
     assert fake_hfss["coil_shape_tx_dd_outer_x"].endswith("mm")
+    assert fake_hfss["coil_placement_tx_vertical_layout_mode"].isdigit()
+    assert not fake_hfss["coil_spacing_tx_vertical_mode2_pair_spacing_ratio"].endswith("mm")
+    assert not fake_hfss["coil_placement_tx_vertical_mode2_x_ratio_to_tx_dd_center"].endswith("mm")
     assert fake_hfss["coil_groups_0__count_mode"].isdigit()
-    assert fake_hfss["coil_groups_1__count_range"].isdigit()
+    assert "coil_groups_1__count_range" not in fake_hfss
     assert fake_hfss["coil_groups_params_tx_dd_turn_count_max"].isdigit()
-    assert fake_hfss["coil_groups_params_tx_dd_band_ratio"].endswith("mm")
+    assert not fake_hfss["coil_groups_params_tx_dd_band_ratio"].endswith("mm")
     assert "tv_width_mm" not in fake_hfss
     assert "coil_shape_tx_vertical_outer_x" not in fake_hfss
     assert "tx_dd_pair_spacing_mm" not in fake_hfss
+    assert "tx_vertical_mode2_pair_spacing_mm" not in fake_hfss
 
 
 def test_run_manifest_records_source_toml_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -83,7 +87,14 @@ def test_assign_design_variables_reads_values_from_matching_manifest_sections(
     tx_dd_geometry = next(entry for entry in manifest["selected_group_geometry"] if entry["kind"] == "tx_dd")
 
     assert fake_hfss["coil_shape_tx_dd_outer_x"] == f"{manifest['selected_parameters']['tx_dd_outer_x']}mm"
+    assert fake_hfss["coil_placement_tx_vertical_layout_mode"] == str(manifest["selected_parameters"]["tx_vertical_layout_mode"])
+    assert fake_hfss["coil_spacing_tx_vertical_mode2_pair_spacing_ratio"] == str(
+        manifest["selected_parameters"]["tx_vertical_mode2_pair_spacing_ratio"]
+    )
+    assert fake_hfss["coil_placement_tx_vertical_mode2_x_ratio_to_tx_dd_center"] == str(
+        manifest["selected_parameters"]["tx_vertical_mode2_x_ratio_to_tx_dd_center"]
+    )
     assert fake_hfss["coil_groups_0__count_mode"] == str(tx_dd_group["requested_count"])
-    assert fake_hfss["coil_groups_1__count_range"] == str(tx_vertical_group["requested_count"])
+    assert "coil_groups_1__count_range" not in fake_hfss
     assert fake_hfss["coil_groups_params_tx_dd_turn_count_max"] == str(tx_dd_geometry["turn_count_max"])
-    assert fake_hfss["coil_groups_params_tx_dd_band_ratio"] == f"{tx_dd_geometry['band_ratio']}mm"
+    assert fake_hfss["coil_groups_params_tx_dd_band_ratio"] == str(tx_dd_geometry["band_ratio"])

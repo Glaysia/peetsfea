@@ -176,9 +176,10 @@ def _resolve_rx_ferrite_spec(
     selected: SelectedParameters,
     scene_objects: list[SceneObjectEntry],
     coil_plane_bboxes: list[tuple[str, Literal["XY", "YZ", "ZX"], list[float]]],
+    tx_board_ids: set[str],
     strict: bool,
 ) -> tuple[str, _FerriteKind, _Point3, _Point3, Literal["XY", "YZ"]]:
-    rx_bboxes = [bbox for _, plane, bbox in coil_plane_bboxes if plane == "YZ"]
+    rx_bboxes = [bbox for board_id, plane, bbox in coil_plane_bboxes if plane == "YZ" and board_id not in tx_board_ids]
     if not rx_bboxes:
         if strict:
             raise ValueError("Ferrite requested but no RX YZ coil bbox was captured")
@@ -309,6 +310,7 @@ def _create_ferrite_model_objects(
             selected=selected,
             scene_objects=scene_objects,
             coil_plane_bboxes=coil_plane_bboxes,
+            tx_board_ids=tx_board_ids,
             strict=ferrite_present,
         ),
         _resolve_tx_ferrite_spec(

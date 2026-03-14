@@ -55,11 +55,12 @@ This document defines the project rules for coding agents working in this reposi
 - Determinism tests are required; Pyaedt integration tests are optional.
 - Run commands from the `run/` directory when executing scripts/tests to avoid polluting the repo root with generated artifacts.
 - Prefer output paths under `run/` for manifests, AEDT files, logs, and temporary execution artifacts.
-- When running `sample.py` or `build.py` for AEDT geometry/debug flows, follow `.vscode/launch.json` contract.
-- Do not run `sample.py` or `build.py` directly from arbitrary cwd without the pre-launch cleanup step.
+- When running `entry/multi_sample.py`, `entry/build.py`, `entry/multi_build.py`, `entry/build_one.py`, or `entry/sample_one_build.py` for AEDT geometry/debug flows, follow `.vscode/launch.json` contract.
+- Do not run those entry scripts directly from arbitrary cwd without the pre-launch cleanup step.
 - Required sequence:
-  - For TOML generation, run the `prepare-sample-debug` task first (this clears `run/toml/`), then launch `Run sample.py from run/` with `cwd=run/`.
-  - For AEDT generation, run the `prepare-build-debug` task first (this clears `run/aedt/`), then launch `Run build.py from run/` with `cwd=run/`.
+  - For TOML generation, run the `prepare-sample-debug` task first (this clears `run/toml/`), then launch `Run entry/multi_sample.py from run/` with `cwd=run/`.
+  - For AEDT generation from an existing manifest, run the `prepare-build-debug` task first (this clears `run/aedt/`), then launch `Run entry/build.py from run/` with `cwd=run/`.
+  - For combined sample+build flows, run the `prepare-sample-build-debug` task first (this clears both `run/toml/` and `run/aedt/`), then launch `Run entry/build_one.py from run/` or `Run entry/sample_one_build.py from run/` with `cwd=run/`.
 - Rationale: stale `run/aedt/*.aedt.lock` files can cause HFSS startup/open failures.
 
 ## File layout (planned)

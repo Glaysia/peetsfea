@@ -17,7 +17,7 @@ from tests.fixtures.type1_spec import write_type1_toml
 
 
 def _load_script(name: str) -> ModuleType:
-    module_path = Path(__file__).resolve().parents[1] / f"{name}.py"
+    module_path = Path(__file__).resolve().parents[1] / "entry" / f"{name}.py"
     spec = importlib.util.spec_from_file_location(f"{name}_module", module_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load {name}.py module")
@@ -170,32 +170,42 @@ def test_multi_sample_uses_process_pool_when_parallel_enabled(monkeypatch: pytes
 def test_build_debug_processes_full_manifest_sequentially(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     build_script = _load_script("build")
     source_toml_path = tmp_path / "source.toml"
-    source_toml_path.write_text("spec_version = \"0.2.16\"\n", encoding="utf-8")
+    source_toml_path.write_text("spec_version = \"0.2.17\"\n", encoding="utf-8")
     manifest_path = tmp_path / "manifest.json"
     entries = [
         _make_manifest_entry(design_id="000001_dead_cafe_0", toml_path=tmp_path / "a.toml", source_toml_path=source_toml_path),
         _make_manifest_entry(design_id="000002_dead_cafe_0", toml_path=tmp_path / "b.toml", source_toml_path=source_toml_path),
     ]
     manifest_path.write_text(json.dumps(entries, indent=2), encoding="utf-8")
-    calls: list[tuple[str, bool]] = []
+    calls: list[tuple[str, bool, bool]] = []
 
-    def _fake_build(entry: SampleManifestEntry, *, ansys_run_dir: Path, ansys_executable_path: str, is_debug: bool) -> bool:
-        calls.append((entry["toml_path"], is_debug))
+    def _fake_build(
+        entry: SampleManifestEntry,
+        *,
+        ansys_run_dir: Path,
+        ansys_executable_path: str,
+        non_graphical: bool,
+        close_on_exit: bool,
+    ) -> bool:
+        calls.append((entry["toml_path"], non_graphical, close_on_exit))
         return True
 
-    monkeypatch.setattr(build_script, "build_aedt_from_manifest_entry", _fake_build)
+    monkeypatch.setattr(build_script, "build_aedt_from_manifest_entry_with_options", _fake_build)
     monkeypatch.setenv("PEETSFEA_DEBUG", "1")
 
     result = build_script.build_from_manifest_path(manifest_path, ansys_run_dir=tmp_path / "aedt")
 
     assert result == [True, True]
-    assert calls == [(entries[0]["toml_path"], True), (entries[1]["toml_path"], True)]
+    assert calls == [
+        (entries[0]["toml_path"], False, False),
+        (entries[1]["toml_path"], False, False),
+    ]
 
 
 def test_build_non_debug_uses_process_pool_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     build_script = _load_script("build")
     source_toml_path = tmp_path / "source.toml"
-    source_toml_path.write_text("spec_version = \"0.2.16\"\n", encoding="utf-8")
+    source_toml_path.write_text("spec_version = \"0.2.17\"\n", encoding="utf-8")
     manifest_path = tmp_path / "manifest.json"
     entries = [
         _make_manifest_entry(design_id="000001_dead_cafe_0", toml_path=tmp_path / "a.toml", source_toml_path=source_toml_path),
@@ -205,8 +215,16 @@ def test_build_non_debug_uses_process_pool_path(tmp_path: Path, monkeypatch: pyt
     calls: list[str] = []
     workers: list[int] = []
 
-    def _fake_build(entry: SampleManifestEntry, *, ansys_run_dir: Path, ansys_executable_path: str, is_debug: bool) -> bool:
-        assert is_debug is False
+    def _fake_build(
+        entry: SampleManifestEntry,
+        *,
+        ansys_run_dir: Path,
+        ansys_executable_path: str,
+        non_graphical: bool,
+        close_on_exit: bool,
+    ) -> bool:
+        assert non_graphical is True
+        assert close_on_exit is True
         calls.append(entry["toml_path"])
         return True
 
@@ -222,12 +240,12 @@ def test_build_non_debug_uses_process_pool_path(tmp_path: Path, monkeypatch: pyt
 
         def map(
             self,
-            fn: Callable[[tuple[SampleManifestEntry, Path]], bool],
-            values: list[tuple[SampleManifestEntry, Path]],
+            fn: Callable[[tuple[SampleManifestEntry, Path, object]], bool],
+            values: list[tuple[SampleManifestEntry, Path, object]],
         ) -> list[bool]:
             return [fn(value) for value in values]
 
-    monkeypatch.setattr(build_script, "build_aedt_from_manifest_entry", _fake_build)
+    monkeypatch.setattr(build_script, "build_aedt_from_manifest_entry_with_options", _fake_build)
     monkeypatch.setattr(build_script, "ProcessPoolExecutor", _FakeProcessPoolExecutor)
     monkeypatch.delenv("PEETSFEA_DEBUG", raising=False)
 
@@ -236,6 +254,58 @@ def test_build_non_debug_uses_process_pool_path(tmp_path: Path, monkeypatch: pyt
     assert result == [True, True]
     assert workers == [build_script.BUILD_WORKER_COUNT]
     assert calls == [entries[0]["toml_path"], entries[1]["toml_path"]]
+
+
+def test_build_entries_forces_sequential_gui_visible_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    build_script = _load_script("build")
+    entries = [
+        _make_manifest_entry(design_id="000001_dead_cafe_0", toml_path=tmp_path / "a.toml", source_toml_path=tmp_path / "source.toml"),
+        _make_manifest_entry(design_id="000002_dead_cafe_0", toml_path=tmp_path / "b.toml", source_toml_path=tmp_path / "source.toml"),
+    ]
+    calls: list[tuple[str, bool, bool]] = []
+    process_pool_used = False
+
+    def _fake_build(
+        entry: SampleManifestEntry,
+        *,
+        ansys_run_dir: Path,
+        ansys_executable_path: str,
+        non_graphical: bool,
+        close_on_exit: bool,
+    ) -> bool:
+        calls.append((entry["toml_path"], non_graphical, close_on_exit))
+        return True
+
+    class _UnexpectedProcessPoolExecutor:
+        def __init__(self, *, max_workers: int) -> None:
+            nonlocal process_pool_used
+            process_pool_used = True
+
+        def __enter__(self) -> "_UnexpectedProcessPoolExecutor":
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> bool:
+            return False
+
+        def map(self, fn: object, values: object) -> list[bool]:
+            raise AssertionError("GUI-visible build must stay sequential")
+
+    monkeypatch.setattr(build_script, "build_aedt_from_manifest_entry_with_options", _fake_build)
+    monkeypatch.setattr(build_script, "ProcessPoolExecutor", _UnexpectedProcessPoolExecutor)
+
+    result = build_script.build_entries(
+        entries,
+        ansys_run_dir=tmp_path / "aedt",
+        runtime=build_script.GUI_VISIBLE_BUILD_RUNTIME,
+        parallel=True,
+    )
+
+    assert result == [True, True]
+    assert process_pool_used is False
+    assert calls == [
+        (entries[0]["toml_path"], False, True),
+        (entries[1]["toml_path"], False, True),
+    ]
 
 
 def test_multi_build_discovers_batch_manifests_and_ignores_top_level_manifest(
@@ -249,8 +319,8 @@ def test_multi_build_discovers_batch_manifests_and_ignores_top_level_manifest(
         return [True]
 
     run_toml_root = tmp_path / "run" / "toml"
-    first_manifest = run_toml_root / "toml_0.2.16_0" / "manifest.json"
-    second_manifest = run_toml_root / "toml_0.2.16_1000" / "manifest.json"
+    first_manifest = run_toml_root / "toml_0.2.17_0" / "manifest.json"
+    second_manifest = run_toml_root / "toml_0.2.17_1000" / "manifest.json"
     ignored_manifest = run_toml_root / "manifest.json"
     first_manifest.parent.mkdir(parents=True)
     second_manifest.parent.mkdir(parents=True)
@@ -267,8 +337,8 @@ def test_multi_build_discovers_batch_manifests_and_ignores_top_level_manifest(
     result = multi_build_script.build_all_targets(targets)
 
     assert calls == [
-        (first_manifest, tmp_path / "run" / "aedt" / "aedt_0.2.16_0"),
-        (second_manifest, tmp_path / "run" / "aedt" / "aedt_0.2.16_1000"),
+        (first_manifest, tmp_path / "run" / "aedt" / "aedt_0.2.17_0"),
+        (second_manifest, tmp_path / "run" / "aedt" / "aedt_0.2.17_1000"),
     ]
     assert result == [[True], [True]]
 
@@ -359,6 +429,80 @@ def test_build_helper_cleans_failed_design_artifacts_and_aedtresults(tmp_path: P
     aedt_dir = run_root / "aedt"
     assert list(aedt_dir.glob("*.aedt")) == []
     assert list(aedt_dir.glob("*.aedtresults")) == []
+
+
+def test_build_one_generates_100_samples_then_runs_gui_visible_build(monkeypatch: pytest.MonkeyPatch) -> None:
+    build_one_script = _load_script("build_one")
+    calls: list[tuple[str, object]] = []
+    fake_entries = [
+        {
+            "design_id": "000001_dead_cafe_0",
+            "seed": 11,
+            "retry_attempt": 0,
+            "toml_path": "/tmp/a.toml",
+            "source_toml_path": "/tmp/source.toml",
+            "design_unique_hash": "dead",
+            "toml_space_hash": "cafe",
+            "toml_hash": "a" * 64,
+        }
+    ]
+
+    def _fake_generate_sample_manifest(**kwargs: object) -> list[dict[str, object]]:
+        calls.append(("sample", kwargs))
+        return fake_entries
+
+    def _fake_build_entries(
+        entries: list[dict[str, object]],
+        *,
+        ansys_run_dir: Path,
+        runtime: object,
+        parallel: bool,
+    ) -> list[bool]:
+        calls.append(("build", (entries, ansys_run_dir, runtime, parallel)))
+        return [True]
+
+    monkeypatch.setattr(build_one_script, "generate_sample_manifest", _fake_generate_sample_manifest)
+    monkeypatch.setattr(build_one_script, "build_entries", _fake_build_entries)
+
+    result = build_one_script.build_one()
+
+    assert result.entries == tuple(fake_entries)
+    assert result.build_results == (True,)
+    sample_call = calls[0][1]
+    assert isinstance(sample_call, dict)
+    assert sample_call["seed_start"] == 0
+    assert sample_call["seed_end"] == 500
+    assert sample_call["target_count"] == 100
+    build_call = calls[1][1]
+    assert isinstance(build_call, tuple)
+    assert build_call[0] == fake_entries
+    assert build_call[2] == build_one_script.GUI_VISIBLE_BUILD_RUNTIME
+    assert build_call[3] is False
+
+
+def test_sample_one_build_generates_single_sample_batch(monkeypatch: pytest.MonkeyPatch) -> None:
+    sample_one_build_script = _load_script("sample_one_build")
+    calls: list[object] = []
+    sentinel = object()
+
+    def _fake_generate_and_build_profile(profile: object) -> object:
+        calls.append(profile)
+        return sentinel
+
+    monkeypatch.setattr(sample_one_build_script, "generate_and_build_profile", _fake_generate_and_build_profile)
+
+    result = sample_one_build_script.sample_one_build()
+
+    assert result is sentinel
+    assert len(calls) == 1
+    profile = calls[0]
+    assert isinstance(profile, sample_one_build_script.SampleProfile)
+    seed_start = getattr(profile, "seed_start")
+    seed_end = getattr(profile, "seed_end")
+    target_count = getattr(profile, "target_count")
+    assert seed_start == 0
+    assert seed_end == 500
+    assert target_count == 1
 
 
 def test_build_helper_rejects_non_frozen_toml_before_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

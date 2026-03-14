@@ -8,7 +8,7 @@
 # Numeric range convention:
 #   range = [is_integer, start, end, count]
 
-spec_version = "0.2.16"
+spec_version = "0.2.17"
 
 [design]
 units = "mm"
@@ -37,7 +37,7 @@ port_accuracy = 2
 # AEDT output-variable/report definition
 
 [outputs]
-# Output/report generation is TOML-driven in 0.2.16. This single table is the
+# Output/report generation is TOML-driven in 0.2.17. This single table is the
 # SSOT for the one AEDT data-table report created by the EM pipeline.
 report_name = "Output Variables Table1"
 solution_name = "Setup1 : LastAdaptive"
@@ -292,12 +292,17 @@ range = [false, 2.0, 8.0, 8]
 # TX DD pair spacing ratio to tx.region.outer_h_mm.
 range = [false, 0.0, 0.12, 25]
 
+[coil_spacing.tx_vertical_mode2_pair_spacing_ratio]
+# TX vertical mode-2 DD pair spacing ratio to tx.region.outer_h_mm.
+# This controls the internal gap between the two RX-DD-style YZ half-coils.
+range = [false, 0.0, 0.03, 25]
+
 [coil_spacing.rx_dd_pair_spacing_ratio]
 # RX DD pair spacing ratio to rx.region.outer_h_mm.
 range = [false, 0.0, 0.03, 25]
 
 [coil_spacing.tx_vertical_center_gap_mm]
-# Adjacent center-to-center spacing for tx_vertical coils (ZX-plane normal axis, Y direction).
+# Adjacent center-to-center spacing for tx_vertical coils along the Y direction.
 # tx_vertical_span_mm is derived in resolver: center_gap * max(0, selected_count - 1).
 range = [false, 1.62, 15.0, 8]
 
@@ -319,21 +324,21 @@ range = [false, 1.62, 15.0, 8]
 # When tx_dd resolves to 4 instances (two stacked XY layers), the lower layer
 # keeps the same realized turn count but uses a one-pitch smaller centerline
 # box so its trace centers align roughly with the upper-layer gap centers.
-range = [true, 1, 3, 3]
+range = [true, 2, 4, 3]
 [coil_groups_params.tx_dd.band_ratio]
 range = [false, 0.1, 0.35, 20]
 [coil_groups_params.tx_dd.metal_ratio]
 range = [false, 0.15, 0.60, 25]
 
 [coil_groups_params.tx_vertical.turn_count_max]
-range = [true, 1, 3, 3]
+range = [true, 2, 4, 3]
 [coil_groups_params.tx_vertical.band_ratio]
 range = [false, 0.35, 0.5, 20]
 [coil_groups_params.tx_vertical.metal_ratio]
 range = [false, 0.45, 0.75, 25]
 
 [coil_groups_params.rx_dd.turn_count_max]
-range = [true, 1, 3, 3]
+range = [true, 2, 4, 3]
 [coil_groups_params.rx_dd.band_ratio]
 range = [false, 0.1, 0.35, 20]
 [coil_groups_params.rx_dd.metal_ratio]
@@ -377,6 +382,16 @@ range = [false, 1.0, 1.0, 1]
 # 0.0 keeps the DD coil at the zone top; 0.3 places it 30% down within the DD zone.
 range = [false, 0.0, 0.3, 10]
 
+[coil_placement.tx_vertical_layout_mode]
+# TX vertical layout mode.
+# 1 = legacy ZX layout attached to the min-X face, 2 = YZ layout using an opposite-wound RX-DD-style vertical pair.
+range = [true, 1, 2, 2]
+
+[coil_placement.tx_vertical_mode2_x_ratio_to_tx_dd_center]
+# Despite the legacy path name, mode 2 uses center_x = tx_dd_region_min_x + ratio*tx_dd_outer_x.
+# ratio=0.7..1.0 keeps the YZ DD pair on the RX-far +X side of the underlying TX DD span.
+range = [false, 0.7, 1.0, 10]
+
 [coil_placement.rx_face_clearance_mm]
 # Clearance from RX +X face (TV side) to RX DD coil face (mm), must be >= 0.
 range = [false, 0.0, 0.0, 1]
@@ -388,10 +403,6 @@ value = "XZ"
 [coil_placement.rx_plane]
 # RX coil placement plane contract (vertical to floor).
 value = "YZ"
-
-[coil_placement.tx_vertical_plane]
-# TX vertical coil plane contract (parallel to ZX plane).
-value = "ZX"
 
 [pcb_spacing.tx_main_1_z_from_tx_main_0_mm]
 # Relative Z spacing from tx_main_0 to tx_main_1 (mm).
@@ -460,6 +471,22 @@ lhs = { path = "tx_dd_pair_spacing_ratio" }
 op = "<="
 rhs = { value = 0.12 }
 
+[[constraints.rules]]
+id = "tx_vertical_mode2_pair_spacing_positive"
+kind = "comparison"
+message = "tx_vertical_mode2_pair_spacing_mm must be >= 0"
+lhs = { path = "tx_vertical_mode2_pair_spacing_mm" }
+op = ">="
+rhs = { value = 0.0 }
+
+[[constraints.rules]]
+id = "tx_vertical_mode2_pair_spacing_ratio_upper_bound"
+kind = "comparison"
+message = "tx_vertical_mode2_pair_spacing_ratio must be <= 0.03"
+lhs = { path = "tx_vertical_mode2_pair_spacing_ratio" }
+op = "<="
+rhs = { value = 0.03 }
+
 # RX DD pair edge gap must be non-negative (mm).
 [[constraints.rules]]
 id = "rx_dd_spacing_positive"
@@ -485,6 +512,26 @@ message = "tx_vertical_center_gap_mm must be in [1.62,15]"
 target = { path = "tx_vertical_center_gap_mm" }
 min = { value = 1.62 }
 max = { value = 15.0 }
+inclusive_min = true
+inclusive_max = true
+
+[[constraints.rules]]
+id = "tx_vertical_layout_mode_supported"
+kind = "range"
+message = "tx_vertical_layout_mode must be in [1,2]"
+target = { path = "tx_vertical_layout_mode" }
+min = { value = 1.0 }
+max = { value = 2.0 }
+inclusive_min = true
+inclusive_max = true
+
+[[constraints.rules]]
+id = "tx_vertical_mode2_x_ratio_range"
+kind = "range"
+message = "tx_vertical_mode2_x_ratio_to_tx_dd_center must be in [0.7,1.0]"
+target = { path = "tx_vertical_mode2_x_ratio_to_tx_dd_center" }
+min = { value = 0.7 }
+max = { value = 1.0 }
 inclusive_min = true
 inclusive_max = true
 
@@ -560,8 +607,8 @@ lhs = { func = "add(mul(2,tx_dd_outer_y),tx_dd_pair_spacing_mm)" }
 op = "<="
 rhs = { path = "tx_region_outer_h_mm" }
 
-# Bridge no-pierce guard: DD->vertical bridge endpoint must stay right of vertical copper outer edge.
-# If tx_vertical is not active (selected_count=0), this rule is treated as pass.
+# ZX legacy Y-order guard: DD->vertical bridge endpoint must stay right of vertical copper outer edge.
+# If tx_vertical is not active or tx_vertical_plane == "YZ", this legacy guard is treated as pass.
 [[constraints.rules]]
 id = "tx_bridge_no_pierce"
 kind = "comparison"
@@ -587,6 +634,22 @@ message = "tx_vertical turn_count_max must be <= feasible_turns_max under capped
 lhs = { path = "selected_group_geometry.tx_vertical.turn_count_max" }
 op = "<="
 rhs = { func = "feasible_turns_max(tx_vertical,outer_x,outer_y,tx_region_vertical_z_mm)" }
+
+[[constraints.rules]]
+id = "tx_vertical_mode2_center_x_in_region"
+kind = "comparison"
+message = "mode2 tx_vertical center_x must stay within tx_region_vertical X bounds"
+lhs = { func = "tx_vertical_mode2_center_x_in_region_ok()" }
+op = "=="
+rhs = { value = 1.0 }
+
+[[constraints.rules]]
+id = "tx_vertical_mode2_pair_y_in_region"
+kind = "comparison"
+message = "mode2 tx_vertical RX-DD-style pair must fit within tx_region_vertical Y bounds"
+lhs = { func = "tx_vertical_mode2_pair_y_in_region_ok()" }
+op = "=="
+rhs = { value = 1.0 }
 
 [[constraints.rules]]
 id = "tx_dd_turn_count_within_feasible_max"
@@ -722,16 +785,6 @@ enabled = true
 lhs = { path = "rx_face_clearance_mm" }
 op = "<="
 rhs = { path = "rx_region_thickness_mm" }
-
-# TX vertical coil plane is fixed by product requirement.
-[[constraints.rules]]
-id = "tx_vertical_plane_fixed_zx"
-kind = "comparison"
-message = "tx_vertical_plane must be ZX"
-enabled = true
-lhs = { path = "tx_vertical_plane" }
-op = "=="
-rhs = { value = "ZX" }
 
 [[constraints.rules]]
 id = "tx_dd_mount_index_in_range"
@@ -880,7 +933,8 @@ instance_transforms = [
 
 [[coil_groups]]
 kind = "tx_vertical"
-count_range = [true, 1, 6, 6]
+# Mode 2 is realized as a single RX-DD-style YZ pair; requested count>1 clamps to 1.
+count_range = [true, 1, 1, 1]
 instance_transforms = [
   { dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 },
 ]
@@ -894,7 +948,7 @@ instance_transforms = [
 
 # ----------------------------------------------------------------------------
 # PCB instances (9 total: 5 always-on + 4 optional)
-# - 0.2.16 fixed-topology mode:
+# - 0.2.17 fixed-topology mode:
 #   coil count is primary, PCB present/mounts are normalized to this topology.
 # - tx_vertical uses dedicated host board tx_vertical_0.
 # - optional boards remain in spec for compatibility but are forced inactive.

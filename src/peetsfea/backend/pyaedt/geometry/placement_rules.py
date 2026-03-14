@@ -16,11 +16,17 @@ from peetsfea.types.manifest import (
 )
 
 from .debug_checks import _compute_pitch_checks
-from .spiral_points import _build_rect_spiral_centerline_absolute, _translate_points
+from .spiral_points import (
+    _build_rect_spiral_centerline_absolute,
+    _map_xy_points_to_yz,
+    _mirror_points_about_y_axis_line,
+    _translate_points,
+)
 
 _Point2 = tuple[float, float]
 _Point3 = tuple[float, float, float]
 _GroupInstanceKey = tuple[str, str, int]
+_YzDdPairPlacement = tuple[Literal["left", "right"], list[list[float]], float, Literal["cw", "ccw"]]
 
 def _axis_aligned_segments_intersect_2d(a0: _Point2, a1: _Point2, b0: _Point2, b1: _Point2, eps: float) -> bool:
     ax0, ay0 = a0
@@ -202,6 +208,42 @@ def _build_rxdd_right_points_A_to_d_cw(
             f"(actual_direction={direction})"
         )
     return points
+
+
+def _build_yz_dd_pair_from_right_local(
+    *,
+    right_local_points: list[list[float]],
+    x_const: float,
+    axis_y: float,
+    z_center: float,
+    pair_center_distance: float,
+) -> list[_YzDdPairPlacement]:
+    pair_half_distance = pair_center_distance / 2.0
+    right_points = _map_xy_points_to_yz(
+        right_local_points,
+        x_const=x_const,
+        y_center=axis_y + pair_half_distance,
+        z_center=z_center,
+    )
+    left_points = _mirror_points_about_y_axis_line(right_points, axis_y=axis_y)
+    right_projected = [[point[1], point[2], 0.0] for point in right_points]
+    left_projected = [[point[1], point[2], 0.0] for point in left_points]
+    right_direction = _current_direction_from_xy_points(right_projected)
+    left_direction = _current_direction_from_xy_points(left_projected)
+    if right_direction != "cw":
+        raise ValueError(
+            "YZ DD pair right-half winding contract violation "
+            f"(actual_direction={right_direction}, expected=cw)"
+        )
+    if left_direction != "ccw":
+        raise ValueError(
+            "YZ DD pair left-half winding contract violation "
+            f"(actual_direction={left_direction}, expected=ccw)"
+        )
+    return [
+        ("left", left_points, axis_y - pair_half_distance, left_direction),
+        ("right", right_points, axis_y + pair_half_distance, right_direction),
+    ]
 
 
 def _tx_dd_center_y_and_layer(

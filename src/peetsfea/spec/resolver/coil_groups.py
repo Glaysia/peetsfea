@@ -100,6 +100,8 @@ def resolve_coil_groups(
             spec, kind, seed, GROUP_OFFSET_BASE + idx, attempt, context, f"coil_groups[{idx}]"
         )
         if kind == "tx_vertical":
+            if int(selected["tx_vertical_layout_mode"]) == 2:
+                selected_count = 1
             spacing_mm = float(selected["tx_vertical_center_gap_mm"]) * float(max(0, selected_count - 1))
             selected["tx_vertical_span_mm"] = spacing_mm
         elif kind == "tx_dd":

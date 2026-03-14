@@ -10,6 +10,7 @@ from ansys.aedt.core.modeler.modeler_3d import Modeler3D
 
 from peetsfea.backend.pyaedt.em_pipeline import run_em_pipeline
 from peetsfea.backend.pyaedt.em_pipeline.contracts import EmPipelineInput
+from peetsfea.placement_math import tx_vertical_mode2_center_x_from_tx_dd_min
 from peetsfea.types.manifest import EmPolicy, GeometryMetadata, GroupGeometryParams, Manifest, SceneObjectEntry, TerminalLabel
 
 from .build_rx_dd import build_em_artifacts, finalize_solids_and_substrates
@@ -81,7 +82,35 @@ def _edge_points_at_path_end(*, points: list[list[float]], trace: float) -> Edge
     return p0, p1
 
 
-def _edge_points_at_tx_vertical_terminal(*, points: list[list[float]], trace: float) -> Edge2P:
+def _tx_vertical_yz_outer_edge(
+    *,
+    points: list[list[float]],
+    trace: float,
+    side: Literal["left", "right"],
+) -> Edge2P:
+    if len(points) < 2:
+        raise ValueError("Cannot compute tx_vertical YZ outer edge from path with fewer than 2 points")
+    target_y = max(point[1] for point in points) if side == "right" else min(point[1] for point in points)
+    boundary_points = [point for point in points if abs(point[1] - target_y) <= 1e-9]
+    if not boundary_points:
+        raise ValueError("Cannot compute tx_vertical YZ outer edge from empty boundary point set")
+    x_const = sum(point[0] for point in boundary_points) / float(len(boundary_points))
+    z_values = [point[2] for point in boundary_points]
+    z_center = (min(z_values) + max(z_values)) / 2.0
+    half_trace = trace / 2.0
+    p0: Point3 = (x_const, target_y, z_center - half_trace)
+    p1: Point3 = (x_const, target_y, z_center + half_trace)
+    return p0, p1
+
+
+def _edge_points_at_tx_vertical_terminal(
+    *,
+    points: list[list[float]],
+    trace: float,
+    plane: Literal["ZX", "YZ"] = "ZX",
+) -> Edge2P:
+    if plane == "YZ":
+        return _tx_vertical_yz_outer_edge(points=points, trace=trace, side="right")
     if len(points) < 2:
         raise ValueError("Cannot compute tx_vertical terminal edge from path with fewer than 2 points")
     start = points[0]
@@ -106,7 +135,14 @@ def _edge_points_at_tx_vertical_terminal(*, points: list[list[float]], trace: fl
     return p0, p1
 
 
-def _edge_points_at_tx_vertical_opposite_terminal(*, points: list[list[float]], trace: float) -> Edge2P:
+def _edge_points_at_tx_vertical_opposite_terminal(
+    *,
+    points: list[list[float]],
+    trace: float,
+    plane: Literal["ZX", "YZ"] = "ZX",
+) -> Edge2P:
+    if plane == "YZ":
+        return _tx_vertical_yz_outer_edge(points=points, trace=trace, side="left")
     if len(points) < 2:
         raise ValueError("Cannot compute tx_vertical opposite terminal edge from path with fewer than 2 points")
     start = points[0]
@@ -138,7 +174,16 @@ def _tx_vertical_bridge_edges_from_node(
     trace: float,
     tx_vertical_region_min: Point3,
     tx_vertical_region_max: Point3,
+    plane: Literal["ZX", "YZ"] = "ZX",
+    points: list[list[float]] | None = None,
 ) -> tuple[Edge2P, Edge2P]:
+    if plane == "YZ":
+        if points is None:
+            raise ValueError("tx_vertical YZ bridge edge resolution requires source points")
+        return (
+            _tx_vertical_yz_outer_edge(points=points, trace=trace, side="right"),
+            _tx_vertical_yz_outer_edge(points=points, trace=trace, side="left"),
+        )
     half = trace / 2.0
     min_x_allowed = tx_vertical_region_min[0] + half
     max_x_allowed = tx_vertical_region_max[0] - half
@@ -211,8 +256,11 @@ def _prepare_runtime(manifest: Manifest) -> GeometryRuntimeContext:
         pcb_thickness=prelude["pcb_thickness"],
         cu_thickness=prelude["cu_thickness"],
         tx_dd_top_clearance=prelude["tx_dd_top_clearance"],
+        tx_vertical_layout_mode=cast(Literal[1, 2], prelude["tx_vertical_layout_mode"]),
+        tx_vertical_mode2_pair_spacing_mm=prelude["tx_vertical_mode2_pair_spacing_mm"],
+        tx_vertical_mode2_x_ratio_to_tx_dd_center=prelude["tx_vertical_mode2_x_ratio_to_tx_dd_center"],
         rx_face_clearance=prelude["rx_face_clearance"],
-        tx_vertical_plane=cast(Literal["ZX"], prelude["tx_vertical_plane"]),
+        tx_vertical_plane=cast(Literal["ZX", "YZ"], prelude["tx_vertical_plane"]),
     )
 
 
@@ -231,10 +279,17 @@ def _build_scene(ctx: GeometryRuntimeContext, state: GeometryBuildState, modeler
     ctx.tx_vertical_region_min, ctx.tx_vertical_region_max = _bounds_from_scene_entry(scene_by_kind["tx_region_vertical"])
     ctx.rx_region_min, ctx.rx_region_max = _bounds_from_scene_entry(scene_by_kind["rx_region_actual"])
 
-    # Keep TX coils attached to the YZ plane side (minimum X of TX region).
+    # TX DD stays attached to the YZ plane side (minimum X of TX region).
     ctx.tx_dd_center_x = ctx.tx_dd_region_min[0] + (ctx.tx_dd_outer_x / 2.0)
     ctx.tx_dd_center_y = (ctx.tx_dd_region_min[1] + ctx.tx_dd_region_max[1]) / 2.0
-    ctx.tx_vertical_center_x = ctx.tx_vertical_region_min[0] + (ctx.tx_vertical_outer_x / 2.0)
+    if ctx.tx_vertical_plane == "ZX":
+        ctx.tx_vertical_center_x = ctx.tx_vertical_region_min[0] + (ctx.tx_vertical_outer_x / 2.0)
+    else:
+        ctx.tx_vertical_center_x = tx_vertical_mode2_center_x_from_tx_dd_min(
+            tx_dd_min_x=ctx.tx_dd_region_min[0],
+            tx_dd_outer_x=ctx.tx_dd_outer_x,
+            x_ratio=ctx.tx_vertical_mode2_x_ratio_to_tx_dd_center,
+        )
     ctx.tx_vertical_center_y = (ctx.tx_vertical_region_min[1] + ctx.tx_vertical_region_max[1]) / 2.0
     ctx.rx_center_y = (ctx.rx_region_min[1] + ctx.rx_region_max[1]) / 2.0
 
@@ -328,6 +383,7 @@ def _finalize_geometry(
         pcb_thickness=ctx.pcb_thickness,
         tx_board_ids=ctx.tx_board_ids,
         tx_vertical_nodes_by_board=finalize_inputs.tx_vertical_nodes_by_board,
+        tx_vertical_mode2_connect_sources_by_board=finalize_inputs.tx_vertical_mode2_connect_sources_by_board,
         tx_vertical_region_min=ctx.tx_vertical_region_min,
         tx_vertical_region_max=ctx.tx_vertical_region_max,
         txdd_right_a_points=finalize_inputs.txdd_right_a_points,
@@ -342,11 +398,11 @@ def _finalize_geometry(
         placement_violations=state.placement_violations,
         coil_plane_bboxes=state.coil_plane_bboxes,
         fr4_object_names=state.fr4_object_names,
-        tx_zx_fr4_names=state.tx_zx_fr4_names,
+        tx_vertical_fr4_names=state.tx_vertical_fr4_names,
         txdd_global_right_d_edge=finalize_inputs.txdd_global_right_d_edge,
         txdd_global_right_d_object_name=finalize_inputs.txdd_global_right_d_object_name,
-        txdd_global_left_a_edge=finalize_inputs.txdd_global_left_a_edge,
-        txdd_global_left_a_object_name=finalize_inputs.txdd_global_left_a_object_name,
+        txdd_global_left_vertical_link_edge=finalize_inputs.txdd_global_left_vertical_link_edge,
+        txdd_global_left_vertical_link_object_name=finalize_inputs.txdd_global_left_vertical_link_object_name,
         tx_vertical_global_outer_right_edge=finalize_inputs.tx_vertical_global_outer_right_edge,
         tx_vertical_global_outer_left_edge=finalize_inputs.tx_vertical_global_outer_left_edge,
     )

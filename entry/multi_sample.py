@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import sys
 from concurrent.futures import ProcessPoolExecutor
-from os import cpu_count
+from pathlib import Path
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from peetsfea.pipeline.run_batch import SampleManifestEntry
 
-from sample import SampleProfile, generate_sample_manifest, sample_manifest_path_for_seed_start
+from entry.sample import SampleProfile, generate_sample_manifest, sample_manifest_path_for_seed_start
+
 N = 1
 SAMPLE_PROFILES: tuple[SampleProfile, ...] = tuple(
     SampleProfile(seed_start=500 * i, seed_end=500 * (i + 1), target_count=100)

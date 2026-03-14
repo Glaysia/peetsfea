@@ -76,6 +76,16 @@ def test_retry_attempt_advances_until_constraint_satisfied(tmp_path: Path, monke
         "[coil_shape.tx_dd.outer_x]\nrange = [false, 140.0, 140.0, 1]",
         "[coil_shape.tx_dd.outer_x]\nrange = [false, 120.0, 320.0, 2]",
     )
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 2, 4, 3]",
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
+        1,
+    )
+    raw = raw.replace(
+        "[coil_placement.tx_vertical_layout_mode]\nrange = [true, 1, 2, 2]",
+        "[coil_placement.tx_vertical_layout_mode]\nrange = [true, 1, 1, 1]",
+        1,
+    )
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("2" * 40))
 
@@ -106,11 +116,11 @@ def test_feasibility_constraint_allows_retry_to_find_valid_case(tmp_path: Path) 
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8")
     raw = raw.replace(
-        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 3, 3]",
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 2, 4, 3]",
         "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
-        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 3, 3]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 2, 4, 3]",
         "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
@@ -122,7 +132,7 @@ def test_feasibility_constraint_allows_retry_to_find_valid_case(tmp_path: Path) 
         "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
     )
     raw = raw.replace(
-        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 3, 3]",
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 2, 4, 3]",
         "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
@@ -141,7 +151,7 @@ def test_feasibility_constraint_allows_retry_to_find_valid_case(tmp_path: Path) 
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.85, 0.85, 1]",
     )
-    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 1, 1, 1]")
+    raw = raw.replace("count_range = [true, 1, 1, 1]", "count_range = [true, 1, 1, 1]")
     raw += (
         "\n[[constraints.rules]]\n"
         'id = "tx_vertical_feasible_turns_for_active_group"\n'

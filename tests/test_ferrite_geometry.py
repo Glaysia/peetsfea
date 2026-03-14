@@ -82,9 +82,11 @@ def _selected(*, ferrite_present: bool) -> SelectedParameters:
             "inner_margin_x": 2.0,
             "inner_margin_y": 2.0,
             "tx_dd_pair_spacing_ratio": 0.1,
+            "tx_vertical_mode2_pair_spacing_ratio": 0.03,
             "rx_dd_pair_spacing_ratio": 0.02,
             "tx_vertical_center_gap_mm": 10.0,
             "tx_dd_pair_spacing_mm": 28.0,
+            "tx_vertical_mode2_pair_spacing_mm": 8.4,
             "rx_dd_pair_spacing_mm": 7.2,
             "tx_vertical_span_mm": 10.0,
             "tv_width_mm": 1200.0,
@@ -115,6 +117,8 @@ def _selected(*, ferrite_present: bool) -> SelectedParameters:
             "rx_region_bottom_from_tv_mm": 1.0,
             "tx_dd_top_clearance_ratio": 0.005,
             "tx_dd_top_clearance_mm": 0.1,
+            "tx_vertical_layout_mode": 1,
+            "tx_vertical_mode2_x_ratio_to_tx_dd_center": 1.0,
             "rx_face_clearance_mm": 0.0,
             "tx_main_1_z_from_tx_main_0_mm": 3.0,
             "dd_mirror_plane": "XZ",
@@ -245,6 +249,29 @@ def test_create_ferrite_model_objects_records_absence_without_creating_boxes() -
     assert modeler.box_calls == []
     assert entries[0]["origin_xyz"] == (1.9, -40.0, 610.0)
     assert entries[1]["origin_xyz"] == (9.9, -30.1, 394.2)
+
+
+def test_create_ferrite_model_objects_ignores_tx_yz_bboxes_when_resolving_rx_ferrite() -> None:
+    modeler = _FakeModeler()
+    hfss = _FakeHfss()
+
+    _, _, entries = _create_ferrite_model_objects(
+        modeler=cast(Modeler3D, modeler),
+        hfss=cast(Hfss, hfss),
+        design_id="demo",
+        selected=_selected(ferrite_present=False),
+        scene_objects=_scene_objects(),
+        object_names=["scene_wall_demo", "scene_tv_demo", "coil_rx_demo", "coil_tx_low_demo", "fr4_demo"],
+        coil_plane_bboxes=cast(
+            list[_PlaneBbox],
+            _coil_plane_bboxes() + [("tx_main_0", "YZ", [7.0, -300.0, 500.0, 7.035, 300.0, 950.0])],
+        ),
+        cad_probe=_cad_probe(),
+        tx_board_ids={"tx_main_0", "tx_main_1"},
+    )
+
+    assert entries[0]["origin_xyz"] == (1.9, -40.0, 610.0)
+    assert entries[0]["size_xyz"] == (2.0, 82.0, 80.0)
 
 
 def test_create_ferrite_model_objects_fails_when_rx_plate_would_leave_tv() -> None:

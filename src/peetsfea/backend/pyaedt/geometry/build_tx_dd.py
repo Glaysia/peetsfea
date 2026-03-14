@@ -16,6 +16,9 @@ class BuildPrelude(TypedDict):
     cu_thickness: float
     fr4_er: float
     tx_dd_top_clearance: float
+    tx_vertical_layout_mode: int
+    tx_vertical_mode2_pair_spacing_mm: float
+    tx_vertical_mode2_x_ratio_to_tx_dd_center: float
     rx_face_clearance: float
     dd_mirror_plane: str
     rx_plane: str
@@ -35,6 +38,9 @@ def extract_build_prelude(manifest: Manifest) -> BuildPrelude:
         "cu_thickness": float(selected["cu_thickness"]),
         "fr4_er": float(selected["fr4_er"]),
         "tx_dd_top_clearance": float(selected["tx_dd_top_clearance_mm"]),
+        "tx_vertical_layout_mode": int(selected["tx_vertical_layout_mode"]),
+        "tx_vertical_mode2_pair_spacing_mm": float(selected["tx_vertical_mode2_pair_spacing_mm"]),
+        "tx_vertical_mode2_x_ratio_to_tx_dd_center": float(selected["tx_vertical_mode2_x_ratio_to_tx_dd_center"]),
         "rx_face_clearance": float(selected["rx_face_clearance_mm"]),
         "dd_mirror_plane": str(selected["dd_mirror_plane"]),
         "rx_plane": str(selected["rx_plane"]),
@@ -51,11 +57,15 @@ def validate_build_prelude(prelude: BuildPrelude) -> None:
         raise ValueError("selected_parameters.fr4_er must be > 1.0")
     if prelude["tx_dd_top_clearance"] < 0:
         raise ValueError("selected_parameters.tx_dd_top_clearance_mm must be >= 0")
+    if prelude["tx_vertical_layout_mode"] not in (1, 2):
+        raise ValueError("selected_parameters.tx_vertical_layout_mode must be 1 or 2")
+    if prelude["tx_vertical_mode2_pair_spacing_mm"] < 0:
+        raise ValueError("selected_parameters.tx_vertical_mode2_pair_spacing_mm must be >= 0")
     if prelude["rx_face_clearance"] < 0:
         raise ValueError("selected_parameters.rx_face_clearance_mm must be >= 0")
     if prelude["dd_mirror_plane"] != "XZ":
         raise ValueError("selected_parameters.dd_mirror_plane must be 'XZ'")
     if prelude["rx_plane"] != "YZ":
         raise ValueError("selected_parameters.rx_plane must be 'YZ'")
-    if prelude["tx_vertical_plane"] != "ZX":
-        raise ValueError("selected_parameters.tx_vertical_plane must be 'ZX'")
+    if prelude["tx_vertical_plane"] not in {"ZX", "YZ"}:
+        raise ValueError("selected_parameters.tx_vertical_plane must be 'ZX' or 'YZ'")

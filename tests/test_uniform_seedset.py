@@ -10,7 +10,18 @@ from peetsfea.pipeline.uniform_seedset import (
     generate_eager_uniform_feasible_seeds,
     iter_feasible_seed_points,
 )
-from peetsfea.spec.loader import load_toml_bytes
+from peetsfea.spec.loader import TOMLTable, load_toml_bytes
+from peetsfea.spec.resolver import SelectionConstraintError, resolve_selection_result
+
+
+def _first_feasible_result(spec: TOMLTable, *, seed: int, max_attempts: int) -> int:
+    for attempt in range(max_attempts):
+        try:
+            result = resolve_selection_result(spec=spec, seed=seed, attempt=attempt)
+            return int(result.selected_parameters["tx_vertical_layout_mode"])
+        except SelectionConstraintError:
+            continue
+    raise AssertionError(f"No feasible selection found for seed={seed}")
 
 
 def test_generate_eager_uniform_feasible_seeds_is_deterministic() -> None:
@@ -48,6 +59,7 @@ def test_generate_eager_uniform_feasible_seed_points_have_sampling_ledger() -> N
     for point in points:
         assert point.seed >= 0
         assert point.attempt >= 0
+        assert "coil_placement.tx_vertical_layout_mode" in point.sampling_ledger
         assert "coil_groups[1].count_range" in point.sampling_ledger
 
 
@@ -101,3 +113,15 @@ def test_eager_uniform_improves_or_matches_naive_first_feasible_baseline() -> No
     eager_vectors = [point.sampling_ledger.as_float_vector(keys) for point in eager_points]
     naive_vectors = [point.sampling_ledger.as_float_vector(keys) for point in naive_points]
     assert _min_pairwise_distance(eager_vectors) >= _min_pairwise_distance(naive_vectors)
+
+
+def test_example_spec_keeps_mode2_population_above_regression_floor() -> None:
+    spec_path = Path(__file__).resolve().parents[1] / "examples" / "type1.toml"
+    spec, _ = load_toml_bytes(spec_path)
+
+    mode2_count = 0
+    for seed in range(500):
+        if _first_feasible_result(spec, seed=seed, max_attempts=64) == 2:
+            mode2_count += 1
+
+    assert mode2_count >= 30

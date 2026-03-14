@@ -286,25 +286,28 @@ def build_for_board(
             right_top_points,
             axis_y=tx_dd_center_y + transform["dy"],
         )
-        capture_dd_left_a_edge = (instance_count == 2) or (instance_count == 4 and right_layer_index == 1)
-        if capture_dd_left_a_edge:
-            left_a_edge_points = edge_points_at_path_end(points=left_top_points, trace=trace)
-            if finalize_inputs.txdd_global_left_a_edge is not None:
-                prev_object_name = finalize_inputs.txdd_global_left_a_object_name
+        capture_dd_left_vertical_link_edge = (instance_count == 2) or (instance_count == 4 and right_layer_index == 1)
+        if capture_dd_left_vertical_link_edge:
+            if instance_count == 2:
+                left_vertical_link_edge_points = edge_points_at_path_end(points=list(reversed(left_top_points)), trace=trace)
+            else:
+                left_vertical_link_edge_points = edge_points_at_path_end(points=left_top_points, trace=trace)
+            if finalize_inputs.txdd_global_left_vertical_link_edge is not None:
+                prev_object_name = finalize_inputs.txdd_global_left_vertical_link_object_name
                 raise ValueError(
-                    "tx_dd global left a-edge must be unique for tx_dd_left_a->tx_vertical bridge contract "
+                    "tx_dd global left vertical-link edge must be unique for tx_dd_left->tx_vertical bridge contract "
                     f"(existing: object_name={prev_object_name}; "
                     f"new: board_id={pcb['id']}, instance_index={right_index}, object_name={left_obj_name})"
                 )
-            finalize_inputs.txdd_global_left_a_edge = left_a_edge_points
-            finalize_inputs.txdd_global_left_a_object_name = left_obj_name
+            finalize_inputs.txdd_global_left_vertical_link_edge = left_vertical_link_edge_points
+            finalize_inputs.txdd_global_left_vertical_link_object_name = left_obj_name
         if instance_count == 2:
             finalize_inputs.txdd_start_stub_sources.setdefault(pcb["id"], []).append(
-                (cast(Point3, tuple(float(v) for v in left_top_points[0])), trace, left_obj_name)
+                (cast(Point3, tuple(float(v) for v in left_top_points[-1])), trace, left_obj_name)
             )
         elif instance_count == 4 and right_layer_index == 0:
             finalize_inputs.txdd_start_stub_sources.setdefault(pcb["id"], []).append(
-                (cast(Point3, tuple(float(v) for v in left_top_points[0])), trace, left_obj_name)
+                (cast(Point3, tuple(float(v) for v in left_top_points[-1])), trace, left_obj_name)
             )
         if instance_count == 4 and right_layer_index in (0, 1):
             finalize_inputs.txdd_left_object_names[right_layer_index] = left_obj_name

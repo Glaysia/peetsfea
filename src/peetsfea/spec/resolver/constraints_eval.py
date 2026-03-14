@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from typing import Callable, Literal, cast
 
+from peetsfea.placement_math import tx_vertical_mode2_center_x_from_tx_dd_min
 from peetsfea.spec.loader import TOMLTable
 from peetsfea.types.manifest import (
     GroupGeometryParams,
@@ -665,8 +666,10 @@ def _tx_bridge_representative_right_edge_y(
     tx_vertical_transform_dy = tx_vertical_transforms[0]["dy"] if tx_vertical_transforms else 0.0
     tx_vertical_spacing_mm = float(tx_vertical_group["spacing_mm"])
     tx_vertical_trace = float(tx_vertical_geometry["trace"])
+    tx_vertical_layout_mode = int(selected["tx_vertical_layout_mode"])
+    tx_vertical_plane = cast(Literal["ZX", "YZ"], selected["tx_vertical_plane"])
     vertical_right_selection_key: tuple[float, str, int] | None = None
-    vertical_right_edge_y: float | None = None
+    vertical_right_reference_y: float | None = None
     for pcb in pcbs:
         if not pcb["present"]:
             continue
@@ -683,10 +686,109 @@ def _tx_bridge_representative_right_edge_y(
             selection_key = (-y_center, pcb["id"], instance_index)
             if vertical_right_selection_key is None or selection_key < vertical_right_selection_key:
                 vertical_right_selection_key = selection_key
-                vertical_right_edge_y = y_center
-    if vertical_right_edge_y is None:
+                if tx_vertical_layout_mode == 2 or tx_vertical_plane == "YZ":
+                    vertical_right_reference_y = y_center + (float(selected["tx_vertical_outer_x"]) / 2.0)
+                else:
+                    vertical_right_reference_y = y_center
+    if vertical_right_reference_y is None:
         raise ValueError("tx_bridge_right_y_margin_ok cannot resolve tx_vertical right representative edge Y")
-    return dd_right_edge_y, vertical_right_edge_y
+    return dd_right_edge_y, vertical_right_reference_y
+
+
+def _tx_vertical_mode2_center_x_in_region_ok(
+    *,
+    selected: SelectedParameters,
+    group_geometry_by_kind: dict[GroupKind, GroupGeometryParams],
+) -> tuple[float, str]:
+    tx_vertical_layout_mode = int(selected["tx_vertical_layout_mode"])
+    if tx_vertical_layout_mode != 2:
+        return 1.0, "func=tx_vertical_mode2_center_x_in_region_ok skipped because tx_vertical_layout_mode != 2"
+    tx_vertical_geometry = group_geometry_by_kind.get("tx_vertical")
+    if tx_vertical_geometry is None:
+        raise ValueError("tx_vertical_mode2_center_x_in_region_ok requires tx_vertical geometry")
+    tx_region_min_x = 0.0
+    tx_region_max_x = float(selected["tx_region_outer_w_mm"])
+    tx_dd_outer_x = float(selected["tx_dd_outer_x"])
+    ratio = float(selected["tx_vertical_mode2_x_ratio_to_tx_dd_center"])
+    center_x = tx_vertical_mode2_center_x_from_tx_dd_min(
+        tx_dd_min_x=tx_region_min_x,
+        tx_dd_outer_x=tx_dd_outer_x,
+        x_ratio=ratio,
+    )
+    half_trace = float(tx_vertical_geometry["trace"]) / 2.0
+    min_center_x = tx_region_min_x + half_trace
+    max_center_x = tx_region_max_x - half_trace
+    ok = min_center_x <= center_x <= max_center_x
+    debug = (
+        "func=tx_vertical_mode2_center_x_in_region_ok "
+        f"center_x={center_x} min_center_x={min_center_x} max_center_x={max_center_x} "
+        f"ratio={ratio} tx_dd_min_x={tx_region_min_x} tx_dd_max_x={tx_region_min_x + tx_dd_outer_x} ok={ok}"
+    )
+    return (1.0 if ok else 0.0), debug
+
+
+def _tx_vertical_mode2_pair_y_in_region_ok(
+    *,
+    selected: SelectedParameters,
+    group_geometry_by_kind: dict[GroupKind, GroupGeometryParams],
+    coil_groups_by_kind: dict[GroupKind, ResolvedCoilGroup],
+    pcbs: list[ResolvedPcbInstance],
+) -> tuple[float, str]:
+    tx_vertical_layout_mode = int(selected["tx_vertical_layout_mode"])
+    if tx_vertical_layout_mode != 2:
+        return 1.0, "func=tx_vertical_mode2_pair_y_in_region_ok skipped because tx_vertical_layout_mode != 2"
+    tx_vertical_group = coil_groups_by_kind.get("tx_vertical")
+    if tx_vertical_group is None:
+        raise ValueError("tx_vertical_mode2_pair_y_in_region_ok requires tx_vertical group")
+    tx_vertical_geometry = group_geometry_by_kind.get("tx_vertical")
+    if tx_vertical_geometry is None:
+        raise ValueError("tx_vertical_mode2_pair_y_in_region_ok requires tx_vertical geometry")
+
+    tx_region_outer_h = float(selected["tx_region_outer_h_mm"])
+    tx_region_min_y = -tx_region_outer_h / 2.0
+    tx_region_max_y = tx_region_outer_h / 2.0
+    tx_region_center_y = (tx_region_min_y + tx_region_max_y) / 2.0
+    transforms = tx_vertical_group["instance_transforms"]
+    transform_dy = transforms[0]["dy"] if transforms else 0.0
+    spacing_mm = float(tx_vertical_group["spacing_mm"])
+    trace_mm = float(tx_vertical_geometry["trace"])
+    half_span = float(selected["tx_vertical_outer_x"]) + (float(selected["tx_vertical_mode2_pair_spacing_mm"]) / 2.0)
+
+    checked_instances = 0
+    for pcb in pcbs:
+        if not pcb["present"]:
+            continue
+        for instance_index in range(int(tx_vertical_group["selected_count"])):
+            if not _mount_allows_instance(pcb["mounts"], "tx_vertical", instance_index):
+                continue
+            checked_instances += 1
+            off_y = _tx_vertical_instance_offset_y(
+                instance_index=instance_index,
+                instance_count=int(tx_vertical_group["selected_count"]),
+                spacing_mm=spacing_mm,
+                trace_mm=trace_mm,
+            )
+            logical_center_y = tx_region_center_y + transform_dy + off_y
+            pair_min_y = logical_center_y - half_span
+            pair_max_y = logical_center_y + half_span
+            ok = pair_min_y >= tx_region_min_y and pair_max_y <= tx_region_max_y
+            debug = (
+                "func=tx_vertical_mode2_pair_y_in_region_ok "
+                f"instance_index={instance_index} board_id={pcb['id']} "
+                f"logical_center_y={logical_center_y} half_span={half_span} "
+                f"pair_min_y={pair_min_y} pair_max_y={pair_max_y} "
+                f"region_min_y={tx_region_min_y} region_max_y={tx_region_max_y} ok={ok}"
+            )
+            if not ok:
+                return 0.0, debug
+
+    if checked_instances == 0:
+        return 1.0, "func=tx_vertical_mode2_pair_y_in_region_ok skipped because no mounted tx_vertical instance"
+    return 1.0, (
+        "func=tx_vertical_mode2_pair_y_in_region_ok "
+        f"checked_instances={checked_instances} half_span={half_span} "
+        f"region_min_y={tx_region_min_y} region_max_y={tx_region_max_y} ok=True"
+    )
 
 
 def eval_numeric_expr(
@@ -846,6 +948,9 @@ def resolve_func_ref(
             raise ValueError("rhs.func tx_bridge_right_y_margin_ok() requires tx_vertical group")
         if int(tx_vertical_group["selected_count"]) == 0:
             return 1.0, "func=tx_bridge_right_y_margin_ok skipped because tx_vertical.selected_count == 0"
+        tx_vertical_plane = cast(Literal["ZX", "YZ"], selected["tx_vertical_plane"])
+        if tx_vertical_plane == "YZ":
+            return 1.0, "func=tx_bridge_right_y_margin_ok skipped because tx_vertical_plane == 'YZ'"
         dd_right_edge_y, vertical_right_edge_y = _tx_bridge_representative_right_edge_y(
             selected=selected,
             group_geometry_by_kind=group_geometry_by_kind,
@@ -877,16 +982,22 @@ def resolve_func_ref(
             raise ValueError("rhs.func tx_bridge_no_pierce_ok() requires tx_vertical group")
         if int(tx_vertical_group["selected_count"]) == 0:
             return 1.0, "func=tx_bridge_no_pierce_ok skipped because tx_vertical.selected_count == 0"
+        tx_vertical_plane = cast(Literal["ZX", "YZ"], selected["tx_vertical_plane"])
+        if tx_vertical_plane == "YZ":
+            return 1.0, "func=tx_bridge_no_pierce_ok skipped because tx_vertical_plane == 'YZ'"
         tx_vertical_geometry = group_geometry_by_kind.get("tx_vertical")
         if tx_vertical_geometry is None:
             raise ValueError("rhs.func tx_bridge_no_pierce_ok() requires tx_vertical geometry")
-        dd_right_edge_y, vertical_right_center_y = _tx_bridge_representative_right_edge_y(
+        dd_right_edge_y, vertical_right_reference_y = _tx_bridge_representative_right_edge_y(
             selected=selected,
             group_geometry_by_kind=group_geometry_by_kind,
             coil_groups_by_kind=coil_groups_by_kind,
             pcbs=pcbs,
         )
-        vertical_right_outer_edge_y = vertical_right_center_y + (float(tx_vertical_geometry["trace"]) / 2.0)
+        if tx_vertical_plane == "YZ":
+            vertical_right_outer_edge_y = vertical_right_reference_y
+        else:
+            vertical_right_outer_edge_y = vertical_right_reference_y + (float(tx_vertical_geometry["trace"]) / 2.0)
         ok = dd_right_edge_y >= (vertical_right_outer_edge_y + clearance_mm)
         debug = (
             "func=tx_bridge_no_pierce_ok "
@@ -894,6 +1005,26 @@ def resolve_func_ref(
             f"clearance_mm={clearance_mm} ok={ok}"
         )
         return (1.0 if ok else 0.0), debug
+
+    def _handle_tx_vertical_mode2_center_x_in_region_ok(parts_text: list[str]) -> tuple[float, str | None]:
+        if len(parts_text) != 0:
+            raise ValueError("rhs.func tx_vertical_mode2_center_x_in_region_ok() must not have arguments")
+        value, debug = _tx_vertical_mode2_center_x_in_region_ok(
+            selected=selected,
+            group_geometry_by_kind=group_geometry_by_kind,
+        )
+        return value, debug
+
+    def _handle_tx_vertical_mode2_pair_y_in_region_ok(parts_text: list[str]) -> tuple[float, str | None]:
+        if len(parts_text) != 0:
+            raise ValueError("rhs.func tx_vertical_mode2_pair_y_in_region_ok() must not have arguments")
+        value, debug = _tx_vertical_mode2_pair_y_in_region_ok(
+            selected=selected,
+            group_geometry_by_kind=group_geometry_by_kind,
+            coil_groups_by_kind=coil_groups_by_kind,
+            pcbs=pcbs,
+        )
+        return value, debug
 
     func_dispatch: dict[str, Callable[[list[str]], tuple[float, str | None]]] = {
         "add": _handle_add,
@@ -908,6 +1039,8 @@ def resolve_func_ref(
         "max_mount_selector_index": _handle_max_mount_selector_index,
         "tx_bridge_right_y_margin_ok": _handle_tx_bridge_right_y_margin_ok,
         "tx_bridge_no_pierce_ok": _handle_tx_bridge_no_pierce_ok,
+        "tx_vertical_mode2_center_x_in_region_ok": _handle_tx_vertical_mode2_center_x_in_region_ok,
+        "tx_vertical_mode2_pair_y_in_region_ok": _handle_tx_vertical_mode2_pair_y_in_region_ok,
     }
     handler = func_dispatch.get(name)
     if handler is None:
@@ -918,7 +1051,9 @@ def resolve_func_ref(
             "feasible_turns_max(kind,outer_x_path,outer_y_path,outer_cap_y_path), "
             "max_supported_mount_index(kind), max_mount_selector_index(kind), "
             "tx_bridge_right_y_margin_ok(margin_mm), "
-            "tx_bridge_no_pierce_ok(clearance_mm)"
+            "tx_bridge_no_pierce_ok(clearance_mm), "
+            "tx_vertical_mode2_center_x_in_region_ok(), "
+            "tx_vertical_mode2_pair_y_in_region_ok()"
         )
     return handler(parts)
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Literal, Protocol, cast
+from typing import Callable, Literal, Protocol, cast
 
 from ansys.aedt.core import Hfss
 from ansys.aedt.core.modeler.cad.object_3d import Object3d
@@ -28,8 +28,11 @@ _Point3 = tuple[float, float, float]
 _Edge2P = tuple[_Point3, _Point3]
 _BoardKey = tuple[str, int]
 _TxVerticalLinkNode = tuple[int, str, _Point3, _Point3, float, float, _Edge2P, _Edge2P]
+_BackConnectStubSource = tuple[str, int, str, _Point3, float, str]
 _TxDdStartStubSource = tuple[_Point3, float, str]
-_RxDdBackStubSource = tuple[str, int, str, _Point3, float, str]
+_RxDdBackStubSource = _BackConnectStubSource
+_TxVerticalMode2ConnectSource = _BackConnectStubSource
+_RegionKind = Literal["tx_region_dd", "tx_region_vertical", "rx_region_actual"]
 TX_DD_START_STUB_DOWN_MM = 3.0
 RX_DD_BACK_STUB_LEN_MM = 3.0
 RX_DD_BACK_STUB_AXIS_SIGN_X = -1.0
@@ -78,6 +81,303 @@ def _rxdd_back_stub_bridge_edge(*, anchor_xyz: _Point3, trace: float) -> _Edge2P
     p0: _Point3 = (x_at_back, anchor_xyz[1] - half_trace, anchor_xyz[2] - half_trace)
     p1: _Point3 = (x_at_back, anchor_xyz[1] - half_trace, anchor_xyz[2] + half_trace)
     return p0, p1
+
+
+def _apply_back_connect_stub_pair_bridge(
+    *,
+    modeler: Modeler3D,
+    design_id: str,
+    cu_thickness: float,
+    sources: list[_BackConnectStubSource],
+    group_objects: GroupObjects,
+    group_key: Literal["rx_dd", "tx_vertical"],
+    object_names: list[str],
+    cad_probe: list[CadProbe],
+    bridge_name: str,
+    stub_name_prefix: str,
+    stub_error_context: str,
+    bridge_error_context: str,
+    sheet_points_builder: Callable[..., list[list[float]]] | None = None,
+    region_kind: _RegionKind | None = None,
+    region_min: _Point3 | None = None,
+    region_max: _Point3 | None = None,
+    placement_violations: list[RegionViolation] | None = None,
+) -> None:
+    if not sources:
+        return
+    if sheet_points_builder is None:
+        sheet_points_builder = _sheet_points_from_edge_pair
+
+    name_replacements: dict[str, str] = {}
+    connect_stub_edges: dict[str, _Edge2P] = {}
+    connect_source_names: dict[str, str] = {}
+
+    def _resolve_replaced_name(name: str) -> str:
+        current = name
+        for _ in range(10):
+            next_name = name_replacements.get(current)
+            if next_name is None or next_name == current:
+                return current
+            current = next_name
+        raise ValueError(f"{group_key} replacement chain too deep (name={name})")
+
+    def _check_region(*, object_name: str, bbox: list[float]) -> None:
+        if region_kind is None or region_min is None or region_max is None:
+            return
+        violations = _bbox_violations(
+            object_name=object_name,
+            bbox=bbox,
+            region_kind=region_kind,
+            region_min=region_min,
+            region_max=region_max,
+        )
+        if not violations:
+            return
+        if placement_violations is not None:
+            placement_violations.extend(violations)
+        first = violations[0]
+        raise ValueError(
+            f"Coil placement out of region for {first['object_name']} in {first['region_kind']} "
+            f"(axis={first['axis']}, overflow_mm={first['overflow_mm']})"
+        )
+
+    for board_id, instance_index, endpoint_label, anchor_xyz, trace, source_object_name_raw in sorted(
+        sources,
+        key=_rxdd_back_stub_sort_key,
+    ):
+        if endpoint_label not in ("c", "d"):
+            raise ValueError(
+                f"{group_key} back connect-stub endpoint must be c/d only "
+                f"(actual={endpoint_label}, board_id={board_id}, instance_index={instance_index})"
+            )
+        source_object_name = _resolve_replaced_name(source_object_name_raw)
+        source_exists = (source_object_name in object_names) or (source_object_name in group_objects[group_key])
+        if not source_exists:
+            raise ValueError(
+                f"{group_key} back stub source object missing "
+                f"(board_id={board_id}, instance_index={instance_index}, endpoint={endpoint_label}, "
+                f"source={source_object_name}, source_raw={source_object_name_raw})"
+            )
+        stub_origin, stub_sizes = _rxdd_back_stub_origin_and_sizes(anchor_xyz=anchor_xyz, trace=trace)
+        stub_name = f"{stub_name_prefix}_{board_id}_{instance_index}_{endpoint_label}"
+        stub_created = modeler.create_box(origin=stub_origin, sizes=stub_sizes, name=stub_name, material="copper")
+        if not stub_created:
+            raise ValueError(
+                f"{group_key} back stub creation failed "
+                f"(name={stub_name}, source={source_object_name}, origin={stub_origin}, sizes={stub_sizes})"
+            )
+        stub_obj = cast(Object3d, stub_created)
+        stub_object_name = _object_name(stub_obj, stub_name)
+        object_names.append(stub_object_name)
+        group_objects[group_key].append(stub_object_name)
+        stub_probe = _probe_cad_object(stub_obj, stub_name)
+        cad_probe.append(stub_probe)
+        _check_region(object_name=stub_object_name, bbox=stub_probe["bbox"])
+
+        stub_united_name = safe_unite(
+            modeler=modeler,
+            targets=[source_object_name, stub_object_name],
+            fallback_name=source_object_name,
+            error_context=stub_error_context,
+        )
+        group_objects[group_key] = [name for name in group_objects[group_key] if name != stub_object_name]
+        object_names[:] = [name for name in object_names if name != stub_object_name]
+        group_objects[group_key] = [stub_united_name if name == source_object_name else name for name in group_objects[group_key]]
+        object_names[:] = [stub_united_name if name == source_object_name else name for name in object_names]
+        if stub_united_name not in group_objects[group_key]:
+            group_objects[group_key].append(stub_united_name)
+        if stub_united_name not in object_names:
+            object_names.append(stub_united_name)
+        for old_name, mapped_name in list(name_replacements.items()):
+            if mapped_name == source_object_name:
+                name_replacements[old_name] = stub_united_name
+        name_replacements[source_object_name] = stub_united_name
+        name_replacements[source_object_name_raw] = stub_united_name
+        if endpoint_label in connect_stub_edges:
+            raise ValueError(
+                f"{group_key} d/c bridge contract violation: duplicate stub endpoint captured "
+                f"(endpoint={endpoint_label}, board_id={board_id}, instance_index={instance_index})"
+            )
+        connect_stub_edges[endpoint_label] = _rxdd_back_stub_bridge_edge(anchor_xyz=anchor_xyz, trace=trace)
+        connect_source_names[endpoint_label] = source_object_name_raw
+
+    has_c = "c" in connect_stub_edges
+    has_d = "d" in connect_stub_edges
+    if has_c != has_d:
+        raise ValueError(
+            f"{group_key} d/c bridge contract violation: both c and d stub edges must be present together "
+            f"(has_c={has_c}, has_d={has_d})"
+        )
+    if not has_c:
+        return
+
+    c_edge = connect_stub_edges["c"]
+    d_edge = connect_stub_edges["d"]
+    c_object_name = _resolve_replaced_name(connect_source_names["c"])
+    d_object_name = _resolve_replaced_name(connect_source_names["d"])
+    c_exists = (c_object_name in object_names) or (c_object_name in group_objects[group_key])
+    d_exists = (d_object_name in object_names) or (d_object_name in group_objects[group_key])
+    if not c_exists or not d_exists:
+        raise ValueError(f"{group_key} d/c bridge source object missing (c_source={c_object_name}, d_source={d_object_name})")
+
+    dc_bridge_sheet_points = sheet_points_builder(dd_edge=d_edge, vertical_edge=c_edge)
+    try:
+        dc_bridge_obj_name, dc_bridge_obj = _create_thickened_sheet_from_points(
+            modeler=modeler,
+            sheet_points=dc_bridge_sheet_points,
+            sheet_name=bridge_name,
+            thickness=(cu_thickness * 4.0),
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith("Sheet loop creation failed"):
+            raise ValueError(f"{bridge_error_context} rectangle loop creation failed (name={bridge_name})") from exc
+        if message.startswith("Sheet cover_lines failed"):
+            raise ValueError(f"{bridge_error_context} cover_lines failed (name={bridge_name})") from exc
+        if message.startswith("Sheet thicken failed"):
+            raise ValueError(f"{bridge_error_context} thicken failed (name={bridge_name}, thickness={cu_thickness * 4.0})") from exc
+        raise
+
+    object_names.append(dc_bridge_obj_name)
+    group_objects[group_key].append(dc_bridge_obj_name)
+    bridge_probe = _probe_cad_object(dc_bridge_obj, bridge_name)
+    cad_probe.append(bridge_probe)
+    _check_region(object_name=dc_bridge_obj_name, bbox=bridge_probe["bbox"])
+
+    unite_targets = sorted(set([d_object_name, c_object_name, dc_bridge_obj_name]))
+    if len(unite_targets) <= 1:
+        return
+    united_name = safe_unite(
+        modeler=modeler,
+        targets=unite_targets,
+        fallback_name=unite_targets[0],
+        error_context=bridge_error_context,
+    )
+    group_objects[group_key] = [name for name in group_objects[group_key] if name not in unite_targets[1:]]
+    if united_name not in group_objects[group_key]:
+        group_objects[group_key].append(united_name)
+    object_names[:] = [name for name in object_names if name not in unite_targets[1:]]
+    if united_name not in object_names:
+        object_names.append(united_name)
+
+
+def _apply_diagonal_connect_pair_conductor(
+    *,
+    modeler: Modeler3D,
+    cu_thickness: float,
+    sources: list[_BackConnectStubSource],
+    group_objects: GroupObjects,
+    group_key: Literal["rx_dd", "tx_vertical"],
+    object_names: list[str],
+    cad_probe: list[CadProbe],
+    conductor_name: str,
+    conductor_error_context: str,
+    region_kind: _RegionKind | None = None,
+    region_min: _Point3 | None = None,
+    region_max: _Point3 | None = None,
+    placement_violations: list[RegionViolation] | None = None,
+) -> None:
+    if not sources:
+        return
+
+    def _check_region(*, object_name: str, bbox: list[float]) -> None:
+        if region_kind is None or region_min is None or region_max is None:
+            return
+        violations = _bbox_violations(
+            object_name=object_name,
+            bbox=bbox,
+            region_kind=region_kind,
+            region_min=region_min,
+            region_max=region_max,
+        )
+        if not violations:
+            return
+        if placement_violations is not None:
+            placement_violations.extend(violations)
+        first = violations[0]
+        raise ValueError(
+            f"Coil placement out of region for {first['object_name']} in {first['region_kind']} "
+            f"(axis={first['axis']}, overflow_mm={first['overflow_mm']})"
+        )
+
+    endpoints: dict[str, tuple[_Point3, float, str]] = {}
+    for board_id, instance_index, endpoint_label, anchor_xyz, trace, source_object_name in sorted(
+        sources,
+        key=_rxdd_back_stub_sort_key,
+    ):
+        if endpoint_label not in ("c", "d"):
+            raise ValueError(
+                f"{group_key} diagonal connector endpoint must be c/d only "
+                f"(actual={endpoint_label}, board_id={board_id}, instance_index={instance_index})"
+            )
+        source_exists = (source_object_name in object_names) or (source_object_name in group_objects[group_key])
+        if not source_exists:
+            raise ValueError(
+                f"{group_key} diagonal connector source object missing "
+                f"(board_id={board_id}, instance_index={instance_index}, endpoint={endpoint_label}, "
+                f"source={source_object_name})"
+            )
+        if endpoint_label in endpoints:
+            raise ValueError(
+                f"{group_key} diagonal connector contract violation: duplicate endpoint captured "
+                f"(endpoint={endpoint_label}, board_id={board_id}, instance_index={instance_index})"
+            )
+        endpoints[endpoint_label] = (anchor_xyz, trace, source_object_name)
+
+    has_c = "c" in endpoints
+    has_d = "d" in endpoints
+    if has_c != has_d:
+        raise ValueError(
+            f"{group_key} diagonal connector contract violation: both c and d endpoints must be present together "
+            f"(has_c={has_c}, has_d={has_d})"
+        )
+    if not has_c:
+        return
+
+    c_anchor_xyz, c_trace, c_object_name = endpoints["c"]
+    d_anchor_xyz, d_trace, d_object_name = endpoints["d"]
+    if abs(c_trace - d_trace) > 1e-9:
+        raise ValueError(
+            f"{group_key} diagonal connector trace mismatch "
+            f"(c_trace={c_trace}, d_trace={d_trace})"
+        )
+
+    conductor_created = modeler.create_polyline(
+        points=[
+            [d_anchor_xyz[0], d_anchor_xyz[1], d_anchor_xyz[2]],
+            [c_anchor_xyz[0], c_anchor_xyz[1], c_anchor_xyz[2]],
+        ],
+        name=conductor_name,
+        material="copper",
+        xsection_type="Rectangle",
+        xsection_width=d_trace,  # type: ignore[arg-type]
+        xsection_height=cu_thickness,  # type: ignore[arg-type]
+    )
+    if not conductor_created:
+        raise ValueError(f"{conductor_error_context} polyline creation failed (name={conductor_name})")
+    conductor_obj = cast(Object3d, conductor_created)
+    conductor_obj_name = _object_name(conductor_obj, conductor_name)
+    object_names.append(conductor_obj_name)
+    group_objects[group_key].append(conductor_obj_name)
+    conductor_probe = _probe_cad_object(conductor_obj, conductor_name)
+    cad_probe.append(conductor_probe)
+    _check_region(object_name=conductor_obj_name, bbox=conductor_probe["bbox"])
+
+    unite_targets = sorted(set([d_object_name, c_object_name, conductor_obj_name]))
+    if len(unite_targets) <= 1:
+        return
+    united_name = safe_unite(
+        modeler=modeler,
+        targets=unite_targets,
+        fallback_name=unite_targets[0],
+        error_context=conductor_error_context,
+    )
+    group_objects[group_key] = [name for name in group_objects[group_key] if name not in unite_targets[1:]]
+    if united_name not in group_objects[group_key]:
+        group_objects[group_key].append(united_name)
+    object_names[:] = [name for name in object_names if name not in unite_targets[1:]]
+    if united_name not in object_names:
+        object_names.append(united_name)
 
 
 def _auto_identify_ports_direct(
@@ -202,6 +502,26 @@ def _sheet_points_from_edge_pair(*, dd_edge: _Edge2P, vertical_edge: _Edge2P) ->
     ]
 
 
+def _diagonal_sheet_points_from_edge_pair(*, dd_edge: _Edge2P, vertical_edge: _Edge2P) -> list[list[float]]:
+    dd_edge_0, dd_edge_1 = dd_edge
+    v_edge_0, v_edge_1 = vertical_edge
+    same_pair_cost = math.dist(dd_edge_0, v_edge_0) + math.dist(dd_edge_1, v_edge_1)
+    cross_pair_cost = math.dist(dd_edge_0, v_edge_1) + math.dist(dd_edge_1, v_edge_0)
+    if same_pair_cost <= cross_pair_cost:
+        return [
+            [dd_edge_0[0], dd_edge_0[1], dd_edge_0[2]],
+            [dd_edge_1[0], dd_edge_1[1], dd_edge_1[2]],
+            [v_edge_0[0], v_edge_0[1], v_edge_0[2]],
+            [v_edge_1[0], v_edge_1[1], v_edge_1[2]],
+        ]
+    return [
+        [dd_edge_0[0], dd_edge_0[1], dd_edge_0[2]],
+        [dd_edge_1[0], dd_edge_1[1], dd_edge_1[2]],
+        [v_edge_1[0], v_edge_1[1], v_edge_1[2]],
+        [v_edge_0[0], v_edge_0[1], v_edge_0[2]],
+    ]
+
+
 def _fr4_box_from_plane_bbox(
     *,
     plane: Literal["XY", "YZ", "ZX"],
@@ -273,6 +593,7 @@ def _finalize_solids_and_substrates_impl(
     pcb_thickness: float,
     tx_board_ids: set[str],
     tx_vertical_nodes_by_board: dict[_BoardKey, list[_TxVerticalLinkNode]],
+    tx_vertical_mode2_connect_sources_by_board: dict[_BoardKey, list[_TxVerticalMode2ConnectSource]],
     tx_vertical_region_min: _Point3,
     tx_vertical_region_max: _Point3,
     txdd_right_a_points: dict[int, tuple[_Point3, float]],
@@ -287,51 +608,40 @@ def _finalize_solids_and_substrates_impl(
     placement_violations: list[RegionViolation],
     coil_plane_bboxes: list[tuple[str, Literal["XY", "YZ", "ZX"], list[float]]],
     fr4_object_names: list[str],
-    tx_zx_fr4_names: list[str],
+    tx_vertical_fr4_names: list[str],
     txdd_global_right_d_edge: _Edge2P | None,
     txdd_global_right_d_object_name: str | None,
-    txdd_global_left_a_edge: _Edge2P | None,
-    txdd_global_left_a_object_name: str | None,
+    txdd_global_left_vertical_link_edge: _Edge2P | None,
+    txdd_global_left_vertical_link_object_name: str | None,
     tx_vertical_global_outer_right_edge: _Edge2P | None,
     tx_vertical_global_outer_left_edge: _Edge2P | None,
 ) -> tuple[list[str], list[str]]:
     txdd_bridge_object_name: str | None = None
     txdd_left_bridge_object_name: str | None = None
     txdd_right_d_object_name_active = txdd_global_right_d_object_name
-    txdd_left_a_object_name_active = (
-        txdd_global_left_a_object_name or txdd_left_object_names.get(1) or txdd_left_object_names.get(0)
+    txdd_left_vertical_link_object_name_active = (
+        txdd_global_left_vertical_link_object_name or txdd_left_object_names.get(1) or txdd_left_object_names.get(0)
     )
 
-    rxdd_name_replacements: dict[str, str] = {}
-    rxdd_dc_stub_edges: dict[str, _Edge2P] = {}
-    rxdd_dc_source_names: dict[str, str] = {}
     txdd_start_stub_port_edges_by_board: dict[str, list[_Edge2P]] = {}
     txdd_start_stub_reference_names_by_board: dict[str, list[str]] = {}
     rxdd_start_stub_edge_by_name: dict[str, _Edge2P] = {}
     rxdd_start_stub_board_by_name: dict[str, str] = {}
 
-    def _resolve_replaced_name(name: str) -> str:
-        current = name
-        for _ in range(10):
-            next_name = rxdd_name_replacements.get(current)
-            if next_name is None or next_name == current:
-                return current
-            current = next_name
-        raise ValueError(f"rx_dd replacement chain too deep (name={name})")
-
     sorted_rxdd_back_stub_sources = sorted(rxdd_back_stub_sources, key=_rxdd_back_stub_sort_key)
-    for board_id, instance_index, endpoint_label, anchor_xyz, trace, source_object_name_raw in sorted_rxdd_back_stub_sources:
-        source_object_name = _resolve_replaced_name(source_object_name_raw)
+    rxdd_connect_stub_sources: list[_RxDdBackStubSource] = []
+    for board_id, instance_index, endpoint_label, anchor_xyz, trace, source_object_name in sorted_rxdd_back_stub_sources:
+        if _is_rxdd_connect_stub_endpoint(endpoint_label):
+            rxdd_connect_stub_sources.append((board_id, instance_index, endpoint_label, anchor_xyz, trace, source_object_name))
+            continue
         source_exists = (source_object_name in object_names) or (source_object_name in group_objects["rx_dd"])
         if not source_exists:
             raise ValueError(
                 "rx_dd back stub source object missing "
                 f"(board_id={board_id}, instance_index={instance_index}, endpoint={endpoint_label}, "
-                f"source={source_object_name}, source_raw={source_object_name_raw})"
+                f"source={source_object_name})"
             )
         stub_origin, stub_sizes = _rxdd_back_stub_origin_and_sizes(anchor_xyz=anchor_xyz, trace=trace)
-        # Keep the reference conductor name short because AEDT terminal names
-        # are derived from it and are reused by post-processing.
         stub_name = f"rxs_{board_id}_{instance_index}_{endpoint_label}"
         stub_created = modeler.create_box(origin=stub_origin, sizes=stub_sizes, name=stub_name, material="copper")
         if not stub_created:
@@ -344,110 +654,27 @@ def _finalize_solids_and_substrates_impl(
         object_names.append(stub_object_name)
         group_objects["rx_dd"].append(stub_object_name)
         cad_probe.append(_probe_cad_object(stub_obj, stub_name))
-        if _is_rxdd_connect_stub_endpoint(endpoint_label):
-            stub_united_name = safe_unite(
-                modeler=modeler,
-                targets=[source_object_name, stub_object_name],
-                fallback_name=source_object_name,
-                error_context="rx_dd back connect-stub with source coil",
-            )
-            group_objects["rx_dd"] = [name for name in group_objects["rx_dd"] if name != stub_object_name]
-            object_names = [name for name in object_names if name != stub_object_name]
-            group_objects["rx_dd"] = [stub_united_name if name == source_object_name else name for name in group_objects["rx_dd"]]
-            object_names = [stub_united_name if name == source_object_name else name for name in object_names]
-            if stub_united_name not in group_objects["rx_dd"]:
-                group_objects["rx_dd"].append(stub_united_name)
-            if stub_united_name not in object_names:
-                object_names.append(stub_united_name)
-            for old_name, mapped_name in list(rxdd_name_replacements.items()):
-                if mapped_name == source_object_name:
-                    rxdd_name_replacements[old_name] = stub_united_name
-            rxdd_name_replacements[source_object_name] = stub_united_name
-            rxdd_name_replacements[source_object_name_raw] = stub_united_name
-            if endpoint_label in rxdd_dc_stub_edges:
-                raise ValueError(
-                    "rx_dd d/c bridge contract violation: duplicate stub endpoint captured "
-                    f"(endpoint={endpoint_label}, board_id={board_id}, instance_index={instance_index})"
-                )
-            rxdd_dc_stub_edges[endpoint_label] = _rxdd_back_stub_bridge_edge(anchor_xyz=anchor_xyz, trace=trace)
-            rxdd_dc_source_names[endpoint_label] = source_object_name_raw
-        else:
-            # Keep the source conductor unchanged and carve overlap volume out of port stubs only.
-            subtract_ok = modeler.subtract(blank_list=[stub_object_name], tool_list=[source_object_name], keep_originals=True)
-            if not subtract_ok:
-                raise ValueError(
-                    "rx_dd back port-stub subtract-from-source failed "
-                    f"(stub={stub_object_name}, source={source_object_name}, board_id={board_id}, endpoint={endpoint_label})"
-                )
-            if _is_rxdd_port_stub_endpoint(endpoint_label):
-                rxdd_start_stub_edge_by_name[stub_object_name] = _rxdd_back_stub_bridge_edge(anchor_xyz=anchor_xyz, trace=trace)
-                rxdd_start_stub_board_by_name[stub_object_name] = board_id
-
-    has_c = "c" in rxdd_dc_stub_edges
-    has_d = "d" in rxdd_dc_stub_edges
-    if has_c != has_d:
-        raise ValueError(
-            "rx_dd d/c bridge contract violation: both c and d stub edges must be present together "
-            f"(has_c={has_c}, has_d={has_d})"
-        )
-    if has_c and has_d:
-        c_edge = rxdd_dc_stub_edges["c"]
-        d_edge = rxdd_dc_stub_edges["d"]
-        c_object_name = _resolve_replaced_name(rxdd_dc_source_names["c"])
-        d_object_name = _resolve_replaced_name(rxdd_dc_source_names["d"])
-        c_exists = (c_object_name in object_names) or (c_object_name in group_objects["rx_dd"])
-        d_exists = (d_object_name in object_names) or (d_object_name in group_objects["rx_dd"])
-        if not c_exists or not d_exists:
+        subtract_ok = modeler.subtract(blank_list=[stub_object_name], tool_list=[source_object_name], keep_originals=True)
+        if not subtract_ok:
             raise ValueError(
-                "rx_dd d/c bridge source object missing "
-                f"(c_source={c_object_name}, d_source={d_object_name})"
+                "rx_dd back port-stub subtract-from-source failed "
+                f"(stub={stub_object_name}, source={source_object_name}, board_id={board_id}, endpoint={endpoint_label})"
             )
+        if _is_rxdd_port_stub_endpoint(endpoint_label):
+            rxdd_start_stub_edge_by_name[stub_object_name] = _rxdd_back_stub_bridge_edge(anchor_xyz=anchor_xyz, trace=trace)
+            rxdd_start_stub_board_by_name[stub_object_name] = board_id
 
-        dc_bridge_sheet_points = _sheet_points_from_edge_pair(dd_edge=d_edge, vertical_edge=c_edge)
-        dc_bridge_name = f"bridge_rx_dd_d_to_c_{design_id}"
-        try:
-            dc_bridge_obj_name, dc_bridge_obj = _create_thickened_sheet_from_points(
-                modeler=modeler,
-                sheet_points=dc_bridge_sheet_points,
-                sheet_name=dc_bridge_name,
-                thickness=(cu_thickness * 4.0),
-            )
-        except ValueError as exc:
-            message = str(exc)
-            if message.startswith("Sheet loop creation failed"):
-                raise ValueError(f"rx_dd d/c bridge rectangle loop creation failed (name={dc_bridge_name})") from exc
-            if message.startswith("Sheet cover_lines failed"):
-                raise ValueError(f"rx_dd d/c bridge cover_lines failed (name={dc_bridge_name})") from exc
-            if message.startswith("Sheet thicken failed"):
-                raise ValueError(
-                    "rx_dd d/c bridge thicken failed "
-                    f"(name={dc_bridge_name}, thickness={cu_thickness * 4.0})"
-                ) from exc
-            raise
-
-        object_names.append(dc_bridge_obj_name)
-        group_objects["rx_dd"].append(dc_bridge_obj_name)
-        cad_probe.append(_probe_cad_object(dc_bridge_obj, dc_bridge_name))
-
-        rxdd_unite_targets = sorted(set([d_object_name, c_object_name, dc_bridge_obj_name]))
-        if len(rxdd_unite_targets) > 1:
-            rxdd_united_name = safe_unite(
-                modeler=modeler,
-                targets=rxdd_unite_targets,
-                fallback_name=rxdd_unite_targets[0],
-                error_context="rx_dd c/d bridge with source coils",
-            )
-            group_objects["rx_dd"] = [name for name in group_objects["rx_dd"] if name not in rxdd_unite_targets[1:]]
-            if rxdd_united_name not in group_objects["rx_dd"]:
-                group_objects["rx_dd"].append(rxdd_united_name)
-            object_names = [name for name in object_names if name not in rxdd_unite_targets[1:]]
-            if rxdd_united_name not in object_names:
-                object_names.append(rxdd_united_name)
-            for old_name, mapped_name in list(rxdd_name_replacements.items()):
-                if mapped_name in rxdd_unite_targets:
-                    rxdd_name_replacements[old_name] = rxdd_united_name
-            for target_name in rxdd_unite_targets:
-                rxdd_name_replacements[target_name] = rxdd_united_name
+    _apply_diagonal_connect_pair_conductor(
+        modeler=modeler,
+        cu_thickness=cu_thickness,
+        sources=rxdd_connect_stub_sources,
+        group_objects=group_objects,
+        group_key="rx_dd",
+        object_names=object_names,
+        cad_probe=cad_probe,
+        conductor_name=f"bridge_rx_dd_d_to_c_{design_id}",
+        conductor_error_context="rx_dd d/c diagonal conductor with source coils",
+    )
 
     for board_id, stub_sources in sorted(txdd_start_stub_sources.items()):
         for stub_idx, stub_source in enumerate(stub_sources):
@@ -602,6 +829,23 @@ def _finalize_solids_and_substrates_impl(
             sheet_name=start_port_sheet_obj_name,
             board_id=board_id_context,
             context="rx_dd start port assignment",
+        )
+
+    for (board_id, board_idx), connect_sources in sorted(tx_vertical_mode2_connect_sources_by_board.items()):
+        _apply_diagonal_connect_pair_conductor(
+            modeler=modeler,
+            cu_thickness=cu_thickness,
+            sources=connect_sources,
+            group_objects=group_objects,
+            group_key="tx_vertical",
+            object_names=object_names,
+            cad_probe=cad_probe,
+            conductor_name=f"bridge_tx_vertical_mode2_d_to_c_b{board_idx}_{design_id}",
+            conductor_error_context="tx_vertical mode2 pair diagonal conductor with source coils",
+            region_kind="tx_region_vertical",
+            region_min=tx_vertical_region_min,
+            region_max=tx_vertical_region_max,
+            placement_violations=placement_violations,
         )
 
     for (board_id, board_idx), nodes in tx_vertical_nodes_by_board.items():
@@ -788,8 +1032,8 @@ def _finalize_solids_and_substrates_impl(
         object_names = [name for name in object_names if name not in txdd_left_unite_targets[1:]]
         if left_united_object_name not in object_names:
             object_names.append(left_united_object_name)
-        if txdd_left_a_object_name_active in txdd_left_unite_targets:
-            txdd_left_a_object_name_active = left_united_object_name
+        if txdd_left_vertical_link_object_name_active in txdd_left_unite_targets:
+            txdd_left_vertical_link_object_name_active = left_united_object_name
 
     tx_vertical_unite_targets = sorted(set(group_objects["tx_vertical"]))
     if len(tx_vertical_unite_targets) > 1:
@@ -871,13 +1115,13 @@ def _finalize_solids_and_substrates_impl(
 
         if tx_vertical_global_outer_left_edge is None:
             raise ValueError("tx_vertical global outer-left edge contract violation: points were not captured")
-        if txdd_global_left_a_edge is None:
-            raise ValueError("tx_dd global left a-edge contract violation: points were not captured")
+        if txdd_global_left_vertical_link_edge is None:
+            raise ValueError("tx_dd global left vertical-link edge contract violation: points were not captured")
         dd_left_to_vertical_sheet_points = _sheet_points_from_edge_pair(
-            dd_edge=txdd_global_left_a_edge,
+            dd_edge=txdd_global_left_vertical_link_edge,
             vertical_edge=tx_vertical_global_outer_left_edge,
         )
-        dd_left_to_vertical_bridge_name = f"bridge_tx_dd_left_a_to_tx_vertical_{design_id}"
+        dd_left_to_vertical_bridge_name = f"bridge_tx_dd_left_to_tx_vertical_{design_id}"
         try:
             dd_left_to_vertical_obj_name, dd_left_to_vertical_obj = _create_thickened_sheet_from_points(
                 modeler=modeler,
@@ -889,52 +1133,53 @@ def _finalize_solids_and_substrates_impl(
             message = str(exc)
             if message.startswith("Sheet loop creation failed"):
                 raise ValueError(
-                    "tx_dd_left_a_to_tx_vertical bridge rectangle loop creation failed "
+                    "tx_dd_left_to_tx_vertical bridge rectangle loop creation failed "
                     f"(name={dd_left_to_vertical_bridge_name})"
                 ) from exc
             if message.startswith("Sheet cover_lines failed"):
                 raise ValueError(
-                    "tx_dd_left_a_to_tx_vertical bridge cover_lines failed "
+                    "tx_dd_left_to_tx_vertical bridge cover_lines failed "
                     f"(name={dd_left_to_vertical_bridge_name})"
                 ) from exc
             if message.startswith("Sheet thicken failed"):
                 raise ValueError(
-                    "tx_dd_left_a_to_tx_vertical bridge thicken failed "
+                    "tx_dd_left_to_tx_vertical bridge thicken failed "
                     f"(name={dd_left_to_vertical_bridge_name}, thickness={cu_thickness * 4.0})"
                 ) from exc
             raise
         object_names.append(dd_left_to_vertical_obj_name)
         group_objects["tx_vertical"].append(dd_left_to_vertical_obj_name)
         cad_probe.append(_probe_cad_object(dd_left_to_vertical_obj, dd_left_to_vertical_bridge_name))
-        if txdd_left_a_object_name_active is None:
-            raise ValueError("tx_dd global left a-edge contract violation: object name was not captured")
-        tx_left_connect_unite_targets = sorted(set([txdd_left_a_object_name_active] + group_objects["tx_vertical"]))
+        if txdd_left_vertical_link_object_name_active is None:
+            raise ValueError("tx_dd global left vertical-link edge contract violation: object name was not captured")
+        tx_left_connect_unite_targets = sorted(set([txdd_left_vertical_link_object_name_active] + group_objects["tx_vertical"]))
         if len(tx_left_connect_unite_targets) > 1:
             tx_left_connect_united_name = safe_unite(
                 modeler=modeler,
                 targets=tx_left_connect_unite_targets,
                 fallback_name=tx_left_connect_unite_targets[0],
-                error_context="tx_dd left a coil + dd_left_a_to_vertical bridge + tx_vertical group",
+                error_context="tx_dd left vertical-link coil + dd_left_to_vertical bridge + tx_vertical group",
             )
             group_objects["tx_vertical"] = [tx_left_connect_united_name]
             object_names = [name for name in object_names if name not in tx_left_connect_unite_targets[1:]]
             if tx_left_connect_united_name not in object_names:
                 object_names.append(tx_left_connect_united_name)
-            if txdd_left_a_object_name_active is not None:
+            if txdd_left_vertical_link_object_name_active is not None:
                 _replace_object_name_in_map(
                     txdd_right_object_names,
-                    old_name=txdd_left_a_object_name_active,
+                    old_name=txdd_left_vertical_link_object_name_active,
                     new_name=tx_left_connect_united_name,
                 )
                 _replace_object_name_in_map(
                     txdd_left_object_names,
-                    old_name=txdd_left_a_object_name_active,
+                    old_name=txdd_left_vertical_link_object_name_active,
                     new_name=tx_left_connect_united_name,
                 )
-                txdd_left_a_object_name_active = tx_left_connect_united_name
+                txdd_left_vertical_link_object_name_active = tx_left_connect_united_name
 
     eps_len = 1e-6
     grouped_plane_bboxes: dict[tuple[str, Literal["XY", "YZ", "ZX"], int], list[float]] = {}
+    fr4_role_by_name: dict[str, Literal["tx", "rx"]] = {}
     fr4_plane_by_name: dict[str, Literal["XY", "YZ", "ZX"]] = {}
     for board_id, plane, bbox in coil_plane_bboxes:
         if len(bbox) < 6:
@@ -972,30 +1217,35 @@ def _finalize_solids_and_substrates_impl(
         substrate_name = f"fr4_{board_id}_{plane.lower()}_{layer_idx}_{design_id}"
         substrate = cast(Object3d, modeler.create_box(origin=origin, sizes=sizes, name=substrate_name, material="FR4_epoxy"))
         substrate_object_name = _object_name(substrate, substrate_name)
+        substrate_role: Literal["tx", "rx"] = "tx" if board_id in tx_board_ids else "rx"
         object_names.append(substrate_object_name)
         fr4_object_names.append(substrate_object_name)
+        fr4_role_by_name[substrate_object_name] = substrate_role
         fr4_plane_by_name[substrate_object_name] = plane
-        if plane == "ZX" and board_id in tx_board_ids:
-            tx_zx_fr4_names.append(substrate_object_name)
+        if plane != "XY" and substrate_role == "tx":
+            tx_vertical_fr4_names.append(substrate_object_name)
         cad_probe.append(_probe_cad_object(substrate, substrate_name))
 
-    if len(tx_zx_fr4_names) > 1:
-        tx_zx_fr4_targets = sorted(set(tx_zx_fr4_names))
-        tx_zx_united_name = safe_unite(
+    if len(tx_vertical_fr4_names) > 1:
+        tx_vertical_fr4_targets = sorted(set(tx_vertical_fr4_names))
+        tx_vertical_fr4_plane = fr4_plane_by_name.get(tx_vertical_fr4_targets[0], "ZX")
+        tx_vertical_fr4_united_name = safe_unite(
             modeler=modeler,
-            targets=tx_zx_fr4_targets,
-            fallback_name=tx_zx_fr4_targets[0],
-            error_context="tx ZX FR4 group",
+            targets=tx_vertical_fr4_targets,
+            fallback_name=tx_vertical_fr4_targets[0],
+            error_context="tx vertical FR4 group",
         )
-        fr4_object_names = [name for name in fr4_object_names if name not in tx_zx_fr4_targets[1:]]
-        for removed_name in tx_zx_fr4_targets[1:]:
+        fr4_object_names = [name for name in fr4_object_names if name not in tx_vertical_fr4_targets[1:]]
+        for removed_name in tx_vertical_fr4_targets[1:]:
+            fr4_role_by_name.pop(removed_name, None)
             fr4_plane_by_name.pop(removed_name, None)
-        if tx_zx_united_name not in fr4_object_names:
-            fr4_object_names.append(tx_zx_united_name)
-        fr4_plane_by_name[tx_zx_united_name] = "ZX"
-        object_names = [name for name in object_names if name not in tx_zx_fr4_targets[1:]]
-        if tx_zx_united_name not in object_names:
-            object_names.append(tx_zx_united_name)
+        if tx_vertical_fr4_united_name not in fr4_object_names:
+            fr4_object_names.append(tx_vertical_fr4_united_name)
+        fr4_role_by_name[tx_vertical_fr4_united_name] = "tx"
+        fr4_plane_by_name[tx_vertical_fr4_united_name] = tx_vertical_fr4_plane
+        object_names = [name for name in object_names if name not in tx_vertical_fr4_targets[1:]]
+        if tx_vertical_fr4_united_name not in object_names:
+            object_names.append(tx_vertical_fr4_united_name)
 
     live_object_names = set(object_names)
     tx_tools = sorted(
@@ -1008,36 +1258,27 @@ def _finalize_solids_and_substrates_impl(
             group_objects=group_objects,
             live_object_names=live_object_names,
         )
-    copper_tools_by_plane: dict[Literal["XY", "YZ", "ZX"], list[str]] = {
-        "XY": tx_tools,
-        "YZ": sorted(set(group_objects["rx_dd"])),
-        "ZX": tx_tools,
-    }
-    fr4_by_plane: dict[Literal["XY", "YZ", "ZX"], list[str]] = {"XY": [], "YZ": [], "ZX": []}
-    for fr4_name in fr4_object_names:
+    rx_tools = sorted(name for name in set(group_objects["rx_dd"]) if name in live_object_names)
+    for fr4_name in sorted(set(fr4_object_names)):
+        fr4_role = fr4_role_by_name.get(fr4_name)
         fr4_plane = fr4_plane_by_name.get(fr4_name)
-        if fr4_plane is None:
+        if fr4_role is None or fr4_plane is None:
             continue
-        fr4_by_plane[fr4_plane].append(fr4_name)
-    planes: tuple[Literal["XY", "YZ", "ZX"], Literal["XY", "YZ", "ZX"], Literal["XY", "YZ", "ZX"]] = ("XY", "YZ", "ZX")
-    for plane in planes:
-        plane_fr4 = sorted(set(fr4_by_plane[plane]))
-        plane_tools = copper_tools_by_plane[plane]
-        if plane == "XY" and plane_fr4 and not plane_tools:
+        fr4_tools = tx_tools if fr4_role == "tx" else rx_tools
+        if fr4_plane == "XY" and fr4_role == "tx" and not fr4_tools:
             raise ValueError("No live tx_dd XY tools found for FR4 subtraction")
-        if not plane_fr4 or not plane_tools:
+        if not fr4_tools:
             continue
-        for fr4_name in plane_fr4:
-            for tool_name in plane_tools:
-                if fr4_name == tool_name:
-                    continue
-                subtract_ok = modeler.subtract(blank_list=[fr4_name], tool_list=[tool_name], keep_originals=True)
-                if not subtract_ok:
-                    raise ValueError(
-                        "Failed to subtract copper solid from FR4 substrate "
-                        f"(plane={plane}, fr4_name={fr4_name}, tool_name={tool_name}, "
-                        f"overlap_mm={FR4_SUBTRACT_OVERLAP_MM})"
-                    )
+        for tool_name in fr4_tools:
+            if fr4_name == tool_name:
+                continue
+            subtract_ok = modeler.subtract(blank_list=[fr4_name], tool_list=[tool_name], keep_originals=True)
+            if not subtract_ok:
+                raise ValueError(
+                    "Failed to subtract copper solid from FR4 substrate "
+                    f"(plane={fr4_plane}, role={fr4_role}, fr4_name={fr4_name}, "
+                    f"tool_name={tool_name}, overlap_mm={FR4_SUBTRACT_OVERLAP_MM})"
+                )
 
     hfss.save_project(str(aedt_path))
     return object_names, fr4_object_names
@@ -1053,6 +1294,7 @@ def finalize_solids_and_substrates(
     pcb_thickness: float,
     tx_board_ids: set[str],
     tx_vertical_nodes_by_board: dict[_BoardKey, list[_TxVerticalLinkNode]],
+    tx_vertical_mode2_connect_sources_by_board: dict[_BoardKey, list[_TxVerticalMode2ConnectSource]],
     tx_vertical_region_min: _Point3,
     tx_vertical_region_max: _Point3,
     txdd_right_a_points: dict[int, tuple[_Point3, float]],
@@ -1067,11 +1309,11 @@ def finalize_solids_and_substrates(
     placement_violations: list[RegionViolation],
     coil_plane_bboxes: list[tuple[str, Literal["XY", "YZ", "ZX"], list[float]]],
     fr4_object_names: list[str],
-    tx_zx_fr4_names: list[str],
+    tx_vertical_fr4_names: list[str],
     txdd_global_right_d_edge: _Edge2P | None,
     txdd_global_right_d_object_name: str | None,
-    txdd_global_left_a_edge: _Edge2P | None,
-    txdd_global_left_a_object_name: str | None,
+    txdd_global_left_vertical_link_edge: _Edge2P | None,
+    txdd_global_left_vertical_link_object_name: str | None,
     tx_vertical_global_outer_right_edge: _Edge2P | None,
     tx_vertical_global_outer_left_edge: _Edge2P | None,
 ) -> tuple[list[str], list[str]]:
@@ -1084,6 +1326,7 @@ def finalize_solids_and_substrates(
         pcb_thickness=pcb_thickness,
         tx_board_ids=tx_board_ids,
         tx_vertical_nodes_by_board=tx_vertical_nodes_by_board,
+        tx_vertical_mode2_connect_sources_by_board=tx_vertical_mode2_connect_sources_by_board,
         tx_vertical_region_min=tx_vertical_region_min,
         tx_vertical_region_max=tx_vertical_region_max,
         txdd_right_a_points=txdd_right_a_points,
@@ -1098,11 +1341,11 @@ def finalize_solids_and_substrates(
         placement_violations=placement_violations,
         coil_plane_bboxes=coil_plane_bboxes,
         fr4_object_names=fr4_object_names,
-        tx_zx_fr4_names=tx_zx_fr4_names,
+        tx_vertical_fr4_names=tx_vertical_fr4_names,
         txdd_global_right_d_edge=txdd_global_right_d_edge,
         txdd_global_right_d_object_name=txdd_global_right_d_object_name,
-        txdd_global_left_a_edge=txdd_global_left_a_edge,
-        txdd_global_left_a_object_name=txdd_global_left_a_object_name,
+        txdd_global_left_vertical_link_edge=txdd_global_left_vertical_link_edge,
+        txdd_global_left_vertical_link_object_name=txdd_global_left_vertical_link_object_name,
         tx_vertical_global_outer_right_edge=tx_vertical_global_outer_right_edge,
         tx_vertical_global_outer_left_edge=tx_vertical_global_outer_left_edge,
     )

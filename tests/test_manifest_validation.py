@@ -52,8 +52,8 @@ def test_invalid_group_turn_count_range_fails(tmp_path: Path, monkeypatch: pytes
     toml_path = tmp_path / "bad_turn_count.toml"
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8").replace(
-        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 3, 3]",
-        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [false, 1, 3, 3]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 2, 4, 3]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [false, 2, 4, 3]",
     )
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("1" * 40))
@@ -102,58 +102,69 @@ def test_legacy_trace_gap_keys_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 def test_unsupported_spec_version_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "old_spec_version.toml"
     write_type1_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.16"', 'spec_version = "0.1.6"', 1)
+    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.17"', 'spec_version = "0.1.6"', 1)
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("5" * 40))
 
-    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.16'"):
+    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.17'"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
-def test_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_removed_path_errors_on_027(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "removed_path.toml"
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8")
     raw += "\n[coil_shape.outer_x]\nrange = [false, 10.0, 10.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("9" * 40))
-    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.16"):
+    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.17"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
-def test_tx_vertical_span_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tx_vertical_span_removed_path_errors_on_027(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "removed_tx_vertical_span_path.toml"
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8")
     raw += "\n[coil_spacing.tx_vertical_span_mm]\nrange = [false, 3.0, 3.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("a" * 40))
-    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.16: coil_spacing\.tx_vertical_span_mm"):
+    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.17: coil_spacing\.tx_vertical_span_mm"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
-def test_tx_dd_top_clearance_mm_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tx_dd_top_clearance_mm_removed_path_errors_on_027(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "removed_tx_dd_top_clearance_mm.toml"
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8")
     raw += "\n[coil_placement.tx_dd_top_clearance_mm]\nrange = [false, 0.1, 0.1, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("b" * 40))
-    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.16: coil_placement\.tx_dd_top_clearance_mm"):
+    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.17: coil_placement\.tx_dd_top_clearance_mm"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_tx_vertical_plane_removed_path_errors_on_027(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "removed_tx_vertical_plane.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw += '\n[coil_placement.tx_vertical_plane]\nvalue = "ZX"\n'
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("c" * 40))
+    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.17: coil_placement\.tx_vertical_plane"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
 @pytest.mark.parametrize("kind", ["tx_dd", "tx_vertical", "rx_dd"])
-def test_turn_count_above_three_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
-    toml_path = tmp_path / f"{kind}_turn_count_above_three.toml"
+def test_turn_count_above_four_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
+    toml_path = tmp_path / f"{kind}_turn_count_above_four.toml"
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8").replace(
-        f"[coil_groups_params.{kind}.turn_count_max]\nrange = [true, 1, 3, 3]",
-        f"[coil_groups_params.{kind}.turn_count_max]\nrange = [true, 4, 4, 1]",
+        f"[coil_groups_params.{kind}.turn_count_max]\nrange = [true, 2, 4, 3]",
+        f"[coil_groups_params.{kind}.turn_count_max]\nrange = [true, 5, 5, 1]",
         1,
     )
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("7" * 40))
 
-    with pytest.raises(ValueError, match=rf"coil_groups_params\.{kind}\.turn_count_max must be <= 3"):
+    with pytest.raises(ValueError, match=rf"coil_groups_params\.{kind}\.turn_count_max must be <= 4"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 

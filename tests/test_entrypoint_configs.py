@@ -9,9 +9,17 @@ def test_launch_json_has_multi_sample_build_and_multi_build_debug_entries() -> N
     launch = json.loads((workspace_root / ".vscode" / "launch.json").read_text(encoding="utf-8"))
     configurations = launch["configurations"]
     names = [entry["name"] for entry in configurations]
-    assert "Run multi_sample.py from run/" in names
-    assert "Run build.py from run/" in names
-    assert "Run multi_build.py from run/" in names
+    programs = [entry["program"] for entry in configurations]
+    assert "Run entry/multi_sample.py from run/" in names
+    assert "Run entry/build.py from run/" in names
+    assert "Run entry/multi_build.py from run/" in names
+    assert "Run entry/build_one.py from run/" in names
+    assert "Run entry/sample_one_build.py from run/" in names
+    assert "${workspaceFolder}/entry/multi_sample.py" in programs
+    assert "${workspaceFolder}/entry/build.py" in programs
+    assert "${workspaceFolder}/entry/multi_build.py" in programs
+    assert "${workspaceFolder}/entry/build_one.py" in programs
+    assert "${workspaceFolder}/entry/sample_one_build.py" in programs
     assert "Run sample.py from run/" not in names
 
 
@@ -23,3 +31,4 @@ def test_tasks_json_has_separate_sample_and_build_prepare_tasks() -> None:
     assert "clean-run-aedt" in labels
     assert "prepare-sample-debug" in labels
     assert "prepare-build-debug" in labels
+    assert "prepare-sample-build-debug" in labels

@@ -10,6 +10,7 @@ from ansys.aedt.core.modeler.modeler_3d import Modeler3D
 from peetsfea.backend.pyaedt.geometry.build_rx_dd import (
     _create_sheet_from_points,
     _create_thickened_sheet_from_points,
+    _diagonal_sheet_points_from_edge_pair,
     _sheet_points_from_edge_pair,
     _tx_dd_xy_tools,
     _txdd_left_a_edge_from_points,
@@ -95,6 +96,18 @@ def test_sheet_points_from_edge_pair_matches_legacy(dd_edge: _Edge2P, vertical_e
     for exp_row, act_row in zip(expected, actual, strict=True):
         for exp_axis, act_axis in zip(exp_row, act_row, strict=True):
             assert act_axis == pytest.approx(exp_axis, abs=1e-9)
+
+
+def test_diagonal_sheet_points_from_edge_pair_prefers_cross_pairing_when_shorter() -> None:
+    dd_edge: _Edge2P = ((0.0, 0.0, 0.0), (0.0, 10.0, 0.0))
+    vertical_edge: _Edge2P = ((5.0, 10.0, 0.0), (5.0, 0.0, 0.0))
+    actual = _diagonal_sheet_points_from_edge_pair(dd_edge=dd_edge, vertical_edge=vertical_edge)
+    assert actual == [
+        [0.0, 0.0, 0.0],
+        [0.0, 10.0, 0.0],
+        [5.0, 0.0, 0.0],
+        [5.0, 10.0, 0.0],
+    ]
 
 
 def test_txdd_left_a_edge_from_points_returns_expected_pair() -> None:

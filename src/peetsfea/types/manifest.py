@@ -34,10 +34,12 @@ class SelectedParameters(TypedDict):
     inner_margin_x: float
     inner_margin_y: float
     tx_dd_pair_spacing_ratio: float
+    tx_vertical_mode2_pair_spacing_ratio: float
     rx_dd_pair_spacing_ratio: float
     tx_vertical_center_gap_mm: float
     # Derived from tx_vertical_center_gap_mm * max(0, tx_vertical selected_count - 1).
     tx_dd_pair_spacing_mm: float
+    tx_vertical_mode2_pair_spacing_mm: float
     rx_dd_pair_spacing_mm: float
     tx_vertical_span_mm: float
     tv_width_mm: float
@@ -69,11 +71,13 @@ class SelectedParameters(TypedDict):
     tx_dd_top_clearance_ratio: float
     # Derived from tx_dd_top_clearance_ratio * tx_region_dd_z_mm.
     tx_dd_top_clearance_mm: float
+    tx_vertical_layout_mode: int
+    tx_vertical_mode2_x_ratio_to_tx_dd_center: float
     rx_face_clearance_mm: float
     tx_main_1_z_from_tx_main_0_mm: float
     dd_mirror_plane: Literal["XZ"]
     rx_plane: Literal["YZ"]
-    tx_vertical_plane: Literal["ZX"]
+    tx_vertical_plane: Literal["ZX", "YZ"]
     via_diameter_mm: float
     pcb_thickness_mm: float
     cu_thickness_mm: float

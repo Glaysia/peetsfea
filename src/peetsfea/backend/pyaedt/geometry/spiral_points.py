@@ -86,5 +86,3 @@ def _dd_instance_points(base_points: list[list[float]], *, mirror_winding: bool)
     if not mirror_winding:
         return base_points
     return _mirror_xy_points_about_x_axis(base_points)
-
-

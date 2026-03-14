@@ -19,8 +19,9 @@
 - `tv`, `tx.region`, `rx.region`: 장면/영역 크기와 배치 기준
 - `ferrite`: 전역 ferrite on/off와 coil-footprint 기준 RX/TX ferrite 두께, 재질 기본값. `ferrite.tx_gap_mm`가 TX ferrite gap의 canonical sampled owner이고, 기본 예제는 `3.1..12.0`, `count=8`이다. TX ferrite는 최하단 TX XY FR4 아래 그 gap을 유지하고 TX coil copper, TX bridge object, TX port sheet object, TX FR4 sheet object와 비접촉이어야 한다.
 - `coil_shape`, `coil_groups_params`: 그룹별 코일 형상 및 파생 파라미터 제어
-- `coil_placement`: 배치 계약 제어. 기본 예제는 `coil_placement.tx_dd_top_clearance_ratio`를 `0.0..0.3`, `count=10`으로 두고, 이는 `tx.region.z_parts.dd_z_mm` 대비 DD 코일 top의 하강 비율이다.
-- `coil_groups_params.{tx_dd,tx_vertical,rx_dd}.turn_count_max`는 모두 `1..3`만 허용된다.
+- `coil_placement`: 배치 계약 제어. 기본 예제는 `coil_placement.tx_dd_top_clearance_ratio`를 `0.0..0.3`, `count=10`으로 두고, 이는 `tx.region.z_parts.dd_z_mm` 대비 DD 코일 top의 하강 비율이다. `coil_placement.tx_vertical_layout_mode`는 `1=ZX`, `2=YZ`를 뜻하고, mode 2에서는 `coil_spacing.tx_vertical_mode2_pair_spacing_ratio`가 RX-DD-style vertical DD pair의 내부 gap을 `tx.region.outer_h_mm` 기준 `0.0..0.03`, `count=25`로 제어하며, `coil_placement.tx_vertical_mode2_x_ratio_to_tx_dd_center`가 그 pair의 `X`를 underlying TX DD 폭의 RX-far `70%..100%`, `count=10` 구간으로 제어한다. 공개 path 이름은 유지하지만 실제 식은 `tx_dd_min_x + ratio * tx_dd_outer_x`다. mode 2의 `tx_vertical`은 보드당 DD pair 1개만 실현하고, 기본 예제 `coil_groups.tx_vertical.count_range`는 `1`로 고정되며 커스텀 spec의 더 큰 count는 realized `selected_count=1`로 clamp 된다. 공개 스펙은 더 이상 `coil_placement.tx_vertical_plane`를 받지 않으며 realized plane만 내부에서 파생한다.
+- mode 2 (`YZ`)는 현재 legacy `Y`-side bridge no-pierce guard를 적용하지 않는다. 그 guard는 `ZX` 배치 계약으로만 유지된다.
+- `coil_groups_params.{tx_dd,tx_vertical,rx_dd}.turn_count_max`는 모두 기본 `2..4` 범위를 사용하며, 런타임도 `4`까지 허용한다.
 - `outputs`: AEDT output variable과 단일 data-table report의 SSOT. 기본 예제에는 `S22_mag_ratio`와 WPT 파생 효율 지표 8개가 포함된다.
 - `outputs`의 `eta_*_from_*`, `eta_s21_two_sided_norm_ratio`는 normalized proxy metric이라 acceptance term이 0에 가까우면 불안정해질 수 있다.
 - `tx_dd`가 4개 인스턴스(2층)로 해석되면 아래층은 같은 turn/trace/gap을 유지하되 centerline box를 한 pitch만큼 줄여 위층 trace 사이 gap 중심 쪽으로 interleave된다.
@@ -34,5 +35,5 @@
 
 ## 빠른 확인 포인트
 - 입력 스펙: `examples/type1.toml`
-- 실행 진입점: `multi_sample.py` -> `build.py` 또는 `multi_build.py`
+- 실행 진입점: `entry/multi_sample.py` -> `entry/build.py` 또는 `entry/multi_build.py`
 - 기본 테스트: `run/` 디렉터리에서 `../.venv/bin/pytest -q ../tests`

@@ -11,7 +11,7 @@ from peetsfea.pipeline.run_batch import (
 )
 from peetsfea.pipeline.uniform_seedset import generate_eager_uniform_feasible_seed_points
 
-cwd = Path(__file__).parent.resolve()
+cwd = Path(__file__).resolve().parents[1]
 DEFAULT_EAGER_MAX_ATTEMPTS = 64
 
 ANSYS_EXECUTABLE_PATH = "/opt/ansys_inc/v252/AnsysEM"

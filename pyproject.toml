@@ -1,6 +1,6 @@
 [project]
 name = "peetsfea"
-version = "0.2.16"
+version = "0.2.17"
 description = "Spec-first deterministic device design with Pyaedt."
 readme = "README.md"
 requires-python = "==3.12"
@@ -40,7 +40,7 @@ disallow_untyped_defs = false
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
-include = ["src", "tests", "sample.py", "build.py", "multi_sample.py", "multi_build.py"]
+include = ["src", "tests", "entry"]
 exclude = ["ref", "**/__pycache__"]
 typeCheckingMode = "basic"
 reportMissingImports = "none"

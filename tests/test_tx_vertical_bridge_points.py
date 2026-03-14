@@ -75,11 +75,34 @@ def test_tx_vertical_bridge_edges_match_legacy_formula(
         trace=trace,
         tx_vertical_region_min=region_min,
         tx_vertical_region_max=region_max,
+        plane="ZX",
     )
     for expected_edge, actual_edge in ((expected_out, actual_out), (expected_in, actual_in)):
         for expected_point, actual_point in zip(expected_edge, actual_edge, strict=True):
             for expected_axis, actual_axis in zip(expected_point, actual_point, strict=True):
                 assert actual_axis == pytest.approx(expected_axis, abs=1e-9)
+
+
+def test_tx_vertical_bridge_edges_for_yz_mode_use_outer_y_edges() -> None:
+    points = [
+        [5.0, -2.0, 0.0],
+        [5.0, 2.0, 0.0],
+        [5.0, 2.0, 4.0],
+        [5.0, -2.0, 4.0],
+    ]
+
+    actual_out, actual_in = _tx_vertical_bridge_edges_from_node(
+        start_xyz=(5.0, -2.0, 0.0),
+        end_xyz=(5.0, 2.0, 0.0),
+        trace=1.0,
+        tx_vertical_region_min=(0.0, -10.0, 0.0),
+        tx_vertical_region_max=(10.0, 10.0, 10.0),
+        plane="YZ",
+        points=points,
+    )
+
+    assert actual_out == ((5.0, 2.0, 1.5), (5.0, 2.0, 2.5))
+    assert actual_in == ((5.0, -2.0, 1.5), (5.0, -2.0, 2.5))
 
 
 def test_tx_vertical_global_selection_keys_choose_max_for_right_and_min_for_left() -> None:

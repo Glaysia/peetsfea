@@ -130,12 +130,13 @@ def _apply_sample_identity(manifest: Manifest, entry: SampleManifestEntry, *, to
     manifest["inputs"]["source_toml_path"] = entry["source_toml_path"]
 
 
-def build_aedt_from_manifest_entry(
+def build_aedt_from_manifest_entry_with_options(
     *,
     entry: SampleManifestEntry,
     ansys_run_dir: Path,
     ansys_executable_path: str,
-    is_debug: bool,
+    non_graphical: bool,
+    close_on_exit: bool,
 ) -> bool:
     config = RunConfig(
         ansys_executable_path=ansys_executable_path,
@@ -143,8 +144,8 @@ def build_aedt_from_manifest_entry(
         toml_path=entry["toml_path"],
         seed=entry["seed"],
         backend="hfss",
-        non_graphical=not is_debug,
-        close_on_exit=not is_debug,
+        non_graphical=non_graphical,
+        close_on_exit=close_on_exit,
     )
     run_dir = Path(config.ansys_run_dir)
     result: RunResult | None = None
@@ -180,6 +181,22 @@ def build_aedt_from_manifest_entry(
         )
         print(f"[design_id={design_id}] build failed; cleaned generated files and continue: {exc}")
         return False
+
+
+def build_aedt_from_manifest_entry(
+    *,
+    entry: SampleManifestEntry,
+    ansys_run_dir: Path,
+    ansys_executable_path: str,
+    is_debug: bool,
+) -> bool:
+    return build_aedt_from_manifest_entry_with_options(
+        entry=entry,
+        ansys_run_dir=ansys_run_dir,
+        ansys_executable_path=ansys_executable_path,
+        non_graphical=not is_debug,
+        close_on_exit=not is_debug,
+    )
 
 
 def write_sample_manifest(entries: list[SampleManifestEntry], manifest_path: Path) -> None:

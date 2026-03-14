@@ -28,7 +28,8 @@ def _var_expr(name: str, value: int | float | str) -> str:
     if isinstance(value, str):
         return value
     if (
-        name.endswith("_count")
+        name.endswith("layout_mode")
+        or name.endswith("_count")
         or name.endswith("count_mode")
         or name.endswith("count_range")
         or name.endswith("turn_count_max")
@@ -39,6 +40,8 @@ def _var_expr(name: str, value: int | float | str) -> str:
     if name.endswith("_deg") or name.endswith("rotation_deg"):
         return f"{float(value)}deg"
     if name in {"fr4_er", "ferrite_relative_permeability"}:
+        return str(float(value))
+    if name.endswith("_ratio_to_tx_dd_center") or name.endswith("_pair_spacing_ratio") or name.endswith("metal_ratio") or name.endswith("band_ratio"):
         return str(float(value))
     return f"{float(value)}mm"
 

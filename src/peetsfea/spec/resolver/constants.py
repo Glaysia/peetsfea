@@ -13,6 +13,7 @@ SCALAR_RANGE_SPECS: tuple[tuple[str, str, bool], ...] = (
     ("coil_shape.inner_margin_x", "inner_margin_x", False),
     ("coil_shape.inner_margin_y", "inner_margin_y", False),
     ("coil_spacing.tx_dd_pair_spacing_ratio", "tx_dd_pair_spacing_ratio", False),
+    ("coil_spacing.tx_vertical_mode2_pair_spacing_ratio", "tx_vertical_mode2_pair_spacing_ratio", False),
     ("coil_spacing.rx_dd_pair_spacing_ratio", "rx_dd_pair_spacing_ratio", False),
     ("coil_spacing.tx_vertical_center_gap_mm", "tx_vertical_center_gap_mm", False),
     ("tv.width_mm", "tv_width_mm", False),
@@ -46,6 +47,8 @@ SCALAR_RANGE_SPECS: tuple[tuple[str, str, bool], ...] = (
     ("scene_anchor.shelf_min_size_x_mm", "shelf_min_size_x_mm", False),
     ("scene_anchor.rx_region_bottom_from_tv_mm", "rx_region_bottom_from_tv_mm", False),
     ("coil_placement.tx_dd_top_clearance_ratio", "tx_dd_top_clearance_ratio", False),
+    ("coil_placement.tx_vertical_layout_mode", "tx_vertical_layout_mode", True),
+    ("coil_placement.tx_vertical_mode2_x_ratio_to_tx_dd_center", "tx_vertical_mode2_x_ratio_to_tx_dd_center", False),
     ("coil_placement.rx_face_clearance_mm", "rx_face_clearance_mm", False),
     ("pcb_spacing.tx_main_1_z_from_tx_main_0_mm", "tx_main_1_z_from_tx_main_0_mm", False),
 )
@@ -65,6 +68,7 @@ REMOVED_PATHS: tuple[str, ...] = (
     "coil_spacing.rx_dd_pair_spacing_mm",
     "coil_spacing.tx_vertical_span_mm",
     "coil_placement.tx_dd_top_clearance_mm",
+    "coil_placement.tx_vertical_plane",
 )
 
 DERIVED_RANGE_PATHS: dict[str, str] = {

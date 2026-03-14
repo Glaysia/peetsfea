@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from build import build_from_manifest_path
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-cwd = Path(__file__).parent.resolve()
+from entry.build import build_from_manifest_path
+
+cwd = Path(__file__).resolve().parents[1]
 RUN_TOML_ROOT = cwd / "run" / "toml"
 _BATCH_DIR_PATTERN = re.compile(r"^toml_(?P<version>.+)_(?P<seed_start>\d+)$")
 

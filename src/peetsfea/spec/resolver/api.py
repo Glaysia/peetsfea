@@ -49,6 +49,9 @@ def _build_selected_parameters(spec: TOMLTable, raw: dict[str, Number]) -> Selec
     rx_region_thickness_mm = float(raw["rx_region_thickness_mm"])
     tx_region_dd_z_mm = float(raw["tx_region_dd_z_mm"])
     tx_dd_top_clearance_ratio = float(raw["tx_dd_top_clearance_ratio"])
+    tx_vertical_layout_mode = int(raw["tx_vertical_layout_mode"])
+    tx_vertical_mode2_pair_spacing_ratio = float(raw["tx_vertical_mode2_pair_spacing_ratio"])
+    tx_vertical_mode2_x_ratio_to_tx_dd_center = float(raw["tx_vertical_mode2_x_ratio_to_tx_dd_center"])
     if rx_ferrite_thickness_mm <= 0.0:
         raise ValueError("ferrite.rx_thickness_mm must be > 0")
     if tx_ferrite_thickness_mm <= 0.0:
@@ -57,8 +60,11 @@ def _build_selected_parameters(spec: TOMLTable, raw: dict[str, Number]) -> Selec
         raise ValueError("ferrite.tx_gap_mm must be > 0")
     if ferrite_relative_permeability <= 1.0:
         raise ValueError("ferrite.relative_permeability must be > 1")
+    if tx_vertical_layout_mode not in (1, 2):
+        raise ValueError("coil_placement.tx_vertical_layout_mode must resolve to 1 or 2")
     if (rx_ferrite_thickness_mm + pcb_thickness_mm) > (rx_region_thickness_mm + 1e-9):
         raise ValueError("ferrite.rx_thickness_mm + coil_material.pcb_thickness_mm must be <= rx.region.thickness_mm")
+    tx_vertical_plane: Literal["ZX", "YZ"] = "ZX" if tx_vertical_layout_mode == 1 else "YZ"
     return {
         "tx_dd_outer_x": float(raw["tx_dd_outer_x"]),
         "tx_dd_outer_y": float(raw["tx_dd_outer_y"]),
@@ -69,9 +75,11 @@ def _build_selected_parameters(spec: TOMLTable, raw: dict[str, Number]) -> Selec
         "inner_margin_x": float(raw["inner_margin_x"]),
         "inner_margin_y": float(raw["inner_margin_y"]),
         "tx_dd_pair_spacing_ratio": float(raw["tx_dd_pair_spacing_ratio"]),
+        "tx_vertical_mode2_pair_spacing_ratio": tx_vertical_mode2_pair_spacing_ratio,
         "rx_dd_pair_spacing_ratio": float(raw["rx_dd_pair_spacing_ratio"]),
         "tx_vertical_center_gap_mm": float(raw["tx_vertical_center_gap_mm"]),
         "tx_dd_pair_spacing_mm": float(raw["tx_dd_pair_spacing_ratio"]) * float(raw["tx_region_outer_h_mm"]),
+        "tx_vertical_mode2_pair_spacing_mm": tx_vertical_mode2_pair_spacing_ratio * float(raw["tx_region_outer_h_mm"]),
         "rx_dd_pair_spacing_mm": float(raw["rx_dd_pair_spacing_ratio"]) * float(raw["rx_region_outer_h_mm"]),
         "tx_vertical_span_mm": 0.0,
         "tv_width_mm": float(raw["tv_width_mm"]),
@@ -102,13 +110,13 @@ def _build_selected_parameters(spec: TOMLTable, raw: dict[str, Number]) -> Selec
         "rx_region_bottom_from_tv_mm": float(raw["rx_region_bottom_from_tv_mm"]),
         "tx_dd_top_clearance_ratio": tx_dd_top_clearance_ratio,
         "tx_dd_top_clearance_mm": tx_dd_top_clearance_ratio * tx_region_dd_z_mm,
+        "tx_vertical_layout_mode": tx_vertical_layout_mode,
+        "tx_vertical_mode2_x_ratio_to_tx_dd_center": tx_vertical_mode2_x_ratio_to_tx_dd_center,
         "rx_face_clearance_mm": float(raw["rx_face_clearance_mm"]),
         "tx_main_1_z_from_tx_main_0_mm": float(raw["tx_main_1_z_from_tx_main_0_mm"]),
         "dd_mirror_plane": cast(Literal["XZ"], parse_string_value_at_path(spec, "coil_placement.dd_mirror_plane", allowed={"XZ"})),
         "rx_plane": cast(Literal["YZ"], parse_string_value_at_path(spec, "coil_placement.rx_plane", allowed={"YZ"})),
-        "tx_vertical_plane": cast(
-            Literal["ZX"], parse_string_value_at_path(spec, "coil_placement.tx_vertical_plane", allowed={"ZX"})
-        ),
+        "tx_vertical_plane": tx_vertical_plane,
         "via_diameter_mm": float(raw["via_diameter_mm"]),
         "pcb_thickness_mm": pcb_thickness_mm,
         "cu_thickness_mm": float(raw["cu_thickness_mm"]),

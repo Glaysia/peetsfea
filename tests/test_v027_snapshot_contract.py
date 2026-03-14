@@ -104,7 +104,7 @@ def test_ac04_dataset_placeholders_and_timeout_and_aedt_file(tmp_path: Path, mon
     assert tuple(exported_paths) == expected_paths
     assert "ferrite.present" in exported_paths
     assert "coil_groups[0].count_mode" in exported_paths
-    assert "coil_groups[1].count_range" in exported_paths
+    assert "coil_groups[1].count_range" not in exported_paths
     assert "coil_shape.tx_vertical.outer_x" not in exported_paths
     assert all(not path.startswith("pcbs[") or not path.endswith(".present") for path in exported_paths)
 

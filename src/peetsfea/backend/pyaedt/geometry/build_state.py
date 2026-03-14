@@ -25,8 +25,9 @@ Point3 = tuple[float, float, float]
 Edge2P = tuple[Point3, Point3]
 BoardKey = tuple[str, int]
 TxVerticalLinkNode = tuple[int, str, Point3, Point3, float, float, Edge2P, Edge2P]
+BackConnectStubSource = tuple[str, int, str, Point3, float, str]
 TxDdStartStubSource = tuple[Point3, float, str]
-RxDdBackStubSource = tuple[str, int, str, Point3, float, str]
+RxDdBackStubSource = BackConnectStubSource
 
 
 def _empty_group_objects() -> GroupObjects:
@@ -43,7 +44,7 @@ class GeometryBuildState:
     placement_violations: list[RegionViolation] = field(default_factory=list)
     coil_plane_bboxes: list[tuple[str, Plane, list[float]]] = field(default_factory=list)
     fr4_object_names: list[str] = field(default_factory=list)
-    tx_zx_fr4_names: list[str] = field(default_factory=list)
+    tx_vertical_fr4_names: list[str] = field(default_factory=list)
     scene_objects: list[SceneObjectEntry] = field(default_factory=list)
 
 
@@ -56,11 +57,12 @@ class FinalizeInputs:
     txdd_start_stub_sources: dict[str, list[TxDdStartStubSource]] = field(default_factory=dict)
     rxdd_back_stub_sources: list[RxDdBackStubSource] = field(default_factory=list)
     tx_vertical_nodes_by_board: dict[BoardKey, list[TxVerticalLinkNode]] = field(default_factory=dict)
+    tx_vertical_mode2_connect_sources_by_board: dict[BoardKey, list[BackConnectStubSource]] = field(default_factory=dict)
     txdd_global_right_d_edge: Edge2P | None = None
     txdd_global_right_d_object_name: str | None = None
     txdd_global_right_d_selection_key: tuple[float, str, int] | None = None
-    txdd_global_left_a_edge: Edge2P | None = None
-    txdd_global_left_a_object_name: str | None = None
+    txdd_global_left_vertical_link_edge: Edge2P | None = None
+    txdd_global_left_vertical_link_object_name: str | None = None
     tx_vertical_global_outer_right_edge: Edge2P | None = None
     tx_vertical_global_outer_left_edge: Edge2P | None = None
     tx_vertical_outer_right_selection_key: tuple[float, str, int] | None = None
@@ -90,8 +92,11 @@ class GeometryRuntimeContext:
     pcb_thickness: float
     cu_thickness: float
     tx_dd_top_clearance: float
+    tx_vertical_layout_mode: Literal[1, 2]
+    tx_vertical_mode2_pair_spacing_mm: float
+    tx_vertical_mode2_x_ratio_to_tx_dd_center: float
     rx_face_clearance: float
-    tx_vertical_plane: Literal["ZX"]
+    tx_vertical_plane: Literal["ZX", "YZ"]
     tx_dd_region_min: Point3 | None = None
     tx_dd_region_max: Point3 | None = None
     tx_vertical_region_min: Point3 | None = None

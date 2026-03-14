@@ -39,6 +39,16 @@
         "clean-run-aedt"
       ],
       "problemMatcher": []
+    },
+    {
+      "label": "prepare-sample-build-debug",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "install-dev-editable",
+        "clean-run-toml",
+        "clean-run-aedt"
+      ],
+      "problemMatcher": []
     }
   ]
 }

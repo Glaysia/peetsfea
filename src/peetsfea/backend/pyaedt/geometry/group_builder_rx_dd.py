@@ -12,15 +12,14 @@ from .cad_probe import _object_name, _probe_cad_object
 from .debug_checks import _bbox_violations
 from .placement_rules import (
     _build_polarity,
+    _build_yz_dd_pair_from_right_local,
     _build_rxdd_right_points_A_to_d_cw,
-    _current_direction_from_xy_points,
     _instance_side,
     _max_feasible_turns,
     _mount_allows_instance,
     _rx_dd_center_offset_y,
     _validate_rxdd_single_layer_count,
 )
-from .spiral_points import _map_xy_points_to_yz, _translate_points
 
 
 def build_for_board(
@@ -88,6 +87,16 @@ def build_for_board(
     # Bottom-anchor contract: coil bottom touches RX region minimum Z.
     rx_center_z = rx_region_min[2] + (ctx.rx_dd_outer_y / 2.0) + 1e-6
     axis_y = rx_center_y + transform["dy"]
+    pair_placements_by_side: dict[Literal["left", "right"], tuple[list[list[float]], Literal["cw", "ccw"]]] = {}
+    pair_center_distance = ctx.rx_dd_outer_x + spacing_mm
+    for pair_side, world_points, _y_center, current_direction in _build_yz_dd_pair_from_right_local(
+        right_local_points=rxdd_right_local_points,
+        x_const=rx_anchor_x + transform["dx"],
+        axis_y=axis_y,
+        z_center=rx_center_z + transform["dz"],
+        pair_center_distance=pair_center_distance,
+    ):
+        pair_placements_by_side[pair_side] = (world_points, current_direction)
 
     for instance_index in range(instance_count):
         if not _mount_allows_instance(pcb["mounts"], "rx_dd", instance_index):
@@ -98,23 +107,16 @@ def build_for_board(
             outer_x=ctx.rx_dd_outer_x,
             edge_gap_mm=spacing_mm,
         )
-        pair_offset_y = abs(off_y)
         rx_side = _instance_side("rx_dd", (0.0, off_y, 0.0))
         if rx_side == "center":
             raise ValueError(
                 "rx_dd side contract violation: instance side must be left or right "
                 f"(instance_index={instance_index}, off_y={off_y})"
             )
-        rx_dd_points = [point[:] for point in rxdd_right_local_points]
-        translated_xy = _translate_points(rx_dd_points, dx=0.0, dy=0.0, dz=0.0)
-        top_points = _map_xy_points_to_yz(
-            translated_xy,
-            x_const=rx_anchor_x + transform["dx"],
-            y_center=axis_y + pair_offset_y,
-            z_center=rx_center_z + transform["dz"],
-        )
-        if rx_side == "left":
-            top_points = [[point[0], (2.0 * axis_y) - point[1], point[2]] for point in top_points]
+        placement = pair_placements_by_side.get(rx_side)
+        if placement is None:
+            raise ValueError(f"rx_dd pair placement is missing side '{rx_side}'")
+        top_points, current_direction = placement
 
         top_name = f"coil_rx_dd_g{instance_index}_b{board_idx}_{ctx.design_id}"
         top_created = modeler.create_polyline(
@@ -184,8 +186,6 @@ def build_for_board(
         default_current_direction, b_field_direction = _build_polarity("rx_dd", rx_side)
         expected_right_direction: Literal["cw", "ccw"] = "cw"
         expected_left_direction: Literal["cw", "ccw"] = "ccw"
-        yz_projected = [[point[1], point[2], 0.0] for point in top_points]
-        current_direction = _current_direction_from_xy_points(yz_projected) or default_current_direction
         expected = expected_right_direction if rx_side == "right" else expected_left_direction
         if current_direction != expected:
             raise ValueError(
