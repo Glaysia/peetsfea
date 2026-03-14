@@ -8,7 +8,7 @@
 # Numeric range convention:
 #   range = [is_integer, start, end, count]
 
-spec_version = "0.2.15"
+spec_version = "0.2.16"
 
 [design]
 units = "mm"
@@ -32,6 +32,138 @@ minimum_converged_passes = 10
 percent_refinement = 20
 basis_order = 1
 port_accuracy = 2
+
+# ----------------------------------------------------------------------------
+# AEDT output-variable/report definition
+
+[outputs]
+# Output/report generation is TOML-driven in 0.2.16. This single table is the
+# SSOT for the one AEDT data-table report created by the EM pipeline.
+report_name = "Output Variables Table1"
+solution_name = "Setup1 : LastAdaptive"
+primary_sweep = "Freq"
+report_category = "Terminal Solution Data"
+plot_type = "Data Table"
+
+[[outputs.variables]]
+name = "Ltx_uH"
+expression = "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"
+
+[[outputs.variables]]
+name = "Lrx_uH"
+expression = "im(Zt(RX_TML,RX_TML))/2/pi/freq*1e6"
+
+[[outputs.variables]]
+name = "M_uH"
+expression = "abs(im(Zt(TX_TML,RX_TML))/2/pi/freq*1e6)"
+
+[[outputs.variables]]
+name = "k_ratio"
+expression = "M_uH/sqrt(Ltx_uH*Lrx_uH)"
+
+[[outputs.variables]]
+name = "Qtx_ratio"
+expression = "im(Zt(TX_TML,TX_TML))/re(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Qrx_ratio"
+expression = "im(Zt(RX_TML,RX_TML))/re(Zt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "FOM_ratio"
+expression = "k_ratio*sqrt(Qtx_ratio*Qrx_ratio)"
+
+[[outputs.variables]]
+name = "Rtx_ac_ohm"
+expression = "re(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Rrx_ac_ohm"
+expression = "re(Zt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "Xtx_ohm"
+expression = "im(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Xrx_ohm"
+expression = "im(Zt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "M_over_Ltx_ratio"
+expression = "M_uH/Ltx_uH"
+
+[[outputs.variables]]
+name = "M_over_Lrx_ratio"
+expression = "M_uH/Lrx_uH"
+
+[[outputs.variables]]
+name = "Gtx_S"
+expression = "re(Yt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Btx_S"
+expression = "im(Yt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Grx_S"
+expression = "re(Yt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "Brx_S"
+expression = "im(Yt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S11_mag_ratio"
+expression = "mag(S(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "S21_mag_ratio"
+expression = "mag(S(TX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S21_phase_deg"
+expression = "ang_deg_val(S(TX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S22_mag_ratio"
+expression = "mag(S(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "eta_s21_power_ratio"
+expression = "S21_mag_ratio*S21_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_tx_accept_ratio"
+expression = "1-S11_mag_ratio*S11_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_rx_accept_ratio"
+expression = "1-S22_mag_ratio*S22_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_match_product_ratio"
+expression = "eta_tx_accept_ratio*eta_rx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_from_tx_accept_ratio"
+expression = "eta_s21_power_ratio/eta_tx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_from_rx_accept_ratio"
+expression = "eta_s21_power_ratio/eta_rx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_two_sided_norm_ratio"
+expression = "eta_s21_power_ratio/(eta_tx_accept_ratio*eta_rx_accept_ratio)"
+
+[[outputs.variables]]
+name = "eta_fom_max_ratio"
+expression = "(FOM_ratio*FOM_ratio)/((1+sqrt(1+FOM_ratio*FOM_ratio))*(1+sqrt(1+FOM_ratio*FOM_ratio)))"
+
+# `eta_*_from_*` and `eta_s21_two_sided_norm_ratio` are normalized proxy
+# metrics. They can become unstable when the corresponding acceptance term
+# approaches zero, so interpret them together with S11/S22 acceptance outputs.
 
 # ----------------------------------------------------------------------------
 # Non-model scene/envelope sizes
@@ -109,11 +241,16 @@ range = [true, 0, 1, 2]
 range = [false, 2.0, 2.0, 1]
 
 [ferrite.tx_thickness_mm]
-# TX ferrite is fixed as a 2.0mm plate below the lowest TX XY coil layer with a 1.0mm gap.
+# TX ferrite is a 2.0mm plate below the lowest TX XY FR4 layer.
 range = [false, 2.0, 2.0, 1]
 
+[ferrite.tx_gap_mm]
+# TX ferrite gap below the lowest TX XY FR4 layer.
+# This gap must stay clear of TX coil copper, TX bridge objects, TX port sheet objects, and TX FR4 sheet objects.
+range = [false, 3.1, 12.0, 8]
+
 [ferrite.relative_permeability]
-# Idealized ferrite material baseline for 0.2.15 planning.
+# Idealized ferrite material baseline for 0.2.16 planning.
 range = [false, 500.0, 500.0, 1]
 
 # ----------------------------------------------------------------------------
@@ -121,7 +258,7 @@ range = [false, 500.0, 500.0, 1]
 
 [coil_shape.tx_dd.outer_x]
 # TX DD outer X span.
-range = [false, 60.0, 158.0, 10]
+range = [false, 30.0, 158.0, 45]
 
 [coil_shape.tx_dd.outer_y]
 # TX DD outer Y span.
@@ -182,21 +319,21 @@ range = [false, 1.62, 15.0, 8]
 # When tx_dd resolves to 4 instances (two stacked XY layers), the lower layer
 # keeps the same realized turn count but uses a one-pitch smaller centerline
 # box so its trace centers align roughly with the upper-layer gap centers.
-range = [true, 3, 6, 10]
+range = [true, 1, 3, 3]
 [coil_groups_params.tx_dd.band_ratio]
 range = [false, 0.1, 0.35, 20]
 [coil_groups_params.tx_dd.metal_ratio]
 range = [false, 0.15, 0.60, 25]
 
 [coil_groups_params.tx_vertical.turn_count_max]
-range = [true, 3, 3, 4]
+range = [true, 1, 3, 3]
 [coil_groups_params.tx_vertical.band_ratio]
 range = [false, 0.35, 0.5, 20]
 [coil_groups_params.tx_vertical.metal_ratio]
 range = [false, 0.45, 0.75, 25]
 
 [coil_groups_params.rx_dd.turn_count_max]
-range = [true, 3, 6, 10]
+range = [true, 1, 3, 3]
 [coil_groups_params.rx_dd.band_ratio]
 range = [false, 0.1, 0.35, 20]
 [coil_groups_params.rx_dd.metal_ratio]
@@ -235,9 +372,10 @@ range = [false, 350.0, 350.0, 1]
 # RX region bottom offset from TV base plane (mm), must be >= 0.
 range = [false, 1.0, 1.0, 1]
 
-[coil_placement.tx_dd_top_clearance_mm]
-# Clearance from TX DD zone top face to DD coil top (mm), must be >= 0.
-range = [false, 0.1, 0.1, 1]
+[coil_placement.tx_dd_top_clearance_ratio]
+# Fraction of tx.region.z_parts.dd_z_mm from the TX DD zone top face to the DD coil top.
+# 0.0 keeps the DD coil at the zone top; 0.3 places it 30% down within the DD zone.
+range = [false, 0.0, 0.3, 10]
 
 [coil_placement.rx_face_clearance_mm]
 # Clearance from RX +X face (TV side) to RX DD coil face (mm), must be >= 0.
@@ -545,13 +683,13 @@ lhs = { path = "rx_region_bottom_from_tv_mm" }
 op = ">="
 rhs = { value = 0.0 }
 
-# Placement clearance constraint from TOML SSOT.
+# Placement ratio constraint from TOML SSOT.
 [[constraints.rules]]
-id = "tx_dd_top_clearance_non_negative"
+id = "tx_dd_top_clearance_ratio_non_negative"
 kind = "comparison"
-message = "tx_dd_top_clearance_mm must be >= 0"
+message = "tx_dd_top_clearance_ratio must be >= 0"
 enabled = true
-lhs = { path = "tx_dd_top_clearance_mm" }
+lhs = { path = "tx_dd_top_clearance_ratio" }
 op = ">="
 rhs = { value = 0.0 }
 
@@ -565,15 +703,15 @@ lhs = { path = "rx_face_clearance_mm" }
 op = ">="
 rhs = { value = 0.0 }
 
-# Placement feasibility constraint in TX DD region.
+# Placement ratio support contract for TX DD region.
 [[constraints.rules]]
-id = "tx_dd_top_clearance_within_dd_zone"
+id = "tx_dd_top_clearance_ratio_supported_upper_bound"
 kind = "comparison"
-message = "tx_dd_top_clearance_mm must be <= tx_region_dd_z_mm"
+message = "tx_dd_top_clearance_ratio must be <= 0.3"
 enabled = true
-lhs = { path = "tx_dd_top_clearance_mm" }
+lhs = { path = "tx_dd_top_clearance_ratio" }
 op = "<="
-rhs = { path = "tx_region_dd_z_mm" }
+rhs = { value = 0.3 }
 
 # Placement feasibility constraint in RX region.
 [[constraints.rules]]
@@ -756,7 +894,7 @@ instance_transforms = [
 
 # ----------------------------------------------------------------------------
 # PCB instances (9 total: 5 always-on + 4 optional)
-# - 0.2.15 fixed-topology mode:
+# - 0.2.16 fixed-topology mode:
 #   coil count is primary, PCB present/mounts are normalized to this topology.
 # - tx_vertical uses dedicated host board tx_vertical_0.
 # - optional boards remain in spec for compatibility but are forced inactive.

@@ -43,13 +43,18 @@ def _build_selected_parameters(spec: TOMLTable, raw: dict[str, Number]) -> Selec
         raise ValueError("ferrite.present must resolve to 0 or 1")
     rx_ferrite_thickness_mm = float(raw["rx_ferrite_thickness_mm"])
     tx_ferrite_thickness_mm = float(raw["tx_ferrite_thickness_mm"])
+    tx_ferrite_gap_mm = float(raw["tx_ferrite_gap_mm"])
     ferrite_relative_permeability = float(raw["ferrite_relative_permeability"])
     pcb_thickness_mm = float(raw["pcb_thickness_mm"])
     rx_region_thickness_mm = float(raw["rx_region_thickness_mm"])
+    tx_region_dd_z_mm = float(raw["tx_region_dd_z_mm"])
+    tx_dd_top_clearance_ratio = float(raw["tx_dd_top_clearance_ratio"])
     if rx_ferrite_thickness_mm <= 0.0:
         raise ValueError("ferrite.rx_thickness_mm must be > 0")
     if tx_ferrite_thickness_mm <= 0.0:
         raise ValueError("ferrite.tx_thickness_mm must be > 0")
+    if tx_ferrite_gap_mm <= 0.0:
+        raise ValueError("ferrite.tx_gap_mm must be > 0")
     if ferrite_relative_permeability <= 1.0:
         raise ValueError("ferrite.relative_permeability must be > 1")
     if (rx_ferrite_thickness_mm + pcb_thickness_mm) > (rx_region_thickness_mm + 1e-9):
@@ -77,7 +82,7 @@ def _build_selected_parameters(spec: TOMLTable, raw: dict[str, Number]) -> Selec
         "tx_region_outer_h_mm": float(raw["tx_region_outer_h_mm"]),
         "tx_region_thickness_mm": float(raw["tx_region_thickness_mm"]),
         "tx_region_vertical_z_mm": float(raw["tx_region_vertical_z_mm"]),
-        "tx_region_dd_z_mm": float(raw["tx_region_dd_z_mm"]),
+        "tx_region_dd_z_mm": tx_region_dd_z_mm,
         "rx_region_outer_w_mm": float(raw["rx_region_outer_w_mm"]),
         "rx_region_outer_h_mm": float(raw["rx_region_outer_h_mm"]),
         "rx_region_thickness_mm": float(raw["rx_region_thickness_mm"]),
@@ -90,11 +95,13 @@ def _build_selected_parameters(spec: TOMLTable, raw: dict[str, Number]) -> Selec
         "ferrite_present": ferrite_present == 1,
         "rx_ferrite_thickness_mm": rx_ferrite_thickness_mm,
         "tx_ferrite_thickness_mm": tx_ferrite_thickness_mm,
+        "tx_ferrite_gap_mm": tx_ferrite_gap_mm,
         "ferrite_relative_permeability": ferrite_relative_permeability,
         "shelf_height_mm": float(raw["shelf_height_mm"]),
         "shelf_min_size_x_mm": float(raw["shelf_min_size_x_mm"]),
         "rx_region_bottom_from_tv_mm": float(raw["rx_region_bottom_from_tv_mm"]),
-        "tx_dd_top_clearance_mm": float(raw["tx_dd_top_clearance_mm"]),
+        "tx_dd_top_clearance_ratio": tx_dd_top_clearance_ratio,
+        "tx_dd_top_clearance_mm": tx_dd_top_clearance_ratio * tx_region_dd_z_mm,
         "rx_face_clearance_mm": float(raw["rx_face_clearance_mm"]),
         "tx_main_1_z_from_tx_main_0_mm": float(raw["tx_main_1_z_from_tx_main_0_mm"]),
         "dd_mirror_plane": cast(Literal["XZ"], parse_string_value_at_path(spec, "coil_placement.dd_mirror_plane", allowed={"XZ"})),

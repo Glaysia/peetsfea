@@ -27,7 +27,7 @@ def _append_tx_bridge_margin_rule(raw: str, *, margin_mm: float = 1.0) -> str:
 def _stabilize_group_geometry_sampling(raw: str) -> str:
     out = raw
     out = out.replace(
-        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 3, 3]",
         "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     out = out.replace(
@@ -39,7 +39,7 @@ def _stabilize_group_geometry_sampling(raw: str) -> str:
         "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
     )
     out = out.replace(
-        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 3, 3]",
         "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     out = out.replace(
@@ -51,7 +51,7 @@ def _stabilize_group_geometry_sampling(raw: str) -> str:
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
     )
     out = out.replace(
-        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 3, 3]",
         "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     out = out.replace(
@@ -78,7 +78,7 @@ def test_feasibility_constraint_blocks_infeasible_tx_vertical(tmp_path: Path) ->
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8")
     raw = raw.replace(
-        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 3, 3]",
         "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
@@ -90,11 +90,11 @@ def test_feasibility_constraint_blocks_infeasible_tx_vertical(tmp_path: Path) ->
         "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
     )
     raw = raw.replace(
-        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 3, 3]",
         "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
-        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 3, 3]",
         "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
@@ -106,7 +106,7 @@ def test_feasibility_constraint_blocks_infeasible_tx_vertical(tmp_path: Path) ->
         "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
     )
     raw = raw.replace(
-        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 3, 3]",
         "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
@@ -148,11 +148,11 @@ def test_tx_vertical_center_gap_range_fails(tmp_path: Path) -> None:
     raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 6, 6, 1]")
     raw = raw.replace("rhs = { value = 10.0 }", "rhs = { value = 20.0 }", 1)
     raw = raw.replace(
-        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 3, 3]",
         "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
-        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 3, 3]",
         "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
@@ -164,7 +164,7 @@ def test_tx_vertical_center_gap_range_fails(tmp_path: Path) -> None:
         "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
     )
     raw = raw.replace(
-        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 3, 3]",
         "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
@@ -192,11 +192,11 @@ def test_tx_vertical_span_is_derived_from_center_gap_and_count(tmp_path: Path) -
     raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 6, 6, 1]")
     raw = raw.replace("rhs = { value = 10.0 }", "rhs = { value = 20.0 }", 1)
     raw = raw.replace(
-        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 3, 3]",
         "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
-        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 3, 3]",
         "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
@@ -208,7 +208,7 @@ def test_tx_vertical_span_is_derived_from_center_gap_and_count(tmp_path: Path) -
         "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
     )
     raw = raw.replace(
-        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 3, 3]",
         "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
@@ -259,6 +259,40 @@ def test_tx_bridge_right_margin_rule_passes_when_dd_is_right_enough(tmp_path: Pa
 
     spec, _ = load_toml_bytes(toml_path)
     resolve_selection(spec=spec, seed=1, attempt=0)
+
+
+def test_one_turn_selection_succeeds_for_all_groups_with_two_layer_txdd(tmp_path: Path) -> None:
+    toml_path = tmp_path / "one_turn_two_layer.toml"
+    write_type1_toml(toml_path)
+    raw = _stabilize_group_geometry_sampling(toml_path.read_text(encoding="utf-8"))
+    raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 2, 2, 1]")
+    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 1, 1, 1]")
+    toml_path.write_text(raw, encoding="utf-8")
+
+    spec, _ = load_toml_bytes(toml_path)
+    _, _, groups, group_geometry, _ = resolve_selection(spec=spec, seed=1, attempt=0)
+    groups_by_kind = {group["kind"]: group for group in groups}
+    turns_by_kind = {entry["kind"]: int(entry["turn_count_max"]) for entry in group_geometry}
+
+    assert int(groups_by_kind["tx_dd"]["selected_count"]) == 2
+    assert turns_by_kind == {"tx_dd": 1, "tx_vertical": 1, "rx_dd": 1}
+
+
+def test_one_turn_selection_succeeds_for_all_groups_with_four_layer_txdd(tmp_path: Path) -> None:
+    toml_path = tmp_path / "one_turn_four_layer.toml"
+    write_type1_toml(toml_path)
+    raw = _stabilize_group_geometry_sampling(toml_path.read_text(encoding="utf-8"))
+    raw = raw.replace("count_mode = [true, 2, 4, 2]", "count_mode = [true, 4, 4, 1]")
+    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 1, 1, 1]")
+    toml_path.write_text(raw, encoding="utf-8")
+
+    spec, _ = load_toml_bytes(toml_path)
+    _, _, groups, group_geometry, _ = resolve_selection(spec=spec, seed=1, attempt=0)
+    groups_by_kind = {group["kind"]: group for group in groups}
+    turns_by_kind = {entry["kind"]: int(entry["turn_count_max"]) for entry in group_geometry}
+
+    assert int(groups_by_kind["tx_dd"]["selected_count"]) == 4
+    assert turns_by_kind == {"tx_dd": 1, "tx_vertical": 1, "rx_dd": 1}
 
 
 def test_tx_bridge_right_margin_rule_fails_when_dd_is_left_of_vertical(tmp_path: Path) -> None:

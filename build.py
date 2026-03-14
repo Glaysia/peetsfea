@@ -16,7 +16,7 @@ cwd = Path(__file__).parent.resolve()
 
 ANSYS_EXECUTABLE_PATH = "/opt/ansys_inc/v252/AnsysEM"
 DEFAULT_BUILD_SEED_START = 0
-BUILD_WORKER_COUNT = 5
+BUILD_WORKER_COUNT = 12
 
 
 def default_sample_manifest_path_for_seed_start(seed_start: int, *, workspace_root: Path = cwd) -> Path:

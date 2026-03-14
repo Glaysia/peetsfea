@@ -21,6 +21,7 @@ class ManifestSpec(TypedDict):
     design_name: str
     units: str
     simulation: EmPolicy
+    outputs: OutputsSpec
 
 
 class SelectedParameters(TypedDict):
@@ -60,10 +61,13 @@ class SelectedParameters(TypedDict):
     ferrite_present: bool
     rx_ferrite_thickness_mm: float
     tx_ferrite_thickness_mm: float
+    tx_ferrite_gap_mm: float
     ferrite_relative_permeability: float
     shelf_height_mm: float
     shelf_min_size_x_mm: float
     rx_region_bottom_from_tv_mm: float
+    tx_dd_top_clearance_ratio: float
+    # Derived from tx_dd_top_clearance_ratio * tx_region_dd_z_mm.
     tx_dd_top_clearance_mm: float
     rx_face_clearance_mm: float
     tx_main_1_z_from_tx_main_0_mm: float
@@ -312,6 +316,20 @@ class EmPolicy(TypedDict):
     percent_refinement: int
     basis_order: int
     port_accuracy: int
+
+
+class OutputVariableSpec(TypedDict):
+    name: str
+    expression: str
+
+
+class OutputsSpec(TypedDict):
+    report_name: str
+    solution_name: str
+    primary_sweep: str
+    report_category: str
+    plot_type: str
+    variables: list[OutputVariableSpec]
 
 
 class PostTemplateResult(TypedDict):

@@ -12,7 +12,7 @@ TOML 스펙을 입력으로 받아 HFSS(AEDT)용 설계를 결정론적으로 �
 - 단일 설계 생성과 데이터셋 생성이 같은 계약 위에서 동작하도록 유지한다.
 
 ## 현재 문서 기준
-- 현재 문서 정리의 기준 릴리즈는 `0.2.15`다.
+- 현재 문서 정리의 기준 릴리즈는 `0.2.16`다.
 - 공개 요약은 이 README가 담당하고, 세부 설계는 `PLANS/` 문서가 담당한다.
 - 구현 규칙은 [AGENTS.md](AGENTS.md), 장기 원칙은 [PLANS/LONGTERM_PLAN.md](PLANS/LONGTERM_PLAN.md)를 참고한다. `PLANS/V0_2_11.md`는 0.2.11 계획 기록이다.
 
@@ -44,14 +44,21 @@ cd run
   - `<design_id>.source.toml`
 - `manifest_<design_id>.json`, `geometry_metadata_<design_id>.json`은 기본 비활성이다(옵션으로만 생성).
 
-## 0.2.15 기준 큰 계약
+## 0.2.16 기준 큰 계약
 - sampling ownership은 canonical owner 기준으로만 관리한다.
 - alias/derived path는 독립 sampled dimension으로 세지지 않는다.
 - `dataset.toml`은 `coil_groups[*].count_*` 같은 inline sampled owner도 포함하고, derived alias와 fixed field는 제외한다.
 - `dataset.toml`과 `repro.toml`은 서로 다른 역할을 가지며, replay safety는 둘의 대응 관계로 관리한다.
 - `design_id`의 마지막 두 조각은 서로 다른 의미다: `design_unique_hash`는 realized design identity, `toml_space_hash`는 원본 `source.toml` sampling space identity다. `retry_attempt`도 파일명 suffix에 반영된다.
 - ferrite는 전역 `ferrite.present` 플래그 하나로만 제어하고, RX/TX 모두 실제 코일 footprint 기준으로 배치하며 RX `2.0mm` / TX `2.0mm` / `mu_r=500`을 기본 spec 계약으로 둔다.
-- adaptive 기본값은 `percent_refinement=20`, `maximum_passes=15`, `minimum_converged_passes=10`, `max_delta_s=0.007` 기준으로 정리한다.
+- TX ferrite gap은 `ferrite.tx_gap_mm` sampled path가 소유하고, 기본 예제는 `3.1..12.0`, `count=8`이다.
+- TX ferrite는 최하단 TX XY FR4 아래 그 gap을 유지해야 하며, 캡처된 TX coil copper, TX bridge object, TX port sheet object, TX FR4 sheet object와 접촉하면 안 된다.
+- `coil_groups_params.{tx_dd,tx_vertical,rx_dd}.turn_count_max`는 모두 `1..3` 범위만 허용한다.
+- TX DD 상단 배치는 `coil_placement.tx_dd_top_clearance_ratio` sampled path가 소유하고, 기본 예제는 `0.0..0.3`, `count=10`이다. 내부 `tx_dd_top_clearance_mm`는 `tx.region.z_parts.dd_z_mm`에 대한 파생값이다.
+- `[outputs]`는 AEDT output variable과 단일 data-table report의 SSOT다.
+- 기본 `[outputs]`에는 `S22_mag_ratio`와 8개의 WPT 파생 효율 지표가 포함된다.
+- `eta_*_from_*`, `eta_s21_two_sided_norm_ratio`는 normalized proxy metric이라 acceptance term이 0에 가까우면 불안정해질 수 있다.
+- adaptive 기본값은 `percent_refinement=20`, `maximum_passes=13`, `minimum_converged_passes=10`, `max_delta_s=0.007` 기준으로 정리한다.
 - 세부 설계는 아래 문서로 분리되어 있다.
   - [PLANS/V0_2_11.md](PLANS/V0_2_11.md)
   - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md)

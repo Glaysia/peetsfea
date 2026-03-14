@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import re
 from typing import Mapping, cast
 
 from peetsfea.identity.hashing import (
@@ -27,6 +28,8 @@ from peetsfea.types.manifest import (
     EmPolicy,
     GroupGeometryParams,
     Manifest,
+    OutputVariableSpec,
+    OutputsSpec,
     ReproSnapshot,
     ResolvedCoilGroup,
     ResolvedPcbInstance,
@@ -36,7 +39,7 @@ from peetsfea.types.manifest import (
 )
 
 MAX_ATTEMPTS = 64
-SUPPORTED_SPEC_VERSION = "0.2.15"
+SUPPORTED_SPEC_VERSION = "0.2.16"
 
 
 def _require_number(value: object, name: str) -> float:
@@ -55,6 +58,13 @@ def _require_string(value: object, name: str) -> str:
     if not isinstance(value, str):
         raise ValueError(f"{name} must be string")
     return value
+
+
+def _require_non_empty_string(value: object, name: str) -> str:
+    parsed = _require_string(value, name)
+    if parsed == "":
+        raise ValueError(f"{name} must be non-empty string")
+    return parsed
 
 
 def _parse_simulation_policy(spec: Mapping[str, object]) -> EmPolicy:
@@ -131,6 +141,65 @@ def _parse_simulation_policy(spec: Mapping[str, object]) -> EmPolicy:
         "percent_refinement": percent_refinement,
         "basis_order": basis_order,
         "port_accuracy": port_accuracy,
+    }
+
+
+def _parse_outputs_spec(spec: Mapping[str, object]) -> OutputsSpec:
+    raw_outputs = spec.get("outputs")
+    if not isinstance(raw_outputs, dict):
+        raise ValueError("outputs must be a table/object")
+    outputs = raw_outputs
+    expected_keys = {
+        "report_name",
+        "solution_name",
+        "primary_sweep",
+        "report_category",
+        "plot_type",
+        "variables",
+    }
+    missing_keys = sorted(expected_keys - set(outputs.keys()))
+    if missing_keys:
+        raise ValueError(f"outputs is missing required keys: {missing_keys}")
+    extra_keys = sorted(set(outputs.keys()) - expected_keys)
+    if extra_keys:
+        raise ValueError(f"outputs contains unsupported keys: {extra_keys}")
+
+    raw_variables = outputs["variables"]
+    if not isinstance(raw_variables, list):
+        raise ValueError("outputs.variables must be an array of tables")
+    if len(raw_variables) == 0:
+        raise ValueError("outputs.variables must be non-empty")
+
+    variables: list[OutputVariableSpec] = []
+    seen_names: set[str] = set()
+    for index, raw_variable in enumerate(raw_variables):
+        if not isinstance(raw_variable, dict):
+            raise ValueError(f"outputs.variables[{index}] must be a table/object")
+        expected_variable_keys = {"name", "expression"}
+        extra_variable_keys = sorted(set(raw_variable.keys()) - expected_variable_keys)
+        if extra_variable_keys:
+            raise ValueError(f"outputs.variables[{index}] contains unsupported keys: {extra_variable_keys}")
+        missing_variable_keys = sorted(expected_variable_keys - set(raw_variable.keys()))
+        if missing_variable_keys:
+            raise ValueError(f"outputs.variables[{index}] is missing required keys: {missing_variable_keys}")
+        name = _require_non_empty_string(raw_variable["name"], f"outputs.variables[{index}].name")
+        if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", name) is None:
+            raise ValueError(
+                f"outputs.variables[{index}].name must match ^[A-Za-z][A-Za-z0-9_]*$"
+            )
+        if name in seen_names:
+            raise ValueError(f"outputs.variables[{index}].name must be unique: {name}")
+        expression = _require_non_empty_string(raw_variable["expression"], f"outputs.variables[{index}].expression")
+        seen_names.add(name)
+        variables.append({"name": name, "expression": expression})
+
+    return {
+        "report_name": _require_non_empty_string(outputs["report_name"], "outputs.report_name"),
+        "solution_name": _require_non_empty_string(outputs["solution_name"], "outputs.solution_name"),
+        "primary_sweep": _require_non_empty_string(outputs["primary_sweep"], "outputs.primary_sweep"),
+        "report_category": _require_non_empty_string(outputs["report_category"], "outputs.report_category"),
+        "plot_type": _require_non_empty_string(outputs["plot_type"], "outputs.plot_type"),
+        "variables": variables,
     }
 
 @dataclass(frozen=True)
@@ -234,6 +303,7 @@ def run(config: RunConfig) -> RunResult:
     if backend_tool != "hfss":
         raise ValueError("backend.tool must be 'hfss' for this MVP")
     simulation = _parse_simulation_policy(spec)
+    outputs = _parse_outputs_spec(spec)
     repro_mode = detect_repro_mode(spec)
     (
         selected_parameters,
@@ -300,6 +370,7 @@ def run(config: RunConfig) -> RunResult:
             "design_name": design_name,
             "units": units,
             "simulation": simulation,
+            "outputs": outputs,
         },
         "created_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "manifest_path": manifest_path_str,

@@ -65,6 +65,8 @@ def resolve_group_geometry(
         ratio = float(metal_ratio)
         if n_turns < 1:
             raise ValueError(f"{kind_root}.turn_count_max must be >= 1")
+        if n_turns > 3:
+            raise ValueError(f"{kind_root}.turn_count_max must be <= 3")
         if band_ratio_float <= 0 or band_ratio_float >= 1:
             raise ValueError(f"{kind_root}.band_ratio must be > 0 and < 1")
         if ratio <= 0 or ratio >= 1:

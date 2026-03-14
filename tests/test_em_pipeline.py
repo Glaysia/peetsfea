@@ -9,6 +9,8 @@ from ansys.aedt.core.modeler.modeler_3d import Modeler3D
 from peetsfea.backend.pyaedt.em_pipeline.boundary_port import build_ports
 from peetsfea.backend.pyaedt.em_pipeline import default_em_policy, run_em_pipeline
 from peetsfea.backend.pyaedt.em_pipeline.contracts import EmPipelineInput
+from peetsfea.types.manifest import OutputsSpec
+from tests.fixtures.type1_spec import TYPE1_OUTPUT_VARIABLES, type1_outputs_spec
 
 
 class _FakeHfss:
@@ -217,10 +219,14 @@ def _input() -> EmPipelineInput:
     }
 
 
+def _outputs() -> OutputsSpec:
+    return cast(OutputsSpec, type1_outputs_spec())
+
+
 def test_run_em_pipeline_returns_full_contract() -> None:
     fake_hfss = _FakeHfss()
     fake_modeler = _FakeModeler()
-    result = run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, fake_modeler), _input(), default_em_policy())
+    result = run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, fake_modeler), _input(), default_em_policy(), _outputs())
     assert set(result.keys()) == {
         "groups",
         "series",
@@ -243,28 +249,8 @@ def test_run_em_pipeline_returns_full_contract() -> None:
     assert fake_hfss.edited_sources_payloads
     assert fake_hfss.inserted_setup_types == ["HfssDriven"]
     assert fake_hfss.inserted_sweep_setup_names == []
-    assert [name for name, _, _ in fake_hfss.created_output_variables] == [
-        "Ltx_uH",
-        "Lrx_uH",
-        "M_uH",
-        "k_ratio",
-        "Qtx_ratio",
-        "Qrx_ratio",
-        "FOM_ratio",
-        "Rtx_ac_ohm",
-        "Rrx_ac_ohm",
-        "Xtx_ohm",
-        "Xrx_ohm",
-        "M_over_Ltx_ratio",
-        "M_over_Lrx_ratio",
-        "Gtx_S",
-        "Btx_S",
-        "Grx_S",
-        "Brx_S",
-        "S11_mag_ratio",
-        "S21_mag_ratio",
-        "S21_phase_deg",
-    ]
+    expected_output_names = [name for name, _ in TYPE1_OUTPUT_VARIABLES]
+    assert [name for name, _, _ in fake_hfss.created_output_variables] == expected_output_names
     expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
     assert "Zt(" in expressions_by_name["Ltx_uH"]
     assert "freq" in expressions_by_name["Ltx_uH"]
@@ -295,6 +281,21 @@ def test_run_em_pipeline_returns_full_contract() -> None:
     assert "mag(S(" in expressions_by_name["S11_mag_ratio"]
     assert "mag(S(" in expressions_by_name["S21_mag_ratio"]
     assert "ang_deg_val(S(" in expressions_by_name["S21_phase_deg"]
+    assert "mag(S(" in expressions_by_name["S22_mag_ratio"]
+    assert expressions_by_name["eta_s21_power_ratio"] == "S21_mag_ratio*S21_mag_ratio"
+    assert expressions_by_name["eta_tx_accept_ratio"] == "1-S11_mag_ratio*S11_mag_ratio"
+    assert expressions_by_name["eta_rx_accept_ratio"] == "1-S22_mag_ratio*S22_mag_ratio"
+    assert expressions_by_name["eta_match_product_ratio"] == "eta_tx_accept_ratio*eta_rx_accept_ratio"
+    assert expressions_by_name["eta_s21_from_tx_accept_ratio"] == "eta_s21_power_ratio/eta_tx_accept_ratio"
+    assert expressions_by_name["eta_s21_from_rx_accept_ratio"] == "eta_s21_power_ratio/eta_rx_accept_ratio"
+    assert (
+        expressions_by_name["eta_s21_two_sided_norm_ratio"]
+        == "eta_s21_power_ratio/(eta_tx_accept_ratio*eta_rx_accept_ratio)"
+    )
+    assert (
+        expressions_by_name["eta_fom_max_ratio"]
+        == "(FOM_ratio*FOM_ratio)/((1+sqrt(1+FOM_ratio*FOM_ratio))*(1+sqrt(1+FOM_ratio*FOM_ratio)))"
+    )
     assert fake_hfss.created_reports[0]["plot_name"] == "Output Variables Table1"
     assert fake_hfss.created_reports[0]["report_category"] == "Terminal Solution Data"
     assert fake_hfss.created_reports[0]["plot_type"] == "Data Table"
@@ -306,50 +307,8 @@ def test_run_em_pipeline_returns_full_contract() -> None:
             "template_id": "output_variables_table_1",
             "report_name": "Output Variables Table1",
             "solution_name": "Setup1 : LastAdaptive",
-            "traces": [
-                "Ltx_uH",
-                "Lrx_uH",
-                "M_uH",
-                "k_ratio",
-                "Qtx_ratio",
-                "Qrx_ratio",
-                "FOM_ratio",
-                "Rtx_ac_ohm",
-                "Rrx_ac_ohm",
-                "Xtx_ohm",
-                "Xrx_ohm",
-                "M_over_Ltx_ratio",
-                "M_over_Lrx_ratio",
-                "Gtx_S",
-                "Btx_S",
-                "Grx_S",
-                "Brx_S",
-                "S11_mag_ratio",
-                "S21_mag_ratio",
-                "S21_phase_deg",
-            ],
-            "output_variables": [
-                "Ltx_uH",
-                "Lrx_uH",
-                "M_uH",
-                "k_ratio",
-                "Qtx_ratio",
-                "Qrx_ratio",
-                "FOM_ratio",
-                "Rtx_ac_ohm",
-                "Rrx_ac_ohm",
-                "Xtx_ohm",
-                "Xrx_ohm",
-                "M_over_Ltx_ratio",
-                "M_over_Lrx_ratio",
-                "Gtx_S",
-                "Btx_S",
-                "Grx_S",
-                "Brx_S",
-                "S11_mag_ratio",
-                "S21_mag_ratio",
-                "S21_phase_deg",
-            ],
+            "traces": expected_output_names,
+            "output_variables": expected_output_names,
         }
     ]
 
@@ -358,13 +317,13 @@ def test_run_em_pipeline_hard_fail_validation() -> None:
     data = _input()
     data["ready_objects"]["rx_conductors"] = []
     with pytest.raises(ValueError, match="validation failed"):
-        run_em_pipeline(cast(Hfss, _FakeHfss()), cast(Modeler3D, _FakeModeler()), data, default_em_policy())
+        run_em_pipeline(cast(Hfss, _FakeHfss()), cast(Modeler3D, _FakeModeler()), data, default_em_policy(), _outputs())
 
 
 def test_run_em_pipeline_uses_numeric_ports_when_named_ports_are_unavailable() -> None:
     fake_hfss = _FakeHfss()
     fake_hfss.available_traces = ["S(1,1)", "S(1,2)", "S(2,1)", "S(2,2)"]
-    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
+    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy(), _outputs())
     expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
     assert "Zt(1,1)" in expressions_by_name["Ltx_uH"]
     assert "Zt(2,2)" in expressions_by_name["Lrx_uH"]
@@ -373,6 +332,7 @@ def test_run_em_pipeline_uses_numeric_ports_when_named_ports_are_unavailable() -
     assert "S(1,1)" in expressions_by_name["S11_mag_ratio"]
     assert "S(1,2)" in expressions_by_name["S21_mag_ratio"]
     assert "S(1,2)" in expressions_by_name["S21_phase_deg"]
+    assert "S(2,2)" in expressions_by_name["S22_mag_ratio"]
 
 
 def test_run_em_pipeline_supports_terminal_style_st_traces_with_long_names() -> None:
@@ -385,7 +345,7 @@ def test_run_em_pipeline_supports_terminal_style_st_traces_with_long_names() -> 
         f"St({rx_term},{tx_term})",
         f"St({rx_term},{rx_term})",
     ]
-    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
+    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy(), _outputs())
     expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
     assert f"Zt({tx_term},{tx_term})" in expressions_by_name["Ltx_uH"]
     assert f"Zt({rx_term},{rx_term})" in expressions_by_name["Lrx_uH"]
@@ -394,6 +354,7 @@ def test_run_em_pipeline_supports_terminal_style_st_traces_with_long_names() -> 
     assert f"St({tx_term},{tx_term})" in expressions_by_name["S11_mag_ratio"]
     assert f"St({tx_term},{rx_term})" in expressions_by_name["S21_mag_ratio"]
     assert f"St({tx_term},{rx_term})" in expressions_by_name["S21_phase_deg"]
+    assert f"St({rx_term},{rx_term})" in expressions_by_name["S22_mag_ratio"]
 
 
 def test_run_em_pipeline_prefers_stub_excitation_names_for_post_variables() -> None:
@@ -402,7 +363,7 @@ def test_run_em_pipeline_prefers_stub_excitation_names_for_post_variables() -> N
         "txs_tx_main_1_1_T1",
         "rxs_rx_main_1_1_A_T1",
     ]
-    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
+    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy(), _outputs())
     expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
     assert "Zt(txs_tx_main_1_1_T1,txs_tx_main_1_1_T1)" in expressions_by_name["Ltx_uH"]
     assert "Zt(rxs_rx_main_1_1_A_T1,rxs_rx_main_1_1_A_T1)" in expressions_by_name["Lrx_uH"]
@@ -415,7 +376,7 @@ def test_run_em_pipeline_normalizes_parenthesized_terminal_names() -> None:
         "St((rxs_rx_main_0_0_B_T1,(rxs_rx_main_0_0_B_T1))",
         "St((rxs_rx_main_0_0_B_T1,(txs_tx_main_0_0_T1))",
     ]
-    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
+    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy(), _outputs())
     expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
     assert "Zt(rxs_rx_main_0_0_B_T1,rxs_rx_main_0_0_B_T1)" in expressions_by_name["Ltx_uH"]
 
@@ -432,7 +393,7 @@ def test_run_em_pipeline_uses_policy_frequencies_for_setup_and_disabled_sweep_me
     policy["sweep_start_hz"] = 2.5e6
     policy["sweep_stop_hz"] = 60.0e6
 
-    result = run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), policy)
+    result = run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), policy, _outputs())
 
     setup_payload = fake_hfss.inserted_setup_payloads[0]
     assert "13.56MHz" in setup_payload
@@ -448,15 +409,15 @@ def test_default_em_policy_exposes_0214_adaptive_defaults_and_setup_payload() ->
     policy = default_em_policy()
 
     assert policy["max_delta_s"] == 0.007
-    assert policy["maximum_passes"] == 15
+    assert policy["maximum_passes"] == 13
     assert policy["minimum_converged_passes"] == 10
     assert policy["percent_refinement"] == 20
 
-    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), policy)
+    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), policy, _outputs())
     setup_payload = fake_hfss.inserted_setup_payloads[0]
 
     assert 0.007 in setup_payload
-    assert 15 in setup_payload
+    assert 13 in setup_payload
     assert 10 in setup_payload
     assert 20 in setup_payload
     assert "UseMaxTetIncrease:=" in setup_payload
@@ -476,7 +437,7 @@ def test_run_em_pipeline_uses_adaptive_policy_keys_only_for_exposed_numbers() ->
     policy["basis_order"] = 2
     policy["port_accuracy"] = 3
 
-    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), policy)
+    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), policy, _outputs())
     setup_payload = fake_hfss.inserted_setup_payloads[0]
 
     assert 0.005 in setup_payload
@@ -494,7 +455,7 @@ def test_run_em_pipeline_falls_back_to_stub_rxdd_source_name_for_90deg_phase() -
         "TX_TML",
         "rxs_rx_main_1_1_A_T1",
     ]
-    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy())
+    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy(), _outputs())
     assert fake_hfss.edited_sources_payloads
     sources_payload = fake_hfss.edited_sources_payloads[0]
     payload_text = str(sources_payload)

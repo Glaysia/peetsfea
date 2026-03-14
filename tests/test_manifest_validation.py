@@ -8,7 +8,7 @@ import pytest
 import peetsfea.pipeline.run_design as runner
 from peetsfea.spec.loader import load_toml_bytes
 from peetsfea.spec.resolver import SelectionConstraintError, resolve_selection
-from tests.fixtures.type1_spec import write_type1_toml
+from tests.fixtures.type1_spec import type1_outputs_spec, write_type1_toml
 
 def test_missing_group_geometry_section_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "missing_group_params.toml"
@@ -52,8 +52,8 @@ def test_invalid_group_turn_count_range_fails(tmp_path: Path, monkeypatch: pytes
     toml_path = tmp_path / "bad_turn_count.toml"
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8").replace(
-        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 20, 20]",
-        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [false, 1, 20, 20]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 3, 3]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [false, 1, 3, 3]",
     )
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("1" * 40))
@@ -102,11 +102,11 @@ def test_legacy_trace_gap_keys_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 def test_unsupported_spec_version_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "old_spec_version.toml"
     write_type1_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.15"', 'spec_version = "0.1.6"', 1)
+    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.16"', 'spec_version = "0.1.6"', 1)
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("5" * 40))
 
-    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.15'"):
+    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.16'"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 def test_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -116,7 +116,7 @@ def test_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     raw += "\n[coil_shape.outer_x]\nrange = [false, 10.0, 10.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("9" * 40))
-    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.15"):
+    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.16"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 def test_tx_vertical_span_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -126,7 +126,34 @@ def test_tx_vertical_span_removed_path_errors_on_026(tmp_path: Path, monkeypatch
     raw += "\n[coil_spacing.tx_vertical_span_mm]\nrange = [false, 3.0, 3.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("a" * 40))
-    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.15: coil_spacing\.tx_vertical_span_mm"):
+    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.16: coil_spacing\.tx_vertical_span_mm"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_tx_dd_top_clearance_mm_removed_path_errors_on_026(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "removed_tx_dd_top_clearance_mm.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw += "\n[coil_placement.tx_dd_top_clearance_mm]\nrange = [false, 0.1, 0.1, 1]\n"
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("b" * 40))
+    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.16: coil_placement\.tx_dd_top_clearance_mm"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+@pytest.mark.parametrize("kind", ["tx_dd", "tx_vertical", "rx_dd"])
+def test_turn_count_above_three_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
+    toml_path = tmp_path / f"{kind}_turn_count_above_three.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        f"[coil_groups_params.{kind}.turn_count_max]\nrange = [true, 1, 3, 3]",
+        f"[coil_groups_params.{kind}.turn_count_max]\nrange = [true, 4, 4, 1]",
+        1,
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("7" * 40))
+
+    with pytest.raises(ValueError, match=rf"coil_groups_params\.{kind}\.turn_count_max must be <= 3"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -139,6 +166,103 @@ def test_missing_simulation_section_fails(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("b" * 40))
 
     with pytest.raises(ValueError, match="simulation must be a table/object"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_missing_outputs_section_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "missing_outputs.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    start = raw.index("[outputs]")
+    end = raw.index("\n[tv.width_mm]")
+    raw = raw[:start] + raw[end + 1 :]
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("1" * 40))
+
+    with pytest.raises(ValueError, match="outputs must be a table/object"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_outputs_unsupported_key_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "outputs_extra_key.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace('[outputs]\n', '[outputs]\nextra = "nope"\n', 1)
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("2" * 40))
+
+    with pytest.raises(ValueError, match=r"outputs contains unsupported keys: \['extra'\]"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_outputs_variables_must_be_non_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "outputs_empty_variables.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    start = raw.index("[outputs]")
+    end = raw.index("\n[tv.width_mm]")
+    raw = raw[:start] + (
+        "[outputs]\n"
+        'report_name = "Output Variables Table1"\n'
+        'solution_name = "Setup1 : LastAdaptive"\n'
+        'primary_sweep = "Freq"\n'
+        'report_category = "Terminal Solution Data"\n'
+        'plot_type = "Data Table"\n'
+        "variables = []\n\n"
+    ) + raw[end + 1 :]
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("3" * 40))
+
+    with pytest.raises(ValueError, match="outputs.variables must be non-empty"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_outputs_duplicate_name_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "outputs_duplicate_name.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace('name = "Lrx_uH"', 'name = "Ltx_uH"', 1)
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("4" * 40))
+
+    with pytest.raises(ValueError, match=r"outputs\.variables\[\d+\]\.name must be unique: Ltx_uH"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_outputs_invalid_name_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "outputs_invalid_name.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace('name = "Ltx_uH"', 'name = "1bad"', 1)
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("5" * 40))
+
+    with pytest.raises(
+        ValueError, match=r"outputs\.variables\[0\]\.name must match \^\[A-Za-z\]\[A-Za-z0-9_\]\*\$"
+    ):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_outputs_expression_must_be_non_empty_string(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "outputs_bad_expression.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        'expression = "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"', 'expression = ""', 1
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("6" * 40))
+
+    with pytest.raises(ValueError, match=r"outputs\.variables\[0\]\.expression must be non-empty string"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
+
+
+def test_outputs_expression_must_be_string(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "outputs_expression_not_string.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        'expression = "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"', "expression = 1", 1
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("7" * 40))
+
+    with pytest.raises(ValueError, match=r"outputs\.variables\[0\]\.expression must be string"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -184,6 +308,7 @@ def test_manifest_includes_simulation_policy(tmp_path: Path, monkeypatch: pytest
         "basis_order": 1,
         "port_accuracy": 2,
     }
+    assert manifest["spec"]["outputs"] == type1_outputs_spec()
 
 
 def test_manifest_selected_parameters_include_ferrite_contract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

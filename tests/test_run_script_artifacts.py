@@ -100,7 +100,14 @@ def test_multi_sample_orchestrates_profiles_in_order(monkeypatch: pytest.MonkeyP
     multi_sample_script = _load_script("multi_sample")
     calls: list[tuple[int, int, int]] = []
 
-    def _fake_generate(*, seed_start: int, seed_end: int, target_count: int) -> list[dict[str, object]]:
+    def _fake_generate(profile: object) -> list[dict[str, object]]:
+        assert isinstance(profile, multi_sample_script.SampleProfile)
+        seed_start = getattr(profile, "seed_start")
+        seed_end = getattr(profile, "seed_end")
+        target_count = getattr(profile, "target_count")
+        assert isinstance(seed_start, int)
+        assert isinstance(seed_end, int)
+        assert isinstance(target_count, int)
         calls.append((seed_start, seed_end, target_count))
         return [{"seed": seed_start}]
 
@@ -108,18 +115,62 @@ def test_multi_sample_orchestrates_profiles_in_order(monkeypatch: pytest.MonkeyP
         multi_sample_script.SampleProfile(seed_start=0, seed_end=500, target_count=100),
         multi_sample_script.SampleProfile(seed_start=500, seed_end=1000, target_count=1000),
     )
-    monkeypatch.setattr(multi_sample_script, "generate_sample_manifest", _fake_generate)
+    monkeypatch.setattr(multi_sample_script, "_generate_profile_manifest", _fake_generate)
 
-    result = multi_sample_script.generate_all_sample_manifests(profiles)
+    result = multi_sample_script.generate_all_sample_manifests(profiles, parallel=False)
 
     assert calls == [(0, 500, 100), (500, 1000, 1000)]
+    assert result == [[{"seed": 0}], [{"seed": 500}]]
+
+
+def test_multi_sample_uses_process_pool_when_parallel_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    multi_sample_script = _load_script("multi_sample")
+    calls: list[tuple[int, int, int]] = []
+    workers: list[int] = []
+
+    def _fake_generate(profile: object) -> list[dict[str, object]]:
+        assert isinstance(profile, multi_sample_script.SampleProfile)
+        seed_start = getattr(profile, "seed_start")
+        seed_end = getattr(profile, "seed_end")
+        target_count = getattr(profile, "target_count")
+        assert isinstance(seed_start, int)
+        assert isinstance(seed_end, int)
+        assert isinstance(target_count, int)
+        calls.append((seed_start, seed_end, target_count))
+        return [{"seed": seed_start}]
+
+    class _FakeProcessPoolExecutor:
+        def __init__(self, *, max_workers: int) -> None:
+            workers.append(max_workers)
+
+        def __enter__(self) -> "_FakeProcessPoolExecutor":
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> bool:
+            return False
+
+        def map(self, fn: Callable[[object], list[dict[str, object]]], values: tuple[object, ...]) -> list[list[dict[str, object]]]:
+            return [fn(value) for value in values]
+
+    profiles = (
+        multi_sample_script.SampleProfile(seed_start=0, seed_end=500, target_count=100),
+        multi_sample_script.SampleProfile(seed_start=500, seed_end=1000, target_count=100),
+    )
+    monkeypatch.setattr(multi_sample_script, "_generate_profile_manifest", _fake_generate)
+    monkeypatch.setattr(multi_sample_script, "ProcessPoolExecutor", _FakeProcessPoolExecutor)
+    monkeypatch.setattr(multi_sample_script, "SAMPLE_WORKER_COUNT", 8)
+
+    result = multi_sample_script.generate_all_sample_manifests(profiles, parallel=True)
+
+    assert workers == [2]
+    assert calls == [(0, 500, 100), (500, 1000, 100)]
     assert result == [[{"seed": 0}], [{"seed": 500}]]
 
 
 def test_build_debug_processes_full_manifest_sequentially(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     build_script = _load_script("build")
     source_toml_path = tmp_path / "source.toml"
-    source_toml_path.write_text("spec_version = \"0.2.15\"\n", encoding="utf-8")
+    source_toml_path.write_text("spec_version = \"0.2.16\"\n", encoding="utf-8")
     manifest_path = tmp_path / "manifest.json"
     entries = [
         _make_manifest_entry(design_id="000001_dead_cafe_0", toml_path=tmp_path / "a.toml", source_toml_path=source_toml_path),
@@ -144,7 +195,7 @@ def test_build_debug_processes_full_manifest_sequentially(tmp_path: Path, monkey
 def test_build_non_debug_uses_process_pool_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     build_script = _load_script("build")
     source_toml_path = tmp_path / "source.toml"
-    source_toml_path.write_text("spec_version = \"0.2.15\"\n", encoding="utf-8")
+    source_toml_path.write_text("spec_version = \"0.2.16\"\n", encoding="utf-8")
     manifest_path = tmp_path / "manifest.json"
     entries = [
         _make_manifest_entry(design_id="000001_dead_cafe_0", toml_path=tmp_path / "a.toml", source_toml_path=source_toml_path),
@@ -198,8 +249,8 @@ def test_multi_build_discovers_batch_manifests_and_ignores_top_level_manifest(
         return [True]
 
     run_toml_root = tmp_path / "run" / "toml"
-    first_manifest = run_toml_root / "toml_0.2.15_0" / "manifest.json"
-    second_manifest = run_toml_root / "toml_0.2.15_1000" / "manifest.json"
+    first_manifest = run_toml_root / "toml_0.2.16_0" / "manifest.json"
+    second_manifest = run_toml_root / "toml_0.2.16_1000" / "manifest.json"
     ignored_manifest = run_toml_root / "manifest.json"
     first_manifest.parent.mkdir(parents=True)
     second_manifest.parent.mkdir(parents=True)
@@ -216,8 +267,8 @@ def test_multi_build_discovers_batch_manifests_and_ignores_top_level_manifest(
     result = multi_build_script.build_all_targets(targets)
 
     assert calls == [
-        (first_manifest, tmp_path / "run" / "aedt" / "aedt_0.2.15_0"),
-        (second_manifest, tmp_path / "run" / "aedt" / "aedt_0.2.15_1000"),
+        (first_manifest, tmp_path / "run" / "aedt" / "aedt_0.2.16_0"),
+        (second_manifest, tmp_path / "run" / "aedt" / "aedt_0.2.16_1000"),
     ]
     assert result == [[True], [True]]
 

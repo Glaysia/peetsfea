@@ -53,6 +53,18 @@ def test_realized_txdd_geometry_rejects_invalid_lower_layer_result() -> None:
         )
 
 
+def test_realized_txdd_geometry_supports_one_turn_for_four_layer_tx_dd() -> None:
+    assert _realized_txdd_geometry(
+        turns=1,
+        outer_x=120.0,
+        outer_y=80.0,
+        trace=1.2,
+        gap=0.3,
+        instance_count=4,
+        layer_index=0,
+    ) == (1, 118.5, 78.5)
+
+
 def test_txdd_right_points_use_gap_centered_lower_layer_interleave_with_aligned_a_for_four_layer_tx_dd() -> None:
     lower_points = _txdd_right_points(
         turns=5,
@@ -95,3 +107,28 @@ def test_txdd_right_points_keeps_two_layer_contract_unchanged() -> None:
         layer_index=0,
     )
     assert len(points) > 2
+
+
+def test_txdd_right_points_support_one_turn_for_two_and_four_layer_tx_dd() -> None:
+    two_layer_points = _txdd_right_points(
+        turns=1,
+        outer_x=100.0,
+        outer_y=60.0,
+        trace=1.0,
+        gap=0.25,
+        instance_count=2,
+        layer_index=0,
+    )
+    four_layer_points = _txdd_right_points(
+        turns=1,
+        outer_x=100.0,
+        outer_y=60.0,
+        trace=1.0,
+        gap=0.25,
+        instance_count=4,
+        layer_index=0,
+    )
+    assert len(two_layer_points) == 2
+    assert len(four_layer_points) == 5
+    assert two_layer_points[0] != two_layer_points[-1]
+    assert four_layer_points[0] != four_layer_points[-1]

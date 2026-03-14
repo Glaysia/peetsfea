@@ -8,7 +8,7 @@ from ansys.aedt.core import Hfss
 from ansys.aedt.core.modeler.modeler_3d import Modeler3D
 
 from peetsfea.backend.pyaedt.geometry.build_rx_dd import build_em_artifacts
-from peetsfea.backend.pyaedt.geometry.scene_objects import _create_ferrite_model_objects
+from peetsfea.backend.pyaedt.geometry.scene_objects import _assert_tx_ferrite_gap_from_live_objects, _create_ferrite_model_objects
 from peetsfea.types.manifest import CadProbe, GroupObjects, SceneObjectEntry, SelectedParameters
 
 
@@ -108,10 +108,12 @@ def _selected(*, ferrite_present: bool) -> SelectedParameters:
             "ferrite_present": ferrite_present,
             "rx_ferrite_thickness_mm": 2.0,
             "tx_ferrite_thickness_mm": 2.0,
+            "tx_ferrite_gap_mm": 3.1,
             "ferrite_relative_permeability": 500.0,
             "shelf_height_mm": 400.0,
             "shelf_min_size_x_mm": 350.0,
             "rx_region_bottom_from_tv_mm": 1.0,
+            "tx_dd_top_clearance_ratio": 0.005,
             "tx_dd_top_clearance_mm": 0.1,
             "rx_face_clearance_mm": 0.0,
             "tx_main_1_z_from_tx_main_0_mm": 3.0,
@@ -203,8 +205,11 @@ def test_create_ferrite_model_objects_creates_coil_footprint_plates_and_subtract
     assert all(entry["non_model"] is False for entry in entries)
     assert entries[0]["origin_xyz"] == (1.9, -40.0, 610.0)
     assert entries[0]["size_xyz"] == (2.0, 82.0, 80.0)
-    assert entries[1]["origin_xyz"] == (9.9, -30.1, 396.3)
+    assert entries[1]["origin_xyz"] == (9.9, -30.1, 394.2)
     assert entries[1]["size_xyz"] == (80.19999999999999, 60.2, 2.0)
+    tx_ferrite_top_z = entries[1]["origin_xyz"][2] + entries[1]["size_xyz"][2]
+    lowest_tx_xy_fr4_min_z = min(probe["bbox"][2] for probe in _cad_probe() if "_xy_" in probe["object_name"])
+    assert tx_ferrite_top_z == pytest.approx(lowest_tx_xy_fr4_min_z - 3.1)
     assert len(modeler.box_calls) == 2
     assert all(call["material"] == "peetsfea_ferrite_mu500" for call in modeler.box_calls)
     assert len(modeler.subtract_calls) == 2
@@ -239,7 +244,7 @@ def test_create_ferrite_model_objects_records_absence_without_creating_boxes() -
     assert [entry["present"] for entry in entries] == [False, False]
     assert modeler.box_calls == []
     assert entries[0]["origin_xyz"] == (1.9, -40.0, 610.0)
-    assert entries[1]["origin_xyz"] == (9.9, -30.1, 396.3)
+    assert entries[1]["origin_xyz"] == (9.9, -30.1, 394.2)
 
 
 def test_create_ferrite_model_objects_fails_when_rx_plate_would_leave_tv() -> None:
@@ -280,6 +285,57 @@ def test_create_ferrite_model_objects_fails_when_tx_xy_fr4_is_missing() -> None:
             object_names=["scene_wall_demo", "scene_tv_demo", "coil_rx_demo"],
             coil_plane_bboxes=cast(list[_PlaneBbox], [("rx_main_0", "YZ", [3.9, -40.0, 610.0, 3.935, 42.0, 690.0])]),
             cad_probe=[],
+            tx_board_ids={"tx_main_0"},
+        )
+
+
+def test_create_ferrite_model_objects_fails_when_tx_ferrite_touches_tx_live_object() -> None:
+    modeler = _FakeModeler()
+    hfss = _FakeHfss()
+    touching_probe = cast(
+        list[CadProbe],
+        [
+            {"object_name": "fr4_tx_main_0_xy_0_demo", "bbox": [9.9, -30.1, 399.3, 90.1, 30.1, 400.9]},
+            {"object_name": "coil_tx_touch_demo", "bbox": [9.9, -30.1, 396.1, 90.1, 30.1, 396.8]},
+        ],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "TX ferrite must keep a positive gap from TX coil copper, TX bridge objects, "
+            "TX port sheet objects, and TX FR4 sheet objects"
+        ),
+    ):
+        _create_ferrite_model_objects(
+            modeler=cast(Modeler3D, modeler),
+            hfss=cast(Hfss, hfss),
+            design_id="demo",
+            selected=_selected(ferrite_present=True),
+            scene_objects=_scene_objects(),
+            object_names=["scene_wall_demo", "scene_tv_demo", "coil_tx_low_demo", "fr4_demo"],
+            coil_plane_bboxes=_coil_plane_bboxes(),
+            cad_probe=touching_probe,
+            tx_board_ids={"tx_main_0"},
+        )
+
+
+def test_assert_tx_ferrite_gap_from_live_objects_fails_when_tx_port_sheet_touches() -> None:
+    with pytest.raises(
+        ValueError,
+        match=(
+            "TX ferrite must keep a positive gap from TX coil copper, TX bridge objects, "
+            "TX port sheet objects, and TX FR4 sheet objects"
+        ),
+    ):
+        _assert_tx_ferrite_gap_from_live_objects(
+            ferrite_name="ferrite_tx_demo",
+            origin_xyz=(9.9, -30.1, 394.2),
+            size_xyz=(80.2, 60.2, 2.0),
+            cad_probe=cast(
+                list[CadProbe],
+                [{"object_name": "sheet_txdd_ports_tx_main_0", "bbox": [9.9, -30.1, 396.0, 90.1, 30.1, 396.6]}],
+            ),
             tx_board_ids={"tx_main_0"},
         )
 

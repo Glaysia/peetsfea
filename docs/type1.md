@@ -17,8 +17,12 @@
 
 ## 입력 스펙에서 중요한 블록
 - `tv`, `tx.region`, `rx.region`: 장면/영역 크기와 배치 기준
-- `ferrite`: 전역 ferrite on/off와 coil-footprint 기준 RX/TX ferrite 두께, 재질 기본값
+- `ferrite`: 전역 ferrite on/off와 coil-footprint 기준 RX/TX ferrite 두께, 재질 기본값. `ferrite.tx_gap_mm`가 TX ferrite gap의 canonical sampled owner이고, 기본 예제는 `3.1..12.0`, `count=8`이다. TX ferrite는 최하단 TX XY FR4 아래 그 gap을 유지하고 TX coil copper, TX bridge object, TX port sheet object, TX FR4 sheet object와 비접촉이어야 한다.
 - `coil_shape`, `coil_groups_params`: 그룹별 코일 형상 및 파생 파라미터 제어
+- `coil_placement`: 배치 계약 제어. 기본 예제는 `coil_placement.tx_dd_top_clearance_ratio`를 `0.0..0.3`, `count=10`으로 두고, 이는 `tx.region.z_parts.dd_z_mm` 대비 DD 코일 top의 하강 비율이다.
+- `coil_groups_params.{tx_dd,tx_vertical,rx_dd}.turn_count_max`는 모두 `1..3`만 허용된다.
+- `outputs`: AEDT output variable과 단일 data-table report의 SSOT. 기본 예제에는 `S22_mag_ratio`와 WPT 파생 효율 지표 8개가 포함된다.
+- `outputs`의 `eta_*_from_*`, `eta_s21_two_sided_norm_ratio`는 normalized proxy metric이라 acceptance term이 0에 가까우면 불안정해질 수 있다.
 - `tx_dd`가 4개 인스턴스(2층)로 해석되면 아래층은 같은 turn/trace/gap을 유지하되 centerline box를 한 pitch만큼 줄여 위층 trace 사이 gap 중심 쪽으로 interleave된다.
 - `constraints`: 샘플 선택/배치 가능성/토폴로지 제약 검증
 - `pcbs`: fixed-topology 계약에 따른 보드 present/mount 정규화. 정규화로 소거되는 field는 독립 sampled dimension으로 허용하지 않는다.

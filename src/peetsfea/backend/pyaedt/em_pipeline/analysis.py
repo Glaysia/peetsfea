@@ -5,8 +5,8 @@ from typing import Protocol, cast
 
 from ansys.aedt.core import Hfss
 
-from peetsfea.backend.pyaedt.em_pipeline.report_templates import default_post_templates
-from peetsfea.types.manifest import EmPolicy, PostTemplateResult
+from peetsfea.backend.pyaedt.em_pipeline.report_templates import build_post_template
+from peetsfea.types.manifest import EmPolicy, OutputsSpec, PostTemplateResult
 
 
 class _AnalysisSetupModule(Protocol):
@@ -240,8 +240,8 @@ def _resolve_port_terms_for_expressions(hfss: Hfss) -> tuple[str, str, str]:
     return ("1", "2", s_function)
 
 
-def build_post_templates(hfss: Hfss) -> list[PostTemplateResult]:
-    templates = default_post_templates()
+def build_post_templates(hfss: Hfss, outputs: OutputsSpec) -> list[PostTemplateResult]:
+    templates = [build_post_template(outputs)]
     design = hfss.odesign
     assert design is not None and not isinstance(design, str), "HFSS design is not initialized"
     report_setup = cast(_ReportSetupModule, cast(_DesignModuleProvider, design).GetModule("ReportSetup"))

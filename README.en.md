@@ -12,7 +12,7 @@ Release notes are managed by version and language under `release-notes/`.
 - Keep single-design generation and dataset generation on the same contract surface.
 
 ## Current Documentation Baseline
-- The current documentation baseline is `0.2.15`.
+- The current documentation baseline is `0.2.16`.
 - This README is the public summary; detailed design notes live under `PLANS/`.
 - For implementation rules, see [AGENTS.md](AGENTS.md). For long-term principles, see [PLANS/LONGTERM_PLAN.md](PLANS/LONGTERM_PLAN.md). [PLANS/V0_2_11.md](PLANS/V0_2_11.md) remains the archived 0.2.11 planning index.
 
@@ -44,14 +44,18 @@ Default execution is split across `multi_sample.py` and `build.py`/`multi_build.
   - `<design_id>.source.toml`
 - `manifest_<design_id>.json` and `geometry_metadata_<design_id>.json` are disabled by default (optional only).
 
-## Major Contracts In 0.2.15
+## Major Contracts In 0.2.16
 - Sampling ownership is managed only through canonical owners.
 - Alias/derived paths do not count as independent sampled dimensions.
 - `dataset.toml` includes inline sampled owners such as `coil_groups[*].count_*`, while excluding derived aliases and fixed fields.
 - `dataset.toml` and `repro.toml` have different roles, and replay safety is defined by their correspondence.
 - The last two `design_id` fragments have different meanings: `design_unique_hash` is the realized design identity, while `toml_space_hash` is the original `source.toml` sampling-space identity. `retry_attempt` is also reflected in the filename suffix.
 - Ferrite is controlled only by the global `ferrite.present` flag, follows the actual coil footprint on both RX and TX, and uses RX `2.0mm`, TX `2.0mm`, and `mu_r=500` as the baseline spec contract.
-- Adaptive defaults are standardized to `percent_refinement=20`, `maximum_passes=15`, `minimum_converged_passes=10`, and `max_delta_s=0.007`.
+- The TX ferrite gap is owned by the sampled path `ferrite.tx_gap_mm`, with the default example range set to `3.1..12.0`, `count=8`.
+- TX ferrite must keep that gap below the lowest TX XY FR4 layer and must not touch captured TX live model objects.
+- `coil_groups_params.{tx_dd,tx_vertical,rx_dd}.turn_count_max` is now limited to `1..3` for every group.
+- TX DD top placement is owned by the sampled path `coil_placement.tx_dd_top_clearance_ratio`, with the default example range set to `0.0..0.3`, `count=10`. Internal `tx_dd_top_clearance_mm` is derived from `tx.region.z_parts.dd_z_mm`.
+- Adaptive defaults are standardized to `percent_refinement=20`, `maximum_passes=13`, `minimum_converged_passes=10`, and `max_delta_s=0.007`.
 - Detailed planning is split across the following documents:
   - [PLANS/V0_2_11.md](PLANS/V0_2_11.md)
   - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md)

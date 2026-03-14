@@ -424,12 +424,13 @@ def _build_and_save_metadata(
     )
     em_ready_objects["fr4_objects"] = sorted(state.fr4_object_names)
     em_policy: EmPolicy = manifest["spec"]["simulation"]
+    outputs = manifest["spec"]["outputs"]
     em_input: EmPipelineInput = {
         "ready_objects": em_ready_objects,
         "endpoints": em_endpoints,
         "context": em_context,
     }
-    em_pipeline_result = run_em_pipeline(hfss, modeler, em_input, em_policy)
+    em_pipeline_result = run_em_pipeline(hfss, modeler, em_input, em_policy, outputs)
     # Reports/post-processing artifacts are added during EM pipeline; persist them before packaging/export.
     hfss.save_project(str(ctx.aedt_path))
 

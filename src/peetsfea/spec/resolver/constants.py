@@ -36,6 +36,7 @@ SCALAR_RANGE_SPECS: tuple[tuple[str, str, bool], ...] = (
     ("ferrite.present", "ferrite_present", True),
     ("ferrite.rx_thickness_mm", "rx_ferrite_thickness_mm", False),
     ("ferrite.tx_thickness_mm", "tx_ferrite_thickness_mm", False),
+    ("ferrite.tx_gap_mm", "tx_ferrite_gap_mm", False),
     ("ferrite.relative_permeability", "ferrite_relative_permeability", False),
     ("coil_material.via_diameter_mm", "via_diameter_mm", False),
     ("coil_material.pcb_thickness_mm", "pcb_thickness_mm", False),
@@ -44,7 +45,7 @@ SCALAR_RANGE_SPECS: tuple[tuple[str, str, bool], ...] = (
     ("scene_anchor.shelf_height_mm", "shelf_height_mm", False),
     ("scene_anchor.shelf_min_size_x_mm", "shelf_min_size_x_mm", False),
     ("scene_anchor.rx_region_bottom_from_tv_mm", "rx_region_bottom_from_tv_mm", False),
-    ("coil_placement.tx_dd_top_clearance_mm", "tx_dd_top_clearance_mm", False),
+    ("coil_placement.tx_dd_top_clearance_ratio", "tx_dd_top_clearance_ratio", False),
     ("coil_placement.rx_face_clearance_mm", "rx_face_clearance_mm", False),
     ("pcb_spacing.tx_main_1_z_from_tx_main_0_mm", "tx_main_1_z_from_tx_main_0_mm", False),
 )
@@ -63,6 +64,7 @@ REMOVED_PATHS: tuple[str, ...] = (
     "coil_spacing.tx_dd_pair_spacing_mm",
     "coil_spacing.rx_dd_pair_spacing_mm",
     "coil_spacing.tx_vertical_span_mm",
+    "coil_placement.tx_dd_top_clearance_mm",
 )
 
 DERIVED_RANGE_PATHS: dict[str, str] = {

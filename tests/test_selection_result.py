@@ -64,3 +64,20 @@ def test_ferrite_present_sampling_is_deterministic_and_reaches_both_states(tmp_p
     assert seen_states == {False, True}
     assert any(state is False for state in seen_by_seed.values())
     assert any(state is True for state in seen_by_seed.values())
+
+
+def test_tx_dd_top_clearance_ratio_derives_mm_clearance(tmp_path: Path) -> None:
+    toml_path = tmp_path / "tx_dd_top_clearance_ratio.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        "[coil_placement.tx_dd_top_clearance_ratio]\nrange = [false, 0.0, 0.3, 10]",
+        "[coil_placement.tx_dd_top_clearance_ratio]\nrange = [false, 0.3, 0.3, 1]",
+        1,
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    spec, _ = load_toml_bytes(toml_path)
+
+    _, result = _first_feasible_result(spec, seed=5)
+
+    assert float(result.selected_parameters["tx_dd_top_clearance_ratio"]) == 0.3
+    assert float(result.selected_parameters["tx_dd_top_clearance_mm"]) == 2.1
