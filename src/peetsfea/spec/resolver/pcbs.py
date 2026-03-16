@@ -5,6 +5,7 @@ from typing import Literal, cast
 
 from peetsfea.spec.loader import TOMLTable, TOMLValue
 from peetsfea.types.manifest import ResolvedPcbInstance, ResolvedPcbMount
+from peetsfea.version import SUPPORTED_SPEC_VERSION
 
 from .constants import FIXED_PCB_ORDER, FIXED_PCB_RULES, GROUP_KIND_ORDER, PCB_OFFSET_BASE, PCB_SPACING_OFFSET_BASE
 from .sampling import select_range_value
@@ -199,7 +200,7 @@ def normalize_pcbs_fixed_topology(pcbs: list[ResolvedPcbInstance]) -> list[Resol
             detail_parts.append(f"extra={extra}")
         detail = ", ".join(detail_parts)
         raise ValueError(
-            "spec_version 0.2.17 requires fixed pcbs topology ids "
+            f"spec_version {SUPPORTED_SPEC_VERSION} requires fixed pcbs topology ids "
             f"{list(FIXED_PCB_ORDER)} ({detail})"
         )
 
@@ -209,14 +210,14 @@ def normalize_pcbs_fixed_topology(pcbs: list[ResolvedPcbInstance]) -> list[Resol
         rule = FIXED_PCB_RULES[pcb_id]
         if pcb["role"] != rule["role"]:
             raise ValueError(
-                "spec_version 0.2.17 fixed topology requires "
+                f"spec_version {SUPPORTED_SPEC_VERSION} fixed topology requires "
                 f"pcbs.{pcb_id}.role='{rule['role']}' (actual={pcb['role']})"
             )
 
         expected_present = rule["present"]
         if pcb["present"] != expected_present:
             warnings.warn(
-                f"pcbs.{pcb_id}.present normalized to {expected_present} for spec_version 0.2.17 fixed topology",
+                f"pcbs.{pcb_id}.present normalized to {expected_present} for spec_version {SUPPORTED_SPEC_VERSION} fixed topology",
                 UserWarning,
                 stacklevel=2,
             )
@@ -225,7 +226,7 @@ def normalize_pcbs_fixed_topology(pcbs: list[ResolvedPcbInstance]) -> list[Resol
         expected_mounts = rule["mounts"]
         if mount_specs(pcb["mounts"]) != expected_mounts:
             warnings.warn(
-                f"pcbs.{pcb_id}.mounts normalized to fixed topology mapping for spec_version 0.2.17",
+                f"pcbs.{pcb_id}.mounts normalized to fixed topology mapping for spec_version {SUPPORTED_SPEC_VERSION}",
                 UserWarning,
                 stacklevel=2,
             )

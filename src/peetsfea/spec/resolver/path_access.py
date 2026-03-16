@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from peetsfea.spec.loader import TOMLTable, TOMLValue, require_table
+from peetsfea.version import SUPPORTED_SPEC_VERSION
 
 from .constants import REMOVED_PATHS
 
@@ -23,7 +24,7 @@ def reject_removed_paths(spec: TOMLTable) -> None:
             read_path(spec, path)
         except ValueError:
             continue
-        raise ValueError(f"Removed path in spec_version 0.2.17: {path}")
+        raise ValueError(f"Removed path in spec_version {SUPPORTED_SPEC_VERSION}: {path}")
 
 
 def read_range_definition(root: TOMLTable, dotted_path: str) -> list[TOMLValue]:

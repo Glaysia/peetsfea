@@ -170,7 +170,7 @@ def test_multi_sample_uses_process_pool_when_parallel_enabled(monkeypatch: pytes
 def test_build_debug_processes_full_manifest_sequentially(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     build_script = _load_script("build")
     source_toml_path = tmp_path / "source.toml"
-    source_toml_path.write_text("spec_version = \"0.2.17\"\n", encoding="utf-8")
+    source_toml_path.write_text("spec_version = \"0.2.18\"\n", encoding="utf-8")
     manifest_path = tmp_path / "manifest.json"
     entries = [
         _make_manifest_entry(design_id="000001_dead_cafe_0", toml_path=tmp_path / "a.toml", source_toml_path=source_toml_path),
@@ -205,7 +205,7 @@ def test_build_debug_processes_full_manifest_sequentially(tmp_path: Path, monkey
 def test_build_non_debug_uses_process_pool_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     build_script = _load_script("build")
     source_toml_path = tmp_path / "source.toml"
-    source_toml_path.write_text("spec_version = \"0.2.17\"\n", encoding="utf-8")
+    source_toml_path.write_text("spec_version = \"0.2.18\"\n", encoding="utf-8")
     manifest_path = tmp_path / "manifest.json"
     entries = [
         _make_manifest_entry(design_id="000001_dead_cafe_0", toml_path=tmp_path / "a.toml", source_toml_path=source_toml_path),
@@ -319,8 +319,8 @@ def test_multi_build_discovers_batch_manifests_and_ignores_top_level_manifest(
         return [True]
 
     run_toml_root = tmp_path / "run" / "toml"
-    first_manifest = run_toml_root / "toml_0.2.17_0" / "manifest.json"
-    second_manifest = run_toml_root / "toml_0.2.17_1000" / "manifest.json"
+    first_manifest = run_toml_root / "toml_0.2.18_0" / "manifest.json"
+    second_manifest = run_toml_root / "toml_0.2.18_1000" / "manifest.json"
     ignored_manifest = run_toml_root / "manifest.json"
     first_manifest.parent.mkdir(parents=True)
     second_manifest.parent.mkdir(parents=True)
@@ -337,8 +337,8 @@ def test_multi_build_discovers_batch_manifests_and_ignores_top_level_manifest(
     result = multi_build_script.build_all_targets(targets)
 
     assert calls == [
-        (first_manifest, tmp_path / "run" / "aedt" / "aedt_0.2.17_0"),
-        (second_manifest, tmp_path / "run" / "aedt" / "aedt_0.2.17_1000"),
+        (first_manifest, tmp_path / "run" / "aedt" / "aedt_0.2.18_0"),
+        (second_manifest, tmp_path / "run" / "aedt" / "aedt_0.2.18_1000"),
     ]
     assert result == [[True], [True]]
 

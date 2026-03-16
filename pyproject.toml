@@ -1,12 +1,12 @@
 [project]
 name = "peetsfea"
-version = "0.2.17"
+version = "0.2.18"
 description = "Spec-first deterministic device design with Pyaedt."
 readme = "README.md"
 requires-python = "==3.12"
 license = { text = "MIT" }
 dependencies = [
-  "pyaedt[graphics]>=0.25.1",
+  "pyaedt[graphics]==0.25.1",
   "dearpygui>=2.1.1",
   "cadquery>=2.6.1",
   "sympy>=1.14.0",
