@@ -244,12 +244,16 @@ def test_tx_vertical_mode2_builder_uses_rxdd_d_path_on_yz_plane() -> None:
         tx_vertical_bridge_edges_from_node=_tx_vertical_bridge_edges_from_node,
     )
 
-    expected_local_points = _build_rxdd_right_points_A_to_d_cw(
-        turns=2,
-        outer_x=100.0,
-        outer_y=40.0,
-        trace=1.0,
-        gap=1.0,
+    expected_local_points = list(
+        reversed(
+            _build_rxdd_right_points_A_to_d_cw(
+                turns=2,
+                outer_x=100.0,
+                outer_y=40.0,
+                trace=1.0,
+                gap=1.0,
+            )
+        )
     )
     expected_right_points = _map_xy_points_to_yz(
         expected_local_points,
@@ -287,6 +291,24 @@ def test_tx_vertical_mode2_builder_uses_rxdd_d_path_on_yz_plane() -> None:
     assert all(point[0] == 70.0 for point in expected_right_points)
     assert state.coil_plane_bboxes[0][1] == "YZ"
     assert state.coil_plane_bboxes[1][1] == "YZ"
+    assert state.coil_polarity == [
+        {
+            "group_kind": "tx_vertical",
+            "group_instance_index": 0,
+            "board_id": "tx_vertical_0",
+            "instance_side": "left",
+            "current_direction": "cw",
+            "b_field_direction": "right",
+        },
+        {
+            "group_kind": "tx_vertical",
+            "group_instance_index": 1,
+            "board_id": "tx_vertical_0",
+            "instance_side": "right",
+            "current_direction": "ccw",
+            "b_field_direction": "right",
+        },
+    ]
     assert finalize_inputs.tx_vertical_global_outer_right_edge == expected_right_start_edge
     assert finalize_inputs.tx_vertical_global_outer_left_edge == expected_left_end_edge
     assert finalize_inputs.tx_vertical_mode2_terminal_edges_by_board[("tx_vertical_0", 0)] == {
@@ -568,18 +590,47 @@ def test_existing_edge_bridge_conductor_builds_thickened_sheet_for_tx_vertical_m
         bridge_error_context="tx_vertical mode2 pair bridge",
         region_kind="tx_region_vertical",
         region_min=(0.0, -10.0, 0.0),
-        region_max=(2.0, 10.0, 10.0),
+        region_max=(3.0, 10.0, 10.0),
         placement_violations=[],
+        x_jog_mm=1.0,
     )
 
     assert cast(list[list[float]], modeler.polyline_calls[0]["points"]) == [
-        [1.0, 5.0, 8.0],
+        [2.0, 5.0, 8.0],
+        [2.0, 5.0, 9.0],
         [1.0, 5.0, 9.0],
+        [1.0, 5.0, 8.0],
+    ]
+    assert cast(list[list[float]], modeler.polyline_calls[1]["points"]) == [
+        [2.0, 5.0, 8.0],
+        [2.0, 5.0, 9.0],
+        [2.0, -5.0, 3.0],
+        [2.0, -5.0, 2.0],
+    ]
+    assert cast(list[list[float]], modeler.polyline_calls[2]["points"]) == [
+        [2.0, -5.0, 2.0],
+        [2.0, -5.0, 3.0],
         [1.0, -5.0, 3.0],
         [1.0, -5.0, 2.0],
     ]
-    assert modeler.cover_lines_calls == ["bridge_tx_vertical_mode2_pair_demo"]
-    assert modeler.thicken_sheet_calls == [("bridge_tx_vertical_mode2_pair_demo", 0.14)]
-    assert modeler.unite_calls == [["coil_txv_right", "coil_txv_left", "bridge_tx_vertical_mode2_pair_demo"]]
-    assert cad_probe[-1]["bbox"] == pytest.approx([1.0, -5.0, 2.0, 1.14, 5.0, 9.0], abs=1e-12)
+    assert modeler.cover_lines_calls == [
+        "bridge_tx_vertical_mode2_pair_demo_jog_out",
+        "bridge_tx_vertical_mode2_pair_demo",
+        "bridge_tx_vertical_mode2_pair_demo_jog_in",
+    ]
+    assert modeler.thicken_sheet_calls == [
+        ("bridge_tx_vertical_mode2_pair_demo_jog_out", 0.14),
+        ("bridge_tx_vertical_mode2_pair_demo", 0.14),
+        ("bridge_tx_vertical_mode2_pair_demo_jog_in", 0.14),
+    ]
+    assert modeler.unite_calls == [[
+        "coil_txv_right",
+        "coil_txv_left",
+        "bridge_tx_vertical_mode2_pair_demo_jog_out",
+        "bridge_tx_vertical_mode2_pair_demo",
+        "bridge_tx_vertical_mode2_pair_demo_jog_in",
+    ]]
+    assert cad_probe[-3]["bbox"] == pytest.approx([1.0, 5.0, 8.0, 2.0, 5.14, 9.0], abs=1e-12)
+    assert cad_probe[-2]["bbox"] == pytest.approx([2.0, -5.0, 2.0, 2.14, 5.0, 9.0], abs=1e-12)
+    assert cad_probe[-1]["bbox"] == pytest.approx([1.0, -5.0, 2.0, 2.0, -4.86, 3.0], abs=1e-12)
     assert united_name == "coil_txv_right"

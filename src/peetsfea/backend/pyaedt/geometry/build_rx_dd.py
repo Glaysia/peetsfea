@@ -36,6 +36,7 @@ TX_DD_START_STUB_DOWN_MM = 3.0
 RX_DD_BACK_STUB_LEN_MM = 3.0
 RX_DD_BACK_STUB_AXIS_SIGN_X = -1.0
 FR4_SUBTRACT_OVERLAP_MM = 0.1
+TX_VERTICAL_MODE2_PAIR_JOG_X_MM = 1.0
 
 
 class _TxVerticalMode2TerminalEdges(TypedDict):
@@ -408,6 +409,7 @@ def _apply_existing_edge_bridge_conductor(
     region_min: _Point3 | None = None,
     region_max: _Point3 | None = None,
     placement_violations: list[RegionViolation] | None = None,
+    x_jog_mm: float = 0.0,
 ) -> str:
     def _check_region(*, object_name: str, bbox: list[float]) -> None:
         if region_kind is None or region_min is None or region_max is None:
@@ -437,33 +439,82 @@ def _apply_existing_edge_bridge_conductor(
                 f"(bridge={bridge_name}, source={source_object_name})"
             )
 
-    bridge_sheet_points = _sheet_points_from_edge_pair(dd_edge=first_edge, vertical_edge=second_edge)
-    try:
-        bridge_obj_name, bridge_obj = _create_thickened_sheet_from_points(
-            modeler=modeler,
-            sheet_points=bridge_sheet_points,
-            sheet_name=bridge_name,
-            thickness=(cu_thickness * 4.0),
+    if x_jog_mm < 0.0:
+        raise ValueError(f"{group_key} edge-bridge x_jog_mm must be >= 0 (actual={x_jog_mm})")
+
+    def _offset_edge_x(edge: _Edge2P, dx: float) -> _Edge2P:
+        return (
+            (edge[0][0] + dx, edge[0][1], edge[0][2]),
+            (edge[1][0] + dx, edge[1][1], edge[1][2]),
         )
-    except ValueError as exc:
-        message = str(exc)
-        if message.startswith("Sheet loop creation failed"):
-            raise ValueError(f"{bridge_error_context} rectangle loop creation failed (name={bridge_name})") from exc
-        if message.startswith("Sheet cover_lines failed"):
-            raise ValueError(f"{bridge_error_context} cover_lines failed (name={bridge_name})") from exc
-        if message.startswith("Sheet thicken failed"):
-            raise ValueError(
-                f"{bridge_error_context} thicken failed (name={bridge_name}, thickness={cu_thickness * 4.0})"
-            ) from exc
-        raise
 
-    object_names.append(bridge_obj_name)
-    group_objects[group_key].append(bridge_obj_name)
-    bridge_probe = _probe_cad_object(bridge_obj, bridge_name)
-    cad_probe.append(bridge_probe)
-    _check_region(object_name=bridge_obj_name, bbox=bridge_probe["bbox"])
+    def _create_bridge_piece(
+        *,
+        piece_name: str,
+        piece_first_edge: _Edge2P,
+        piece_second_edge: _Edge2P,
+        reverse_sheet_loop: bool = False,
+    ) -> str:
+        bridge_sheet_points = _sheet_points_from_edge_pair(dd_edge=piece_first_edge, vertical_edge=piece_second_edge)
+        if reverse_sheet_loop:
+            bridge_sheet_points = list(reversed(bridge_sheet_points))
+        try:
+            bridge_obj_name, bridge_obj = _create_thickened_sheet_from_points(
+                modeler=modeler,
+                sheet_points=bridge_sheet_points,
+                sheet_name=piece_name,
+                thickness=(cu_thickness * 4.0),
+            )
+        except ValueError as exc:
+            message = str(exc)
+            if message.startswith("Sheet loop creation failed"):
+                raise ValueError(f"{bridge_error_context} rectangle loop creation failed (name={piece_name})") from exc
+            if message.startswith("Sheet cover_lines failed"):
+                raise ValueError(f"{bridge_error_context} cover_lines failed (name={piece_name})") from exc
+            if message.startswith("Sheet thicken failed"):
+                raise ValueError(
+                    f"{bridge_error_context} thicken failed (name={piece_name}, thickness={cu_thickness * 4.0})"
+                ) from exc
+            raise
 
-    unite_targets = [first_object_name, second_object_name, bridge_obj_name]
+        object_names.append(bridge_obj_name)
+        group_objects[group_key].append(bridge_obj_name)
+        bridge_probe = _probe_cad_object(bridge_obj, piece_name)
+        cad_probe.append(bridge_probe)
+        _check_region(object_name=bridge_obj_name, bbox=bridge_probe["bbox"])
+        return bridge_obj_name
+
+    if x_jog_mm <= 1e-12:
+        bridge_object_names = [
+            _create_bridge_piece(
+                piece_name=bridge_name,
+                piece_first_edge=first_edge,
+                piece_second_edge=second_edge,
+            )
+        ]
+    else:
+        first_offset_edge = _offset_edge_x(first_edge, x_jog_mm)
+        second_offset_edge = _offset_edge_x(second_edge, x_jog_mm)
+        bridge_object_names = [
+            _create_bridge_piece(
+                piece_name=f"{bridge_name}_jog_out",
+                piece_first_edge=first_edge,
+                piece_second_edge=first_offset_edge,
+                reverse_sheet_loop=True,
+            ),
+            _create_bridge_piece(
+                piece_name=bridge_name,
+                piece_first_edge=first_offset_edge,
+                piece_second_edge=second_offset_edge,
+            ),
+            _create_bridge_piece(
+                piece_name=f"{bridge_name}_jog_in",
+                piece_first_edge=second_offset_edge,
+                piece_second_edge=second_edge,
+            ),
+        ]
+
+    unite_targets = [first_object_name, second_object_name, *bridge_object_names]
     united_name = safe_unite(
         modeler=modeler,
         targets=unite_targets,
@@ -946,6 +997,7 @@ def _finalize_solids_and_substrates_impl(
             region_min=tx_vertical_region_min,
             region_max=tx_vertical_region_max,
             placement_violations=placement_violations,
+            x_jog_mm=TX_VERTICAL_MODE2_PAIR_JOG_X_MM,
         )
 
     for (board_id, board_idx), nodes in tx_vertical_nodes_by_board.items():

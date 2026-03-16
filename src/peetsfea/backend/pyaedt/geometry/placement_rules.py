@@ -6,12 +6,8 @@ from typing import Literal, cast
 from peetsfea.types.manifest import (
     CoilPolaritySpec,
     GroupEndpointEntry,
-    GroupGeometryParams,
-    Manifest,
-    RegionViolation,
     ResolvedPcbInstance,
     ResolvedPcbMount,
-    SceneObjectEntry,
     TerminalLabel,
 )
 
@@ -20,7 +16,6 @@ from .spiral_points import (
     _build_rect_spiral_centerline_absolute,
     _map_xy_points_to_yz,
     _mirror_points_about_y_axis_line,
-    _translate_points,
 )
 
 _Point2 = tuple[float, float]
@@ -217,6 +212,8 @@ def _build_yz_dd_pair_from_right_local(
     axis_y: float,
     z_center: float,
     pair_center_distance: float,
+    expected_right_direction: Literal["cw", "ccw"] = "cw",
+    expected_left_direction: Literal["cw", "ccw"] = "ccw",
 ) -> list[_YzDdPairPlacement]:
     pair_half_distance = pair_center_distance / 2.0
     right_points = _map_xy_points_to_yz(
@@ -230,19 +227,21 @@ def _build_yz_dd_pair_from_right_local(
     left_projected = [[point[1], point[2], 0.0] for point in left_points]
     right_direction = _current_direction_from_xy_points(right_projected)
     left_direction = _current_direction_from_xy_points(left_projected)
-    if right_direction != "cw":
+    if right_direction != expected_right_direction:
         raise ValueError(
             "YZ DD pair right-half winding contract violation "
-            f"(actual_direction={right_direction}, expected=cw)"
+            f"(actual_direction={right_direction}, expected={expected_right_direction})"
         )
-    if left_direction != "ccw":
+    if left_direction != expected_left_direction:
         raise ValueError(
             "YZ DD pair left-half winding contract violation "
-            f"(actual_direction={left_direction}, expected=ccw)"
+            f"(actual_direction={left_direction}, expected={expected_left_direction})"
         )
+    right_direction_final = cast(Literal["cw", "ccw"], right_direction)
+    left_direction_final = cast(Literal["cw", "ccw"], left_direction)
     return [
-        ("left", left_points, axis_y - pair_half_distance, left_direction),
-        ("right", right_points, axis_y + pair_half_distance, right_direction),
+        ("left", left_points, axis_y - pair_half_distance, left_direction_final),
+        ("right", right_points, axis_y + pair_half_distance, right_direction_final),
     ]
 
 
