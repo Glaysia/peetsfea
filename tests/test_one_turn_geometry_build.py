@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 import pytest
+from ansys.aedt.core import Hfss
 from ansys.aedt.core.modeler.modeler_3d import Modeler3D
 
 from peetsfea.backend.pyaedt.geometry.build import (
@@ -15,8 +16,9 @@ from peetsfea.backend.pyaedt.geometry.build import (
     _tx_vertical_bridge_edges_from_node,
 )
 from peetsfea.backend.pyaedt.geometry.build_rx_dd import (
-    _apply_diagonal_connect_pair_conductor,
+    _apply_back_connect_stub_pair_bridge,
     _apply_existing_edge_bridge_conductor,
+    _finalize_solids_and_substrates_impl,
 )
 from peetsfea.backend.pyaedt.geometry.build_state import FinalizeInputs, GeometryBuildState, GeometryRuntimeContext
 from peetsfea.backend.pyaedt.geometry.group_builder_rx_dd import build_for_board as build_rx_dd_for_board
@@ -47,14 +49,31 @@ class _FakePolylineObject:
 class _FakeModeler:
     def __init__(self) -> None:
         self.polyline_calls: list[dict[str, object]] = []
+        self.create_box_calls: list[dict[str, object]] = []
         self.cover_lines_calls: list[str] = []
         self.thicken_sheet_calls: list[tuple[str, float]] = []
+        self.subtract_calls: list[dict[str, object]] = []
+        self.get_object_faces_calls: list[str] = []
         self.unite_calls: list[list[str]] = []
         self.objects: dict[str, _FakePolylineObject] = {}
 
     def create_polyline(self, **kwargs: object) -> _FakePolylineObject:
         self.polyline_calls.append(dict(kwargs))
         obj = _FakePolylineObject(str(kwargs["name"]), cast(list[list[float]], kwargs["points"]))
+        self.objects[obj.name] = obj
+        return obj
+
+    def create_box(self, **kwargs: object) -> _FakePolylineObject:
+        self.create_box_calls.append(dict(kwargs))
+        origin = cast(list[float], kwargs["origin"])
+        sizes = cast(list[float], kwargs["sizes"])
+        obj = _FakePolylineObject(
+            str(kwargs["name"]),
+            [
+                origin[:],
+                [origin[0] + sizes[0], origin[1] + sizes[1], origin[2] + sizes[2]],
+            ],
+        )
         self.objects[obj.name] = obj
         return obj
 
@@ -97,9 +116,55 @@ class _FakeModeler:
         _ = origin, vector, duplicate_assignment
         return [f"{assignment}_mirror"]
 
+    def subtract(self, *, blank_list: list[str], tool_list: list[str], keep_originals: bool) -> bool:
+        self.subtract_calls.append(
+            {
+                "blank_list": list(blank_list),
+                "tool_list": list(tool_list),
+                "keep_originals": keep_originals,
+            }
+        )
+        return True
+
+    def get_object_faces(self, assignment: str) -> list[int]:
+        self.get_object_faces_calls.append(assignment)
+        return [1]
+
     def unite(self, *, assignment: list[str]) -> str:
         self.unite_calls.append(list(assignment))
         return assignment[0]
+
+
+class _FakeBoundaryModule:
+    def __init__(self) -> None:
+        self.auto_identify_ports_calls: list[dict[str, object]] = []
+
+    def AutoIdentifyPorts(
+        self,
+        faces: list[object],
+        is_wave_port: bool,
+        reference_conductors: list[object],
+        port_name: str,
+        renormalize: bool,
+    ) -> None:
+        self.auto_identify_ports_calls.append(
+            {
+                "faces": list(faces),
+                "is_wave_port": is_wave_port,
+                "reference_conductors": list(reference_conductors),
+                "port_name": port_name,
+                "renormalize": renormalize,
+            }
+        )
+
+
+class _FakeHfss:
+    def __init__(self) -> None:
+        self.oboundary = _FakeBoundaryModule()
+        self.save_project_calls: list[str] = []
+
+    def save_project(self, path: str) -> None:
+        self.save_project_calls.append(path)
 
 
 def _ctx_base(*, selected_pcbs: list[ResolvedPcbInstance]) -> GeometryRuntimeContext:
@@ -533,7 +598,7 @@ def test_rx_dd_builder_supports_one_turn() -> None:
     assert state.placement_violations == []
 
 
-def test_diagonal_connect_pair_conductor_keeps_rx_dd_polyline_connector() -> None:
+def test_back_connect_stub_pair_bridge_builds_minus_x_yz_sheet_for_rx_dd() -> None:
     modeler = _FakeModeler()
     group_objects = cast(
         GroupObjects,
@@ -542,28 +607,123 @@ def test_diagonal_connect_pair_conductor_keeps_rx_dd_polyline_connector() -> Non
     object_names = ["coil_rx_left", "coil_rx_right"]
     cad_probe: list[CadProbe] = []
 
-    _apply_diagonal_connect_pair_conductor(
+    _apply_back_connect_stub_pair_bridge(
         modeler=cast(Modeler3D, modeler),
+        design_id="demo",
         cu_thickness=0.035,
         sources=[
-            ("board_0", 0, "c", (1.0, -5.0, 2.0), 1.0, "coil_rx_left"),
+            ("board_0", 0, "B", (1.0, -6.0, 1.0), 1.0, "coil_rx_left"),
             ("board_0", 0, "d", (1.0, 5.0, 8.0), 1.0, "coil_rx_right"),
         ],
+        endpoint_labels=("d", "B"),
+        stub_length_mm=1.0,
         group_objects=group_objects,
         group_key="rx_dd",
         object_names=object_names,
         cad_probe=cad_probe,
-        conductor_name="bridge_rx_dd_d_to_c_demo",
-        conductor_error_context="rx_dd diagonal connector",
-        region_kind="rx_region_actual",
-        region_min=(0.0, -10.0, 0.0),
-        region_max=(2.0, 10.0, 10.0),
-        placement_violations=[],
+        bridge_name="bridge_rx_dd_d_to_b_demo",
+        stub_name_prefix="rxc",
+        stub_error_context="rx_dd connect stub",
+        bridge_error_context="rx_dd yz sheet bridge",
     )
 
-    assert cast(list[list[float]], modeler.polyline_calls[0]["points"]) == [[1.0, 5.0, 8.0], [1.0, -5.0, 2.0]]
-    assert modeler.unite_calls == [["bridge_rx_dd_d_to_c_demo", "coil_rx_left", "coil_rx_right"]]
-    assert cad_probe[-1]["bbox"] == [1.0, -5.0, 2.0, 1.0, 5.0, 8.0]
+    assert [call["name"] for call in modeler.create_box_calls] == ["rxc_board_0_0_B", "rxc_board_0_0_d"]
+    assert cast(list[float], modeler.create_box_calls[0]["origin"]) == [0.0, -6.5, 0.5]
+    assert cast(list[float], modeler.create_box_calls[0]["sizes"]) == [1.0, 1.0, 1.0]
+    assert cast(list[float], modeler.create_box_calls[1]["origin"]) == [0.0, 4.5, 7.5]
+    assert cast(list[float], modeler.create_box_calls[1]["sizes"]) == [1.0, 1.0, 1.0]
+    assert cast(list[list[float]], modeler.polyline_calls[0]["points"]) == [
+        [0.0, 4.5, 7.5],
+        [0.0, 4.5, 8.5],
+        [0.0, -6.5, 1.5],
+        [0.0, -6.5, 0.5],
+    ]
+    assert modeler.unite_calls == [
+        ["coil_rx_left", "rxc_board_0_0_B"],
+        ["coil_rx_right", "rxc_board_0_0_d"],
+        ["bridge_rx_dd_d_to_b_demo", "coil_rx_left", "coil_rx_right"],
+    ]
+    assert cad_probe[-1]["bbox"] == [0.0, -6.5, 0.5, 0.14, 4.5, 8.5]
+
+
+def test_finalize_solids_routes_rx_port_over_a_to_c_and_pair_connector_over_d_to_b() -> None:
+    modeler = _FakeModeler()
+    hfss = _FakeHfss()
+    group_objects = cast(
+        GroupObjects,
+        {"tx_dd": [], "tx_vertical": [], "rx_dd": ["coil_rx_left", "coil_rx_right"], "ferrite": []},
+    )
+    object_names = ["coil_rx_left", "coil_rx_right"]
+    cad_probe: list[CadProbe] = []
+
+    finalized_object_names, _ = _finalize_solids_and_substrates_impl(
+        modeler=cast(Modeler3D, modeler),
+        hfss=cast(Hfss, hfss),
+        aedt_path=Path("/tmp/demo.aedt"),
+        design_id="demo",
+        cu_thickness=0.035,
+        pcb_thickness=1.6,
+        tx_board_ids=set(),
+        tx_vertical_nodes_by_board={},
+        tx_vertical_mode2_terminal_edges_by_board={},
+        tx_vertical_region_min=(0.0, -10.0, 0.0),
+        tx_vertical_region_max=(10.0, 10.0, 10.0),
+        txdd_right_a_points={},
+        txdd_right_object_names={},
+        txdd_left_a_points={},
+        txdd_left_object_names={},
+        txdd_start_stub_sources={},
+        rxdd_back_stub_sources=[
+            ("rx_main", 0, "B", (1.0, -6.0, 1.0), 1.0, "coil_rx_left"),
+            ("rx_main", 0, "c", (1.0, -5.0, 2.0), 1.0, "coil_rx_left"),
+            ("rx_main", 1, "A", (1.0, 6.0, 9.0), 1.0, "coil_rx_right"),
+            ("rx_main", 1, "d", (1.0, 5.0, 8.0), 1.0, "coil_rx_right"),
+        ],
+        group_objects=group_objects,
+        object_names=object_names,
+        cad_probe=cad_probe,
+        placement_violations=[],
+        coil_plane_bboxes=[],
+        fr4_object_names=[],
+        tx_vertical_fr4_names=[],
+        txdd_global_right_d_edge=None,
+        txdd_global_right_d_object_name=None,
+        txdd_global_left_vertical_link_edge=None,
+        txdd_global_left_vertical_link_object_name=None,
+        tx_vertical_global_outer_right_edge=None,
+        tx_vertical_global_outer_left_edge=None,
+    )
+
+    assert [call["name"] for call in modeler.create_box_calls] == [
+        "rxs_rx_main_0_c",
+        "rxs_rx_main_1_A",
+        "rxc_rx_main_0_B",
+        "rxc_rx_main_1_d",
+    ]
+    assert cast(list[float], modeler.create_box_calls[2]["origin"]) == [0.0, -6.5, 0.5]
+    assert cast(list[float], modeler.create_box_calls[2]["sizes"]) == [1.0, 1.0, 1.0]
+    assert cast(list[float], modeler.create_box_calls[3]["origin"]) == [0.0, 4.5, 7.5]
+    assert cast(list[float], modeler.create_box_calls[3]["sizes"]) == [1.0, 1.0, 1.0]
+    assert cast(list[list[float]], modeler.polyline_calls[0]["points"]) == [
+        [0.0, 4.5, 7.5],
+        [0.0, 4.5, 8.5],
+        [0.0, -6.5, 1.5],
+        [0.0, -6.5, 0.5],
+    ]
+    assert cast(str, modeler.polyline_calls[0]["name"]) == "bridge_rx_dd_d_to_b_demo"
+    assert cast(str, modeler.polyline_calls[1]["name"]) == "sheet_rxdd_ports"
+    assert modeler.get_object_faces_calls == ["sheet_rxdd_ports"]
+    assert hfss.oboundary.auto_identify_ports_calls == [
+        {
+            "faces": ["NAME:Faces", 1],
+            "is_wave_port": False,
+            "reference_conductors": ["NAME:ReferenceConductors", "rxs_rx_main_1_A"],
+            "port_name": "RX_TML",
+            "renormalize": True,
+        }
+    ]
+    assert hfss.save_project_calls == ["/tmp/demo.aedt"]
+    assert "bridge_rx_dd_d_to_b_demo" in finalized_object_names
 
 
 def test_existing_edge_bridge_conductor_builds_thickened_sheet_for_tx_vertical_mode2() -> None:

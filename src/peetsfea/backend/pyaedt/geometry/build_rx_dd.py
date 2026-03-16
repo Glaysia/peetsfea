@@ -34,9 +34,12 @@ _RxDdBackStubSource = _BackConnectStubSource
 _RegionKind = Literal["tx_region_dd", "tx_region_vertical", "rx_region_actual"]
 TX_DD_START_STUB_DOWN_MM = 3.0
 RX_DD_BACK_STUB_LEN_MM = 3.0
+RX_DD_CONNECT_STUB_LEN_MM = 1.0
 RX_DD_BACK_STUB_AXIS_SIGN_X = -1.0
 FR4_SUBTRACT_OVERLAP_MM = 0.1
 TX_VERTICAL_MODE2_PAIR_JOG_X_MM = 1.0
+RX_DD_CONNECT_ENDPOINT_LABELS: tuple[str, str] = ("d", "B")
+RX_DD_PORT_ENDPOINT_LABELS: tuple[str, str] = ("A", "c")
 
 
 class _TxVerticalMode2TerminalEdges(TypedDict):
@@ -66,10 +69,16 @@ def _rxdd_back_stub_sort_key(source: _RxDdBackStubSource) -> tuple[str, int, str
     return board_id, instance_index, endpoint_label
 
 
-def _rxdd_back_stub_origin_and_sizes(*, anchor_xyz: _Point3, trace: float) -> tuple[list[float], list[float]]:
-    length = RX_DD_BACK_STUB_LEN_MM
+def _rxdd_back_stub_origin_and_sizes(
+    *,
+    anchor_xyz: _Point3,
+    trace: float,
+    length: float = RX_DD_BACK_STUB_LEN_MM,
+) -> tuple[list[float], list[float]]:
     if trace <= 0.0:
         raise ValueError(f"rx_dd back stub trace must be > 0 (actual={trace})")
+    if length <= 0.0:
+        raise ValueError(f"rx_dd back stub length must be > 0 (actual={length})")
     if abs(RX_DD_BACK_STUB_AXIS_SIGN_X + 1.0) > 1e-12:
         raise ValueError(
             "rx_dd back stub axis contract violation: RX_DD_BACK_STUB_AXIS_SIGN_X must be -1.0 "
@@ -84,10 +93,17 @@ def _rxdd_back_stub_origin_and_sizes(*, anchor_xyz: _Point3, trace: float) -> tu
     return origin, sizes
 
 
-def _rxdd_back_stub_bridge_edge(*, anchor_xyz: _Point3, trace: float) -> _Edge2P:
+def _rxdd_back_stub_bridge_edge(
+    *,
+    anchor_xyz: _Point3,
+    trace: float,
+    length: float = RX_DD_BACK_STUB_LEN_MM,
+) -> _Edge2P:
     if trace <= 0.0:
         raise ValueError(f"rx_dd back stub bridge trace must be > 0 (actual={trace})")
-    x_at_back = anchor_xyz[0] + (RX_DD_BACK_STUB_AXIS_SIGN_X * RX_DD_BACK_STUB_LEN_MM)
+    if length <= 0.0:
+        raise ValueError(f"rx_dd back stub bridge length must be > 0 (actual={length})")
+    x_at_back = anchor_xyz[0] + (RX_DD_BACK_STUB_AXIS_SIGN_X * length)
     half_trace = trace / 2.0
     p0: _Point3 = (x_at_back, anchor_xyz[1] - half_trace, anchor_xyz[2] - half_trace)
     p1: _Point3 = (x_at_back, anchor_xyz[1] - half_trace, anchor_xyz[2] + half_trace)
@@ -100,6 +116,8 @@ def _apply_back_connect_stub_pair_bridge(
     design_id: str,
     cu_thickness: float,
     sources: list[_BackConnectStubSource],
+    endpoint_labels: tuple[str, str] = ("c", "d"),
+    stub_length_mm: float = RX_DD_BACK_STUB_LEN_MM,
     group_objects: GroupObjects,
     group_key: Literal["rx_dd", "tx_vertical"],
     object_names: list[str],
@@ -118,6 +136,14 @@ def _apply_back_connect_stub_pair_bridge(
         return
     if sheet_points_builder is None:
         sheet_points_builder = _sheet_points_from_edge_pair
+    first_endpoint_label, second_endpoint_label = endpoint_labels
+    if first_endpoint_label == second_endpoint_label:
+        raise ValueError(
+            f"{group_key} back connect-stub endpoint labels must be distinct "
+            f"(labels={endpoint_labels})"
+        )
+    allowed_endpoint_labels = {first_endpoint_label, second_endpoint_label}
+    allowed_endpoint_text = "/".join(endpoint_labels)
 
     name_replacements: dict[str, str] = {}
     connect_stub_edges: dict[str, _Edge2P] = {}
@@ -156,9 +182,9 @@ def _apply_back_connect_stub_pair_bridge(
         sources,
         key=_rxdd_back_stub_sort_key,
     ):
-        if endpoint_label not in ("c", "d"):
+        if endpoint_label not in allowed_endpoint_labels:
             raise ValueError(
-                f"{group_key} back connect-stub endpoint must be c/d only "
+                f"{group_key} back connect-stub endpoint must be {allowed_endpoint_text} only "
                 f"(actual={endpoint_label}, board_id={board_id}, instance_index={instance_index})"
             )
         source_object_name = _resolve_replaced_name(source_object_name_raw)
@@ -169,7 +195,11 @@ def _apply_back_connect_stub_pair_bridge(
                 f"(board_id={board_id}, instance_index={instance_index}, endpoint={endpoint_label}, "
                 f"source={source_object_name}, source_raw={source_object_name_raw})"
             )
-        stub_origin, stub_sizes = _rxdd_back_stub_origin_and_sizes(anchor_xyz=anchor_xyz, trace=trace)
+        stub_origin, stub_sizes = _rxdd_back_stub_origin_and_sizes(
+            anchor_xyz=anchor_xyz,
+            trace=trace,
+            length=stub_length_mm,
+        )
         stub_name = f"{stub_name_prefix}_{board_id}_{instance_index}_{endpoint_label}"
         stub_created = modeler.create_box(origin=stub_origin, sizes=stub_sizes, name=stub_name, material="copper")
         if not stub_created:
@@ -206,32 +236,39 @@ def _apply_back_connect_stub_pair_bridge(
         name_replacements[source_object_name_raw] = stub_united_name
         if endpoint_label in connect_stub_edges:
             raise ValueError(
-                f"{group_key} d/c bridge contract violation: duplicate stub endpoint captured "
+                f"{group_key} {allowed_endpoint_text} bridge contract violation: duplicate stub endpoint captured "
                 f"(endpoint={endpoint_label}, board_id={board_id}, instance_index={instance_index})"
             )
-        connect_stub_edges[endpoint_label] = _rxdd_back_stub_bridge_edge(anchor_xyz=anchor_xyz, trace=trace)
+        connect_stub_edges[endpoint_label] = _rxdd_back_stub_bridge_edge(
+            anchor_xyz=anchor_xyz,
+            trace=trace,
+            length=stub_length_mm,
+        )
         connect_source_names[endpoint_label] = source_object_name_raw
 
-    has_c = "c" in connect_stub_edges
-    has_d = "d" in connect_stub_edges
-    if has_c != has_d:
+    has_first = first_endpoint_label in connect_stub_edges
+    has_second = second_endpoint_label in connect_stub_edges
+    if has_first != has_second:
         raise ValueError(
-            f"{group_key} d/c bridge contract violation: both c and d stub edges must be present together "
-            f"(has_c={has_c}, has_d={has_d})"
+            f"{group_key} {allowed_endpoint_text} bridge contract violation: both endpoints must be present together "
+            f"(has_{first_endpoint_label}={has_first}, has_{second_endpoint_label}={has_second})"
         )
-    if not has_c:
+    if not has_first:
         return
 
-    c_edge = connect_stub_edges["c"]
-    d_edge = connect_stub_edges["d"]
-    c_object_name = _resolve_replaced_name(connect_source_names["c"])
-    d_object_name = _resolve_replaced_name(connect_source_names["d"])
-    c_exists = (c_object_name in object_names) or (c_object_name in group_objects[group_key])
-    d_exists = (d_object_name in object_names) or (d_object_name in group_objects[group_key])
-    if not c_exists or not d_exists:
-        raise ValueError(f"{group_key} d/c bridge source object missing (c_source={c_object_name}, d_source={d_object_name})")
+    first_edge = connect_stub_edges[first_endpoint_label]
+    second_edge = connect_stub_edges[second_endpoint_label]
+    first_object_name = _resolve_replaced_name(connect_source_names[first_endpoint_label])
+    second_object_name = _resolve_replaced_name(connect_source_names[second_endpoint_label])
+    first_exists = (first_object_name in object_names) or (first_object_name in group_objects[group_key])
+    second_exists = (second_object_name in object_names) or (second_object_name in group_objects[group_key])
+    if not first_exists or not second_exists:
+        raise ValueError(
+            f"{group_key} {allowed_endpoint_text} bridge source object missing "
+            f"({first_endpoint_label}_source={first_object_name}, {second_endpoint_label}_source={second_object_name})"
+        )
 
-    dc_bridge_sheet_points = sheet_points_builder(dd_edge=d_edge, vertical_edge=c_edge)
+    dc_bridge_sheet_points = sheet_points_builder(dd_edge=first_edge, vertical_edge=second_edge)
     try:
         dc_bridge_obj_name, dc_bridge_obj = _create_thickened_sheet_from_points(
             modeler=modeler,
@@ -255,7 +292,7 @@ def _apply_back_connect_stub_pair_bridge(
     cad_probe.append(bridge_probe)
     _check_region(object_name=dc_bridge_obj_name, bbox=bridge_probe["bbox"])
 
-    unite_targets = sorted(set([d_object_name, c_object_name, dc_bridge_obj_name]))
+    unite_targets = sorted(set([first_object_name, second_object_name, dc_bridge_obj_name]))
     if len(unite_targets) <= 1:
         return
     united_name = safe_unite(
@@ -277,6 +314,7 @@ def _apply_diagonal_connect_pair_conductor(
     modeler: Modeler3D,
     cu_thickness: float,
     sources: list[_BackConnectStubSource],
+    endpoint_labels: tuple[str, str],
     group_objects: GroupObjects,
     group_key: Literal["rx_dd", "tx_vertical"],
     object_names: list[str],
@@ -290,6 +328,14 @@ def _apply_diagonal_connect_pair_conductor(
 ) -> None:
     if not sources:
         return
+    first_endpoint_label, second_endpoint_label = endpoint_labels
+    if first_endpoint_label == second_endpoint_label:
+        raise ValueError(
+            f"{group_key} diagonal connector endpoint labels must be distinct "
+            f"(labels={endpoint_labels})"
+        )
+    allowed_endpoint_labels = {first_endpoint_label, second_endpoint_label}
+    allowed_endpoint_text = "/".join(endpoint_labels)
 
     def _check_region(*, object_name: str, bbox: list[float]) -> None:
         if region_kind is None or region_min is None or region_max is None:
@@ -316,9 +362,9 @@ def _apply_diagonal_connect_pair_conductor(
         sources,
         key=_rxdd_back_stub_sort_key,
     ):
-        if endpoint_label not in ("c", "d"):
+        if endpoint_label not in allowed_endpoint_labels:
             raise ValueError(
-                f"{group_key} diagonal connector endpoint must be c/d only "
+                f"{group_key} diagonal connector endpoint must be {allowed_endpoint_text} only "
                 f"(actual={endpoint_label}, board_id={board_id}, instance_index={instance_index})"
             )
         source_exists = (source_object_name in object_names) or (source_object_name in group_objects[group_key])
@@ -335,33 +381,33 @@ def _apply_diagonal_connect_pair_conductor(
             )
         endpoints[endpoint_label] = (anchor_xyz, trace, source_object_name)
 
-    has_c = "c" in endpoints
-    has_d = "d" in endpoints
-    if has_c != has_d:
+    has_first = first_endpoint_label in endpoints
+    has_second = second_endpoint_label in endpoints
+    if has_first != has_second:
         raise ValueError(
-            f"{group_key} diagonal connector contract violation: both c and d endpoints must be present together "
-            f"(has_c={has_c}, has_d={has_d})"
+            f"{group_key} diagonal connector contract violation: both {allowed_endpoint_text} endpoints must be present together "
+            f"(has_{first_endpoint_label}={has_first}, has_{second_endpoint_label}={has_second})"
         )
-    if not has_c:
+    if not has_first:
         return
 
-    c_anchor_xyz, c_trace, c_object_name = endpoints["c"]
-    d_anchor_xyz, d_trace, d_object_name = endpoints["d"]
-    if abs(c_trace - d_trace) > 1e-9:
+    first_anchor_xyz, first_trace, first_object_name = endpoints[first_endpoint_label]
+    second_anchor_xyz, second_trace, second_object_name = endpoints[second_endpoint_label]
+    if abs(first_trace - second_trace) > 1e-9:
         raise ValueError(
             f"{group_key} diagonal connector trace mismatch "
-            f"(c_trace={c_trace}, d_trace={d_trace})"
+            f"({first_endpoint_label}_trace={first_trace}, {second_endpoint_label}_trace={second_trace})"
         )
 
     conductor_created = modeler.create_polyline(
         points=[
-            [d_anchor_xyz[0], d_anchor_xyz[1], d_anchor_xyz[2]],
-            [c_anchor_xyz[0], c_anchor_xyz[1], c_anchor_xyz[2]],
+            [first_anchor_xyz[0], first_anchor_xyz[1], first_anchor_xyz[2]],
+            [second_anchor_xyz[0], second_anchor_xyz[1], second_anchor_xyz[2]],
         ],
         name=conductor_name,
         material="copper",
         xsection_type="Rectangle",
-        xsection_width=d_trace,  # type: ignore[arg-type]
+        xsection_width=first_trace,  # type: ignore[arg-type]
         xsection_height=cu_thickness,  # type: ignore[arg-type]
     )
     if not conductor_created:
@@ -374,7 +420,7 @@ def _apply_diagonal_connect_pair_conductor(
     cad_probe.append(conductor_probe)
     _check_region(object_name=conductor_obj_name, bbox=conductor_probe["bbox"])
 
-    unite_targets = sorted(set([d_object_name, c_object_name, conductor_obj_name]))
+    unite_targets = sorted(set([first_object_name, second_object_name, conductor_obj_name]))
     if len(unite_targets) <= 1:
         return
     united_name = safe_unite(
@@ -556,11 +602,11 @@ def _auto_identify_ports_direct(
 
 
 def _is_rxdd_connect_stub_endpoint(endpoint_label: str) -> bool:
-    return endpoint_label in ("c", "d")
+    return endpoint_label in RX_DD_CONNECT_ENDPOINT_LABELS
 
 
 def _is_rxdd_port_stub_endpoint(endpoint_label: str) -> bool:
-    return endpoint_label in ("A", "B")
+    return endpoint_label in RX_DD_PORT_ENDPOINT_LABELS
 
 
 def _txdd_start_stub_port_edge(*, anchor_xyz: _Point3, trace: float) -> _Edge2P:
@@ -773,8 +819,9 @@ def _finalize_solids_and_substrates_impl(
 
     txdd_start_stub_port_edges_by_board: dict[str, list[_Edge2P]] = {}
     txdd_start_stub_reference_names_by_board: dict[str, list[str]] = {}
-    rxdd_start_stub_edge_by_name: dict[str, _Edge2P] = {}
-    rxdd_start_stub_board_by_name: dict[str, str] = {}
+    rxdd_start_stub_edge_by_endpoint: dict[str, _Edge2P] = {}
+    rxdd_start_stub_name_by_endpoint: dict[str, str] = {}
+    rxdd_start_stub_board_by_endpoint: dict[str, str] = {}
 
     sorted_rxdd_back_stub_sources = sorted(rxdd_back_stub_sources, key=_rxdd_back_stub_sort_key)
     rxdd_connect_stub_sources: list[_RxDdBackStubSource] = []
@@ -809,19 +856,36 @@ def _finalize_solids_and_substrates_impl(
                 f"(stub={stub_object_name}, source={source_object_name}, board_id={board_id}, endpoint={endpoint_label})"
             )
         if _is_rxdd_port_stub_endpoint(endpoint_label):
-            rxdd_start_stub_edge_by_name[stub_object_name] = _rxdd_back_stub_bridge_edge(anchor_xyz=anchor_xyz, trace=trace)
-            rxdd_start_stub_board_by_name[stub_object_name] = board_id
+            if endpoint_label in rxdd_start_stub_edge_by_endpoint:
+                raise ValueError(
+                    "rx_dd start port endpoint contract violation: duplicate endpoint captured "
+                    f"(endpoint={endpoint_label}, board_id={board_id}, instance_index={instance_index})"
+                )
+            rxdd_start_stub_edge_by_endpoint[endpoint_label] = _rxdd_back_stub_bridge_edge(
+                anchor_xyz=anchor_xyz,
+                trace=trace,
+            )
+            rxdd_start_stub_name_by_endpoint[endpoint_label] = stub_object_name
+            rxdd_start_stub_board_by_endpoint[endpoint_label] = board_id
 
-    _apply_diagonal_connect_pair_conductor(
+    _apply_back_connect_stub_pair_bridge(
         modeler=modeler,
+        design_id=design_id,
         cu_thickness=cu_thickness,
         sources=rxdd_connect_stub_sources,
+        endpoint_labels=RX_DD_CONNECT_ENDPOINT_LABELS,
+        stub_length_mm=RX_DD_CONNECT_STUB_LEN_MM,
         group_objects=group_objects,
         group_key="rx_dd",
         object_names=object_names,
         cad_probe=cad_probe,
-        conductor_name=f"bridge_rx_dd_d_to_c_{design_id}",
-        conductor_error_context="rx_dd d/c diagonal conductor with source coils",
+        bridge_name=(
+            f"bridge_rx_dd_{RX_DD_CONNECT_ENDPOINT_LABELS[0].lower()}_to_"
+            f"{RX_DD_CONNECT_ENDPOINT_LABELS[1].lower()}_{design_id}"
+        ),
+        stub_name_prefix="rxc",
+        stub_error_context="rx_dd d/B connect stub with source coils",
+        bridge_error_context="rx_dd d/B YZ sheet bridge with connect stubs",
     )
 
     for board_id, stub_sources in sorted(txdd_start_stub_sources.items()):
@@ -919,65 +983,74 @@ def _finalize_solids_and_substrates_impl(
             board_id=board_id,
             context="tx_dd start port assignment",
         )
-    if rxdd_start_stub_edge_by_name:
-        sorted_rxdd_stub_names = sorted(rxdd_start_stub_edge_by_name)
-        if len(sorted_rxdd_stub_names) < 2:
+    if rxdd_start_stub_edge_by_endpoint:
+        first_port_label, second_port_label = RX_DD_PORT_ENDPOINT_LABELS
+        has_first_port = first_port_label in rxdd_start_stub_edge_by_endpoint
+        has_second_port = second_port_label in rxdd_start_stub_edge_by_endpoint
+        if has_first_port != has_second_port:
             raise ValueError(
-                "rx_dd start port sheet contract violation: expected at least 2 rx_dd back stubs overall "
-                f"(actual={len(sorted_rxdd_stub_names)})"
+                "rx_dd start port endpoint contract violation: both A and c stubs must be present together "
+                f"(has_{first_port_label}={has_first_port}, has_{second_port_label}={has_second_port})"
             )
-        selected_rxdd_stub_names = sorted_rxdd_stub_names[:2]
-        start_port_sheet_points = _sheet_points_from_edge_pair(
-            dd_edge=rxdd_start_stub_edge_by_name[selected_rxdd_stub_names[0]],
-            vertical_edge=rxdd_start_stub_edge_by_name[selected_rxdd_stub_names[1]],
-        )
-        start_port_sheet_name = "sheet_rxdd_ports"
-        try:
-            start_port_sheet_obj_name, start_port_sheet_obj = _create_sheet_from_points(
-                modeler=modeler,
-                sheet_points=start_port_sheet_points,
-                sheet_name=start_port_sheet_name,
-            )
-        except ValueError as exc:
-            message = str(exc)
-            if message.startswith("Sheet loop creation failed"):
-                raise ValueError(
-                    "rx_dd start port sheet rectangle loop creation failed "
-                    f"(name={start_port_sheet_name})"
-                ) from exc
-            if message.startswith("Sheet cover_lines failed"):
-                raise ValueError(
-                    "rx_dd start port sheet cover_lines failed "
-                    f"(name={start_port_sheet_name})"
-                ) from exc
-            raise
-        object_names.append(start_port_sheet_obj_name)
-        cad_probe.append(_probe_cad_object(start_port_sheet_obj, start_port_sheet_name))
-        start_port_faces = modeler.get_object_faces(start_port_sheet_obj_name)
-        if not start_port_faces:
+        if not has_first_port:
+            pass
+        elif len(rxdd_start_stub_edge_by_endpoint) < 2:
             raise ValueError(
-                "rx_dd start port assignment failed: no sheet faces were found "
-                f"(sheet={start_port_sheet_obj_name})"
+                "rx_dd start port sheet contract violation: expected both A and c stubs overall "
+                f"(actual={len(rxdd_start_stub_edge_by_endpoint)})"
             )
-        reference_conductor_name = selected_rxdd_stub_names[0]
-        board_id_context = ",".join(
-            sorted(
-                {
-                    rxdd_start_stub_board_by_name[selected_rxdd_stub_names[0]],
-                    rxdd_start_stub_board_by_name[selected_rxdd_stub_names[1]],
-                }
+        else:
+            start_port_sheet_points = _sheet_points_from_edge_pair(
+                dd_edge=rxdd_start_stub_edge_by_endpoint[first_port_label],
+                vertical_edge=rxdd_start_stub_edge_by_endpoint[second_port_label],
             )
-        )
-        start_port_name = "RX_TML"
-        _auto_identify_ports_direct(
-            hfss=hfss,
-            face_id=int(start_port_faces[0]),
-            reference_conductor_name=reference_conductor_name,
-            port_name=start_port_name,
-            sheet_name=start_port_sheet_obj_name,
-            board_id=board_id_context,
-            context="rx_dd start port assignment",
-        )
+            start_port_sheet_name = "sheet_rxdd_ports"
+            try:
+                start_port_sheet_obj_name, start_port_sheet_obj = _create_sheet_from_points(
+                    modeler=modeler,
+                    sheet_points=start_port_sheet_points,
+                    sheet_name=start_port_sheet_name,
+                )
+            except ValueError as exc:
+                message = str(exc)
+                if message.startswith("Sheet loop creation failed"):
+                    raise ValueError(
+                        "rx_dd start port sheet rectangle loop creation failed "
+                        f"(name={start_port_sheet_name})"
+                    ) from exc
+                if message.startswith("Sheet cover_lines failed"):
+                    raise ValueError(
+                        "rx_dd start port sheet cover_lines failed "
+                        f"(name={start_port_sheet_name})"
+                    ) from exc
+                raise
+            object_names.append(start_port_sheet_obj_name)
+            cad_probe.append(_probe_cad_object(start_port_sheet_obj, start_port_sheet_name))
+            start_port_faces = modeler.get_object_faces(start_port_sheet_obj_name)
+            if not start_port_faces:
+                raise ValueError(
+                    "rx_dd start port assignment failed: no sheet faces were found "
+                    f"(sheet={start_port_sheet_obj_name})"
+                )
+            reference_conductor_name = rxdd_start_stub_name_by_endpoint[first_port_label]
+            board_id_context = ",".join(
+                sorted(
+                    {
+                        rxdd_start_stub_board_by_endpoint[first_port_label],
+                        rxdd_start_stub_board_by_endpoint[second_port_label],
+                    }
+                )
+            )
+            start_port_name = "RX_TML"
+            _auto_identify_ports_direct(
+                hfss=hfss,
+                face_id=int(start_port_faces[0]),
+                reference_conductor_name=reference_conductor_name,
+                port_name=start_port_name,
+                sheet_name=start_port_sheet_obj_name,
+                board_id=board_id_context,
+                context="rx_dd start port assignment",
+            )
 
     for (_board_id, board_idx), terminal_edges in sorted(tx_vertical_mode2_terminal_edges_by_board.items()):
         _apply_existing_edge_bridge_conductor(
