@@ -36,12 +36,16 @@ def _build_tx_vertical_local_points(
     gap: float,
 ) -> list[list[float]]:
     if layout_mode == 2:
-        return _build_rxdd_right_points_A_to_d_cw(
-            turns=turns,
-            outer_x=outer_x,
-            outer_y=outer_z,
-            trace=trace,
-            gap=gap,
+        return list(
+            reversed(
+                _build_rxdd_right_points_A_to_d_cw(
+                    turns=turns,
+                    outer_x=outer_x,
+                    outer_y=outer_z,
+                    trace=trace,
+                    gap=gap,
+                )
+            )
         )
     return [
         list(point)
@@ -271,6 +275,8 @@ def build_for_board(
                 axis_y=logical_center_y,
                 z_center=world_center_z,
                 pair_center_distance=pair_center_distance,
+                expected_right_direction="ccw",
+                expected_left_direction="cw",
             ):
                 group_instance_index = (instance_index * 2) if pair_side == "left" else (instance_index * 2) + 1
                 (

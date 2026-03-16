@@ -57,6 +57,8 @@ This document defines the project rules for coding agents working in this reposi
 - Prefer output paths under `run/` for manifests, AEDT files, logs, and temporary execution artifacts.
 - When running `entry/multi_sample.py`, `entry/build.py`, `entry/multi_build.py`, `entry/build_one.py`, or `entry/sample_one_build.py` for AEDT geometry/debug flows, follow `.vscode/launch.json` contract.
 - Do not run those entry scripts directly from arbitrary cwd without the pre-launch cleanup step.
+- For requests that modify geometry, coil routing, terminal wiring, or other physical shape/topology, do at least one GUI-mode AEDT verification before considering the work complete.
+- This GUI-mode verification is a validation step only; the implementation itself must remain headless-compatible.
 - Required sequence:
   - For TOML generation, run the `prepare-sample-debug` task first (this clears `run/toml/`), then launch `Run entry/multi_sample.py from run/` with `cwd=run/`.
   - For AEDT generation from an existing manifest, run the `prepare-build-debug` task first (this clears `run/aedt/`), then launch `Run entry/build.py from run/` with `cwd=run/`.

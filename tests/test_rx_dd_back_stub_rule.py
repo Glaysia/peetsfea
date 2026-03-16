@@ -6,6 +6,8 @@ from typing import Literal, cast
 from peetsfea.backend.pyaedt.geometry.build import _append_rxdd_back_stub_sources_if_needed
 from peetsfea.backend.pyaedt.geometry.build_rx_dd import (
     FR4_SUBTRACT_OVERLAP_MM,
+    _is_rxdd_connect_stub_endpoint,
+    _is_rxdd_port_stub_endpoint,
     _fr4_box_from_plane_bbox,
     _rxdd_back_stub_bridge_edge,
     _rxdd_back_stub_origin_and_sizes,
@@ -20,6 +22,14 @@ def test_rxdd_back_stub_origin_and_sizes_use_trace_square_and_minus_x() -> None:
     origin, sizes = _rxdd_back_stub_origin_and_sizes(anchor_xyz=anchor, trace=trace)
     assert origin == [7.0, 19.4, 29.4]
     assert sizes == [3.0, 1.2, 1.2]
+
+
+def test_rxdd_back_stub_origin_and_sizes_support_custom_minus_x_length() -> None:
+    anchor = (10.0, 20.0, 30.0)
+    trace = 1.2
+    origin, sizes = _rxdd_back_stub_origin_and_sizes(anchor_xyz=anchor, trace=trace, length=1.0)
+    assert origin == [9.0, 19.4, 29.4]
+    assert sizes == [1.0, 1.2, 1.2]
 
 
 def test_rxdd_back_stub_sort_key_is_deterministic_by_board_instance_endpoint() -> None:
@@ -90,9 +100,26 @@ def test_append_rxdd_back_stub_sources_for_rxdd_left_and_right() -> None:
     ]
 
 
+def test_rxdd_endpoint_partition_routes_d_b_to_connect_and_a_c_to_port() -> None:
+    assert _is_rxdd_connect_stub_endpoint("d") is True
+    assert _is_rxdd_connect_stub_endpoint("B") is True
+    assert _is_rxdd_connect_stub_endpoint("A") is False
+    assert _is_rxdd_connect_stub_endpoint("c") is False
+
+    assert _is_rxdd_port_stub_endpoint("A") is True
+    assert _is_rxdd_port_stub_endpoint("c") is True
+    assert _is_rxdd_port_stub_endpoint("B") is False
+    assert _is_rxdd_port_stub_endpoint("d") is False
+
+
 def test_rxdd_back_stub_bridge_edge_uses_back_face_with_two_points() -> None:
     edge = _rxdd_back_stub_bridge_edge(anchor_xyz=(10.0, 20.0, 30.0), trace=2.0)
     assert edge == ((7.0, 19.0, 29.0), (7.0, 19.0, 31.0))
+
+
+def test_rxdd_back_stub_bridge_edge_supports_custom_minus_x_length() -> None:
+    edge = _rxdd_back_stub_bridge_edge(anchor_xyz=(10.0, 20.0, 30.0), trace=2.0, length=1.0)
+    assert edge == ((9.0, 19.0, 29.0), (9.0, 19.0, 31.0))
 
 
 def test_rxdd_back_stub_bridge_edge_rejects_non_positive_trace() -> None:
