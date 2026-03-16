@@ -206,6 +206,16 @@ def _input() -> EmPipelineInput:
                     "start_label": "A",
                     "end_label": "d",
                     "present": True,
+                },
+                {
+                    "group_kind": "rx_dd",
+                    "group_instance_index": 1,
+                    "board_id": "rx_main_1",
+                    "start_xyz": (0.0, -1.0, 0.0),
+                    "end_xyz": (1.0, -1.0, 0.0),
+                    "start_label": "B",
+                    "end_label": "c",
+                    "present": True,
                 }
             ],
         },
@@ -361,13 +371,14 @@ def test_run_em_pipeline_prefers_stub_excitation_names_for_post_variables() -> N
     fake_hfss = _FakeHfss()
     fake_hfss.excitation_names = [
         "txs_tx_main_1_1_T1",
-        "rxs_rx_main_1_1_A_T1",
+        "rxs_rx_main_0_0_A_T1",
+        "rxs_rx_main_1_1_c_T1",
     ]
     run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy(), _outputs())
     expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
     assert "Zt(txs_tx_main_1_1_T1,txs_tx_main_1_1_T1)" in expressions_by_name["Ltx_uH"]
-    assert "Zt(rxs_rx_main_1_1_A_T1,rxs_rx_main_1_1_A_T1)" in expressions_by_name["Lrx_uH"]
-    assert "Zt(txs_tx_main_1_1_T1,rxs_rx_main_1_1_A_T1)" in expressions_by_name["M_uH"]
+    assert "Zt(rxs_rx_main_1_1_c_T1,rxs_rx_main_1_1_c_T1)" in expressions_by_name["Lrx_uH"]
+    assert "Zt(txs_tx_main_1_1_T1,rxs_rx_main_1_1_c_T1)" in expressions_by_name["M_uH"]
 
 
 def test_run_em_pipeline_normalizes_parenthesized_terminal_names() -> None:
@@ -383,7 +394,19 @@ def test_run_em_pipeline_normalizes_parenthesized_terminal_names() -> None:
 
 def test_build_ports_returns_endpoint_based_default_port_names() -> None:
     ports = build_ports(cast(Hfss, _FakeHfss()), cast(Modeler3D, _FakeModeler()), _input())
-    assert ports == {"tx": ["TX_TML"], "rx": ["RX_TML"]}
+    assert ports == {"tx": ["TX_TML"], "rx": ["RX_TML", "rxs_rx_main_1_1_c_T1"]}
+
+
+def test_run_em_pipeline_prefers_canonical_rx_stub_for_parenthesized_excitation_names() -> None:
+    fake_hfss = _FakeHfss()
+    fake_hfss.excitation_names = [
+        "txs_tx_main_1_1_T1",
+        "(rxs_rx_main_0_0_A_T1)",
+        "(rxs_rx_main_1_1_c_T1)",
+    ]
+    run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy(), _outputs())
+    expressions_by_name = {name: expr for name, expr, _ in fake_hfss.created_output_variables}
+    assert "Zt(rxs_rx_main_1_1_c_T1,rxs_rx_main_1_1_c_T1)" in expressions_by_name["Lrx_uH"]
 
 
 def test_run_em_pipeline_uses_policy_frequencies_for_setup_and_disabled_sweep_metadata() -> None:
@@ -453,11 +476,12 @@ def test_run_em_pipeline_falls_back_to_stub_rxdd_source_name_for_90deg_phase() -
     fake_hfss = _FakeHfss()
     fake_hfss.excitation_names = [
         "TX_TML",
-        "rxs_rx_main_1_1_A_T1",
+        "rxs_rx_main_0_0_A_T1",
+        "rxs_rx_main_1_1_c_T1",
     ]
     run_em_pipeline(cast(Hfss, fake_hfss), cast(Modeler3D, _FakeModeler()), _input(), default_em_policy(), _outputs())
     assert fake_hfss.edited_sources_payloads
     sources_payload = fake_hfss.edited_sources_payloads[0]
     payload_text = str(sources_payload)
-    assert "rxs_rx_main_1_1_A_T1" in payload_text
+    assert "rxs_rx_main_1_1_c_T1" in payload_text
     assert "90deg" in payload_text

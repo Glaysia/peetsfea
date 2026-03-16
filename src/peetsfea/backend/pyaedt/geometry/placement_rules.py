@@ -70,6 +70,52 @@ def _find_txdd_right_inner_c_index(base_points: list[list[float]]) -> int:
     return max(candidate[0] for candidate in min_xy_candidates)
 
 
+def _build_txdd_right_points_c_to_a(
+    *,
+    base: list[list[float]],
+    outer_x: float,
+    outer_y: float,
+    trace: float,
+    gap: float,
+) -> list[list[float]]:
+    c_index = _find_txdd_right_inner_c_index(base)
+    points = [point[:] for point in reversed(base[: c_index + 1])]
+    upper_a = [
+        -(outer_x + (trace + gap)) / 2.0 + (trace / 2.0),
+        (outer_y + (trace + gap)) / 2.0 - (trace / 2.0),
+        0.0,
+    ]
+    last = points[-1]
+    if abs(last[0] - upper_a[0]) > 1e-9:
+        points.append([upper_a[0], last[1], last[2]])
+    if abs(points[-1][1] - upper_a[1]) > 1e-9:
+        points.append([upper_a[0], upper_a[1], upper_a[2]])
+    if len(points) < 2:
+        raise ValueError("tx_dd right endpoint contract violation: c->A path is too short")
+    return points
+
+
+def _build_txdd_right_points_a_to_d(*, base: list[list[float]]) -> list[list[float]]:
+    mirrored_x = [[-point[0], point[1], point[2]] for point in base]
+    outer_a = base[0]
+    a_index = next(
+        (
+            idx
+            for idx, point in enumerate(mirrored_x)
+            if abs(point[0] - outer_a[0]) <= 1e-9 and abs(point[1] - outer_a[1]) <= 1e-9
+        ),
+        None,
+    )
+    if a_index is None:
+        raise ValueError("tx_dd right endpoint contract violation: cannot locate outer A anchor for A->D->...->d")
+    rotated = mirrored_x[a_index:] + mirrored_x[:a_index]
+    c_index = _find_txdd_right_inner_c_index(rotated)
+    d_index = c_index - 1
+    if d_index < 1:
+        raise ValueError("tx_dd right endpoint contract violation: A->D->...->d path is too short")
+    return [point[:] for point in rotated[: d_index + 1]]
+
+
 def _validate_txdd_right_points(
     points: list[list[float]],
     *,
@@ -360,6 +406,10 @@ def _build_polarity(kind: str, side: Literal["left", "right", "center"]) -> tupl
             return ("cw", "down")
         return ("ccw", "up")
     if kind == "tx_vertical":
+        if side == "right":
+            return ("cw", "left")
+        if side == "left":
+            return ("ccw", "right")
         return ("ccw", "right")
     # rx_dd
     if side == "right":
@@ -451,12 +501,12 @@ def _apply_txdd_right_endpoint_rule(
 
     if not right_candidates:
         return
-    # Single-layer tx_dd (selected_count=2) always uses the right endpoint path C->d.
+    # Single-layer tx_dd (selected_count=2) always uses the right endpoint path A->d.
     # In this topology, every right instance index is 1, even if multiple boards contribute.
     if all(candidate[2] == 1 for candidate in right_candidates):
         for _, _, _, key in right_candidates:
             endpoint_entry = endpoint_by_key[key]
-            endpoint_entry["start_label"] = "C"
+            endpoint_entry["start_label"] = "A"
             endpoint_entry["end_label"] = "d"
         return
     if len(right_candidates) > 2:
@@ -473,7 +523,7 @@ def _apply_txdd_right_endpoint_rule(
         endpoint_entry["end_label"] = end_label
 
     if len(right_candidates) == 1:
-        _set_labels(right_candidates[0][3], "C", "d")
+        _set_labels(right_candidates[0][3], "A", "d")
         return
 
     # Lower layer first by Z center, then deterministic key tie-break.
@@ -512,10 +562,8 @@ def _txdd_right_points(
         )
     ]
     if instance_count == 2:
-        # Single layer right: C -> d.
-        points = base[2:]
-        if len(points) < 2:
-            raise ValueError("tx_dd right endpoint contract violation: C->d path is too short")
+        # Single layer right: A -> D -> ... -> d.
+        points = _build_txdd_right_points_a_to_d(base=base)
         _validate_txdd_right_points(points, trace=trace, gap=gap)
         return points
     if instance_count != 4:
@@ -524,41 +572,17 @@ def _txdd_right_points(
         raise ValueError(f"tx_dd right endpoint rule requires layer index 0 or 1 (actual={layer_index})")
     if layer_index == 0:
         # Lower layer right: c -> A.
-        c_index = _find_txdd_right_inner_c_index(base)
-        points = [point[:] for point in reversed(base[: c_index + 1])]
-        upper_a = [
-            -(outer_x + (trace + gap)) / 2.0 + (trace / 2.0),
-            (outer_y + (trace + gap)) / 2.0 - (trace / 2.0),
-            0.0,
-        ]
-        last = points[-1]
-        if abs(last[0] - upper_a[0]) > 1e-9:
-            points.append([upper_a[0], last[1], last[2]])
-        if abs(points[-1][1] - upper_a[1]) > 1e-9:
-            points.append([upper_a[0], upper_a[1], upper_a[2]])
-        if len(points) < 2:
-            raise ValueError("tx_dd right endpoint contract violation: c->A path is too short")
+        points = _build_txdd_right_points_c_to_a(
+            base=base,
+            outer_x=outer_x,
+            outer_y=outer_y,
+            trace=trace,
+            gap=gap,
+        )
         _validate_txdd_right_points(points, trace=trace, gap=gap)
         return points
     # Upper layer right: A -> D -> ... -> d.
-    mirrored_x = [[-point[0], point[1], point[2]] for point in base]
-    outer_a = base[0]
-    a_index = next(
-        (
-            idx
-            for idx, point in enumerate(mirrored_x)
-            if abs(point[0] - outer_a[0]) <= 1e-9 and abs(point[1] - outer_a[1]) <= 1e-9
-        ),
-        None,
-    )
-    if a_index is None:
-        raise ValueError("tx_dd right endpoint contract violation: cannot locate outer A anchor for A->D->...->d")
-    rotated = mirrored_x[a_index:] + mirrored_x[:a_index]
-    c_index = _find_txdd_right_inner_c_index(rotated)
-    d_index = c_index - 1
-    if d_index < 1:
-        raise ValueError("tx_dd right endpoint contract violation: A->D->...->d path is too short")
-    points = [point[:] for point in rotated[: d_index + 1]]
+    points = _build_txdd_right_points_a_to_d(base=base)
     _validate_txdd_right_points(points, trace=trace, gap=gap)
     return points
 

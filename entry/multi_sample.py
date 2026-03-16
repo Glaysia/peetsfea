@@ -10,11 +10,11 @@ if __package__ in {None, ""}:
 from peetsfea.pipeline.run_batch import SampleManifestEntry
 
 from entry.sample import SampleProfile, generate_sample_manifest, sample_manifest_path_for_seed_start
-
+START = 0
 N = 1
 SAMPLE_PROFILES: tuple[SampleProfile, ...] = tuple(
     SampleProfile(seed_start=500 * i, seed_end=500 * (i + 1), target_count=100)
-    for i in range(N)
+    for i in range(START, N)
 )
 SAMPLE_WORKER_COUNT = N
 

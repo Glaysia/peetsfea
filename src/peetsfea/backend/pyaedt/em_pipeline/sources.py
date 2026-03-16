@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import re
 from typing import Protocol, cast
 
 from ansys.aedt.core import Hfss
+
+from .excitation_names import normalize_excitation_name, normalized_excitation_name_map, select_regex_fallback_name
 
 
 class _SolutionsModule(Protocol):
@@ -14,10 +15,6 @@ class _DesignModuleProvider(Protocol):
     def GetModule(self, name: str) -> object: ...
 
 
-def _normalize_excitation_name(name: str) -> str:
-    return str(name).strip().strip("'\"").lstrip("(").rstrip(")")
-
-
 def _find_excitation_name(
     *,
     preferred_names: list[str],
@@ -26,19 +23,24 @@ def _find_excitation_name(
     regex_fallback: str,
     role: str,
 ) -> str:
-    normalized_map: dict[str, str] = {_normalize_excitation_name(raw): raw for raw in excitation_names}
+    normalized_map = normalized_excitation_name_map(excitation_names)
     for preferred in preferred_names:
-        normalized_preferred = _normalize_excitation_name(preferred)
+        normalized_preferred = normalize_excitation_name(preferred)
         if not excitation_names and normalized_preferred:
             return preferred
         if normalized_preferred in normalized_map:
             return normalized_map[normalized_preferred]
 
-    if exact_fallback in normalized_map:
-        return normalized_map[exact_fallback]
-    for normalized, raw in normalized_map.items():
-        if re.search(regex_fallback, normalized):
-            return raw
+    normalized_exact_fallback = normalize_excitation_name(exact_fallback)
+    if normalized_exact_fallback in normalized_map:
+        return normalized_map[normalized_exact_fallback]
+    regex_fallback_name = select_regex_fallback_name(
+        excitation_names=excitation_names,
+        regex_fallback=regex_fallback,
+        prefer_canonical_rx_stub=(role == "rx"),
+    )
+    if regex_fallback_name is not None:
+        return regex_fallback_name
     raise ValueError(f"Could not resolve {role} source excitation name from available excitations: {sorted(normalized_map)}")
 
 

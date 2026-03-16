@@ -22,6 +22,20 @@ def test_build_candidates_float() -> None:
     assert list(values) == [0.0, 0.5, 1.0]
 
 
+def _find_seed_with_retry(spec_path: Path, *, seed_end: int = 64, max_attempts: int = 16) -> tuple[int, int]:
+    spec, _ = load_toml_bytes(spec_path)
+    for seed in range(seed_end):
+        for attempt in range(max_attempts):
+            try:
+                resolve_selection(spec=spec, seed=seed, attempt=attempt)
+                if attempt > 0:
+                    return seed, attempt
+                break
+            except SelectionConstraintError:
+                continue
+    raise AssertionError("Expected at least one seed that requires retry")
+
+
 def test_run_creates_manifest_and_is_deterministic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "spec.toml"
     write_type1_toml(toml_path)
@@ -77,7 +91,7 @@ def test_retry_attempt_advances_until_constraint_satisfied(tmp_path: Path, monke
         "[coil_shape.tx_dd.outer_x]\nrange = [false, 120.0, 320.0, 2]",
     )
     raw = raw.replace(
-        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 2, 4, 3]",
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 2, 3, 2]",
         "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
         1,
     )
@@ -89,8 +103,9 @@ def test_retry_attempt_advances_until_constraint_satisfied(tmp_path: Path, monke
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("2" * 40))
 
-    manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))["manifest"]
-    assert manifest["retry_attempt"] > 0
+    seed, expected_attempt = _find_seed_with_retry(toml_path)
+    manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=seed, backend="hfss"))["manifest"]
+    assert manifest["retry_attempt"] == expected_attempt
     assert manifest["retry_count"] == manifest["retry_attempt"]
     assert manifest["design_id"].split("_")[-1] == str(manifest["retry_attempt"])
 
@@ -116,11 +131,11 @@ def test_feasibility_constraint_allows_retry_to_find_valid_case(tmp_path: Path) 
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8")
     raw = raw.replace(
-        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 2, 4, 3]",
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 2, 3, 2]",
         "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
-        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 2, 4, 3]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 2, 3, 2]",
         "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
@@ -132,7 +147,7 @@ def test_feasibility_constraint_allows_retry_to_find_valid_case(tmp_path: Path) 
         "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
     )
     raw = raw.replace(
-        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 2, 4, 3]",
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 2, 3, 2]",
         "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
@@ -151,7 +166,7 @@ def test_feasibility_constraint_allows_retry_to_find_valid_case(tmp_path: Path) 
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.85, 0.85, 1]",
     )
-    raw = raw.replace("count_range = [true, 1, 1, 1]", "count_range = [true, 1, 1, 1]")
+    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 1, 1, 1]")
     raw += (
         "\n[[constraints.rules]]\n"
         'id = "tx_vertical_feasible_turns_for_active_group"\n'
@@ -164,10 +179,12 @@ def test_feasibility_constraint_allows_retry_to_find_valid_case(tmp_path: Path) 
     toml_path.write_text(raw, encoding="utf-8")
 
     spec, _ = load_toml_bytes(toml_path)
-    with pytest.raises(SelectionConstraintError):
-        resolve_selection(spec=spec, seed=2, attempt=0)
+    seed, first_feasible_attempt = _find_seed_with_retry(toml_path)
+    for attempt in range(first_feasible_attempt):
+        with pytest.raises(SelectionConstraintError):
+            resolve_selection(spec=spec, seed=seed, attempt=attempt)
 
-    selected, _, groups, geometries, _ = resolve_selection(spec=spec, seed=2, attempt=1)
+    selected, _, groups, geometries, _ = resolve_selection(spec=spec, seed=seed, attempt=first_feasible_attempt)
     groups_by_kind = {group["kind"]: group for group in groups}
     assert int(groups_by_kind["tx_vertical"]["selected_count"]) == 1
     geom_by_kind = {geom["kind"]: geom for geom in geometries}

@@ -324,21 +324,21 @@ range = [false, 1.62, 15.0, 8]
 # When tx_dd resolves to 4 instances (two stacked XY layers), the lower layer
 # keeps the same realized turn count but uses a one-pitch smaller centerline
 # box so its trace centers align roughly with the upper-layer gap centers.
-range = [true, 2, 4, 3]
+range = [true, 2, 3, 2]
 [coil_groups_params.tx_dd.band_ratio]
 range = [false, 0.1, 0.35, 20]
 [coil_groups_params.tx_dd.metal_ratio]
 range = [false, 0.15, 0.60, 25]
 
 [coil_groups_params.tx_vertical.turn_count_max]
-range = [true, 2, 4, 3]
+range = [true, 2, 3, 2]
 [coil_groups_params.tx_vertical.band_ratio]
 range = [false, 0.35, 0.5, 20]
 [coil_groups_params.tx_vertical.metal_ratio]
 range = [false, 0.45, 0.75, 25]
 
 [coil_groups_params.rx_dd.turn_count_max]
-range = [true, 2, 4, 3]
+range = [true, 2, 3, 2]
 [coil_groups_params.rx_dd.band_ratio]
 range = [false, 0.1, 0.35, 20]
 [coil_groups_params.rx_dd.metal_ratio]
@@ -367,7 +367,8 @@ range = [false, 4.4, 4.4, 1]
 
 [scene_anchor.shelf_height_mm]
 # Shelf top height from floor (mm) where TX region starts.
-range = [false, 400.0, 400.0, 1]
+# The default 456mm keeps the nominal TX-region-top to RX-region-bottom gap at 55mm.
+range = [false, 456.0, 456.0, 1]
 
 [scene_anchor.shelf_min_size_x_mm]
 # Minimum shelf size in +X (mm) to ensure scene envelope availability.
@@ -933,8 +934,9 @@ instance_transforms = [
 
 [[coil_groups]]
 kind = "tx_vertical"
-# Mode 2 is realized as a single RX-DD-style YZ pair; requested count>1 clamps to 1.
-count_range = [true, 1, 1, 1]
+# TX vertical requested count for legacy ZX mode.
+# Mode 2 is still realized as a single RX-DD-style YZ pair, so realized selected_count clamps to 1 there.
+count_range = [true, 1, 6, 6]
 instance_transforms = [
   { dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 },
 ]

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from collections import Counter
-
 from peetsfea.spec.loader import TOMLTable, load_toml_bytes
 from peetsfea.spec.resolver.api import _build_selected_parameters, resolve_selected_scalars
+from peetsfea.spec.resolver.coil_groups import resolve_coil_groups
 from peetsfea.spec.resolver.sampling import SamplingLedger, build_sampling_registry
 from peetsfea.spec.resolver import resolve_selection, resolve_selection_result, resolve_selection_with_context
 from peetsfea.spec.resolver.types import SelectionConstraintError, SelectionResult
@@ -12,7 +11,7 @@ from tests.fixtures.type1_spec import write_type1_toml
 
 
 def _first_feasible_result(spec: TOMLTable, *, seed: int) -> tuple[int, SelectionResult]:
-    for attempt in range(16):
+    for attempt in range(64):
         try:
             return attempt, resolve_selection_result(spec=spec, seed=seed, attempt=attempt)
         except SelectionConstraintError:
@@ -58,10 +57,10 @@ def test_ferrite_present_sampling_is_deterministic_and_reaches_both_states(tmp_p
     seen_by_seed: dict[int, bool] = {}
     seen_states: set[bool] = set()
     for seed in range(8):
-        context_a = SamplingLedger(registry)
+        context_a = SamplingLedger(registry, seed=seed, attempt=0)
         raw_a = resolve_selected_scalars(spec, seed, 0, context_a)
         selected_a = _build_selected_parameters(spec, raw_a)
-        context_b = SamplingLedger(registry)
+        context_b = SamplingLedger(registry, seed=seed, attempt=0)
         raw_b = resolve_selected_scalars(spec, seed, 0, context_b)
         selected_b = _build_selected_parameters(spec, raw_b)
         ferrite_a = bool(selected_a["ferrite_present"])
@@ -73,6 +72,21 @@ def test_ferrite_present_sampling_is_deterministic_and_reaches_both_states(tmp_p
     assert seen_states == {False, True}
     assert any(state is False for state in seen_by_seed.values())
     assert any(state is True for state in seen_by_seed.values())
+
+
+def test_sampling_is_deterministic_for_same_seed_and_attempt(tmp_path: Path) -> None:
+    toml_path = tmp_path / "type1.toml"
+    write_type1_toml(toml_path)
+    spec, _ = load_toml_bytes(toml_path)
+    registry = build_sampling_registry(spec)
+
+    context_a = SamplingLedger(registry, seed=11, attempt=3)
+    raw_a = resolve_selected_scalars(spec, 11, 3, context_a)
+    context_b = SamplingLedger(registry, seed=11, attempt=3)
+    raw_b = resolve_selected_scalars(spec, 11, 3, context_b)
+
+    assert raw_a == raw_b
+    assert context_a.as_dict() == context_b.as_dict()
 
 
 def test_tx_dd_top_clearance_ratio_derives_mm_clearance(tmp_path: Path) -> None:
@@ -126,7 +140,7 @@ def test_tx_vertical_mode2_clamps_selected_count_to_one(tmp_path: Path) -> None:
     toml_path = tmp_path / "tx_vertical_mode2_count_clamp.toml"
     write_type1_toml(toml_path, tx_region_h=320.0, outer_x=100.0)
     raw = toml_path.read_text(encoding="utf-8").replace(
-        "count_range = [true, 1, 1, 1]",
+        "count_range = [true, 1, 6, 6]",
         "count_range = [true, 6, 6, 1]",
         1,
     )
@@ -146,17 +160,39 @@ def test_tx_vertical_mode2_clamps_selected_count_to_one(tmp_path: Path) -> None:
     assert float(result.selected_parameters["tx_vertical_span_mm"]) == 0.0
 
 
-def test_raw_sampled_tx_vertical_layout_mode_is_evenly_split_on_attempt_zero(tmp_path: Path) -> None:
+def test_example_spec_keeps_tx_vertical_count_sampling_active_for_mode1(tmp_path: Path) -> None:
+    toml_path = tmp_path / "type1.toml"
+    write_type1_toml(toml_path)
+    spec, _ = load_toml_bytes(toml_path)
+
+    seen_requested_counts: set[int] = set()
+    for seed in range(500):
+        _, result = _first_feasible_result(spec, seed=seed)
+        if int(result.selected_parameters["tx_vertical_layout_mode"]) != 1:
+            continue
+        tx_vertical_group = next(group for group in result.selected_coil_groups if group["kind"] == "tx_vertical")
+        seen_requested_counts.add(int(tx_vertical_group["requested_count"]))
+        if len(seen_requested_counts) >= 2 and max(seen_requested_counts) > 1:
+            break
+
+    assert max(seen_requested_counts) > 1
+
+
+def test_layout_mode_and_tx_dd_count_mode_are_no_longer_perfectly_coupled(tmp_path: Path) -> None:
     toml_path = tmp_path / "type1.toml"
     write_type1_toml(toml_path)
     spec, _ = load_toml_bytes(toml_path)
     registry = build_sampling_registry(spec)
 
-    counts: Counter[int] = Counter()
+    seen_combos: set[tuple[int, int]] = set()
     for seed in range(500):
-        context = SamplingLedger(registry)
+        context = SamplingLedger(registry, seed=seed, attempt=0)
         raw = resolve_selected_scalars(spec, seed, 0, context)
         selected = _build_selected_parameters(spec, raw)
-        counts[int(selected["tx_vertical_layout_mode"])] += 1
+        groups = resolve_coil_groups(spec, seed, 0, selected, context)
+        tx_dd_group = next(group for group in groups if group["kind"] == "tx_dd")
+        seen_combos.add((int(selected["tx_vertical_layout_mode"]), int(tx_dd_group["selected_count"])))
+        if len(seen_combos) == 4:
+            break
 
-    assert counts == Counter({1: 250, 2: 250})
+    assert seen_combos == {(1, 2), (1, 4), (2, 2), (2, 4)}

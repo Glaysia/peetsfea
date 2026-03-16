@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from peetsfea.backend.pyaedt.geometry.placement_rules import _realized_txdd_geometry, _txdd_right_points
+from peetsfea.backend.pyaedt.geometry.placement_rules import (
+    _current_direction_from_xy_points,
+    _realized_txdd_geometry,
+    _txdd_right_points,
+)
 
 
 def test_realized_txdd_geometry_keeps_single_layer_geometry() -> None:
@@ -96,7 +100,7 @@ def test_txdd_right_points_use_gap_centered_lower_layer_interleave_with_aligned_
     assert lower_points[-1][1] == pytest.approx(upper_points[0][1])
 
 
-def test_txdd_right_points_keeps_two_layer_contract_unchanged() -> None:
+def test_txdd_right_points_uses_same_winding_for_two_layer_and_upper_four_layer_right_halves() -> None:
     points = _txdd_right_points(
         turns=3,
         outer_x=100.0,
@@ -106,7 +110,20 @@ def test_txdd_right_points_keeps_two_layer_contract_unchanged() -> None:
         instance_count=2,
         layer_index=0,
     )
+    upper_points = _txdd_right_points(
+        turns=3,
+        outer_x=100.0,
+        outer_y=60.0,
+        trace=1.0,
+        gap=0.25,
+        instance_count=4,
+        layer_index=1,
+    )
     assert len(points) > 2
+    assert _current_direction_from_xy_points(points) == "ccw"
+    assert _current_direction_from_xy_points(upper_points) == "ccw"
+    assert points[0] == upper_points[0]
+    assert points[-1] == upper_points[-1]
 
 
 def test_txdd_right_points_support_one_turn_for_two_and_four_layer_tx_dd() -> None:

@@ -52,8 +52,8 @@ def test_invalid_group_turn_count_range_fails(tmp_path: Path, monkeypatch: pytes
     toml_path = tmp_path / "bad_turn_count.toml"
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8").replace(
-        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 2, 4, 3]",
-        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [false, 2, 4, 3]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 2, 3, 2]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [false, 2, 3, 2]",
     )
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("1" * 40))
@@ -153,18 +153,18 @@ def test_tx_vertical_plane_removed_path_errors_on_027(tmp_path: Path, monkeypatc
 
 
 @pytest.mark.parametrize("kind", ["tx_dd", "tx_vertical", "rx_dd"])
-def test_turn_count_above_four_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
-    toml_path = tmp_path / f"{kind}_turn_count_above_four.toml"
+def test_turn_count_above_three_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
+    toml_path = tmp_path / f"{kind}_turn_count_above_three.toml"
     write_type1_toml(toml_path)
     raw = toml_path.read_text(encoding="utf-8").replace(
-        f"[coil_groups_params.{kind}.turn_count_max]\nrange = [true, 2, 4, 3]",
-        f"[coil_groups_params.{kind}.turn_count_max]\nrange = [true, 5, 5, 1]",
+        f"[coil_groups_params.{kind}.turn_count_max]\nrange = [true, 2, 3, 2]",
+        f"[coil_groups_params.{kind}.turn_count_max]\nrange = [true, 4, 4, 1]",
         1,
     )
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("7" * 40))
 
-    with pytest.raises(ValueError, match=rf"coil_groups_params\.{kind}\.turn_count_max must be <= 4"):
+    with pytest.raises(ValueError, match=rf"coil_groups_params\.{kind}\.turn_count_max must be <= 3"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 

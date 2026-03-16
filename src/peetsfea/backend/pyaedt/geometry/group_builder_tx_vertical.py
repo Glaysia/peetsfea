@@ -36,16 +36,12 @@ def _build_tx_vertical_local_points(
     gap: float,
 ) -> list[list[float]]:
     if layout_mode == 2:
-        return list(
-            reversed(
-                _build_rxdd_right_points_A_to_d_cw(
-                    turns=turns,
-                    outer_x=outer_x,
-                    outer_y=outer_z,
-                    trace=trace,
-                    gap=gap,
-                )
-            )
+        return _build_rxdd_right_points_A_to_d_cw(
+            turns=turns,
+            outer_x=outer_x,
+            outer_y=outer_z,
+            trace=trace,
+            gap=gap,
         )
     return [
         list(point)
@@ -91,6 +87,8 @@ def build_for_board(
     gap = geometry["gap"]
     if turns < 1:
         raise ValueError("selected_group_geometry.tx_vertical.turn_count_max must be >= 1")
+    if turns > 3:
+        raise ValueError("selected_group_geometry.tx_vertical.turn_count_max must be <= 3")
     if trace <= 0:
         raise ValueError("selected_group_geometry.tx_vertical.trace must be > 0")
     if gap < 0:
@@ -221,20 +219,22 @@ def build_for_board(
             tx_vertical_region_max=tx_vertical_region_max,
             plane=ctx.tx_vertical_plane,
         )
+        outer_right_edge = terminal_edge
+        outer_left_edge = opposite_terminal_edge
         right_key = (-y_center, pcb["id"], group_instance_index)
         if (
             finalize_inputs.tx_vertical_outer_right_selection_key is None
             or right_key < finalize_inputs.tx_vertical_outer_right_selection_key
         ):
             finalize_inputs.tx_vertical_outer_right_selection_key = right_key
-            finalize_inputs.tx_vertical_global_outer_right_edge = terminal_edge
+            finalize_inputs.tx_vertical_global_outer_right_edge = outer_right_edge
         left_key = (y_center, pcb["id"], group_instance_index)
         if (
             finalize_inputs.tx_vertical_outer_left_selection_key is None
             or left_key < finalize_inputs.tx_vertical_outer_left_selection_key
         ):
             finalize_inputs.tx_vertical_outer_left_selection_key = left_key
-            finalize_inputs.tx_vertical_global_outer_left_edge = opposite_terminal_edge
+            finalize_inputs.tx_vertical_global_outer_left_edge = outer_left_edge
         if register_link_node:
             board_key = (pcb["id"], board_idx)
             board_nodes = finalize_inputs.tx_vertical_nodes_by_board.setdefault(board_key, [])
@@ -275,8 +275,8 @@ def build_for_board(
                 axis_y=logical_center_y,
                 z_center=world_center_z,
                 pair_center_distance=pair_center_distance,
-                expected_right_direction="ccw",
-                expected_left_direction="cw",
+                expected_right_direction="cw",
+                expected_left_direction="ccw",
             ):
                 group_instance_index = (instance_index * 2) if pair_side == "left" else (instance_index * 2) + 1
                 (

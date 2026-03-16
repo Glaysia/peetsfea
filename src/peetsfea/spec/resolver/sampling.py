@@ -6,10 +6,11 @@ from collections.abc import Iterator, MutableMapping, Sequence
 from dataclasses import dataclass
 from typing import Final, Literal, cast
 
+import numpy as np
+
 from peetsfea.spec.loader import TOMLTable, TOMLValue
 
 from .constants import (
-    ATTEMPT_STRIDE,
     DERIVED_RANGE_PATHS,
     FIXED_PCB_RULES,
     GROUP_KIND_ORDER,
@@ -108,14 +109,19 @@ class SamplingRegistry:
 
 
 class SamplingLedger(MutableMapping[str, Number]):
-    def __init__(self, registry: SamplingRegistry) -> None:
+    def __init__(self, registry: SamplingRegistry, *, seed: int = 0, attempt: int = 0) -> None:
         self._registry = registry
         self._values_by_canonical: dict[str, Number] = {}
         self._path_to_canonical: dict[str, str] = {}
+        self._rng = _build_sampling_rng(seed=seed, attempt=attempt)
 
     @property
     def registry(self) -> SamplingRegistry:
         return self._registry
+
+    @property
+    def rng(self) -> np.random.Generator:
+        return self._rng
 
     def record(self, path: str, value: Number) -> Number:
         entry = self._registry.entry_for_path(path)
@@ -311,10 +317,28 @@ def build_candidates(is_integer: bool, start: float, end: float, count: int) -> 
     return tuple(deduped)
 
 
-def sample_candidate(candidates: Sequence[Number], *, seed: int, offset: int, attempt: int) -> Number:
+def _seed_words(seed: int, attempt: int) -> tuple[int, int, int, int]:
+    seed_bits = seed & ((1 << 64) - 1)
+    attempt_bits = attempt & ((1 << 64) - 1)
+    return (
+        seed_bits & 0xFFFFFFFF,
+        (seed_bits >> 32) & 0xFFFFFFFF,
+        attempt_bits & 0xFFFFFFFF,
+        (attempt_bits >> 32) & 0xFFFFFFFF,
+    )
+
+
+def _build_sampling_rng(*, seed: int, attempt: int) -> np.random.Generator:
+    return np.random.default_rng(np.random.SeedSequence(_seed_words(seed, attempt)))
+
+
+def sample_candidate(candidates: Sequence[Number], *, rng: np.random.Generator, seed: int, offset: int, attempt: int) -> Number:
     if len(candidates) == 0:
         raise ValueError("No candidates available for sampling")
-    return candidates[(seed + offset + (attempt * ATTEMPT_STRIDE)) % len(candidates)]
+    _ = seed, offset, attempt
+    if len(candidates) == 1:
+        return candidates[0]
+    return candidates[int(rng.integers(0, len(candidates)))]
 
 
 def _entry_from_scalar_range(path: str, expect_integer: bool) -> SamplingRegistryEntry:
@@ -595,7 +619,7 @@ def select_range_value(
     candidates = build_candidates(is_integer=is_integer, start=start, end=end, count=count)
     if len(candidates) == 0:
         raise ValueError(f"No candidates generated from {dotted_range_path}")
-    selected = sample_candidate(candidates, seed=seed, offset=offset, attempt=attempt)
+    selected = sample_candidate(candidates, rng=ledger.rng, seed=seed, offset=offset, attempt=attempt)
     return ledger.record(dotted_path, selected)
 
 

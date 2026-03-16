@@ -5,6 +5,11 @@ from typing import Protocol, cast
 
 from ansys.aedt.core import Hfss
 
+from peetsfea.backend.pyaedt.em_pipeline.excitation_names import (
+    normalize_excitation_name,
+    normalized_excitation_name_map,
+    select_regex_fallback_name,
+)
 from peetsfea.backend.pyaedt.em_pipeline.report_templates import build_post_template
 from peetsfea.types.manifest import EmPolicy, OutputsSpec, PostTemplateResult
 
@@ -171,16 +176,17 @@ def _find_terminal_name(
     excitation_names: list[str],
     exact_fallback: str,
     regex_fallback: str,
+    prefer_canonical_rx_stub: bool = False,
 ) -> str | None:
-    normalized_map: dict[str, str] = {
-        str(name).strip().strip("'\"").lstrip("(").rstrip(")"): str(name)
-        for name in excitation_names
-        if str(name).strip()
-    }
-    for normalized, raw in normalized_map.items():
-        if re.search(regex_fallback, normalized):
-            return raw
-    return normalized_map.get(exact_fallback)
+    regex_fallback_name = select_regex_fallback_name(
+        excitation_names=excitation_names,
+        regex_fallback=regex_fallback,
+        prefer_canonical_rx_stub=prefer_canonical_rx_stub,
+    )
+    if regex_fallback_name is not None:
+        return regex_fallback_name
+    normalized_map = normalized_excitation_name_map(excitation_names)
+    return normalized_map.get(normalize_excitation_name(exact_fallback))
 
 
 def _resolve_port_terms_for_expressions(hfss: Hfss) -> tuple[str, str, str]:
@@ -199,7 +205,7 @@ def _resolve_port_terms_for_expressions(hfss: Hfss) -> tuple[str, str, str]:
     except Exception:
         excitation_names = []
     normalized_excitation_names = [
-        str(name).strip().strip("'\"").lstrip("(").rstrip(")")
+        normalize_excitation_name(name)
         for name in excitation_names
         if isinstance(name, str) and str(name).strip()
     ]
@@ -228,6 +234,7 @@ def _resolve_port_terms_for_expressions(hfss: Hfss) -> tuple[str, str, str]:
         excitation_names=normalized_excitation_names,
         exact_fallback="RX_TML",
         regex_fallback=r"^rxs_.*_T1$",
+        prefer_canonical_rx_stub=True,
     )
     if tx_terminal_name is not None and rx_terminal_name is not None:
         return (tx_terminal_name, rx_terminal_name, s_function)

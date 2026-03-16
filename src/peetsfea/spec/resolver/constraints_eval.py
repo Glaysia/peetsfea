@@ -428,6 +428,52 @@ def _find_txdd_right_inner_c_index(base_points: list[_Point3]) -> int:
     return max(candidate[0] for candidate in min_xy_candidates)
 
 
+def _build_txdd_right_points_c_to_a(
+    *,
+    base: list[_Point3],
+    outer_x: float,
+    outer_y: float,
+    trace: float,
+    gap: float,
+) -> list[_Point3]:
+    c_index = _find_txdd_right_inner_c_index(base)
+    points = [point for point in reversed(base[: c_index + 1])]
+    upper_a = (
+        -(outer_x + (trace + gap)) / 2.0 + (trace / 2.0),
+        (outer_y + (trace + gap)) / 2.0 - (trace / 2.0),
+        0.0,
+    )
+    last = points[-1]
+    if abs(last[0] - upper_a[0]) > 1e-9:
+        points.append((upper_a[0], last[1], last[2]))
+    if abs(points[-1][1] - upper_a[1]) > 1e-9:
+        points.append(upper_a)
+    if len(points) < 2:
+        raise ValueError("tx_dd right endpoint contract violation: c->A path is too short")
+    return points
+
+
+def _build_txdd_right_points_a_to_d(*, base: list[_Point3]) -> list[_Point3]:
+    mirrored_x = [(-point[0], point[1], point[2]) for point in base]
+    outer_a = base[0]
+    a_index = next(
+        (
+            idx
+            for idx, point in enumerate(mirrored_x)
+            if abs(point[0] - outer_a[0]) <= 1e-9 and abs(point[1] - outer_a[1]) <= 1e-9
+        ),
+        None,
+    )
+    if a_index is None:
+        raise ValueError("tx_dd right endpoint contract violation: cannot locate outer A anchor for A->D->...->d")
+    rotated = mirrored_x[a_index:] + mirrored_x[:a_index]
+    c_index = _find_txdd_right_inner_c_index(rotated)
+    d_index = c_index - 1
+    if d_index < 1:
+        raise ValueError("tx_dd right endpoint contract violation: A->D->...->d path is too short")
+    return [point for point in rotated[: d_index + 1]]
+
+
 def _txdd_right_points(
     *,
     turns: int,
@@ -456,48 +502,20 @@ def _txdd_right_points(
         z=0.0,
     )
     if instance_count == 2:
-        points = base[2:]
-        if len(points) < 2:
-            raise ValueError("tx_dd right endpoint contract violation: C->d path is too short")
-        return points
+        return _build_txdd_right_points_a_to_d(base=base)
     if instance_count != 4:
         raise ValueError(f"tx_dd selected_count must be 2 or 4 for right endpoint rule (actual={instance_count})")
     if layer_index not in (0, 1):
         raise ValueError(f"tx_dd right endpoint rule requires layer index 0 or 1 (actual={layer_index})")
     if layer_index == 0:
-        c_index = _find_txdd_right_inner_c_index(base)
-        points = [point for point in reversed(base[: c_index + 1])]
-        upper_a = (
-            -(outer_x + (trace + gap)) / 2.0 + (trace / 2.0),
-            (outer_y + (trace + gap)) / 2.0 - (trace / 2.0),
-            0.0,
+        return _build_txdd_right_points_c_to_a(
+            base=base,
+            outer_x=outer_x,
+            outer_y=outer_y,
+            trace=trace,
+            gap=gap,
         )
-        last = points[-1]
-        if abs(last[0] - upper_a[0]) > 1e-9:
-            points.append((upper_a[0], last[1], last[2]))
-        if abs(points[-1][1] - upper_a[1]) > 1e-9:
-            points.append(upper_a)
-        if len(points) < 2:
-            raise ValueError("tx_dd right endpoint contract violation: c->A path is too short")
-        return points
-    mirrored_x = [(-point[0], point[1], point[2]) for point in base]
-    outer_a = base[0]
-    a_index = next(
-        (
-            idx
-            for idx, point in enumerate(mirrored_x)
-            if abs(point[0] - outer_a[0]) <= 1e-9 and abs(point[1] - outer_a[1]) <= 1e-9
-        ),
-        None,
-    )
-    if a_index is None:
-        raise ValueError("tx_dd right endpoint contract violation: cannot locate outer A anchor for A->D->...->d")
-    rotated = mirrored_x[a_index:] + mirrored_x[:a_index]
-    c_index = _find_txdd_right_inner_c_index(rotated)
-    d_index = c_index - 1
-    if d_index < 1:
-        raise ValueError("tx_dd right endpoint contract violation: A->D->...->d path is too short")
-    return [point for point in rotated[: d_index + 1]]
+    return _build_txdd_right_points_a_to_d(base=base)
 
 
 def _realized_txdd_geometry(

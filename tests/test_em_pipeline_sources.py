@@ -48,12 +48,21 @@ def test_apply_sources_phase_uses_named_tx_rx_ports() -> None:
 
 
 def test_apply_sources_phase_falls_back_to_short_rx_stub_excitation() -> None:
-    fake_hfss = _FakeHfssForSources(["TX_TML", "rxs_rx_main_1_1_A_T1"])
+    fake_hfss = _FakeHfssForSources(["TX_TML", "rxs_rx_main_1_1_c_T1"])
     result = apply_sources_phase(cast(Hfss, fake_hfss), {"tx": ["TX_TML"], "rx": ["RX_TML"]})
 
-    assert result["rx_source_name"] == "rxs_rx_main_1_1_A_T1"
+    assert result["rx_source_name"] == "rxs_rx_main_1_1_c_T1"
     assert fake_hfss.edited_sources_payloads
-    assert "rxs_rx_main_1_1_A_T1" in str(fake_hfss.edited_sources_payloads[0])
+    assert "rxs_rx_main_1_1_c_T1" in str(fake_hfss.edited_sources_payloads[0])
+
+
+def test_apply_sources_phase_prefers_canonical_rx_c_stub_over_a_fallback() -> None:
+    fake_hfss = _FakeHfssForSources(["TX_TML", "rxs_rx_main_0_0_A_T1", "rxs_rx_main_1_1_c_T1"])
+    result = apply_sources_phase(cast(Hfss, fake_hfss), {"tx": ["TX_TML"], "rx": ["RX_TML"]})
+
+    assert result["rx_source_name"] == "rxs_rx_main_1_1_c_T1"
+    assert fake_hfss.edited_sources_payloads
+    assert "rxs_rx_main_1_1_c_T1" in str(fake_hfss.edited_sources_payloads[0])
 
 
 def test_apply_sources_phase_raises_when_rx_source_is_missing() -> None:

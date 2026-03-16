@@ -144,7 +144,7 @@ def resolve_selection_result(spec: TOMLTable, seed: int, attempt: int = 0) -> Se
     reject_removed_paths(spec)
     registry = build_sampling_registry(spec)
     preflight_sampling_spec(spec, registry)
-    context = SamplingLedger(registry)
+    context = SamplingLedger(registry, seed=seed, attempt=attempt)
     raw = resolve_selected_scalars(spec, seed, attempt, context)
     raw_max = resolve_selected_max_scalars(spec)
     selected = _build_selected_parameters(spec, raw)

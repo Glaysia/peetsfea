@@ -4,6 +4,7 @@ from ansys.aedt.core import Hfss
 from ansys.aedt.core.modeler.modeler_3d import Modeler3D
 
 from peetsfea.backend.pyaedt.em_pipeline.contracts import EmPipelineInput
+from peetsfea.backend.pyaedt.em_pipeline.excitation_names import build_rx_port_preferred_names
 from peetsfea.types.manifest import EmPolicy
 
 
@@ -52,5 +53,5 @@ def build_ports(hfss: Hfss, modeler: Modeler3D, em_input: EmPipelineInput) -> di
     _ = (hfss, modeler)
     endpoints = em_input["endpoints"]
     tx_ports = ["TX_TML"] if endpoints["tx"] else []
-    rx_ports = ["RX_TML"] if endpoints["rx"] else []
+    rx_ports = build_rx_port_preferred_names(endpoints["rx"])
     return {"tx": tx_ports, "rx": rx_ports}

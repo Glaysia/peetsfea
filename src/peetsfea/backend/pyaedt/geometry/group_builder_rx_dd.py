@@ -45,6 +45,8 @@ def build_for_board(
     gap = geometry["gap"]
     if turns < 1:
         raise ValueError("selected_group_geometry.rx_dd.turn_count_max must be >= 1")
+    if turns > 3:
+        raise ValueError("selected_group_geometry.rx_dd.turn_count_max must be <= 3")
     if trace <= 0:
         raise ValueError("selected_group_geometry.rx_dd.trace must be > 0")
     if gap < 0:

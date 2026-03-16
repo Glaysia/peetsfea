@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-import re
 
 import pytest
 
 import peetsfea.pipeline.run_design as runner
 from peetsfea.spec.loader import load_toml_bytes
-from peetsfea.spec.resolver import SelectionConstraintError, resolve_selection
+from peetsfea.spec.resolver import resolve_selection
 from tests.fixtures.type1_spec import write_type1_toml
 
 def test_tx_main_1_relative_z_requires_spacing_path(tmp_path: Path) -> None:
@@ -52,7 +51,7 @@ def test_derived_dummy_path_maps_to_tx_dd_outer_x(tmp_path: Path) -> None:
     write_type1_toml(toml_path, outer_x=123.0)
     raw = toml_path.read_text(encoding="utf-8")
     raw = raw.replace(
-        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 2, 4, 3]",
+        "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 2, 3, 2]",
         "[coil_groups_params.tx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
@@ -64,7 +63,7 @@ def test_derived_dummy_path_maps_to_tx_dd_outer_x(tmp_path: Path) -> None:
         "[coil_groups_params.tx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
     )
     raw = raw.replace(
-        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 2, 4, 3]",
+        "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 2, 3, 2]",
         "[coil_groups_params.tx_vertical.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(
@@ -75,9 +74,13 @@ def test_derived_dummy_path_maps_to_tx_dd_outer_x(tmp_path: Path) -> None:
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.15, 0.85, 71]",
         "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
     )
-    raw = raw.replace("count_range = [true, 1, 1, 1]", "count_range = [true, 1, 1, 1]")
+    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 1, 1, 1]")
     raw = raw.replace(
-        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 2, 4, 3]",
+        "[coil_placement.tx_vertical_layout_mode]\nrange = [true, 1, 2, 2]",
+        "[coil_placement.tx_vertical_layout_mode]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 2, 3, 2]",
         "[coil_groups_params.rx_dd.turn_count_max]\nrange = [true, 1, 1, 1]",
     )
     raw = raw.replace(

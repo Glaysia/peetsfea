@@ -49,6 +49,8 @@ def build_for_board(
     gap = geometry["gap"]
     if turns < 1:
         raise ValueError("selected_group_geometry.tx_dd.turn_count_max must be >= 1")
+    if turns > 3:
+        raise ValueError("selected_group_geometry.tx_dd.turn_count_max must be <= 3")
     if trace <= 0:
         raise ValueError("selected_group_geometry.tx_dd.trace must be > 0")
     if gap < 0:
@@ -306,8 +308,10 @@ def build_for_board(
                 (cast(Point3, tuple(float(v) for v in left_top_points[-1])), trace, left_obj_name)
             )
         elif instance_count == 4 and right_layer_index == 0:
+            # The lower-left stacked coil must expose the opposite terminal so the
+            # port stub and left inter-layer bridge do not land on the same node.
             finalize_inputs.txdd_start_stub_sources.setdefault(pcb["id"], []).append(
-                (cast(Point3, tuple(float(v) for v in left_top_points[-1])), trace, left_obj_name)
+                (cast(Point3, tuple(float(v) for v in left_top_points[0])), trace, left_obj_name)
             )
         if instance_count == 4 and right_layer_index in (0, 1):
             finalize_inputs.txdd_left_object_names[right_layer_index] = left_obj_name

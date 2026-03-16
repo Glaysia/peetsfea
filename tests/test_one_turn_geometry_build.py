@@ -253,7 +253,57 @@ def test_tx_vertical_builder_supports_one_turn() -> None:
     assert state.placement_violations == []
 
 
-def test_tx_vertical_mode2_builder_uses_rxdd_d_path_on_yz_plane() -> None:
+def test_tx_vertical_builder_rejects_turn_count_above_three_even_if_feasible() -> None:
+    pcb = cast(
+        ResolvedPcbInstance,
+        {
+            "id": "tx_vertical_0",
+            "role": "tx",
+            "position": (0.0, 0.0, 0.0),
+            "rotation_deg": 0.0,
+            "present": True,
+            "z_mode": "absolute",
+            "z_relative_base_id": None,
+            "z_delta_path": None,
+            "mounts": [{"kind": "tx_vertical", "selector_mode": "all", "selector_index": None}],
+        },
+    )
+    ctx = _ctx_base(selected_pcbs=[pcb])
+    ctx.tx_vertical_outer_x = 100.0
+    ctx.tx_vertical_outer_y = 40.0
+    ctx.tx_vertical_region_min = (0.0, -10.0, 0.0)
+    ctx.tx_vertical_region_max = (140.0, 10.0, 60.0)
+    ctx.tx_vertical_center_x = 50.0
+    ctx.tx_vertical_center_y = 0.0
+    state = GeometryBuildState()
+    finalize_inputs = FinalizeInputs()
+    group = cast(
+        ResolvedCoilGroup,
+        {"kind": "tx_vertical", "requested_count": 1, "selected_count": 1, "spacing_mm": 0.0, "instance_transforms": []},
+    )
+    geometry = cast(
+        GroupGeometryParams,
+        {"kind": "tx_vertical", "turn_count_max": 4, "band_ratio": 0.2, "metal_ratio": 0.5, "trace": 1.0, "gap": 1.0},
+    )
+    modeler = _FakeModeler()
+
+    with pytest.raises(ValueError, match=r"selected_group_geometry\.tx_vertical\.turn_count_max must be <= 3"):
+        build_tx_vertical_for_board(
+            modeler=cast(Modeler3D, modeler),
+            ctx=ctx,
+            state=state,
+            finalize_inputs=finalize_inputs,
+            board_idx=0,
+            pcb=pcb,
+            group=group,
+            geometry=geometry,
+            edge_points_at_tx_vertical_terminal=_edge_points_at_tx_vertical_terminal,
+            edge_points_at_tx_vertical_opposite_terminal=_edge_points_at_tx_vertical_opposite_terminal,
+            tx_vertical_bridge_edges_from_node=_tx_vertical_bridge_edges_from_node,
+        )
+
+
+def test_tx_vertical_mode2_builder_flips_winding_on_yz_plane() -> None:
     pcb = cast(
         ResolvedPcbInstance,
         {
@@ -309,16 +359,12 @@ def test_tx_vertical_mode2_builder_uses_rxdd_d_path_on_yz_plane() -> None:
         tx_vertical_bridge_edges_from_node=_tx_vertical_bridge_edges_from_node,
     )
 
-    expected_local_points = list(
-        reversed(
-            _build_rxdd_right_points_A_to_d_cw(
-                turns=2,
-                outer_x=100.0,
-                outer_y=40.0,
-                trace=1.0,
-                gap=1.0,
-            )
-        )
+    expected_local_points = _build_rxdd_right_points_A_to_d_cw(
+        turns=2,
+        outer_x=100.0,
+        outer_y=40.0,
+        trace=1.0,
+        gap=1.0,
     )
     expected_right_points = _map_xy_points_to_yz(
         expected_local_points,
@@ -362,7 +408,7 @@ def test_tx_vertical_mode2_builder_uses_rxdd_d_path_on_yz_plane() -> None:
             "group_instance_index": 0,
             "board_id": "tx_vertical_0",
             "instance_side": "left",
-            "current_direction": "cw",
+            "current_direction": "ccw",
             "b_field_direction": "right",
         },
         {
@@ -370,8 +416,8 @@ def test_tx_vertical_mode2_builder_uses_rxdd_d_path_on_yz_plane() -> None:
             "group_instance_index": 1,
             "board_id": "tx_vertical_0",
             "instance_side": "right",
-            "current_direction": "ccw",
-            "b_field_direction": "right",
+            "current_direction": "cw",
+            "b_field_direction": "left",
         },
     ]
     assert finalize_inputs.tx_vertical_global_outer_right_edge == expected_right_start_edge
@@ -387,6 +433,86 @@ def test_tx_vertical_mode2_builder_uses_rxdd_d_path_on_yz_plane() -> None:
         "left_end_object_name": "coil_tx_vertical_g0_b0_demo",
     }
     assert state.placement_violations == []
+
+
+def test_finalize_solids_bridges_tx_vertical_mode2_using_right_end_to_left_start_pair() -> None:
+    modeler = _FakeModeler()
+    hfss = _FakeHfss()
+    group_objects = cast(
+        GroupObjects,
+        {
+            "tx_dd": ["coil_txdd_right", "coil_txdd_left"],
+            "tx_vertical": ["coil_txv_left", "coil_txv_right"],
+            "rx_dd": [],
+            "ferrite": [],
+        },
+    )
+    object_names = ["coil_txdd_right", "coil_txdd_left", "coil_txv_left", "coil_txv_right"]
+    cad_probe: list[CadProbe] = []
+
+    finalized_object_names, _ = _finalize_solids_and_substrates_impl(
+        modeler=cast(Modeler3D, modeler),
+        hfss=cast(Hfss, hfss),
+        aedt_path=Path("/tmp/demo_tx_vertical_mode2.aedt"),
+        design_id="demo_tx_vertical_mode2",
+        cu_thickness=0.035,
+        pcb_thickness=1.6,
+        tx_board_ids=set(),
+        tx_vertical_nodes_by_board={},
+        tx_vertical_mode2_terminal_edges_by_board={
+            ("tx_vertical_0", 0): {
+                "right_start_edge": ((1.0, 5.0, 8.0), (1.0, 5.0, 9.0)),
+                "right_start_object_name": "coil_txv_right",
+                "right_end_edge": ((1.0, 5.0, 6.0), (1.0, 5.0, 7.0)),
+                "right_end_object_name": "coil_txv_right",
+                "left_start_edge": ((1.0, -5.0, 4.0), (1.0, -5.0, 5.0)),
+                "left_start_object_name": "coil_txv_left",
+                "left_end_edge": ((1.0, -5.0, 2.0), (1.0, -5.0, 3.0)),
+                "left_end_object_name": "coil_txv_left",
+            }
+        },
+        tx_vertical_region_min=(0.0, -10.0, 0.0),
+        tx_vertical_region_max=(3.0, 10.0, 10.0),
+        txdd_right_a_points={},
+        txdd_right_object_names={},
+        txdd_left_a_points={},
+        txdd_left_object_names={},
+        txdd_start_stub_sources={},
+        rxdd_back_stub_sources=[],
+        group_objects=group_objects,
+        object_names=object_names,
+        cad_probe=cad_probe,
+        placement_violations=[],
+        coil_plane_bboxes=[],
+        fr4_object_names=[],
+        tx_vertical_fr4_names=[],
+        txdd_global_right_d_edge=((0.0, 6.0, 6.0), (0.0, 6.0, 7.0)),
+        txdd_global_right_d_object_name="coil_txdd_right",
+        txdd_global_left_vertical_link_edge=((0.0, -6.0, 4.0), (0.0, -6.0, 5.0)),
+        txdd_global_left_vertical_link_object_name="coil_txdd_left",
+        tx_vertical_global_outer_right_edge=((1.0, 5.0, 8.0), (1.0, 5.0, 9.0)),
+        tx_vertical_global_outer_left_edge=((1.0, -5.0, 2.0), (1.0, -5.0, 3.0)),
+    )
+
+    assert cast(list[list[float]], modeler.polyline_calls[0]["points"]) == [
+        [2.0, 5.0, 6.0],
+        [2.0, 5.0, 7.0],
+        [1.0, 5.0, 7.0],
+        [1.0, 5.0, 6.0],
+    ]
+    assert cast(list[list[float]], modeler.polyline_calls[1]["points"]) == [
+        [2.0, 5.0, 6.0],
+        [2.0, 5.0, 7.0],
+        [2.0, -5.0, 5.0],
+        [2.0, -5.0, 4.0],
+    ]
+    assert cast(list[list[float]], modeler.polyline_calls[2]["points"]) == [
+        [2.0, -5.0, 4.0],
+        [2.0, -5.0, 5.0],
+        [1.0, -5.0, 5.0],
+        [1.0, -5.0, 4.0],
+    ]
+    assert finalized_object_names
 
 
 def test_tx_vertical_mode2_x_ratio_targets_far_txdd_side() -> None:
@@ -447,6 +573,7 @@ def test_tx_dd_builder_separates_left_feed_and_vertical_link_terminals() -> None
     assert len(start_stub_sources) == 2
     right_source = start_stub_sources[0]
     left_source = start_stub_sources[1]
+    right_endpoint = next(entry for entry in state.group_endpoints if entry["group_kind"] == "tx_dd" and entry["group_instance_index"] == 1)
     left_endpoint = next(entry for entry in state.group_endpoints if entry["group_kind"] == "tx_dd" and entry["group_instance_index"] == 0)
     assert ctx.tx_dd_region_min is not None
     assert ctx.tx_dd_region_max is not None
@@ -481,11 +608,31 @@ def test_tx_dd_builder_separates_left_feed_and_vertical_link_terminals() -> None
     expected_left_points = _mirror_points_about_y_axis_line(right_world_points, axis_y=ctx.tx_dd_center_y)
     expected_left_vertical_link_edge = _edge_points_at_path_end(points=list(reversed(expected_left_points)), trace=1.0)
 
+    assert right_source[0] == right_endpoint["start_xyz"]
+    assert right_source[0] != right_endpoint["end_xyz"]
     assert left_source[0] == left_endpoint["end_xyz"]
     assert left_source[0] != left_endpoint["start_xyz"]
     assert right_source[0] != left_source[0]
     assert finalize_inputs.txdd_global_left_vertical_link_edge == expected_left_vertical_link_edge
     assert finalize_inputs.txdd_global_left_vertical_link_edge != _edge_points_at_path_end(points=expected_left_points, trace=1.0)
+    assert state.coil_polarity == [
+        {
+            "group_kind": "tx_dd",
+            "group_instance_index": 1,
+            "board_id": "tx_main_0",
+            "instance_side": "right",
+            "current_direction": "ccw",
+            "b_field_direction": "up",
+        },
+        {
+            "group_kind": "tx_dd",
+            "group_instance_index": 0,
+            "board_id": "tx_main_0",
+            "instance_side": "left",
+            "current_direction": "cw",
+            "b_field_direction": "down",
+        },
+    ]
 
 
 def test_tx_dd_builder_keeps_feed_and_vertical_link_on_different_layers_for_four_layer_case() -> None:
@@ -546,6 +693,109 @@ def test_tx_dd_builder_keeps_feed_and_vertical_link_on_different_layers_for_four
     assert len(left_feed_object_names) == 1
     assert finalize_inputs.txdd_global_left_vertical_link_object_name is not None
     assert finalize_inputs.txdd_global_left_vertical_link_object_name not in left_feed_object_names
+    assert {
+        (
+            entry["group_instance_index"],
+            entry["instance_side"],
+            entry["current_direction"],
+            entry["b_field_direction"],
+        )
+        for entry in state.coil_polarity
+    } == {
+        (1, "right", "ccw", "up"),
+        (3, "right", "ccw", "up"),
+        (0, "left", "cw", "down"),
+        (2, "left", "cw", "down"),
+    }
+
+
+def test_tx_dd_builder_uses_opposite_left_feed_terminal_for_stacked_four_layer_case() -> None:
+    pcbs = [
+        cast(
+            ResolvedPcbInstance,
+            {
+                "id": "tx_main_0",
+                "role": "tx",
+                "position": (0.0, 0.0, 0.0),
+                "rotation_deg": 0.0,
+                "present": True,
+                "z_mode": "absolute",
+                "z_relative_base_id": None,
+                "z_delta_path": None,
+                "mounts": [
+                    {"kind": "tx_dd", "selector_mode": "index", "selector_index": 0},
+                    {"kind": "tx_dd", "selector_mode": "index", "selector_index": 1},
+                ],
+            },
+        ),
+        cast(
+            ResolvedPcbInstance,
+            {
+                "id": "tx_main_1",
+                "role": "tx",
+                "position": (0.0, 0.0, 4.0),
+                "rotation_deg": 0.0,
+                "present": True,
+                "z_mode": "absolute",
+                "z_relative_base_id": None,
+                "z_delta_path": None,
+                "mounts": [
+                    {"kind": "tx_dd", "selector_mode": "index", "selector_index": 2},
+                    {"kind": "tx_dd", "selector_mode": "index", "selector_index": 3},
+                ],
+            },
+        ),
+    ]
+    ctx = _ctx_base(selected_pcbs=pcbs)
+    ctx.tx_dd_outer_x = 100.0
+    ctx.tx_dd_outer_y = 60.0
+    ctx.tx_dd_region_min = (0.0, -80.0, 0.0)
+    ctx.tx_dd_region_max = (160.0, 80.0, 20.0)
+    ctx.tx_dd_center_x = 50.0
+    ctx.tx_dd_center_y = 0.0
+    state = GeometryBuildState()
+    finalize_inputs = FinalizeInputs()
+    group = cast(
+        ResolvedCoilGroup,
+        {"kind": "tx_dd", "requested_count": 4, "selected_count": 4, "spacing_mm": 0.0, "instance_transforms": []},
+    )
+    geometry = cast(
+        GroupGeometryParams,
+        {"kind": "tx_dd", "turn_count_max": 2, "band_ratio": 0.2, "metal_ratio": 0.5, "trace": 1.0, "gap": 1.0},
+    )
+    modeler = _FakeModeler()
+
+    for board_idx, pcb in enumerate(pcbs):
+        build_tx_dd_for_board(
+            modeler=cast(Modeler3D, modeler),
+            ctx=ctx,
+            state=state,
+            finalize_inputs=finalize_inputs,
+            board_idx=board_idx,
+            pcb=pcb,
+            group=group,
+            geometry=geometry,
+            edge_points_at_path_end=_edge_points_at_path_end,
+        )
+
+    lower_board_sources = finalize_inputs.txdd_start_stub_sources["tx_main_1"]
+    assert len(lower_board_sources) == 2
+    right_lower_source, left_lower_source = lower_board_sources
+
+    lower_right_endpoint = next(
+        entry
+        for entry in state.group_endpoints
+        if entry["group_kind"] == "tx_dd" and entry["board_id"] == "tx_main_1" and entry["group_instance_index"] == 3
+    )
+    lower_left_endpoint = next(
+        entry
+        for entry in state.group_endpoints
+        if entry["group_kind"] == "tx_dd" and entry["board_id"] == "tx_main_1" and entry["group_instance_index"] == 2
+    )
+
+    assert right_lower_source[0] == lower_right_endpoint["start_xyz"]
+    assert left_lower_source[0] == lower_left_endpoint["start_xyz"]
+    assert left_lower_source[0] != lower_left_endpoint["end_xyz"]
 
 
 def test_rx_dd_builder_supports_one_turn() -> None:
@@ -717,13 +967,139 @@ def test_finalize_solids_routes_rx_port_over_a_to_c_and_pair_connector_over_d_to
         {
             "faces": ["NAME:Faces", 1],
             "is_wave_port": False,
-            "reference_conductors": ["NAME:ReferenceConductors", "rxs_rx_main_1_A"],
+            "reference_conductors": ["NAME:ReferenceConductors", "rxs_rx_main_0_c"],
             "port_name": "RX_TML",
             "renormalize": True,
         }
     ]
     assert hfss.save_project_calls == ["/tmp/demo.aedt"]
     assert "bridge_rx_dd_d_to_b_demo" in finalized_object_names
+
+
+def test_finalize_solids_keeps_rx_port_reference_on_c_stub_when_sources_are_reversed() -> None:
+    modeler = _FakeModeler()
+    hfss = _FakeHfss()
+    group_objects = cast(
+        GroupObjects,
+        {"tx_dd": [], "tx_vertical": [], "rx_dd": ["coil_rx_left", "coil_rx_right"], "ferrite": []},
+    )
+    object_names = ["coil_rx_left", "coil_rx_right"]
+    cad_probe: list[CadProbe] = []
+
+    _finalize_solids_and_substrates_impl(
+        modeler=cast(Modeler3D, modeler),
+        hfss=cast(Hfss, hfss),
+        aedt_path=Path("/tmp/demo_reversed.aedt"),
+        design_id="demo_reversed",
+        cu_thickness=0.035,
+        pcb_thickness=1.6,
+        tx_board_ids=set(),
+        tx_vertical_nodes_by_board={},
+        tx_vertical_mode2_terminal_edges_by_board={},
+        tx_vertical_region_min=(0.0, -10.0, 0.0),
+        tx_vertical_region_max=(10.0, 10.0, 10.0),
+        txdd_right_a_points={},
+        txdd_right_object_names={},
+        txdd_left_a_points={},
+        txdd_left_object_names={},
+        txdd_start_stub_sources={},
+        rxdd_back_stub_sources=[
+            ("rx_main", 1, "d", (1.0, 5.0, 8.0), 1.0, "coil_rx_right"),
+            ("rx_main", 1, "A", (1.0, 6.0, 9.0), 1.0, "coil_rx_right"),
+            ("rx_main", 0, "c", (1.0, -5.0, 2.0), 1.0, "coil_rx_left"),
+            ("rx_main", 0, "B", (1.0, -6.0, 1.0), 1.0, "coil_rx_left"),
+        ],
+        group_objects=group_objects,
+        object_names=object_names,
+        cad_probe=cad_probe,
+        placement_violations=[],
+        coil_plane_bboxes=[],
+        fr4_object_names=[],
+        tx_vertical_fr4_names=[],
+        txdd_global_right_d_edge=None,
+        txdd_global_right_d_object_name=None,
+        txdd_global_left_vertical_link_edge=None,
+        txdd_global_left_vertical_link_object_name=None,
+        tx_vertical_global_outer_right_edge=None,
+        tx_vertical_global_outer_left_edge=None,
+    )
+
+    assert hfss.oboundary.auto_identify_ports_calls == [
+        {
+            "faces": ["NAME:Faces", 1],
+            "is_wave_port": False,
+            "reference_conductors": ["NAME:ReferenceConductors", "rxs_rx_main_0_c"],
+            "port_name": "RX_TML",
+            "renormalize": True,
+        }
+    ]
+
+
+def test_finalize_solids_uses_opposite_tx_stub_as_reference_conductor() -> None:
+    modeler = _FakeModeler()
+    hfss = _FakeHfss()
+    group_objects = cast(
+        GroupObjects,
+        {"tx_dd": ["coil_tx_right", "coil_tx_left"], "tx_vertical": [], "rx_dd": [], "ferrite": []},
+    )
+    object_names = ["coil_tx_right", "coil_tx_left"]
+    cad_probe: list[CadProbe] = []
+
+    finalized_object_names, _ = _finalize_solids_and_substrates_impl(
+        modeler=cast(Modeler3D, modeler),
+        hfss=cast(Hfss, hfss),
+        aedt_path=Path("/tmp/demo_tx.aedt"),
+        design_id="demo_tx",
+        cu_thickness=0.035,
+        pcb_thickness=1.6,
+        tx_board_ids={"tx_main_0"},
+        tx_vertical_nodes_by_board={},
+        tx_vertical_mode2_terminal_edges_by_board={},
+        tx_vertical_region_min=(0.0, -10.0, 0.0),
+        tx_vertical_region_max=(10.0, 10.0, 10.0),
+        txdd_right_a_points={},
+        txdd_right_object_names={},
+        txdd_left_a_points={},
+        txdd_left_object_names={},
+        txdd_start_stub_sources={
+            "tx_main_0": [
+                ((10.0, 6.0, 9.0), 1.0, "coil_tx_right"),
+                ((10.0, -6.0, 9.0), 1.0, "coil_tx_left"),
+            ]
+        },
+        rxdd_back_stub_sources=[],
+        group_objects=group_objects,
+        object_names=object_names,
+        cad_probe=cad_probe,
+        placement_violations=[],
+        coil_plane_bboxes=[],
+        fr4_object_names=[],
+        tx_vertical_fr4_names=[],
+        txdd_global_right_d_edge=None,
+        txdd_global_right_d_object_name=None,
+        txdd_global_left_vertical_link_edge=None,
+        txdd_global_left_vertical_link_object_name=None,
+        tx_vertical_global_outer_right_edge=None,
+        tx_vertical_global_outer_left_edge=None,
+    )
+
+    assert [call["name"] for call in modeler.create_box_calls] == [
+        "txs_tx_main_0_0",
+        "txs_tx_main_0_1",
+    ]
+    assert cast(str, modeler.polyline_calls[0]["name"]) == "sheet_txdd_ports_tx_main_0"
+    assert modeler.get_object_faces_calls == ["sheet_txdd_ports_tx_main_0"]
+    assert hfss.oboundary.auto_identify_ports_calls == [
+        {
+            "faces": ["NAME:Faces", 1],
+            "is_wave_port": False,
+            "reference_conductors": ["NAME:ReferenceConductors", "txs_tx_main_0_1"],
+            "port_name": "TX_TML",
+            "renormalize": True,
+        }
+    ]
+    assert hfss.save_project_calls == ["/tmp/demo_tx.aedt"]
+    assert "sheet_txdd_ports_tx_main_0" in finalized_object_names
 
 
 def test_existing_edge_bridge_conductor_builds_thickened_sheet_for_tx_vertical_mode2() -> None:

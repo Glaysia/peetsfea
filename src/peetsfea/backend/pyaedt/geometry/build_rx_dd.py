@@ -620,6 +620,29 @@ def _txdd_start_stub_port_edge(*, anchor_xyz: _Point3, trace: float) -> _Edge2P:
     return p0, p1
 
 
+def _select_txdd_reference_conductor_name(reference_conductors: list[str]) -> str:
+    if not reference_conductors:
+        raise ValueError("tx_dd start port reference conductor list must not be empty")
+    # TX_TML uses the opposite generated start stub as the deterministic HFSS reference.
+    return sorted(reference_conductors)[-1]
+
+
+def _select_rxdd_reference_conductor_name(reference_conductors_by_endpoint: dict[str, str]) -> str:
+    paired_label, canonical_label = RX_DD_PORT_ENDPOINT_LABELS
+    has_canonical_label = canonical_label in reference_conductors_by_endpoint
+    has_paired_label = paired_label in reference_conductors_by_endpoint
+    if has_canonical_label != has_paired_label:
+        raise ValueError(
+            "rx_dd start port reference conductor contract violation: both A and c stub names must be present together "
+            f"(has_{canonical_label}={has_canonical_label}, has_{paired_label}={has_paired_label})"
+        )
+    if not has_canonical_label:
+        raise ValueError(
+            "rx_dd start port reference conductor contract violation: canonical c stub name was not captured"
+        )
+    return reference_conductors_by_endpoint[canonical_label]
+
+
 def _create_thickened_sheet_from_points(
     *,
     modeler: Modeler3D,
@@ -971,8 +994,8 @@ def _finalize_solids_and_substrates_impl(
                 f"(sheet={start_port_sheet_obj_name}, board_id={board_id})"
             )
         # Match the direct HFSS COM invocation pattern (BoundarySetup.AutoIdentifyPorts)
-        # using one deterministic reference conductor from the generated start stubs.
-        reference_conductor_name = sorted(reference_conductors)[0]
+        # using the opposite generated start stub as the deterministic reference conductor.
+        reference_conductor_name = _select_txdd_reference_conductor_name(reference_conductors)
         start_port_name = "TX_TML"
         _auto_identify_ports_direct(
             hfss=hfss,
@@ -1032,7 +1055,7 @@ def _finalize_solids_and_substrates_impl(
                     "rx_dd start port assignment failed: no sheet faces were found "
                     f"(sheet={start_port_sheet_obj_name})"
                 )
-            reference_conductor_name = rxdd_start_stub_name_by_endpoint[first_port_label]
+            reference_conductor_name = _select_rxdd_reference_conductor_name(rxdd_start_stub_name_by_endpoint)
             board_id_context = ",".join(
                 sorted(
                     {
