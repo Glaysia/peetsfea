@@ -77,6 +77,8 @@ cd run
 ## type1 참고 문서
 - 설계 개요: [docs/type1.md](docs/type1.md)
 - 영문 설계 개요: [docs/type1.en.md](docs/type1.en.md)
+- 현재 파이프라인 분석: [docs/current-pipeline.md](docs/current-pipeline.md)
+- type2 재사용 자산 분석: [docs/type2-reuse.md](docs/type2-reuse.md)
 
 ## 호환성 정책
 - 장기 하위호환을 보장하지 않는다.
