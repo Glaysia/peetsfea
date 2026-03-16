@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from peetsfea.backend.pyaedt.geometry.build import _tx_vertical_bridge_edges_from_node
+from peetsfea.backend.pyaedt.geometry.build import _edge_points_at_yz_terminal, _tx_vertical_bridge_edges_from_node
 
 
 _Point3 = tuple[float, float, float]
@@ -83,26 +83,40 @@ def test_tx_vertical_bridge_edges_match_legacy_formula(
                 assert actual_axis == pytest.approx(expected_axis, abs=1e-9)
 
 
-def test_tx_vertical_bridge_edges_for_yz_mode_use_outer_y_edges() -> None:
+def test_edge_points_at_yz_terminal_use_actual_terminal_cross_section() -> None:
+    actual = _edge_points_at_yz_terminal(
+        terminal_xyz=(5.0, 6.0, 39.5),
+        neighbor_xyz=(5.0, 105.0, 39.5),
+        trace=1.0,
+    )
+
+    assert actual == ((5.0, 6.0, 39.0), (5.0, 6.0, 40.0))
+
+
+def test_tx_vertical_bridge_edges_for_yz_mode_use_start_and_end_terminals() -> None:
     points = [
-        [5.0, -2.0, 0.0],
-        [5.0, 2.0, 0.0],
-        [5.0, 2.0, 4.0],
-        [5.0, -2.0, 4.0],
+        [5.0, 6.0, 39.5],
+        [5.0, 105.0, 39.5],
+        [5.0, 105.0, 0.5],
+        [5.0, 6.0, 0.5],
+        [5.0, 6.0, 37.5],
+        [5.0, 103.0, 37.5],
+        [5.0, 103.0, 2.5],
+        [5.0, 8.0, 2.5],
     ]
 
     actual_out, actual_in = _tx_vertical_bridge_edges_from_node(
-        start_xyz=(5.0, -2.0, 0.0),
-        end_xyz=(5.0, 2.0, 0.0),
+        start_xyz=(5.0, 6.0, 39.5),
+        end_xyz=(5.0, 8.0, 2.5),
         trace=1.0,
         tx_vertical_region_min=(0.0, -10.0, 0.0),
-        tx_vertical_region_max=(10.0, 10.0, 10.0),
+        tx_vertical_region_max=(10.0, 110.0, 50.0),
         plane="YZ",
         points=points,
     )
 
-    assert actual_out == ((5.0, 2.0, 1.5), (5.0, 2.0, 2.5))
-    assert actual_in == ((5.0, -2.0, 1.5), (5.0, -2.0, 2.5))
+    assert actual_out == ((5.0, 6.0, 39.0), (5.0, 6.0, 40.0))
+    assert actual_in == ((5.0, 8.0, 2.0), (5.0, 8.0, 3.0))
 
 
 def test_tx_vertical_global_selection_keys_choose_max_for_right_and_min_for_left() -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Callable, Literal, Protocol, cast
+from typing import Callable, Literal, Protocol, TypedDict, cast
 
 from ansys.aedt.core import Hfss
 from ansys.aedt.core.modeler.cad.object_3d import Object3d
@@ -31,12 +31,22 @@ _TxVerticalLinkNode = tuple[int, str, _Point3, _Point3, float, float, _Edge2P, _
 _BackConnectStubSource = tuple[str, int, str, _Point3, float, str]
 _TxDdStartStubSource = tuple[_Point3, float, str]
 _RxDdBackStubSource = _BackConnectStubSource
-_TxVerticalMode2ConnectSource = _BackConnectStubSource
 _RegionKind = Literal["tx_region_dd", "tx_region_vertical", "rx_region_actual"]
 TX_DD_START_STUB_DOWN_MM = 3.0
 RX_DD_BACK_STUB_LEN_MM = 3.0
 RX_DD_BACK_STUB_AXIS_SIGN_X = -1.0
 FR4_SUBTRACT_OVERLAP_MM = 0.1
+
+
+class _TxVerticalMode2TerminalEdges(TypedDict):
+    right_start_edge: _Edge2P
+    right_start_object_name: str
+    right_end_edge: _Edge2P
+    right_end_object_name: str
+    left_start_edge: _Edge2P
+    left_start_object_name: str
+    left_end_edge: _Edge2P
+    left_end_object_name: str
 
 
 class _BoundaryModule(Protocol):
@@ -380,6 +390,93 @@ def _apply_diagonal_connect_pair_conductor(
         object_names.append(united_name)
 
 
+def _apply_existing_edge_bridge_conductor(
+    *,
+    modeler: Modeler3D,
+    cu_thickness: float,
+    first_edge: _Edge2P,
+    first_object_name: str,
+    second_edge: _Edge2P,
+    second_object_name: str,
+    group_objects: GroupObjects,
+    group_key: Literal["tx_vertical"],
+    object_names: list[str],
+    cad_probe: list[CadProbe],
+    bridge_name: str,
+    bridge_error_context: str,
+    region_kind: _RegionKind | None = None,
+    region_min: _Point3 | None = None,
+    region_max: _Point3 | None = None,
+    placement_violations: list[RegionViolation] | None = None,
+) -> str:
+    def _check_region(*, object_name: str, bbox: list[float]) -> None:
+        if region_kind is None or region_min is None or region_max is None:
+            return
+        violations = _bbox_violations(
+            object_name=object_name,
+            bbox=bbox,
+            region_kind=region_kind,
+            region_min=region_min,
+            region_max=region_max,
+        )
+        if not violations:
+            return
+        if placement_violations is not None:
+            placement_violations.extend(violations)
+        first = violations[0]
+        raise ValueError(
+            f"Coil placement out of region for {first['object_name']} in {first['region_kind']} "
+            f"(axis={first['axis']}, overflow_mm={first['overflow_mm']})"
+        )
+
+    for source_object_name in (first_object_name, second_object_name):
+        source_exists = (source_object_name in object_names) or (source_object_name in group_objects[group_key])
+        if not source_exists:
+            raise ValueError(
+                f"{group_key} edge-bridge source object missing "
+                f"(bridge={bridge_name}, source={source_object_name})"
+            )
+
+    bridge_sheet_points = _sheet_points_from_edge_pair(dd_edge=first_edge, vertical_edge=second_edge)
+    try:
+        bridge_obj_name, bridge_obj = _create_thickened_sheet_from_points(
+            modeler=modeler,
+            sheet_points=bridge_sheet_points,
+            sheet_name=bridge_name,
+            thickness=(cu_thickness * 4.0),
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith("Sheet loop creation failed"):
+            raise ValueError(f"{bridge_error_context} rectangle loop creation failed (name={bridge_name})") from exc
+        if message.startswith("Sheet cover_lines failed"):
+            raise ValueError(f"{bridge_error_context} cover_lines failed (name={bridge_name})") from exc
+        if message.startswith("Sheet thicken failed"):
+            raise ValueError(
+                f"{bridge_error_context} thicken failed (name={bridge_name}, thickness={cu_thickness * 4.0})"
+            ) from exc
+        raise
+
+    object_names.append(bridge_obj_name)
+    group_objects[group_key].append(bridge_obj_name)
+    bridge_probe = _probe_cad_object(bridge_obj, bridge_name)
+    cad_probe.append(bridge_probe)
+    _check_region(object_name=bridge_obj_name, bbox=bridge_probe["bbox"])
+
+    unite_targets = [first_object_name, second_object_name, bridge_obj_name]
+    united_name = safe_unite(
+        modeler=modeler,
+        targets=unite_targets,
+        fallback_name=first_object_name,
+        error_context=bridge_error_context,
+    )
+    group_objects[group_key] = [name for name in group_objects[group_key] if name not in unite_targets]
+    group_objects[group_key].append(united_name)
+    object_names[:] = [name for name in object_names if name not in unite_targets]
+    object_names.append(united_name)
+    return united_name
+
+
 def _auto_identify_ports_direct(
     *,
     hfss: Hfss,
@@ -593,7 +690,7 @@ def _finalize_solids_and_substrates_impl(
     pcb_thickness: float,
     tx_board_ids: set[str],
     tx_vertical_nodes_by_board: dict[_BoardKey, list[_TxVerticalLinkNode]],
-    tx_vertical_mode2_connect_sources_by_board: dict[_BoardKey, list[_TxVerticalMode2ConnectSource]],
+    tx_vertical_mode2_terminal_edges_by_board: dict[_BoardKey, _TxVerticalMode2TerminalEdges],
     tx_vertical_region_min: _Point3,
     tx_vertical_region_max: _Point3,
     txdd_right_a_points: dict[int, tuple[_Point3, float]],
@@ -831,17 +928,20 @@ def _finalize_solids_and_substrates_impl(
             context="rx_dd start port assignment",
         )
 
-    for (board_id, board_idx), connect_sources in sorted(tx_vertical_mode2_connect_sources_by_board.items()):
-        _apply_diagonal_connect_pair_conductor(
+    for (_board_id, board_idx), terminal_edges in sorted(tx_vertical_mode2_terminal_edges_by_board.items()):
+        _apply_existing_edge_bridge_conductor(
             modeler=modeler,
             cu_thickness=cu_thickness,
-            sources=connect_sources,
+            first_edge=terminal_edges["right_end_edge"],
+            first_object_name=terminal_edges["right_end_object_name"],
+            second_edge=terminal_edges["left_start_edge"],
+            second_object_name=terminal_edges["left_start_object_name"],
             group_objects=group_objects,
             group_key="tx_vertical",
             object_names=object_names,
             cad_probe=cad_probe,
-            conductor_name=f"bridge_tx_vertical_mode2_d_to_c_b{board_idx}_{design_id}",
-            conductor_error_context="tx_vertical mode2 pair diagonal conductor with source coils",
+            bridge_name=f"bridge_tx_vertical_mode2_pair_b{board_idx}_{design_id}",
+            bridge_error_context="tx_vertical mode2 pair bridge with source coils",
             region_kind="tx_region_vertical",
             region_min=tx_vertical_region_min,
             region_max=tx_vertical_region_max,
@@ -1294,7 +1394,7 @@ def finalize_solids_and_substrates(
     pcb_thickness: float,
     tx_board_ids: set[str],
     tx_vertical_nodes_by_board: dict[_BoardKey, list[_TxVerticalLinkNode]],
-    tx_vertical_mode2_connect_sources_by_board: dict[_BoardKey, list[_TxVerticalMode2ConnectSource]],
+    tx_vertical_mode2_terminal_edges_by_board: dict[_BoardKey, _TxVerticalMode2TerminalEdges],
     tx_vertical_region_min: _Point3,
     tx_vertical_region_max: _Point3,
     txdd_right_a_points: dict[int, tuple[_Point3, float]],
@@ -1326,7 +1426,7 @@ def finalize_solids_and_substrates(
         pcb_thickness=pcb_thickness,
         tx_board_ids=tx_board_ids,
         tx_vertical_nodes_by_board=tx_vertical_nodes_by_board,
-        tx_vertical_mode2_connect_sources_by_board=tx_vertical_mode2_connect_sources_by_board,
+        tx_vertical_mode2_terminal_edges_by_board=tx_vertical_mode2_terminal_edges_by_board,
         tx_vertical_region_min=tx_vertical_region_min,
         tx_vertical_region_max=tx_vertical_region_max,
         txdd_right_a_points=txdd_right_a_points,

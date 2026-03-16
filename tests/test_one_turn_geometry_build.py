@@ -3,16 +3,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal, cast
 
+import pytest
 from ansys.aedt.core.modeler.modeler_3d import Modeler3D
 
 from peetsfea.backend.pyaedt.geometry.build import (
     _append_rxdd_back_stub_sources_if_needed,
     _edge_points_at_path_end,
+    _edge_points_at_yz_terminal,
     _edge_points_at_tx_vertical_opposite_terminal,
     _edge_points_at_tx_vertical_terminal,
     _tx_vertical_bridge_edges_from_node,
 )
-from peetsfea.backend.pyaedt.geometry.build_rx_dd import _apply_diagonal_connect_pair_conductor
+from peetsfea.backend.pyaedt.geometry.build_rx_dd import (
+    _apply_diagonal_connect_pair_conductor,
+    _apply_existing_edge_bridge_conductor,
+)
 from peetsfea.backend.pyaedt.geometry.build_state import FinalizeInputs, GeometryBuildState, GeometryRuntimeContext
 from peetsfea.backend.pyaedt.geometry.group_builder_rx_dd import build_for_board as build_rx_dd_for_board
 from peetsfea.backend.pyaedt.geometry.group_builder_tx_dd import build_for_board as build_tx_dd_for_board
@@ -31,6 +36,7 @@ from peetsfea.types.manifest import CadProbe, GroupGeometryParams, GroupObjects,
 class _FakePolylineObject:
     def __init__(self, name: str, points: list[list[float]]) -> None:
         self.name = name
+        self.points = [point[:] for point in points]
         xs = [point[0] for point in points]
         ys = [point[1] for point in points]
         zs = [point[2] for point in points]
@@ -41,11 +47,45 @@ class _FakePolylineObject:
 class _FakeModeler:
     def __init__(self) -> None:
         self.polyline_calls: list[dict[str, object]] = []
+        self.cover_lines_calls: list[str] = []
+        self.thicken_sheet_calls: list[tuple[str, float]] = []
         self.unite_calls: list[list[str]] = []
+        self.objects: dict[str, _FakePolylineObject] = {}
 
     def create_polyline(self, **kwargs: object) -> _FakePolylineObject:
         self.polyline_calls.append(dict(kwargs))
-        return _FakePolylineObject(str(kwargs["name"]), cast(list[list[float]], kwargs["points"]))
+        obj = _FakePolylineObject(str(kwargs["name"]), cast(list[list[float]], kwargs["points"]))
+        self.objects[obj.name] = obj
+        return obj
+
+    def cover_lines(self, assignment: str) -> str:
+        self.cover_lines_calls.append(assignment)
+        return assignment
+
+    def thicken_sheet(self, assignment: str, thickness: float) -> _FakePolylineObject:
+        self.thicken_sheet_calls.append((assignment, thickness))
+        source = self.objects[assignment]
+        min_x, min_y, min_z, max_x, max_y, max_z = source.bounding_box
+        span_x = max_x - min_x
+        span_y = max_y - min_y
+        if span_x <= 1e-9:
+            points = [
+                [min_x, min_y, min_z],
+                [min_x + thickness, max_y, max_z],
+            ]
+        elif span_y <= 1e-9:
+            points = [
+                [min_x, min_y, min_z],
+                [max_x, min_y + thickness, max_z],
+            ]
+        else:
+            points = [
+                [min_x, min_y, min_z],
+                [max_x, max_y, min_z + thickness],
+            ]
+        thickened = _FakePolylineObject(assignment, points)
+        self.objects[assignment] = thickened
+        return thickened
 
     def duplicate_and_mirror(
         self,
@@ -218,6 +258,26 @@ def test_tx_vertical_mode2_builder_uses_rxdd_d_path_on_yz_plane() -> None:
         z_center=20.0,
     )
     expected_left_points = _mirror_points_about_y_axis_line(expected_right_points, axis_y=0.5)
+    expected_right_start_edge = _edge_points_at_yz_terminal(
+        terminal_xyz=cast(tuple[float, float, float], tuple(expected_right_points[0])),
+        neighbor_xyz=cast(tuple[float, float, float], tuple(expected_right_points[1])),
+        trace=1.0,
+    )
+    expected_right_end_edge = _edge_points_at_yz_terminal(
+        terminal_xyz=cast(tuple[float, float, float], tuple(expected_right_points[-1])),
+        neighbor_xyz=cast(tuple[float, float, float], tuple(expected_right_points[-2])),
+        trace=1.0,
+    )
+    expected_left_start_edge = _edge_points_at_yz_terminal(
+        terminal_xyz=cast(tuple[float, float, float], tuple(expected_left_points[0])),
+        neighbor_xyz=cast(tuple[float, float, float], tuple(expected_left_points[1])),
+        trace=1.0,
+    )
+    expected_left_end_edge = _edge_points_at_yz_terminal(
+        terminal_xyz=cast(tuple[float, float, float], tuple(expected_left_points[-1])),
+        neighbor_xyz=cast(tuple[float, float, float], tuple(expected_left_points[-2])),
+        trace=1.0,
+    )
 
     assert len(modeler.polyline_calls) == 2
     assert cast(list[list[float]], modeler.polyline_calls[0]["points"]) == expected_left_points
@@ -227,6 +287,18 @@ def test_tx_vertical_mode2_builder_uses_rxdd_d_path_on_yz_plane() -> None:
     assert all(point[0] == 70.0 for point in expected_right_points)
     assert state.coil_plane_bboxes[0][1] == "YZ"
     assert state.coil_plane_bboxes[1][1] == "YZ"
+    assert finalize_inputs.tx_vertical_global_outer_right_edge == expected_right_start_edge
+    assert finalize_inputs.tx_vertical_global_outer_left_edge == expected_left_end_edge
+    assert finalize_inputs.tx_vertical_mode2_terminal_edges_by_board[("tx_vertical_0", 0)] == {
+        "right_start_edge": expected_right_start_edge,
+        "right_start_object_name": "coil_tx_vertical_g1_b0_demo",
+        "right_end_edge": expected_right_end_edge,
+        "right_end_object_name": "coil_tx_vertical_g1_b0_demo",
+        "left_start_edge": expected_left_start_edge,
+        "left_start_object_name": "coil_tx_vertical_g0_b0_demo",
+        "left_end_edge": expected_left_end_edge,
+        "left_end_object_name": "coil_tx_vertical_g0_b0_demo",
+    }
     assert state.placement_violations == []
 
 
@@ -439,65 +511,75 @@ def test_rx_dd_builder_supports_one_turn() -> None:
     assert state.placement_violations == []
 
 
-def test_diagonal_connect_pair_conductor_creates_in_plane_polyline_for_rx_dd_and_tx_vertical() -> None:
-    def _group_objects(*, group_key: Literal["rx_dd", "tx_vertical"]) -> GroupObjects:
-        return cast(
-            GroupObjects,
-            {
-                "tx_dd": [],
-                "tx_vertical": ["coil_txv_left", "coil_txv_right"] if group_key == "tx_vertical" else [],
-                "rx_dd": ["coil_rx_left", "coil_rx_right"] if group_key == "rx_dd" else [],
-                "ferrite": [],
-            },
-        )
+def test_diagonal_connect_pair_conductor_keeps_rx_dd_polyline_connector() -> None:
+    modeler = _FakeModeler()
+    group_objects = cast(
+        GroupObjects,
+        {"tx_dd": [], "tx_vertical": [], "rx_dd": ["coil_rx_left", "coil_rx_right"], "ferrite": []},
+    )
+    object_names = ["coil_rx_left", "coil_rx_right"]
+    cad_probe: list[CadProbe] = []
 
-    def _run_case(
-        *,
-        group_key: Literal["rx_dd", "tx_vertical"],
-        left_name: str,
-        right_name: str,
-        conductor_name: str,
-    ) -> tuple[_FakeModeler, list[CadProbe]]:
-        modeler = _FakeModeler()
-        group_objects = _group_objects(group_key=group_key)
-        object_names = [left_name, right_name]
-        cad_probe: list[CadProbe] = []
-        _apply_diagonal_connect_pair_conductor(
-            modeler=cast(Modeler3D, modeler),
-            cu_thickness=0.035,
-            sources=[
-                ("board_0", 0, "c", (1.0, -5.0, 2.0), 1.0, left_name),
-                ("board_0", 0, "d", (1.0, 5.0, 8.0), 1.0, right_name),
-            ],
-            group_objects=group_objects,
-            group_key=group_key,
-            object_names=object_names,
-            cad_probe=cad_probe,
-            conductor_name=conductor_name,
-            conductor_error_context=f"{group_key} diagonal connector",
-            region_kind="rx_region_actual" if group_key == "rx_dd" else "tx_region_vertical",
-            region_min=(0.0, -10.0, 0.0),
-            region_max=(2.0, 10.0, 10.0),
-            placement_violations=[],
-        )
-        return modeler, cad_probe
-
-    rx_modeler, rx_cad_probe = _run_case(
+    _apply_diagonal_connect_pair_conductor(
+        modeler=cast(Modeler3D, modeler),
+        cu_thickness=0.035,
+        sources=[
+            ("board_0", 0, "c", (1.0, -5.0, 2.0), 1.0, "coil_rx_left"),
+            ("board_0", 0, "d", (1.0, 5.0, 8.0), 1.0, "coil_rx_right"),
+        ],
+        group_objects=group_objects,
         group_key="rx_dd",
-        left_name="coil_rx_left",
-        right_name="coil_rx_right",
+        object_names=object_names,
+        cad_probe=cad_probe,
         conductor_name="bridge_rx_dd_d_to_c_demo",
-    )
-    txv_modeler, txv_cad_probe = _run_case(
-        group_key="tx_vertical",
-        left_name="coil_txv_left",
-        right_name="coil_txv_right",
-        conductor_name="bridge_tx_vertical_mode2_d_to_c_demo",
+        conductor_error_context="rx_dd diagonal connector",
+        region_kind="rx_region_actual",
+        region_min=(0.0, -10.0, 0.0),
+        region_max=(2.0, 10.0, 10.0),
+        placement_violations=[],
     )
 
-    assert cast(list[list[float]], rx_modeler.polyline_calls[0]["points"]) == [[1.0, 5.0, 8.0], [1.0, -5.0, 2.0]]
-    assert cast(list[list[float]], txv_modeler.polyline_calls[0]["points"]) == [[1.0, 5.0, 8.0], [1.0, -5.0, 2.0]]
-    assert rx_modeler.unite_calls == [["bridge_rx_dd_d_to_c_demo", "coil_rx_left", "coil_rx_right"]]
-    assert txv_modeler.unite_calls == [["bridge_tx_vertical_mode2_d_to_c_demo", "coil_txv_left", "coil_txv_right"]]
-    assert rx_cad_probe[-1]["bbox"] == [1.0, -5.0, 2.0, 1.0, 5.0, 8.0]
-    assert txv_cad_probe[-1]["bbox"] == [1.0, -5.0, 2.0, 1.0, 5.0, 8.0]
+    assert cast(list[list[float]], modeler.polyline_calls[0]["points"]) == [[1.0, 5.0, 8.0], [1.0, -5.0, 2.0]]
+    assert modeler.unite_calls == [["bridge_rx_dd_d_to_c_demo", "coil_rx_left", "coil_rx_right"]]
+    assert cad_probe[-1]["bbox"] == [1.0, -5.0, 2.0, 1.0, 5.0, 8.0]
+
+
+def test_existing_edge_bridge_conductor_builds_thickened_sheet_for_tx_vertical_mode2() -> None:
+    modeler = _FakeModeler()
+    group_objects = cast(
+        GroupObjects,
+        {"tx_dd": [], "tx_vertical": ["coil_txv_left", "coil_txv_right"], "rx_dd": [], "ferrite": []},
+    )
+    object_names = ["coil_txv_left", "coil_txv_right"]
+    cad_probe: list[CadProbe] = []
+
+    united_name = _apply_existing_edge_bridge_conductor(
+        modeler=cast(Modeler3D, modeler),
+        cu_thickness=0.035,
+        first_edge=((1.0, 5.0, 8.0), (1.0, 5.0, 9.0)),
+        first_object_name="coil_txv_right",
+        second_edge=((1.0, -5.0, 2.0), (1.0, -5.0, 3.0)),
+        second_object_name="coil_txv_left",
+        group_objects=group_objects,
+        group_key="tx_vertical",
+        object_names=object_names,
+        cad_probe=cad_probe,
+        bridge_name="bridge_tx_vertical_mode2_pair_demo",
+        bridge_error_context="tx_vertical mode2 pair bridge",
+        region_kind="tx_region_vertical",
+        region_min=(0.0, -10.0, 0.0),
+        region_max=(2.0, 10.0, 10.0),
+        placement_violations=[],
+    )
+
+    assert cast(list[list[float]], modeler.polyline_calls[0]["points"]) == [
+        [1.0, 5.0, 8.0],
+        [1.0, 5.0, 9.0],
+        [1.0, -5.0, 3.0],
+        [1.0, -5.0, 2.0],
+    ]
+    assert modeler.cover_lines_calls == ["bridge_tx_vertical_mode2_pair_demo"]
+    assert modeler.thicken_sheet_calls == [("bridge_tx_vertical_mode2_pair_demo", 0.14)]
+    assert modeler.unite_calls == [["coil_txv_right", "coil_txv_left", "bridge_tx_vertical_mode2_pair_demo"]]
+    assert cad_probe[-1]["bbox"] == pytest.approx([1.0, -5.0, 2.0, 1.14, 5.0, 9.0], abs=1e-12)
+    assert united_name == "coil_txv_right"

@@ -82,24 +82,22 @@ def _edge_points_at_path_end(*, points: list[list[float]], trace: float) -> Edge
     return p0, p1
 
 
-def _tx_vertical_yz_outer_edge(
+def _edge_points_at_yz_terminal(
     *,
-    points: list[list[float]],
+    terminal_xyz: Point3,
+    neighbor_xyz: Point3,
     trace: float,
-    side: Literal["left", "right"],
 ) -> Edge2P:
-    if len(points) < 2:
-        raise ValueError("Cannot compute tx_vertical YZ outer edge from path with fewer than 2 points")
-    target_y = max(point[1] for point in points) if side == "right" else min(point[1] for point in points)
-    boundary_points = [point for point in points if abs(point[1] - target_y) <= 1e-9]
-    if not boundary_points:
-        raise ValueError("Cannot compute tx_vertical YZ outer edge from empty boundary point set")
-    x_const = sum(point[0] for point in boundary_points) / float(len(boundary_points))
-    z_values = [point[2] for point in boundary_points]
-    z_center = (min(z_values) + max(z_values)) / 2.0
+    dy = terminal_xyz[1] - neighbor_xyz[1]
+    dz = terminal_xyz[2] - neighbor_xyz[2]
+    seg_len = math.hypot(dy, dz)
+    if seg_len <= 1e-12:
+        raise ValueError("Cannot compute tx_vertical YZ terminal edge from zero-length terminal segment")
+    ny = -dz / seg_len
+    nz = dy / seg_len
     half_trace = trace / 2.0
-    p0: Point3 = (x_const, target_y, z_center - half_trace)
-    p1: Point3 = (x_const, target_y, z_center + half_trace)
+    p0: Point3 = (terminal_xyz[0], terminal_xyz[1] + (ny * half_trace), terminal_xyz[2] + (nz * half_trace))
+    p1: Point3 = (terminal_xyz[0], terminal_xyz[1] - (ny * half_trace), terminal_xyz[2] - (nz * half_trace))
     return p0, p1
 
 
@@ -110,7 +108,13 @@ def _edge_points_at_tx_vertical_terminal(
     plane: Literal["ZX", "YZ"] = "ZX",
 ) -> Edge2P:
     if plane == "YZ":
-        return _tx_vertical_yz_outer_edge(points=points, trace=trace, side="right")
+        if len(points) < 2:
+            raise ValueError("Cannot compute tx_vertical terminal edge from path with fewer than 2 points")
+        return _edge_points_at_yz_terminal(
+            terminal_xyz=cast(Point3, tuple(float(v) for v in points[0])),
+            neighbor_xyz=cast(Point3, tuple(float(v) for v in points[1])),
+            trace=trace,
+        )
     if len(points) < 2:
         raise ValueError("Cannot compute tx_vertical terminal edge from path with fewer than 2 points")
     start = points[0]
@@ -142,7 +146,13 @@ def _edge_points_at_tx_vertical_opposite_terminal(
     plane: Literal["ZX", "YZ"] = "ZX",
 ) -> Edge2P:
     if plane == "YZ":
-        return _tx_vertical_yz_outer_edge(points=points, trace=trace, side="left")
+        if len(points) < 2:
+            raise ValueError("Cannot compute tx_vertical opposite terminal edge from path with fewer than 2 points")
+        return _edge_points_at_yz_terminal(
+            terminal_xyz=cast(Point3, tuple(float(v) for v in points[-1])),
+            neighbor_xyz=cast(Point3, tuple(float(v) for v in points[-2])),
+            trace=trace,
+        )
     if len(points) < 2:
         raise ValueError("Cannot compute tx_vertical opposite terminal edge from path with fewer than 2 points")
     start = points[0]
@@ -180,9 +190,19 @@ def _tx_vertical_bridge_edges_from_node(
     if plane == "YZ":
         if points is None:
             raise ValueError("tx_vertical YZ bridge edge resolution requires source points")
+        if len(points) < 2:
+            raise ValueError("tx_vertical YZ bridge edge resolution requires at least 2 source points")
         return (
-            _tx_vertical_yz_outer_edge(points=points, trace=trace, side="right"),
-            _tx_vertical_yz_outer_edge(points=points, trace=trace, side="left"),
+            _edge_points_at_yz_terminal(
+                terminal_xyz=cast(Point3, tuple(float(v) for v in points[0])),
+                neighbor_xyz=cast(Point3, tuple(float(v) for v in points[1])),
+                trace=trace,
+            ),
+            _edge_points_at_yz_terminal(
+                terminal_xyz=cast(Point3, tuple(float(v) for v in points[-1])),
+                neighbor_xyz=cast(Point3, tuple(float(v) for v in points[-2])),
+                trace=trace,
+            ),
         )
     half = trace / 2.0
     min_x_allowed = tx_vertical_region_min[0] + half
@@ -383,7 +403,7 @@ def _finalize_geometry(
         pcb_thickness=ctx.pcb_thickness,
         tx_board_ids=ctx.tx_board_ids,
         tx_vertical_nodes_by_board=finalize_inputs.tx_vertical_nodes_by_board,
-        tx_vertical_mode2_connect_sources_by_board=finalize_inputs.tx_vertical_mode2_connect_sources_by_board,
+        tx_vertical_mode2_terminal_edges_by_board=finalize_inputs.tx_vertical_mode2_terminal_edges_by_board,
         tx_vertical_region_min=ctx.tx_vertical_region_min,
         tx_vertical_region_max=ctx.tx_vertical_region_max,
         txdd_right_a_points=finalize_inputs.txdd_right_a_points,

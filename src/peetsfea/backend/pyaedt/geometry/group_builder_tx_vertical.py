@@ -136,7 +136,7 @@ def build_for_board(
         side: Literal["left", "right", "center"],
         current_direction_override: Literal["cw", "ccw"] | None = None,
         register_link_node: bool = True,
-    ) -> tuple[str, float, Edge2P, Edge2P, Point3, Point3]:
+    ) -> tuple[str, float, Edge2P, Edge2P, Point3, Point3, Edge2P, Edge2P]:
         top_name = f"coil_tx_vertical_g{group_instance_index}_b{board_idx}_{ctx.design_id}"
         top_created = modeler.create_polyline(
             points=world_points,
@@ -237,7 +237,16 @@ def build_for_board(
             board_nodes.append(
                 (group_instance_index, obj_name, start_xyz, end_xyz, y_center, trace, bridge_out_edge, bridge_in_edge)
             )
-        return obj_name, y_center, bridge_out_edge, bridge_in_edge, start_xyz, end_xyz
+        return (
+            obj_name,
+            y_center,
+            bridge_out_edge,
+            bridge_in_edge,
+            start_xyz,
+            end_xyz,
+            terminal_edge,
+            opposite_terminal_edge,
+        )
 
     for instance_index in range(instance_count):
         if not _mount_allows_instance(pcb["mounts"], "tx_vertical", instance_index):
@@ -255,7 +264,7 @@ def build_for_board(
         world_center_z = tx_vertical_center_z + transform["dz"] + off_z
         if ctx.tx_vertical_layout_mode == 2 and ctx.tx_vertical_plane == "YZ":
             pair_center_distance = tx_vertical_span_primary + ctx.tx_vertical_mode2_pair_spacing_mm
-            mode2_registered: dict[Literal["left", "right"], tuple[str, Point3]] = {}
+            mode2_registered: dict[Literal["left", "right"], tuple[str, Edge2P, Edge2P]] = {}
             for pair_side, pair_world_points, _pair_y_center, pair_current_direction in _build_yz_dd_pair_from_right_local(
                 right_local_points=tx_vertical_points,
                 x_const=world_center_x,
@@ -264,7 +273,16 @@ def build_for_board(
                 pair_center_distance=pair_center_distance,
             ):
                 group_instance_index = (instance_index * 2) if pair_side == "left" else (instance_index * 2) + 1
-                obj_name, _y_center, _bridge_out_edge, _bridge_in_edge, _start_xyz, end_xyz = _register_tx_vertical_path(
+                (
+                    obj_name,
+                    _y_center,
+                    _bridge_out_edge,
+                    _bridge_in_edge,
+                    _start_xyz,
+                    _end_xyz,
+                    start_terminal_edge,
+                    end_terminal_edge,
+                ) = _register_tx_vertical_path(
                     world_points=pair_world_points,
                     local_points=tx_vertical_points,
                     plane="YZ",
@@ -273,21 +291,27 @@ def build_for_board(
                     current_direction_override=pair_current_direction,
                     register_link_node=False,
                 )
-                mode2_registered[pair_side] = (obj_name, end_xyz)
+                mode2_registered[pair_side] = (obj_name, start_terminal_edge, end_terminal_edge)
             if "left" not in mode2_registered or "right" not in mode2_registered:
                 raise ValueError("tx_vertical mode 2 pair registration contract violation: missing left/right half")
-            left_name, left_end_xyz = mode2_registered["left"]
-            right_name, right_end_xyz = mode2_registered["right"]
+            left_name, left_start_edge, left_end_edge = mode2_registered["left"]
+            right_name, right_start_edge, right_end_edge = mode2_registered["right"]
             board_key = (pcb["id"], board_idx)
-            if board_key in finalize_inputs.tx_vertical_mode2_connect_sources_by_board:
+            if board_key in finalize_inputs.tx_vertical_mode2_terminal_edges_by_board:
                 raise ValueError(
-                    "tx_vertical mode 2 connect-source contract violation: duplicate board entry "
+                    "tx_vertical mode 2 terminal-edge contract violation: duplicate board entry "
                     f"(board_id={pcb['id']}, board_idx={board_idx})"
                 )
-            finalize_inputs.tx_vertical_mode2_connect_sources_by_board[board_key] = [
-                (pcb["id"], instance_index, "c", left_end_xyz, trace, left_name),
-                (pcb["id"], instance_index, "d", right_end_xyz, trace, right_name),
-            ]
+            finalize_inputs.tx_vertical_mode2_terminal_edges_by_board[board_key] = {
+                "right_start_edge": right_start_edge,
+                "right_start_object_name": right_name,
+                "right_end_edge": right_end_edge,
+                "right_end_object_name": right_name,
+                "left_start_edge": left_start_edge,
+                "left_start_object_name": left_name,
+                "left_end_edge": left_end_edge,
+                "left_end_object_name": left_name,
+            }
             continue
         if ctx.tx_vertical_plane == "ZX":
             top_points = _map_xy_points_to_zx(

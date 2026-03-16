@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, TypedDict, cast
 
 from peetsfea.types.manifest import (
     CadProbe,
@@ -28,6 +28,17 @@ TxVerticalLinkNode = tuple[int, str, Point3, Point3, float, float, Edge2P, Edge2
 BackConnectStubSource = tuple[str, int, str, Point3, float, str]
 TxDdStartStubSource = tuple[Point3, float, str]
 RxDdBackStubSource = BackConnectStubSource
+
+
+class TxVerticalMode2TerminalEdges(TypedDict):
+    right_start_edge: Edge2P
+    right_start_object_name: str
+    right_end_edge: Edge2P
+    right_end_object_name: str
+    left_start_edge: Edge2P
+    left_start_object_name: str
+    left_end_edge: Edge2P
+    left_end_object_name: str
 
 
 def _empty_group_objects() -> GroupObjects:
@@ -57,7 +68,7 @@ class FinalizeInputs:
     txdd_start_stub_sources: dict[str, list[TxDdStartStubSource]] = field(default_factory=dict)
     rxdd_back_stub_sources: list[RxDdBackStubSource] = field(default_factory=list)
     tx_vertical_nodes_by_board: dict[BoardKey, list[TxVerticalLinkNode]] = field(default_factory=dict)
-    tx_vertical_mode2_connect_sources_by_board: dict[BoardKey, list[BackConnectStubSource]] = field(default_factory=dict)
+    tx_vertical_mode2_terminal_edges_by_board: dict[BoardKey, TxVerticalMode2TerminalEdges] = field(default_factory=dict)
     txdd_global_right_d_edge: Edge2P | None = None
     txdd_global_right_d_object_name: str | None = None
     txdd_global_right_d_selection_key: tuple[float, str, int] | None = None
