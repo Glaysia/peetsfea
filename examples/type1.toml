@@ -583,7 +583,7 @@ op = "<="
 rhs = { path = "tx_region_outer_h_mm" }
 
 # ZX legacy Y-order guard: DD->vertical bridge endpoint는 vertical copper outer edge보다 오른쪽에 있어야 한다.
-# tx_vertical이 비활성 또는 tx_vertical_plane == "ZX"면 이 legacy guard는 pass로 처리한다.
+# 현재 active vertical path는 ZX뿐이므로, tx_vertical이 비활성이면 이 guard는 pass로 처리한다.
 [[constraints.rules]]
 id = "tx_bridge_no_pierce"
 kind = "comparison"
@@ -904,7 +904,7 @@ instance_transforms = [
 [[coil_groups]]
 kind = "tx_vertical"
 # TX vertical requested count는 legacy ZX mode 기준이다.
-# TX vertical은 현재 ZX 배치만 유지한다.
+# tx_vertical_orientation_mode=0이면 sampling owner는 유지하지만 realized selected_count는 0이 된다.
 count_range = [true, 1, 6, 6]
 instance_transforms = [
   { dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 },

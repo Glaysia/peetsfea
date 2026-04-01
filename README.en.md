@@ -33,7 +33,7 @@ cd run
 ../.venv/bin/pytest -q ../tests
 ```
 
-Default execution is split across `entry/sample.py` and `entry/build.py`: `entry/sample.py` writes windowed batch-specific resolved TOMLs plus per-batch manifests under `run/toml/`, and `entry/build.py` walks that derived batch series and turns the existing manifests into AEDT files under `run/aedt/`. `entry/sample_build.py` is the dedicated GUI-visible single-sample debug flow used by the VS Code F5 launch. The default runnable spec is `examples/type1.toml`.
+Default execution is split across `entry/sample.py` and `entry/build.py`: `entry/sample.py` writes batch-specific resolved TOMLs plus per-batch manifests under `run/toml/`, and `entry/build.py` replays those manifests into AEDT files under `run/aedt/`. `entry/sample_build.py` is the dedicated GUI-visible replay flow used by the VS Code F5 launch. The default runnable spec is `examples/type1.toml`.
 
 ## Core Artifacts
 - Zip export is temporarily disabled.
@@ -53,19 +53,15 @@ Default execution is split across `entry/sample.py` and `entry/build.py`: `entry
 - Ferrite is controlled only by the global `ferrite.present` flag, follows the actual coil footprint on both RX and TX, and uses RX `2.0mm`, TX `2.0mm`, and `mu_r=500` as the baseline spec contract.
 - The TX ferrite gap is owned by the sampled path `ferrite.tx_gap_mm`, with the default example range set to `3.1..12.0`, `count=8`.
 - TX ferrite must keep that gap below the lowest TX XY FR4 layer and must not touch captured TX live model objects.
-- `coil_groups_params.{tx_dd,tx_vertical,rx_dd}.turn_count_max` now uses the default `2..3` range for every group, and runtime validation accepts up to `3`.
-- The default runnable example now samples `tx.region.z_parts.vertical_z_mm` over `5..15`, `count=11`. Because realized `tx_vertical` height is still `min(coil_shape.tx_vertical.outer_y, tx.region.z_parts.vertical_z_mm)`, the default sample effectively uses `tx_region_vertical_z_mm` as the active height owner.
-- TX DD top placement is owned by the sampled path `coil_placement.tx_dd_top_clearance_ratio`, with the default example range set to `0.0..0.3`, `count=10`. Internal `tx_dd_top_clearance_mm` is derived from `tx.region.z_parts.dd_z_mm`.
-- TX vertical placement is now owned by the sampled path `coil_placement.tx_vertical_layout_mode`. `1` keeps the legacy `ZX` mode and `2` enables the new `YZ` mode.
-- `coil_spacing.tx_vertical_mode2_pair_spacing_ratio` now controls the internal gap of the mode-2 RX-DD-style vertical DD pair over `0.0..0.03`, `count=25`, relative to `tx.region.outer_h_mm`. Internal `tx_vertical_mode2_pair_spacing_mm` is derived from it.
-- `coil_placement.tx_vertical_mode2_x_ratio_to_tx_dd_center` now places the mode-2 RX-DD-style vertical DD pair on the RX-far `70%..100%` band of the underlying TX DD span with `count=10`. The public path name is retained, but the realized formula is `tx_dd_min_x + ratio * tx_dd_outer_x`.
-- `coil_groups.tx_vertical.count_range` samples `1..6` requested coils for legacy ZX mode in the default example.
-- Mode 2 still realizes exactly one DD pair per `tx_vertical` board, so larger sampled/requested counts are clamped to realized `selected_count = 1`.
+- `coil_shape.corner_mode` is the public corner-shaping owner and keeps the `0=sharp_90`, `1=blunt` contract.
+- The default runnable example now samples `tx.region.z_parts.vertical_z_mm` over `5..15`, `count=11`. Because realized `tx_vertical` height is still `min(coil_shape.neo_tx_vertical.outer_y, tx.region.z_parts.vertical_z_mm)`, the default sample effectively uses `tx_region_vertical_z_mm` as the active height owner.
+- TX DD top placement is owned by the sampled path `coil_placement.neo_tx_dd_top_offset_ratio`, with the default example range set to `0.01..0.6`, `count=30`. Internal `tx_dd_top_clearance_mm` is derived from `tx.region.z_parts.dd_z_mm`.
+- `coil_placement.tx_vertical_orientation_mode` now means `0 = no tx_vertical` and `1 = ZX tx_vertical`.
+- `coil_groups.tx_vertical.count_range` remains the canonical sampling owner for requested ZX vertical count. When orientation mode resolves to `0`, the owner still exists in the sampling ledger but realized `selected_count` becomes `0`.
 - The default runnable scene now keeps the nominal `TX-region top -> RX-region bottom` gap at `50 mm` via `scene_anchor.shelf_height_mm = 461.0` under the existing scene-anchor formula.
-- The public spec no longer accepts `coil_placement.tx_vertical_plane`; the realized plane is derived internally as `selected_parameters.tx_vertical_plane = "ZX" | "YZ"`.
-- In mode 2 (`YZ`), the driven current orientation is fixed so that, viewed from `+X`, the right `(+Y)` half is clockwise (`-X` local B) and the left `(-Y)` half is counterclockwise (`+X` local B).
-- Mode 2 (`YZ`) currently skips the legacy `Y`-side bridge no-pierce gate. That guard remains a `ZX`-only contract.
-- Adaptive defaults are standardized to `percent_refinement=20`, `maximum_passes=13`, `minimum_converged_passes=10`, and `max_delta_s=0.007`.
+- The public spec no longer accepts `coil_placement.tx_vertical_plane`; the realized plane is currently fixed internally as `selected_parameters.tx_vertical_plane = "ZX"`.
+- When `tx_vertical_orientation_mode = 0`, the finalized TX DD conductor set is rotated about `Y` to realize the no-vertical mode while preserving the TX region top contract.
+- Adaptive defaults are standardized to `percent_refinement=22`, `maximum_passes=10`, `minimum_passes=8`, `minimum_converged_passes=10`, and `max_delta_s=0.007`.
 - Detailed planning is split across the following documents:
   - [PLANS/V0_2_11.md](PLANS/V0_2_11.md)
   - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md)

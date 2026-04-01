@@ -6,117 +6,171 @@
 flowchart TD
     Spec["run/type1.toml 또는 frozen resolved TOML"]
 
-    subgraph SampleEntries["샘플 entry"]
-        SamplePy["entry/sample.py"]
-        SampleBuild["entry/sample_build.py"]
-    end
+    SamplePy["entry/sample.py"]
+    Profiles["iter_sample_batch_profiles()"]
+    Seeds["generate_eager_uniform_feasible_seed_points()"]
+    RunSample["run() -> build_run_result()"]
+    Freeze["write_resolved_toml()"]
+    BatchManifest["run/toml/.../manifest.json"]
 
-    subgraph BuildEntries["빌드 entry"]
-        BuildPy["entry/build.py"]
-        BuildWorker["build_entries"]
-    end
+    BuildPy["entry/build.py"]
+    SampleBuild["entry/sample_build.py"]
+    LoadManifest["load_sample_manifest()"]
+    FrozenGate["require_frozen_sampling_spec()"]
+    RunBuild["run()"]
+    Geometry["build_square_spiral_from_manifest()"]
+    Finalize["finalize / ferrite / mode0 rotation"]
+    EM["run_em_pipeline()"]
+    Outputs[".aedt + optional geometry metadata"]
 
     Spec --> SamplePy
-    SamplePy --> Uniform["generate_eager_uniform_feasible_seed_points"]
-    Uniform --> RunSample["run"]
-    RunSample --> Snapshots["RunResult snapshots"]
-    Snapshots --> ResolvedToml["write_resolved_toml + manifest.json"]
+    SamplePy --> Profiles
+    Profiles --> Seeds
+    Seeds --> RunSample
+    RunSample --> Freeze
+    Freeze --> BatchManifest
 
-    ResolvedToml --> BuildPy
-    ResolvedToml --> SampleBuild
-    BuildPy --> BuildWorker
-    SampleBuild --> BuildPy
-
-    BuildWorker --> FrozenGate["require_frozen_sampling_spec"]
-    FrozenGate --> RunBuild["run"]
-    RunBuild --> Geometry["build_square_spiral_from_manifest"]
-    Geometry --> Scene["scene / coils / finalize / ferrite"]
-    Scene --> EMPipeline["run_em_pipeline"]
-    EMPipeline --> Outputs[".aedt + optional geometry metadata"]
+    BatchManifest --> BuildPy
+    BatchManifest --> SampleBuild
+    BuildPy --> LoadManifest
+    SampleBuild --> LoadManifest
+    LoadManifest --> FrozenGate
+    FrozenGate --> RunBuild
+    RunBuild --> Geometry
+    Geometry --> Finalize
+    Finalize --> EM
+    EM --> Outputs
 ```
 
 ## 엔트리포인트 역할
-- `entry/sample.py`: 고정 total TOML count, batch TOML count, sparsity ratio 상수에서 batch seed window들을 계산하고, 각 window마다 resolved TOML과 batch `manifest.json`을 만든다.
-- `entry/build.py`: `entry/sample.py`와 같은 batch series에서 유도된 `manifest.json`들을 순서대로 읽고, 존재하는 batch만 build한다.
-- `entry/sample_build.py`: 미리 생성된 batch `manifest.json`들을 GUI-visible runtime으로 순차 replay하는 F5 디버그 entry다. 새 sample 생성은 하지 않는다.
+- `entry/sample.py`: 기본 batch profile 집합을 계산하고, 각 batch마다 resolved TOML들과 batch `manifest.json`을 생성한다.
+- `entry/build.py`: `entry/sample.py`와 같은 batch profile 집합을 다시 순회하면서 각 `manifest.json`을 읽어 build를 수행한다.
+- `entry/sample_build.py`: 새 sample을 만들지 않고, 이미 만들어진 batch `manifest.json`들을 순차 replay build하는 디버그 entry다.
 
-## 샘플링 단계
-- 샘플 단계의 시작점은 `entry/sample.py::generate_sample_manifest()`다.
-- 이 함수는 먼저 `generate_eager_uniform_feasible_seed_points()`를 호출해 seed range 전체에서 feasible point를 찾는다.
-- feasible 판정은 `uniform_seedset.py::_first_feasible_point()` 안에서 `resolve_selection_result(spec, seed, attempt)`를 반복 호출하는 방식이다.
-- 한 seed에 대해 시도 횟수는 최대 `64`회이고, 이 값은 `entry/sample.py::DEFAULT_EAGER_MAX_ATTEMPTS`와 `run_design.py::MAX_ATTEMPTS`로 각각 드러난다.
-- selection 내부에서는 아래 흐름이 유지된다.
-  - sampling registry/preflight
-  - scalar selection
-  - coil group selection
-  - group geometry 파생
-  - PCB resolution/normalization
-  - constraint validation
+현재 entry 계층에서 사라진 것:
+- `multi_sample.py`, `multi_build.py`, `build_one.py`, `sample_one_build.py` 같은 별도 우회 entry는 현재 active path가 아니다.
+
+실행 특성:
+- `entry/sample.py`는 batch 간 병렬화는 가능하지만, batch 내부 design 생성은 현재 직렬로 수행한다.
+- `entry/build.py`는 headless runtime일 때만 manifest 내부 entry build를 병렬화할 수 있다.
+- GUI-visible build는 항상 순차 실행된다.
+- `stop_on_error=False`는 더 이상 지원되지 않는다.
+
+## 샘플링과 selection 단계
+- 샘플링 시작점은 `entry/sample.py::generate_all_sample_manifests()`다.
+- 기본 batch series는 `iter_sample_batch_profiles()`가 `total_toml_count`, `batch_toml_count`, `sparsity_ratio` 계열 상수로 계산한다.
+- 각 batch는 `generate_sample_manifest()`로 들어가고, 먼저 `generate_eager_uniform_feasible_seed_points()`로 feasible seed를 찾는다.
+- 개별 seed는 `generate_sample_artifact_for_seed()`가 처리하며, 내부적으로 `run()`을 호출해 manifest/snapshot을 만든 뒤 frozen resolved TOML을 기록한다.
+
+selection 내부의 핵심 흐름:
+- `run()`
+- `_select_feasible_result()`
+- `resolve_selection_result()`
+- sampling registry/preflight
+- scalar selection
+- coil group resolution
+- group geometry 파생
+- PCB resolution/normalization
+- constraint validation
+
+재시도 계약:
+- seed 하나당 최대 재시도 횟수는 `64`회다.
+- `SelectionConstraintError`만 재시도 대상이고, 그 외 오류는 즉시 실패한다.
+
+현재 `tx_vertical` 계약:
+- `coil_placement.tx_vertical_orientation_mode`는 `0` 또는 `1`만 지원한다.
+- `0`은 `no tx_vertical coil` 모드다.
+- `1`은 legacy `ZX tx_vertical` 모드다.
+- 실험하던 `YZ` mode-2는 현재 active path에 없다.
+- `mode 0`이어도 sampling ledger에는 `coil_groups[tx_vertical].count_range` owner가 남지만, realized `selected_count`는 `0`으로 고정된다.
+
+현재 실제 호출 체인은 아래와 같다.
 
 ```python
-selected_points = generate_eager_uniform_feasible_seed_points(...)
-entry = generate_sample_artifact_for_seed(...)
-result = run(config)
-```
-
-## manifest/repro/dataset/resolved TOML 생성
-- `generate_sample_artifact_for_seed()`는 각 seed마다 `run()`을 호출한다.
-- `run()`은 spec을 읽고 manifest를 조립하며, 동시에 `source_toml_bytes`, `repro_snapshot`, `dataset_snapshot`을 `RunResult` 안에 넣는다.
-- 그 다음 `write_resolved_toml()`이 `repro_snapshot`을 사용해 sampled range만 얼린 resolved TOML을 디스크에 기록한다.
-- 마지막으로 `write_sample_manifest()`가 batch 단위 `manifest.json`을 `run/toml/toml_<version>_<seed_start>/manifest.json`에 저장한다.
-
-현재 실제 호출 체인은 아래 순서다.
-
-```python
-generate_eager_uniform_feasible_seed_points(...)
+generate_all_sample_manifests()
+-> generate_sample_manifest()
+-> generate_eager_uniform_feasible_seed_points()
+-> generate_sample_artifact_for_seed()
 -> run()
--> write_resolved_toml(...)
--> write_sample_manifest(...)
+-> write_resolved_toml()
+-> write_sample_manifest()
 ```
 
-## frozen TOML 재검증 후 build
-- build 단계는 resolved TOML을 다시 읽고 `require_frozen_sampling_spec(spec)`를 먼저 통과해야 한다.
-- 이 gate는 `build_aedt_from_manifest_entry_with_options()` 안에 있으며, non-frozen spec이면 `run()` 자체를 다시 호출하지 않는다.
-- gate를 통과하면 build 단계에서도 `run()`을 한 번 더 호출해 manifest를 재구성한다.
-- 이후 sample manifest에 들어 있던 `design_id`, hash, seed, retry 정보를 `_apply_sample_identity()`로 다시 덮어써 샘플 단계의 identity를 유지한다.
-- `entry/build.py::build_entries()`는 기본 batch runtime일 때만 병렬 처리하고, GUI-visible runtime이면 강제로 순차 처리한다.
+## `run()`과 sample 산출물
+- `run()`은 `spec_version`, backend/tool, TOML basename 길이, simulation/outputs 계약을 먼저 검사한다.
+- TOML basename 길이가 `30`자를 넘으면 즉시 실패한다.
+- backend는 현재 `hfss`만 허용한다.
+- `build_run_result()`는 hash, `design_id`, manifest, `source_toml_bytes`, `repro_snapshot`, `dataset_snapshot`을 조립한다.
 
-```python
-load_sample_manifest(...)
--> require_frozen_sampling_spec(spec)
--> run(config)
--> _apply_sample_identity(...)
--> build_square_spiral_from_manifest(manifest)
-```
+resolved TOML 생성 방식:
+- `write_resolved_toml()`은 원본 spec을 다시 읽는다.
+- `result["repro_snapshot"]["toml_bytes"]`를 기준으로 sampled owner range만 `count=1`의 frozen range로 바꾼다.
+- 선택된 PCB `present`/`mounts`도 replay 기준의 canonical 값으로 다시 써 넣는다.
+
+batch manifest 기록:
+- `write_sample_manifest()`는 `design_id`, `seed`, `retry_attempt`, `toml_path`, `source_toml_path`, 각종 hash를 JSON 배열로 저장한다.
+- build 단계는 이 batch manifest만 읽고 replay를 시작한다.
+
+## frozen TOML replay build
+- build 시작점은 `entry/build.py::build_all_targets_with_options()`다.
+- 기본 대상은 `iter_default_build_targets()`가 sample batch profile과 같은 규칙으로 계산한다.
+- target manifest가 하나라도 없으면 건너뛰지 않고 즉시 `FileNotFoundError`를 낸다.
+
+개별 entry build 흐름:
+- `load_sample_manifest()`
+- `require_frozen_sampling_spec()`
+- `run()`
+- `_apply_sample_identity()`
+- `build_square_spiral_from_manifest()`
+
+중요한 replay 계약:
+- build 입력 TOML은 sampled owner 전부가 frozen 상태여야 한다.
+- replay `run()`은 frozen TOML에서 manifest를 다시 만들지만, 최종적으로는 sample 단계의 `design_id`, hash, seed, retry 값을 `_apply_sample_identity()`로 덮어써 identity를 유지한다.
+- geometry build에 들어가면 manifest의 `repro_mode`는 `manifest_json`으로 전환된다.
+
+정리/실패 처리:
+- 성공/실패와 관계없이 `.aedtresults`는 정리한다.
+- 실패 시 `.aedt`, `.aedt.lock`, optional manifest/metadata/zip 산출물도 함께 정리한다.
+- build는 기본적으로 fail-fast다. 첫 실패에서 멈춘다.
 
 ## geometry build
 - geometry build 진입점은 `src/peetsfea/backend/pyaedt/geometry/build.py::build_square_spiral_from_manifest()`다.
-- 내부 순서는 고정돼 있다.
+- 현재 고정 순서는 아래와 같다.
   - `_prepare_runtime()`
   - `create_hfss_session()`
   - `_assign_design_variables()`
   - `_build_scene()`
   - `_build_all_coils()`
+  - `_build_tx_ferrite()`
   - `_finalize_geometry()`
-  - `_build_ferrite()`
+  - `_build_rx_ferrite()`
   - `_build_and_save_metadata()`
-- `_build_all_coils()`는 현재 `tx_dd`, `tx_vertical`, `rx_dd` 세 kind를 하드코딩으로 분기한다.
-- `_finalize_geometry()`는 bridge/stub/fr4/port용 보조 형상을 합치고, `_build_and_save_metadata()`는 `build_em_artifacts()`까지 이어서 EM 입력용 객체 묶음을 만든다.
-- 특히 `tx_dd -> tx_vertical` bridge는 ordered terminal section 기반 diagonal anti-parallel topology만 허용하고, 가까운 터미널/짧은 거리 heuristic wiring은 active path에서 금지한다.
-- `tx_dd`는 더 이상 `count_mode`나 `selected_count=2/4` 공개 계약을 쓰지 않는다. 공개 입력은 `coil_groups[tx_dd].stacked_mode = 0/1`뿐이고, `2`개/`4`개 물리 루프 수는 private helper가 `layer_count`에서 파생한다.
+  - `_close_hfss_desktop()`
 
-실제 build 체인은 아래 한 줄로 요약된다.
+코일 빌드 계층:
+- `_build_all_coils()`는 PCB별로 `tx_dd`, `tx_vertical`, `rx_dd`를 순회한다.
+- `tx_vertical`은 `selected_count == 0`이면 geometry 생성 자체를 건너뛴다.
+- `tx_dd`는 `stacked_mode=0/1`에서 파생된 layer count를 기준으로 neo builder를 탄다.
+- `tx_vertical` active path는 현재 `ZX` 전용이다.
 
-```python
-run()
--> build_square_spiral_from_manifest()
--> scene/coils/finalize/ferrite
--> build_em_artifacts()
-```
+finalize 계층:
+- `_finalize_geometry()`는 `finalize_solids_and_substrates()`를 통해 RX back-stub, TX vertical, TX DD start stub, TX bridge, global unite, semantic port, FR4 저장 단계를 묶어서 처리한다.
+- TX/RX 포트는 detached sheet 가정이 아니라 finalized conductor 기준 explicit port 계약으로 내려온다.
+
+`tx_vertical_orientation_mode = 0`의 추가 동작:
+- finalize plan 내부에서 `rotate_tx_mode0_plan_objects_if_needed()`가 실행된다.
+- 이 단계는 finalized TX DD 객체를 `Y`축 기준으로 회전시켜 `tx_region_dd` top 계약을 맞춘다.
+- 회전 후 CAD probe, endpoint, bbox, placement violation도 다시 계산한다.
+- 회전 결과는 geometry metadata의 `tx_dd_rotation_angle_deg`, `tx_dd_rotation_pivot_xyz`, `tx_dd_rotation_object_names`에 기록된다.
+
+현재 geometry 계층의 중요한 사실:
+- `tx_vertical_plane`는 realized 값으로만 유지되며 현재 `"ZX"`로 고정된다.
+- `RX` 코일 plane은 계속 `YZ`다.
+- `YZ tx_vertical`은 더 이상 geometry build active path에 포함되지 않는다.
 
 ## EM pipeline
-- EM 단계 진입점은 `src/peetsfea/backend/pyaedt/em_pipeline/runner.py::run_em_pipeline()`다.
-- geometry 단계가 만든 `EmPipelineInput`을 받아 아래 순서로 실행한다.
+- EM 진입점은 `src/peetsfea/backend/pyaedt/em_pipeline/runner.py::run_em_pipeline()`다.
+- 현재 실행 순서는 아래와 같다.
   - `build_groups()`
   - `build_series()`
   - `build_subtract()`
@@ -126,36 +180,40 @@ run()
   - `build_analysis()`
   - `build_post_templates()`
   - `validate_pipeline()`
-- 이 레이어는 HFSS 실행 정책과 post template 구성을 처리하는 공통층에 가깝다.
-- 다만 `build_em_artifacts()`가 만드는 `em_context["source"]`는 현재 `"type1_geometry"`로 고정돼 있다.
 
-```python
-em_input = {"ready_objects": ..., "endpoints": ..., "context": ...}
-run_em_pipeline(hfss, modeler, em_input, em_policy, outputs)
-```
+현재 계약:
+- `build_ports()`는 geometry finalize 단계가 만든 explicit port를 그대로 사용한다.
+- TX 포트 1개, RX 포트 1개가 아니면 즉시 실패한다.
+- `validation_gate == "hard_fail"`이면 TX/RX conductor group이 없을 때 즉시 실패한다.
+- `outputs` 테이블은 report/post template의 SSOT다.
 
-## 산출물/정리
+## 산출물과 디버그 경로
 
 | 산출물 | 생성 시점 | 현재 저장 위치 | 용도 |
 | --- | --- | --- | --- |
 | 원본 입력 TOML | 샘플 시작 전부터 존재 | 보통 `run/type1.toml` | sampling space의 원본 SSOT다. |
-| resolved `.toml` | `write_resolved_toml()` | `run/toml/toml_<version>_<seed_start>/<design_id>.toml` | build 단계가 다시 읽는 frozen sampled spec이다. |
-| batch `manifest.json` | `write_sample_manifest()` | `run/toml/toml_<version>_<seed_start>/manifest.json` | build 단계에 넘길 entry 목록이다. |
-| `.repro.toml` 논리 산출물 | `run()` | 현재 기본 플로우에서는 `RunResult["repro_snapshot"]["toml_bytes"]`로 유지 | exact replay snapshot 계약이다. |
-| `.dataset.toml` 논리 산출물 | `run()` | 현재 기본 플로우에서는 `RunResult["dataset_snapshot"]["toml_bytes"]`로 유지 | canonical sampled owner ledger 계약이다. |
-| `.source.toml` 논리 산출물 | `run()` | 현재 기본 플로우에서는 `RunResult["source_toml_bytes"]`로 유지 | 실행 당시 원본 TOML byte snapshot이다. |
-| `.aedt` | geometry build 완료 후 | `run/aedt/aedt_<version>_<seed_start>/<design_id>.aedt` | HFSS 프로젝트 본체다. |
-| `geometry_metadata_<design_id>.json` | `_build_and_save_metadata()` 후 | 기본 비활성, 옵션일 때만 `run/aedt/...`에 저장 | geometry/EM metadata 디버그용 산출물이다. |
+| resolved `.toml` | `write_resolved_toml()` | `run/toml/toml_<version>_<seed_start>/<design_id>.toml` | build replay 입력용 frozen spec이다. |
+| batch `manifest.json` | `write_sample_manifest()` | `run/toml/toml_<version>_<seed_start>/manifest.json` | build 단계가 읽는 batch entry 목록이다. |
+| per-design manifest JSON | `run()` with `emit_manifest_json=True` | `run/aedt/aedt_<version>_<seed_start>/manifest_<design_id>.json` | 기본 플로우에서는 보통 비활성이다. |
+| `.repro.toml` 논리 산출물 | `run()` | 기본 플로우에서는 `RunResult["repro_snapshot"]["toml_bytes"]` | exact replay snapshot이다. |
+| `.dataset.toml` 논리 산출물 | `run()` | 기본 플로우에서는 `RunResult["dataset_snapshot"]["toml_bytes"]` | sampled owner ledger snapshot이다. |
+| `.aedt` | geometry/EM 완료 후 | `run/aedt/aedt_<version>_<seed_start>/<design_id>.aedt` | HFSS 프로젝트 본체다. |
+| `geometry_metadata_<design_id>.json` | `_build_and_save_metadata()` 후 | `run/aedt/...`에 optional 저장 | geometry/EM/rotation 디버그용 metadata다. |
 
-- `.repro.toml`, `.dataset.toml`, `.source.toml`은 현재 기본 경로에서는 디스크 파일로 직접 쓰이지 않는다.
-- 다만 `src/peetsfea/pipeline/package_export.py`에 zip export 계약이 남아 있어 파일명 규약 자체는 이미 정의돼 있다.
-- 실패 시 `build_aedt_from_manifest_entry_with_options()`가 `.aedt`, `.aedt.lock`, `.aedtresults`, optional metadata/zip을 정리한다.
-- 성공 시에도 `cleanup_aedtresults()`가 `.aedtresults` 디렉터리를 제거한다.
-- GUI-visible build는 `entry/sample_build.py`에서 `entry/build.py::build_all_targets_with_options(..., parallel=False)`로 replay되고, 내부적으로도 `entry/build.py::build_entries()`에서 병렬이 강제로 꺼진다.
+기본 플로우에서 디스크에 바로 쓰지 않는 것:
+- `.repro.toml`
+- `.dataset.toml`
+- `.source.toml`
+- zip export
 
-## type2 확장 시 결합 지점
-- selection 쪽은 `GROUP_KIND_ORDER`, `FIXED_PCB_RULES`, scalar owner path 집합이 `type1` 이름에 묶여 있다.
-- geometry 쪽은 `build_square_spiral_from_manifest()`가 필수 kind를 `tx_dd`, `tx_vertical`, `rx_dd`로 가정한다.
-- scene/ferrite 쪽은 TV/wall/rx face 배치 계약이 현재 `type1` 환경을 전제로 한다.
-- EM 쪽은 대부분 재사용 가능하지만 `em_context["source"] = "type1_geometry"`는 분리 대상이다.
-- 재사용 관점의 세부 분류는 sibling 문서인 [docs/type2-reuse.md](docs/type2-reuse.md)를 본다.
+현재 VS Code 디버그 경로:
+- `run-sample-debug` task는 `run/toml/`을 비운 뒤 `run/`에서 `entry/sample.py`를 실행한다.
+- `Run entry/sample_build.py from run/` launch는 `prepare-build-debug` 이후 `run/`에서 `entry/sample_build.py`를 실행한다.
+- `entry/sample_build.py`는 기존 manifest replay만 수행하며, 새 sample 생성은 하지 않는다.
+
+## type2 확장 시 현재 결합 지점
+- selection 계층은 여전히 `tx_dd`, `tx_vertical`, `rx_dd` kind와 fixed PCB order를 전제로 한다.
+- geometry 계층은 `build_square_spiral_from_manifest()`가 세 kind와 현재 plane 계약(`tx_vertical=ZX`, `rx=YZ`)을 고정으로 본다.
+- `tx_vertical_orientation_mode`의 공개 입력도 사실상 `0=no vertical`, `1=ZX vertical`의 2값 계약에 묶여 있다.
+- EM context의 `source`는 현재 `"type1_geometry"`로 고정된다.
+- 재사용 관점의 세부 분리는 sibling 문서인 [docs/type2-reuse.md](docs/type2-reuse.md)를 본다.

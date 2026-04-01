@@ -13,3 +13,7 @@ Nullable runtime state and fallback attribute/mapping access are forbidden acros
 ## Debug Launch
 
 VS Code debug tasks in `.vscode/tasks.json` install the project in editable mode before running. This file exists so the package metadata declared in `pyproject.toml` has a valid readme target during that step.
+
+## Release History
+
+Release work may be squashed onto `main` to keep the public history compact. When that happens, topic branches can retain their detailed commit history, and later sync back to `main` through a normal merge once `main` has advanced again.
