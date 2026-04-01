@@ -17,21 +17,6 @@
       "problemMatcher": []
     },
     {
-      "label": "clean-run-toml",
-      "type": "shell",
-      "command": "mkdir -p ${workspaceFolder}/run/toml && find ${workspaceFolder}/run/toml -mindepth 1 -maxdepth 1 -exec rm -rf {} +",
-      "problemMatcher": []
-    },
-    {
-      "label": "prepare-sample-debug",
-      "dependsOrder": "sequence",
-      "dependsOn": [
-        "install-dev-editable",
-        "clean-run-toml"
-      ],
-      "problemMatcher": []
-    },
-    {
       "label": "prepare-build-debug",
       "dependsOrder": "sequence",
       "dependsOn": [
@@ -41,12 +26,15 @@
       "problemMatcher": []
     },
     {
-      "label": "prepare-sample-build-debug",
+      "label": "run-sample-debug",
+      "type": "shell",
+      "command": "mkdir -p ${workspaceFolder}/run/toml && find ${workspaceFolder}/run/toml -mindepth 1 -maxdepth 1 -exec rm -rf {} + && ${workspaceFolder}/.venv/bin/python ../entry/sample.py",
+      "options": {
+        "cwd": "${workspaceFolder}/run"
+      },
       "dependsOrder": "sequence",
       "dependsOn": [
-        "install-dev-editable",
-        "clean-run-toml",
-        "clean-run-aedt"
+        "install-dev-editable"
       ],
       "problemMatcher": []
     }

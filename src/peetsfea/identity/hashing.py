@@ -64,3 +64,25 @@ def compose_design_id(unique_hash: str, toml_space_hash: str, seed: int, attempt
     _require_lower_hex(toml_space_hash, 4, "toml_space_hash")
     seed_prefix = f"-{abs(seed):06d}" if seed < 0 else f"{seed:06d}"
     return f"{seed_prefix}_{unique_hash}_{toml_space_hash}_{attempt}"
+
+
+def object_name_tag_from_design_id(design_id: str) -> str:
+    design_id_parts = design_id.split("_")
+    if len(design_id_parts) == 4:
+        seed_prefix, unique_hash, toml_space_hash, attempt = design_id_parts
+        seed_is_numeric = seed_prefix.isdigit() or (
+            seed_prefix.startswith("-") and len(seed_prefix) > 1 and seed_prefix[1:].isdigit()
+        )
+        if seed_is_numeric and len(seed_prefix.lstrip("-")) >= 6 and attempt.isdigit():
+            _require_lower_hex(unique_hash, 4, "design_id unique_hash")
+            _require_lower_hex(toml_space_hash, 4, "design_id toml_space_hash")
+            return unique_hash
+    if len(design_id) == 4:
+        allowed = set("0123456789abcdefghijklmnopqrstuvwxyz")
+        if any(char not in allowed for char in design_id):
+            raise ValueError(
+                "object-name design tag must use lowercase alnum chars "
+                f"(design_id={design_id!r})"
+            )
+        return design_id
+    return hashlib.sha256(design_id.encode("utf-8")).hexdigest()[:4]

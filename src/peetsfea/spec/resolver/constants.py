@@ -4,16 +4,14 @@ from .types import _FixedPcbRule
 
 
 SCALAR_RANGE_SPECS: tuple[tuple[str, str, bool], ...] = (
-    ("coil_shape.tx_dd.outer_x", "tx_dd_outer_x", False),
-    ("coil_shape.tx_dd.outer_y", "tx_dd_outer_y", False),
-    ("coil_shape.tx_vertical.outer_x", "tx_vertical_outer_x", False),
-    ("coil_shape.tx_vertical.outer_y", "tx_vertical_outer_y", False),
+    ("coil_shape.neo_tx_dd.outer_x", "tx_dd_outer_x", False),
+    ("coil_shape.neo_tx_dd.outer_y", "tx_dd_outer_y", False),
+    ("coil_shape.neo_tx_vertical.outer_x", "tx_vertical_outer_x", False),
+    ("coil_shape.neo_tx_vertical.outer_y", "tx_vertical_outer_y", False),
     ("coil_shape.rx_dd.outer_x", "rx_dd_outer_x", False),
     ("coil_shape.rx_dd.outer_y", "rx_dd_outer_y", False),
-    ("coil_shape.inner_margin_x", "inner_margin_x", False),
-    ("coil_shape.inner_margin_y", "inner_margin_y", False),
-    ("coil_spacing.tx_dd_pair_spacing_ratio", "tx_dd_pair_spacing_ratio", False),
-    ("coil_spacing.tx_vertical_mode2_pair_spacing_ratio", "tx_vertical_mode2_pair_spacing_ratio", False),
+    ("coil_shape.corner_mode", "corner_mode", True),
+    ("coil_spacing.neo_tx_dd_pair_spacing_ratio", "tx_dd_pair_spacing_ratio", False),
     ("coil_spacing.rx_dd_pair_spacing_ratio", "rx_dd_pair_spacing_ratio", False),
     ("coil_spacing.tx_vertical_center_gap_mm", "tx_vertical_center_gap_mm", False),
     ("tv.width_mm", "tv_width_mm", False),
@@ -46,9 +44,8 @@ SCALAR_RANGE_SPECS: tuple[tuple[str, str, bool], ...] = (
     ("scene_anchor.shelf_height_mm", "shelf_height_mm", False),
     ("scene_anchor.shelf_min_size_x_mm", "shelf_min_size_x_mm", False),
     ("scene_anchor.rx_region_bottom_from_tv_mm", "rx_region_bottom_from_tv_mm", False),
-    ("coil_placement.tx_dd_top_clearance_ratio", "tx_dd_top_clearance_ratio", False),
-    ("coil_placement.tx_vertical_layout_mode", "tx_vertical_layout_mode", True),
-    ("coil_placement.tx_vertical_mode2_x_ratio_to_tx_dd_center", "tx_vertical_mode2_x_ratio_to_tx_dd_center", False),
+    ("coil_placement.neo_tx_dd_top_offset_ratio", "tx_dd_top_offset_ratio", False),
+    ("coil_placement.tx_vertical_orientation_mode", "tx_vertical_orientation_mode", True),
     ("coil_placement.rx_face_clearance_mm", "rx_face_clearance_mm", False),
     ("pcb_spacing.tx_main_1_z_from_tx_main_0_mm", "tx_main_1_z_from_tx_main_0_mm", False),
 )
@@ -64,15 +61,29 @@ ATTEMPT_STRIDE = 1009
 REMOVED_PATHS: tuple[str, ...] = (
     "coil_shape.outer_x",
     "coil_shape.outer_y",
+    "coil_shape.tx_dd.outer_x",
+    "coil_shape.tx_dd.outer_y",
     "coil_spacing.tx_dd_pair_spacing_mm",
+    "coil_spacing.tx_dd_pair_spacing_ratio",
     "coil_spacing.rx_dd_pair_spacing_mm",
     "coil_spacing.tx_vertical_span_mm",
+    "coil_placement.tx_dd_top_offset_ratio",
     "coil_placement.tx_dd_top_clearance_mm",
+    "coil_placement.tx_dd_top_clearance_ratio",
     "coil_placement.tx_vertical_plane",
+    "coil_placement.tx_vertical_layout_mode",
+    "coil_groups_params.tx_dd.turn_count",
+    "coil_groups_params.tx_dd.band_ratio",
+    "coil_groups_params.tx_dd.metal_ratio",
+    "coil_groups_params.tx_dd.turn_count_max",
+    "coil_groups_params.neo_tx_dd.turn_count_max",
+    "coil_groups_params.tx_vertical.turn_count_max",
+    "coil_groups_params.rx_dd.turn_count_max",
+    "coil_placement.neo_tx_dd_top_clearance_ratio",
 )
 
 DERIVED_RANGE_PATHS: dict[str, str] = {
-    "coil_shape.tx_vertical.outer_x": "coil_shape.tx_dd.outer_x",
+    "coil_shape.neo_tx_vertical.outer_x": "coil_shape.neo_tx_dd.outer_x",
 }
 
 FIXED_PCB_ORDER: tuple[str, ...] = (

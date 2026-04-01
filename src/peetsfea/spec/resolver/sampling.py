@@ -16,27 +16,27 @@ from .constants import (
     GROUP_KIND_ORDER,
     SCALAR_RANGE_SPECS,
 )
-from .path_access import read_range_definition
+from .constraints.path_access import read_range_definition
 from .types import Number, SamplingContext
 
 SamplerKind = Literal["range", "inline_range"]
 SamplingValueType = Literal["int", "float"]
 
-_INLINE_RANGE_FIELDS: Final[frozenset[str]] = frozenset({"count_mode", "count_range", "count_fixed", "present"})
+_INLINE_RANGE_FIELDS: Final[frozenset[str]] = frozenset({"stacked_mode", "count_range", "count_fixed", "present"})
 _INDEXED_SEGMENT_RE: Final[re.Pattern[str]] = re.compile(r"^(?P<key>[A-Za-z0-9_-]+)(?:\[(?P<index>\d+)\])?$")
 _GROUP_COUNT_FIELD_BY_KIND: Final[dict[str, str]] = {
-    "tx_dd": "count_mode",
+    "tx_dd": "stacked_mode",
     "tx_vertical": "count_range",
     "rx_dd": "count_fixed",
 }
 _GROUP_GEOMETRY_RANGE_SPECS: Final[tuple[tuple[str, bool], ...]] = (
-    ("coil_groups_params.tx_dd.turn_count_max", True),
-    ("coil_groups_params.tx_dd.band_ratio", False),
-    ("coil_groups_params.tx_dd.metal_ratio", False),
-    ("coil_groups_params.tx_vertical.turn_count_max", True),
-    ("coil_groups_params.tx_vertical.band_ratio", False),
-    ("coil_groups_params.tx_vertical.metal_ratio", False),
-    ("coil_groups_params.rx_dd.turn_count_max", True),
+    ("coil_groups_params.neo_tx_dd.turn_count", True),
+    ("coil_groups_params.neo_tx_dd.band_ratio", False),
+    ("coil_groups_params.neo_tx_dd.metal_ratio", False),
+    ("coil_groups_params.neo_tx_vertical.turn_count", True),
+    ("coil_groups_params.neo_tx_vertical.band_ratio", False),
+    ("coil_groups_params.neo_tx_vertical.metal_ratio", False),
+    ("coil_groups_params.rx_dd.turn_count", True),
     ("coil_groups_params.rx_dd.band_ratio", False),
     ("coil_groups_params.rx_dd.metal_ratio", False),
 )
@@ -50,7 +50,6 @@ class SamplingRegistryEntry:
     value_type: SamplingValueType
     export_to_dataset: bool
     replay_affects_design: bool
-    fixed_value: Number | None = None
 
 
 @dataclass(frozen=True)
@@ -95,17 +94,32 @@ class SamplingRegistry:
         return set(self._entries_by_owner.keys()) | set(self._alias_to_owner.keys())
 
     def entry_for_owner(self, owner_path: str) -> SamplingRegistryEntry | None:
-        return self._entries_by_owner.get(owner_path)
+        if owner_path in self._entries_by_owner:
+            return self._entries_by_owner[owner_path]
+        return None
 
     def entry_for_path(self, path: str) -> SamplingRegistryEntry | None:
         owner_path = self.resolve_owner_path(path)
-        return self._entries_by_owner.get(owner_path)
+        if owner_path in self._entries_by_owner:
+            return self._entries_by_owner[owner_path]
+        return None
 
     def resolve_owner_path(self, path: str) -> str:
-        return self._alias_to_owner.get(path, path)
+        if path in self._alias_to_owner:
+            return self._alias_to_owner[path]
+        return path
 
     def is_alias_path(self, path: str) -> bool:
         return path in self._alias_to_owner
+
+    def require_entry_for_owner(self, owner_path: str) -> SamplingRegistryEntry:
+        if owner_path not in self._entries_by_owner:
+            raise ValueError(f"Sampling registry owner path is missing an entry: {owner_path}")
+        return self._entries_by_owner[owner_path]
+
+    def require_entry_for_path(self, path: str) -> SamplingRegistryEntry:
+        owner_path = self.resolve_owner_path(path)
+        return self.require_entry_for_owner(owner_path)
 
 
 class SamplingLedger(MutableMapping[str, Number]):
@@ -124,20 +138,18 @@ class SamplingLedger(MutableMapping[str, Number]):
         return self._rng
 
     def record(self, path: str, value: Number) -> Number:
-        entry = self._registry.entry_for_path(path)
-        if entry is None:
-            raise KeyError(path)
+        entry = self._registry.require_entry_for_path(path)
         self._values_by_canonical[entry.canonical_key] = value
         self._path_to_canonical[path] = entry.canonical_key
         return value
 
     def has_canonical_value(self, path: str) -> bool:
-        entry = self._registry.entry_for_path(path)
-        return entry is not None and entry.canonical_key in self._values_by_canonical
+        entry = self._registry.require_entry_for_path(path)
+        return entry.canonical_key in self._values_by_canonical
 
     def canonical_value(self, path: str) -> Number:
-        entry = self._registry.entry_for_path(path)
-        if entry is None or entry.canonical_key not in self._values_by_canonical:
+        entry = self._registry.require_entry_for_path(path)
+        if entry.canonical_key not in self._values_by_canonical:
             raise KeyError(path)
         return self._values_by_canonical[entry.canonical_key]
 
@@ -156,6 +168,9 @@ class SamplingLedger(MutableMapping[str, Number]):
     def __getitem__(self, key: str) -> Number:
         canonical_key = self._path_to_canonical[key]
         return self._values_by_canonical[canonical_key]
+
+    def __contains__(self, key: object) -> bool:
+        return isinstance(key, str) and key in self._path_to_canonical
 
     def __setitem__(self, key: str, value: Number) -> None:
         self.record(key, value)
@@ -200,7 +215,7 @@ def _read_path_with_indexes(root: TOMLTable, dotted_path: str) -> TOMLValue:
     current: TOMLValue = root
     for segment in dotted_path.split("."):
         match = _INDEXED_SEGMENT_RE.match(segment)
-        if match is None:
+        if not match:
             raise ValueError(f"Unsupported indexed path: {dotted_path}")
         key = match.group("key")
         raw_index = match.group("index")
@@ -209,7 +224,7 @@ def _read_path_with_indexes(root: TOMLTable, dotted_path: str) -> TOMLValue:
         if key not in current:
             raise ValueError(f"Missing required path: {dotted_path}")
         current = current[key]
-        if raw_index is None:
+        if not raw_index:
             continue
         if not isinstance(current, list):
             raise ValueError(f"{'.'.join(dotted_path.split('.')[:-1])} must be an array")
@@ -228,7 +243,7 @@ def _write_path_with_indexes(root: TOMLTable, dotted_path: str, value: TOMLValue
     current: TOMLValue = root
     for segment in segments[:-1]:
         match = _INDEXED_SEGMENT_RE.match(segment)
-        if match is None:
+        if not match:
             raise ValueError(f"Unsupported indexed path: {dotted_path}")
         key = match.group("key")
         raw_index = match.group("index")
@@ -237,7 +252,7 @@ def _write_path_with_indexes(root: TOMLTable, dotted_path: str, value: TOMLValue
         if key not in current:
             raise ValueError(f"Missing required path: {dotted_path}")
         current = current[key]
-        if raw_index is None:
+        if not raw_index:
             continue
         if not isinstance(current, list):
             raise ValueError(f"{'.'.join(dotted_path.split('.')[:-1])} must be an array")
@@ -248,7 +263,7 @@ def _write_path_with_indexes(root: TOMLTable, dotted_path: str, value: TOMLValue
 
     last_segment = segments[-1]
     match = _INDEXED_SEGMENT_RE.match(last_segment)
-    if match is None:
+    if not match:
         raise ValueError(f"Unsupported indexed path: {dotted_path}")
     key = match.group("key")
     raw_index = match.group("index")
@@ -256,7 +271,7 @@ def _write_path_with_indexes(root: TOMLTable, dotted_path: str, value: TOMLValue
         raise ValueError(f"{dotted_path} parent must be a table/object")
     if key not in current:
         raise ValueError(f"Missing required path: {dotted_path}")
-    if raw_index is None:
+    if not raw_index:
         current[key] = value
         return
 
@@ -385,7 +400,7 @@ def _entry_from_fixed_group_count(owner_path: str, canonical_key: str) -> Sampli
     )
 
 
-def _entry_from_pcb_present(owner_path: str, canonical_key: str, fixed_value: int | None) -> SamplingRegistryEntry:
+def _entry_from_pcb_present(owner_path: str, canonical_key: str) -> SamplingRegistryEntry:
     return SamplingRegistryEntry(
         canonical_key=canonical_key,
         owner_path=owner_path,
@@ -393,7 +408,6 @@ def _entry_from_pcb_present(owner_path: str, canonical_key: str, fixed_value: in
         value_type="int",
         export_to_dataset=False,
         replay_affects_design=False,
-        fixed_value=fixed_value,
     )
 
 
@@ -406,39 +420,43 @@ def build_sampling_registry(spec: TOMLTable) -> SamplingRegistry:
     for path, expect_integer in _GROUP_GEOMETRY_RANGE_SPECS:
         entries.append(_entry_from_group_geometry(path, expect_integer))
 
-    raw_groups = spec.get("coil_groups")
-    if isinstance(raw_groups, list):
-        for idx, raw_group in enumerate(raw_groups):
-            if not isinstance(raw_group, dict):
-                continue
-            kind = raw_group.get("kind")
-            if kind not in GROUP_KIND_ORDER:
-                continue
-            field_name = _GROUP_COUNT_FIELD_BY_KIND[str(kind)]
-            owner_path = f"coil_groups[{idx}].{field_name}"
-            canonical_key = f"coil_groups.{kind}.{field_name}"
-            if str(kind) == "rx_dd":
-                entries.append(_entry_from_fixed_group_count(owner_path, canonical_key))
-            else:
-                entries.append(_entry_from_group_count(owner_path, canonical_key))
+    if "coil_groups" not in spec or not isinstance(spec["coil_groups"], list):
+        raise ValueError("coil_groups must be a list")
+    raw_groups = spec["coil_groups"]
+    for idx, raw_group in enumerate(raw_groups):
+        if not isinstance(raw_group, dict):
+            continue
+        if "kind" not in raw_group:
+            continue
+        kind = raw_group["kind"]
+        if kind not in GROUP_KIND_ORDER:
+            continue
+        field_name = _GROUP_COUNT_FIELD_BY_KIND[str(kind)]
+        owner_path = f"coil_groups[{idx}].{field_name}"
+        canonical_key = f"coil_groups.{kind}.{field_name}"
+        if str(kind) == "rx_dd":
+            entries.append(_entry_from_fixed_group_count(owner_path, canonical_key))
+        else:
+            entries.append(_entry_from_group_count(owner_path, canonical_key))
 
-    raw_pcbs = spec.get("pcbs")
-    if isinstance(raw_pcbs, list):
-        for idx, raw_pcb in enumerate(raw_pcbs):
-            if not isinstance(raw_pcb, dict):
-                continue
-            pcb_id = raw_pcb.get("id")
-            if not isinstance(pcb_id, str) or pcb_id == "":
-                continue
-            fixed_rule = FIXED_PCB_RULES.get(pcb_id)
-            fixed_value = int(fixed_rule["present"]) if fixed_rule is not None else None
-            entries.append(
-                _entry_from_pcb_present(
-                    owner_path=f"pcbs[{idx}].present",
-                    canonical_key=f"pcbs.{pcb_id}.present",
-                    fixed_value=fixed_value,
-                )
+    if "pcbs" not in spec or not isinstance(spec["pcbs"], list):
+        raise ValueError("pcbs must be a list")
+    raw_pcbs = spec["pcbs"]
+    for idx, raw_pcb in enumerate(raw_pcbs):
+        if not isinstance(raw_pcb, dict):
+            continue
+        if "id" not in raw_pcb:
+            continue
+        pcb_id = raw_pcb["id"]
+        if not isinstance(pcb_id, str) or pcb_id == "":
+            continue
+        assert pcb_id in FIXED_PCB_RULES, f"Unsupported pcb id in sampling registry: {pcb_id}"
+        entries.append(
+            _entry_from_pcb_present(
+                owner_path=f"pcbs[{idx}].present",
+                canonical_key=f"pcbs.{pcb_id}.present",
             )
+        )
 
     return SamplingRegistry(entries=entries, aliases=dict(DERIVED_RANGE_PATHS))
 
@@ -446,10 +464,7 @@ def build_sampling_registry(spec: TOMLTable) -> SamplingRegistry:
 def iter_registry_entries_in_canonical_order(registry: SamplingRegistry) -> tuple[SamplingRegistryEntry, ...]:
     entries: list[SamplingRegistryEntry] = []
     for owner_path in registry.owner_paths():
-        entry = registry.entry_for_owner(owner_path)
-        if entry is None:
-            raise ValueError(f"Sampling registry owner path is missing an entry: {owner_path}")
-        entries.append(entry)
+        entries.append(registry.require_entry_for_owner(owner_path))
     entries.sort(key=lambda entry: entry.canonical_key)
     return tuple(entries)
 
@@ -457,7 +472,7 @@ def iter_registry_entries_in_canonical_order(registry: SamplingRegistry) -> tupl
 def scan_sample_like_fields(value: TOMLValue, path: str = "") -> list[ScannedSamplingField]:
     found: list[ScannedSamplingField] = []
     if isinstance(value, dict):
-        if set(value.keys()) == {"range"} and isinstance(value.get("range"), list):
+        if set(value.keys()) == {"range"} and isinstance(value["range"], list):
             found.append(ScannedSamplingField(path=path, sampler_kind="range", raw_range=cast(list[TOMLValue], value["range"])))
             return found
         for key, child in value.items():
@@ -529,9 +544,10 @@ def preflight_sampling_spec(spec: TOMLTable, registry: SamplingRegistry) -> None
             ensure_dummy_derived_range(field.raw_range, field.path)
             continue
 
-        entry = registry.entry_for_owner(field.path)
-        if entry is None:
-            raise ValueError(f"Unknown sampled field: {field.path}")
+        try:
+            entry = registry.require_entry_for_owner(field.path)
+        except ValueError as exc:
+            raise ValueError(f"Unknown sampled field: {field.path}") from exc
         if entry.sampler_kind != field.sampler_kind:
             raise ValueError(f"Sampling field kind mismatch for {field.path}")
 
@@ -554,19 +570,21 @@ def preflight_sampling_spec(spec: TOMLTable, registry: SamplingRegistry) -> None
             if count != 1 or float(start) != float(end):
                 raise ValueError(f"normalized-away sampled field must be fixed with count=1: {field.path}")
 
-    raw_pcbs = spec.get("pcbs")
-    if not isinstance(raw_pcbs, list):
+    if "pcbs" not in spec or not isinstance(spec["pcbs"], list):
         return
+    raw_pcbs = spec["pcbs"]
     for idx, raw_pcb in enumerate(raw_pcbs):
         if not isinstance(raw_pcb, dict):
             continue
-        z_mode = raw_pcb.get("z_mode")
+        if "z_mode" not in raw_pcb or "z_delta_path" not in raw_pcb:
+            continue
+        z_mode = raw_pcb["z_mode"]
         if z_mode != "relative_to_pcb":
             continue
-        z_delta_path = raw_pcb.get("z_delta_path")
+        z_delta_path = raw_pcb["z_delta_path"]
         if not isinstance(z_delta_path, str) or z_delta_path == "":
             continue
-        if registry.entry_for_owner(z_delta_path) is None:
+        if z_delta_path not in registry.owner_paths():
             raise ValueError(f"relative_to_pcb z_delta_path must reference registered sampling owner: pcbs[{idx}].z_delta_path")
         if registry.is_alias_path(z_delta_path):
             raise ValueError(f"relative_to_pcb z_delta_path must reference canonical owner path: {z_delta_path}")
@@ -599,9 +617,7 @@ def select_range_value(
         )
         return ledger.record(dotted_path, selected)
 
-    entry = ledger.registry.entry_for_owner(dotted_path)
-    if entry is None:
-        raise ValueError(f"Sampling path is not registered: {dotted_path}")
+    entry = ledger.registry.require_entry_for_owner(dotted_path)
     if ledger.has_canonical_value(dotted_path):
         return ledger.record(dotted_path, ledger.canonical_value(dotted_path))
     if _expect_integer_for_entry(entry) != expect_integer:

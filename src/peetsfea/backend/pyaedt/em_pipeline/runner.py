@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from ansys.aedt.core import Hfss
-from ansys.aedt.core.modeler.modeler_3d import Modeler3D
+from peetsfea.aedt import Hfss
+from peetsfea.aedt import Modeler3D
 
-from peetsfea.backend.pyaedt.em_pipeline.analysis import build_analysis, build_post_templates
-from peetsfea.backend.pyaedt.em_pipeline.boundary_port import build_boundary, build_ports
 from peetsfea.backend.pyaedt.em_pipeline.contracts import EmPipelineInput, EmPipelineResult
-from peetsfea.backend.pyaedt.em_pipeline.grouping import build_groups
+from peetsfea.backend.pyaedt.em_pipeline.steps.analysis import build_analysis, build_post_templates
+from peetsfea.backend.pyaedt.em_pipeline.steps.boundary_port import build_boundary, build_ports
+from peetsfea.backend.pyaedt.em_pipeline.steps.grouping import build_groups
+from peetsfea.backend.pyaedt.em_pipeline.steps.sources import apply_sources_phase
 from peetsfea.backend.pyaedt.em_pipeline.series import build_series
-from peetsfea.backend.pyaedt.em_pipeline.sources import apply_sources_phase
 from peetsfea.backend.pyaedt.em_pipeline.subtract import build_subtract
 from peetsfea.backend.pyaedt.em_pipeline.validate import validate_pipeline
-from peetsfea.types.manifest import EmPolicy, OutputsSpec
+from peetsfea.types.manifest import EmPolicy, EmPorts, OutputsSpec
 
 
 def run_em_pipeline(
@@ -25,10 +25,10 @@ def run_em_pipeline(
     series = build_series(groups)
     subtract = build_subtract(groups)
     boundary = build_boundary(hfss, modeler, em_policy)
-    ports = build_ports(hfss, modeler, em_input)
+    ports: EmPorts = build_ports(hfss, modeler, em_input)
     sources = apply_sources_phase(hfss, ports)
     analysis = build_analysis(hfss, em_policy)
-    post_templates = build_post_templates(hfss, outputs)
+    post_templates = build_post_templates(hfss, outputs, ports)
     result: EmPipelineResult = {
         "groups": groups,
         "series": series,

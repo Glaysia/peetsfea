@@ -1,23 +1,31 @@
 from __future__ import annotations
 
 import os
+import sys
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
-from peetsfea import __version__
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from peetsfea.pipeline.run_batch import (
     SampleManifestEntry,
     build_aedt_from_manifest_entry_with_options,
     load_sample_manifest,
 )
+from peetsfea.console_log import info
+
+from entry import sample
 
 cwd = Path(__file__).resolve().parents[1]
 
-
+IS_DEBUG = os.environ.get("PEETSFEA_DEBUG") == "1"
 ANSYS_EXECUTABLE_PATH = "/opt/ansys_inc/v252/AnsysEM"
-DEFAULT_BUILD_SEED_START = 0
-BUILD_WORKER_COUNT = 12
+BUILD_PARALLEL = not IS_DEBUG
+BUILD_WORKER_COUNT = 1 if IS_DEBUG else 6
+BUILD_NON_GRAPHICAL = not IS_DEBUG
+BUILD_CLOSE_ON_EXIT = not IS_DEBUG
 
 
 @dataclass(frozen=True)
@@ -26,34 +34,38 @@ class BuildRuntime:
     close_on_exit: bool
 
 
-DEFAULT_BUILD_RUNTIME = BuildRuntime(non_graphical=True, close_on_exit=True)
-DEBUG_BUILD_RUNTIME = BuildRuntime(non_graphical=False, close_on_exit=False)
+@dataclass(frozen=True)
+class BuildTarget:
+    manifest_path: Path
+    ansys_run_dir: Path
+
+
+DEFAULT_BUILD_RUNTIME = BuildRuntime(
+    non_graphical=BUILD_NON_GRAPHICAL,
+    close_on_exit=BUILD_CLOSE_ON_EXIT,
+)
 GUI_VISIBLE_BUILD_RUNTIME = BuildRuntime(non_graphical=False, close_on_exit=True)
-
-
-def default_sample_manifest_path_for_seed_start(seed_start: int, *, workspace_root: Path = cwd) -> Path:
-    return workspace_root / "run" / "toml" / f"toml_{__version__}_{seed_start}" / "manifest.json"
-
-
-def default_ansys_run_dir_for_seed_start(seed_start: int, *, workspace_root: Path = cwd) -> Path:
-    return workspace_root / "run" / "aedt" / f"aedt_{__version__}_{seed_start}"
-
-
-DEFAULT_SAMPLE_MANIFEST_PATH = default_sample_manifest_path_for_seed_start(DEFAULT_BUILD_SEED_START)
-DEFAULT_ANSYS_RUN_DIR = default_ansys_run_dir_for_seed_start(DEFAULT_BUILD_SEED_START)
-
-
-def _is_debug_enabled() -> bool:
-    return os.environ.get("PEETSFEA_DEBUG") == "1"
+DEFAULT_FIRST_BATCH = sample.iter_sample_batch_profiles()[0]
+DEFAULT_SAMPLE_MANIFEST_PATH = sample.sample_manifest_path_for_seed_start(
+    DEFAULT_FIRST_BATCH.seed_start,
+    workspace_root=cwd,
+)
+DEFAULT_ANSYS_RUN_DIR = sample.sample_ansys_run_dir_for_seed_start(
+    DEFAULT_FIRST_BATCH.seed_start,
+    workspace_root=cwd,
+)
 
 
 def _default_runtime() -> BuildRuntime:
-    if _is_debug_enabled():
-        return DEBUG_BUILD_RUNTIME
     return DEFAULT_BUILD_RUNTIME
 
 
-def _build_entry(entry: SampleManifestEntry, *, ansys_run_dir: Path, runtime: BuildRuntime) -> bool:
+def _build_entry(
+    entry: SampleManifestEntry,
+    *,
+    ansys_run_dir: Path,
+    runtime: BuildRuntime,
+) -> bool:
     return build_aedt_from_manifest_entry_with_options(
         entry=entry,
         ansys_run_dir=ansys_run_dir,
@@ -75,22 +87,45 @@ def build_entries(
     runtime: BuildRuntime | None = None,
     parallel: bool | None = None,
     max_workers: int | None = None,
+    stop_on_error: bool = True,
 ) -> list[bool]:
+    if stop_on_error is False:
+        raise ValueError("stop_on_error=False is no longer supported")
     if not entries:
         return []
 
     resolved_runtime = runtime or _default_runtime()
-    should_parallel = parallel if parallel is not None else resolved_runtime == DEFAULT_BUILD_RUNTIME
+    should_parallel = BUILD_PARALLEL if parallel is None else parallel
     if resolved_runtime.non_graphical is False:
         should_parallel = False
 
-    worker_count = max_workers or BUILD_WORKER_COUNT
+    worker_count = BUILD_WORKER_COUNT if max_workers is None else max_workers
     if not should_parallel or worker_count <= 1:
-        return [_build_entry(entry, ansys_run_dir=ansys_run_dir, runtime=resolved_runtime) for entry in entries]
+        results: list[bool] = []
+        for entry in entries:
+            ok = _build_entry(
+                entry,
+                ansys_run_dir=ansys_run_dir,
+                runtime=resolved_runtime,
+            )
+            results.append(ok)
+            if not ok:
+                raise RuntimeError(
+                    "Build failed and stop_on_error is enabled "
+                    f"(design_id={entry['design_id']}, toml_path={entry['toml_path']})"
+                )
+        return results
 
     tasks = [(entry, ansys_run_dir, resolved_runtime) for entry in entries]
     with ProcessPoolExecutor(max_workers=worker_count) as executor:
-        return list(executor.map(_build_worker, tasks))
+        results = list(executor.map(_build_worker, tasks))
+    for entry, ok in zip(entries, results, strict=True):
+        if not ok:
+            raise RuntimeError(
+                "Build failed and stop_on_error is enabled "
+                f"(design_id={entry['design_id']}, toml_path={entry['toml_path']})"
+            )
+    return results
 
 
 def build_from_manifest_path(
@@ -100,7 +135,10 @@ def build_from_manifest_path(
     runtime: BuildRuntime | None = None,
     parallel: bool | None = None,
     max_workers: int | None = None,
+    stop_on_error: bool = True,
 ) -> list[bool]:
+    if stop_on_error is False:
+        raise ValueError("stop_on_error=False is no longer supported")
     entries = load_sample_manifest(manifest_path)
     return build_entries(
         entries,
@@ -108,8 +146,57 @@ def build_from_manifest_path(
         runtime=runtime,
         parallel=parallel,
         max_workers=max_workers,
+        stop_on_error=stop_on_error,
     )
 
 
+def iter_default_build_targets(*, workspace_root: Path = cwd) -> tuple[BuildTarget, ...]:
+    return tuple(
+        BuildTarget(
+            manifest_path=sample.sample_manifest_path_for_seed_start(profile.seed_start, workspace_root=workspace_root),
+            ansys_run_dir=sample.sample_ansys_run_dir_for_seed_start(profile.seed_start, workspace_root=workspace_root),
+        )
+        for profile in sample.iter_sample_batch_profiles()
+    )
+
+
+def build_all_targets(targets: tuple[BuildTarget, ...] | None = None) -> list[list[bool]]:
+    return build_all_targets_with_options(targets)
+
+
+def build_all_targets_with_options(
+    targets: tuple[BuildTarget, ...] | None = None,
+    *,
+    runtime: BuildRuntime | None = None,
+    parallel: bool | None = None,
+    max_workers: int | None = None,
+    stop_on_error: bool = True,
+) -> list[list[bool]]:
+    resolved_targets = targets if targets is not None else iter_default_build_targets()
+    if stop_on_error is False:
+        raise ValueError("stop_on_error=False is no longer supported")
+    results: list[list[bool]] = []
+
+    for target in resolved_targets:
+        if not target.manifest_path.exists():
+            raise FileNotFoundError(f"Missing batch manifest: {target.manifest_path}")
+        info(f"[build] start manifest={target.manifest_path} ansys_run_dir={target.ansys_run_dir}")
+        target_results = build_from_manifest_path(
+            target.manifest_path,
+            ansys_run_dir=target.ansys_run_dir,
+            runtime=runtime,
+            parallel=parallel,
+            max_workers=max_workers,
+            stop_on_error=stop_on_error,
+        )
+        info(f"[build] completed manifest={target.manifest_path} count={len(target_results)}")
+        results.append(target_results)
+    return results
+
+
+def main() -> list[list[bool]]:
+    return build_all_targets()
+
+
 if __name__ == "__main__":
-    build_from_manifest_path()
+    main()

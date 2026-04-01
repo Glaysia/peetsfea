@@ -23,13 +23,13 @@ def load_toml_bytes(path: Path) -> tuple[TOMLTable, bytes]:
     return parsed, raw
 
 
-def require_table(value: TOMLValue | None, name: str) -> TOMLTable:
+def require_table(value: object, name: str) -> TOMLTable:
     if not isinstance(value, dict):
         raise ValueError(f"{name} must be a table/object")
     return value
 
 
-def require_str(value: TOMLValue | None, name: str) -> str:
+def require_str(value: object, name: str) -> str:
     if not isinstance(value, str):
         raise ValueError(f"{name} must be a string")
     return value

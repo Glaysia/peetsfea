@@ -2,16 +2,16 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run current file from run/",
+      "name": "Run entry/sample_build.py from run/",
       "type": "debugpy",
       "request": "launch",
       "python": "${workspaceFolder}/.venv/bin/python3",
-      "program": "${file}",
+      "program": "${workspaceFolder}/entry/sample_build.py",
       "cwd": "${workspaceFolder}/run",
       "env": {
         "PEETSFEA_DEBUG": "1"
       },
-      "preLaunchTask": "prepare-sample-build-debug",
+      "preLaunchTask": "prepare-build-debug",
       "console": "integratedTerminal"
     }
   ]

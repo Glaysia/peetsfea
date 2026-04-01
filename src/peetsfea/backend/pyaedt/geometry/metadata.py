@@ -7,8 +7,10 @@ from peetsfea.types.manifest import (
     CoilPolaritySpec,
     EmContext,
     EmEndpoints,
+    EmPortAssignments,
     EmPipelineResult,
     EmPolicy,
+    EmPorts,
     EmReadyObjects,
     GeometryDebug,
     GeometryMetadata,
@@ -30,10 +32,15 @@ def _build_geometry_metadata(
     coil_polarity: list[CoilPolaritySpec],
     em_ready_objects: EmReadyObjects,
     em_endpoints: EmEndpoints,
+    em_ports: EmPorts,
+    em_port_assignments: EmPortAssignments,
     em_context: EmContext,
     em_policy: EmPolicy,
     em_pipeline_result: EmPipelineResult,
     scene_objects: list[SceneObjectEntry],
+    tx_dd_rotation_angle_deg: float,
+    tx_dd_rotation_pivot_xyz: tuple[float, float, float],
+    tx_dd_rotation_object_names: list[str],
     debug: GeometryDebug,
 ) -> GeometryMetadata:
     return {
@@ -60,11 +67,14 @@ def _build_geometry_metadata(
         "coil_polarity": coil_polarity,
         "em_ready_objects": em_ready_objects,
         "em_endpoints": em_endpoints,
+        "em_ports": em_ports,
+        "em_port_assignments": em_port_assignments,
         "em_context": em_context,
         "em_policy": em_policy,
         "em_pipeline_result": em_pipeline_result,
         "scene_objects": scene_objects,
+        "tx_dd_rotation_angle_deg": tx_dd_rotation_angle_deg,
+        "tx_dd_rotation_pivot_xyz": tx_dd_rotation_pivot_xyz,
+        "tx_dd_rotation_object_names": tx_dd_rotation_object_names,
         "debug": debug,
     }
-
-

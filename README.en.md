@@ -12,7 +12,7 @@ Release notes are managed by version and language under `release-notes/`.
 - Keep single-design generation and dataset generation on the same contract surface.
 
 ## Current Documentation Baseline
-- The current documentation baseline is `0.2.18`.
+- The current documentation baseline is `0.2.19`.
 - This README is the public summary; detailed design notes live under `PLANS/`.
 - For implementation rules, see [AGENTS.md](AGENTS.md). For long-term principles, see [PLANS/LONGTERM_PLAN.md](PLANS/LONGTERM_PLAN.md). [PLANS/V0_2_11.md](PLANS/V0_2_11.md) remains the archived 0.2.11 planning index.
 
@@ -33,7 +33,7 @@ cd run
 ../.venv/bin/pytest -q ../tests
 ```
 
-Default execution is split across `entry/multi_sample.py` and `entry/build.py`/`entry/multi_build.py`: `entry/multi_sample.py` writes batch-specific resolved TOMLs plus manifests under `run/toml/`, and `entry/build.py` or `entry/multi_build.py` turns those manifests into AEDT files under `run/aedt/`. `entry/build_one.py` generates 100 TOMLs and builds them sequentially with the GUI visible, while `entry/sample_one_build.py` does the same for a single sample. The default runnable spec is `examples/type1.toml`.
+Default execution is split across `entry/sample.py` and `entry/build.py`: `entry/sample.py` writes windowed batch-specific resolved TOMLs plus per-batch manifests under `run/toml/`, and `entry/build.py` walks that derived batch series and turns the existing manifests into AEDT files under `run/aedt/`. `entry/sample_build.py` is the dedicated GUI-visible single-sample debug flow used by the VS Code F5 launch. The default runnable spec is `examples/type1.toml`.
 
 ## Core Artifacts
 - Zip export is temporarily disabled.
@@ -44,7 +44,7 @@ Default execution is split across `entry/multi_sample.py` and `entry/build.py`/`
   - `<design_id>.source.toml`
 - `manifest_<design_id>.json` and `geometry_metadata_<design_id>.json` are disabled by default (optional only).
 
-## Major Contracts In 0.2.18
+## Major Contracts In 0.2.19
 - Sampling ownership is managed only through canonical owners.
 - Alias/derived paths do not count as independent sampled dimensions.
 - `dataset.toml` includes inline sampled owners such as `coil_groups[*].count_*`, while excluding derived aliases and fixed fields.

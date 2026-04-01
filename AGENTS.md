@@ -1,3 +1,11 @@
+> Global code commandments live in [CODE_COMMANDMENTS.md](CODE_COMMANDMENTS.md) and are mandatory for the entire repository.
+> Commandment 1 is active now: every real failure must raise and stop execution by default.
+> Commandment 2 is active now: if a PyAEDT call returns `False`, raise immediately with context; never log-and-continue.
+> Commandment 3 is active now for all `src/`: repository runtime state must not be nullable.
+> Commandment 4 is active now for `src/`: bind values only after asserted validation.
+> Commandment 5 is active now for `src/`: attribute and mapping fallbacks are forbidden.
+> Fallbacks are forbidden: do not add fallback code paths, degraded substitutes, silent retries, or "try alternative behavior and continue" logic unless the user explicitly requests that behavior for the current task.
+> Never launch AEDT in GUI mode unless the user explicitly asks for GUI validation.
 # AGENTS
 
 This document defines the project rules for coding agents working in this repository.
@@ -9,12 +17,20 @@ This document defines the project rules for coding agents working in this reposi
 - **Dataset generation**: Produce datasets via parameter sweeps/sampling.
 
 ## Working principles
+- Follow the repository-wide commandments in `CODE_COMMANDMENTS.md`; this document supplements them and must not weaken them.
+- Do not implement fallback behavior by default. If the intended path fails or is unsupported, raise immediately with actionable context instead of switching to an alternate path.
+- In `src/`, do not introduce `Optional[...]`, `| None`, `NotRequired[...]`, `if value is None`, or `if value is not None` for repository runtime state, including parser and boundary code.
+- In `src/`, validate dynamic values before binding them: `assert hasattr(...)`, read, then `assert isinstance(...)` or assert an equivalent invariant.
+- In `src/`, do not use `getattr(..., default)`, `mapping.get(...)`, or similar fallback-return APIs for required state, including parser and boundary code.
+- If state must survive across steps, prefer a canonical module-level registry/dictionary and require `assert key in registry` before reads.
 - Any spec change must be reflected in docs (README or spec docs).
 - Random/sampling logic must always accept an explicit `seed`.
 - Document defaults; do not hide implicit values.
 - Keep Pyaedt-dependent code isolated and replaceable.
 - Do not add features that assume a UI/GUI (headless AEDT, GUI off).
 - Keep execution configuration (machines, runners) in Python code, not in TOML.
+- When later logic needs the position/coordinates of an already created object, do not reverse-calculate them from downstream geometry; store the canonical coordinates in an accessible location at creation time and read from that source thereafter.
+- If existing code currently depends on post-hoc coordinate reverse-calculation for created objects, refactor it to persist and reuse the creation-time coordinates instead of preserving the reverse-calculation path.
 - Prefer thorough type hints across the codebase.
 - Do not use `Any` unless there is a hard external boundary that cannot be typed precisely; document the reason when `Any` is unavoidable.
 - If a value is expected to be a concrete runtime type, prefer explicit runtime checks and `assert` to fail fast instead of passing loosely typed values through.
@@ -22,6 +38,7 @@ This document defines the project rules for coding agents working in this reposi
 - Use a project-root virtual environment at `.venv` for local installs and commands.
 - Agents can use `.venv` as the Python interpreter when running or linting code in this repo.
 - Always prefer commands via `.venv` binaries (for example, `.venv/bin/python`, `.venv/bin/pytest`).
+- Do not use `python -O`; optimized mode disables required assertions and is unsupported in this repository.
 - Always check and resolve Pylance diagnostics (`reportArgumentType`, `reportCallIssue`, `reportGeneralTypeIssues`, etc.) before considering work complete.
 - Recommended: download Pyaedt docs to `ref/pyaedt-doc-v0.24.1` for local reference.
 - Agents can consult `ref/pyaedt-doc-v0.24.1` when implementing or modifying Pyaedt-related code.
@@ -55,14 +72,21 @@ This document defines the project rules for coding agents working in this reposi
 - Determinism tests are required; Pyaedt integration tests are optional.
 - Run commands from the `run/` directory when executing scripts/tests to avoid polluting the repo root with generated artifacts.
 - Prefer output paths under `run/` for manifests, AEDT files, logs, and temporary execution artifacts.
-- When running `entry/multi_sample.py`, `entry/build.py`, `entry/multi_build.py`, `entry/build_one.py`, or `entry/sample_one_build.py` for AEDT geometry/debug flows, follow `.vscode/launch.json` contract.
-- Do not run those entry scripts directly from arbitrary cwd without the pre-launch cleanup step.
-- For requests that modify geometry, coil routing, terminal wiring, or other physical shape/topology, do at least one GUI-mode AEDT verification before considering the work complete.
-- This GUI-mode verification is a validation step only; the implementation itself must remain headless-compatible.
+- Use `entry/sample.py` for windowed batch TOML generation, `entry/build.py` for the derived batch-series AEDT generation, and `entry/sample_build.py` only for the GUI debug flow.
+- Do not run those entry scripts directly from arbitrary cwd without the matching cleanup step.
+- Default execution must stay headless. Do not launch GUI-visible AEDT or `entry/sample_build.py` during routine implementation, refactoring, or automated validation.
+- GUI-mode AEDT verification is opt-in only and must not be run unless the user explicitly requests it for the current task.
+- Even when GUI verification is requested, treat it as a validation step only; the implementation itself must remain headless-compatible.
+- GUI validation is considered valid only when started through `.vscode/launch.json` using `Run entry/sample_build.py from run/`.
+- Ad-hoc GUI launches such as direct `python ../entry/sample_build.py`, direct manifest-entry execution, or direct `build_aedt_from_manifest_entry_with_options()` calls are not valid GUI validation evidence.
+- Agents must not infer product/runtime bugs from GUI behavior observed through non-regular launch paths.
 - Required sequence:
-  - For TOML generation, run the `prepare-sample-debug` task first (this clears `run/toml/`), then launch `Run entry/multi_sample.py from run/` with `cwd=run/`.
-  - For AEDT generation from an existing manifest, run the `prepare-build-debug` task first (this clears `run/aedt/`), then launch `Run entry/build.py from run/` with `cwd=run/`.
-  - For combined sample+build flows, run the `prepare-sample-build-debug` task first (this clears both `run/toml/` and `run/aedt/`), then launch `Run entry/build_one.py from run/` or `Run entry/sample_one_build.py from run/` with `cwd=run/`.
+  - For TOML generation, run the `run-sample-debug` task; it installs editable deps, clears `run/toml/`, and runs `../.venv/bin/python ../entry/sample.py` from `run/` in one task.
+  - For AEDT generation from existing batch manifests, run the `prepare-build-debug` task first (this clears `run/aedt/`), then run `../.venv/bin/python ../entry/build.py` from `run/`.
+  - For GUI validation, launch `Run entry/sample_build.py from run/`; its `preLaunchTask` is `prepare-build-debug`, so it clears `run/aedt/` before starting.
+- Build/run failures must be fail-fast by default:
+  - Do not silently continue to the next design after a failed build.
+  - Use `stop_on_error=True` / `raise_on_error=True` for execution paths unless the user explicitly requests best-effort continuation.
 - Rationale: stale `run/aedt/*.aedt.lock` files can cause HFSS startup/open failures.
 
 ## File layout (planned)
@@ -71,33 +95,3 @@ This document defines the project rules for coding agents working in this reposi
 - `peetsfea/backend/`: Pyaedt adapters
 - `examples/`: TOML examples
 - `docs/`: spec/design docs
-
-## Discord notifications (MCP)
-- Send a Discord message via `mcp__discord__discord_send` when work is finished.
-- Skip Discord notifications when total task time is under 5 minutes.
-- The 300-second rule is a notification threshold only, not a task time limit.
-- Do not split or rush work to stay under 300 seconds; send a notification only when the task actually takes 5 minutes or longer.
-- Do not estimate duration; compute it in shell seconds.
-  - At start: `start_ts=$(date +%s)`
-  - At end: `end_ts=$(date +%s); elapsed=$((end_ts-start_ts))`
-  - Send Discord notification only when `elapsed >= 300`.
-- On success, start with `Codex 완료`, then add a 1-2 line summary and next action (if any).
-- On failure/interruption, start with `Codex 실패`, then add a short cause summary.
-
-## Discord MCP setup (`~/.codex`)
-- Ensure `~/.codex/config.toml` has an enabled Discord MCP server:
-  - `[mcp_servers.discord]`
-  - `enabled = true`
-  - `url = "http://127.0.0.1:17870/mcp"`
-- Keep allowed tools configured for Discord usage:
-  - `discord_send`, `discord_list_servers`, `discord_get_server_info`
-  - `discord_create_text_channel`, `discord_delete_channel`
-- Optional timeout tuning:
-  - `startup_timeout_sec = 20`
-  - `tool_timeout_sec = 60`
-- Resolve IDs before first use:
-  - `mcp__discord__discord_list_servers` -> get `guildId`
-  - `mcp__discord__discord_get_server_info` -> pick `channelId`
-
-## Discord test
-- Send a smoke-test message with your name using `mcp__discord__discord_send`.

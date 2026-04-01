@@ -8,37 +8,24 @@ flowchart TD
 
     subgraph SampleEntries["샘플 entry"]
         SamplePy["entry/sample.py"]
-        MultiSample["entry/multi_sample.py"]
-        BuildOne["entry/build_one.py"]
-        SampleOneBuild["entry/sample_one_build.py"]
+        SampleBuild["entry/sample_build.py"]
     end
 
     subgraph BuildEntries["빌드 entry"]
         BuildPy["entry/build.py"]
-        MultiBuild["entry/multi_build.py"]
         BuildWorker["build_entries"]
     end
 
     Spec --> SamplePy
-    Spec --> MultiSample
-    Spec --> BuildOne
-    Spec --> SampleOneBuild
-
-    MultiSample --> SamplePy
-    BuildOne --> SamplePy
-    SampleOneBuild --> BuildOne
-
     SamplePy --> Uniform["generate_eager_uniform_feasible_seed_points"]
     Uniform --> RunSample["run"]
     RunSample --> Snapshots["RunResult snapshots"]
     Snapshots --> ResolvedToml["write_resolved_toml + manifest.json"]
 
     ResolvedToml --> BuildPy
-    ResolvedToml --> MultiBuild
-    MultiBuild --> BuildPy
+    ResolvedToml --> SampleBuild
     BuildPy --> BuildWorker
-    BuildOne --> BuildWorker
-    SampleOneBuild --> BuildWorker
+    SampleBuild --> BuildPy
 
     BuildWorker --> FrozenGate["require_frozen_sampling_spec"]
     FrozenGate --> RunBuild["run"]
@@ -49,12 +36,9 @@ flowchart TD
 ```
 
 ## 엔트리포인트 역할
-- `entry/sample.py`: seed range에서 feasible seed를 고르고, 각 seed에 대해 `run()`을 호출해 resolved TOML과 batch `manifest.json`을 만든다.
-- `entry/multi_sample.py`: 여러 `SampleProfile`에 대해 `entry/sample.py` 경로를 병렬 또는 순차로 반복한다.
-- `entry/build.py`: batch `manifest.json`을 읽고 각 entry에 대해 frozen TOML을 다시 검증한 뒤 build를 수행한다.
-- `entry/multi_build.py`: `run/toml/**/manifest.json`을 훑어 여러 batch를 차례로 `entry/build.py`에 넘긴다.
-- `entry/build_one.py`: 샘플 100개를 먼저 만든 뒤 GUI-visible runtime으로 순차 build한다.
-- `entry/sample_one_build.py`: `entry/build_one.py`의 단건 버전이다.
+- `entry/sample.py`: 고정 total TOML count, batch TOML count, sparsity ratio 상수에서 batch seed window들을 계산하고, 각 window마다 resolved TOML과 batch `manifest.json`을 만든다.
+- `entry/build.py`: `entry/sample.py`와 같은 batch series에서 유도된 `manifest.json`들을 순서대로 읽고, 존재하는 batch만 build한다.
+- `entry/sample_build.py`: 미리 생성된 batch `manifest.json`들을 GUI-visible runtime으로 순차 replay하는 F5 디버그 entry다. 새 sample 생성은 하지 않는다.
 
 ## 샘플링 단계
 - 샘플 단계의 시작점은 `entry/sample.py::generate_sample_manifest()`다.
@@ -95,7 +79,7 @@ generate_eager_uniform_feasible_seed_points(...)
 - 이 gate는 `build_aedt_from_manifest_entry_with_options()` 안에 있으며, non-frozen spec이면 `run()` 자체를 다시 호출하지 않는다.
 - gate를 통과하면 build 단계에서도 `run()`을 한 번 더 호출해 manifest를 재구성한다.
 - 이후 sample manifest에 들어 있던 `design_id`, hash, seed, retry 정보를 `_apply_sample_identity()`로 다시 덮어써 샘플 단계의 identity를 유지한다.
-- `entry/build.py::build_entries()`는 기본 non-graphical runtime일 때만 병렬 처리하고, GUI-visible runtime이면 강제로 순차 처리한다.
+- `entry/build.py::build_entries()`는 기본 batch runtime일 때만 병렬 처리하고, GUI-visible runtime이면 강제로 순차 처리한다.
 
 ```python
 load_sample_manifest(...)
@@ -118,6 +102,8 @@ load_sample_manifest(...)
   - `_build_and_save_metadata()`
 - `_build_all_coils()`는 현재 `tx_dd`, `tx_vertical`, `rx_dd` 세 kind를 하드코딩으로 분기한다.
 - `_finalize_geometry()`는 bridge/stub/fr4/port용 보조 형상을 합치고, `_build_and_save_metadata()`는 `build_em_artifacts()`까지 이어서 EM 입력용 객체 묶음을 만든다.
+- 특히 `tx_dd -> tx_vertical` bridge는 ordered terminal section 기반 diagonal anti-parallel topology만 허용하고, 가까운 터미널/짧은 거리 heuristic wiring은 active path에서 금지한다.
+- `tx_dd`는 더 이상 `count_mode`나 `selected_count=2/4` 공개 계약을 쓰지 않는다. 공개 입력은 `coil_groups[tx_dd].stacked_mode = 0/1`뿐이고, `2`개/`4`개 물리 루프 수는 private helper가 `layer_count`에서 파생한다.
 
 실제 build 체인은 아래 한 줄로 요약된다.
 
@@ -165,7 +151,7 @@ run_em_pipeline(hfss, modeler, em_input, em_policy, outputs)
 - 다만 `src/peetsfea/pipeline/package_export.py`에 zip export 계약이 남아 있어 파일명 규약 자체는 이미 정의돼 있다.
 - 실패 시 `build_aedt_from_manifest_entry_with_options()`가 `.aedt`, `.aedt.lock`, `.aedtresults`, optional metadata/zip을 정리한다.
 - 성공 시에도 `cleanup_aedtresults()`가 `.aedtresults` 디렉터리를 제거한다.
-- GUI-visible build는 `entry/build.py::build_entries()`에서 병렬이 강제로 꺼진다.
+- GUI-visible build는 `entry/sample_build.py`에서 `entry/build.py::build_all_targets_with_options(..., parallel=False)`로 replay되고, 내부적으로도 `entry/build.py::build_entries()`에서 병렬이 강제로 꺼진다.
 
 ## type2 확장 시 결합 지점
 - selection 쪽은 `GROUP_KIND_ORDER`, `FIXED_PCB_RULES`, scalar owner path 집합이 `type1` 이름에 묶여 있다.
