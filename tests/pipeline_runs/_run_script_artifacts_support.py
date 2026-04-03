@@ -453,7 +453,7 @@ def test_build_debug_processes_full_manifest_sequentially(tmp_path: Path, monkey
     monkeypatch.setenv("PEETSFEA_DEBUG", "1")
     build_script = _load_script("build")
     source_toml_path = tmp_path / "source.toml"
-    source_toml_path.write_text("spec_version = \"0.2.20\"\n", encoding="utf-8")
+    source_toml_path.write_text("spec_version = \"0.2.21\"\n", encoding="utf-8")
     manifest_path = tmp_path / "manifest.json"
     entries = [
         _make_manifest_entry(design_id="000001_dead_cafe_0", toml_path=tmp_path / "a.toml", source_toml_path=source_toml_path),
@@ -490,7 +490,7 @@ def test_build_non_debug_uses_process_pool_path(tmp_path: Path, monkeypatch: pyt
     monkeypatch.delenv("PEETSFEA_DEBUG", raising=False)
     build_script = _load_script("build")
     source_toml_path = tmp_path / "source.toml"
-    source_toml_path.write_text("spec_version = \"0.2.20\"\n", encoding="utf-8")
+    source_toml_path.write_text("spec_version = \"0.2.21\"\n", encoding="utf-8")
     manifest_path = tmp_path / "manifest.json"
     entries = [
         _make_manifest_entry(design_id="000001_dead_cafe_0", toml_path=tmp_path / "a.toml", source_toml_path=source_toml_path),
@@ -593,26 +593,44 @@ def test_build_entries_forces_sequential_gui_visible_mode(tmp_path: Path, monkey
     ]
 
 
-def test_build_entries_rejects_stop_on_error_false(tmp_path: Path) -> None:
+def test_build_entries_continue_on_error_when_stop_on_error_false(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     build_script = _load_script("build")
     entries = [
         _make_manifest_entry(design_id="000001_dead_cafe_0", toml_path=tmp_path / "a.toml", source_toml_path=tmp_path / "source.toml"),
+        _make_manifest_entry(design_id="000002_beef_cafe_0", toml_path=tmp_path / "b.toml", source_toml_path=tmp_path / "source.toml"),
     ]
+    calls: list[str] = []
 
-    with pytest.raises(ValueError, match="stop_on_error=False is no longer supported"):
-        build_script.build_entries(
-            entries,
-            ansys_run_dir=tmp_path / "aedt",
-            stop_on_error=False,
-        )
+    def _fake_build(
+        entry: dict[str, object],
+        *,
+        ansys_run_dir: Path,
+        runtime: object,
+    ) -> bool:
+        calls.append(str(entry["design_id"]))
+        if str(entry["design_id"]) == "000001_dead_cafe_0":
+            raise RuntimeError("builder failed")
+        return True
+
+    monkeypatch.setattr(build_script, "_build_entry", _fake_build)
+
+    result = build_script.build_entries(
+        entries,
+        ansys_run_dir=tmp_path / "aedt",
+        stop_on_error=False,
+        parallel=False,
+    )
+
+    assert result == [False, True]
+    assert calls == ["000001_dead_cafe_0", "000002_beef_cafe_0"]
 
 
 def test_build_all_targets_fails_on_missing_manifest_and_stops_immediately(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     build_script = _load_script("build")
-    manifest1 = tmp_path / "run" / "toml" / "toml_0.2.20_0" / "manifest.json"
-    manifest2 = tmp_path / "run" / "toml" / "toml_0.2.20_500" / "manifest.json"
+    manifest1 = tmp_path / "run" / "toml" / "toml_0.2.21_0" / "manifest.json"
+    manifest2 = tmp_path / "run" / "toml" / "toml_0.2.21_500" / "manifest.json"
     manifest1.parent.mkdir(parents=True)
     manifest1.write_text("[]", encoding="utf-8")
     calls: list[tuple[Path, Path, object | None, bool | None, int | None, bool]] = []
@@ -630,8 +648,8 @@ def test_build_all_targets_fails_on_missing_manifest_and_stops_immediately(
         return [True]
 
     targets = (
-        build_script.BuildTarget(manifest_path=manifest1, ansys_run_dir=tmp_path / "run" / "aedt" / "aedt_0.2.20_0"),
-        build_script.BuildTarget(manifest_path=manifest2, ansys_run_dir=tmp_path / "run" / "aedt" / "aedt_0.2.20_500"),
+        build_script.BuildTarget(manifest_path=manifest1, ansys_run_dir=tmp_path / "run" / "aedt" / "aedt_0.2.21_0"),
+        build_script.BuildTarget(manifest_path=manifest2, ansys_run_dir=tmp_path / "run" / "aedt" / "aedt_0.2.21_500"),
     )
     monkeypatch.setattr(build_script, "build_from_manifest_path", _fake_build_from_manifest_path)
 
@@ -639,7 +657,7 @@ def test_build_all_targets_fails_on_missing_manifest_and_stops_immediately(
         build_script.build_all_targets(targets)
 
     assert calls == [
-        (manifest1, tmp_path / "run" / "aedt" / "aedt_0.2.20_0", None, None, None, True),
+        (manifest1, tmp_path / "run" / "aedt" / "aedt_0.2.21_0", None, None, None, True),
     ]
 
 
@@ -647,8 +665,8 @@ def test_build_all_targets_fails_when_all_manifests_are_missing(tmp_path: Path) 
     build_script = _load_script("build")
     targets = (
         build_script.BuildTarget(
-            manifest_path=tmp_path / "run" / "toml" / "toml_0.2.20_0" / "manifest.json",
-            ansys_run_dir=tmp_path / "run" / "aedt" / "aedt_0.2.20_0",
+            manifest_path=tmp_path / "run" / "toml" / "toml_0.2.21_0" / "manifest.json",
+            ansys_run_dir=tmp_path / "run" / "aedt" / "aedt_0.2.21_0",
         ),
     )
 
@@ -738,7 +756,7 @@ def test_build_all_targets_with_options_forwards_runtime_controls(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     build_script = _load_script("build")
-    manifest = tmp_path / "run" / "toml" / "toml_0.2.20_0" / "manifest.json"
+    manifest = tmp_path / "run" / "toml" / "toml_0.2.21_0" / "manifest.json"
     manifest.parent.mkdir(parents=True)
     manifest.write_text("[]", encoding="utf-8")
     calls: list[tuple[Path, Path, object | None, bool | None, int | None, bool]] = []
@@ -758,7 +776,7 @@ def test_build_all_targets_with_options_forwards_runtime_controls(
     targets = (
         build_script.BuildTarget(
             manifest_path=manifest,
-            ansys_run_dir=tmp_path / "run" / "aedt" / "aedt_0.2.20_0",
+            ansys_run_dir=tmp_path / "run" / "aedt" / "aedt_0.2.21_0",
         ),
     )
     monkeypatch.setattr(build_script, "build_from_manifest_path", _fake_build_from_manifest_path)
@@ -774,7 +792,7 @@ def test_build_all_targets_with_options_forwards_runtime_controls(
     assert calls == [
         (
             manifest,
-            tmp_path / "run" / "aedt" / "aedt_0.2.20_0",
+            tmp_path / "run" / "aedt" / "aedt_0.2.21_0",
             build_script.GUI_VISIBLE_BUILD_RUNTIME,
             False,
             1,
@@ -820,17 +838,39 @@ def test_sample_build_reuses_build_target_runner_and_skips_sampling(monkeypatch:
     ]
 
 
-def test_build_all_targets_with_options_rejects_stop_on_error_false(tmp_path: Path) -> None:
+def test_build_all_targets_with_options_forwards_stop_on_error_false(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     build_script = _load_script("build")
+    manifest = tmp_path / "run" / "toml" / "toml_0.2.21_0" / "manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("[]", encoding="utf-8")
     targets = (
         build_script.BuildTarget(
-            manifest_path=tmp_path / "run" / "toml" / "toml_0.2.20_0" / "manifest.json",
-            ansys_run_dir=tmp_path / "run" / "aedt" / "aedt_0.2.20_0",
+            manifest_path=manifest,
+            ansys_run_dir=tmp_path / "run" / "aedt" / "aedt_0.2.21_0",
         ),
     )
+    calls: list[bool] = []
 
-    with pytest.raises(ValueError, match="stop_on_error=False is no longer supported"):
-        build_script.build_all_targets_with_options(targets, stop_on_error=False)
+    def _fake_build_from_manifest_path(
+        manifest_path: Path,
+        *,
+        ansys_run_dir: Path,
+        runtime: object | None = None,
+        parallel: bool | None = None,
+        max_workers: int | None = None,
+        stop_on_error: bool = True,
+    ) -> list[bool]:
+        calls.append(stop_on_error)
+        return [False, True]
+
+    monkeypatch.setattr(build_script, "build_from_manifest_path", _fake_build_from_manifest_path)
+
+    result = build_script.build_all_targets_with_options(targets, stop_on_error=False)
+
+    assert result == [[False, True]]
+    assert calls == [False]
 
 
 def test_sample_build_can_force_non_graphical_runtime_via_env(monkeypatch: pytest.MonkeyPatch) -> None:

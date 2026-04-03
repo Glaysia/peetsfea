@@ -12,7 +12,7 @@ Release notes are managed by version and language under `release-notes/`.
 - Keep single-design generation and dataset generation on the same contract surface.
 
 ## Current Documentation Baseline
-- The current documentation baseline is `0.2.20`.
+- The current documentation baseline is `0.2.21`.
 - This README is the public summary; detailed design notes live under `PLANS/`.
 - For implementation rules, see [AGENTS.md](AGENTS.md). For long-term principles, see [PLANS/LONGTERM_PLAN.md](PLANS/LONGTERM_PLAN.md). [PLANS/V0_2_11.md](PLANS/V0_2_11.md) remains the archived 0.2.11 planning index.
 
@@ -44,7 +44,7 @@ Default execution is split across `entry/sample.py` and `entry/build.py`: `entry
   - `<design_id>.source.toml`
 - `manifest_<design_id>.json` and `geometry_metadata_<design_id>.json` are disabled by default (optional only).
 
-## Major Contracts In 0.2.20
+## Major Contracts In 0.2.21
 - Sampling ownership is managed only through canonical owners.
 - Alias/derived paths do not count as independent sampled dimensions.
 - `dataset.toml` includes inline sampled owners such as `coil_groups[*].count_*`, while excluding derived aliases and fixed fields.
@@ -52,7 +52,7 @@ Default execution is split across `entry/sample.py` and `entry/build.py`: `entry
 - The last two `design_id` fragments have different meanings: `design_unique_hash` is the realized design identity, while `toml_space_hash` is the original `source.toml` sampling-space identity. `retry_attempt` is also reflected in the filename suffix.
 - Ferrite is controlled only by the global `ferrite.present` flag, follows the actual coil footprint on both RX and TX, and uses RX `2.0mm`, TX `2.0mm`, and `mu_r=500` as the baseline spec contract.
 - The TX ferrite gap is owned by the sampled path `ferrite.tx_gap_mm`, with the default example range set to `3.1..12.0`, `count=8`.
-- TX ferrite must keep that gap below the lowest TX XY FR4 layer and must not touch captured TX live model objects.
+- TX ferrite still uses `ferrite.tx_gap_mm` as the placement owner below the lowest TX XY FR4 layer, but finalized TX copper/bridge/terminal geometry is now resolved by ferrite subtract cutouts instead of a pre-subtract positive-gap rejection.
 - `coil_shape.corner_mode` is the public corner-shaping owner and keeps the `0=sharp_90`, `1=blunt` contract.
 - The default runnable example now samples `tx.region.z_parts.vertical_z_mm` over `5..15`, `count=11`. Because realized `tx_vertical` height is still `min(coil_shape.neo_tx_vertical.outer_y, tx.region.z_parts.vertical_z_mm)`, the default sample effectively uses `tx_region_vertical_z_mm` as the active height owner.
 - TX DD top placement is owned by the sampled path `coil_placement.neo_tx_dd_top_offset_ratio`, with the default example range set to `0.01..0.6`, `count=30`. Internal `tx_dd_top_clearance_mm` is derived from `tx.region.z_parts.dd_z_mm`.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import traceback
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,7 +15,7 @@ from peetsfea.pipeline.run_batch import (
     build_aedt_from_manifest_entry_with_options,
     load_sample_manifest,
 )
-from peetsfea.console_log import info
+from peetsfea.console_log import error, info
 
 from entry import sample
 
@@ -75,9 +76,24 @@ def _build_entry(
     )
 
 
-def _build_worker(task: tuple[SampleManifestEntry, Path, BuildRuntime]) -> bool:
-    entry, ansys_run_dir, runtime = task
-    return _build_entry(entry, ansys_run_dir=ansys_run_dir, runtime=runtime)
+def _report_build_exception(entry: SampleManifestEntry, exc: Exception) -> None:
+    error(
+        "[build] failed "
+        f"design_id={entry['design_id']} toml_path={entry['toml_path']} "
+        f"exc_type={type(exc).__name__} exc={exc}"
+    )
+    error(traceback.format_exc().rstrip())
+
+
+def _build_worker(task: tuple[SampleManifestEntry, Path, BuildRuntime, bool]) -> bool:
+    entry, ansys_run_dir, runtime, stop_on_error = task
+    if stop_on_error:
+        return _build_entry(entry, ansys_run_dir=ansys_run_dir, runtime=runtime)
+    try:
+        return _build_entry(entry, ansys_run_dir=ansys_run_dir, runtime=runtime)
+    except Exception as exc:
+        _report_build_exception(entry, exc)
+        return False
 
 
 def build_entries(
@@ -89,8 +105,6 @@ def build_entries(
     max_workers: int | None = None,
     stop_on_error: bool = True,
 ) -> list[bool]:
-    if stop_on_error is False:
-        raise ValueError("stop_on_error=False is no longer supported")
     if not entries:
         return []
 
@@ -103,28 +117,41 @@ def build_entries(
     if not should_parallel or worker_count <= 1:
         results: list[bool] = []
         for entry in entries:
-            ok = _build_entry(
-                entry,
-                ansys_run_dir=ansys_run_dir,
-                runtime=resolved_runtime,
-            )
+            if stop_on_error:
+                ok = _build_entry(
+                    entry,
+                    ansys_run_dir=ansys_run_dir,
+                    runtime=resolved_runtime,
+                )
+            else:
+                try:
+                    ok = _build_entry(
+                        entry,
+                        ansys_run_dir=ansys_run_dir,
+                        runtime=resolved_runtime,
+                    )
+                except Exception as exc:
+                    _report_build_exception(entry, exc)
+                    ok = False
             results.append(ok)
-            if not ok:
+            if stop_on_error and not ok:
                 raise RuntimeError(
                     "Build failed and stop_on_error is enabled "
                     f"(design_id={entry['design_id']}, toml_path={entry['toml_path']})"
                 )
+        info(f"[build] completed entries={len(results)} ok={sum(results)} failed={len(results) - sum(results)}")
         return results
 
-    tasks = [(entry, ansys_run_dir, resolved_runtime) for entry in entries]
+    tasks = [(entry, ansys_run_dir, resolved_runtime, stop_on_error) for entry in entries]
     with ProcessPoolExecutor(max_workers=worker_count) as executor:
         results = list(executor.map(_build_worker, tasks))
     for entry, ok in zip(entries, results, strict=True):
-        if not ok:
+        if stop_on_error and not ok:
             raise RuntimeError(
                 "Build failed and stop_on_error is enabled "
                 f"(design_id={entry['design_id']}, toml_path={entry['toml_path']})"
             )
+    info(f"[build] completed entries={len(results)} ok={sum(results)} failed={len(results) - sum(results)}")
     return results
 
 
@@ -137,8 +164,6 @@ def build_from_manifest_path(
     max_workers: int | None = None,
     stop_on_error: bool = True,
 ) -> list[bool]:
-    if stop_on_error is False:
-        raise ValueError("stop_on_error=False is no longer supported")
     entries = load_sample_manifest(manifest_path)
     return build_entries(
         entries,
@@ -173,8 +198,6 @@ def build_all_targets_with_options(
     stop_on_error: bool = True,
 ) -> list[list[bool]]:
     resolved_targets = targets if targets is not None else iter_default_build_targets()
-    if stop_on_error is False:
-        raise ValueError("stop_on_error=False is no longer supported")
     results: list[list[bool]] = []
 
     for target in resolved_targets:
