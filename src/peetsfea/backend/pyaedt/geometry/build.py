@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import math
-import os
 import subprocess
 from pathlib import Path
 from typing import Literal, cast
@@ -13,7 +12,7 @@ from peetsfea.aedt import Modeler3D
 from peetsfea.backend.pyaedt.em_pipeline.contracts import EmPipelineInput, EmPipelineResult
 from peetsfea.backend.pyaedt.em_pipeline.runner import run_em_pipeline
 from peetsfea.backend.pyaedt.failfast import raise_on_false
-from peetsfea.console_log import info
+from peetsfea.console_log import info, warn
 from peetsfea.types.manifest import CadProbe, EmPolicy, GeometryMetadata, GroupGeometryParams, Manifest, OutputsSpec, SceneObjectEntry, TerminalLabel
 from peetsfea.types.runtime_selection import ResolvedTxVerticalGroup
 
@@ -77,6 +76,29 @@ def _write_geometry_metadata_if_enabled(manifest: Manifest, metadata: GeometryMe
     if not _emit_geometry_metadata_enabled(manifest):
         return
     metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _log_aedt_messages(hfss: Hfss, ctx: GeometryRuntimeContext) -> None:
+    try:
+        messages = hfss.desktop_class.GetMessages("", "", 0)
+    except Exception as exc:
+        warn(f"[aedt_messages] design_id={ctx.design_id} unavailable error={exc}")
+        return
+    info(f"[aedt_messages] design_id={ctx.design_id} count={len(messages)}")
+    for message in messages:
+        info(f"[aedt_message] {message}")
+
+
+def _validate_design_or_raise(hfss: Hfss, ctx: GeometryRuntimeContext) -> None:
+    design = hfss.odesign
+    raw_design = object.__getattribute__(design, "_raw")
+    assert hasattr(raw_design, "ValidateDesign"), "Raw Design is missing required attribute ValidateDesign"
+    raw_validate_design = getattr(raw_design, "ValidateDesign")
+    assert callable(raw_validate_design), "Raw Design.ValidateDesign must be callable"
+    raw_result = raw_validate_design()
+    if raw_result is False:
+        _log_aedt_messages(hfss, ctx)
+        raise RuntimeError("PyAEDT operation returned False: ValidateDesign")
 
 
 def _require_tx_series_landing(
@@ -639,7 +661,7 @@ def _build_and_save_metadata(
         outputs=outputs,
     )
     info(f"[em] validation_ok={em_pipeline_result['validation_report']['ok']}")
-    assert hfss.odesign.ValidateDesign(), "HFSS oDesign.ValidateDesign() failed after geometry build and EM pipeline execution"
+    _validate_design_or_raise(hfss, ctx)
     hfss.save_project(str(ctx.aedt_path))
 
     metadata = _build_geometry_metadata(
@@ -697,31 +719,16 @@ def _close_hfss_desktop(hfss: Hfss, ctx: GeometryRuntimeContext) -> None:
 
 def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
     ctx = _prepare_runtime(manifest)
-    debug_mode = os.environ.get("PEETSFEA_DEBUG") == "1"
     hfss = create_hfss_session(manifest=manifest, aedt_path=ctx.aedt_path)
     
     _assign_design_variables(hfss, manifest)
     modeler = cast(Modeler3D, hfss.modeler)
     state = GeometryBuildState()
-    if debug_mode:
-        _build_scene(ctx, state, modeler)
-        finalize_inputs = _build_all_coils(ctx, state, modeler)
-        _build_tx_ferrite(ctx, state, modeler, hfss)
-        _finalize_geometry(ctx, state, finalize_inputs, modeler, hfss)
-        _build_rx_ferrite(ctx, state, modeler, hfss)
-        metadata = _build_and_save_metadata(ctx, state, manifest, hfss)
-        if metadata is False:
-            raise RuntimeError(
-                "build_square_spiral_from_manifest returned False "
-                f"(design_id={ctx.design_id})"
-            )
-        _close_hfss_desktop(hfss, ctx)
-        return metadata
     try:
         _build_scene(ctx, state, modeler)
         finalize_inputs = _build_all_coils(ctx, state, modeler)
-        _build_tx_ferrite(ctx, state, modeler, hfss)
         _finalize_geometry(ctx, state, finalize_inputs, modeler, hfss)
+        _build_tx_ferrite(ctx, state, modeler, hfss)
         _build_rx_ferrite(ctx, state, modeler, hfss)
         metadata = _build_and_save_metadata(ctx, state, manifest, hfss)
         if metadata is False:
@@ -731,4 +738,5 @@ def build_square_spiral_from_manifest(manifest: Manifest) -> GeometryMetadata:
             )
         return metadata
     finally:
+        _log_aedt_messages(hfss, ctx)
         _close_hfss_desktop(hfss, ctx)

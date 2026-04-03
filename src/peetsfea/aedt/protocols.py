@@ -32,6 +32,8 @@ class BoundaryModuleSession(Protocol):
 class DesktopSession(Protocol):
     aedt_process_id: int
 
+    def GetMessages(self, project_name: str, design_name: str, level: int) -> list[str] | tuple[str, ...]: ...
+
     def release_desktop(self, close_projects: bool, close_on_exit: bool) -> object: ...
 
 

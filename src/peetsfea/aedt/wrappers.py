@@ -51,6 +51,25 @@ def _require_mapping_attr(raw: object, name: str, *, owner: str) -> Mapping[str,
     return cast(Mapping[str, object], raw_value)
 
 
+def _require_str_sequence_result(
+    raw_value: object,
+    *,
+    owner: str,
+    method_name: str,
+) -> list[str] | tuple[str, ...]:
+    assert isinstance(raw_value, Sequence), (
+        f"Raw {owner}.{method_name} result must be Sequence (actual={type(raw_value).__name__})"
+    )
+    assert not isinstance(raw_value, (str, bytes)), (
+        f"Raw {owner}.{method_name} result must not be str/bytes (actual={type(raw_value).__name__})"
+    )
+    for item in raw_value:
+        assert isinstance(item, str), (
+            f"Raw {owner}.{method_name} items must be str (actual={type(item).__name__})"
+        )
+    return cast(list[str] | tuple[str, ...], raw_value)
+
+
 def _extract_name_value(payload: list[object], *, prefix: str, field: str) -> str:
     for item in payload:
         if isinstance(item, str) and item.startswith(prefix):
@@ -179,7 +198,7 @@ class BoundaryModule(_WrappedAccess):
 
 class Desktop(_WrappedAccess):
     _blocked_type_name = "Desktop"
-    _allowed_names = frozenset({"aedt_process_id", "release_desktop"})
+    _allowed_names = frozenset({"aedt_process_id", "GetMessages", "release_desktop"})
 
     def __init__(self, *, _raw: object) -> None:
         object.__setattr__(self, "_raw", _raw)
@@ -187,6 +206,15 @@ class Desktop(_WrappedAccess):
     @property
     def aedt_process_id(self) -> int:
         return _require_int_attr(object.__getattribute__(self, "_raw"), "aedt_process_id", owner="Desktop")
+
+    def GetMessages(self, project_name: str, design_name: str, level: int) -> list[str] | tuple[str, ...]:
+        raw_odesktop = _require_attr(object.__getattribute__(self, "_raw"), "odesktop", owner="Desktop")
+        raw_result = _require_callable_attr(raw_odesktop, "GetMessages", owner="Desktop.odesktop")(
+            project_name,
+            design_name,
+            level,
+        )
+        return _require_str_sequence_result(raw_result, owner="Desktop", method_name="GetMessages")
 
     def release_desktop(self, close_projects: bool, close_on_exit: bool) -> object:
         return raise_on_false(

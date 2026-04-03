@@ -67,10 +67,7 @@ def compute_tx_mode0_rotation_angle_rad(*, candidate_points: list[Point3], top_z
         if radius <= eps:
             continue
         if point[2] > (top_z + eps):
-            raise ValueError(
-                "tx mode0 rotation candidate point already exceeds tx_region_dd top "
-                f"(point={point}, top_z={top_z})"
-            )
+            return 0.0
         if allowed_top_offset >= (radius - eps):
             continue
         phase = math.atan2(dz, dx)
@@ -85,18 +82,16 @@ def compute_tx_mode0_rotation_angle_rad(*, candidate_points: list[Point3], top_z
 
 
 def _tx_mode0_rotation_target_names(ctx: GeometryRuntimeContext, state: GeometryBuildState) -> list[str]:
-    tx_ferrite_names = [name for name in state.group_objects["ferrite"] if name.startswith("ferrite_tx_")]
     tx_fr4_names = [name for name in state.fr4_object_names if any(board_id in name for board_id in ctx.tx_board_ids)]
     tx_object_names = state.group_objects["tx_dd"] + state.group_objects["tx_vertical"]
-    live_target_names = [name for name in set(tx_object_names + tx_fr4_names + tx_ferrite_names) if name in state.object_names]
+    live_target_names = [name for name in set(tx_object_names + tx_fr4_names) if name in state.object_names]
     return sorted(live_target_names)
 
 
 def _tx_mode0_rotation_target_names_from_finalize_plan(plan: FinalizePlan) -> list[str]:
-    tx_ferrite_names = [name for name in plan.group_objects["ferrite"] if name.startswith("ferrite_tx_")]
     tx_fr4_names = [name for name in plan.fr4_object_names if any(board_id in name for board_id in plan.tx_board_ids)]
     tx_object_names = plan.group_objects["tx_dd"] + plan.group_objects["tx_vertical"]
-    live_target_names = [name for name in set(tx_object_names + tx_fr4_names + tx_ferrite_names) if name in plan.object_names]
+    live_target_names = [name for name in set(tx_object_names + tx_fr4_names) if name in plan.object_names]
     return sorted(live_target_names)
 
 

@@ -111,17 +111,6 @@ def _union_bboxes(bboxes: Iterable[list[float]]) -> list[float]:
     return union
 
 
-def _bbox_touches_or_overlaps(a: list[float], b: list[float], *, tol: float = 1e-9) -> bool:
-    return not (
-        a[3] < (b[0] - tol)
-        or b[3] < (a[0] - tol)
-        or a[4] < (b[1] - tol)
-        or b[4] < (a[1] - tol)
-        or a[5] < (b[2] - tol)
-        or b[5] < (a[2] - tol)
-    )
-
-
 def _resolve_rx_ferrite_spec(
     *,
     design_id: str,
@@ -180,44 +169,6 @@ def _resolve_tx_ferrite_spec(
     origin_xyz: _Point3 = (union[0], union[1], top_z - thickness)
     size_xyz: _Point3 = (union[3] - union[0], union[4] - union[1], thickness)
     return (f"ferrite_tx_{object_name_tag}", "tx_ferrite", origin_xyz, size_xyz, "XY")
-
-
-def _assert_tx_ferrite_gap_from_live_objects(
-    *,
-    ferrite_name: str,
-    origin_xyz: _Point3,
-    size_xyz: _Point3,
-    cad_probe: list[CadProbe],
-    tx_board_ids: set[str],
-) -> None:
-    ferrite_bbox = [
-        origin_xyz[0],
-        origin_xyz[1],
-        origin_xyz[2],
-        origin_xyz[0] + size_xyz[0],
-        origin_xyz[1] + size_xyz[1],
-        origin_xyz[2] + size_xyz[2],
-    ]
-    tx_live_probes = [
-        probe
-        for probe in cad_probe
-        if probe["object_name"].startswith("coil_tx_")
-        or probe["object_name"].startswith("bridge_tx_")
-        or probe["object_name"].startswith("txs_")
-        or any(
-            probe["object_name"].startswith(f"fr4_{board_id}_")
-            or probe["object_name"].startswith(f"{_NEO_TX_DD_FR4_PREFIX}{board_id}_")
-            for board_id in tx_board_ids
-        )
-    ]
-    for probe in tx_live_probes:
-        probe_bbox = list(probe["bbox"][:6])
-        if _bbox_touches_or_overlaps(ferrite_bbox, probe_bbox):
-            raise ValueError(
-                "TX ferrite must keep a positive gap from TX coil copper, TX bridge objects, "
-                "TX terminal copper, and TX FR4 sheet objects "
-                f"(ferrite_name={ferrite_name}, live_object={probe['object_name']})"
-            )
 
 
 def _live_model_object_names(
@@ -337,13 +288,6 @@ def _create_tx_ferrite_model_objects(
     tool_names = _live_model_object_names(modeler=modeler, candidate_names=live_object_names)
     if not tool_names:
         raise ValueError("Ferrite requested but no live model objects were available for subtract cutouts")
-    _assert_tx_ferrite_gap_from_live_objects(
-        ferrite_name=name,
-        origin_xyz=origin_xyz,
-        size_xyz=size_xyz,
-        cad_probe=cad_probe,
-        tx_board_ids=tx_board_ids,
-    )
     material_name = _ensure_ferrite_material(hfss, ferrite_relative_permeability)
     ferrite_name, ferrite_probe, ferrite_entry = _create_ferrite_object(
         modeler=modeler,

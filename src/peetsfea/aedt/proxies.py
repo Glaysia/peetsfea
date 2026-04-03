@@ -122,7 +122,24 @@ class BoundaryModuleProxy(_ProxyBase):
 
 
 class DesktopProxy(_ProxyBase):
-    pass
+    def GetMessages(self, project_name: str, design_name: str, level: int) -> list[str] | tuple[str, ...]:
+        raw_odesktop = _require_attr(self.raw, "odesktop", owner="Desktop")
+        raw_result = _require_callable_attr(raw_odesktop, "GetMessages", owner="Desktop.odesktop")(
+            project_name,
+            design_name,
+            level,
+        )
+        assert isinstance(raw_result, Sequence), (
+            f"Raw Desktop.odesktop.GetMessages result must be Sequence (actual={type(raw_result).__name__})"
+        )
+        assert not isinstance(raw_result, (str, bytes)), (
+            f"Raw Desktop.odesktop.GetMessages result must not be str/bytes (actual={type(raw_result).__name__})"
+        )
+        for item in raw_result:
+            assert isinstance(item, str), (
+                f"Raw Desktop.odesktop.GetMessages items must be str (actual={type(item).__name__})"
+            )
+        return cast(list[str] | tuple[str, ...], raw_result)
 
 
 class DesignProxy(_ProxyBase):

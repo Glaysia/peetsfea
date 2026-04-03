@@ -5,7 +5,7 @@ from collections.abc import Callable
 from peetsfea.identity.hashing import object_name_tag_from_design_id
 
 from ..build_state import _empty_em_port_assignments, _empty_em_ports
-from .build_fr4_ops import _finalize_fr4_and_save_project
+from .build_fr4_ops import _finalize_fr4
 from .finalize_stage_rx import _apply_rxdd_back_stub_stage
 from .finalize_stage_stacked import _apply_stacked_txdd_closure
 from ..rules.tx_mode0_rotation import rotate_tx_mode0_plan_objects_if_needed
@@ -46,10 +46,8 @@ def run_finalize_plan(
         resolved_ports=resolved_ports,
         resolved_port_assignments=resolved_port_assignments,
     )
-    object_names, fr4_object_names, final_ports, final_port_assignments = _finalize_fr4_and_save_project(
+    object_names, fr4_object_names, final_ports, final_port_assignments = _finalize_fr4(
         modeler=plan.modeler,
-        hfss=plan.hfss,
-        aedt_path=plan.aedt_path,
         design_id=plan.design_id,
         pcb_thickness=plan.pcb_thickness,
         tx_board_ids=plan.tx_board_ids,

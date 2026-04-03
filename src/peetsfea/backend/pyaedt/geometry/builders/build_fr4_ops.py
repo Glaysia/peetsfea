@@ -144,11 +144,9 @@ def _debug_fr4_subtract_result(
     info_json(payload)
 
 
-def _finalize_fr4_and_save_project(
+def _finalize_fr4(
     *,
     modeler: Modeler3D,
-    hfss: Hfss,
-    aedt_path: Path,
     design_id: str,
     pcb_thickness: float,
     tx_board_ids: set[str],
@@ -317,12 +315,7 @@ def _finalize_fr4_and_save_project(
                 f"tool_names={fr4_tools_to_subtract}, overlap_mm={FR4_SUBTRACT_OVERLAP_MM})"
             )
 
-    raise_on_false(
-        hfss.save_project(str(aedt_path)),
-        operation="save_project",
-        context={"aedt_path": str(aedt_path)},
-    )
     return object_names, fr4_object_names, resolved_ports, resolved_port_assignments
 
 
-__all__ = ["_finalize_fr4_and_save_project"]
+__all__ = ["_finalize_fr4"]
