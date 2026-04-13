@@ -91,7 +91,8 @@ class TraceProviderSession(Protocol):
 
 
 class ModelerSession(Protocol):
-    object_names: Sequence[str]
+    @property
+    def object_names(self) -> Sequence[str]: ...
 
     def create_box(self, **kwargs: object) -> object: ...
 
@@ -173,13 +174,26 @@ class ModelerSession(Protocol):
 
 
 class HfssSession(TraceProviderSession, Protocol):
-    modeler: ModelerSession
-    desktop_class: DesktopSession
-    odesign: object
-    materials: object
-    oboundary: object
-    excitation_names: Sequence[str]
-    setup_names: Sequence[str]
+    @property
+    def modeler(self) -> ModelerSession: ...
+
+    @property
+    def desktop_class(self) -> DesktopSession: ...
+
+    @property
+    def odesign(self) -> object: ...
+
+    @property
+    def materials(self) -> object: ...
+
+    @property
+    def oboundary(self) -> object: ...
+
+    @property
+    def excitation_names(self) -> Sequence[str]: ...
+
+    @property
+    def setup_names(self) -> Sequence[str]: ...
 
     def __setitem__(self, key: str, value: str) -> None: ...
 

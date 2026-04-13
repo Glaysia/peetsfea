@@ -27,9 +27,39 @@ flowchart TD
 - sample 단계는 batch profile, seed selection, manifest write를 묶는다.
 - 테스트 노트는 sampling registry와 preflight fail-fast 계약을 대표 예시로 가리킨다.
 
+## Type2 STEP Import Smoke Flow
+
+이 흐름은 tracked STEP artifact를 HFSS로 가져오는 opt-in smoke path다. `entry/build.py` runtime replay나 EM pipeline에는 아직 연결하지 않는다.
+
+```mermaid
+flowchart TD
+    Type2Toml["examples/type2/type2_non_model_objects.toml"]
+    StepExport["examples/type2/generate_non_model_step.py"]
+    StepArtifact["examples/type2/artifacts/type2_non_model_objects.step"]
+    SmokeImport["examples/type2/import_non_model_step_to_hfss.py"]
+    HeadlessHfss["headless HFSS via PyAEDT"]
+    ImportCad["Modeler3D.import_3d_cad()"]
+    NonModelState["set_object_model_state(..., False)"]
+    SmokeAedt["run/aedt/type2_step_import_smoke/*.aedt"]
+    RuntimeBuild["entry/build.py runtime replay"]
+    EmRuntime["EM pipeline"]
+
+    Type2Toml --> StepExport
+    StepExport --> StepArtifact
+    StepArtifact --> SmokeImport
+    SmokeImport --> HeadlessHfss
+    HeadlessHfss --> ImportCad
+    ImportCad --> NonModelState
+    NonModelState --> SmokeAedt
+    SmokeImport -. not wired .-> RuntimeBuild
+    SmokeImport -. not wired .-> EmRuntime
+```
+
 ## Links
 - [[sdd/sdd-index]]
 - [[sdd/architecture/current-pipeline-sdd-view]]
 - [[sdd/code/entry/sample.py]]
 - [[sdd/code/src/peetsfea/spec/loader.py]]
 - [[sdd/code/tests/spec_resolver/test_sampling_registry.py]]
+- [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
+- [[sdd/code/examples/type2/import_non_model_step_to_hfss.py]]
