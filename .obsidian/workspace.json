@@ -176,12 +176,35 @@
       "bases:Create new base": false
     }
   },
-  "active": "5069a77b495b2905",
+  "active": "abb45bdee3359cb3",
   "lastOpenFiles": [
-    "tmp/build123d_smoke/artifacts/basic_plate_with_hole.step",
-    "tmp/build123d_smoke/make_basic_shape.py",
-    "tmp/build123d_smoke/artifacts",
-    "tmp/build123d_smoke",
-    "tmp"
+    "PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md",
+    "sdd/code/tests/spec_resolver/test_sampling_registry.py.md",
+    "sdd/code/entry/sample.py.md",
+    "sdd/code/src/peetsfea/spec/loader.py.md",
+    "sdd/diagrams/sample-build-flow.md",
+    "sdd/structure/sdd-vault-layout.md",
+    "sdd/architecture/current-pipeline-sdd-view.md",
+    "sdd/plans/0.2.22-sdd-adoption.md",
+    "sdd/templates/architecture-note.md",
+    "sdd/templates/plan-note.md",
+    "sdd/templates/source-note.md",
+    "sdd/diagrams/index.md",
+    "sdd/structure/index.md",
+    "sdd/architecture/index.md",
+    "sdd/plans/index.md",
+    "sdd/code/index.md",
+    "sdd/index.md",
+    "SDD.md",
+    "sdd/templates",
+    "sdd/diagrams",
+    "sdd/structure",
+    "sdd/code/src/peetsfea/spec",
+    "sdd/code/tests/spec_resolver",
+    "sdd/code/src/peetsfea",
+    "sdd/code/tests",
+    "sdd/code/src",
+    "sdd/code/entry",
+    "sdd/plans"
   ]
 }

@@ -6,6 +6,8 @@
 > Commandment 5 is active now for `src/`: attribute and mapping fallbacks are forbidden.
 > Fallbacks are forbidden: do not add fallback code paths, degraded substitutes, silent retries, or "try alternative behavior and continue" logic unless the user explicitly requests that behavior for the current task.
 > Never launch AEDT in GUI mode unless the user explicitly asks for GUI validation.
+> SDD policy lives in [SDD.md](SDD.md).
+> From `0.2.22` onward, any newly created or substantively edited tracked Python file under `src/`, `entry/`, or `tests/` must ship with a matching note under `sdd/code/`.
 # AGENTS
 
 This document defines the project rules for coding agents working in this repository.
@@ -46,6 +48,21 @@ This document defines the project rules for coding agents working in this reposi
 - Keep the TOML-to-code mapping one-to-one; avoid generating multiple code paths per spec.
 - Ensure (TOML + seed) deterministically maps to final parameters; treat this as a testable contract.
 - Preflight validation must report what is supported vs. unsupported before design generation.
+
+## SDD rules
+- `SDD.md` is the repository policy for software design documentation. Follow it together with `AGENTS.md`, `README.md`, and `CODE_COMMANDMENTS.md`.
+- Scope: the forward-only SDD requirement applies from `0.2.22` onward to newly created or substantively edited tracked Python files under `src/`, `entry/`, and `tests/`.
+- Legacy tracked files that remain untouched are exempt. Once a legacy file is substantively edited, add or update the matching `sdd/code/<repo-relative-path>.md` note in the same change.
+- Required code-note mapping examples:
+  - `src/peetsfea/spec/loader.py` -> `sdd/code/src/peetsfea/spec/loader.py.md`
+  - `entry/sample.py` -> `sdd/code/entry/sample.py.md`
+  - `tests/spec_resolver/test_sampling_registry.py` -> `sdd/code/tests/spec_resolver/test_sampling_registry.py.md`
+- A substantive edit includes changes to logic, interfaces, runtime state, invariants, I/O, fail-fast behavior, or data flow. Formatting-only, comment-only, or purely mechanical non-behavioral changes do not trigger mandatory note updates.
+- Every code note must state the source path, single responsibility, inputs/outputs, canonical state, invariants, fail-fast points, collaborator modules, related tests, change hazards, and relevant `[[wikilink]]` connections.
+- New features and large refactors must create or update a plan note under `sdd/plans/` before or alongside the code change.
+- If module boundaries, flows, or layering change, also create or update the relevant notes under `sdd/architecture/`, `sdd/structure/`, or `sdd/diagrams/`.
+- Use Obsidian-style `[[wikilink]]` links liberally between code notes, plans, architecture notes, structure notes, and diagrams. Prefer path-qualified links such as `[[sdd/code/src/peetsfea/spec/loader.py]]` to avoid ambiguity.
+- Do not backfill the entire repository unless the user explicitly asks for it. The default policy is forward-only SDD coverage from `0.2.22` onward.
 
 ## Sampling and replay rules
 - Every independent sampled degree of freedom must have exactly one canonical owner.
@@ -95,3 +112,4 @@ This document defines the project rules for coding agents working in this reposi
 - `peetsfea/backend/`: Pyaedt adapters
 - `examples/`: TOML examples
 - `docs/`: spec/design docs
+- `sdd/`: Obsidian-targeted SDD workspace and code/design note registry
