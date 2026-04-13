@@ -27,6 +27,9 @@
 - [[sdd/code/src/peetsfea/spec/loader.py]]
 - [[sdd/code/entry/sample.py]]
 - [[sdd/code/tests/spec_resolver/test_sampling_registry.py]]
+- [[sdd/code/src/peetsfea/tx_rect_void.py]]
+- [[sdd/code/entry/export_tx_rect_void_step.py]]
+- [[sdd/code/tests/tx_rect_void/test_tx_rect_void.py]]
 
 ## 운영 메모
 - 이 인덱스는 전체 레포 백필 목록이 아니다.

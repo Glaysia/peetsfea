@@ -7,6 +7,7 @@
 - [[sdd/plans/0.2.22-type2-build123d-non-model-step]]
 - [[sdd/plans/0.2.22-step-viewer-notebook-registry]]
 - [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
+- [[sdd/plans/tx-rect-void-step-generator]]
 
 ## 규칙
 - 신규 기능과 큰 리팩터링은 코드 전에, 또는 코드와 함께 계획 문서를 만든다.
