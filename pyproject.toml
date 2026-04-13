@@ -1,6 +1,6 @@
 [project]
 name = "peetsfea"
-version = "0.2.21"
+version = "0.2.22"
 description = "Spec-first deterministic device design with Pyaedt."
 readme = "README.md"
 requires-python = "==3.12"
@@ -11,7 +11,11 @@ dependencies = [
   "dearpygui>=2.1.1",
   "cadquery>=2.6.1",
   "sympy>=1.14.0",
-  "pyvista>=0.46.5"
+  "pyvista>=0.46.5",
+  "build123d>=0.10.0",
+  "ocp-vscode>=3.3.4",
+  "ocp-tessellate>=3.2.2",
+  "ipykernel>=7.2.0",
 ]
 
 [project.optional-dependencies]

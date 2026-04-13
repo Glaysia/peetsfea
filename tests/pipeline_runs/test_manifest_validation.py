@@ -20,7 +20,7 @@ def test_runnable_examples_keep_vertical_z_and_gap_defaults_in_sync() -> None:
     example_spec = tomllib.loads((repo_root / "examples" / "type1.toml").read_text(encoding="utf-8"))
 
     for spec in (run_spec, example_spec):
-        assert spec["spec_version"] == "0.2.21"
+        assert spec["spec_version"] == "0.2.22"
         assert spec["tx"]["region"]["z_parts"]["vertical_z_mm"]["range"] == [False, 5, 15, 17]
         assert spec["scene_anchor"]["shelf_height_mm"]["range"] == [False, 461.0, 461.0, 1]
 
@@ -124,11 +124,11 @@ def test_legacy_trace_gap_keys_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 def test_unsupported_spec_version_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     toml_path = tmp_path / "old_spec_version.toml"
     write_type1_toml(toml_path)
-    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.21"', 'spec_version = "0.1.6"', 1)
+    raw = toml_path.read_text(encoding="utf-8").replace('spec_version = "0.2.22"', 'spec_version = "0.1.6"', 1)
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("5" * 40))
 
-    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.21'"):
+    with pytest.raises(ValueError, match=r"spec_version must be '0\.2\.22'"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 def test_removed_path_errors_on_027(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -138,7 +138,7 @@ def test_removed_path_errors_on_027(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     raw += "\n[coil_shape.outer_x]\nrange = [false, 10.0, 10.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("9" * 40))
-    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.21"):
+    with pytest.raises(ValueError, match="Removed path in spec_version 0.2.22"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 def test_tx_vertical_span_removed_path_errors_on_027(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -148,7 +148,7 @@ def test_tx_vertical_span_removed_path_errors_on_027(tmp_path: Path, monkeypatch
     raw += "\n[coil_spacing.tx_vertical_span_mm]\nrange = [false, 3.0, 3.0, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("a" * 40))
-    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.21: coil_spacing\.tx_vertical_span_mm"):
+    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.22: coil_spacing\.tx_vertical_span_mm"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -159,7 +159,7 @@ def test_tx_dd_top_clearance_mm_removed_path_errors_on_027(tmp_path: Path, monke
     raw += "\n[coil_placement.tx_dd_top_clearance_mm]\nrange = [false, 0.1, 0.1, 1]\n"
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("b" * 40))
-    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.21: coil_placement\.tx_dd_top_clearance_mm"):
+    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.22: coil_placement\.tx_dd_top_clearance_mm"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -170,7 +170,7 @@ def test_tx_vertical_plane_removed_path_errors_on_027(tmp_path: Path, monkeypatc
     raw += '\n[coil_placement.tx_vertical_plane]\nvalue = "ZX"\n'
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("c" * 40))
-    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.21: coil_placement\.tx_vertical_plane"):
+    with pytest.raises(ValueError, match=r"Removed path in spec_version 0.2.22: coil_placement\.tx_vertical_plane"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
@@ -308,7 +308,7 @@ def test_renamed_public_paths_fail_hard_on_0219(
     toml_path.write_text(raw, encoding="utf-8")
     monkeypatch.setattr(runner, "get_git_commit", lambda _: ("d" * 40))
 
-    with pytest.raises(ValueError, match=rf"Removed path in spec_version 0.2.21: {expected_path}"):
+    with pytest.raises(ValueError, match=rf"Removed path in spec_version 0.2.22: {expected_path}"):
         runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))
 
 
