@@ -1,0 +1,61 @@
+# generate_non_model_step.py
+
+## Source
+- Path: `examples/type2/generate_non_model_step.py`
+- Code note path: `sdd/code/examples/type2/generate_non_model_step.py.md`
+- Related plan: [[sdd/plans/0.2.22-type2-build123d-non-model-step]]
+- Related STEP viewer registry: [[sdd/plans/0.2.22-step-viewer-notebook-registry]]
+- Related architecture: [[sdd/architecture/current-pipeline-sdd-view]]
+- Related diagrams: [[sdd/diagrams/index]]
+
+## 역할
+- type2 non-model scene TOML 초안을 읽어 build123d box compound를 생성하고 STEP artifact로 export한다.
+- AEDT import 전 단계의 geometry authoring smoke path만 담당한다.
+
+## 입력 / 출력
+- 입력: `examples/type2/type2_non_model_objects.toml`
+- 출력: `examples/type2/artifacts/type2_non_model_objects.step`
+- STEP viewer registry: `examples/type2/view_step_files.ipynb`
+- CLI entry: `.venv/bin/python examples/type2/generate_non_model_step.py`
+- stdout: source TOML, output STEP, non-model object count, compound bounding box
+
+## Canonical state
+- 없음.
+- canonical 입력은 TOML의 `non_model_objects` 배열이고, 스크립트는 이를 매 실행마다 다시 읽는다.
+
+## Invariants / fail-fast
+- `non_model_objects`는 비어 있으면 안 된다.
+- 각 object는 table이어야 하며 `id`, `kind`, `primitive`, `present`, `non_model`, `material`, `plane`, `origin_xyz`, `size_xyz`를 가져야 한다.
+- `primitive`는 `box`만 허용한다.
+- `present`와 `non_model`은 `true`만 허용한다.
+- `plane`은 `XY`, `YZ`, `ZX` 중 하나여야 한다.
+- `origin_xyz`와 `size_xyz`는 숫자 3개여야 하며, `size_xyz`는 모두 양수여야 한다.
+- 중복 `id`와 `build123d.export_step()` 실패는 즉시 예외를 발생시킨다.
+
+## 직접 의존
+- Python 표준 라이브러리: `pathlib`, `tomllib`, `typing`
+- 외부 라이브러리: `build123d`
+
+## 이 파일을 쓰는 곳
+- 현재는 직접 import하는 runtime code가 없다.
+- 사람이 직접 실행하는 type2 STEP 생성 smoke script다.
+
+## 관련 테스트
+- 직접 자동 테스트는 아직 없다.
+- 검증 명령:
+  - `.venv/bin/python examples/type2/generate_non_model_step.py`
+  - `test -s examples/type2/artifacts/type2_non_model_objects.step`
+
+## 변경 시 주의점
+- TOML schema를 바꾸면 [[sdd/plans/0.2.22-type2-build123d-non-model-step]]도 같이 갱신한다.
+- `origin_xyz` 해석을 바꾸면 기존 STEP artifact의 좌표계가 바뀐다.
+- 출력 STEP artifact를 추가, 제거, 이동하면 `examples/type2/view_step_files.ipynb`의 `STEP_ARTIFACTS` registry와 viewer cell을 같이 갱신한다.
+- runtime parser에 연결하기 전까지 이 파일은 type2 실험용 smoke path로 유지한다.
+
+## Links
+- [[SDD]]
+- [[AGENTS]]
+- [[sdd/index]]
+- [[sdd/code/index]]
+- [[sdd/plans/0.2.22-type2-build123d-non-model-step]]
+- [[sdd/plans/0.2.22-step-viewer-notebook-registry]]

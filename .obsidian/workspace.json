@@ -11,10 +11,14 @@
             "id": "5069a77b495b2905",
             "type": "leaf",
             "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
+              "type": "markdown",
+              "state": {
+                "file": "sdd/diagrams/index.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "index"
             }
           }
         ]
@@ -90,6 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
+                "file": "sdd/diagrams/index.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -99,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks"
+              "title": "Backlinks for index"
             }
           },
           {
@@ -108,11 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
+                "file": "sdd/diagrams/index.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links"
+              "title": "Outgoing links from index"
             }
           },
           {
@@ -150,12 +156,13 @@
             "state": {
               "type": "outline",
               "state": {
+                "file": "sdd/diagrams/index.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline"
+              "title": "Outline of index"
             }
           }
         ]
@@ -176,8 +183,21 @@
       "bases:Create new base": false
     }
   },
-  "active": "abb45bdee3359cb3",
+  "active": "5069a77b495b2905",
   "lastOpenFiles": [
+    "sdd/plans/0.2.22-step-viewer-notebook-registry.md",
+    "examples/type2/view_step_files.ipynb",
+    "examples/type2/artifacts/type2_non_model_objects.step",
+    "examples/type2/artifacts",
+    "examples/type2/__pycache__/generate_non_model_step.cpython-312.pyc",
+    "examples/type2/__pycache__",
+    "sdd/code/examples/type2/generate_non_model_step.py.md",
+    "sdd/code/examples/type2",
+    "sdd/code/examples",
+    "sdd/plans/0.2.22-type2-build123d-non-model-step.md",
+    "examples/type2/generate_non_model_step.py",
+    "examples/type2/type2_non_model_objects.toml",
+    "examples/type2/non_model_objects.toml",
     "PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md",
     "sdd/code/tests/spec_resolver/test_sampling_registry.py.md",
     "sdd/code/entry/sample.py.md",
@@ -195,16 +215,6 @@
     "sdd/plans/index.md",
     "sdd/code/index.md",
     "sdd/index.md",
-    "SDD.md",
-    "sdd/templates",
-    "sdd/diagrams",
-    "sdd/structure",
-    "sdd/code/src/peetsfea/spec",
-    "sdd/code/tests/spec_resolver",
-    "sdd/code/src/peetsfea",
-    "sdd/code/tests",
-    "sdd/code/src",
-    "sdd/code/entry",
-    "sdd/plans"
+    "SDD.md"
   ]
 }

@@ -83,11 +83,19 @@
 - SDD는 TOML spec을 대체하지 않는다.
 - Spec이 바뀌면 spec docs와 함께 관련 SDD 문서도 갱신해야 한다.
 
+## STEP artifact registry
+- 추적되는 durable `.step` / `.stp` artifact를 생성하는 소스코드를 새로 만들거나 실질 수정하면 `examples/type2/view_step_files.ipynb`의 `STEP_ARTIFACTS` registry를 같은 변경 안에서 갱신해야 한다.
+- 각 추적 STEP artifact는 notebook 안에 전용 viewer cell을 가져야 한다.
+- registry 항목은 artifact 경로, 생성 소스 경로, 사람이 읽을 label을 포함해야 한다.
+- SDD 대상 소스 파일이 STEP artifact를 생성하면 해당 코드 노트에 generator/output 관계와 viewer notebook 연결을 기록해야 한다.
+- 무시되는 scratch artifact, 예를 들어 `tmp/` 아래 STEP 파일은 registry 대상이 아니다.
+
 ## 작업 체크리스트
 - `src/`, `entry/`, `tests/`의 새 파일을 만들었는가: 대응 코드 노트를 만든다.
 - 기존 파일을 실질 수정했는가: 대응 코드 노트를 갱신한다.
 - 신규 기능 또는 큰 리팩터링인가: `[[sdd/plans/index]]` 아래 계획 문서를 만든다.
 - 경계/흐름/레이어가 바뀌는가: `[[sdd/architecture/index]]`, `[[sdd/structure/index]]`, `[[sdd/diagrams/index]]` 중 필요한 문서를 만든다.
+- 추적되는 `.step` / `.stp` artifact를 생성하는가: `examples/type2/view_step_files.ipynb`에 registry 항목과 전용 viewer cell을 추가하고 관련 코드 노트를 갱신한다.
 - 기존 전체 코드를 한 번에 백필하려고 하는가: 사용자가 명시적으로 요청하지 않았다면 하지 않는다.
 
 ## 부트스트랩 시작점
