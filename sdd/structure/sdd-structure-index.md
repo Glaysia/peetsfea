@@ -1,6 +1,6 @@
 # Structure Note Index
 
-저장소 구조, 문서 구조, ownership map, 폴더 배치를 설명하는 문서는 여기서 관리한다. 정책은 [[SDD]], 전체 허브는 [[sdd/index]]다.
+저장소 구조, 문서 구조, ownership map, 폴더 배치를 설명하는 문서는 여기서 관리한다. 정책은 [[SDD]], 전체 허브는 [[sdd/sdd-index]]다.
 
 ## 현재 문서
 - [[sdd/structure/sdd-vault-layout]]

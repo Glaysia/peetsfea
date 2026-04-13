@@ -1,6 +1,6 @@
 # Plan Note Index
 
-큰 변경, 장기 작업, 큰 리팩터링은 여기서 시작한다. 운영 원칙은 [[SDD]], 전체 허브는 [[sdd/index]], 템플릿은 [[sdd/templates/plan-note]]를 본다.
+큰 변경, 장기 작업, 큰 리팩터링은 여기서 시작한다. 운영 원칙은 [[SDD]], 전체 허브는 [[sdd/sdd-index]], 템플릿은 [[sdd/templates/plan-note]]를 본다.
 
 ## 현재 계획 문서
 - [[sdd/plans/0.2.22-sdd-adoption]]

@@ -1,6 +1,6 @@
 # Code Note Index
 
-이 허브는 코드와 일대일 대응되는 노트의 진입점이다. 운영 규칙은 [[SDD]], 에이전트 강제 규칙은 [[AGENTS]], 전체 허브는 [[sdd/index]]를 본다.
+이 허브는 코드와 일대일 대응되는 노트의 진입점이다. 운영 규칙은 [[SDD]], 에이전트 강제 규칙은 [[AGENTS]], 전체 허브는 [[sdd/sdd-index]]를 본다.
 
 ## 경로 규칙
 - 정규 규칙: `sdd/code/<repo-relative-code-path>.md`

@@ -1,13 +1,13 @@
 # SDD Vault Layout
 
-이 문서는 SDD 볼트 구조와 경로 규칙을 설명한다. 상위 정책은 [[SDD]], 전체 허브는 [[sdd/index]], 현재 도입 계획은 [[sdd/plans/0.2.22-sdd-adoption]]다.
+이 문서는 SDD 볼트 구조와 경로 규칙을 설명한다. 상위 정책은 [[SDD]], 전체 허브는 [[sdd/sdd-index]], 현재 도입 계획은 [[sdd/plans/0.2.22-sdd-adoption]]다.
 
 ## Directory roles
-- [[sdd/code/index]]: 코드와 일대일 대응되는 노트
-- [[sdd/plans/index]]: 기능/리팩터링 계획
-- [[sdd/architecture/index]]: 계층, 경계, 흐름
-- [[sdd/structure/index]]: 저장소/문서 구조와 ownership map
-- [[sdd/diagrams/index]]: Mermaid 구조도와 흐름도
+- [[sdd/code/sdd-code-index]]: 코드와 일대일 대응되는 노트
+- [[sdd/plans/sdd-plans-index]]: 기능/리팩터링 계획
+- [[sdd/architecture/sdd-architecture-index]]: 계층, 경계, 흐름
+- [[sdd/structure/sdd-structure-index]]: 저장소/문서 구조와 ownership map
+- [[sdd/diagrams/sdd-diagrams-index]]: Mermaid 구조도와 흐름도
 - 템플릿:
   - [[sdd/templates/source-note]]
   - [[sdd/templates/plan-note]]

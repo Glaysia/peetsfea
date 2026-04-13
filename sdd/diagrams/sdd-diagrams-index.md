@@ -1,6 +1,6 @@
 # Diagram Note Index
 
-Mermaid 기반 흐름도와 구조도는 여기서 모은다. 정책은 [[SDD]], 전체 허브는 [[sdd/index]], 관련 아키텍처 문서는 [[sdd/architecture/index]]를 본다.
+Mermaid 기반 흐름도와 구조도는 여기서 모은다. 정책은 [[SDD]], 전체 허브는 [[sdd/sdd-index]], 관련 아키텍처 문서는 [[sdd/architecture/sdd-architecture-index]]를 본다.
 
 ## 현재 문서
 - [[sdd/diagrams/sample-build-flow]]

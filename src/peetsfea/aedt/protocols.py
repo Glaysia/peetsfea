@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 __all__ = [
@@ -90,6 +91,8 @@ class TraceProviderSession(Protocol):
 
 
 class ModelerSession(Protocol):
+    object_names: Sequence[str]
+
     def create_box(self, **kwargs: object) -> object: ...
 
     def create_coordinate_system(
@@ -135,11 +138,32 @@ class ModelerSession(Protocol):
 
     def get_vertex_position(self, assignment: int) -> list[float]: ...
 
+    def import_3d_cad(
+        self,
+        input_file: str | Path,
+        healing: bool = False,
+        refresh_all_ids: bool = True,
+        import_materials: bool = False,
+        create_lightweight_part: bool = False,
+        group_by_assembly: bool = False,
+        create_group: bool = True,
+        separate_disjoints_lumped_object: bool = False,
+        import_free_surfaces: bool = False,
+        point_coincidence_tolerance: float = 1e-6,
+        reduce_stl: bool = False,
+        reduce_percentage: int = 0,
+        reduce_error: int = 0,
+        merge_planar_faces: bool = True,
+        merge_angle: float = 0.02,
+    ) -> bool: ...
+
     def move(self, assignment: object, vector: list[float]) -> object: ...
 
     def rotate(self, assignment: object, axis: str, angle: float = 90.0, units: str = "deg") -> object: ...
 
     def set_working_coordinate_system(self, name: str) -> object: ...
+
+    def set_object_model_state(self, name: str, model: bool) -> object: ...
 
     def subtract(self, *, blank_list: list[str], tool_list: list[str], keep_originals: bool) -> object: ...
 

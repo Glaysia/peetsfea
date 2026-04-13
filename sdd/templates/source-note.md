@@ -1,13 +1,13 @@
 # Source Note Template
 
-이 템플릿은 [[sdd/code/index]]용 기본 골격이다. 규칙 원문은 [[SDD]], 전체 허브는 [[sdd/index]]를 본다.
+이 템플릿은 [[sdd/code/sdd-code-index]]용 기본 골격이다. 규칙 원문은 [[SDD]], 전체 허브는 [[sdd/sdd-index]]를 본다.
 
 ## Source
 - Path: `<repo-relative-path>`
 - Code note path: `sdd/code/<repo-relative-path>.md`
-- Related plan: [[sdd/plans/index]]
-- Related architecture: [[sdd/architecture/index]]
-- Related diagrams: [[sdd/diagrams/index]]
+- Related plan: [[sdd/plans/sdd-plans-index]]
+- Related architecture: [[sdd/architecture/sdd-architecture-index]]
+- Related diagrams: [[sdd/diagrams/sdd-diagrams-index]]
 
 ## 역할
 - 이 파일의 단일 책임을 한두 문장으로 적는다.
@@ -38,5 +38,5 @@
 ## Links
 - [[SDD]]
 - [[AGENTS]]
-- [[sdd/index]]
-- [[sdd/code/index]]
+- [[sdd/sdd-index]]
+- [[sdd/code/sdd-code-index]]

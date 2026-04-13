@@ -3,7 +3,7 @@
 - Source path: `entry/sample.py`
 - Code note path: `[[sdd/code/entry/sample.py]]`
 - Related policy: [[SDD]]
-- Related hubs: [[sdd/index]], [[sdd/code/index]]
+- Related hubs: [[sdd/sdd-index]], [[sdd/code/sdd-code-index]]
 - Related plan: [[sdd/plans/0.2.22-sdd-adoption]]
 - Related architecture: [[sdd/architecture/current-pipeline-sdd-view]]
 - Related diagram: [[sdd/diagrams/sample-build-flow]]

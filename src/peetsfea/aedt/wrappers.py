@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import cast, overload
 
 from ansys.aedt.core import Hfss as RawHfss
@@ -391,7 +392,9 @@ class Modeler3D(RawModeler3D, _WrappedAccess):
             "get_object_edges",
             "get_object_faces",
             "get_vertex_position",
+            "import_3d_cad",
             "move",
+            "object_names",
             "rotate",
             "set_working_coordinate_system",
             "set_object_model_state",
@@ -403,6 +406,20 @@ class Modeler3D(RawModeler3D, _WrappedAccess):
 
     def __init__(self, *, _raw: object) -> None:
         object.__setattr__(self, "_raw", _raw)
+
+    @property
+    def object_names(self) -> list[str]:
+        raw_names = _require_str_sequence_result(
+            _require_attr(object.__getattribute__(self, "_raw"), "object_names", owner="Modeler3D"),
+            owner="Modeler3D",
+            method_name="object_names",
+        )
+        names: list[str] = []
+        for index, name in enumerate(raw_names):
+            assert name, f"Raw Modeler3D.object_names[{index}] must not be empty"
+            validate_aedt_name(name, field=f"object_names[{index}]")
+            names.append(name)
+        return names
 
     def create_box(self, **kwargs: object) -> object:
         name = kwargs.get("name")
@@ -581,6 +598,67 @@ class Modeler3D(RawModeler3D, _WrappedAccess):
             context={"assignment": assignment},
         )
         return cast(list[float], raw_result)
+
+    def import_3d_cad(
+        self,
+        input_file: str | Path,
+        healing: bool = False,
+        refresh_all_ids: bool = True,
+        import_materials: bool = False,
+        create_lightweight_part: bool = False,
+        group_by_assembly: bool = False,
+        create_group: bool = True,
+        separate_disjoints_lumped_object: bool = False,
+        import_free_surfaces: bool = False,
+        point_coincidence_tolerance: float = 1e-6,
+        reduce_stl: bool = False,
+        reduce_percentage: int = 0,
+        reduce_error: int = 0,
+        merge_planar_faces: bool = True,
+        merge_angle: float = 0.02,
+    ) -> bool:
+        input_file_path = Path(input_file)
+        raw_result = raise_on_false(
+            _require_callable_attr(object.__getattribute__(self, "_raw"), "import_3d_cad", owner="Modeler3D")(
+                input_file=input_file_path,
+                healing=healing,
+                refresh_all_ids=refresh_all_ids,
+                import_materials=import_materials,
+                create_lightweight_part=create_lightweight_part,
+                group_by_assembly=group_by_assembly,
+                create_group=create_group,
+                separate_disjoints_lumped_object=separate_disjoints_lumped_object,
+                import_free_surfaces=import_free_surfaces,
+                point_coincidence_tolerance=point_coincidence_tolerance,
+                reduce_stl=reduce_stl,
+                reduce_percentage=reduce_percentage,
+                reduce_error=reduce_error,
+                merge_planar_faces=merge_planar_faces,
+                merge_angle=merge_angle,
+            ),
+            operation="import_3d_cad",
+            context={
+                "input_file": str(input_file_path),
+                "healing": healing,
+                "refresh_all_ids": refresh_all_ids,
+                "import_materials": import_materials,
+                "create_lightweight_part": create_lightweight_part,
+                "group_by_assembly": group_by_assembly,
+                "create_group": create_group,
+                "separate_disjoints_lumped_object": separate_disjoints_lumped_object,
+                "import_free_surfaces": import_free_surfaces,
+                "point_coincidence_tolerance": point_coincidence_tolerance,
+                "reduce_stl": reduce_stl,
+                "reduce_percentage": reduce_percentage,
+                "reduce_error": reduce_error,
+                "merge_planar_faces": merge_planar_faces,
+                "merge_angle": merge_angle,
+            },
+        )
+        assert isinstance(raw_result, bool), (
+            f"Modeler3D.import_3d_cad must return bool (actual={type(raw_result).__name__})"
+        )
+        return raw_result
 
     def move(self, assignment: object, vector: list[float]) -> object:
         raw_result = raise_on_false(

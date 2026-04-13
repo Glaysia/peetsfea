@@ -77,8 +77,8 @@ origin_xyz = [0.0, -921.0, 600.0]
 size_xyz = [9.0, 1842.0, 1055.0]
 
 [[non_model_objects]]
-id = "tx_region_max"
-kind = "tx_region_max"
+id = "tx_region"
+kind = "tx_region"
 primitive = "box"
 present = true
 non_model = true
@@ -86,39 +86,6 @@ material = "vacuum"
 plane = "XY"
 origin_xyz = [0.0, -140.0, 461.0]
 size_xyz = [160.0, 280.0, 90.0]
-
-[[non_model_objects]]
-id = "tx_region_leftover"
-kind = "tx_region_leftover"
-primitive = "box"
-present = true
-non_model = true
-material = "vacuum"
-plane = "XY"
-origin_xyz = [0.0, -140.0, 461.0]
-size_xyz = [160.0, 280.0, 70.0]
-
-[[non_model_objects]]
-id = "tx_region_dd"
-kind = "tx_region_dd"
-primitive = "box"
-present = true
-non_model = true
-material = "vacuum"
-plane = "XY"
-origin_xyz = [0.0, -140.0, 531.0]
-size_xyz = [160.0, 280.0, 15.0]
-
-[[non_model_objects]]
-id = "tx_region_vertical"
-kind = "tx_region_vertical"
-primitive = "box"
-present = true
-non_model = true
-material = "vacuum"
-plane = "XY"
-origin_xyz = [0.0, -140.0, 546.0]
-size_xyz = [160.0, 280.0, 5.0]
 
 [[non_model_objects]]
 id = "rx_region_max"

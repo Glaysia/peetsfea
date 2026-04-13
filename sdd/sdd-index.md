@@ -4,11 +4,11 @@
 
 ## 시작점
 - 정책: [[SDD]]
-- 코드 대응 문서 허브: [[sdd/code/index]]
-- 계획 허브: [[sdd/plans/index]]
-- 아키텍처 허브: [[sdd/architecture/index]]
-- 구조 허브: [[sdd/structure/index]]
-- 다이어그램 허브: [[sdd/diagrams/index]]
+- 코드 대응 문서 허브: [[sdd/code/sdd-code-index]]
+- 계획 허브: [[sdd/plans/sdd-plans-index]]
+- 아키텍처 허브: [[sdd/architecture/sdd-architecture-index]]
+- 구조 허브: [[sdd/structure/sdd-structure-index]]
+- 다이어그램 허브: [[sdd/diagrams/sdd-diagrams-index]]
 - 템플릿:
   - [[sdd/templates/source-note]]
   - [[sdd/templates/plan-note]]
@@ -25,10 +25,10 @@
   - [[sdd/code/tests/spec_resolver/test_sampling_registry.py]]
 
 ## 운영 루프
-1. 큰 변경이면 먼저 [[sdd/plans/index]]에 계획을 남긴다.
-2. 경계/흐름/레이어 변경이면 [[sdd/architecture/index]] 또는 [[sdd/structure/index]]를 갱신한다.
+1. 큰 변경이면 먼저 [[sdd/plans/sdd-plans-index]]에 계획을 남긴다.
+2. 경계/흐름/레이어 변경이면 [[sdd/architecture/sdd-architecture-index]] 또는 [[sdd/structure/sdd-structure-index]]를 갱신한다.
 3. 같은 변경 안에서 대응 코드 노트를 만든다.
-4. 필요한 경우 [[sdd/diagrams/index]]에 Mermaid 구조도를 추가한다.
+4. 필요한 경우 [[sdd/diagrams/sdd-diagrams-index]]에 Mermaid 구조도를 추가한다.
 
 ## 경계
 - 현재는 forward-only 도입이다.

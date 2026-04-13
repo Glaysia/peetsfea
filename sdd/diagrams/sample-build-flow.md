@@ -28,7 +28,7 @@ flowchart TD
 - 테스트 노트는 sampling registry와 preflight fail-fast 계약을 대표 예시로 가리킨다.
 
 ## Links
-- [[sdd/index]]
+- [[sdd/sdd-index]]
 - [[sdd/architecture/current-pipeline-sdd-view]]
 - [[sdd/code/entry/sample.py]]
 - [[sdd/code/src/peetsfea/spec/loader.py]]
