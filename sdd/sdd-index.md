@@ -18,6 +18,7 @@
 - 계획: [[sdd/plans/0.2.22-sdd-adoption]]
 - 아키텍처: [[sdd/architecture/current-pipeline-sdd-view]]
 - 구조: [[sdd/structure/sdd-vault-layout]]
+- 커밋 운영: [[sdd/structure/commit-policy]]
 - 구조도: [[sdd/diagrams/sample-build-flow]]
 - 코드 예시:
   - [[sdd/code/src/peetsfea/spec/loader.py]]
@@ -29,6 +30,7 @@
 2. 경계/흐름/레이어 변경이면 [[sdd/architecture/sdd-architecture-index]] 또는 [[sdd/structure/sdd-structure-index]]를 갱신한다.
 3. 같은 변경 안에서 대응 코드 노트를 만든다.
 4. 필요한 경우 [[sdd/diagrams/sdd-diagrams-index]]에 Mermaid 구조도를 추가한다.
+5. 커밋은 [[sdd/structure/commit-policy]]에 따라 논리 단위와 SDD note를 함께 묶는다.
 
 ## 경계
 - 현재는 forward-only 도입이다.

@@ -4,7 +4,9 @@
 
 ## 현재 문서
 - [[sdd/structure/sdd-vault-layout]]
+- [[sdd/structure/commit-policy]]
 
 ## 규칙
 - 코드 배치나 문서 배치 규칙이 바뀌면 이 허브를 갱신한다.
 - 구조 문서는 관련 계획 문서와 코드 노트로 역링크해야 한다.
+- 커밋 묶음과 SDD 동반 규칙은 [[sdd/structure/commit-policy]]를 따른다.

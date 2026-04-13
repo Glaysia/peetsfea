@@ -62,6 +62,8 @@
   - 저장소 구조, 모듈 배치, 문서 배치, ownership map을 다룬다.
 - 구조도/다이어그램 문서: `[[sdd/diagrams/sdd-diagrams-index]]`
   - Mermaid를 허용한다.
+- 커밋 운영 문서: [[sdd/structure/commit-policy]]
+  - SDD note와 코드 변경을 같은 논리 커밋으로 묶는 기준을 다룬다.
 
 큰 변경은 계획 문서에서 시작하고, 경계/흐름/계층이 바뀌면 아키텍처 또는 구조 문서를 추가한다.
 
@@ -109,4 +111,5 @@
   - [[sdd/plans/0.2.22-sdd-adoption]]
   - [[sdd/architecture/current-pipeline-sdd-view]]
   - [[sdd/structure/sdd-vault-layout]]
+  - [[sdd/structure/commit-policy]]
   - [[sdd/diagrams/sample-build-flow]]
