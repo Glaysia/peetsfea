@@ -6,6 +6,7 @@
 - [[sdd/plans/0.2.22-sdd-adoption]]
 - [[sdd/plans/0.2.22-step-viewer-notebook-registry]]
 - [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
+- [[sdd/plans/0.2.22-type2-toml-unification]]
 - [[sdd/plans/0.2.22-type2-build123d-non-model-step]]
 - [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
 - [[sdd/plans/tx-rect-void-step-generator]]
@@ -13,8 +14,9 @@
 ## Type2 milestone order
 - 상위 방향: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
 - 완료 baseline: [[sdd/plans/0.2.22-type2-build123d-non-model-step]]
-- 다음 smoke 단계: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
-- 첫 modeled prototype: [[sdd/plans/tx-rect-void-step-generator]]
+- 단일 SSOT 전환: [[sdd/plans/0.2.22-type2-toml-unification]]
+- historical import smoke: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
+- 첫 modeled object role: [[sdd/plans/tx-rect-void-step-generator]]
 
 ## 규칙
 - 신규 기능과 큰 리팩터링은 코드 전에, 또는 코드와 함께 계획 문서를 만든다.

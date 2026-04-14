@@ -29,11 +29,12 @@ flowchart TD
 
 ## Type2 STEP Import Smoke Flow
 
-이 흐름은 tracked STEP artifact를 HFSS로 가져오는 opt-in smoke path다. `entry/build.py` runtime replay나 EM pipeline에는 아직 연결하지 않는다.
+이 흐름은 tracked STEP artifact를 HFSS로 가져오는 opt-in smoke path다. 현재 구현은 historical non-model baseline을 사용하지만, 다음 planned SSOT는 `examples/type2/type2.toml`이다. `entry/build.py` runtime replay나 EM pipeline에는 아직 연결하지 않는다.
 
 ```mermaid
 flowchart TD
-    Type2Toml["examples/type2/type2_non_model_objects.toml"]
+    Type2Toml["examples/type2/type2.toml\nplanned SSOT"]
+    NonModelBaseline["examples/type2/type2_non_model_objects.toml\nhistorical baseline"]
     StepExport["examples/type2/generate_non_model_step.py"]
     StepArtifact["examples/type2/artifacts/type2_non_model_objects.step"]
     SmokeImport["examples/type2/import_non_model_step_to_hfss.py"]
@@ -44,7 +45,8 @@ flowchart TD
     RuntimeBuild["entry/build.py runtime replay"]
     EmRuntime["EM pipeline"]
 
-    Type2Toml --> StepExport
+    Type2Toml -. absorbs .-> NonModelBaseline
+    NonModelBaseline --> StepExport
     StepExport --> StepArtifact
     StepArtifact --> SmokeImport
     SmokeImport --> HeadlessHfss
