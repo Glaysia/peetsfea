@@ -67,6 +67,18 @@ origin이 `(0, 0, 0)`이고, global placement transform은 아직 범위 밖이�
 - future modeled import smoke에서는 `modeled_objects[0]`가 canonical modeled
   object ledger source가 되고, `boxes`는 디버그/검증 보조 정보로만 남는다.
 
+### Modeled Import Smoke Handoff
+- 다음 단계 adapter 입력은 정확히 2개다:
+  - metadata JSON의 `modeled_objects[0]`
+  - 같은 STEP를 import한 뒤 계산한 `imported_object_names` diff
+- adapter는 metadata의 `object_id`, `role`, `material`, `model_state`,
+  `step_path`, `canonical_coordinates`, `terminal_metadata`를 그대로 유지하고,
+  runtime import 결과로는 `imported_object_names`만 병합한다.
+- prototype 단계에서 `step_path` 일치는 문자열 기준으로 비교한다. 경로
+  정규화/재매핑 규칙은 아직 도입하지 않는다.
+- prototype 단계에서는 AEDT geometry를 다시 측정해 좌표/역할/terminal semantics를
+  역산하지 않는다.
+
 ## 범위 제외
 - PyAEDT, HFSS launch, AEDT import, ports, sources, solving.
 - legacy `tx_dd` 및 `tx_vertical` spec field와의 호환성.

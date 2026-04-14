@@ -1,0 +1,54 @@
+# import_tx_rect_void_step_to_hfss.py
+
+## Source
+- Path: `examples/type2/import_tx_rect_void_step_to_hfss.py`
+- Code note path: `sdd/code/examples/type2/import_tx_rect_void_step_to_hfss.py.md`
+- Related plan: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
+- Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
+- Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
+
+## 역할
+- `tx_rect_void` modeled STEP artifact를 headless HFSS 세션에 import하는 opt-in smoke script다.
+- metadata JSON의 `modeled_objects[0]`와 runtime import diff `imported_object_names`를 어댑터에 전달해 imported modeled ledger entry를 만든다.
+- `EmPipelineInput`, port/source/solve 단계는 다루지 않는다.
+
+## 입력 / 출력
+- 입력 STEP: `run/step/tx_rect_void_coil.step`
+- 입력 metadata: `run/step/tx_rect_void_coil.metadata.json`
+- 출력 AEDT: `run/aedt/type2_step_import_smoke/tx_rect_void_coil_import.aedt`
+- CLI entry: `../.venv/bin/python ../examples/type2/import_tx_rect_void_step_to_hfss.py` from `run/`
+- 반환:
+  - `import_result` (`step_path`, `metadata_path`, `aedt_path`, `imported_object_names`)
+  - `imported_modeled_object_entry` (adapter output ledger entry)
+
+## Canonical state
+- module-level mutable state는 없다.
+- canonical modeled source는 metadata JSON `modeled_objects[0]`다.
+- canonical runtime import source는 HFSS import 전후 `modeler.object_names` diff다.
+
+## Invariants / fail-fast
+- STEP/metadata 파일이 없으면 HFSS launch 전에 즉시 raise한다.
+- metadata는 `modeled_objects` single-entry를 강제하고 `step_path`가 import 입력 STEP와 문자열 일치해야 한다.
+- PyAEDT `import_3d_cad`, `save_project`, `release_desktop` false return은 즉시 raise한다.
+- import diff가 비거나 duplicate면 즉시 raise한다.
+- adapter output은 required fields와 `imported_object_names`/`step_path` 일치를 검증한다.
+
+## 직접 의존
+- `pathlib.Path`
+- `typing.Protocol`, `TypedDict`
+- `peetsfea.aedt.Hfss`
+- `peetsfea.aedt.failfast`
+- `peetsfea.backend.pyaedt.type2_modeled_import_adapter.build_single_imported_modeled_object_entry`
+
+## 이 파일을 쓰는 곳
+- 사람이 직접 실행하는 modeled STEP-to-HFSS smoke path다.
+- [[sdd/code/tests/backend_em/test_tx_rect_void_step_import_smoke.py]]가 fake HFSS/adapter로 pure-Python 계약을 방어한다.
+
+## 관련 테스트
+- [[sdd/code/tests/backend_em/test_tx_rect_void_step_import_smoke.py]]
+- Real AEDT validation is opt-in and not part of default tests.
+
+## 변경 시 주의점
+- adapter 함수 시그니처를 바꾸면 이 smoke script의 loader/call site를 같이 갱신해야 한다.
+- prototype 단계에서 geometry reverse-calculation을 추가하지 않는다. 좌표/terminal semantics는 metadata source를 유지한다.
+- scope 확장(ports/sources/solve, multi-coil)은 [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]] 결정 이후에만 진행한다.

@@ -1,0 +1,394 @@
+{
+  "source_toml_path": "/home/harry/Projects/PythonProjects/peetsfea-main/examples/tx_rect_void/tx_rect_void_coil.toml",
+  "output_step_path": "/home/harry/Projects/PythonProjects/peetsfea-main/run/step/tx_rect_void_coil.step",
+  "metadata_path": "/home/harry/Projects/PythonProjects/peetsfea-main/run/step/tx_rect_void_coil.metadata.json",
+  "realized": {
+    "seed": 0,
+    "terminal_path": "A_cw_to_a",
+    "outer_x_mm": 44.0,
+    "outer_y_over_outer_x": 1.37,
+    "outer_y_mm": 60.28,
+    "turn_count": 1,
+    "layer_count": 3,
+    "layer_gap_mm": 7.0,
+    "void_x_over_outer_x": 0.43000000000000005,
+    "void_y_over_outer_y": 0.43000000000000005,
+    "void_center_x_over_outer_x": 0.095,
+    "void_center_y_over_outer_y": -0.03,
+    "void_x_mm": 18.92,
+    "void_y_mm": 25.920400000000004,
+    "void_center_x_mm": 4.18,
+    "void_center_y_mm": -1.8084,
+    "margin_ratio": 0.05,
+    "margin_x_mm": 2.2,
+    "margin_y_mm": 3.0140000000000002,
+    "metal_fill_factor": 0.59,
+    "pcb_thickness_mm": 1.6,
+    "copper_thickness_mm": 0.1,
+    "outer_bounds": {
+      "min_x": -22.0,
+      "max_x": 22.0,
+      "min_y": -30.14,
+      "max_y": 30.14
+    },
+    "void_bounds": {
+      "min_x": -5.280000000000001,
+      "max_x": 13.64,
+      "min_y": -14.768600000000003,
+      "max_y": 11.151800000000001
+    },
+    "side_geometry": {
+      "left": {
+        "band_width_mm": 16.72,
+        "pitch_mm": 16.72,
+        "trace_mm": 9.864799999999999,
+        "gap_mm": 6.8552
+      },
+      "right": {
+        "band_width_mm": 8.36,
+        "pitch_mm": 8.36,
+        "trace_mm": 4.9323999999999995,
+        "gap_mm": 3.4276
+      },
+      "top": {
+        "band_width_mm": 18.9882,
+        "pitch_mm": 18.9882,
+        "trace_mm": 11.203038,
+        "gap_mm": 7.785162000000001
+      },
+      "bottom": {
+        "band_width_mm": 15.371399999999998,
+        "pitch_mm": 15.371399999999998,
+        "trace_mm": 9.069125999999999,
+        "gap_mm": 6.302274
+      }
+    }
+  },
+  "boxes": [
+    {
+      "label": "tx_pcb_l0",
+      "role": "pcb",
+      "layer_index": 0,
+      "origin_xyz": [
+        -22.0,
+        -30.14,
+        0.0
+      ],
+      "size_xyz": [
+        44.0,
+        60.28,
+        1.6
+      ]
+    },
+    {
+      "label": "tx_copper_l0_s0",
+      "role": "copper",
+      "layer_index": 0,
+      "origin_xyz": [
+        -17.0676,
+        18.936962,
+        1.6
+      ],
+      "size_xyz": [
+        36.6014,
+        11.203038,
+        0.1
+      ]
+    },
+    {
+      "label": "tx_copper_l0_s1",
+      "role": "copper",
+      "layer_index": 0,
+      "origin_xyz": [
+        17.0676,
+        -25.605437000000002,
+        1.6
+      ],
+      "size_xyz": [
+        4.932400000000001,
+        50.143918,
+        0.1
+      ]
+    },
+    {
+      "label": "tx_copper_l0_s2",
+      "role": "copper",
+      "layer_index": 0,
+      "origin_xyz": [
+        -17.0676,
+        -30.14,
+        1.6
+      ],
+      "size_xyz": [
+        36.6014,
+        9.069125999999997,
+        0.1
+      ]
+    },
+    {
+      "label": "tx_copper_l0_s3",
+      "role": "copper",
+      "layer_index": 0,
+      "origin_xyz": [
+        -17.0676,
+        -30.14,
+        1.6
+      ],
+      "size_xyz": [
+        6.855199999999998,
+        9.069125999999997,
+        0.1
+      ]
+    },
+    {
+      "label": "tx_copper_l0_s4",
+      "role": "copper",
+      "layer_index": 0,
+      "origin_xyz": [
+        -15.1448,
+        -25.605437000000002,
+        1.6
+      ],
+      "size_xyz": [
+        9.864799999999999,
+        42.358756,
+        0.1
+      ]
+    },
+    {
+      "label": "tx_pcb_l1",
+      "role": "pcb",
+      "layer_index": 1,
+      "origin_xyz": [
+        -22.0,
+        -30.14,
+        8.6
+      ],
+      "size_xyz": [
+        44.0,
+        60.28,
+        1.6
+      ]
+    },
+    {
+      "label": "tx_copper_l1_s0",
+      "role": "copper",
+      "layer_index": 1,
+      "origin_xyz": [
+        -17.0676,
+        18.936962,
+        10.2
+      ],
+      "size_xyz": [
+        36.6014,
+        11.203038,
+        0.1
+      ]
+    },
+    {
+      "label": "tx_copper_l1_s1",
+      "role": "copper",
+      "layer_index": 1,
+      "origin_xyz": [
+        17.0676,
+        -25.605437000000002,
+        10.2
+      ],
+      "size_xyz": [
+        4.932400000000001,
+        50.143918,
+        0.1
+      ]
+    },
+    {
+      "label": "tx_copper_l1_s2",
+      "role": "copper",
+      "layer_index": 1,
+      "origin_xyz": [
+        -17.0676,
+        -30.14,
+        10.2
+      ],
+      "size_xyz": [
+        36.6014,
+        9.069125999999997,
+        0.1
+      ]
+    },
+    {
+      "label": "tx_copper_l1_s3",
+      "role": "copper",
+      "layer_index": 1,
+      "origin_xyz": [
+        -17.0676,
+        -30.14,
+        10.2
+      ],
+      "size_xyz": [
+        6.855199999999998,
+        9.069125999999997,
+        0.1
+      ]
+    },
+    {
+      "label": "tx_copper_l1_s4",
+      "role": "copper",
+      "layer_index": 1,
+      "origin_xyz": [
+        -15.1448,
+        -25.605437000000002,
+        10.2
+      ],
+      "size_xyz": [
+        9.864799999999999,
+        42.358756,
+        0.1
+      ]
+    },
+    {
+      "label": "tx_pcb_l2",
+      "role": "pcb",
+      "layer_index": 2,
+      "origin_xyz": [
+        -22.0,
+        -30.14,
+        17.2
+      ],
+      "size_xyz": [
+        44.0,
+        60.28,
+        1.6
+      ]
+    },
+    {
+      "label": "tx_copper_l2_s0",
+      "role": "copper",
+      "layer_index": 2,
+      "origin_xyz": [
+        -17.0676,
+        18.936962,
+        18.8
+      ],
+      "size_xyz": [
+        36.6014,
+        11.203038,
+        0.1
+      ]
+    },
+    {
+      "label": "tx_copper_l2_s1",
+      "role": "copper",
+      "layer_index": 2,
+      "origin_xyz": [
+        17.0676,
+        -25.605437000000002,
+        18.8
+      ],
+      "size_xyz": [
+        4.932400000000001,
+        50.143918,
+        0.1
+      ]
+    },
+    {
+      "label": "tx_copper_l2_s2",
+      "role": "copper",
+      "layer_index": 2,
+      "origin_xyz": [
+        -17.0676,
+        -30.14,
+        18.8
+      ],
+      "size_xyz": [
+        36.6014,
+        9.069125999999997,
+        0.1
+      ]
+    },
+    {
+      "label": "tx_copper_l2_s3",
+      "role": "copper",
+      "layer_index": 2,
+      "origin_xyz": [
+        -17.0676,
+        -30.14,
+        18.8
+      ],
+      "size_xyz": [
+        6.855199999999998,
+        9.069125999999997,
+        0.1
+      ]
+    },
+    {
+      "label": "tx_copper_l2_s4",
+      "role": "copper",
+      "layer_index": 2,
+      "origin_xyz": [
+        -15.1448,
+        -25.605437000000002,
+        18.8
+      ],
+      "size_xyz": [
+        9.864799999999999,
+        42.358756,
+        0.1
+      ]
+    }
+  ],
+  "modeled_objects": [
+    {
+      "object_id": "tx_rect_void_coil",
+      "role": "tx_single_coil",
+      "material": "composite",
+      "model_state": true,
+      "step_path": "/home/harry/Projects/PythonProjects/peetsfea-main/run/step/tx_rect_void_coil.step",
+      "canonical_coordinates": {
+        "frame_origin_xyz": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "outer_bounds_min_xyz": [
+          -22.0,
+          -30.14,
+          0.0
+        ],
+        "outer_bounds_max_xyz": [
+          22.0,
+          30.14,
+          18.900000000000002
+        ],
+        "outer_bounds_size_xyz": [
+          44.0,
+          60.28,
+          18.900000000000002
+        ],
+        "pcb_layer_z_positions_mm": [
+          0.0,
+          8.6,
+          17.2
+        ],
+        "copper_layer_z_positions_mm": [
+          1.6,
+          10.2,
+          18.8
+        ]
+      },
+      "terminal_metadata": {
+        "path": "A_cw_to_a",
+        "outer_corner": "A",
+        "inner_corner": "a",
+        "direction": "cw",
+        "start_point_xy_mm": [
+          -17.0676,
+          24.538481
+        ],
+        "end_point_xy_mm": [
+          -10.2124,
+          16.753319
+        ]
+      }
+    }
+  ]
+}

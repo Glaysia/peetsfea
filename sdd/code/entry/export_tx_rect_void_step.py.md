@@ -5,6 +5,7 @@
 - Code note path: `sdd/code/entry/export_tx_rect_void_step.py.md`
 - Related plan: [[sdd/plans/tx-rect-void-step-generator]]
 - Related docs: [[docs/tx-rect-void-step]]
+- Related STEP viewer registry: [[sdd/plans/0.2.22-step-viewer-notebook-registry]]
 
 ## 역할
 - Standalone TX rect/void coil TOML을 STEP으로 export하는 얇은 CLI entrypoint다.
@@ -15,6 +16,7 @@
 - 입력: `--toml`, `--output-step`, `--metadata`, `--seed`.
 - 기본 입력: `examples/tx_rect_void/tx_rect_void_coil.toml`.
 - 기본 출력: `run/step/tx_rect_void_coil.step`, `run/step/tx_rect_void_coil.metadata.json`.
+- viewer notebook: `examples/type2/view_step_files.ipynb`의 generated STEP viewer cell.
 
 ## Canonical state
 - module-level mutable state는 없다.
@@ -39,5 +41,6 @@
 
 ## 변경 시 주의점
 - 기본 output path를 바꾸면 [[docs/tx-rect-void-step]]와 [[sdd/plans/tx-rect-void-step-generator]]도 갱신한다.
+- 기본 STEP output path나 metadata path를 바꾸면 `examples/type2/view_step_files.ipynb`의 generated viewer cell도 같이 갱신한다.
 - metadata JSON shape를 바꾸면 CLI smoke expectation과 [[sdd/code/tests/tx_rect_void/test_tx_rect_void.py]]를 같이 갱신한다.
 - 이 entrypoint에 AEDT import를 섞지 않는다. import는 별도 계획이 필요하다.

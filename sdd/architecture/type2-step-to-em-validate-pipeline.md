@@ -13,7 +13,7 @@
 1. Type2 object registry가 object id, role, material, canonical coordinates, model/non-model intent를 확정한다.
 2. Build123d export 단계가 object마다 STEP artifact를 만들고 ledger에 `object_id`, `role`, `step_path`, `expected_model_state`를 기록한다.
 3. Headless HFSS import 단계가 STEP artifact를 하나씩 import하고, import 전후 `modeler.object_names` diff를 검증해 `imported_object_names`를 ledger에 추가한다.
-4. Import adapter가 ledger의 `em_mapping_role`를 읽어 `EmPipelineInput.ready_objects`, `ports`, `context`, `endpoints`를 조립한다.
+4. Post-prototype adapter가 ledger의 `em_mapping_role`를 읽어 `EmPipelineInput.ready_objects`, `ports`, `context`, `endpoints`를 조립한다.
 5. `run_em_pipeline()`가 grouping, series/subtract metadata, radiation boundary, explicit ports, source phase, analysis setup, post template creation을 수행한다.
 6. `validate_pipeline()`가 repo-level TX/RX conductor readiness를 검사하고, AEDT `ValidateDesign()`가 design-level validation을 수행한다.
 
@@ -31,6 +31,7 @@
 - import diff로 얻은 모든 `imported_object_names`는 그 single modeled object에 귀속된다.
 - object role, coordinates, terminal meaning은 metadata에서 읽고, imported object names만 import 결과에서 읽는다.
 - AEDT live geometry를 다시 측정해 role, coordinates, terminal semantics를 역산하지 않는다.
+- prototype adapter 출력에는 아직 `em_mapping_role`이 없다. 이는 post-prototype 조립 단계에서만 추가된다.
 
 ### Fail-fast
 - `modeled_objects` 길이가 1이 아니면 즉시 실패한다.

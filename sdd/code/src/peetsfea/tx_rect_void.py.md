@@ -5,6 +5,7 @@
 - Code note path: `sdd/code/src/peetsfea/tx_rect_void.py.md`
 - Related plan: [[sdd/plans/tx-rect-void-step-generator]]
 - Related docs: [[docs/tx-rect-void-step]]
+- Related STEP viewer registry: [[sdd/plans/0.2.22-step-viewer-notebook-registry]]
 
 ## 역할
 - Standalone TX rectangular/void coil TOML을 읽고, deterministic sampled realization과 build123d STEP export를 수행한다.
@@ -45,5 +46,6 @@
 ## 변경 시 주의점
 - TOML schema 변경 시 [[docs/tx-rect-void-step]]와 [[sdd/plans/tx-rect-void-step-generator]]를 같이 갱신한다.
 - STEP artifact를 tracked 파일로 추가하면 viewer registry 정책을 별도 계획으로 갱신해야 한다.
+- 기본 generated STEP path나 generator entrypoint가 바뀌면 `examples/type2/view_step_files.ipynb`의 tx_rect_void viewer cell도 같이 갱신한다.
 - `modeled_objects` field naming이나 canonical coordinate semantics를 바꾸면 관련 테스트와 plan note를 같이 갱신한다.
 - 기존 PyAEDT pipeline에 연결하려면 새 계획을 만들고 type dispatch, terminal, port, import 계약을 별도로 설계한다.
