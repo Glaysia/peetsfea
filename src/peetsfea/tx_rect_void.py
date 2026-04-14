@@ -15,6 +15,8 @@ CornerLabel = Literal["A", "B", "C", "D"]
 InnerCornerLabel = Literal["a", "b", "c", "d"]
 PathDirection = Literal["cw", "ccw"]
 BoxRole = Literal["pcb", "copper"]
+ModeledObjectRole = Literal["tx_single_coil"]
+ModeledObjectMaterial = Literal["composite"]
 
 _EPS = 1e-9
 _OUTER_TO_INNER_CORNER: dict[CornerLabel, InnerCornerLabel] = {
@@ -137,12 +139,44 @@ class BoxSpec:
 
 
 @dataclass(frozen=True)
+class ModeledObjectCanonicalCoordinates:
+    frame_origin_xyz: tuple[float, float, float]
+    outer_bounds_min_xyz: tuple[float, float, float]
+    outer_bounds_max_xyz: tuple[float, float, float]
+    outer_bounds_size_xyz: tuple[float, float, float]
+    pcb_layer_z_positions_mm: tuple[float, ...]
+    copper_layer_z_positions_mm: tuple[float, ...]
+
+
+@dataclass(frozen=True)
+class ModeledObjectTerminalMetadata:
+    path: str
+    outer_corner: CornerLabel
+    inner_corner: InnerCornerLabel
+    direction: PathDirection
+    start_point_xy_mm: tuple[float, float]
+    end_point_xy_mm: tuple[float, float]
+
+
+@dataclass(frozen=True)
+class ModeledObjectEntry:
+    object_id: str
+    role: ModeledObjectRole
+    material: ModeledObjectMaterial
+    model_state: Literal[True]
+    step_path: str
+    canonical_coordinates: ModeledObjectCanonicalCoordinates
+    terminal_metadata: ModeledObjectTerminalMetadata
+
+
+@dataclass(frozen=True)
 class TxRectVoidExportResult:
     source_toml_path: str
     output_step_path: str
     metadata_path: str
     realized: RealizedTxRectVoidCoil
     boxes: tuple[BoxSpec, ...]
+    modeled_objects: tuple[ModeledObjectEntry, ...]
 
 
 def _require_key(table: dict[str, object], key: str, context: str) -> object:
@@ -628,6 +662,47 @@ def _write_metadata(path: Path, result: TxRectVoidExportResult) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _build_modeled_object_entry(
+    *,
+    realized: RealizedTxRectVoidCoil,
+    output_step_path: Path,
+) -> ModeledObjectEntry:
+    terminal_path = _parse_terminal_path(realized.terminal_path)
+    centerline = build_tx_rect_void_centerline(realized)
+    pcb_layer_z_positions_mm = tuple(
+        float(layer_index) * (realized.pcb_thickness_mm + realized.layer_gap_mm)
+        for layer_index in range(realized.layer_count)
+    )
+    copper_layer_z_positions_mm = tuple(
+        pcb_z + realized.pcb_thickness_mm
+        for pcb_z in pcb_layer_z_positions_mm
+    )
+    total_height_mm = copper_layer_z_positions_mm[-1] + realized.copper_thickness_mm
+    return ModeledObjectEntry(
+        object_id="tx_rect_void_coil",
+        role="tx_single_coil",
+        material="composite",
+        model_state=True,
+        step_path=str(output_step_path),
+        canonical_coordinates=ModeledObjectCanonicalCoordinates(
+            frame_origin_xyz=(0.0, 0.0, 0.0),
+            outer_bounds_min_xyz=(realized.outer_bounds.min_x, realized.outer_bounds.min_y, 0.0),
+            outer_bounds_max_xyz=(realized.outer_bounds.max_x, realized.outer_bounds.max_y, total_height_mm),
+            outer_bounds_size_xyz=(realized.outer_x_mm, realized.outer_y_mm, total_height_mm),
+            pcb_layer_z_positions_mm=pcb_layer_z_positions_mm,
+            copper_layer_z_positions_mm=copper_layer_z_positions_mm,
+        ),
+        terminal_metadata=ModeledObjectTerminalMetadata(
+            path=terminal_path.raw,
+            outer_corner=terminal_path.outer_corner,
+            inner_corner=terminal_path.inner_corner,
+            direction=terminal_path.direction,
+            start_point_xy_mm=centerline[0],
+            end_point_xy_mm=centerline[-1],
+        ),
+    )
+
+
 def export_tx_rect_void_step(
     *,
     toml_path: Path,
@@ -643,12 +718,14 @@ def export_tx_rect_void_step(
     export_ok = bd.export_step(scene, output_step_path)
     if export_ok is not True:
         raise RuntimeError(f"build123d export_step returned False: {output_step_path}")
+    modeled_object = _build_modeled_object_entry(realized=realized, output_step_path=output_step_path)
     result = TxRectVoidExportResult(
         source_toml_path=str(toml_path),
         output_step_path=str(output_step_path),
         metadata_path=str(metadata_path),
         realized=realized,
         boxes=boxes,
+        modeled_objects=(modeled_object,),
     )
     _write_metadata(metadata_path, result)
     return result
@@ -657,6 +734,9 @@ def export_tx_rect_void_step(
 __all__ = [
     "BoxSpec",
     "ManufacturingSpec",
+    "ModeledObjectCanonicalCoordinates",
+    "ModeledObjectEntry",
+    "ModeledObjectTerminalMetadata",
     "RangeSpec",
     "RealizedTxRectVoidCoil",
     "RectBounds",

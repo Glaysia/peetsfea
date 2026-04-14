@@ -4,8 +4,8 @@
 - Path: `examples/type2/import_non_model_step_to_hfss.py`
 - Code note path: `sdd/code/examples/type2/import_non_model_step_to_hfss.py.md`
 - Related plan: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
-- Related architecture: [[sdd/architecture/current-pipeline-sdd-view]]
-- Related diagrams: [[sdd/diagrams/sdd-diagrams-index]]
+- Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
+- Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 역할
 - type2 non-model STEP artifact를 headless HFSS 세션에 import하는 opt-in smoke script다.
@@ -43,11 +43,6 @@
 
 ## 변경 시 주의점
 - runtime build flow에 연결하려면 새 계획을 만들고 manifest/type dispatch 설계를 먼저 갱신한다.
+- full STEP-to-EM validation flow에 연결하려면 [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]의 object-level ledger와 `EmPipelineInput` adapter 계약을 먼저 구현한다.
 - PyAEDT 버전이 올라가 `input_file_unit` 같은 새 인자를 쓰게 되면 [[sdd/plans/0.2.22-type2-pyaedt-step-import]]를 갱신한다.
 - 출력 STEP artifact 경로를 바꾸면 [[sdd/plans/0.2.22-type2-build123d-non-model-step]]와 viewer registry도 같이 확인한다.
-
-## Links
-- [[SDD]]
-- [[AGENTS]]
-- [[sdd/sdd-index]]
-- [[sdd/code/sdd-code-index]]

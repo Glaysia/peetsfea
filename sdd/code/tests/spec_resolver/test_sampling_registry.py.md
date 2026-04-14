@@ -1,9 +1,7 @@
 # tests/spec_resolver/test_sampling_registry.py
 
 - Source path: `tests/spec_resolver/test_sampling_registry.py`
-- Code note path: `[[sdd/code/tests/spec_resolver/test_sampling_registry.py]]`
-- Related policy: [[SDD]]
-- Related hubs: [[sdd/sdd-index]], [[sdd/code/sdd-code-index]]
+- Code note path: `sdd/code/tests/spec_resolver/test_sampling_registry.py.md`
 - Related plan: [[sdd/plans/0.2.22-sdd-adoption]]
 - Related architecture: [[sdd/architecture/current-pipeline-sdd-view]]
 - Related diagram: [[sdd/diagrams/sample-build-flow]]
@@ -46,5 +44,5 @@
 
 ## 변경 시 주의점
 - sampling registry path naming을 바꾸면 expected error message와 coverage assertion을 같이 갱신해야 한다.
-- fail-fast 정책을 약화하면 [[CODE_COMMANDMENTS]]와 충돌한다.
+- fail-fast 정책을 약화하면 `CODE_COMMANDMENTS.md`와 충돌한다.
 - selection contract가 바뀌면 [[sdd/architecture/current-pipeline-sdd-view]]와 관련 코드 노트를 같이 갱신한다.

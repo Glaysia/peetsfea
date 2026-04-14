@@ -20,6 +20,8 @@ This document defines the project rules for coding agents working in this reposi
 
 ## Working principles
 - Follow the repository-wide commandments in `CODE_COMMANDMENTS.md`; this document supplements them and must not weaken them.
+- Multiple agents may work in this repository concurrently; before editing, re-read any file that may have changed, keep changes scoped to the assigned task, and do not overwrite, revert, or reformat unrelated in-flight edits from other agents.
+- Coordinate by preserving other agents' in-flight work and integrating around it instead of forcing a file back to an earlier local snapshot.
 - Do not implement fallback behavior by default. If the intended path fails or is unsupported, raise immediately with actionable context instead of switching to an alternate path.
 - In `src/`, do not introduce `Optional[...]`, `| None`, `NotRequired[...]`, `if value is None`, or `if value is not None` for repository runtime state, including parser and boundary code.
 - In `src/`, validate dynamic values before binding them: `assert hasattr(...)`, read, then `assert isinstance(...)` or assert an equivalent invariant.
@@ -58,10 +60,10 @@ This document defines the project rules for coding agents working in this reposi
   - `entry/sample.py` -> `sdd/code/entry/sample.py.md`
   - `tests/spec_resolver/test_sampling_registry.py` -> `sdd/code/tests/spec_resolver/test_sampling_registry.py.md`
 - A substantive edit includes changes to logic, interfaces, runtime state, invariants, I/O, fail-fast behavior, or data flow. Formatting-only, comment-only, or purely mechanical non-behavioral changes do not trigger mandatory note updates.
-- Every code note must state the source path, single responsibility, inputs/outputs, canonical state, invariants, fail-fast points, collaborator modules, related tests, change hazards, and relevant `[[wikilink]]` connections.
+- Every code note must state the source path, single responsibility, inputs/outputs, canonical state, invariants, fail-fast points, collaborator modules, related tests, change hazards, and relevant Obsidian wikilink connections.
 - New features and large refactors must create or update a plan note under `sdd/plans/` before or alongside the code change.
 - If module boundaries, flows, or layering change, also create or update the relevant notes under `sdd/architecture/`, `sdd/structure/`, or `sdd/diagrams/`.
-- Use Obsidian-style `[[wikilink]]` links liberally between code notes, plans, architecture notes, structure notes, and diagrams. Prefer path-qualified links such as `[[sdd/code/src/peetsfea/spec/loader.py]]` to avoid ambiguity.
+- Use Obsidian-style wikilinks for meaningful relationships only: parent/child index structure, direct collaborator modules, direct tests, directly related plans, and concrete architecture/diagram notes. Do not repeat global policy or hub links in every note. Prefer path-qualified links such as `[[sdd/code/src/peetsfea/spec/loader.py]]` to avoid ambiguity.
 - Do not backfill the entire repository unless the user explicitly asks for it. The default policy is forward-only SDD coverage from `0.2.22` onward.
 
 ## Sampling and replay rules

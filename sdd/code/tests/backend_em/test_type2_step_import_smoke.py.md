@@ -4,8 +4,8 @@
 - Path: `tests/backend_em/test_type2_step_import_smoke.py`
 - Code note path: `sdd/code/tests/backend_em/test_type2_step_import_smoke.py.md`
 - Related plan: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
-- Related architecture: [[sdd/architecture/current-pipeline-sdd-view]]
-- Related diagrams: [[sdd/diagrams/sdd-diagrams-index]]
+- Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
+- Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 역할
 - Type2 STEP PyAEDT import smoke path를 AEDT launch 없이 fake sessions로 검증한다.
@@ -40,9 +40,3 @@
 ## 변경 시 주의점
 - Adding real AEDT launch to this file would violate its pure-Python smoke-test role.
 - If wrapper signature changes, keep fake modeler and Protocol expectations aligned.
-
-## Links
-- [[SDD]]
-- [[AGENTS]]
-- [[sdd/sdd-index]]
-- [[sdd/code/sdd-code-index]]

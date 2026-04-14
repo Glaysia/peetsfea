@@ -1,13 +1,12 @@
 # Source Note Template
 
-이 템플릿은 [[sdd/code/sdd-code-index]]용 기본 골격이다. 규칙 원문은 [[SDD]], 전체 허브는 [[sdd/sdd-index]]를 본다.
+이 템플릿은 코드 대응 문서의 기본 골격이다. 실제 링크는 직접 관련 계획, 협력 코드, 테스트, 구체적 docs/architecture/diagram에만 추가한다.
 
 ## Source
 - Path: `<repo-relative-path>`
 - Code note path: `sdd/code/<repo-relative-path>.md`
-- Related plan: [[sdd/plans/sdd-plans-index]]
-- Related architecture: [[sdd/architecture/sdd-architecture-index]]
-- Related diagrams: [[sdd/diagrams/sdd-diagrams-index]]
+- Related plan: `<direct plan note only when one exists>`
+- Related docs/architecture/diagram: `<direct note only when it explains this file>`
 
 ## 역할
 - 이 파일의 단일 책임을 한두 문장으로 적는다.
@@ -36,7 +35,4 @@
 - 바꾸면 같이 깨질 수 있는 계약, 역링크해야 하는 문서, 리플레이/결정성/SSOT 주의점을 적는다.
 
 ## Links
-- [[SDD]]
-- [[AGENTS]]
-- [[sdd/sdd-index]]
-- [[sdd/code/sdd-code-index]]
+- `<direct collaborator/test/plan note>`

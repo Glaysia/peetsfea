@@ -4,8 +4,8 @@
 - Path: `src/peetsfea/aedt/wrappers.py`
 - Code note path: `sdd/code/src/peetsfea/aedt/wrappers.py.md`
 - Related plan: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
-- Related architecture: [[sdd/architecture/current-pipeline-sdd-view]]
-- Related diagrams: [[sdd/diagrams/sdd-diagrams-index]]
+- Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
+- Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 역할
 - Raw PyAEDT `Hfss`, `Modeler3D`, `Object3d` boundary를 repository fail-fast wrapper로 감싼다.
@@ -45,10 +45,4 @@
 ## 변경 시 주의점
 - allowlist를 넓힐 때마다 fail-fast validation과 false-return handling을 같이 추가한다.
 - PyAEDT version/API drift가 있으면 wrapper signature, protocol, tests, related SDD plan을 같이 갱신한다.
-- raw object method를 fallback으로 직접 노출하면 [[CODE_COMMANDMENTS]]의 boundary fail-fast 의도를 약화시킬 수 있다.
-
-## Links
-- [[SDD]]
-- [[AGENTS]]
-- [[sdd/sdd-index]]
-- [[sdd/code/sdd-code-index]]
+- raw object method를 fallback으로 직접 노출하면 `CODE_COMMANDMENTS.md`의 boundary fail-fast 의도를 약화시킬 수 있다.

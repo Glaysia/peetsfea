@@ -21,10 +21,7 @@
 - build/run 실패는 기본적으로 즉시 멈춰야 한다.
 
 ## Related notes
-- 허브: [[sdd/sdd-index]]
-- 코드 허브: [[sdd/code/sdd-code-index]]
 - 구조도: [[sdd/diagrams/sample-build-flow]]
-- 구조 문서: [[sdd/structure/sdd-vault-layout]]
 - 예시 코드 노트:
   - [[sdd/code/entry/sample.py]]
   - [[sdd/code/src/peetsfea/spec/loader.py]]

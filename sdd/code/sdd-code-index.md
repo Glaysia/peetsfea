@@ -1,6 +1,6 @@
 # Code Note Index
 
-이 허브는 코드와 일대일 대응되는 노트의 진입점이다. 운영 규칙은 [[SDD]], 에이전트 강제 규칙은 [[AGENTS]], 전체 허브는 [[sdd/sdd-index]]를 본다.
+이 허브는 코드와 일대일 대응되는 노트의 진입점이다. 상위 허브는 [[sdd/sdd-index]]다.
 
 ## 경로 규칙
 - 정규 규칙: `sdd/code/<repo-relative-code-path>.md`
@@ -19,16 +19,21 @@
 - collaborators
 - related tests
 - change hazards
-- 관련 `[[wikilink]]`
+- 관련 Obsidian wikilink
 
 템플릿 시작점은 [[sdd/templates/source-note]]다.
 
-## 예시 노트
-- [[sdd/code/src/peetsfea/spec/loader.py]]
-- [[sdd/code/entry/sample.py]]
-- [[sdd/code/tests/spec_resolver/test_sampling_registry.py]]
-- [[sdd/code/src/peetsfea/tx_rect_void.py]]
+## 현재 노트
 - [[sdd/code/entry/export_tx_rect_void_step.py]]
+- [[sdd/code/entry/sample.py]]
+- [[sdd/code/examples/type2/generate_non_model_step.py]]
+- [[sdd/code/examples/type2/import_non_model_step_to_hfss.py]]
+- [[sdd/code/src/peetsfea/aedt/protocols.py]]
+- [[sdd/code/src/peetsfea/aedt/wrappers.py]]
+- [[sdd/code/src/peetsfea/spec/loader.py]]
+- [[sdd/code/src/peetsfea/tx_rect_void.py]]
+- [[sdd/code/tests/backend_em/test_type2_step_import_smoke.py]]
+- [[sdd/code/tests/spec_resolver/test_sampling_registry.py]]
 - [[sdd/code/tests/tx_rect_void/test_tx_rect_void.py]]
 
 ## 운영 메모

@@ -13,8 +13,8 @@ Release notes are managed by version and language under `release-notes/`.
 
 ## Current Documentation Baseline
 - The current documentation baseline is `0.2.22`.
-- This README is the public summary; detailed design notes live under `PLANS/`.
-- For implementation rules, see [AGENTS.md](AGENTS.md). For long-term principles, see [PLANS/LONGTERM_PLAN.md](PLANS/LONGTERM_PLAN.md). [PLANS/V0_2_11.md](PLANS/V0_2_11.md) remains the archived 0.2.11 planning index.
+- This README is the public summary; current design notes live under `sdd/` and active build123d/AEDT import planning lives under `PLANS/`.
+- For implementation rules, see [AGENTS.md](AGENTS.md). For the current build123d/AEDT import plan, see [PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md](PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md).
 
 ## What This Project Intends To Guarantee
 - Input: TOML spec (`examples/type1.toml`)
@@ -62,14 +62,7 @@ Default execution is split across `entry/sample.py` and `entry/build.py`: `entry
 - The public spec no longer accepts `coil_placement.tx_vertical_plane`; the realized plane is currently fixed internally as `selected_parameters.tx_vertical_plane = "ZX"`.
 - When `tx_vertical_orientation_mode = 0`, the finalized TX DD conductor set is rotated about `Y` to realize the no-vertical mode while preserving the TX region top contract.
 - Adaptive defaults are standardized to `percent_refinement=22`, `maximum_passes=10`, `minimum_passes=8`, `minimum_converged_passes=10`, and `max_delta_s=0.007`.
-- Detailed planning is split across the following documents:
-  - [PLANS/V0_2_11.md](PLANS/V0_2_11.md)
-  - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_00A_SAMPLING_LEDGER_AND_PREFLIGHT.md)
-  - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_00B_SELECTION_API_SIMPLIFICATION_AND_REFACTOR.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_00B_SELECTION_API_SIMPLIFICATION_AND_REFACTOR.md)
-  - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_00C_REPLAY_DATASET_AND_SEEDSET_CONTRACT.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_00C_REPLAY_DATASET_AND_SEEDSET_CONTRACT.md)
-  - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_01_SPEC_AND_POLICY.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_01_SPEC_AND_POLICY.md)
-  - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_02_FERRITE_GEOMETRY_AND_METADATA.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_02_FERRITE_GEOMETRY_AND_METADATA.md)
-  - [PLANS/DIVIDE_AND_CONQUER/V0_2_11_03_TESTS_AND_ACCEPTANCE.md](PLANS/DIVIDE_AND_CONQUER/V0_2_11_03_TESTS_AND_ACCEPTANCE.md)
+- Current detailed planning entry point: [PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md](PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md).
 
 ## type1 Reference Docs
 - Korean overview: [docs/type1.md](docs/type1.md)

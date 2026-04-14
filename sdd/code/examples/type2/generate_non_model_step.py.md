@@ -4,9 +4,9 @@
 - Path: `examples/type2/generate_non_model_step.py`
 - Code note path: `sdd/code/examples/type2/generate_non_model_step.py.md`
 - Related plan: [[sdd/plans/0.2.22-type2-build123d-non-model-step]]
+- Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
 - Related STEP viewer registry: [[sdd/plans/0.2.22-step-viewer-notebook-registry]]
-- Related architecture: [[sdd/architecture/current-pipeline-sdd-view]]
-- Related diagrams: [[sdd/diagrams/sdd-diagrams-index]]
+- Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 역할
 - type2 non-model scene TOML 초안을 읽어 build123d box compound를 생성하고 STEP artifact로 export한다.
@@ -53,11 +53,3 @@
 - type2 TX 영역은 현재 단일 `tx_region` box로 기록하며, sub-zone을 되살리려면 TOML과 계획 노트를 먼저 갱신한다.
 - 출력 STEP artifact를 추가, 제거, 이동하면 `examples/type2/view_step_files.ipynb`의 `STEP_ARTIFACTS` registry와 viewer cell을 같이 갱신한다.
 - runtime parser에 연결하기 전까지 이 파일은 type2 실험용 smoke path로 유지한다.
-
-## Links
-- [[SDD]]
-- [[AGENTS]]
-- [[sdd/sdd-index]]
-- [[sdd/code/sdd-code-index]]
-- [[sdd/plans/0.2.22-type2-build123d-non-model-step]]
-- [[sdd/plans/0.2.22-step-viewer-notebook-registry]]

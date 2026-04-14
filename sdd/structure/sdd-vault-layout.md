@@ -1,6 +1,6 @@
 # SDD Vault Layout
 
-이 문서는 SDD 볼트 구조와 경로 규칙을 설명한다. 상위 정책은 [[SDD]], 전체 허브는 [[sdd/sdd-index]], 현재 도입 계획은 [[sdd/plans/0.2.22-sdd-adoption]]다.
+이 문서는 SDD 볼트 구조와 경로 규칙을 설명한다. 현재 도입 계획은 [[sdd/plans/0.2.22-sdd-adoption]]다.
 
 ## Directory roles
 - [[sdd/code/sdd-code-index]]: 코드와 일대일 대응되는 노트
@@ -22,10 +22,11 @@
 - `__init__.py`도 예외 없이 같은 규칙을 따른다.
 
 ## Link style
-- 기본 링크는 `[[wikilink]]`다.
+- 기본 링크는 Obsidian wikilink다.
 - 가능한 한 path-qualified 링크를 써서 같은 이름 충돌을 피한다.
-- 계획 문서와 구조 문서는 영향 받는 코드 노트로 역링크해야 한다.
-- 코드 노트는 허브, 계획, 구조, 테스트 노트로 링크해야 한다.
+- 전역 정책/허브 링크를 모든 노트에 반복하지 않는다.
+- 계획 문서는 실제 영향 받는 코드 노트와 직접 선행/후속 계획만 링크한다.
+- 코드 노트는 직접 계획, 협력 코드, 테스트, 구체적 관련 문서만 링크한다.
 
 ## Adoption boundary
 - 현재는 forward-only다.

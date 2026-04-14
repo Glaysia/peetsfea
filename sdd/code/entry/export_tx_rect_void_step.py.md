@@ -9,6 +9,7 @@
 ## 역할
 - Standalone TX rect/void coil TOML을 STEP으로 export하는 얇은 CLI entrypoint다.
 - CLI argument parsing과 default path wiring만 담당하고, parsing/geometry/export logic은 [[sdd/code/src/peetsfea/tx_rect_void.py]]에 위임한다.
+- 출력 metadata JSON은 기존 export payload에 더해 registry-aligned `modeled_objects` proto-contract를 함께 기록한다.
 
 ## 입력 / 출력
 - 입력: `--toml`, `--output-step`, `--metadata`, `--seed`.
@@ -38,11 +39,5 @@
 
 ## 변경 시 주의점
 - 기본 output path를 바꾸면 [[docs/tx-rect-void-step]]와 [[sdd/plans/tx-rect-void-step-generator]]도 갱신한다.
+- metadata JSON shape를 바꾸면 CLI smoke expectation과 [[sdd/code/tests/tx_rect_void/test_tx_rect_void.py]]를 같이 갱신한다.
 - 이 entrypoint에 AEDT import를 섞지 않는다. import는 별도 계획이 필요하다.
-
-## Links
-- [[SDD]]
-- [[AGENTS]]
-- [[CODE_COMMANDMENTS]]
-- [[sdd/sdd-index]]
-- [[sdd/code/sdd-code-index]]

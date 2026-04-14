@@ -4,8 +4,8 @@
 - Path: `src/peetsfea/aedt/protocols.py`
 - Code note path: `sdd/code/src/peetsfea/aedt/protocols.py.md`
 - Related plan: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
-- Related architecture: [[sdd/architecture/current-pipeline-sdd-view]]
-- Related diagrams: [[sdd/diagrams/sdd-diagrams-index]]
+- Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
+- Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 역할
 - AEDT/PyAEDT session boundary의 structural Protocol 타입을 정의한다.
@@ -44,9 +44,3 @@
 ## 변경 시 주의점
 - Protocol 변경은 wrappers, proxies, fake sessions, pyright diagnostics를 함께 흔든다.
 - PyAEDT version/API drift가 있으면 [[sdd/plans/0.2.22-type2-pyaedt-step-import]]와 관련 tests를 같이 갱신한다.
-
-## Links
-- [[SDD]]
-- [[AGENTS]]
-- [[sdd/sdd-index]]
-- [[sdd/code/sdd-code-index]]

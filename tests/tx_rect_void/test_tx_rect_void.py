@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -200,3 +202,50 @@ def test_export_writes_step_and_metadata(tmp_path: Path) -> None:
     assert payload["output_step_path"] == str(output_step_path)
     assert payload["realized"]["turn_count"] == 1
     assert len(payload["boxes"]) == len(result.boxes)
+    assert len(payload["modeled_objects"]) == 1
+    modeled_object = payload["modeled_objects"][0]
+    assert modeled_object["object_id"] == "tx_rect_void_coil"
+    assert modeled_object["role"] == "tx_single_coil"
+    assert modeled_object["material"] == "composite"
+    assert modeled_object["model_state"] is True
+    assert modeled_object["step_path"] == str(output_step_path)
+    assert modeled_object["canonical_coordinates"]["frame_origin_xyz"] == [0.0, 0.0, 0.0]
+    assert modeled_object["canonical_coordinates"]["outer_bounds_size_xyz"][0] == pytest.approx(
+        result.realized.outer_x_mm
+    )
+    assert modeled_object["terminal_metadata"]["path"] == result.realized.terminal_path
+    assert modeled_object["terminal_metadata"]["start_point_xy_mm"]
+    assert modeled_object["terminal_metadata"]["end_point_xy_mm"]
+
+
+def test_cli_smoke_uses_example_spec_and_writes_registry_aligned_metadata(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    example_toml = repo_root / "examples" / "tx_rect_void" / "tx_rect_void_coil.toml"
+    output_step_path = tmp_path / "cli" / "tx_rect_void.step"
+    metadata_path = tmp_path / "cli" / "tx_rect_void.metadata.json"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(repo_root / "entry" / "export_tx_rect_void_step.py"),
+            "--toml",
+            str(example_toml),
+            "--output-step",
+            str(output_step_path),
+            "--metadata",
+            str(metadata_path),
+            "--seed",
+            "0",
+        ],
+        capture_output=True,
+        check=True,
+        text=True,
+        cwd=repo_root,
+    )
+
+    assert output_step_path.stat().st_size > 0
+    payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert payload["source_toml_path"] == str(example_toml)
+    assert payload["modeled_objects"][0]["step_path"] == str(output_step_path)
+    assert payload["modeled_objects"][0]["terminal_metadata"]["path"] == payload["realized"]["terminal_path"]
+    assert "output STEP:" in completed.stdout

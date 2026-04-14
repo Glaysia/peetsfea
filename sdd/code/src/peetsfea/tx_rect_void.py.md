@@ -5,11 +5,11 @@
 - Code note path: `sdd/code/src/peetsfea/tx_rect_void.py.md`
 - Related plan: [[sdd/plans/tx-rect-void-step-generator]]
 - Related docs: [[docs/tx-rect-void-step]]
-- Related architecture: [[sdd/architecture/current-pipeline-sdd-view]]
 
 ## 역할
 - Standalone TX rectangular/void coil TOML을 읽고, deterministic sampled realization과 build123d STEP export를 수행한다.
 - 기존 type1 PyAEDT/HFSS resolver와 분리된 STEP authoring path만 담당한다.
+- metadata JSON에는 기존 `realized`/`boxes`와 함께 future type2 modeled-object ledger의 proto-contract가 되는 `modeled_objects`를 기록한다.
 
 ## 입력 / 출력
 - 입력: `TxRectVoidSpec` TOML file, integer `seed`, output STEP path, metadata JSON path.
@@ -19,6 +19,7 @@
 ## Canonical state
 - module-level mutable state는 없다.
 - Canonical runtime state는 `RealizedTxRectVoidCoil` dataclass와 generated `BoxSpec` tuple이다.
+- export canonical metadata에는 single-entry `modeled_objects`와 그 안의 canonical coordinates, terminal metadata가 포함된다.
 - Sampling owner identity는 TOML path string plus seed hash로 결정된다.
 
 ## Invariants / fail-fast
@@ -27,6 +28,7 @@
 - `turn_count`는 1..9, `layer_count`는 1..3, `layer_gap_mm`는 2.0 이상이어야 한다.
 - void bounds는 outer bounds 안에 axis-specific margin을 두고 들어와야 한다.
 - generated copper box는 void keepout과 면적으로 겹치면 즉시 예외를 발생시킨다.
+- metadata의 modeled object entry는 `object_id`, `role`, `material`, `model_state`, `step_path`, canonical coordinates, terminal metadata를 빠짐없이 기록해야 한다.
 - `build123d.export_step()`이 `True`를 반환하지 않으면 즉시 예외를 발생시킨다.
 
 ## 직접 의존
@@ -43,11 +45,5 @@
 ## 변경 시 주의점
 - TOML schema 변경 시 [[docs/tx-rect-void-step]]와 [[sdd/plans/tx-rect-void-step-generator]]를 같이 갱신한다.
 - STEP artifact를 tracked 파일로 추가하면 viewer registry 정책을 별도 계획으로 갱신해야 한다.
+- `modeled_objects` field naming이나 canonical coordinate semantics를 바꾸면 관련 테스트와 plan note를 같이 갱신한다.
 - 기존 PyAEDT pipeline에 연결하려면 새 계획을 만들고 type dispatch, terminal, port, import 계약을 별도로 설계한다.
-
-## Links
-- [[SDD]]
-- [[AGENTS]]
-- [[CODE_COMMANDMENTS]]
-- [[sdd/sdd-index]]
-- [[sdd/code/sdd-code-index]]

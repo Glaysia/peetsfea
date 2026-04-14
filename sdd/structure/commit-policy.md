@@ -1,7 +1,5 @@
 # Commit Policy
 
-상위 정책은 [[SDD]], 전체 허브는 [[sdd/sdd-index]], 구조 허브는 [[sdd/structure/sdd-structure-index]]다.
-
 ## Goal
 - 커밋은 SDD 추적 단위와 구현 단위를 분리하지 않게 만든다.
 - 변경 이력을 사람이 읽을 수 있는 논리 단위로 유지한다.
@@ -18,7 +16,7 @@
 - `src/`, `entry/`, `tests/`의 새 Python 파일 또는 실질 수정 파일은 같은 커밋에 대응 `sdd/code/` note를 포함한다.
 - 신규 기능이나 큰 리팩터링은 같은 커밋에 관련 `sdd/plans/` note를 포함한다.
 - 문서 배치, ownership, 운영 규칙이 바뀌면 관련 `sdd/structure/` note와 허브 링크를 같은 커밋에 포함한다.
-- SDD 링크를 추가할 때는 가능한 한 path-qualified `[[wikilink]]`를 쓴다.
+- SDD 링크를 추가할 때는 가능한 한 path-qualified Obsidian wikilink를 쓴다.
 
 ## Exclusions
 - 생성물, cache, `run/` 산출물, AEDT output, `.aedt.lock` 파일은 명시 요청 없이는 커밋하지 않는다.
@@ -37,10 +35,3 @@
 - 순수 Python 테스트는 `.venv`와 `run/` cwd 규칙을 우선한다.
 - Pylance 계열 진단은 가능한 경우 `.venv/bin/pyright`로 확인한다.
 - GUI/AEDT 검증은 사용자가 명시적으로 요청한 현재 작업에서만 수행한다.
-
-## Links
-- [[SDD]]
-- [[AGENTS]]
-- [[CODE_COMMANDMENTS]]
-- [[sdd/sdd-index]]
-- [[sdd/structure/sdd-structure-index]]

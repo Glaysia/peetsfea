@@ -55,11 +55,6 @@ flowchart TD
     SmokeImport -. not wired .-> EmRuntime
 ```
 
-## Links
-- [[sdd/sdd-index]]
-- [[sdd/architecture/current-pipeline-sdd-view]]
-- [[sdd/code/entry/sample.py]]
-- [[sdd/code/src/peetsfea/spec/loader.py]]
-- [[sdd/code/tests/spec_resolver/test_sampling_registry.py]]
+## Related notes
 - [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
 - [[sdd/code/examples/type2/import_non_model_step_to_hfss.py]]

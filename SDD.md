@@ -1,6 +1,6 @@
 # SDD
 
-이 저장소의 Software Design Documentation 운영 규칙은 이 문서가 정한다. 실무 기준점은 [[AGENTS]], [[CODE_COMMANDMENTS]], [[README]], [[docs/current-pipeline]], [[sdd/sdd-index]]다.
+이 저장소의 Software Design Documentation 운영 규칙은 이 문서가 정한다. 실무 기준점은 `AGENTS.md`, `CODE_COMMANDMENTS.md`, `README.md`, `docs/current-pipeline.md`, 그리고 `sdd/sdd-index.md`다.
 
 ## 목적
 - `0.2.22` 이후의 변경부터 코드와 설계 의도를 옵시디언에서 바로 추적 가능하게 만든다.
@@ -17,9 +17,9 @@
 ## 일대일 대응 규칙
 - 코드 대응 문서의 정규 경로는 `sdd/code/<repo-relative-code-path>.md`다.
 - 예시:
-  - `src/peetsfea/spec/loader.py` -> `[[sdd/code/src/peetsfea/spec/loader.py]]`
-  - `entry/sample.py` -> `[[sdd/code/entry/sample.py]]`
-  - `tests/spec_resolver/test_sampling_registry.py` -> `[[sdd/code/tests/spec_resolver/test_sampling_registry.py]]`
+  - `src/peetsfea/spec/loader.py` -> `sdd/code/src/peetsfea/spec/loader.py.md`
+  - `entry/sample.py` -> `sdd/code/entry/sample.py.md`
+  - `tests/spec_resolver/test_sampling_registry.py` -> `sdd/code/tests/spec_resolver/test_sampling_registry.py.md`
   - `src/peetsfea/spec/__init__.py` -> `sdd/code/src/peetsfea/spec/__init__.py.md`
 - 신규 파일 생성과 실질 수정은 같은 변경 안에서 대응 문서를 만들거나 갱신해야 한다.
 - 코드 대응 문서가 없는 신규/실질 수정 코드는 `0.2.22+` 기준의 완료 상태로 보지 않는다.
@@ -49,18 +49,18 @@
 - 직접 의존 모듈과 자신을 쓰는 대표 모듈/테스트
 - 관련 테스트
 - 변경 시 주의점
-- 관련 `[[wikilink]]`
+- 관련 Obsidian wikilink
 
 기본 시작점은 [[sdd/templates/source-note]]를 사용한다.
 
 ## 비코드 문서 체계
-- 계획 문서: `[[sdd/plans/sdd-plans-index]]`
+- 계획 문서: `sdd/plans/`
   - 신규 기능, 큰 리팩터링, 장기 작업은 여기서 시작한다.
-- 아키텍처 문서: `[[sdd/architecture/sdd-architecture-index]]`
+- 아키텍처 문서: `sdd/architecture/`
   - 계층, 경계, 실행 흐름, 협력 구조가 바뀌면 갱신한다.
-- 구조 문서: `[[sdd/structure/sdd-structure-index]]`
+- 구조 문서: `sdd/structure/`
   - 저장소 구조, 모듈 배치, 문서 배치, ownership map을 다룬다.
-- 구조도/다이어그램 문서: `[[sdd/diagrams/sdd-diagrams-index]]`
+- 구조도/다이어그램 문서: `sdd/diagrams/`
   - Mermaid를 허용한다.
 - 커밋 운영 문서: [[sdd/structure/commit-policy]]
   - SDD note와 코드 변경을 같은 논리 커밋으로 묶는 기준을 다룬다.
@@ -68,16 +68,12 @@
 큰 변경은 계획 문서에서 시작하고, 경계/흐름/계층이 바뀌면 아키텍처 또는 구조 문서를 추가한다.
 
 ## 링크 규칙
-- 기본 링크 형식은 Obsidian `[[wikilink]]`다.
+- 기본 링크 형식은 Obsidian wikilink다.
 - 충돌을 피하려면 path-qualified 링크를 우선 사용한다.
-- 코드 문서는 최소한 상위 허브, 관련 계획, 관련 아키텍처/구조도, 관련 테스트 문서로 링크해야 한다.
-- 계획/구조 문서는 영향 받는 코드 대응 문서로 역링크해야 한다.
-- 예시 연결:
-  - [[sdd/sdd-index]]
-  - [[sdd/plans/0.2.22-sdd-adoption]]
-  - [[sdd/architecture/current-pipeline-sdd-view]]
-  - [[sdd/structure/sdd-vault-layout]]
-  - [[sdd/diagrams/sample-build-flow]]
+- 링크는 의미 기반으로 둔다. 전역 정책 문서나 허브 문서를 모든 노트에 반복 링크하지 않는다.
+- 코드 문서는 직접 관련 계획, 직접 협력 코드, 직접 관련 테스트, 구체적 관련 docs/architecture/diagram만 링크한다.
+- 계획 문서는 실제 영향을 받는 코드 대응 문서와 직접 선행/후속 계획만 링크한다.
+- 폴더 index는 부모 허브와 자기 폴더의 직접 문서 목록을 연결한다.
 
 ## TOML spec SSOT와의 관계
 - TOML spec은 기능/입력의 SSOT다.
@@ -95,21 +91,15 @@
 ## 작업 체크리스트
 - `src/`, `entry/`, `tests/`의 새 파일을 만들었는가: 대응 코드 노트를 만든다.
 - 기존 파일을 실질 수정했는가: 대응 코드 노트를 갱신한다.
-- 신규 기능 또는 큰 리팩터링인가: `[[sdd/plans/sdd-plans-index]]` 아래 계획 문서를 만든다.
-- 경계/흐름/레이어가 바뀌는가: `[[sdd/architecture/sdd-architecture-index]]`, `[[sdd/structure/sdd-structure-index]]`, `[[sdd/diagrams/sdd-diagrams-index]]` 중 필요한 문서를 만든다.
+- 신규 기능 또는 큰 리팩터링인가: `sdd/plans/` 아래 계획 문서를 만든다.
+- 경계/흐름/레이어가 바뀌는가: `sdd/architecture/`, `sdd/structure/`, `sdd/diagrams/` 중 필요한 문서를 만든다.
 - 추적되는 `.step` / `.stp` artifact를 생성하는가: `examples/type2/view_step_files.ipynb`에 registry 항목과 전용 viewer cell을 추가하고 관련 코드 노트를 갱신한다.
 - 기존 전체 코드를 한 번에 백필하려고 하는가: 사용자가 명시적으로 요청하지 않았다면 하지 않는다.
 
 ## 부트스트랩 시작점
 - 허브: [[sdd/sdd-index]]
-- 코드 허브: [[sdd/code/sdd-code-index]]
-- 예시 코드 노트:
-  - [[sdd/code/src/peetsfea/spec/loader.py]]
-  - [[sdd/code/entry/sample.py]]
-  - [[sdd/code/tests/spec_resolver/test_sampling_registry.py]]
-- 예시 비코드 문서:
-  - [[sdd/plans/0.2.22-sdd-adoption]]
-  - [[sdd/architecture/current-pipeline-sdd-view]]
-  - [[sdd/structure/sdd-vault-layout]]
-  - [[sdd/structure/commit-policy]]
-  - [[sdd/diagrams/sample-build-flow]]
+- 코드 노트 index: `sdd/code/sdd-code-index.md`
+- 계획 index: `sdd/plans/sdd-plans-index.md`
+- 아키텍처 index: `sdd/architecture/sdd-architecture-index.md`
+- 구조 index: `sdd/structure/sdd-structure-index.md`
+- 다이어그램 index: `sdd/diagrams/sdd-diagrams-index.md`
