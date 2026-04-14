@@ -9,7 +9,7 @@
 
 ## 역할
 - `import_tx_rect_void_step_to_hfss` modeled import smoke path를 AEDT launch 없이 fake sessions로 검증한다.
-- metadata single-entry contract, import diff fail-fast, adapter integration point를 pure-Python으로 방어한다.
+- `type2.toml` 기반 generated artifact auto-resolve, exporter 1회 호출, import diff fail-fast, adapter integration point를 pure-Python으로 방어한다.
 
 ## 입력 / 출력
 - pytest tests under `tests/backend_em`
@@ -22,9 +22,12 @@
 
 ## Invariants / fail-fast
 - metadata 파일이 없으면 HFSS launch 전에 raise해야 한다.
+- 기본 입력(auto)에서는 `type2.toml` 기반 generated artifact가 없을 때 exporter가 1회 호출되어야 한다.
+- exporter 이후에도 `type2.toml` 기반 `tx_single_coil` artifact가 없으면 raise해야 한다.
 - `import_3d_cad(False)`는 즉시 raise해야 한다.
 - import diff duplicate는 즉시 raise해야 한다.
 - happy path에서 adapter는 `modeled_objects[0]`와 diff object names를 입력으로 받아 imported ledger entry를 반환해야 한다.
+- adapter `imported_object_names`는 list/tuple 같은 문자열 시퀀스를 허용해야 한다.
 - desktop release는 실패 케이스에서도 호출되어야 한다.
 
 ## 직접 의존

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -14,10 +15,11 @@ from peetsfea.aedt import Hfss
 from peetsfea.aedt.failfast import raise_on_false, validate_aedt_name
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_STEP_PATH = REPO_ROOT / "run" / "step" / "tx_rect_void_coil.step"
-DEFAULT_METADATA_JSON_PATH = REPO_ROOT / "run" / "step" / "tx_rect_void_coil.metadata.json"
-DEFAULT_OUTPUT_AEDT_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_import_smoke" / "tx_rect_void_coil_import.aedt"
-DEFAULT_DESIGN_NAME = "type2_tx_rect_void_import_smoke"
+DEFAULT_TYPE2_TOML_PATH = REPO_ROOT / "examples" / "type2" / "type2.toml"
+DEFAULT_TYPE2_EXPORTER_PATH = REPO_ROOT / "examples" / "type2" / "generate_type2_step.py"
+DEFAULT_OUTPUT_AEDT_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_import_smoke" / "type2_tx_single_coil_import.aedt"
+DEFAULT_DESIGN_NAME = "type2_tx_single_coil_import_smoke"
+_SUPPORTED_MODELED_ROLE = "tx_single_coil"
 _ADAPTER_MODULE_PATH = "peetsfea.backend.pyaedt.type2_modeled_import_adapter"
 _ADAPTER_FUNCTION_NAME = "build_single_imported_modeled_object_entry"
 _REQUIRED_IMPORTED_LEDGER_FIELDS = (
@@ -73,6 +75,16 @@ class _ModeledImportEntryBuilder(Protocol):
     ) -> object: ...
 
 
+class _Type2ArtifactResolver(Protocol):
+    def __call__(
+        self,
+        *,
+        repo_root: Path,
+        type2_toml_path: Path,
+        type2_exporter_path: Path,
+    ) -> tuple[Path, Path]: ...
+
+
 def _create_headless_hfss(design_name: str) -> _HfssSession:
     return cast(
         _HfssSession,
@@ -92,20 +104,152 @@ def _require_table(value: object, *, context: str) -> dict[str, object]:
     return cast(dict[str, object], value)
 
 
-def _require_modeled_object_entry(metadata_payload: dict[str, object], *, step_path: Path) -> dict[str, object]:
+def _require_non_empty_string(value: object, *, context: str) -> str:
+    if not isinstance(value, str) or value == "":
+        raise TypeError(f"{context} must be a non-empty string")
+    return value
+
+
+def _resolve_existing_path(path_text: str, *, context: str) -> Path:
+    resolved = Path(path_text).resolve()
+    if not resolved.is_file():
+        raise FileNotFoundError(f"{context} not found: {resolved}")
+    return resolved
+
+
+def _metadata_candidate_paths(repo_root: Path) -> tuple[Path, ...]:
+    roots = (
+        repo_root / "run" / "step",
+        repo_root / "examples" / "type2" / "artifacts",
+    )
+    candidates: list[Path] = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for metadata_path in root.rglob("*.metadata.json"):
+            if metadata_path.is_file():
+                candidates.append(metadata_path.resolve())
+    return tuple(sorted(set(candidates), key=str))
+
+
+def _collect_type2_modeled_artifact_candidates(*, repo_root: Path, type2_toml_path: Path) -> tuple[tuple[Path, Path], ...]:
+    candidates: list[tuple[Path, Path]] = []
+    for metadata_path in _metadata_candidate_paths(repo_root):
+        raw_text = metadata_path.read_text(encoding="utf-8")
+        raw_payload = json.loads(raw_text)
+        if not isinstance(raw_payload, dict):
+            continue
+        payload = cast(dict[str, object], raw_payload)
+        raw_source_toml_path = payload.get("source_toml_path")
+        if not isinstance(raw_source_toml_path, str) or raw_source_toml_path == "":
+            continue
+        if Path(raw_source_toml_path).resolve() != type2_toml_path:
+            continue
+        if "modeled_objects" not in payload:
+            raise ValueError(f"metadata JSON is missing required key 'modeled_objects': {metadata_path}")
+        raw_modeled_objects = payload["modeled_objects"]
+        if not isinstance(raw_modeled_objects, list):
+            raise TypeError(f"metadata JSON key 'modeled_objects' must be a list: {metadata_path}")
+        if len(raw_modeled_objects) != 1:
+            raise ValueError(
+                "prototype metadata must contain exactly one modeled object "
+                f"(metadata={metadata_path}, count={len(raw_modeled_objects)})"
+            )
+        modeled_object_entry = _require_table(raw_modeled_objects[0], context=f"{metadata_path}.modeled_objects[0]")
+        raw_role = _require_non_empty_string(
+            modeled_object_entry.get("role"),
+            context=f"{metadata_path}.modeled_objects[0].role",
+        )
+        if raw_role != _SUPPORTED_MODELED_ROLE:
+            raise ValueError(
+                "prototype metadata modeled object role must be "
+                f"'{_SUPPORTED_MODELED_ROLE}' (metadata={metadata_path}, actual={raw_role})"
+            )
+        raw_step_path = _require_non_empty_string(
+            modeled_object_entry.get("step_path"),
+            context=f"{metadata_path}.modeled_objects[0].step_path",
+        )
+        step_path = _resolve_existing_path(raw_step_path, context=f"modeled step_path from {metadata_path}")
+        candidates.append((step_path, metadata_path))
+    return tuple(sorted(set(candidates), key=lambda pair: (str(pair[0]), str(pair[1]))))
+
+
+def resolve_type2_modeled_artifact_paths(
+    *,
+    repo_root: Path = REPO_ROOT,
+    type2_toml_path: Path = DEFAULT_TYPE2_TOML_PATH,
+    type2_exporter_path: Path = DEFAULT_TYPE2_EXPORTER_PATH,
+) -> tuple[Path, Path]:
+    checked_type2_toml_path = _require_existing_file(type2_toml_path, field_name="Type2 TOML file").resolve()
+    checked_type2_exporter_path = _require_existing_file(type2_exporter_path, field_name="Type2 exporter script").resolve()
+    candidates = _collect_type2_modeled_artifact_candidates(
+        repo_root=repo_root,
+        type2_toml_path=checked_type2_toml_path,
+    )
+    if not candidates:
+        subprocess.run(
+            [sys.executable, str(checked_type2_exporter_path)],
+            cwd=repo_root,
+            check=True,
+        )
+        candidates = _collect_type2_modeled_artifact_candidates(
+            repo_root=repo_root,
+            type2_toml_path=checked_type2_toml_path,
+        )
+    if not candidates:
+        raise RuntimeError(
+            "type2 exporter produced no usable tx_single_coil artifact "
+            f"(type2_toml_path={checked_type2_toml_path})"
+        )
+    if len(candidates) != 1:
+        raise RuntimeError(
+            "expected exactly one type2 tx_single_coil artifact candidate, "
+            f"but found {len(candidates)}: {candidates}"
+        )
+    return candidates[0]
+
+
+def _require_modeled_object_entry(
+    metadata_payload: dict[str, object],
+    *,
+    step_path: Path,
+    expected_source_toml_path: Path | None = None,
+) -> dict[str, object]:
     if "modeled_objects" not in metadata_payload:
         raise ValueError("metadata JSON is missing required key 'modeled_objects'")
     raw_modeled_objects = metadata_payload["modeled_objects"]
     if not isinstance(raw_modeled_objects, list):
         raise TypeError("metadata JSON key 'modeled_objects' must be a list")
     if len(raw_modeled_objects) != 1:
-        raise ValueError("metadata JSON must contain exactly one modeled object for tx_rect_void prototype")
+        raise ValueError("metadata JSON must contain exactly one modeled object for type2 tx_single_coil prototype")
     modeled_object_entry = _require_table(raw_modeled_objects[0], context="metadata.modeled_objects[0]")
+    if "role" not in modeled_object_entry:
+        raise ValueError("metadata.modeled_objects[0] is missing required key 'role'")
+    raw_role = _require_non_empty_string(modeled_object_entry["role"], context="metadata.modeled_objects[0].role")
+    if raw_role != _SUPPORTED_MODELED_ROLE:
+        raise ValueError(
+            f"metadata.modeled_objects[0].role must be '{_SUPPORTED_MODELED_ROLE}' "
+            f"for the prototype import path (actual={raw_role})"
+        )
     if "step_path" not in modeled_object_entry:
         raise ValueError("metadata.modeled_objects[0] is missing required key 'step_path'")
-    raw_step_path = modeled_object_entry["step_path"]
-    if not isinstance(raw_step_path, str) or raw_step_path == "":
-        raise TypeError("metadata.modeled_objects[0].step_path must be a non-empty string")
+    raw_step_path = _require_non_empty_string(
+        modeled_object_entry["step_path"],
+        context="metadata.modeled_objects[0].step_path",
+    )
+    if expected_source_toml_path is not None:
+        if "source_toml_path" not in metadata_payload:
+            raise ValueError("metadata JSON is missing required key 'source_toml_path'")
+        raw_source_toml_path = _require_non_empty_string(
+            metadata_payload["source_toml_path"],
+            context="metadata.source_toml_path",
+        )
+        resolved_source_toml_path = Path(raw_source_toml_path).resolve()
+        if resolved_source_toml_path != expected_source_toml_path.resolve():
+            raise RuntimeError(
+                "metadata.source_toml_path does not match expected type2 TOML "
+                f"(metadata={resolved_source_toml_path}, expected={expected_source_toml_path.resolve()})"
+            )
     expected_step_path = str(step_path)
     if raw_step_path != expected_step_path:
         raise RuntimeError(
@@ -115,11 +259,20 @@ def _require_modeled_object_entry(metadata_payload: dict[str, object], *, step_p
     return modeled_object_entry
 
 
-def _load_modeled_object_entry_from_metadata(*, metadata_json_path: Path, step_path: Path) -> dict[str, object]:
+def _load_modeled_object_entry_from_metadata(
+    *,
+    metadata_json_path: Path,
+    step_path: Path,
+    expected_source_toml_path: Path | None = None,
+) -> dict[str, object]:
     raw_text = metadata_json_path.read_text(encoding="utf-8")
     raw_payload = json.loads(raw_text)
     payload = _require_table(raw_payload, context="metadata")
-    return _require_modeled_object_entry(payload, step_path=step_path)
+    return _require_modeled_object_entry(
+        payload,
+        step_path=step_path,
+        expected_source_toml_path=expected_source_toml_path,
+    )
 
 
 def _validated_object_names(raw_names: Sequence[str], *, context: str) -> list[str]:
@@ -174,10 +327,12 @@ def _validated_imported_modeled_object_entry(
             f"(entry={raw_entry_step_path}, input={expected_step_path})"
         )
     raw_entry_imported_names = entry["imported_object_names"]
-    if not isinstance(raw_entry_imported_names, list):
-        raise TypeError("imported_modeled_object_entry.imported_object_names must be a list")
+    if isinstance(raw_entry_imported_names, (str, bytes)):
+        raise TypeError("imported_modeled_object_entry.imported_object_names must be a sequence of strings")
+    if not isinstance(raw_entry_imported_names, Sequence):
+        raise TypeError("imported_modeled_object_entry.imported_object_names must be a sequence of strings")
     entry_imported_names = _validated_object_names(
-        cast(list[str], raw_entry_imported_names),
+        cast(Sequence[str], raw_entry_imported_names),
         context="imported_modeled_object_entry",
     )
     if entry_imported_names != imported_object_names:
@@ -185,23 +340,44 @@ def _validated_imported_modeled_object_entry(
             "adapter returned imported_object_names that do not match STEP import diff "
             f"(adapter={entry_imported_names}, diff={imported_object_names})"
         )
+    entry["imported_object_names"] = entry_imported_names
     return entry
 
 
 def import_tx_rect_void_step_to_hfss(
     *,
-    step_path: Path = DEFAULT_STEP_PATH,
-    metadata_json_path: Path = DEFAULT_METADATA_JSON_PATH,
+    step_path: Path | None = None,
+    metadata_json_path: Path | None = None,
     output_aedt_path: Path = DEFAULT_OUTPUT_AEDT_PATH,
     design_name: str = DEFAULT_DESIGN_NAME,
     hfss_factory: Callable[[str], _HfssSession] = _create_headless_hfss,
     modeled_entry_builder_loader: Callable[[], _ModeledImportEntryBuilder] = _load_modeled_import_builder,
+    type2_toml_path: Path = DEFAULT_TYPE2_TOML_PATH,
+    type2_exporter_path: Path = DEFAULT_TYPE2_EXPORTER_PATH,
+    type2_artifact_resolver: _Type2ArtifactResolver = resolve_type2_modeled_artifact_paths,
 ) -> TxRectVoidModeledStepImportSmokeResult:
-    checked_step_path = _require_existing_file(step_path, field_name="STEP file")
-    checked_metadata_json_path = _require_existing_file(metadata_json_path, field_name="Metadata JSON file")
+    expected_source_toml_path: Path | None = None
+    if step_path is None and metadata_json_path is None:
+        resolved_step_path, resolved_metadata_json_path = type2_artifact_resolver(
+            repo_root=REPO_ROOT,
+            type2_toml_path=type2_toml_path,
+            type2_exporter_path=type2_exporter_path,
+        )
+        checked_step_path = _require_existing_file(resolved_step_path, field_name="STEP file")
+        checked_metadata_json_path = _require_existing_file(resolved_metadata_json_path, field_name="Metadata JSON file")
+        expected_source_toml_path = _require_existing_file(type2_toml_path, field_name="Type2 TOML file")
+    elif step_path is not None and metadata_json_path is not None:
+        checked_step_path = _require_existing_file(step_path, field_name="STEP file")
+        checked_metadata_json_path = _require_existing_file(metadata_json_path, field_name="Metadata JSON file")
+    else:
+        raise ValueError(
+            "step_path and metadata_json_path must be both provided or both omitted "
+            "for type2 artifact auto-resolution"
+        )
     modeled_object_entry = _load_modeled_object_entry_from_metadata(
         metadata_json_path=checked_metadata_json_path,
         step_path=checked_step_path,
+        expected_source_toml_path=expected_source_toml_path,
     )
     build_single_imported_modeled_object_entry = modeled_entry_builder_loader()
     output_aedt_path.parent.mkdir(parents=True, exist_ok=True)
