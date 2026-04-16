@@ -134,12 +134,31 @@ def test_export_type2_step_artifacts_writes_object_steps_and_ledger(tmp_path: Pa
 
     assert ledger_path.is_file()
     assert ledger_path.stat().st_size > 0
-    assert len(ledger["non_model_objects"]) == 7
+    assert len(ledger["non_model_objects"]) == 1
     assert len(ledger["modeled_objects"]) == 1
-    for entry in ledger["non_model_objects"]:
-        step_path = Path(entry["step_path"])
-        assert step_path.is_file()
-        assert step_path.stat().st_size > 0
+    non_model_entry = ledger["non_model_objects"][0]
+    non_model_step_path = Path(non_model_entry["step_path"])
+    assert non_model_step_path.is_file()
+    assert non_model_step_path.stat().st_size > 0
+    assert non_model_step_path.name == "type2_non_model_scene.step"
+    assert non_model_entry["object_id"] == "type2_non_model_scene"
+    assert non_model_entry["role"] == "non_model_scene"
+    assert non_model_entry["plane"] == "mixed"
+    assert non_model_entry["member_object_ids"] == (
+        "floor",
+        "shelf",
+        "wall",
+        "tv",
+        "tx_region",
+        "rx_region_max",
+        "rx_region_actual",
+    )
+    member_objects = non_model_entry["member_objects"]
+    assert len(member_objects) == 7
+    tx_region_member = next(member for member in member_objects if member["object_id"] == "tx_region")
+    assert tx_region_member["role"] == "tx_region"
+    assert tx_region_member["canonical_coordinates"]["outer_bounds_min_xyz"] == (0.0, -140.0, 461.0)
+    assert tx_region_member["canonical_coordinates"]["outer_bounds_size_xyz"] == (160.0, 280.0, 90.0)
     modeled_entry = ledger["modeled_objects"][0]
     modeled_step_path = Path(modeled_entry["step_path"])
     assert modeled_step_path.is_file()
@@ -185,7 +204,7 @@ def test_export_type2_step_artifacts_fails_when_non_model_export_returns_false(
 
     monkeypatch.setattr(module_under_test.bd, "export_step", _false_export_step)
 
-    with pytest.raises(RuntimeError, match=r"build123d export_step returned False for non-model object: floor"):
+    with pytest.raises(RuntimeError, match=r"build123d export_step returned False for non-model scene:"):
         export_type2_step_artifacts(
             toml_path=toml_path,
             output_dir=output_dir,

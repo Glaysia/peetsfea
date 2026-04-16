@@ -7,7 +7,7 @@
 - Related plan: [[sdd/plans/0.2.22-type2-toml-unification]]
 
 ## 역할
-- `generate_type2_step.py`의 type2.toml parser와 object-level STEP export 계약을 pure-Python pytest로 검증한다.
+- `generate_type2_step.py`의 type2.toml parser와 mixed export 계약을 pure-Python pytest로 검증한다.
 - type2 단일 SSOT(`examples/type2.toml`) 경로가 동작하는지와 fail-fast 위반 케이스를 확인한다.
 
 ## 입력 / 출력
@@ -30,7 +30,7 @@
 - modeled required field 누락(`terminal_path`)은 즉시 실패해야 한다.
 - invalid terminal path는 modeled export 단계에서 즉시 실패해야 한다.
 - non-model `build123d.export_step()`가 `False`면 즉시 실패해야 한다.
-- 성공 케이스에서는 object-level STEP files와 ledger JSON이 모두 생성되고 modeled ledger에 expected exported body names/count가 기록되어야 한다.
+- 성공 케이스에서는 combined non-model scene STEP 1개, modeled STEP 1개, ledger JSON이 생성되고 non-model ledger에 `member_objects`/`tx_region` coordinates, modeled ledger에 expected exported body names/count가 기록되어야 한다.
 
 ## 직접 의존
 - `pytest`

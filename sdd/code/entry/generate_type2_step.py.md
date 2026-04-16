@@ -10,15 +10,16 @@
 
 ## 역할
 - `examples/type2.toml`을 단일 type2 authoring input으로 읽는다.
-- `[[non_model_objects]]`와 `[[modeled_objects]]`를 object-level STEP artifact로 export한다.
-- object-level STEP 결과를 metadata ledger(`type2_step_ledger.json`)로 기록한다.
+- `[[non_model_objects]]`는 하나의 combined scene STEP으로 export하고, `[[modeled_objects]]`는 modeled object STEP으로 export한다.
+- generated STEP 결과를 metadata ledger(`type2_step_ledger.json`)로 기록한다.
 - direct single-coil CLI consumers can export the modeled `tx_single_coil` object from the same type2 TOML without using a standalone TOML input.
 
 ## 입력 / 출력
 - 입력: `examples/type2.toml`
 - 출력 디렉터리 기본값: `run/step/type2`
 - 출력 artifact:
-  - `run/step/type2/objects/<object_id>.step`
+  - `run/step/type2/type2_non_model_scene.step`
+  - `run/step/type2/objects/<object_id>.step` (modeled objects)
   - `run/step/type2/metadata/<object_id>.metadata.json` (modeled objects only)
   - `run/step/type2/type2_step_ledger.json`
 - CLI entry: `.venv/bin/python entry/generate_type2_step.py`
@@ -27,6 +28,8 @@
 - module-level mutable state는 없다.
 - canonical 입력은 `type2.toml`의 object registry다.
 - canonical export ledger는 `type2_step_ledger.json`이며 AEDT geometry reverse-calculation 없이 생성 시점 metadata를 유지한다.
+- non-model ledger section is a single combined-scene owner that records the member object ids.
+- combined non-model ledger entry also records `member_objects` with per-object canonical coordinates so the import stage can recover `tx_region` placement metadata without reopening TOML.
 - modeled object metadata keeps `source_toml_path` as the type2 TOML path even though the internal `tx_rect_void` parser is reused.
 
 ## Invariants / fail-fast
@@ -34,6 +37,8 @@
 - `non_model_objects`, `modeled_objects`는 각각 non-empty array of tables여야 한다.
 - object id는 non-model/modeled 합쳐 중복되면 안 된다.
 - non-model object는 `primitive=box`, `present=true`, `non_model=true`, valid plane, positive `size_xyz`를 만족해야 한다.
+- non-model export는 object별 STEP 대신 하나의 combined scene STEP만 만들어야 한다.
+- combined non-model scene ledger must preserve member-level canonical coordinates for downstream import placement/styling.
 - modeled object role은 현재 `tx_single_coil`만 허용한다.
 - prototype 단계에서 `modeled_objects`는 정확히 1개여야 한다.
 - prototype modeled object는 `object_id = tx_rect_void_coil`, `material = composite`를 강제한다.

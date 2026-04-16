@@ -32,6 +32,16 @@ class CanonicalCoordinates(TypedDict):
     outer_bounds_size_xyz: Point3
 
 
+class NonModelSceneMemberLedgerEntry(TypedDict):
+    object_id: str
+    role: str
+    material: str
+    model_state: Literal[False]
+    canonical_coordinates: CanonicalCoordinates
+    plane: Literal["XY", "YZ", "ZX"]
+    non_model: Literal[True]
+
+
 class NonModelObjectLedgerEntry(TypedDict):
     object_id: str
     role: str
@@ -39,8 +49,10 @@ class NonModelObjectLedgerEntry(TypedDict):
     model_state: Literal[False]
     step_path: str
     canonical_coordinates: CanonicalCoordinates
-    plane: Literal["XY", "YZ", "ZX"]
+    plane: Literal["XY", "YZ", "ZX", "mixed"]
     non_model: Literal[True]
+    member_object_ids: tuple[str, ...]
+    member_objects: tuple[NonModelSceneMemberLedgerEntry, ...]
 
 
 class ModeledObjectLedgerEntry(TypedDict):
@@ -373,6 +385,23 @@ def _canonical_from_box(spec: NonModelBoxSpec) -> CanonicalCoordinates:
     }
 
 
+def _canonical_from_non_model_scene(specs: tuple[NonModelBoxSpec, ...]) -> CanonicalCoordinates:
+    if not specs:
+        raise ValueError("non-model scene canonical coordinates require at least one spec")
+    min_x = min(spec.origin_xyz[0] for spec in specs)
+    min_y = min(spec.origin_xyz[1] for spec in specs)
+    min_z = min(spec.origin_xyz[2] for spec in specs)
+    max_x = max(spec.origin_xyz[0] + spec.size_xyz[0] for spec in specs)
+    max_y = max(spec.origin_xyz[1] + spec.size_xyz[1] for spec in specs)
+    max_z = max(spec.origin_xyz[2] + spec.size_xyz[2] for spec in specs)
+    return {
+        "frame_origin_xyz": (min_x, min_y, min_z),
+        "outer_bounds_min_xyz": (min_x, min_y, min_z),
+        "outer_bounds_max_xyz": (max_x, max_y, max_z),
+        "outer_bounds_size_xyz": (max_x - min_x, max_y - min_y, max_z - min_z),
+    }
+
+
 def _format_range(range_spec: RangeSpec) -> str:
     is_integer = "true" if range_spec.is_integer else "false"
     return f"[{is_integer}, {range_spec.start}, {range_spec.end}, {range_spec.count}]"
@@ -436,6 +465,60 @@ def _export_non_model_object(spec: NonModelBoxSpec, *, output_path: Path) -> Non
         "canonical_coordinates": _canonical_from_box(spec),
         "plane": spec.plane,
         "non_model": True,
+        "member_object_ids": (spec.object_id,),
+        "member_objects": (
+            {
+                "object_id": spec.object_id,
+                "role": spec.kind,
+                "material": spec.material,
+                "model_state": False,
+                "canonical_coordinates": _canonical_from_box(spec),
+                "plane": spec.plane,
+                "non_model": True,
+            },
+        ),
+    }
+
+
+def _export_non_model_scene_object(
+    specs: tuple[NonModelBoxSpec, ...],
+    *,
+    output_path: Path,
+) -> NonModelObjectLedgerEntry:
+    if not specs:
+        raise ValueError("non-model scene export requires at least one spec")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    shapes = [_build_non_model_shape(spec) for spec in specs]
+    scene = bd.Compound(children=shapes, label="type2_non_model_scene")
+    export_ok = bd.export_step(scene, output_path)
+    if export_ok is not True:
+        raise RuntimeError(f"build123d export_step returned False for non-model scene: {output_path}")
+    material_names = tuple(sorted({spec.material for spec in specs}))
+    material = material_names[0] if len(material_names) == 1 else "mixed"
+    member_objects: list[NonModelSceneMemberLedgerEntry] = []
+    for spec in specs:
+        member_objects.append(
+            {
+                "object_id": spec.object_id,
+                "role": spec.kind,
+                "material": spec.material,
+                "model_state": False,
+                "canonical_coordinates": _canonical_from_box(spec),
+                "plane": spec.plane,
+                "non_model": True,
+            }
+        )
+    return {
+        "object_id": "type2_non_model_scene",
+        "role": "non_model_scene",
+        "material": material,
+        "model_state": False,
+        "step_path": str(output_path),
+        "canonical_coordinates": _canonical_from_non_model_scene(specs),
+        "plane": "mixed",
+        "non_model": True,
+        "member_object_ids": tuple(spec.object_id for spec in specs),
+        "member_objects": tuple(member_objects),
     }
 
 
@@ -560,10 +643,8 @@ def export_type2_step_artifacts(
     object_steps_dir = output_dir / "objects"
     object_metadata_dir = output_dir / "metadata"
 
-    non_model_entries: list[NonModelObjectLedgerEntry] = []
-    for box_spec in spec.non_model_objects:
-        step_path = object_steps_dir / f"{box_spec.object_id}.step"
-        non_model_entries.append(_export_non_model_object(box_spec, output_path=step_path))
+    non_model_step_path = output_dir / "type2_non_model_scene.step"
+    non_model_entries = [_export_non_model_scene_object(spec.non_model_objects, output_path=non_model_step_path)]
 
     modeled_entries: list[ModeledObjectLedgerEntry] = []
     for modeled_spec in spec.modeled_objects:
@@ -592,7 +673,7 @@ def export_type2_step_artifacts(
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate object-level type2 STEP artifacts from examples/type2.toml.")
+    parser = argparse.ArgumentParser(description="Generate type2 STEP artifacts from examples/type2.toml.")
     parser.add_argument("--toml", type=Path, default=SOURCE_TOML_PATH)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER_PATH)

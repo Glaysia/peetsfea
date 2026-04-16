@@ -27,7 +27,7 @@ _Importer = Callable[..., Type2ImportedLedger]
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Import type2 object-level STEP artifacts into headless HFSS.")
+    parser = argparse.ArgumentParser(description="Import type2 STEP artifacts into headless HFSS.")
     parser.add_argument("--toml", type=Path, default=DEFAULT_TYPE2_TOML_PATH)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_STEP_OUTPUT_DIR)
     parser.add_argument("--step-ledger", type=Path, default=DEFAULT_SOURCE_STEP_LEDGER_PATH)

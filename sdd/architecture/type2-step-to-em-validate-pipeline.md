@@ -1,6 +1,6 @@
 # Type2 STEP to EM Validate Pipeline
 
-이 문서는 `examples/type2.toml`에서 object-level STEP artifact를 거쳐 EM validation까지 이어지는 ownership handoff를 설명한다. 상위 계획은 [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]], type2 TOML 단일화 계획은 [[sdd/plans/0.2.22-type2-toml-unification]]이다.
+이 문서는 `examples/type2.toml`에서 combined non-model scene STEP와 modeled STEP artifact를 거쳐 EM validation까지 이어지는 ownership handoff를 설명한다. 상위 계획은 [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]], type2 TOML 단일화 계획은 [[sdd/plans/0.2.22-type2-toml-unification]]이다.
 
 ## Implementation Status
 - Import+Ledger 단계는 [[sdd/plans/0.2.22-type2-import-ledger-pipeline]]에서 구현됐다.
@@ -11,7 +11,7 @@
 - 입력 SSOT는 `examples/type2.toml`이다.
 - `type2.toml`은 non-model guide objects와 modeled objects를 같은 object registry 안에서 표현한다.
 - geometry authoring은 build123d가 담당하고, Ansys/HFSS는 headless PyAEDT import 이후 EM setup과 validation을 담당한다.
-- object-level STEP artifact와 metadata ledger가 build123d와 PyAEDT 사이의 경계다.
+- combined non-model scene STEP, modeled STEP artifact, metadata ledger가 build123d와 PyAEDT 사이의 경계다.
 - `EmPipelineInput`이 imported AEDT object ledger와 기존 EM pipeline 사이의 경계다.
 - 출력은 imported AEDT object ledger, EM pipeline result, repo validation report, AEDT `ValidateDesign()` 결과다.
 

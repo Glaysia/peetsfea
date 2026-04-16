@@ -21,13 +21,16 @@
 
 ## Canonical state
 - Test-local fake modeler owns import call order, object name batches, and model-state call history.
+- Test-local fake object refs own color, transparency, and material mutation history.
 - The written imported ledger JSON must match runtime result.
 
 ## Invariants / fail-fast
 - Non-model imports happen before modeled imports.
 - Non-model objects are assigned `model=False`; modeled objects are assigned `model=True`.
+- Non-model imported objects are colored gray and made transparent after import.
+- Imported TX bodies are moved into `tx_region`, then PCB/copper material-color contracts are enforced.
 - Missing STEP path and malformed ledger fail before HFSS launch when possible.
-- Duplicate object id, empty import diff, duplicate imported names, import `False`, and save `False` all raise.
+- Duplicate object id, missing `tx_region`, empty import diff, duplicate imported names, import `False`, and save `False` all raise.
 - Desktop release is attempted when import fails after launch.
 
 ## 직접 의존
