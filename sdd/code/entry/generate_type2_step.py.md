@@ -1,27 +1,27 @@
 # generate_type2_step.py
 
 ## Source
-- Path: `examples/type2/generate_type2_step.py`
-- Code note path: `sdd/code/examples/type2/generate_type2_step.py.md`
+- Path: `entry/generate_type2_step.py`
+- Code note path: `sdd/code/entry/generate_type2_step.py.md`
 - Related plan: [[sdd/plans/0.2.22-type2-toml-unification]]
 - Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
 - Related architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 - Related test: [[sdd/code/tests/type2/test_generate_type2_step.py]]
 
 ## 역할
-- `examples/type2/type2.toml`을 단일 type2 authoring input으로 읽는다.
+- `examples/type2.toml`을 단일 type2 authoring input으로 읽는다.
 - `[[non_model_objects]]`와 `[[modeled_objects]]`를 object-level STEP artifact로 export한다.
 - object-level STEP 결과를 metadata ledger(`type2_step_ledger.json`)로 기록한다.
 - direct single-coil CLI consumers can export the modeled `tx_single_coil` object from the same type2 TOML without using a standalone TOML input.
 
 ## 입력 / 출력
-- 입력: `examples/type2/type2.toml`
+- 입력: `examples/type2.toml`
 - 출력 디렉터리 기본값: `run/step/type2`
 - 출력 artifact:
   - `run/step/type2/objects/<object_id>.step`
   - `run/step/type2/metadata/<object_id>.metadata.json` (modeled objects only)
   - `run/step/type2/type2_step_ledger.json`
-- CLI entry: `.venv/bin/python examples/type2/generate_type2_step.py`
+- CLI entry: `.venv/bin/python entry/generate_type2_step.py`
 
 ## Canonical state
 - module-level mutable state는 없다.

@@ -1,6 +1,6 @@
 # Type2 STEP to EM Validate Pipeline
 
-이 문서는 `examples/type2/type2.toml`에서 object-level STEP artifact를 거쳐 EM validation까지 이어지는 ownership handoff를 설명한다. 상위 계획은 [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]], type2 TOML 단일화 계획은 [[sdd/plans/0.2.22-type2-toml-unification]]이다.
+이 문서는 `examples/type2.toml`에서 object-level STEP artifact를 거쳐 EM validation까지 이어지는 ownership handoff를 설명한다. 상위 계획은 [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]], type2 TOML 단일화 계획은 [[sdd/plans/0.2.22-type2-toml-unification]]이다.
 
 ## Implementation Status
 - Import+Ledger 단계는 [[sdd/plans/0.2.22-type2-import-ledger-pipeline]]에서 구현됐다.
@@ -8,7 +8,7 @@
 - Imported ledger까지가 현재 구현 범위이며, `EmPipelineInput` 조립과 EM validate는 후속 단계다.
 
 ## Boundary
-- 입력 SSOT는 `examples/type2/type2.toml`이다.
+- 입력 SSOT는 `examples/type2.toml`이다.
 - `type2.toml`은 non-model guide objects와 modeled objects를 같은 object registry 안에서 표현한다.
 - geometry authoring은 build123d가 담당하고, Ansys/HFSS는 headless PyAEDT import 이후 EM setup과 validation을 담당한다.
 - object-level STEP artifact와 metadata ledger가 build123d와 PyAEDT 사이의 경계다.
@@ -16,7 +16,7 @@
 - 출력은 imported AEDT object ledger, EM pipeline result, repo validation report, AEDT `ValidateDesign()` 결과다.
 
 ## Flow
-1. `examples/type2/type2.toml`이 object id, role, material, model_state, canonical coordinates를 확정한다.
+1. `examples/type2.toml`이 object id, role, material, model_state, canonical coordinates를 확정한다.
 2. Type2 parser가 `[[non_model_objects]]`와 `[[modeled_objects]]`를 같은 registry model로 읽는다.
 3. Build123d export 단계가 object마다 STEP artifact를 만들고 metadata ledger에 `object_id`, `role`, `material`, `model_state`, `step_path`, canonical coordinates를 기록한다.
 4. Headless HFSS import 단계가 STEP artifact를 하나씩 import하고, import 전후 `modeler.object_names` diff를 검증해 `imported_object_names`를 ledger에 추가한다.
@@ -63,8 +63,8 @@
 - GUI-visible AEDT는 이 흐름의 검증 경로가 아니다.
 
 ## Related Code Notes
-- [[sdd/code/examples/type2/generate_non_model_step.py]]
-- [[sdd/code/examples/type2/import_non_model_step_to_hfss.py]]
+- [[sdd/code/entry/generate_non_model_step.py]]
+- [[sdd/code/entry/import_non_model_step_to_hfss.py]]
 - [[sdd/code/entry/import_type2_step.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py]]
 - [[sdd/code/tests/backend_em/test_type2_step_import_pipeline.py]]

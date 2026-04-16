@@ -29,13 +29,13 @@
 ## 직접 의존
 - `pytest`
 - `peetsfea.aedt.Modeler3D`
-- `examples.type2.import_non_model_step_to_hfss`
+- `entry.import_non_model_step_to_hfss`
 
 ## 이 파일을 쓰는 곳
 - default/test command path only.
 
 ## 관련 테스트
-- This file is the direct test note target for [[sdd/code/examples/type2/import_non_model_step_to_hfss.py]].
+- This file is the direct test note target for [[sdd/code/entry/import_non_model_step_to_hfss.py]].
 
 ## 변경 시 주의점
 - Adding real AEDT launch to this file would violate its pure-Python smoke-test role.

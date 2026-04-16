@@ -9,6 +9,7 @@
 - [[sdd/plans/0.2.22-type2-toml-unification]]
 - [[sdd/plans/0.2.22-type2-build123d-non-model-step]]
 - [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
+- [[sdd/plans/0.2.22-type2-import-ledger-pipeline]]
 - [[sdd/plans/0.2.22-type2-tx-coil-geometry-repair]]
 - [[sdd/plans/tx-rect-void-step-generator]]
 
@@ -17,6 +18,7 @@
 - 완료 baseline: [[sdd/plans/0.2.22-type2-build123d-non-model-step]]
 - 단일 SSOT 전환: [[sdd/plans/0.2.22-type2-toml-unification]]
 - historical import smoke: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
+- 구현된 import+ledger path: [[sdd/plans/0.2.22-type2-import-ledger-pipeline]]
 - TX coil geometry repair: [[sdd/plans/0.2.22-type2-tx-coil-geometry-repair]]
 - 첫 modeled object role: [[sdd/plans/tx-rect-void-step-generator]]
 

@@ -1,0 +1,329 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import cast
+
+import pytest
+
+from peetsfea.aedt.protocols import HfssSession
+from peetsfea.backend.pyaedt.type2_step_import_pipeline import import_type2_step_ledger
+
+
+def _write_step(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
+    return path
+
+
+def _non_model_entry(*, object_id: str, step_path: Path) -> dict[str, object]:
+    return {
+        "object_id": object_id,
+        "role": object_id,
+        "material": "vacuum",
+        "model_state": False,
+        "step_path": str(step_path),
+        "canonical_coordinates": {
+            "frame_origin_xyz": [0.0, 0.0, 0.0],
+            "outer_bounds_min_xyz": [0.0, 0.0, 0.0],
+            "outer_bounds_max_xyz": [1.0, 1.0, 1.0],
+            "outer_bounds_size_xyz": [1.0, 1.0, 1.0],
+        },
+        "plane": "XY",
+        "non_model": True,
+    }
+
+
+def _modeled_entry(*, step_path: Path) -> dict[str, object]:
+    return {
+        "object_id": "tx_rect_void_coil",
+        "role": "tx_single_coil",
+        "material": "composite",
+        "model_state": True,
+        "step_path": str(step_path),
+        "canonical_coordinates": {
+            "frame_origin_xyz": [0.0, 0.0, 0.0],
+            "outer_bounds_min_xyz": [-25.0, -15.0, 0.0],
+            "outer_bounds_max_xyz": [25.0, 15.0, 2.8],
+            "outer_bounds_size_xyz": [50.0, 30.0, 2.8],
+            "pcb_layer_z_positions_mm": [0.0],
+            "copper_layer_z_positions_mm": [1.6],
+        },
+        "terminal_metadata": {
+            "path": "A_cw_to_a",
+            "outer_corner": "A",
+            "inner_corner": "a",
+            "direction": "cw",
+            "start_point_xy_mm": [-25.0, 15.0],
+            "end_point_xy_mm": [-10.0, 5.0],
+        },
+        "source_metadata_path": str(step_path.with_suffix(".metadata.json")),
+    }
+
+
+def _write_ledger(
+    path: Path,
+    *,
+    non_model_objects: list[dict[str, object]],
+    modeled_objects: list[dict[str, object]],
+) -> Path:
+    payload = {
+        "source_toml_path": str(path.parent / "type2.toml"),
+        "output_dir": str(path.parent),
+        "seed": 7,
+        "non_model_objects": non_model_objects,
+        "modeled_objects": modeled_objects,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+class _FakeModeler:
+    def __init__(self, *, imported_name_batches: list[tuple[str, ...]], import_result: object = True) -> None:
+        self._object_names: tuple[str, ...] = ("existing",)
+        self._imported_name_batches = list(imported_name_batches)
+        self._import_result = import_result
+        self.import_calls: list[Path] = []
+        self.model_state_calls: list[tuple[str, bool]] = []
+
+    @property
+    def object_names(self) -> tuple[str, ...]:
+        return self._object_names
+
+    def import_3d_cad(self, input_file: str | Path, **_: object) -> object:
+        self.import_calls.append(Path(input_file))
+        if self._import_result is not True:
+            return self._import_result
+        if not self._imported_name_batches:
+            raise AssertionError("fake import batch queue exhausted")
+        next_names = self._imported_name_batches.pop(0)
+        self._object_names = self._object_names + next_names
+        return True
+
+    def set_object_model_state(self, name: str, model: bool) -> object:
+        self.model_state_calls.append((name, model))
+        return True
+
+
+class _FakeDesktop:
+    def __init__(self) -> None:
+        self.release_calls: list[tuple[bool, bool]] = []
+
+    def release_desktop(self, close_projects: bool, close_on_exit: bool) -> object:
+        self.release_calls.append((close_projects, close_on_exit))
+        return True
+
+
+class _FakeHfss:
+    def __init__(self, *, modeler: _FakeModeler, save_project_result: object = True) -> None:
+        self.modeler = modeler
+        self.desktop_class = _FakeDesktop()
+        self._save_project_result = save_project_result
+        self.save_project_calls: list[str] = []
+
+    def save_project(self, path: str) -> object:
+        self.save_project_calls.append(path)
+        return self._save_project_result
+
+
+def _source_paths(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    floor_step = _write_step(tmp_path / "objects" / "floor.step")
+    wall_step = _write_step(tmp_path / "objects" / "wall.step")
+    coil_step = _write_step(tmp_path / "objects" / "tx_rect_void_coil.step")
+    ledger_path = tmp_path / "type2_step_ledger.json"
+    return floor_step, wall_step, coil_step, ledger_path
+
+
+def test_import_type2_step_ledger_imports_non_model_then_modeled_and_writes_ledger(tmp_path: Path) -> None:
+    floor_step, wall_step, coil_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        non_model_objects=[
+            _non_model_entry(object_id="floor", step_path=floor_step),
+            _non_model_entry(object_id="wall", step_path=wall_step),
+        ],
+        modeled_objects=[_modeled_entry(step_path=coil_step)],
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _FakeHfss(
+        modeler=_FakeModeler(
+            imported_name_batches=[
+                ("floor_body",),
+                ("wall_body",),
+                ("coil_pcb", "coil_copper"),
+            ]
+        )
+    )
+
+    result = import_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        design_name="fake_type2_import",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    assert session.modeler.import_calls == [floor_step, wall_step, coil_step]
+    assert session.modeler.model_state_calls == [
+        ("floor_body", False),
+        ("wall_body", False),
+        ("coil_pcb", True),
+        ("coil_copper", True),
+    ]
+    assert session.save_project_calls == [str(output_aedt_path)]
+    assert session.desktop_class.release_calls == [(True, True)]
+    assert result["seed"] == 7
+    assert result["aedt_path"] == str(output_aedt_path)
+    assert result["non_model_objects"][0]["imported_object_names"] == ["floor_body"]
+    assert result["modeled_objects"][0]["object_id"] == "tx_rect_void_coil"
+    assert result["modeled_objects"][0]["source_metadata_path"] == str(coil_step.with_suffix(".metadata.json"))
+    assert result["modeled_objects"][0]["imported_object_names"] == ["coil_pcb", "coil_copper"]
+
+    written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
+    assert written == result
+
+
+def test_import_type2_step_ledger_fails_for_missing_step_before_hfss_launch(tmp_path: Path) -> None:
+    floor_step, _wall_step, coil_step, ledger_path = _source_paths(tmp_path)
+    missing_step = tmp_path / "objects" / "missing_wall.step"
+    _write_ledger(
+        ledger_path,
+        non_model_objects=[
+            _non_model_entry(object_id="floor", step_path=floor_step),
+            _non_model_entry(object_id="wall", step_path=missing_step),
+        ],
+        modeled_objects=[_modeled_entry(step_path=coil_step)],
+    )
+    launch_count = 0
+
+    def _factory(_: str) -> HfssSession:
+        nonlocal launch_count
+        launch_count += 1
+        return cast(HfssSession, _FakeHfss(modeler=_FakeModeler(imported_name_batches=[])))
+
+    with pytest.raises(FileNotFoundError, match=r"non_model_objects\[1\]\.step_path does not exist"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            hfss_factory=_factory,
+        )
+
+    assert launch_count == 0
+
+
+def test_import_type2_step_ledger_fails_for_missing_required_field(tmp_path: Path) -> None:
+    floor_step, _wall_step, coil_step, ledger_path = _source_paths(tmp_path)
+    floor_entry = _non_model_entry(object_id="floor", step_path=floor_step)
+    del floor_entry["step_path"]
+    _write_ledger(
+        ledger_path,
+        non_model_objects=[floor_entry],
+        modeled_objects=[_modeled_entry(step_path=coil_step)],
+    )
+
+    with pytest.raises(ValueError, match=r"non_model_objects\[0\] is missing required key 'step_path'"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            hfss_factory=lambda _: cast(HfssSession, _FakeHfss(modeler=_FakeModeler(imported_name_batches=[]))),
+        )
+
+
+def test_import_type2_step_ledger_fails_for_duplicate_object_id(tmp_path: Path) -> None:
+    floor_step, wall_step, coil_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        non_model_objects=[
+            _non_model_entry(object_id="floor", step_path=floor_step),
+            _non_model_entry(object_id="floor", step_path=wall_step),
+        ],
+        modeled_objects=[_modeled_entry(step_path=coil_step)],
+    )
+
+    with pytest.raises(ValueError, match=r"duplicate type2 object id in STEP ledger: floor"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            hfss_factory=lambda _: cast(HfssSession, _FakeHfss(modeler=_FakeModeler(imported_name_batches=[]))),
+        )
+
+
+def test_import_type2_step_ledger_releases_desktop_when_import_returns_false(tmp_path: Path) -> None:
+    floor_step, _wall_step, coil_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        non_model_objects=[_non_model_entry(object_id="floor", step_path=floor_step)],
+        modeled_objects=[_modeled_entry(step_path=coil_step)],
+    )
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[], import_result=False))
+
+    with pytest.raises(RuntimeError, match=r"PyAEDT operation returned False: import_3d_cad"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
+
+    assert session.desktop_class.release_calls == [(True, True)]
+
+
+def test_import_type2_step_ledger_raises_when_save_project_returns_false(tmp_path: Path) -> None:
+    floor_step, _wall_step, coil_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        non_model_objects=[_non_model_entry(object_id="floor", step_path=floor_step)],
+        modeled_objects=[_modeled_entry(step_path=coil_step)],
+    )
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _FakeHfss(
+        modeler=_FakeModeler(imported_name_batches=[("floor_body",), ("coil_body",)]),
+        save_project_result=False,
+    )
+
+    with pytest.raises(RuntimeError, match=r"PyAEDT operation returned False: save_project"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=imported_ledger_path,
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
+
+    assert session.desktop_class.release_calls == [(True, True)]
+    assert not imported_ledger_path.exists()
+
+
+@pytest.mark.parametrize(
+    ("batches", "match"),
+    [
+        ([()], r"STEP import created no new HFSS objects"),
+        ([("dup", "dup")], r"STEP import produced duplicate new HFSS object names"),
+    ],
+)
+def test_import_type2_step_ledger_rejects_bad_import_diff(
+    tmp_path: Path,
+    batches: list[tuple[str, ...]],
+    match: str,
+) -> None:
+    floor_step, _wall_step, coil_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        non_model_objects=[_non_model_entry(object_id="floor", step_path=floor_step)],
+        modeled_objects=[_modeled_entry(step_path=coil_step)],
+    )
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=batches))
+
+    with pytest.raises(RuntimeError, match=match):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
+
+    assert session.desktop_class.release_calls == [(True, True)]

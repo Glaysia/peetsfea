@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from examples.type2.generate_type2_step import export_type2_step_artifacts
-from examples.type2.generate_type2_step import load_type2_step_spec
+from entry.generate_type2_step import export_type2_step_artifacts
+from entry.generate_type2_step import load_type2_step_spec
 
 
 def _range(is_integer: bool, start: float, end: float, count: int) -> str:
@@ -82,7 +82,7 @@ def _write_spec(tmp_path: Path, text: str) -> Path:
 
 def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    source_toml = repo_root / "examples" / "type2" / "type2.toml"
+    source_toml = repo_root / "examples" / "type2.toml"
     spec = load_type2_step_spec(source_toml)
 
     assert len(spec.non_model_objects) == 7
@@ -121,7 +121,7 @@ def test_load_type2_step_spec_rejects_missing_required_modeled_field(tmp_path: P
 
 def test_export_type2_step_artifacts_writes_object_steps_and_ledger(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    source_toml = repo_root / "examples" / "type2" / "type2.toml"
+    source_toml = repo_root / "examples" / "type2.toml"
     output_dir = tmp_path / "out"
     ledger_path = tmp_path / "out" / "type2_ledger.json"
 
@@ -174,7 +174,7 @@ def test_export_type2_step_artifacts_fails_when_non_model_export_returns_false(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from examples.type2 import generate_type2_step as module_under_test
+    from entry import generate_type2_step as module_under_test
 
     toml_path = _write_spec(tmp_path, _type2_spec_text())
     output_dir = tmp_path / "out"

@@ -10,10 +10,10 @@ from typing import cast
 
 import pytest
 
-import examples.type2.import_tx_rect_void_step_to_hfss as import_smoke_module
-from examples.type2.import_tx_rect_void_step_to_hfss import _HfssSession
-from examples.type2.import_tx_rect_void_step_to_hfss import _ModeledImportEntryBuilder
-from examples.type2.import_tx_rect_void_step_to_hfss import import_tx_rect_void_step_to_hfss
+import entry.import_tx_rect_void_step_to_hfss as import_smoke_module
+from entry.import_tx_rect_void_step_to_hfss import _HfssSession
+from entry.import_tx_rect_void_step_to_hfss import _ModeledImportEntryBuilder
+from entry.import_tx_rect_void_step_to_hfss import import_tx_rect_void_step_to_hfss
 
 
 def _write_step_file(path: Path) -> None:
@@ -296,12 +296,13 @@ def test_tx_rect_void_modeled_step_import_smoke_auto_resolves_type2_generated_ar
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo_root = tmp_path / "repo"
-    type2_toml_path = repo_root / "examples" / "type2" / "type2.toml"
-    exporter_script_path = repo_root / "examples" / "type2" / "generate_type2_step.py"
+    type2_toml_path = repo_root / "examples" / "type2.toml"
+    exporter_script_path = repo_root / "entry" / "generate_type2_step.py"
     step_path = repo_root / "run" / "step" / "type2" / "objects" / "tx_rect_void_coil.step"
     metadata_path = repo_root / "run" / "step" / "type2" / "metadata" / "tx_rect_void_coil.metadata.json"
 
     type2_toml_path.parent.mkdir(parents=True, exist_ok=True)
+    exporter_script_path.parent.mkdir(parents=True, exist_ok=True)
     type2_toml_path.write_text("spec_version = \"0.2.22\"\n", encoding="utf-8")
     exporter_script_path.write_text("# placeholder exporter for tests\n", encoding="utf-8")
     _write_step_file(step_path)
@@ -338,12 +339,13 @@ def test_tx_rect_void_modeled_step_import_smoke_auto_resolve_invokes_type2_expor
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo_root = tmp_path / "repo"
-    type2_toml_path = repo_root / "examples" / "type2" / "type2.toml"
-    exporter_script_path = repo_root / "examples" / "type2" / "generate_type2_step.py"
+    type2_toml_path = repo_root / "examples" / "type2.toml"
+    exporter_script_path = repo_root / "entry" / "generate_type2_step.py"
     generated_step_path = repo_root / "run" / "step" / "type2" / "objects" / "tx_rect_void_coil.step"
     generated_metadata_path = repo_root / "run" / "step" / "type2" / "metadata" / "tx_rect_void_coil.metadata.json"
 
     type2_toml_path.parent.mkdir(parents=True, exist_ok=True)
+    exporter_script_path.parent.mkdir(parents=True, exist_ok=True)
     type2_toml_path.write_text("spec_version = \"0.2.22\"\n", encoding="utf-8")
     exporter_script_path.write_text("# placeholder exporter for tests\n", encoding="utf-8")
     monkeypatch.setattr(import_smoke_module, "REPO_ROOT", repo_root)

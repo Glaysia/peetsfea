@@ -6,12 +6,12 @@ from pathlib import Path
 from typing import Protocol, TypedDict, cast
 
 if __package__ in {None, ""}:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from peetsfea.aedt import Hfss
 from peetsfea.aedt.failfast import raise_on_false, validate_aedt_name
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_STEP_PATH = REPO_ROOT / "run" / "step" / "type2" / "type2_non_model_scene.step"
 DEFAULT_OUTPUT_AEDT_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_import_smoke" / "type2_non_model_scene_import.aedt"
 DEFAULT_DESIGN_NAME = "type2_step_import_smoke"

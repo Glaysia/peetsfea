@@ -1,13 +1,13 @@
 # Type2 TX Rect/Void Modeled Object
 
 ## Goal
-- `tx_rect_void`를 standalone TOML workflow가 아니라 `examples/type2/type2.toml`의 첫 modeled object role로 다룬다.
+- `tx_rect_void`를 standalone TOML workflow가 아니라 `examples/type2.toml`의 첫 modeled object role로 다룬다.
 - 기존 standalone geometry fields는 `type2.toml`의 `[[modeled_objects]]` entry로 흡수한다.
 - 기존 `tx_rect_void` geometry authoring code는 implementation detail로 재사용할 수 있지만, 앞으로 public SSOT는 `type2.toml`이다.
 
 ## Scope
 - 포함:
-  - `examples/type2/type2.toml`
+  - `examples/type2.toml`
   - `[[modeled_objects]] role = "tx_single_coil"`
   - tx rect/void geometry parameters
   - terminal metadata

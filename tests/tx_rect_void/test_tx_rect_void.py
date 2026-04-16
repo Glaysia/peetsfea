@@ -260,7 +260,7 @@ def test_export_writes_step_and_metadata(tmp_path: Path) -> None:
 
 def test_cli_smoke_uses_example_spec_and_writes_registry_aligned_metadata(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    example_toml = repo_root / "examples" / "type2" / "type2.toml"
+    example_toml = repo_root / "examples" / "type2.toml"
     output_step_path = tmp_path / "cli" / "tx_rect_void.step"
     metadata_path = tmp_path / "cli" / "tx_rect_void.metadata.json"
 

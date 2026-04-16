@@ -1,8 +1,8 @@
 # import_tx_rect_void_step_to_hfss.py
 
 ## Source
-- Path: `examples/type2/import_tx_rect_void_step_to_hfss.py`
-- Code note path: `sdd/code/examples/type2/import_tx_rect_void_step_to_hfss.py.md`
+- Path: `entry/import_tx_rect_void_step_to_hfss.py`
+- Code note path: `sdd/code/entry/import_tx_rect_void_step_to_hfss.py.md`
 - Related plan: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
 - Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
 - Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
@@ -14,14 +14,14 @@
 
 ## 입력 / 출력
 - 기본 입력:
-  - `examples/type2/type2.toml`
-  - `examples/type2/generate_type2_step.py` (artifact가 없을 때 1회 호출)
+  - `examples/type2.toml`
+  - `entry/generate_type2_step.py` (artifact가 없을 때 1회 호출)
 - 기본 artifact 해석 규칙:
-  - `source_toml_path == examples/type2/type2.toml`
+  - `source_toml_path == examples/type2.toml`
   - `modeled_objects` single-entry
   - `modeled_objects[0].role == tx_single_coil`
 - 출력 AEDT: `run/aedt/type2_step_import_smoke/type2_tx_single_coil_import.aedt`
-- CLI entry: `../.venv/bin/python ../examples/type2/import_tx_rect_void_step_to_hfss.py` from `run/`
+- CLI entry: `../.venv/bin/python ../entry/import_tx_rect_void_step_to_hfss.py` from `run/`
 - 반환:
   - `import_result` (`step_path`, `metadata_path`, `aedt_path`, `imported_object_names`)
   - `imported_modeled_object_entry` (adapter output ledger entry)

@@ -1,8 +1,8 @@
 # import_non_model_step_to_hfss.py
 
 ## Source
-- Path: `examples/type2/import_non_model_step_to_hfss.py`
-- Code note path: `sdd/code/examples/type2/import_non_model_step_to_hfss.py.md`
+- Path: `entry/import_non_model_step_to_hfss.py`
+- Code note path: `sdd/code/entry/import_non_model_step_to_hfss.py.md`
 - Related plan: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
 - Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
 - Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
@@ -14,7 +14,7 @@
 ## 입력 / 출력
 - 입력: `run/step/type2/type2_non_model_scene.step`
 - 출력: `run/aedt/type2_step_import_smoke/type2_non_model_scene_import.aedt`
-- CLI entry: `../.venv/bin/python ../examples/type2/import_non_model_step_to_hfss.py` from `run/`
+- CLI entry: `../.venv/bin/python ../entry/import_non_model_step_to_hfss.py` from `run/`
 - 반환: `Type2StepImportResult` with step path, AEDT path, imported object names
 
 ## Canonical state

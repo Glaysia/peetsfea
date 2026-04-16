@@ -1,6 +1,6 @@
 # TX Rect/Void Type2 STEP 스펙
 
-이 스펙은 `examples/type2/type2.toml`의 `[[modeled_objects]]`
+이 스펙은 `examples/type2.toml`의 `[[modeled_objects]]`
 `role = "tx_single_coil"` 항목으로 정의되는 build123d STEP authoring
 계약이다. 별도 standalone example TOML은 public input이 아니다.
 
@@ -53,7 +53,7 @@
   export 전에 즉시 실패한다.
 
 ## 출력
-- `examples/type2/generate_type2_step.py`는 기본적으로 `run/step/type2/`
+- `entry/generate_type2_step.py`는 기본적으로 `run/step/type2/`
   아래에 object-level STEP과 metadata ledger를 기록한다.
 - `entry/export_tx_rect_void_step.py`는 같은 type2 TOML에서 modeled
   `tx_single_coil`만 직접 export하는 얇은 CLI다.

@@ -82,7 +82,7 @@
 - Spec이 바뀌면 spec docs와 함께 관련 SDD 문서도 갱신해야 한다.
 
 ## STEP artifact registry
-- 추적되는 durable `.step` / `.stp` artifact를 생성하는 소스코드를 새로 만들거나 실질 수정하면 `examples/type2/view_step_files.ipynb`의 `STEP_ARTIFACTS` registry를 같은 변경 안에서 갱신해야 한다.
+- 추적되는 durable `.step` / `.stp` artifact를 생성하는 소스코드를 새로 만들거나 실질 수정하면 `notebooks/view_step_files.ipynb`의 `STEP_ARTIFACTS` registry를 같은 변경 안에서 갱신해야 한다.
 - 각 추적 STEP artifact는 notebook 안에 전용 viewer cell을 가져야 한다.
 - registry 항목은 artifact 경로, 생성 소스 경로, 사람이 읽을 label을 포함해야 한다.
 - `run/`, `tmp/` 등에서 생성되는 non-tracked STEP artifact라도 repo의 정식 entrypoint, example script, test-supported workflow가 생성한다면 notebook에 generated artifact viewer cell을 추가해야 한다.
@@ -95,8 +95,8 @@
 - 기존 파일을 실질 수정했는가: 대응 코드 노트를 갱신한다.
 - 신규 기능 또는 큰 리팩터링인가: `sdd/plans/` 아래 계획 문서를 만든다.
 - 경계/흐름/레이어가 바뀌는가: `sdd/architecture/`, `sdd/structure/`, `sdd/diagrams/` 중 필요한 문서를 만든다.
-- 추적되는 `.step` / `.stp` artifact를 생성하는가: `examples/type2/view_step_files.ipynb`에 registry 항목과 전용 viewer cell을 추가하고 관련 코드 노트를 갱신한다.
-- 정식 entrypoint/example workflow가 non-tracked `.step` / `.stp` artifact를 새로 생성하는가: `examples/type2/view_step_files.ipynb`에 generated artifact viewer cell을 추가하고 생성 명령을 기록한다.
+- 추적되는 `.step` / `.stp` artifact를 생성하는가: `notebooks/view_step_files.ipynb`에 registry 항목과 전용 viewer cell을 추가하고 관련 코드 노트를 갱신한다.
+- 정식 entrypoint/example workflow가 non-tracked `.step` / `.stp` artifact를 새로 생성하는가: `notebooks/view_step_files.ipynb`에 generated artifact viewer cell을 추가하고 생성 명령을 기록한다.
 - 기존 전체 코드를 한 번에 백필하려고 하는가: 사용자가 명시적으로 요청하지 않았다면 하지 않는다.
 
 ## 부트스트랩 시작점

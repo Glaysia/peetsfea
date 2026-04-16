@@ -12,13 +12,13 @@ from typing import Literal, TypedDict, cast
 import build123d as bd
 
 if __package__ in {None, ""}:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from peetsfea.tx_rect_void import export_tx_rect_void_step_from_spec
 from peetsfea.tx_rect_void import load_tx_rect_void_spec
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SOURCE_TOML_PATH = Path(__file__).with_name("type2.toml")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_TOML_PATH = REPO_ROOT / "examples" / "type2.toml"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "run" / "step" / "type2"
 DEFAULT_LEDGER_PATH = DEFAULT_OUTPUT_DIR / "type2_step_ledger.json"
 
@@ -592,7 +592,7 @@ def export_type2_step_artifacts(
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate object-level type2 STEP artifacts from examples/type2/type2.toml.")
+    parser = argparse.ArgumentParser(description="Generate object-level type2 STEP artifacts from examples/type2.toml.")
     parser.add_argument("--toml", type=Path, default=SOURCE_TOML_PATH)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER_PATH)

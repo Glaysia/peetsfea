@@ -7,8 +7,8 @@ import tomllib
 import build123d as bd
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SOURCE_TOML_PATH = Path(__file__).with_name("type2.toml")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_TOML_PATH = REPO_ROOT / "examples" / "type2.toml"
 OUTPUT_STEP_PATH = REPO_ROOT / "run" / "step" / "type2" / "type2_non_model_scene.step"
 
 Point3 = tuple[float, float, float]

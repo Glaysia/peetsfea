@@ -33,14 +33,14 @@
 
 ## 직접 의존
 - `pytest`
-- `examples.type2.import_tx_rect_void_step_to_hfss`
+- `entry.import_tx_rect_void_step_to_hfss`
 - `types.ModuleType` (default adapter module import 경로 fake 주입)
 
 ## 이 파일을 쓰는 곳
 - default/test command path only.
 
 ## 관련 테스트
-- This file is the direct test note target for [[sdd/code/examples/type2/import_tx_rect_void_step_to_hfss.py]].
+- This file is the direct test note target for [[sdd/code/entry/import_tx_rect_void_step_to_hfss.py]].
 
 ## 변경 시 주의점
 - real AEDT launch를 추가하면 pure-Python smoke 역할을 깨므로 금지한다.

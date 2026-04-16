@@ -7,10 +7,10 @@ from pathlib import Path
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from examples.type2.generate_type2_step import export_type2_tx_single_coil_artifact
+from entry.generate_type2_step import export_type2_tx_single_coil_artifact
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_TOML_PATH = REPO_ROOT / "examples" / "type2" / "type2.toml"
+DEFAULT_TOML_PATH = REPO_ROOT / "examples" / "type2.toml"
 DEFAULT_OUTPUT_STEP_PATH = REPO_ROOT / "run" / "step" / "tx_rect_void_coil.step"
 DEFAULT_METADATA_PATH = REPO_ROOT / "run" / "step" / "tx_rect_void_coil.metadata.json"
 

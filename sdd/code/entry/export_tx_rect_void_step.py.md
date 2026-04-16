@@ -8,15 +8,15 @@
 - Related STEP viewer registry: [[sdd/plans/0.2.22-step-viewer-notebook-registry]]
 
 ## 역할
-- `examples/type2/type2.toml`의 modeled `tx_single_coil` object를 STEP으로 export하는 얇은 CLI entrypoint다.
-- CLI argument parsing과 default path wiring만 담당하고, type2 parsing/export orchestration은 [[sdd/code/examples/type2/generate_type2_step.py]]에 위임한다.
+- `examples/type2.toml`의 modeled `tx_single_coil` object를 STEP으로 export하는 얇은 CLI entrypoint다.
+- CLI argument parsing과 default path wiring만 담당하고, type2 parsing/export orchestration은 [[sdd/code/entry/generate_type2_step.py]]에 위임한다.
 - 출력 metadata JSON은 기존 export payload에 더해 registry-aligned `modeled_objects` proto-contract를 함께 기록한다.
 
 ## 입력 / 출력
 - 입력: `--toml`, `--output-step`, `--metadata`, `--seed`.
-- 기본 입력: `examples/type2/type2.toml`.
+- 기본 입력: `examples/type2.toml`.
 - 기본 출력: `run/step/tx_rect_void_coil.step`, `run/step/tx_rect_void_coil.metadata.json`.
-- viewer notebook: `examples/type2/view_step_files.ipynb`의 generated STEP viewer cell.
+- viewer notebook: `notebooks/view_step_files.ipynb`의 generated STEP viewer cell.
 
 ## Canonical state
 - module-level mutable state는 없다.
@@ -29,7 +29,7 @@
 ## 직접 의존
 - `argparse`
 - `pathlib.Path`
-- [[sdd/code/examples/type2/generate_type2_step.py]]
+- [[sdd/code/entry/generate_type2_step.py]]
 
 ## 이 파일을 쓰는 곳
 - 사람이 직접 실행하는 type2 single-coil direct STEP export CLI.
@@ -41,6 +41,6 @@
 
 ## 변경 시 주의점
 - 기본 output path를 바꾸면 [[docs/tx-rect-void-step]]와 [[sdd/plans/tx-rect-void-step-generator]]도 갱신한다.
-- 기본 STEP output path나 metadata path를 바꾸면 `examples/type2/view_step_files.ipynb`의 generated viewer cell도 같이 갱신한다.
+- 기본 STEP output path나 metadata path를 바꾸면 `notebooks/view_step_files.ipynb`의 generated viewer cell도 같이 갱신한다.
 - metadata JSON shape를 바꾸면 CLI smoke expectation과 [[sdd/code/tests/tx_rect_void/test_tx_rect_void.py]]를 같이 갱신한다.
 - 이 entrypoint에 AEDT import를 섞지 않는다. import는 별도 계획이 필요하다.

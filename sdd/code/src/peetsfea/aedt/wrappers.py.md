@@ -35,7 +35,7 @@
 ## 이 파일을 쓰는 곳
 - `peetsfea.aedt` top-level exports
 - backend geometry and EM pipeline code that imports `Hfss`, `Modeler3D`, `Object3d`
-- [[sdd/code/examples/type2/import_non_model_step_to_hfss.py]]
+- [[sdd/code/entry/import_non_model_step_to_hfss.py]]
 
 ## 관련 테스트
 - [[sdd/code/tests/backend_em/test_type2_step_import_smoke.py]]

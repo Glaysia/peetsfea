@@ -1,8 +1,8 @@
 # generate_non_model_step.py
 
 ## Source
-- Path: `examples/type2/generate_non_model_step.py`
-- Code note path: `sdd/code/examples/type2/generate_non_model_step.py.md`
+- Path: `entry/generate_non_model_step.py`
+- Code note path: `sdd/code/entry/generate_non_model_step.py.md`
 - Related plan: [[sdd/plans/0.2.22-type2-build123d-non-model-step]]
 - Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
 - Related STEP viewer registry: [[sdd/plans/0.2.22-step-viewer-notebook-registry]]
@@ -14,10 +14,10 @@
 - 특정 object id에 분기하지 않고 TOML의 `non_model_objects` 배열을 그대로 검증/export한다.
 
 ## 입력 / 출력
-- 입력: `examples/type2/type2.toml`
+- 입력: `examples/type2.toml`
 - 출력: `run/step/type2/type2_non_model_scene.step`
 - viewer registry: unified generated modeled artifact is registered; this non-model compound smoke output is no longer a tracked viewer artifact.
-- CLI entry: `.venv/bin/python examples/type2/generate_non_model_step.py`
+- CLI entry: `.venv/bin/python entry/generate_non_model_step.py`
 - stdout: source TOML, output STEP, non-model object count, compound bounding box
 
 ## Canonical state
@@ -44,12 +44,12 @@
 ## 관련 테스트
 - 직접 자동 테스트는 아직 없다.
 - 검증 명령:
-  - `.venv/bin/python examples/type2/generate_non_model_step.py`
+  - `.venv/bin/python entry/generate_non_model_step.py`
   - `test -s run/step/type2/type2_non_model_scene.step`
 
 ## 변경 시 주의점
 - TOML schema를 바꾸면 [[sdd/plans/0.2.22-type2-build123d-non-model-step]]도 같이 갱신한다.
 - `origin_xyz` 해석을 바꾸면 기존 STEP artifact의 좌표계가 바뀐다.
 - type2 TX 영역은 현재 단일 `tx_region` box로 기록하며, sub-zone을 되살리려면 TOML과 계획 노트를 먼저 갱신한다.
-- tracked STEP artifact를 추가하면 `examples/type2/view_step_files.ipynb`의 `STEP_ARTIFACTS` registry와 viewer cell을 같이 갱신한다.
+- tracked STEP artifact를 추가하면 `notebooks/view_step_files.ipynb`의 `STEP_ARTIFACTS` registry와 viewer cell을 같이 갱신한다.
 - runtime parser에 연결하기 전까지 이 파일은 type2 실험용 smoke path로 유지한다.

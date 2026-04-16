@@ -9,14 +9,14 @@ from pathlib import Path
 from typing import Protocol, TypedDict, cast
 
 if __package__ in {None, ""}:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from peetsfea.aedt import Hfss
 from peetsfea.aedt.failfast import raise_on_false, validate_aedt_name
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_TYPE2_TOML_PATH = REPO_ROOT / "examples" / "type2" / "type2.toml"
-DEFAULT_TYPE2_EXPORTER_PATH = REPO_ROOT / "examples" / "type2" / "generate_type2_step.py"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_TYPE2_TOML_PATH = REPO_ROOT / "examples" / "type2.toml"
+DEFAULT_TYPE2_EXPORTER_PATH = REPO_ROOT / "entry" / "generate_type2_step.py"
 DEFAULT_OUTPUT_AEDT_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_import_smoke" / "type2_tx_single_coil_import.aedt"
 DEFAULT_DESIGN_NAME = "type2_tx_single_coil_import_smoke"
 _SUPPORTED_MODELED_ROLE = "tx_single_coil"
@@ -120,7 +120,6 @@ def _resolve_existing_path(path_text: str, *, context: str) -> Path:
 def _metadata_candidate_paths(repo_root: Path) -> tuple[Path, ...]:
     roots = (
         repo_root / "run" / "step",
-        repo_root / "examples" / "type2" / "artifacts",
     )
     candidates: list[Path] = []
     for root in roots:

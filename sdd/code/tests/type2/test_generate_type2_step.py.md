@@ -3,16 +3,16 @@
 ## Source
 - Path: `tests/type2/test_generate_type2_step.py`
 - Code note path: `sdd/code/tests/type2/test_generate_type2_step.py.md`
-- Related code: [[sdd/code/examples/type2/generate_type2_step.py]]
+- Related code: [[sdd/code/entry/generate_type2_step.py]]
 - Related plan: [[sdd/plans/0.2.22-type2-toml-unification]]
 
 ## 역할
 - `generate_type2_step.py`의 type2.toml parser와 object-level STEP export 계약을 pure-Python pytest로 검증한다.
-- type2 단일 SSOT(`examples/type2/type2.toml`) 경로가 동작하는지와 fail-fast 위반 케이스를 확인한다.
+- type2 단일 SSOT(`examples/type2.toml`) 경로가 동작하는지와 fail-fast 위반 케이스를 확인한다.
 
 ## 입력 / 출력
 - 입력:
-  - repository example `examples/type2/type2.toml`
+  - repository example `examples/type2.toml`
   - test-local minimal type2 TOML fixtures
 - 출력:
   - `tmp_path` 아래 generated STEP files and ledger JSON
@@ -34,7 +34,7 @@
 
 ## 직접 의존
 - `pytest`
-- [[sdd/code/examples/type2/generate_type2_step.py]]
+- [[sdd/code/entry/generate_type2_step.py]]
 
 ## 이 파일을 쓰는 곳
 - default pytest collection.

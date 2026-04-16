@@ -5,8 +5,8 @@ from typing import cast
 
 import pytest
 
-from examples.type2.import_non_model_step_to_hfss import _HfssSession
-from examples.type2.import_non_model_step_to_hfss import import_step_to_hfss
+from entry.import_non_model_step_to_hfss import _HfssSession
+from entry.import_non_model_step_to_hfss import import_step_to_hfss
 from peetsfea.aedt import Modeler3D
 
 
