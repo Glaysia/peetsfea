@@ -24,12 +24,13 @@
 
 ## Invariants / fail-fast
 - example `type2.toml`은 7 non-model + 1 modeled object로 파싱되어야 한다.
+- example `type2.toml`의 modeled object는 `outer_y_mm`, `turn_count=1..4`, `layer_count=1` 계약을 가져야 한다.
 - duplicate object id는 즉시 실패해야 한다.
 - unsupported modeled role은 즉시 실패해야 한다.
 - modeled required field 누락(`terminal_path`)은 즉시 실패해야 한다.
 - invalid terminal path는 modeled export 단계에서 즉시 실패해야 한다.
 - non-model `build123d.export_step()`가 `False`면 즉시 실패해야 한다.
-- 성공 케이스에서는 object-level STEP files와 ledger JSON이 모두 생성되어야 한다.
+- 성공 케이스에서는 object-level STEP files와 ledger JSON이 모두 생성되고 modeled ledger에 expected exported body names/count가 기록되어야 한다.
 
 ## 직접 의존
 - `pytest`

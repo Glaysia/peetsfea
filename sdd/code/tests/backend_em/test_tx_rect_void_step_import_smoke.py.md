@@ -26,6 +26,7 @@
 - exporter 이후에도 `type2.toml` 기반 `tx_single_coil` artifact가 없으면 raise해야 한다.
 - `import_3d_cad(False)`는 즉시 raise해야 한다.
 - import diff duplicate는 즉시 raise해야 한다.
+- imported object count는 metadata의 `expected_exported_body_count`와 같아야 한다.
 - happy path에서 adapter는 `modeled_objects[0]`와 diff object names를 입력으로 받아 imported ledger entry를 반환해야 한다.
 - adapter `imported_object_names`는 list/tuple 같은 문자열 시퀀스를 허용해야 한다.
 - desktop release는 실패 케이스에서도 호출되어야 한다.

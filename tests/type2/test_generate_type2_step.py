@@ -49,8 +49,8 @@ copper_thickness_mm = 0.1
 
 [modeled_objects.outer_x_mm]
 range = {_range(False, 50.0, 50.0, 1)}
-[modeled_objects.outer_y_over_outer_x]
-range = {_range(False, 1.0, 1.0, 1)}
+[modeled_objects.outer_y_mm]
+range = {_range(False, 60.0, 60.0, 1)}
 [modeled_objects.turn_count]
 range = {_range(True, 2.0, 2.0, 1)}
 [modeled_objects.layer_count]
@@ -89,6 +89,11 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert len(spec.modeled_objects) == 1
     assert spec.modeled_objects[0].object_id == "tx_rect_void_coil"
     assert spec.modeled_objects[0].role == "tx_single_coil"
+    assert spec.modeled_objects[0].outer_y_mm.start == pytest.approx(60.0)
+    assert spec.modeled_objects[0].outer_y_mm.end == pytest.approx(130.0)
+    assert spec.modeled_objects[0].turn_count.end == pytest.approx(4.0)
+    assert spec.modeled_objects[0].layer_count.start == pytest.approx(1.0)
+    assert spec.modeled_objects[0].layer_count.end == pytest.approx(1.0)
 
 
 def test_load_type2_step_spec_rejects_duplicate_object_id(tmp_path: Path) -> None:
@@ -141,10 +146,14 @@ def test_export_type2_step_artifacts_writes_object_steps_and_ledger(tmp_path: Pa
     assert modeled_step_path.stat().st_size > 0
     source_metadata_path = Path(modeled_entry["source_metadata_path"])
     assert source_metadata_path.is_file()
+    source_metadata_payload = json.loads(source_metadata_path.read_text(encoding="utf-8"))
+    assert source_metadata_payload["source_toml_path"] == str(source_toml)
     payload = json.loads(ledger_path.read_text(encoding="utf-8"))
     assert payload["modeled_objects"][0]["object_id"] == "tx_rect_void_coil"
     assert payload["modeled_objects"][0]["role"] == "tx_single_coil"
-    assert payload["modeled_objects"][0]["terminal_metadata"]["path"] == "A_cw_to_a"
+    assert payload["modeled_objects"][0]["terminal_metadata"]["path"] == "D_ccw_to_d"
+    assert payload["modeled_objects"][0]["expected_exported_body_names"] == ["tx_pcb_l0", "tx_copper_l0"]
+    assert payload["modeled_objects"][0]["expected_exported_body_count"] == 2
 
 
 def test_export_type2_step_artifacts_fails_for_invalid_terminal_path(tmp_path: Path) -> None:

@@ -36,6 +36,7 @@
 - 재해석 뒤에도 `type2.toml` 기반 `tx_single_coil` artifact를 찾지 못하면 즉시 raise한다.
 - explicit STEP/metadata 입력이 오면 두 값을 모두 요구한다(한쪽만 전달 금지).
 - metadata는 `modeled_objects` single-entry를 강제하고 `role == tx_single_coil`, `step_path` 문자열 일치를 강제한다.
+- metadata의 expected exported body names/count를 검증하고 import diff 수가 expected count와 다르면 즉시 실패한다.
 - PyAEDT `import_3d_cad`, `save_project`, `release_desktop` false return은 즉시 raise한다.
 - import diff가 비거나 duplicate면 즉시 raise한다.
 - adapter output은 required fields와 `imported_object_names`/`step_path` 일치를 검증한다. `imported_object_names`는 list/tuple 같은 문자열 시퀀스를 허용한다.

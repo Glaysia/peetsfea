@@ -117,17 +117,17 @@ copper_thickness_mm = 0.1
 [modeled_objects.outer_x_mm]
 range = [false, 30.0, 158.0, 129]
 
-[modeled_objects.outer_y_over_outer_x]
-range = [false, 0.50, 1.60, 111]
+[modeled_objects.outer_y_mm]
+range = [false, 60.0, 130.0, 120]
 
 [modeled_objects.turn_count]
-range = [true, 1, 9, 9]
+range = [true, 1, 4, 4]
 
 [modeled_objects.layer_count]
-range = [true, 1, 3, 3]
+range = [true, 1, 1, 1]
 
 [modeled_objects.layer_gap_mm]
-range = [false, 2.0, 8.0, 7]
+range = [false, 2.0, 2.0, 1]
 
 [modeled_objects.void_x_over_outer_x]
 range = [false, 0.20, 0.50, 31]
@@ -136,16 +136,16 @@ range = [false, 0.20, 0.50, 31]
 range = [false, 0.20, 0.50, 31]
 
 [modeled_objects.void_center_x_over_outer_x]
-range = [false, -0.10, 0.10, 41]
+range = [false, 0.0, 0.0, 1]
 
 [modeled_objects.void_center_y_over_outer_y]
-range = [false, -0.10, 0.10, 41]
+range = [false, 0.0, 0.0, 1]
 
 [modeled_objects.margin_ratio]
 range = [false, 0.03, 0.10, 15]
 
 [modeled_objects.metal_fill_factor]
-range = [false, 0.35, 0.75, 41]
+range = [false, 0.35, 0.60, 26]
 
 [modeled_objects.terminal_path]
-value = "A_cw_to_a"
+value = "D_ccw_to_d"

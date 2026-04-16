@@ -8,13 +8,13 @@
 - Related STEP viewer registry: [[sdd/plans/0.2.22-step-viewer-notebook-registry]]
 
 ## 역할
-- Standalone TX rect/void coil TOML을 STEP으로 export하는 얇은 CLI entrypoint다.
-- CLI argument parsing과 default path wiring만 담당하고, parsing/geometry/export logic은 [[sdd/code/src/peetsfea/tx_rect_void.py]]에 위임한다.
+- `examples/type2/type2.toml`의 modeled `tx_single_coil` object를 STEP으로 export하는 얇은 CLI entrypoint다.
+- CLI argument parsing과 default path wiring만 담당하고, type2 parsing/export orchestration은 [[sdd/code/examples/type2/generate_type2_step.py]]에 위임한다.
 - 출력 metadata JSON은 기존 export payload에 더해 registry-aligned `modeled_objects` proto-contract를 함께 기록한다.
 
 ## 입력 / 출력
 - 입력: `--toml`, `--output-step`, `--metadata`, `--seed`.
-- 기본 입력: `examples/tx_rect_void/tx_rect_void_coil.toml`.
+- 기본 입력: `examples/type2/type2.toml`.
 - 기본 출력: `run/step/tx_rect_void_coil.step`, `run/step/tx_rect_void_coil.metadata.json`.
 - viewer notebook: `examples/type2/view_step_files.ipynb`의 generated STEP viewer cell.
 
@@ -23,17 +23,17 @@
 - 기본 path constants는 CLI default contract다.
 
 ## Invariants / fail-fast
-- `export_tx_rect_void_step()`에서 TOML/geometry/export failure를 즉시 예외로 전달한다.
+- type2 parser와 `tx_rect_void` geometry/export failure를 즉시 예외로 전달한다.
 - 이 entrypoint는 AEDT/HFSS를 launch하지 않는다.
 
 ## 직접 의존
 - `argparse`
 - `pathlib.Path`
-- [[sdd/code/src/peetsfea/tx_rect_void.py]]
+- [[sdd/code/examples/type2/generate_type2_step.py]]
 
 ## 이 파일을 쓰는 곳
-- 사람이 직접 실행하는 standalone STEP export CLI.
-- [[sdd/code/tests/tx_rect_void/test_tx_rect_void.py]]는 core module을 직접 테스트한다.
+- 사람이 직접 실행하는 type2 single-coil direct STEP export CLI.
+- [[sdd/code/tests/tx_rect_void/test_tx_rect_void.py]]는 CLI smoke로 이 entrypoint를 검증한다.
 
 ## 관련 테스트
 - [[sdd/code/tests/tx_rect_void/test_tx_rect_void.py]]

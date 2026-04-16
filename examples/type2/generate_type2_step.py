@@ -14,7 +14,8 @@ import build123d as bd
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from peetsfea.tx_rect_void import export_tx_rect_void_step
+from peetsfea.tx_rect_void import export_tx_rect_void_step_from_spec
+from peetsfea.tx_rect_void import load_tx_rect_void_spec
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_TOML_PATH = Path(__file__).with_name("type2.toml")
@@ -48,6 +49,8 @@ class ModeledObjectLedgerEntry(TypedDict):
     material: str
     model_state: Literal[True]
     step_path: str
+    expected_exported_body_names: tuple[str, ...]
+    expected_exported_body_count: int
     canonical_coordinates: dict[str, object]
     terminal_metadata: dict[str, object]
     source_metadata_path: str
@@ -91,7 +94,7 @@ class ModeledTxSingleCoilSpec:
     pcb_thickness_mm: float
     copper_thickness_mm: float
     outer_x_mm: RangeSpec
-    outer_y_over_outer_x: RangeSpec
+    outer_y_mm: RangeSpec
     turn_count: RangeSpec
     layer_count: RangeSpec
     layer_gap_mm: RangeSpec
@@ -292,7 +295,7 @@ def _parse_modeled_tx_single_coil(
         pcb_thickness_mm=pcb_thickness_mm,
         copper_thickness_mm=copper_thickness_mm,
         outer_x_mm=_require_range(table, "outer_x_mm", context, expect_integer=False),
-        outer_y_over_outer_x=_require_range(table, "outer_y_over_outer_x", context, expect_integer=False),
+        outer_y_mm=_require_range(table, "outer_y_mm", context, expect_integer=False),
         turn_count=_require_range(table, "turn_count", context, expect_integer=True),
         layer_count=_require_range(table, "layer_count", context, expect_integer=True),
         layer_gap_mm=_require_range(table, "layer_gap_mm", context, expect_integer=False),
@@ -391,8 +394,8 @@ def _render_tx_rect_void_toml(spec: ModeledTxSingleCoilSpec) -> str:
             "",
             "[tx_coil.outer_x_mm]",
             f"range = {_format_range(spec.outer_x_mm)}",
-            "[tx_coil.outer_y_over_outer_x]",
-            f"range = {_format_range(spec.outer_y_over_outer_x)}",
+            "[tx_coil.outer_y_mm]",
+            f"range = {_format_range(spec.outer_y_mm)}",
             "[tx_coil.turn_count]",
             f"range = {_format_range(spec.turn_count)}",
             "[tx_coil.layer_count]",
@@ -439,6 +442,7 @@ def _export_non_model_object(spec: NonModelBoxSpec, *, output_path: Path) -> Non
 def _export_modeled_tx_single_coil(
     spec: ModeledTxSingleCoilSpec,
     *,
+    source_toml_path: Path,
     output_path: Path,
     metadata_path: Path,
     seed: int,
@@ -448,8 +452,10 @@ def _export_modeled_tx_single_coil(
     with tempfile.TemporaryDirectory(prefix="type2_tx_rect_void_") as temp_dir:
         temp_toml_path = Path(temp_dir) / f"{spec.object_id}.toml"
         temp_toml_path.write_text(_render_tx_rect_void_toml(spec), encoding="utf-8")
-        export_result = export_tx_rect_void_step(
-            toml_path=temp_toml_path,
+        tx_rect_void_spec = load_tx_rect_void_spec(temp_toml_path)
+        export_result = export_tx_rect_void_step_from_spec(
+            spec=tx_rect_void_spec,
+            source_toml_path=source_toml_path,
             output_step_path=output_path,
             metadata_path=metadata_path,
             seed=seed,
@@ -490,16 +496,56 @@ def _export_modeled_tx_single_coil(
     canonical_coordinates = _require_table(raw_canonical, "modeled export canonical_coordinates")
     raw_terminal = _require_key(modeled_object, "terminal_metadata", "modeled export object")
     terminal_metadata = _require_table(raw_terminal, "modeled export terminal_metadata")
+    raw_expected_names = _require_key(modeled_object, "expected_exported_body_names", "modeled export object")
+    if isinstance(raw_expected_names, (str, bytes)) or not isinstance(raw_expected_names, (list, tuple)):
+        raise TypeError("modeled export expected_exported_body_names must be a list or tuple")
+    expected_exported_body_names: list[str] = []
+    for index, raw_name in enumerate(raw_expected_names):
+        if not isinstance(raw_name, str) or raw_name == "":
+            raise TypeError(f"modeled export expected_exported_body_names[{index}] must be non-empty str")
+        expected_exported_body_names.append(raw_name)
+    raw_expected_count = _require_key(modeled_object, "expected_exported_body_count", "modeled export object")
+    if isinstance(raw_expected_count, bool) or not isinstance(raw_expected_count, int):
+        raise TypeError("modeled export expected_exported_body_count must be int")
+    if raw_expected_count != len(expected_exported_body_names):
+        raise RuntimeError(
+            "modeled export expected body count mismatch "
+            f"(count={raw_expected_count}, names={expected_exported_body_names})"
+        )
     return {
         "object_id": exported_object_id,
         "role": "tx_single_coil",
         "material": exported_material,
         "model_state": True,
         "step_path": exported_step_path,
+        "expected_exported_body_names": tuple(expected_exported_body_names),
+        "expected_exported_body_count": raw_expected_count,
         "canonical_coordinates": canonical_coordinates,
         "terminal_metadata": terminal_metadata,
         "source_metadata_path": str(metadata_path),
     }
+
+
+def export_type2_tx_single_coil_artifact(
+    *,
+    toml_path: Path,
+    output_step_path: Path,
+    metadata_path: Path,
+    seed: int,
+) -> ModeledObjectLedgerEntry:
+    spec = load_type2_step_spec(toml_path)
+    if len(spec.modeled_objects) != 1:
+        raise RuntimeError(
+            "type2 tx_single_coil direct export requires exactly one modeled object "
+            f"(actual={len(spec.modeled_objects)})"
+        )
+    return _export_modeled_tx_single_coil(
+        spec.modeled_objects[0],
+        source_toml_path=toml_path,
+        output_path=output_step_path,
+        metadata_path=metadata_path,
+        seed=seed,
+    )
 
 
 def export_type2_step_artifacts(
@@ -526,6 +572,7 @@ def export_type2_step_artifacts(
         modeled_entries.append(
             _export_modeled_tx_single_coil(
                 modeled_spec,
+                source_toml_path=toml_path,
                 output_path=step_path,
                 metadata_path=metadata_path,
                 seed=seed,

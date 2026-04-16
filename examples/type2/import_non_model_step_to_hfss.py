@@ -12,8 +12,8 @@ from peetsfea.aedt import Hfss
 from peetsfea.aedt.failfast import raise_on_false, validate_aedt_name
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_STEP_PATH = Path(__file__).with_name("artifacts") / "type2_non_model_objects.step"
-DEFAULT_OUTPUT_AEDT_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_import_smoke" / "type2_non_model_objects_import.aedt"
+DEFAULT_STEP_PATH = REPO_ROOT / "run" / "step" / "type2" / "type2_non_model_scene.step"
+DEFAULT_OUTPUT_AEDT_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_import_smoke" / "type2_non_model_scene_import.aedt"
 DEFAULT_DESIGN_NAME = "type2_step_import_smoke"
 
 

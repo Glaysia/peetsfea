@@ -259,6 +259,37 @@ def _require_modeled_object_entry(
     return modeled_object_entry
 
 
+def _expected_exported_body_count(modeled_object_entry: dict[str, object]) -> int:
+    if "expected_exported_body_count" not in modeled_object_entry:
+        raise ValueError("metadata.modeled_objects[0] is missing required key 'expected_exported_body_count'")
+    raw_count = modeled_object_entry["expected_exported_body_count"]
+    if isinstance(raw_count, bool) or not isinstance(raw_count, int):
+        raise TypeError("metadata.modeled_objects[0].expected_exported_body_count must be int")
+    if raw_count <= 0:
+        raise ValueError("metadata.modeled_objects[0].expected_exported_body_count must be > 0")
+    if "expected_exported_body_names" not in modeled_object_entry:
+        raise ValueError("metadata.modeled_objects[0] is missing required key 'expected_exported_body_names'")
+    raw_names = modeled_object_entry["expected_exported_body_names"]
+    if isinstance(raw_names, (str, bytes)) or not isinstance(raw_names, Sequence):
+        raise TypeError("metadata.modeled_objects[0].expected_exported_body_names must be a sequence")
+    names: list[str] = []
+    for index, raw_name in enumerate(raw_names):
+        if not isinstance(raw_name, str) or raw_name == "":
+            raise TypeError(
+                "metadata.modeled_objects[0].expected_exported_body_names"
+                f"[{index}] must be a non-empty string"
+            )
+        names.append(raw_name)
+    if len(names) != raw_count:
+        raise RuntimeError(
+            "metadata modeled object expected body count mismatch "
+            f"(count={raw_count}, names={names})"
+        )
+    if len(names) != len(set(names)):
+        raise RuntimeError(f"metadata modeled object expected body names must be unique: {names}")
+    return raw_count
+
+
 def _load_modeled_object_entry_from_metadata(
     *,
     metadata_json_path: Path,
@@ -394,6 +425,13 @@ def import_tx_rect_void_step_to_hfss(
             after_import=after_import,
             step_path=checked_step_path,
         )
+        expected_body_count = _expected_exported_body_count(modeled_object_entry)
+        if len(imported_object_names) != expected_body_count:
+            raise RuntimeError(
+                "STEP import object count does not match modeled metadata "
+                f"(expected={expected_body_count}, actual={len(imported_object_names)}, "
+                f"imported_object_names={imported_object_names})"
+            )
         save_result = hfss.save_project(str(output_aedt_path))
         raise_on_false(save_result, operation="save_project", context={"path": str(output_aedt_path)})
         imported_entry_raw = build_single_imported_modeled_object_entry(modeled_object_entry, imported_object_names)

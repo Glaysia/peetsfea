@@ -30,6 +30,8 @@ def _write_metadata_json(path: Path, *, step_path: Path, source_toml_path: Path 
                 "material": "composite",
                 "model_state": True,
                 "step_path": str(step_path),
+                "expected_exported_body_names": ["tx_pcb_l0", "tx_copper_l0"],
+                "expected_exported_body_count": 2,
                 "canonical_coordinates": {"frame_origin_xyz": [0.0, 0.0, 0.0]},
                 "terminal_metadata": {"path": "A_cw_to_a"},
             }
@@ -296,8 +298,8 @@ def test_tx_rect_void_modeled_step_import_smoke_auto_resolves_type2_generated_ar
     repo_root = tmp_path / "repo"
     type2_toml_path = repo_root / "examples" / "type2" / "type2.toml"
     exporter_script_path = repo_root / "examples" / "type2" / "generate_type2_step.py"
-    step_path = repo_root / "run" / "step" / "type2_tx_single_coil.step"
-    metadata_path = repo_root / "run" / "step" / "type2_tx_single_coil.metadata.json"
+    step_path = repo_root / "run" / "step" / "type2" / "objects" / "tx_rect_void_coil.step"
+    metadata_path = repo_root / "run" / "step" / "type2" / "metadata" / "tx_rect_void_coil.metadata.json"
 
     type2_toml_path.parent.mkdir(parents=True, exist_ok=True)
     type2_toml_path.write_text("spec_version = \"0.2.22\"\n", encoding="utf-8")
@@ -338,8 +340,8 @@ def test_tx_rect_void_modeled_step_import_smoke_auto_resolve_invokes_type2_expor
     repo_root = tmp_path / "repo"
     type2_toml_path = repo_root / "examples" / "type2" / "type2.toml"
     exporter_script_path = repo_root / "examples" / "type2" / "generate_type2_step.py"
-    generated_step_path = repo_root / "run" / "step" / "type2_tx_single_coil.step"
-    generated_metadata_path = repo_root / "run" / "step" / "type2_tx_single_coil.metadata.json"
+    generated_step_path = repo_root / "run" / "step" / "type2" / "objects" / "tx_rect_void_coil.step"
+    generated_metadata_path = repo_root / "run" / "step" / "type2" / "metadata" / "tx_rect_void_coil.metadata.json"
 
     type2_toml_path.parent.mkdir(parents=True, exist_ok=True)
     type2_toml_path.write_text("spec_version = \"0.2.22\"\n", encoding="utf-8")

@@ -9,20 +9,20 @@
 - Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 역할
-- type2 non-model scene TOML 초안을 읽어 build123d box compound를 생성하고 STEP artifact로 export한다.
+- unified type2 TOML의 `non_model_objects`를 읽어 build123d box compound를 생성하고 STEP artifact로 export한다.
 - AEDT import 전 단계의 geometry authoring smoke path만 담당한다.
 - 특정 object id에 분기하지 않고 TOML의 `non_model_objects` 배열을 그대로 검증/export한다.
 
 ## 입력 / 출력
-- 입력: `examples/type2/type2_non_model_objects.toml`
-- 출력: `examples/type2/artifacts/type2_non_model_objects.step`
-- STEP viewer registry: `examples/type2/view_step_files.ipynb`
+- 입력: `examples/type2/type2.toml`
+- 출력: `run/step/type2/type2_non_model_scene.step`
+- viewer registry: unified generated modeled artifact is registered; this non-model compound smoke output is no longer a tracked viewer artifact.
 - CLI entry: `.venv/bin/python examples/type2/generate_non_model_step.py`
 - stdout: source TOML, output STEP, non-model object count, compound bounding box
 
 ## Canonical state
 - 없음.
-- canonical 입력은 TOML의 `non_model_objects` 배열이고, 스크립트는 이를 매 실행마다 다시 읽는다.
+- canonical 입력은 unified type2 TOML의 `non_model_objects` 배열이고, 스크립트는 이를 매 실행마다 다시 읽는다.
 
 ## Invariants / fail-fast
 - `non_model_objects`는 비어 있으면 안 된다.
@@ -45,11 +45,11 @@
 - 직접 자동 테스트는 아직 없다.
 - 검증 명령:
   - `.venv/bin/python examples/type2/generate_non_model_step.py`
-  - `test -s examples/type2/artifacts/type2_non_model_objects.step`
+  - `test -s run/step/type2/type2_non_model_scene.step`
 
 ## 변경 시 주의점
 - TOML schema를 바꾸면 [[sdd/plans/0.2.22-type2-build123d-non-model-step]]도 같이 갱신한다.
 - `origin_xyz` 해석을 바꾸면 기존 STEP artifact의 좌표계가 바뀐다.
 - type2 TX 영역은 현재 단일 `tx_region` box로 기록하며, sub-zone을 되살리려면 TOML과 계획 노트를 먼저 갱신한다.
-- 출력 STEP artifact를 추가, 제거, 이동하면 `examples/type2/view_step_files.ipynb`의 `STEP_ARTIFACTS` registry와 viewer cell을 같이 갱신한다.
+- tracked STEP artifact를 추가하면 `examples/type2/view_step_files.ipynb`의 `STEP_ARTIFACTS` registry와 viewer cell을 같이 갱신한다.
 - runtime parser에 연결하기 전까지 이 파일은 type2 실험용 smoke path로 유지한다.

@@ -12,8 +12,8 @@
 - runtime manifest/build dispatch와 분리된 AEDT import 검증 경로만 담당한다.
 
 ## 입력 / 출력
-- 입력: `examples/type2/artifacts/type2_non_model_objects.step`
-- 출력: `run/aedt/type2_step_import_smoke/type2_non_model_objects_import.aedt`
+- 입력: `run/step/type2/type2_non_model_scene.step`
+- 출력: `run/aedt/type2_step_import_smoke/type2_non_model_scene_import.aedt`
 - CLI entry: `../.venv/bin/python ../examples/type2/import_non_model_step_to_hfss.py` from `run/`
 - 반환: `Type2StepImportResult` with step path, AEDT path, imported object names
 
