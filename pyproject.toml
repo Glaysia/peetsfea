@@ -6,15 +6,15 @@ readme = "README.md"
 requires-python = "==3.12"
 license = { text = "MIT" }
 dependencies = [
-  "pyaedt[graphics]==0.25.1",
+  "pyaedt==0.25.1",
   "pandas>=2.3.3",
   "dearpygui>=2.1.1",
   "cadquery>=2.6.1",
   "sympy>=1.14.0",
   "pyvista>=0.46.5",
   "build123d>=0.10.0",
-  "ocp-vscode>=3.3.4",
-  "ocp-tessellate>=3.2.2",
+  "ocp-vscode>=3.1.2",
+  "ocp-tessellate==3.1.2",
   "ipykernel>=7.2.0",
 ]
 

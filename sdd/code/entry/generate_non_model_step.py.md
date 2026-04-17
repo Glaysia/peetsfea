@@ -1,3 +1,11 @@
+---
+title: generate_non_model_step.py
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - step-export
+---
+
 # generate_non_model_step.py
 
 ## Source
@@ -14,7 +22,7 @@
 - 특정 object id에 분기하지 않고 TOML의 `non_model_objects` 배열을 그대로 검증/export한다.
 
 ## 입력 / 출력
-- 입력: `examples/type2.toml`
+- 입력: `examples/type2_fixed.toml`
 - 출력: `run/step/type2/type2_non_model_scene.step`
 - viewer registry: unified generated modeled artifact is registered; this non-model compound smoke output is no longer a tracked viewer artifact.
 - CLI entry: `.venv/bin/python entry/generate_non_model_step.py`

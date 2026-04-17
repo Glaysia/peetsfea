@@ -19,7 +19,7 @@ from peetsfea.backend.pyaedt.type2_step_import_pipeline import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_TYPE2_TOML_PATH = REPO_ROOT / "examples" / "type2.toml"
+DEFAULT_TYPE2_TOML_PATH = REPO_ROOT / "examples" / "type2_fixed.toml"
 DEFAULT_STEP_OUTPUT_DIR = REPO_ROOT / "run" / "step" / "type2"
 
 _Exporter = Callable[..., object]

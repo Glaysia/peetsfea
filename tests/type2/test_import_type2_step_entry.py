@@ -9,7 +9,7 @@ from peetsfea.backend.pyaedt.type2_step_import_pipeline import Type2ImportedLedg
 
 def _result(*, step_ledger_path: Path, output_aedt_path: Path, imported_ledger_path: Path) -> Type2ImportedLedger:
     return {
-        "source_toml_path": str(step_ledger_path.with_name("type2.toml")),
+        "source_toml_path": str(step_ledger_path.with_name("type2_fixed.toml")),
         "source_step_ledger_path": str(step_ledger_path),
         "seed": 3,
         "aedt_path": str(output_aedt_path),
@@ -20,7 +20,7 @@ def _result(*, step_ledger_path: Path, output_aedt_path: Path, imported_ledger_p
 
 
 def test_import_type2_step_entry_generates_fresh_ledger_before_import(tmp_path: Path) -> None:
-    toml_path = tmp_path / "type2.toml"
+    toml_path = tmp_path / "type2_fixed.toml"
     output_dir = tmp_path / "step"
     step_ledger_path = output_dir / "type2_step_ledger.json"
     output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
