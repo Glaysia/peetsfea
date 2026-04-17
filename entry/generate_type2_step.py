@@ -5,6 +5,7 @@ import math
 import sys
 import tempfile
 from pathlib import Path
+from typing import Literal
 
 import build123d as bd
 
@@ -19,6 +20,7 @@ from peetsfea.type2_step_export import Type2DirectModeledArtifact
 from peetsfea.type2_step_export import Type2StepLedger
 from peetsfea.type2_step_export import export_type2_step_artifacts as _core_export_type2_step_artifacts
 from peetsfea.type2_step_export import export_type2_tx_single_coil_artifact
+from peetsfea.tx_rect_void import BoxSpec
 from peetsfea.tx_rect_void import build_tx_rect_void_box_specs
 from peetsfea.tx_rect_void import load_tx_rect_void_spec
 from peetsfea.tx_rect_void import modeled_body_bounds_from_boxes
@@ -27,20 +29,51 @@ from peetsfea.tx_rect_void import realize_tx_rect_void_spec
 from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
+from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
 
 
-def _require_single_coil_expected_body_contract(ledger: Type2StepLedger) -> None:
+def _tx_underlay_expected_body_names(*, repeat_count: int) -> list[str]:
+    body_names: list[str] = []
+    for unit_index in range(repeat_count):
+        body_names.extend(
+            (
+                f"tx_underlay_ferrite_u{unit_index}",
+                f"tx_underlay_pet_psa_u{unit_index}",
+                f"tx_underlay_air_u{unit_index}",
+            )
+        )
+    return body_names
+
+
+def _require_single_coil_expected_body_contract(
+    ledger: Type2StepLedger,
+    *,
+    spec: Type2StepSpec,
+    seed: int,
+) -> None:
+    modeled_spec_by_id = {modeled_spec.object_id: modeled_spec for modeled_spec in spec.modeled_objects}
     for modeled_entry in ledger["modeled_objects"]:
+        object_id = modeled_entry["object_id"]
+        if object_id not in modeled_spec_by_id:
+            raise ValueError(f"type2 modeled object spec registry is missing exported object {object_id}")
+        modeled_spec = modeled_spec_by_id[object_id]
         role = modeled_entry["role"]
         expected_body_names = modeled_entry["expected_exported_body_names"]
         expected_body_count = modeled_entry["expected_exported_body_count"]
         if role == "tx_single_coil":
             pcb_layer_positions = modeled_entry["canonical_coordinates"]["pcb_layer_z_positions_mm"]
-            if len(pcb_layer_positions) != 1:
-                continue
-            expected_names = ["tx_pcb_l0", "tx_copper_l0", "tx_port_sheet"]
+            expected_names = [f"tx_pcb_l{index}" for index in range(len(pcb_layer_positions))]
+            if len(pcb_layer_positions) == 1:
+                expected_names.append("tx_copper_l0")
+            else:
+                expected_names.append("tx_copper_stack")
+            expected_names.extend(
+                _tx_underlay_expected_body_names(
+                    repeat_count=resolve_modeled_underlay_repeat_count(modeled_spec, seed=seed)
+                )
+            )
         elif role == "rx_single_coil":
-            expected_names = ["rx_pcb_l0", "rx_copper_l0", "rx_port_sheet"]
+            expected_names = ["rx_pcb_l0", "rx_copper_l0"]
         else:
             raise ValueError(f"unsupported modeled object role in type2 ledger: {role}")
         if list(expected_body_names) != expected_names:
@@ -68,7 +101,7 @@ def _shape_vertices(scene_step_path: Path, *, label: str) -> tuple[tuple[float, 
     return tuple(unique_vertices.values())
 
 
-def _terminal_stub_bottom_face_square_plane_vertices(
+def _owner_bottom_face_square_plane_vertices(
     *,
     box_origin_xyz: tuple[float, float, float],
     box_size_xyz: tuple[float, float, float],
@@ -96,18 +129,18 @@ def _terminal_stub_bottom_face_square_plane_vertices(
         )
     if square_side_a <= 0.0 or square_side_b <= 0.0:
         raise RuntimeError(
-            "type2 port sheet widened diagonal validation requires positive terminal-stub bottom-face dimensions "
+            "type2 port sheet widened diagonal validation requires positive owner bottom-face dimensions "
             f"(plane={plane}, origin={box_origin_xyz}, size={box_size_xyz})"
         )
     if abs(square_side_a - square_side_b) > 1e-8:
         raise RuntimeError(
-            "type2 port sheet widened diagonal validation requires square terminal-stub bottom faces "
+            "type2 port sheet widened diagonal validation requires square owner bottom faces "
             f"(plane={plane}, origin={box_origin_xyz}, size={box_size_xyz})"
         )
     return (plane_vertices, bottom_plane_coordinate)
 
 
-def _stub_centerline_perpendicular_distance(
+def _owner_centerline_perpendicular_distance(
     *,
     point_xy: tuple[float, float],
     first_center_xy: tuple[float, float],
@@ -118,7 +151,7 @@ def _stub_centerline_perpendicular_distance(
     denominator = math.hypot(delta_x, delta_y)
     if denominator <= 1e-12:
         raise RuntimeError(
-            "type2 port sheet widened diagonal validation requires distinct terminal-stub centers "
+            "type2 port sheet widened diagonal validation requires distinct owner centers "
             f"(first_center={first_center_xy}, second_center={second_center_xy})"
         )
     numerator = abs(
@@ -128,28 +161,28 @@ def _stub_centerline_perpendicular_distance(
     return numerator / denominator
 
 
-def _widest_stub_bottom_face_diagonal_vertices(
+def _widest_owner_bottom_face_diagonal_vertices(
     *,
-    transformed_terminal_stub_boxes: tuple[tuple[tuple[float, float, float], tuple[float, float, float]], ...],
+    transformed_owner_boxes: tuple[tuple[tuple[float, float, float], tuple[float, float, float]], ...],
     plane: str,
 ) -> tuple[tuple[float, float, float], ...]:
-    if len(transformed_terminal_stub_boxes) != 2:
+    if len(transformed_owner_boxes) != 2:
         raise RuntimeError(
-            "type2 port sheet widened diagonal validation requires exactly two terminal stub boxes "
-            f"(actual={len(transformed_terminal_stub_boxes)})"
+            "type2 port sheet widened diagonal validation requires exactly two owner boxes "
+            f"(actual={len(transformed_owner_boxes)})"
         )
-    plane_vertices_by_stub: list[tuple[tuple[float, float], ...]] = []
+    plane_vertices_by_owner: list[tuple[tuple[float, float], ...]] = []
     bottom_plane_coordinates: list[float] = []
-    stub_center_points: list[tuple[float, float]] = []
-    for box_origin_xyz, box_size_xyz in transformed_terminal_stub_boxes:
-        plane_vertices, bottom_plane_coordinate = _terminal_stub_bottom_face_square_plane_vertices(
+    owner_center_points: list[tuple[float, float]] = []
+    for box_origin_xyz, box_size_xyz in transformed_owner_boxes:
+        plane_vertices, bottom_plane_coordinate = _owner_bottom_face_square_plane_vertices(
             box_origin_xyz=box_origin_xyz,
             box_size_xyz=box_size_xyz,
             plane=plane,
         )
-        plane_vertices_by_stub.append(plane_vertices)
+        plane_vertices_by_owner.append(plane_vertices)
         bottom_plane_coordinates.append(bottom_plane_coordinate)
-        stub_center_points.append(
+        owner_center_points.append(
             (
                 sum(point_xy[0] for point_xy in plane_vertices) / 4.0,
                 sum(point_xy[1] for point_xy in plane_vertices) / 4.0,
@@ -157,7 +190,7 @@ def _widest_stub_bottom_face_diagonal_vertices(
         )
     if max(bottom_plane_coordinates) - min(bottom_plane_coordinates) > 1e-8:
         raise RuntimeError(
-            "type2 terminal stub bottom faces must share one plane for widened sheet derivation "
+            "type2 owner bottom faces must share one plane for widened sheet derivation "
             f"(plane={plane}, plane_values={bottom_plane_coordinates})"
         )
 
@@ -171,10 +204,10 @@ def _widest_stub_bottom_face_diagonal_vertices(
         for first_index, second_index in ((0, 2), (1, 3)):
             diagonal_vertices = (plane_vertices[first_index], plane_vertices[second_index])
             score = sum(
-                _stub_centerline_perpendicular_distance(
+                _owner_centerline_perpendicular_distance(
                     point_xy=point_xy,
-                    first_center_xy=stub_center_points[0],
-                    second_center_xy=stub_center_points[1],
+                    first_center_xy=owner_center_points[0],
+                    second_center_xy=owner_center_points[1],
                 )
                 for point_xy in diagonal_vertices
             )
@@ -191,7 +224,7 @@ def _widest_stub_bottom_face_diagonal_vertices(
         return best_diagonal
 
     diagonal_vertices: list[tuple[float, float, float]] = []
-    for plane_vertices, bottom_plane_coordinate in zip(plane_vertices_by_stub, bottom_plane_coordinates):
+    for plane_vertices, bottom_plane_coordinate in zip(plane_vertices_by_owner, bottom_plane_coordinates):
         selected_diagonal = _selected_diagonal_vertices(plane_vertices=plane_vertices)
         for point_u, point_v in selected_diagonal:
             if plane == "XY":
@@ -234,13 +267,79 @@ def _single_coil_placement_offset_from_local_bounds(
     )
 
 
+def _synthetic_tx_bus_owner_box(
+    *,
+    local_boxes: tuple[BoxSpec, ...],
+    copper_body_prefix: str,
+    terminal_column: Literal["start", "end"],
+) -> BoxSpec:
+    terminal_stub_boxes = tuple(box for box in local_boxes if box.feature == "terminal_stub")
+    matching_stub_boxes = tuple(
+        box for box in terminal_stub_boxes if box.label.endswith(f"_stub_{terminal_column}")
+    )
+    if len(matching_stub_boxes) == 0:
+        raise RuntimeError(
+            "type2 tx port sheet validation requires at least one terminal stub per terminal column "
+            f"(terminal_column={terminal_column}, actual=0)"
+        )
+    if len(matching_stub_boxes) * 2 != len(terminal_stub_boxes):
+        raise RuntimeError(
+            "type2 tx port sheet validation requires balanced start/end terminal stub boxes "
+            f"(terminal_column={terminal_column}, matching={len(matching_stub_boxes)}, total={len(terminal_stub_boxes)})"
+        )
+    min_x = min(box.origin_xyz[0] for box in matching_stub_boxes)
+    min_y = min(box.origin_xyz[1] for box in matching_stub_boxes)
+    min_z = min(box.origin_xyz[2] for box in matching_stub_boxes)
+    max_x = max(box.origin_xyz[0] + box.size_xyz[0] for box in matching_stub_boxes)
+    max_y = max(box.origin_xyz[1] + box.size_xyz[1] for box in matching_stub_boxes)
+    max_z = max(box.origin_xyz[2] + box.size_xyz[2] for box in matching_stub_boxes)
+    return BoxSpec(
+        label=f"{copper_body_prefix}_bus_{terminal_column}",
+        role="copper",
+        feature="vertical_bus",
+        layer_index=0,
+        origin_xyz=(min_x, min_y, min_z),
+        size_xyz=(max_x - min_x, max_y - min_y, max_z - min_z),
+    )
+
+
+def _local_port_sheet_owner_boxes(
+    *,
+    local_boxes: tuple[BoxSpec, ...],
+    profile: object,
+) -> tuple[BoxSpec, BoxSpec]:
+    assert hasattr(profile, "role")
+    assert hasattr(profile, "copper_body_prefix")
+    role = profile.role
+    copper_body_prefix = profile.copper_body_prefix
+    if role == "tx_single_coil":
+        return (
+            _synthetic_tx_bus_owner_box(
+                local_boxes=local_boxes,
+                copper_body_prefix=copper_body_prefix,
+                terminal_column="start",
+            ),
+            _synthetic_tx_bus_owner_box(
+                local_boxes=local_boxes,
+                copper_body_prefix=copper_body_prefix,
+                terminal_column="end",
+            ),
+        )
+    terminal_stub_boxes = tuple(box for box in local_boxes if box.feature == "terminal_stub")
+    start_matches = [box for box in terminal_stub_boxes if box.label == f"{copper_body_prefix}_l0_stub_start"]
+    end_matches = [box for box in terminal_stub_boxes if box.label == f"{copper_body_prefix}_l0_stub_end"]
+    if len(start_matches) != 1 or len(end_matches) != 1 or len(terminal_stub_boxes) != 2:
+        raise RuntimeError(
+            "type2 port sheet validation requires exactly one start/end terminal stub box "
+            f"(role={role}, start_matches={len(start_matches)}, end_matches={len(end_matches)}, actual={len(terminal_stub_boxes)})"
+        )
+    return (start_matches[0], end_matches[0])
+
+
 def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path: Path, seed: int) -> None:
     spec = load_type2_step_spec(toml_path)
-    scene_step_path = Path(ledger["scene_step_path"])
     for modeled_spec in spec.modeled_objects:
         profile = profile_for_modeled_role(modeled_spec.role)
-        if modeled_spec.role == "tx_single_coil" and int(modeled_spec.layer_count.start) != 1:
-            continue
         owner_spec = next(non_model for non_model in spec.non_model_objects if non_model.object_id == profile.placement_owner_id)
         with tempfile.TemporaryDirectory() as temp_dir:
             tx_rect_void_toml_path = Path(temp_dir) / f"{modeled_spec.object_id}.toml"
@@ -256,23 +355,28 @@ def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path:
             local_size_xyz=local_size_xyz,
             profile=profile,
         )
-        terminal_stub_boxes = tuple(box for box in local_boxes if box.feature == "terminal_stub")
-        transformed_terminal_stub_boxes = tuple(
+        owner_boxes = _local_port_sheet_owner_boxes(local_boxes=local_boxes, profile=profile)
+        transformed_owner_boxes = tuple(
             (
                 profile.world_point(box.origin_xyz, frame_origin_xyz=frame_origin_xyz),
                 profile.world_size(box.size_xyz),
             )
-            for box in terminal_stub_boxes
+            for box in owner_boxes
         )
         sheet_label = "tx_port_sheet" if modeled_spec.role == "tx_single_coil" else "rx_port_sheet"
-        sheet_vertices = _shape_vertices(scene_step_path, label=sheet_label)
-        if len(sheet_vertices) != 4:
+        modeled_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == modeled_spec.object_id)
+        raw_sheet_vertices = modeled_entry["terminal_metadata"]["port_sheet_vertices_xyz"]
+        if len(raw_sheet_vertices) != 4:
             raise RuntimeError(
-                "type2 port sheet must export exactly four unique vertices "
-                f"(object_id={modeled_spec.object_id}, label={sheet_label}, actual={len(sheet_vertices)})"
+                "type2 port sheet metadata must contain exactly four unique vertices "
+                f"(object_id={modeled_spec.object_id}, actual={len(raw_sheet_vertices)})"
             )
-        expected_vertices = _widest_stub_bottom_face_diagonal_vertices(
-            transformed_terminal_stub_boxes=transformed_terminal_stub_boxes,
+        sheet_vertices = tuple(
+            (float(vertex[0]), float(vertex[1]), float(vertex[2]))
+            for vertex in raw_sheet_vertices
+        )
+        expected_vertices = _widest_owner_bottom_face_diagonal_vertices(
+            transformed_owner_boxes=transformed_owner_boxes,
             plane=profile.plane,
         )
         if profile.plane == "XY":
@@ -294,7 +398,7 @@ def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path:
         }
         if actual_vertex_set != expected_vertex_set:
             raise RuntimeError(
-                "type2 port sheet must bridge the widened bottom-face diagonals of both terminal stubs "
+                "type2 port sheet must bridge the widened bottom-face diagonals of both owner boxes "
                 f"(object_id={modeled_spec.object_id}, label={sheet_label}, "
                 f"actual_vertices={sorted(actual_vertex_set)}, expected_vertices={sorted(expected_vertex_set)})"
             )
@@ -307,13 +411,14 @@ def export_type2_step_artifacts(
     ledger_path: Path = DEFAULT_LEDGER_PATH,
     seed: int = 0,
 ) -> Type2StepLedger:
+    spec = load_type2_step_spec(toml_path)
     ledger = _core_export_type2_step_artifacts(
         toml_path=toml_path,
         output_dir=output_dir,
         ledger_path=ledger_path,
         seed=seed,
     )
-    _require_single_coil_expected_body_contract(ledger)
+    _require_single_coil_expected_body_contract(ledger, spec=spec, seed=seed)
     _require_port_sheet_geometry_contract(ledger=ledger, toml_path=toml_path, seed=seed)
     return ledger
 

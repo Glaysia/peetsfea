@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import math
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,6 +49,7 @@ class ModeledTxSingleCoilSpec:
     outer_y_mm: RangeSpec
     turn_count: RangeSpec
     layer_count: RangeSpec
+    underlay_repeat_count: RangeSpec
     layer_gap_mm: RangeSpec
     terminal_stub_length_mm: RangeSpec
     void_x_over_outer_x: RangeSpec
@@ -269,6 +272,11 @@ def _parse_modeled_single_coil(
         outer_y_mm=_require_range(table, "outer_y_mm", context, expect_integer=False),
         turn_count=_require_range(table, "turn_count", context, expect_integer=True),
         layer_count=_require_range(table, "layer_count", context, expect_integer=True),
+        underlay_repeat_count=_require_underlay_repeat_count_range(
+            table,
+            context=context,
+            role=modeled_role,
+        ),
         layer_gap_mm=_require_range(table, "layer_gap_mm", context, expect_integer=False),
         terminal_stub_length_mm=_require_range(table, "terminal_stub_length_mm", context, expect_integer=False),
         void_x_over_outer_x=_require_range(table, "void_x_over_outer_x", context, expect_integer=False),
@@ -279,6 +287,88 @@ def _parse_modeled_single_coil(
         metal_fill_factor=_require_range(table, "metal_fill_factor", context, expect_integer=False),
         terminal_path=terminal_path,
     )
+
+
+def _require_underlay_repeat_count_range(
+    table: dict[str, object],
+    *,
+    context: str,
+    role: ModeledObjectRole,
+) -> RangeSpec:
+    range_spec = _require_range(table, "underlay_repeat_count", context, expect_integer=True)
+    if role == "tx_single_coil":
+        if (
+            range_spec.start != 0.0
+            or range_spec.end != 8.0
+            or range_spec.count != 5
+        ):
+            raise ValueError(
+                f"{context}.underlay_repeat_count.range must be [true, 0, 8, 5] for tx_single_coil "
+                f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
+            )
+        return range_spec
+    if role == "rx_single_coil":
+        if (
+            range_spec.start != 0.0
+            or range_spec.end != 0.0
+            or range_spec.count != 1
+        ):
+            raise ValueError(
+                f"{context}.underlay_repeat_count.range must be [true, 0, 0, 1] for rx_single_coil "
+                "until RX underlay support exists"
+            )
+        return range_spec
+    raise RuntimeError(f"unsupported modeled object role for underlay_repeat_count validation: {role}")
+
+
+def _integer_range_candidates(range_spec: RangeSpec) -> tuple[int, ...]:
+    if range_spec.is_integer is not True:
+        raise ValueError("integer range candidates require integer range spec")
+    if range_spec.count == 1:
+        raw_values = (range_spec.start,)
+    else:
+        step = (range_spec.end - range_spec.start) / float(range_spec.count - 1)
+        raw_values = tuple(range_spec.start + (step * index) for index in range(range_spec.count))
+    rounded_values = tuple(int(math.floor(value + 0.5)) for value in raw_values)
+    deduped_values: list[int] = []
+    seen_values: set[int] = set()
+    for value in rounded_values:
+        if value in seen_values:
+            continue
+        seen_values.add(value)
+        deduped_values.append(value)
+    return tuple(deduped_values)
+
+
+def resolve_modeled_underlay_repeat_count(spec: ModeledTxSingleCoilSpec, *, seed: int) -> int:
+    candidates = _integer_range_candidates(spec.underlay_repeat_count)
+    if spec.role == "tx_single_coil":
+        if candidates != (0, 2, 4, 6, 8):
+            raise ValueError(
+                "tx_single_coil.underlay_repeat_count must realize to candidates (0, 2, 4, 6, 8) "
+                f"(actual={candidates})"
+            )
+    elif spec.role == "rx_single_coil":
+        if candidates != (0,):
+            raise ValueError(
+                "rx_single_coil.underlay_repeat_count must realize only to 0 until RX underlay support exists "
+                f"(actual={candidates})"
+            )
+    else:
+        raise RuntimeError(f"unsupported modeled object role for underlay repeat resolution: {spec.role}")
+    if len(candidates) == 1:
+        repeat_count = candidates[0]
+    else:
+        range_path = f"modeled_objects.{spec.object_id}.underlay_repeat_count"
+        digest = hashlib.blake2b(f"{seed}:{range_path}".encode("utf-8"), digest_size=8).digest()
+        index = int.from_bytes(digest, byteorder="big", signed=False) % len(candidates)
+        repeat_count = candidates[index]
+    if spec.role == "rx_single_coil" and repeat_count != 0:
+        raise ValueError(
+            "rx_single_coil.underlay_repeat_count must resolve to 0 until RX underlay support exists "
+            f"(actual={repeat_count})"
+        )
+    return repeat_count
 
 
 def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
@@ -379,5 +469,6 @@ __all__ = [
     "Type2SimulationPolicy",
     "Type2StepSpec",
     "load_type2_step_spec",
+    "resolve_modeled_underlay_repeat_count",
     "render_tx_rect_void_toml",
 ]

@@ -24,12 +24,16 @@ from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import Point3
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
+from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
 
 _NON_MODEL_VISIBLE_GROUPS: tuple[tuple[str, str, Literal["XY", "YZ", "ZX", "mixed"], tuple[str, ...]], ...] = (
     ("environment", "environment", "mixed", ("floor", "shelf", "wall", "tv")),
     ("tx_region", "tx_region", "XY", ("tx_region",)),
     ("rx_region_max", "rx_region_max", "YZ", ("rx_region_max",)),
 )
+_TX_UNDERLAY_FERRITE_THICKNESS_MM = 0.20
+_TX_UNDERLAY_PET_PSA_THICKNESS_MM = 0.15
+_TX_UNDERLAY_AIR_THICKNESS_MM = 0.02
 
 
 def _build_non_model_shape(spec: NonModelBoxSpec) -> bd.Shape:
@@ -291,13 +295,13 @@ def _port_sheet_label_for_profile(profile: SingleCoilProfile) -> str:
     raise RuntimeError(f"unsupported single-coil profile role for port sheet label: {profile.role}")
 
 
-def _terminal_stub_bottom_plane_coordinate(*, box: BoxSpec, profile: SingleCoilProfile) -> float:
+def _port_sheet_owner_bottom_plane_coordinate(*, box: BoxSpec, profile: SingleCoilProfile) -> float:
     if profile.plane == "XY":
         return box.origin_xyz[2]
     return box.origin_xyz[0]
 
 
-def _terminal_stub_bottom_square_plane_bounds(
+def _port_sheet_owner_bottom_square_plane_bounds(
     *,
     box: BoxSpec,
     profile: SingleCoilProfile,
@@ -319,53 +323,94 @@ def _terminal_stub_bottom_square_plane_bounds(
         )
     if abs(square_side_a - square_side_b) > 1e-9:
         raise RuntimeError(
-            "type2 terminal stub bottom-face footprint must be square for port sheet derivation "
+            "type2 port-sheet owner bottom-face footprint must be square for port sheet derivation "
             f"(role={profile.role}, box={box.label}, size={box.size_xyz})"
         )
     plane_max = (plane_min[0] + square_side_a, plane_min[1] + square_side_b)
     return (plane_min, plane_max)
 
 
-def _terminal_stub_bottom_square_boxes_for_port_sheet(
+def _synthetic_tx_bus_owner_box(
+    *,
+    transformed_boxes: tuple[BoxSpec, ...],
+    profile: SingleCoilProfile,
+    terminal_column: Literal["start", "end"],
+) -> BoxSpec:
+    terminal_stub_boxes = tuple(box for box in transformed_boxes if box.feature == "terminal_stub")
+    matching_stub_boxes = tuple(
+        box for box in terminal_stub_boxes if box.label.endswith(f"_stub_{terminal_column}")
+    )
+    if len(matching_stub_boxes) == 0:
+        raise RuntimeError(
+            "type2 tx port sheet requires at least one transformed terminal stub per terminal column "
+            f"(terminal_column={terminal_column}, actual=0)"
+        )
+    if len(matching_stub_boxes) * 2 != len(terminal_stub_boxes):
+        raise RuntimeError(
+            "type2 tx port sheet requires balanced transformed start/end terminal stub boxes "
+            f"(terminal_column={terminal_column}, matching={len(matching_stub_boxes)}, total={len(terminal_stub_boxes)})"
+        )
+    min_x = min(box.origin_xyz[0] for box in matching_stub_boxes)
+    min_y = min(box.origin_xyz[1] for box in matching_stub_boxes)
+    min_z = min(box.origin_xyz[2] for box in matching_stub_boxes)
+    max_x = max(box.origin_xyz[0] + box.size_xyz[0] for box in matching_stub_boxes)
+    max_y = max(box.origin_xyz[1] + box.size_xyz[1] for box in matching_stub_boxes)
+    max_z = max(box.origin_xyz[2] + box.size_xyz[2] for box in matching_stub_boxes)
+    return BoxSpec(
+        label=f"{profile.copper_body_prefix}_bus_{terminal_column}",
+        role="copper",
+        feature="vertical_bus",
+        layer_index=0,
+        origin_xyz=(min_x, min_y, min_z),
+        size_xyz=(max_x - min_x, max_y - min_y, max_z - min_z),
+    )
+
+
+def _port_sheet_owner_boxes(
     *,
     transformed_boxes: tuple[BoxSpec, ...],
     profile: SingleCoilProfile,
 ) -> tuple[BoxSpec, BoxSpec]:
-    terminal_stub_boxes = tuple(box for box in transformed_boxes if box.feature == "terminal_stub")
-    if len(terminal_stub_boxes) != 2:
-        raise RuntimeError(
-            "type2 port sheet requires exactly two transformed terminal stub boxes "
-            f"(role={profile.role}, actual={len(terminal_stub_boxes)})"
+    if profile.role == "tx_single_coil":
+        first_box, second_box = (
+            _synthetic_tx_bus_owner_box(
+                transformed_boxes=transformed_boxes,
+                profile=profile,
+                terminal_column="start",
+            ),
+            _synthetic_tx_bus_owner_box(
+                transformed_boxes=transformed_boxes,
+                profile=profile,
+                terminal_column="end",
+            ),
         )
-
-    def _sort_key(box: BoxSpec) -> tuple[float, float, float, int, str]:
-        plane_min, _plane_max = _terminal_stub_bottom_square_plane_bounds(box=box, profile=profile)
-        return (
-            _terminal_stub_bottom_plane_coordinate(box=box, profile=profile),
-            plane_min[1],
-            plane_min[0],
-            box.layer_index,
-            box.label,
-        )
-
-    first_box, second_box = tuple(sorted(terminal_stub_boxes, key=_sort_key))
-    first_bottom_plane_coordinate = _terminal_stub_bottom_plane_coordinate(box=first_box, profile=profile)
-    second_bottom_plane_coordinate = _terminal_stub_bottom_plane_coordinate(box=second_box, profile=profile)
+    else:
+        terminal_stub_boxes = tuple(box for box in transformed_boxes if box.feature == "terminal_stub")
+        start_matches = [box for box in terminal_stub_boxes if box.label == f"{profile.copper_body_prefix}_l0_stub_start"]
+        end_matches = [box for box in terminal_stub_boxes if box.label == f"{profile.copper_body_prefix}_l0_stub_end"]
+        if len(start_matches) != 1 or len(end_matches) != 1 or len(terminal_stub_boxes) != 2:
+            raise RuntimeError(
+                "type2 port sheet requires exactly one transformed start/end terminal stub box "
+                f"(role={profile.role}, start_matches={len(start_matches)}, end_matches={len(end_matches)}, actual={len(terminal_stub_boxes)})"
+            )
+        first_box, second_box = (start_matches[0], end_matches[0])
+    first_bottom_plane_coordinate = _port_sheet_owner_bottom_plane_coordinate(box=first_box, profile=profile)
+    second_bottom_plane_coordinate = _port_sheet_owner_bottom_plane_coordinate(box=second_box, profile=profile)
     if abs(first_bottom_plane_coordinate - second_bottom_plane_coordinate) > 1e-9:
         raise RuntimeError(
-            "type2 port sheet terminal stub bottom faces must share one plane "
+            "type2 port-sheet owner bottom faces must share one plane "
             f"(role={profile.role}, first={first_box.label}, second={second_box.label}, "
             f"first_bottom={first_bottom_plane_coordinate}, second_bottom={second_bottom_plane_coordinate})"
-    )
+        )
     return (first_box, second_box)
 
 
-def _terminal_stub_bottom_square_center_plane_xy(
+def _port_sheet_owner_bottom_square_center_plane_xy(
     *,
     box: BoxSpec,
     profile: SingleCoilProfile,
 ) -> tuple[float, float]:
-    (plane_min_u, plane_min_v), (plane_max_u, plane_max_v) = _terminal_stub_bottom_square_plane_bounds(
+    (plane_min_u, plane_min_v), (plane_max_u, plane_max_v) = _port_sheet_owner_bottom_square_plane_bounds(
         box=box,
         profile=profile,
     )
@@ -385,7 +430,7 @@ def _line_signed_distance_in_plane(
     direction_length = math.hypot(direction_u, direction_v)
     if direction_length <= 1e-9:
         raise RuntimeError(
-            "type2 port sheet inter-stub centerline must have positive length "
+            "type2 port sheet inter-owner centerline must have positive length "
             f"(line_origin={line_origin_plane_xy}, line_direction={line_direction_plane_xy})"
         )
     point_offset_u = point_plane_xy[0] - line_origin_plane_xy[0]
@@ -411,7 +456,7 @@ def _selected_diagonal_plane_points_for_stub(
     line_origin_plane_xy: tuple[float, float],
     line_direction_plane_xy: tuple[float, float],
 ) -> tuple[tuple[float, float], tuple[float, float]]:
-    (plane_min_u, plane_min_v), (plane_max_u, plane_max_v) = _terminal_stub_bottom_square_plane_bounds(
+    (plane_min_u, plane_min_v), (plane_max_u, plane_max_v) = _port_sheet_owner_bottom_square_plane_bounds(
         box=box,
         profile=profile,
     )
@@ -477,12 +522,28 @@ def _build_single_coil_port_sheet_shape(
     transformed_boxes: tuple[BoxSpec, ...],
     profile: SingleCoilProfile,
 ) -> bd.Shape:
-    first_stub_box, second_stub_box = _terminal_stub_bottom_square_boxes_for_port_sheet(
+    vertices = _single_coil_port_sheet_vertices(
         transformed_boxes=transformed_boxes,
         profile=profile,
     )
-    first_stub_center_plane_xy = _terminal_stub_bottom_square_center_plane_xy(box=first_stub_box, profile=profile)
-    second_stub_center_plane_xy = _terminal_stub_bottom_square_center_plane_xy(box=second_stub_box, profile=profile)
+    with bd.BuildLine() as builder:
+        bd.Polyline(*vertices, close=True)
+    face = cast(bd.Face, bd.make_face(builder.line.wires()[0]))
+    face.label = _port_sheet_label_for_profile(profile)
+    return face
+
+
+def _single_coil_port_sheet_vertices(
+    *,
+    transformed_boxes: tuple[BoxSpec, ...],
+    profile: SingleCoilProfile,
+) -> tuple[Point3, Point3, Point3, Point3]:
+    first_stub_box, second_stub_box = _port_sheet_owner_boxes(
+        transformed_boxes=transformed_boxes,
+        profile=profile,
+    )
+    first_stub_center_plane_xy = _port_sheet_owner_bottom_square_center_plane_xy(box=first_stub_box, profile=profile)
+    second_stub_center_plane_xy = _port_sheet_owner_bottom_square_center_plane_xy(box=second_stub_box, profile=profile)
     inter_stub_centerline_direction_plane_xy = (
         second_stub_center_plane_xy[0] - first_stub_center_plane_xy[0],
         second_stub_center_plane_xy[1] - first_stub_center_plane_xy[1],
@@ -499,7 +560,7 @@ def _build_single_coil_port_sheet_shape(
         line_origin_plane_xy=first_stub_center_plane_xy,
         line_direction_plane_xy=inter_stub_centerline_direction_plane_xy,
     )
-    bottom_plane_coordinate = _terminal_stub_bottom_plane_coordinate(box=first_stub_box, profile=profile)
+    bottom_plane_coordinate = _port_sheet_owner_bottom_plane_coordinate(box=first_stub_box, profile=profile)
     first_diagonal_start_world_xyz = _plane_point_to_world_xyz(
         point_plane_xy=first_diagonal_start_plane_xy,
         bottom_plane_coordinate=bottom_plane_coordinate,
@@ -526,11 +587,7 @@ def _build_single_coil_port_sheet_shape(
         second_diagonal_end_world_xyz,
         first_diagonal_end_world_xyz,
     )
-    with bd.BuildLine() as builder:
-        bd.Polyline(*vertices, close=True)
-    face = cast(bd.Face, bd.make_face(builder.line.wires()[0]))
-    face.label = _port_sheet_label_for_profile(profile)
-    return face
+    return vertices
 
 
 def _parse_terminal_path_components(raw_terminal_path: str) -> tuple[str, str, str]:
@@ -572,6 +629,10 @@ def _modeled_terminal_metadata(
         local_end_xy[0] + plane_origin_xy[0],
         local_end_xy[1] + plane_origin_xy[1],
     )
+    port_sheet_vertices_xyz = _single_coil_port_sheet_vertices(
+        transformed_boxes=transformed_boxes,
+        profile=profile,
+    )
     return {
         "path": terminal_path,
         "outer_corner": outer_corner,
@@ -579,6 +640,7 @@ def _modeled_terminal_metadata(
         "direction": direction,
         "start_point_plane_mm": start_point_plane_mm,
         "end_point_plane_mm": end_point_plane_mm,
+        "port_sheet_vertices_xyz": port_sheet_vertices_xyz,
     }
 
 
@@ -615,6 +677,113 @@ def _modeled_canonical_coordinates(
         "pcb_layer_z_positions_mm": pcb_layer_positions,
         "copper_layer_z_positions_mm": copper_layer_positions,
     }
+
+
+def _build_labeled_solid_box(
+    *,
+    label: str,
+    origin_xyz: Point3,
+    size_xyz: Point3,
+) -> bd.Shape:
+    size_x, size_y, size_z = size_xyz
+    if size_x <= 0.0 or size_y <= 0.0 or size_z <= 0.0:
+        raise RuntimeError(
+            "type2 underlay body size must be positive "
+            f"(label={label}, origin={origin_xyz}, size={size_xyz})"
+        )
+    shape = bd.Box(
+        size_x,
+        size_y,
+        size_z,
+        align=(bd.Align.MIN, bd.Align.MIN, bd.Align.MIN),
+    ).moved(bd.Location(origin_xyz))
+    solids = tuple(shape.solids())
+    if len(solids) != 1:
+        raise RuntimeError(
+            "type2 underlay STEP body must contain exactly one solid "
+            f"(label={label}, solid_count={len(solids)})"
+        )
+    solid = solids[0]
+    solid.label = label
+    return solid
+
+
+def _shape_min_max_xyz(shape: bd.Shape) -> tuple[Point3, Point3]:
+    bbox = shape.bounding_box()
+    return (
+        (bbox.min.X, bbox.min.Y, bbox.min.Z),
+        (bbox.max.X, bbox.max.Y, bbox.max.Z),
+    )
+
+
+def _tx_underlay_planar_bounds(scene_children: tuple[bd.Shape, ...]) -> tuple[float, float, float, float]:
+    if not scene_children:
+        raise RuntimeError("type2 tx underlay bounds require at least one modeled body")
+    min_x = min(_shape_min_max_xyz(shape)[0][0] for shape in scene_children)
+    min_y = min(_shape_min_max_xyz(shape)[0][1] for shape in scene_children)
+    max_x = max(_shape_min_max_xyz(shape)[1][0] for shape in scene_children)
+    max_y = max(_shape_min_max_xyz(shape)[1][1] for shape in scene_children)
+    if max_x <= min_x or max_y <= min_y:
+        raise RuntimeError(
+            "type2 tx underlay planar bounds must be positive "
+            f"(min=({min_x}, {min_y}), max=({max_x}, {max_y}))"
+        )
+    return (min_x, min_y, max_x, max_y)
+
+
+def _build_tx_underlay_scene_shapes(
+    *,
+    scene_children: tuple[bd.Shape, ...],
+    modeled_min_z: float,
+    repeat_count: int,
+) -> tuple[bd.Shape, ...]:
+    if repeat_count < 1:
+        raise RuntimeError(f"type2 tx underlay repeat count must be >= 1 when underlay is emitted (actual={repeat_count})")
+    min_x, min_y, max_x, max_y = _tx_underlay_planar_bounds(scene_children)
+    footprint_size_xyz: Point3 = (max_x - min_x, max_y - min_y, 0.0)
+    if footprint_size_xyz[0] <= 0.0 or footprint_size_xyz[1] <= 0.0:
+        raise RuntimeError(f"type2 tx underlay footprint must be positive (size={footprint_size_xyz})")
+    shapes: list[bd.Shape] = []
+    current_top_z = modeled_min_z
+    for unit_index in range(repeat_count):
+        ferrite_origin_z = current_top_z - _TX_UNDERLAY_FERRITE_THICKNESS_MM
+        shapes.append(
+            _build_labeled_solid_box(
+                label=f"tx_underlay_ferrite_u{unit_index}",
+                origin_xyz=(min_x, min_y, ferrite_origin_z),
+                size_xyz=(
+                    footprint_size_xyz[0],
+                    footprint_size_xyz[1],
+                    _TX_UNDERLAY_FERRITE_THICKNESS_MM,
+                ),
+            )
+        )
+        pet_origin_z = ferrite_origin_z - _TX_UNDERLAY_PET_PSA_THICKNESS_MM
+        shapes.append(
+            _build_labeled_solid_box(
+                label=f"tx_underlay_pet_psa_u{unit_index}",
+                origin_xyz=(min_x, min_y, pet_origin_z),
+                size_xyz=(
+                    footprint_size_xyz[0],
+                    footprint_size_xyz[1],
+                    _TX_UNDERLAY_PET_PSA_THICKNESS_MM,
+                ),
+            )
+        )
+        air_origin_z = pet_origin_z - _TX_UNDERLAY_AIR_THICKNESS_MM
+        shapes.append(
+            _build_labeled_solid_box(
+                label=f"tx_underlay_air_u{unit_index}",
+                origin_xyz=(min_x, min_y, air_origin_z),
+                size_xyz=(
+                    footprint_size_xyz[0],
+                    footprint_size_xyz[1],
+                    _TX_UNDERLAY_AIR_THICKNESS_MM,
+                ),
+            )
+        )
+        current_top_z = air_origin_z
+    return tuple(shapes)
 
 
 def build_modeled_single_coil_scene_data(
@@ -654,24 +823,33 @@ def build_modeled_single_coil_scene_data(
         )
         existing_scene_children = tuple(modeled_scene.children)
         port_sheet_label = _port_sheet_label_for_profile(profile)
-        existing_port_sheet_count = sum(1 for shape in existing_scene_children if shape.label == port_sheet_label)
-        if existing_port_sheet_count > 1:
-            raise RuntimeError(
-                "type2 modeled scene must not expose duplicate port sheet bodies "
-                f"(object_id={spec.object_id}, label={port_sheet_label}, count={existing_port_sheet_count})"
-            )
-        canonical_port_sheet_shape = _build_single_coil_port_sheet_shape(
-            transformed_boxes=transformed_boxes,
-            profile=profile,
+        base_scene_children = tuple(shape for shape in existing_scene_children if shape.label != port_sheet_label)
+        if not base_scene_children:
+            raise RuntimeError(f"type2 modeled scene must expose child bodies: {spec.object_id}")
+        modeled_bounds_min_xyz, _modeled_bounds_max_xyz, _modeled_bounds_size_xyz = modeled_body_bounds_from_boxes(
+            transformed_boxes
         )
-        if existing_port_sheet_count == 1:
-            scene_children = tuple(
-                canonical_port_sheet_shape if shape.label == port_sheet_label else shape for shape in existing_scene_children
+        underlay_repeat_count = resolve_modeled_underlay_repeat_count(spec, seed=seed)
+        if profile.role == "tx_single_coil":
+            if cast(Literal["XY", "YZ"], profile.plane) != "XY":
+                raise RuntimeError(f"type2 tx underlay requires XY modeled plane (actual={profile.plane})")
+            underlay_scene_children = (
+                _build_tx_underlay_scene_shapes(
+                    scene_children=base_scene_children,
+                    modeled_min_z=modeled_bounds_min_xyz[2],
+                    repeat_count=underlay_repeat_count,
+                )
+                if underlay_repeat_count > 0
+                else ()
             )
         else:
-            scene_children = existing_scene_children + (canonical_port_sheet_shape,)
-        if not scene_children:
-            raise RuntimeError(f"type2 modeled scene must expose child bodies: {spec.object_id}")
+            if underlay_repeat_count != 0:
+                raise RuntimeError(
+                    "type2 rx_single_coil underlay is unsupported until RX underlay support exists "
+                    f"(object_id={spec.object_id}, repeat_count={underlay_repeat_count})"
+                )
+            underlay_scene_children = ()
+        scene_children = base_scene_children + underlay_scene_children
         expected_exported_body_names = tuple(shape.label for shape in scene_children)
         if len(set(expected_exported_body_names)) != len(expected_exported_body_names):
             raise RuntimeError(

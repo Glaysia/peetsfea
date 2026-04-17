@@ -45,25 +45,12 @@ def _single_coil_port_sheet_label(profile: SingleCoilProfile) -> str:
     return "rx_port_sheet"
 
 
-def _require_single_coil_port_sheet_supported(
-    realized: RealizedSingleCoilRectVoid,
-    *,
-    profile: SingleCoilProfile,
-) -> None:
-    if profile.role == "tx_single_coil" and realized.layer_count != 1:
-        raise ValueError(
-            "single-coil port sheet from widened terminal-stub bottom-face diagonals currently supports only "
-            "tx_single_coil.layer_count == 1 "
-            f"(actual={realized.layer_count})"
-        )
-
-
 def _stub_bottom_face_center_xy(stub_primitive: CopperPrimitive) -> Point2:
     polygon_xy = stub_primitive.polygon_xy
     if len(polygon_xy) != 4:
         raise ValueError(
-            "single-coil port sheet requires square bottom faces on both terminal stubs "
-            f"(stub_label={stub_primitive.label}, vertices={len(polygon_xy)})"
+            "single-coil port sheet requires square bottom faces on both owner primitives "
+            f"(owner_label={stub_primitive.label}, vertices={len(polygon_xy)})"
         )
     return (
         sum(point_xy[0] for point_xy in polygon_xy) / 4.0,
@@ -82,7 +69,7 @@ def _perpendicular_distance_to_line_xy(
     line_length = math.hypot(line_dx, line_dy)
     if line_length <= 1e-9:
         raise ValueError(
-            "single-coil port sheet requires distinct terminal stub centers "
+            "single-coil port sheet requires distinct owner centers "
             f"(line_start={line_start_xy}, line_end={line_end_xy})"
         )
     point_dx = point_xy[0] - line_start_xy[0]
@@ -99,8 +86,8 @@ def _select_widened_stub_diagonal_xy(
     polygon_xy = stub_primitive.polygon_xy
     if len(polygon_xy) != 4:
         raise ValueError(
-            "single-coil port sheet requires square bottom faces on both terminal stubs "
-            f"(stub_label={stub_primitive.label}, vertices={len(polygon_xy)})"
+            "single-coil port sheet requires square bottom faces on both owner primitives "
+            f"(owner_label={stub_primitive.label}, vertices={len(polygon_xy)})"
         )
     diagonal_candidates = (
         (polygon_xy[0], polygon_xy[2]),
@@ -114,7 +101,7 @@ def _select_widened_stub_diagonal_xy(
         if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
             raise ValueError(
                 "single-coil port sheet diagonal must have positive length "
-                f"(stub_label={stub_primitive.label}, diagonal_start={diagonal_xy[0]}, diagonal_end={diagonal_xy[1]})"
+                f"(owner_label={stub_primitive.label}, diagonal_start={diagonal_xy[0]}, diagonal_end={diagonal_xy[1]})"
             )
         diagonal_score = sum(
             _perpendicular_distance_to_line_xy(
@@ -139,8 +126,8 @@ def _polygon_area_xy(polygon_xy: Polygon2) -> float:
 
 def _bridge_polygon_from_stub_diagonals(
     *,
-    start_stub: CopperPrimitive,
-    end_stub: CopperPrimitive,
+    start_owner: CopperPrimitive,
+    end_owner: CopperPrimitive,
     start_diagonal_xy: tuple[Point2, Point2],
     end_diagonal_xy: tuple[Point2, Point2],
 ) -> Polygon2:
@@ -162,7 +149,7 @@ def _bridge_polygon_from_stub_diagonals(
     if not valid_polygon_found:
         raise ValueError(
             "single-coil port sheet bridge polygon must remain simple "
-            f"(start_stub={start_stub.label}, end_stub={end_stub.label}, "
+            f"(start_owner={start_owner.label}, end_owner={end_owner.label}, "
             f"start_diagonal={start_diagonal_xy}, end_diagonal={end_diagonal_xy})"
         )
     return best_polygon_xy
@@ -369,14 +356,39 @@ def _extrude_face_on_plane(
     return part
 
 
-def _build_single_coil_port_sheet_shape(
+def _single_coil_port_sheet_owner_primitives(
     *,
     realized: RealizedSingleCoilRectVoid,
     centerline: tuple[tuple[float, float], ...],
     profile: SingleCoilProfile,
-    frame_origin_xyz: tuple[float, float, float],
-) -> bd.Face:
-    _require_single_coil_port_sheet_supported(realized, profile=profile)
+) -> tuple[CopperPrimitive, CopperPrimitive]:
+    if profile.role == "tx_single_coil":
+        all_layer_copper_primitives: list[CopperPrimitive] = []
+        for layer_index in range(realized.layer_count):
+            pcb_z = float(layer_index) * (realized.pcb_thickness_mm + realized.layer_gap_mm)
+            all_layer_copper_primitives.extend(
+                _copper_primitives_for_layer(
+                    realized=realized,
+                    centerline=centerline,
+                    layer_index=layer_index,
+                    pcb_z=pcb_z,
+                    profile=profile,
+                )
+            )
+        return (
+            _vertical_bus_primitive_from_stub_column(
+                realized=realized,
+                profile=profile,
+                copper_primitives=tuple(all_layer_copper_primitives),
+                terminal_column="start",
+            ),
+            _vertical_bus_primitive_from_stub_column(
+                realized=realized,
+                profile=profile,
+                copper_primitives=tuple(all_layer_copper_primitives),
+                terminal_column="end",
+            ),
+        )
     copper_primitives = _copper_primitives_for_layer(
         realized=realized,
         centerline=centerline,
@@ -393,31 +405,44 @@ def _build_single_coil_port_sheet_shape(
     )
     if len(start_stub_primitives) != 1 or len(end_stub_primitives) != 1:
         raise ValueError(
-            "single-coil port sheet requires exactly one start/end terminal stub on layer 0 "
+            "single-coil port sheet requires exactly one start/end owner primitive "
             f"(start={len(start_stub_primitives)}, end={len(end_stub_primitives)}, total={len(stub_primitives)})"
         )
-    start_stub = start_stub_primitives[0]
-    end_stub = end_stub_primitives[0]
-    if abs(start_stub.origin_z - end_stub.origin_z) > 1e-9:
+    return (start_stub_primitives[0], end_stub_primitives[0])
+
+
+def _build_single_coil_port_sheet_shape(
+    *,
+    realized: RealizedSingleCoilRectVoid,
+    centerline: tuple[tuple[float, float], ...],
+    profile: SingleCoilProfile,
+    frame_origin_xyz: tuple[float, float, float],
+) -> bd.Face:
+    start_owner, end_owner = _single_coil_port_sheet_owner_primitives(
+        realized=realized,
+        centerline=centerline,
+        profile=profile,
+    )
+    if abs(start_owner.origin_z - end_owner.origin_z) > 1e-9:
         raise ValueError(
-            "single-coil port sheet requires terminal stubs to share one bottom-face plane "
-            f"(start_z={start_stub.origin_z}, end_z={end_stub.origin_z})"
+            "single-coil port sheet requires owner primitives to share one bottom-face plane "
+            f"(start_z={start_owner.origin_z}, end_z={end_owner.origin_z})"
         )
-    start_stub_center_xy = _stub_bottom_face_center_xy(start_stub)
-    end_stub_center_xy = _stub_bottom_face_center_xy(end_stub)
+    start_stub_center_xy = _stub_bottom_face_center_xy(start_owner)
+    end_stub_center_xy = _stub_bottom_face_center_xy(end_owner)
     start_diagonal_xy = _select_widened_stub_diagonal_xy(
-        start_stub,
+        start_owner,
         inter_stub_centerline_start_xy=start_stub_center_xy,
         inter_stub_centerline_end_xy=end_stub_center_xy,
     )
     end_diagonal_xy = _select_widened_stub_diagonal_xy(
-        end_stub,
+        end_owner,
         inter_stub_centerline_start_xy=start_stub_center_xy,
         inter_stub_centerline_end_xy=end_stub_center_xy,
     )
     ordered_bridge_polygon_xy = _bridge_polygon_from_stub_diagonals(
-        start_stub=start_stub,
-        end_stub=end_stub,
+        start_owner=start_owner,
+        end_owner=end_owner,
         start_diagonal_xy=start_diagonal_xy,
         end_diagonal_xy=end_diagonal_xy,
     )
@@ -431,14 +456,14 @@ def _build_single_coil_port_sheet_shape(
     }
     if not expected_diagonal_edge_keys.issubset(bridge_edge_keys):
         raise ValueError(
-            "single-coil port sheet bridge polygon must include both stub diagonals as edges "
-            f"(start_stub={start_stub.label}, end_stub={end_stub.label}, polygon={ordered_bridge_polygon_xy})"
+            "single-coil port sheet bridge polygon must include both owner diagonals as edges "
+            f"(start_owner={start_owner.label}, end_owner={end_owner.label}, polygon={ordered_bridge_polygon_xy})"
         )
     face_xy = _face_from_polygon_xy(ordered_bridge_polygon_xy)
     plane = _plane_for_local_z(
         profile=profile,
         frame_origin_xyz=frame_origin_xyz,
-        local_z=start_stub.origin_z,
+        local_z=start_owner.origin_z,
     )
     face = cast(bd.Face, face_xy.moved(plane.location))
     face.label = _single_coil_port_sheet_label(profile)
@@ -612,14 +637,13 @@ def _expected_exported_body_names(
     *,
     profile: SingleCoilProfile,
 ) -> tuple[str, ...]:
-    _require_single_coil_port_sheet_supported(realized, profile=profile)
     pcb_names = tuple(box.label for box in boxes if box.role == "pcb")
     if _is_tx_multilayer_parallel_stack(realized, profile=profile):
         copper_names = (f"{profile.copper_body_prefix}_stack",)
     else:
         copper_layer_indices = tuple(sorted({box.layer_index for box in boxes if box.role == "copper"}))
         copper_names = tuple(f"{profile.copper_body_prefix}_l{layer_index}" for layer_index in copper_layer_indices)
-    body_names = pcb_names + copper_names + (_single_coil_port_sheet_label(profile),)
+    body_names = pcb_names + copper_names
     if len(body_names) == 0:
         raise ValueError("tx rect/void STEP scene requires at least one exported body")
     if len(body_names) != len(set(body_names)):
@@ -852,13 +876,7 @@ def build_tx_rect_void_step_scene(
                 )
             )
         cut_pcb_shapes = tuple(cut_pcb_shapes_list)
-    port_sheet_shape = _build_single_coil_port_sheet_shape(
-        realized=realized,
-        centerline=centerline,
-        profile=profile,
-        frame_origin_xyz=frame_origin_xyz,
-    )
-    shapes = cut_pcb_shapes + copper_shapes + (port_sheet_shape,)
+    shapes = cut_pcb_shapes + copper_shapes
     actual_body_names = tuple(shape.label for shape in shapes)
     if actual_body_names != expected_body_names:
         raise RuntimeError(

@@ -8,6 +8,41 @@ import pytest
 from entry.refresh_type2_step_viewer_artifacts import refresh_type2_step_viewer_artifacts
 
 
+def _type2_fixed_toml_with_required_underlay_field(tmp_path: Path) -> Path:
+    repo_root = Path(__file__).resolve().parents[2]
+    source_path = repo_root / "examples" / "type2_fixed.toml"
+    source_text = source_path.read_text(encoding="utf-8")
+    if "[modeled_objects.underlay_repeat_count]" not in source_text:
+        source_lines = source_text.splitlines()
+        rewritten_lines: list[str] = []
+        modeled_object_count = 0
+        inserted_count = 0
+        line_index = 0
+        while line_index < len(source_lines):
+            line = source_lines[line_index]
+            rewritten_lines.append(line)
+            if line == "[[modeled_objects]]":
+                modeled_object_count += 1
+            if line == "[modeled_objects.layer_count]":
+                line_index += 1
+                assert line_index < len(source_lines)
+                rewritten_lines.append(source_lines[line_index])
+                rewritten_lines.extend(
+                    (
+                        "",
+                        "[modeled_objects.underlay_repeat_count]",
+                        "range = [true, 0, 0, 1]",
+                    )
+                )
+                inserted_count += 1
+            line_index += 1
+        assert inserted_count == modeled_object_count
+        source_text = "\n".join(rewritten_lines) + "\n"
+    normalized_path = tmp_path / "type2_fixed.with_underlay.toml"
+    normalized_path.write_text(source_text, encoding="utf-8")
+    return normalized_path
+
+
 def _modeled_entry(payload: dict[str, object], *, object_id: str) -> dict[str, object]:
     modeled_objects = payload["modeled_objects"]
     assert isinstance(modeled_objects, list)
@@ -30,8 +65,7 @@ def _member_entry(payload: dict[str, object], *, object_id: str) -> dict[str, ob
 
 
 def test_refresh_type2_step_viewer_artifacts_rebuilds_clean_output_and_validates_tx_rx_placement(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    toml_path = repo_root / "examples" / "type2_fixed.toml"
+    toml_path = _type2_fixed_toml_with_required_underlay_field(tmp_path)
     output_dir = tmp_path / "run" / "step" / "type2"
     ledger_path = output_dir / "type2_step_ledger.json"
 
@@ -77,6 +111,15 @@ def test_refresh_type2_step_viewer_artifacts_rebuilds_clean_output_and_validates
     tx_size_x, tx_size_y, tx_size_z = tx_entry["canonical_coordinates"]["outer_bounds_size_xyz"]
     tx_region_min_x, tx_region_min_y, tx_region_min_z = tx_region["canonical_coordinates"]["outer_bounds_min_xyz"]
     tx_region_size_x, tx_region_size_y, tx_region_size_z = tx_region["canonical_coordinates"]["outer_bounds_size_xyz"]
+    tx_pcb_layers = tx_entry["canonical_coordinates"]["pcb_layer_z_positions_mm"]
+    assert isinstance(tx_pcb_layers, list)
+    tx_expected_names = tx_entry["expected_exported_body_names"]
+    assert tx_expected_names[: len(tx_pcb_layers)] == [f"tx_pcb_l{index}" for index in range(len(tx_pcb_layers))]
+    assert tx_expected_names[len(tx_pcb_layers)] == ("tx_copper_stack" if len(tx_pcb_layers) > 1 else "tx_copper_l0")
+    assert "tx_port_sheet" not in tx_expected_names
+    assert tx_entry["expected_exported_body_count"] == len(tx_expected_names)
+    tx_port_sheet_vertices = tx_entry["terminal_metadata"]["port_sheet_vertices_xyz"]
+    assert len(tx_port_sheet_vertices) == 4
     assert tx_region_min_z == pytest.approx(0.0)
     assert tx_min_x == pytest.approx(tx_region_min_x + (tx_region_size_x - tx_size_x) / 2.0)
     assert tx_min_y == pytest.approx(tx_region_min_y + (tx_region_size_y - tx_size_y) / 2.0)
@@ -88,6 +131,9 @@ def test_refresh_type2_step_viewer_artifacts_rebuilds_clean_output_and_validates
     rx_region_min_x, rx_region_min_y, rx_region_min_z = rx_region["canonical_coordinates"]["outer_bounds_min_xyz"]
     rx_region_max_x, _rx_region_max_y, _rx_region_max_z = rx_region["canonical_coordinates"]["outer_bounds_max_xyz"]
     _rx_region_size_x, rx_region_size_y, _rx_region_size_z = rx_region["canonical_coordinates"]["outer_bounds_size_xyz"]
+    assert rx_entry["expected_exported_body_names"] == ["rx_pcb_l0", "rx_copper_l0"]
+    assert rx_entry["expected_exported_body_count"] == 2
+    assert "rx_port_sheet" not in rx_entry["expected_exported_body_names"]
     assert rx_region_min_z == pytest.approx(139.0)
     assert rx_min_x == pytest.approx(rx_region_max_x - rx_size_x)
     assert rx_min_y == pytest.approx(rx_region_min_y + (rx_region_size_y - rx_size_y) / 2.0)

@@ -1,7 +1,7 @@
 ---
 title: generate_type2_step.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 20:11
+updated: 2026-04-17 @ 19:20
 tags:
   - type2
   - step-export
@@ -14,6 +14,7 @@ tags:
 - Code note path: `sdd/code/entry/generate_type2_step.py.md`
 - Related plan: [[sdd/plans/0.2.22-type2-toml-unification]]
 - Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
+- Related feature plan: [[sdd/plans/0.2.22-type2-tx-underlay-mull12060ferrite]]
 - Related architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 - Related test: [[sdd/code/tests/type2/test_generate_type2_step.py]]
 
@@ -25,13 +26,15 @@ tags:
 - modeled single-coil placement는 owner plane별로 절대 배치를 계산하며, terminal stub/bus 포함 높이를 normal-axis height에 포함한다.
 - placement는 routing envelope가 아니라 derived modeled bbox를 기준으로 계산한다.
 - current implementation delegates to the generalized single-coil core and consumes TX multilayer parallel-bus outputs directly.
-- entry-facing single-coil modeled export contract now requires one explicit separate port-sheet body per coil: `tx_port_sheet`, `rx_port_sheet`.
-- the entry surface fail-fast validates single-layer expected body names/count against that contract before returning the ledger to callers.
-- the entry surface reopens the exported scene STEP and fail-fast validates the revised single-layer port-sheet geometry rule:
-  - the sheet lies in the shared plane of the two terminal-stub bottom faces
-  - the sheet boundary is built from one widened canonical diagonal on each terminal-stub bottom-face square
-  - each stub diagonal is chosen against the inter-stub centerline: among the two square diagonals, keep the one whose endpoints maximize the summed perpendicular distance to the line joining the two stub centers
-  - the exported sheet resolves to exactly four unique vertices, one diagonal endpoint pair per stub square
+- entry-facing modeled export contract keeps port-sheet ownership in `terminal_metadata.port_sheet_vertices_xyz` only and never reintroduces port-sheet STEP bodies.
+- TX underlay milestone adds scene-layer explicit tri-layer solids below the TX modeled stack while keeping underlay responsibility outside the `tx_rect_void` core.
+- the entry surface fail-fast validates expected body names/count for single-layer TX/RX and TX multilayer before returning the ledger to callers.
+- the entry surface fail-fast validates the metadata-owned port-sheet geometry rule:
+  - the sheet lies in the shared plane of the two canonical owner bottom faces
+  - TX always uses the two bottom bus faces, with single-layer TX synthesizing the same bus footprint from its one-layer terminal-stub column; RX uses the two terminal-stub bottom-face squares
+  - the sheet boundary is built from one widened canonical diagonal on each owner bottom-face square
+  - each owner diagonal is chosen against the inter-owner centerline: among the two square diagonals, keep the one whose endpoints maximize the summed perpendicular distance to the line joining the two owner centers
+  - the exported sheet resolves to exactly four unique vertices, one diagonal endpoint pair per owner square
   - single-square-owned geometry, unwidened diagonal selection, and terminal-pair span geometry are not accepted anymore
 
 ## 입력 / 출력
@@ -54,12 +57,16 @@ tags:
 - active example `type2_fixed.toml` baseline is data-owned: the scene is globally Z-rebased so `tx_region.bottom == 0`, and the generator must preserve that explicit world-coordinate contract instead of renormalizing it.
 - modeled object ledger entries are metadata-only; per-entry `step_path`는 없다.
 - modeled object metadata keeps `source_toml_path` as the type2 TOML path even though the internal `tx_rect_void` parser is reused.
-- TX multilayer modeled metadata keeps per-layer PCB names plus a single `tx_copper_stack` expected body name, and terminal points resolve to the two bottom bus faces.
+- TX modeled metadata keeps per-layer PCB names plus a single `tx_copper_stack` expected body name when multilayer, terminal points resolve to the two bottom bus faces for the multilayer case, and `port_sheet_vertices_xyz` resolves from TX bus bottom faces for every supported TX layer count.
+- TX modeled metadata keeps `underlay_repeat_count` ownership in the source TOML and reflects the realized underlay only through exact expected body names/count:
+  - `tx_underlay_ferrite_u{n}`
+  - `tx_underlay_pet_psa_u{n}`
+  - `tx_underlay_air_u{n}`
 - type2 owns modeled placement: exported modeled metadata is already scene-absolute and matches each role's owner-plane contract using the derived PCB+copper union bbox (`tx_region` centered/top-aligned XY, `rx_region_actual` bottom-Z/right-face-aligned YZ).
 - modeled scene authoring passes the same role profile through realization, box decomposition, placement, and final scene export.
-- port-sheet bodies are modeled export bodies, not non-model members, and remain separate top-level STEP children for later port-assignment use.
-- in the current single-layer scene, there are exactly two port-sheet bodies total: one TX and one RX.
-- single-layer port-sheet geometry is defined from the pair of terminal-stub bottom-face squares: the exported sheet must bridge the two widened diagonals in their shared plane, chosen by maximum perpendicular spread away from the inter-stub centerline.
+- port-sheet vertices are modeled metadata, not non-model members, and remain outside the final `type2_scene.step` child set.
+- TX underlay placement is scene-layer owned: the first ferrite top face touches the modeled canonical minimum-Z plane and every later unit stacks downward in deterministic tri-layer order.
+- port-sheet geometry is defined from the canonical start/end owner pair bottom-face squares: the exported metadata must bridge the two widened diagonals in their shared plane, chosen by maximum perpendicular spread away from the inter-owner centerline.
 
 ## Invariants / fail-fast
 - `design.units`는 `mm`여야 한다.
@@ -78,14 +85,15 @@ tags:
 - modeled object uses `outer_y_mm`; ratio-based outer-y input is no longer accepted.
 - `outer_x_mm` / `outer_y_mm` are routing-envelope inputs, not exported PCB size guarantees.
 - current modeled object surface still carries `terminal_stub_length_mm`, but geometry ownership is derived from `layer_gap_mm * 0.8`.
+- `underlay_repeat_count` is a shared modeled-object field with canonical encoding `[true, 0, 8, 5]`. TX supports the realized set `{0, 2, 4, 6, 8}` and RX currently fail-fast rejects non-zero values.
 - `tx_single_coil` may export multilayer parallel-bus geometry; `rx_single_coil` still fail-fast rejects `layer_count != 1`.
 - RX/TX modeled realization must never fall back to TX default profile inside the type2 scene export path.
 - modeled export must record expected exported body names/count for import smoke validation.
 - modeled export must place each single coil at export time according to its owner plane with scene-absolute bounds derived from the actual exported PCB+copper union and plane-aware terminal metadata (`start_point_plane_mm`, `end_point_plane_mm`) already resolved.
 - TX multilayer expected body names are `tx_pcb_l{n}` plus `tx_copper_stack`; single-layer TX/RX keep `*_pcb_l0` + `*_copper_l0`.
-- single-layer expected body names are `tx_pcb_l0` + `tx_copper_l0` + `tx_port_sheet` and `rx_pcb_l0` + `rx_copper_l0` + `rx_port_sheet`.
-- first port-sheet implementation target assumes `tx_single_coil.layer_count == 1`; TX multilayer entering the sheet path before follow-up work lands is expected to fail fast.
-- single-layer port-sheet validation is geometry-aware at the entry boundary: exported sheet placement must stay on the shared terminal-stub bottom-face plane and its boundary must connect the two widened stub-bottom diagonals selected from the inter-stub centerline.
+- TX underlay bodies, when present, must append after the TX PCB/copper base set in exact `ferrite -> pet_psa -> air` per-unit order, and `u0` must be the unit nearest the TX modeled body.
+- TX underlay footprint must follow the actual exported TX planar bounds, not `tx_region` full bounds and not a separate margin heuristic.
+- port-sheet validation is geometry-aware at the entry boundary: exported metadata vertices must stay on the shared owner bottom-face plane and their boundary must connect the two widened owner-bottom diagonals selected from the inter-owner centerline.
 - final scene STEP body names must be unique across non-model + modeled bodies.
 - `build123d.export_step()`가 `False`를 반환하면 즉시 예외로 중단한다.
 
@@ -105,10 +113,11 @@ tags:
 - [ ] tx-only convenience export surface를 role-neutral single-coil convenience surface로 정리한다.
 - [ ] generalized single-coil engine이 준비되면 current TX-named delegation/temp TOML bridge를 대체한다.
 - [ ] solve-ready slice에서 retained ledger에 port/validate handoff metadata를 추가할지 확정한다.
-- [ ] imported exact-name partition and future port adapter에 `tx_port_sheet` / `rx_port_sheet`를 연결한다.
+- [ ] imported exact-name partition and future port adapter에서 underlay body taxonomy와 metadata-driven port-sheet reconstruction ownership을 함께 정리한다.
 
 ## 변경 시 주의점
 - modeled object schema field를 바꾸면 `type2_fixed.toml`과 테스트 fixture를 함께 갱신한다.
 - ledger 필드 shape를 바꾸면 downstream import smoke contract를 함께 갱신한다.
 - owner region 크기를 바꿀 때는 stub 포함 coil thickness가 owner normal-axis 안에 계속 들어가는지 테스트와 example 값을 함께 확인한다.
+- TX underlay는 `tx_rect_void` core output이 아니라 type2 scene-layer responsibility다. core geometry note와 scene/import notes를 분리해 갱신한다.
 - 새 modeled role을 추가할 때는 명시적으로 parser/dispatcher를 확장하고 unsupported role fail-fast를 유지한다.

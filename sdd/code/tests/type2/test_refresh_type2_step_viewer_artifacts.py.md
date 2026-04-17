@@ -17,6 +17,7 @@ tags:
 ## 역할
 - type2 STEP viewer refresh entry가 stale output dir를 지우고 fresh STEP artifacts를 다시 만드는지 검증한다.
 - refreshed ledger와 canonical scene STEP가 TX/RX placement contract를 유지하는지 확인한다.
+- active example의 TX multilayer metadata-owned port-sheet vertices까지 refresh 경로에서 살아남는지 함께 확인한다.
 
 ## 입력 / 출력
 - 입력:
@@ -34,6 +35,7 @@ tags:
 - `type2_step_ledger.json`, `type2_scene.step`, modeled metadata files가 다시 생성돼야 한다.
 - stale `type2_combined_preview.step`와 `objects/` 디렉터리는 refresh 후 남아 있으면 안 된다.
 - refreshed active example baseline must keep `tx_region.bottom == 0` after the scene Z rebase.
+- refreshed active example TX multilayer path must still emit exactly four canonical `port_sheet_vertices_xyz` entries.
 - TX는 centered/top-aligned contract를 유지해야 한다.
 - RX는 centered Y + bottom Z + owner max-X contract를 유지해야 하며, rebased active example에서는 `rx_region_max.min_z == 139`를 그대로 써야 한다.
 
