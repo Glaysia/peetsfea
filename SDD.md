@@ -1,7 +1,7 @@
 ---
 title: SDD
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 20:35
 tags:
   - governance
 ---
@@ -31,6 +31,7 @@ tags:
   - `src/peetsfea/spec/__init__.py` -> `sdd/code/src/peetsfea/spec/__init__.py.md`
 - 신규 파일 생성과 실질 수정은 같은 변경 안에서 대응 문서를 만들거나 갱신해야 한다.
 - 코드 대응 문서가 없는 신규/실질 수정 코드는 `0.2.22+` 기준의 완료 상태로 보지 않는다.
+- 실질 수정 대상 Python 파일은 가능하면 코드 편집 전에 대응 `sdd/code/...md` 노트를 먼저 만들거나 갱신한다. 같은 변경 안에서 맞추는 것만으로 충분하다고 간주하지 말고, 기본 작업 순서는 `SDD note 선행 -> 코드 수정 -> 테스트/검증`으로 유지한다.
 
 ## 실질 수정 정의
 - 아래는 실질 수정이다:
@@ -79,10 +80,10 @@ tags:
 ## 링크 규칙
 - 기본 링크 형식은 Obsidian wikilink다.
 - 충돌을 피하려면 path-qualified 링크를 우선 사용한다.
-- 링크는 의미 기반으로 둔다. 전역 정책 문서나 허브 문서를 모든 노트에 반복 링크하지 않는다.
-- 코드 문서는 직접 관련 계획, 직접 협력 코드, 직접 관련 테스트, 구체적 관련 docs/architecture/diagram만 링크한다.
-- 계획 문서는 실제 영향을 받는 코드 대응 문서와 직접 선행/후속 계획만 링크한다.
-- 폴더 index는 부모 허브와 자기 폴더의 직접 문서 목록을 연결한다.
+- 허용 링크 역할은 `parent hub`, `primary plan`, `primary architecture/structure`, `direct collaborator`, `direct verification`로 제한한다.
+- backlog, split map, inventory, future work, historical context, broad relatedness는 plain text path나 inline code로 기록한다.
+- 전역 정책 문서나 허브 문서를 모든 노트에 반복 링크하지 않는다.
+- 세부 예산과 demotion 규칙은 [[sdd/structure/obsidian-link-policy]]를 따른다.
 
 ## TOML spec SSOT와의 관계
 - TOML spec은 기능/입력의 SSOT다.
@@ -102,6 +103,7 @@ tags:
 ## 작업 체크리스트
 - `src/`, `entry/`, `tests/`의 새 파일을 만들었는가: 대응 코드 노트를 만든다.
 - 기존 파일을 실질 수정했는가: 대응 코드 노트를 갱신한다.
+- 실질 수정 대상 Python 파일 작업을 시작하려는가: 가능하면 먼저 대응 코드 노트를 열어 책임, canonical state, invariants, fail-fast 변화부터 고정한 뒤 코드에 들어간다.
 - 신규 기능 또는 큰 리팩터링인가: `sdd/plans/` 아래 계획 문서를 만든다.
 - `src/` 또는 `entry/`의 tracked Python 파일이 800줄을 넘는가: strong guideline 기준의 분리 검토 대상이다. 예외는 문서화된 ownership boundary 판단으로만 남긴다.
 - 위와 같은 분리에서 새 tracked Python 파일이 생기는가: 새 파일마다 대응 `sdd/code/<repo-relative-path>.md`를 같은 변경에 추가한다.

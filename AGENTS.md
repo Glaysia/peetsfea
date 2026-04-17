@@ -1,7 +1,7 @@
 ---
 title: AGENTS
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 20:35
 tags:
   - governance
 ---
@@ -71,6 +71,7 @@ This document defines the project rules for coding agents working in this reposi
   - `tests/legacy/type1/spec_resolver/test_sampling_registry.py` -> `sdd/code/tests/spec_resolver/test_sampling_registry.py.md`
 - A substantive edit includes changes to logic, interfaces, runtime state, invariants, I/O, fail-fast behavior, or data flow. Formatting-only, comment-only, or purely mechanical non-behavioral changes do not trigger mandatory note updates.
 - Every code note must state the source path, single responsibility, inputs/outputs, canonical state, invariants, fail-fast points, collaborator modules, related tests, change hazards, and relevant Obsidian wikilink connections.
+- For any substantive edit to tracked Python under `src/`, `entry/`, or `tests/`, update or create the matching `sdd/code/...md` note before editing the Python code whenever feasible. Do not defer SDD note updates until after the code change unless the user explicitly asks to postpone documentation work for the current task.
 - New features and large refactors must create or update a plan note under `sdd/plans/` before or alongside the code change.
 - For `src/` or `entry/` size-driven refactors, treat the 800-line threshold as a strong guideline rather than a hard cap. Exceptions should be justified by documented ownership boundaries instead of convenience.
 - If splitting a tracked Python file creates new tracked Python files, add the matching `sdd/code/<repo-relative-path>.md` notes in the same change and update the original file's note to match its reduced responsibility.
