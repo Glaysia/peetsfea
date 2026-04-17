@@ -7,6 +7,10 @@ from typing import Literal, TypedDict
 Point3 = tuple[float, float, float]
 
 
+class Type2ImportEmPolicy(TypedDict):
+    radiation_margin_mm: float
+
+
 class CanonicalCoordinates(TypedDict):
     frame_origin_xyz: Point3
     outer_bounds_min_xyz: Point3
@@ -58,6 +62,7 @@ class Type2StepLedger(TypedDict):
     output_dir: str
     scene_step_path: str
     seed: int
+    em_policy: Type2ImportEmPolicy
     non_model_objects: list[NonModelObjectLedgerEntry]
     modeled_objects: list[ModeledObjectLedgerEntry]
 
@@ -114,6 +119,7 @@ def build_type2_step_ledger(
     output_dir: Path,
     scene_step_path: Path,
     seed: int,
+    em_policy: Type2ImportEmPolicy,
     non_model_objects: list[NonModelObjectLedgerEntry],
     modeled_objects: list[ModeledObjectLedgerEntry],
 ) -> Type2StepLedger:
@@ -122,6 +128,7 @@ def build_type2_step_ledger(
         "output_dir": str(output_dir),
         "scene_step_path": str(scene_step_path),
         "seed": seed,
+        "em_policy": em_policy,
         "non_model_objects": non_model_objects,
         "modeled_objects": modeled_objects,
     }
@@ -139,6 +146,7 @@ __all__ = [
     "NonModelObjectLedgerEntry",
     "NonModelSceneMemberLedgerEntry",
     "Point3",
+    "Type2ImportEmPolicy",
     "Type2DirectModeledArtifact",
     "Type2StepLedger",
     "build_modeled_object_ledger_entry",

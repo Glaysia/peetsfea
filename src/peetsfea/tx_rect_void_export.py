@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict
 from pathlib import Path
 from typing import Literal, cast
@@ -11,6 +12,7 @@ from peetsfea.tx_rect_void_centerline import _void_polygon, build_tx_rect_void_c
 from peetsfea.tx_rect_void_geometry import (
     _planar_bounds_from_polygons,
     _polygon_bounds,
+    _polygon_is_simple,
     _polygons_overlap_positive_area,
     _rect_polygon_from_bounds,
     _segment_joined_polygon,
@@ -35,6 +37,135 @@ from peetsfea.tx_rect_void_types import (
 )
 
 _TERMINAL_STUB_SIDE_RATIO = 0.60
+
+
+def _single_coil_port_sheet_label(profile: SingleCoilProfile) -> str:
+    if profile.role == "tx_single_coil":
+        return "tx_port_sheet"
+    return "rx_port_sheet"
+
+
+def _require_single_coil_port_sheet_supported(
+    realized: RealizedSingleCoilRectVoid,
+    *,
+    profile: SingleCoilProfile,
+) -> None:
+    if profile.role == "tx_single_coil" and realized.layer_count != 1:
+        raise ValueError(
+            "single-coil port sheet from widened terminal-stub bottom-face diagonals currently supports only "
+            "tx_single_coil.layer_count == 1 "
+            f"(actual={realized.layer_count})"
+        )
+
+
+def _stub_bottom_face_center_xy(stub_primitive: CopperPrimitive) -> Point2:
+    polygon_xy = stub_primitive.polygon_xy
+    if len(polygon_xy) != 4:
+        raise ValueError(
+            "single-coil port sheet requires square bottom faces on both terminal stubs "
+            f"(stub_label={stub_primitive.label}, vertices={len(polygon_xy)})"
+        )
+    return (
+        sum(point_xy[0] for point_xy in polygon_xy) / 4.0,
+        sum(point_xy[1] for point_xy in polygon_xy) / 4.0,
+    )
+
+
+def _perpendicular_distance_to_line_xy(
+    point_xy: Point2,
+    *,
+    line_start_xy: Point2,
+    line_end_xy: Point2,
+) -> float:
+    line_dx = line_end_xy[0] - line_start_xy[0]
+    line_dy = line_end_xy[1] - line_start_xy[1]
+    line_length = math.hypot(line_dx, line_dy)
+    if line_length <= 1e-9:
+        raise ValueError(
+            "single-coil port sheet requires distinct terminal stub centers "
+            f"(line_start={line_start_xy}, line_end={line_end_xy})"
+        )
+    point_dx = point_xy[0] - line_start_xy[0]
+    point_dy = point_xy[1] - line_start_xy[1]
+    return abs((line_dx * point_dy) - (line_dy * point_dx)) / line_length
+
+
+def _select_widened_stub_diagonal_xy(
+    stub_primitive: CopperPrimitive,
+    *,
+    inter_stub_centerline_start_xy: Point2,
+    inter_stub_centerline_end_xy: Point2,
+) -> tuple[Point2, Point2]:
+    polygon_xy = stub_primitive.polygon_xy
+    if len(polygon_xy) != 4:
+        raise ValueError(
+            "single-coil port sheet requires square bottom faces on both terminal stubs "
+            f"(stub_label={stub_primitive.label}, vertices={len(polygon_xy)})"
+        )
+    diagonal_candidates = (
+        (polygon_xy[0], polygon_xy[2]),
+        (polygon_xy[1], polygon_xy[3]),
+    )
+    best_diagonal_xy = diagonal_candidates[0]
+    best_score = -1.0
+    for diagonal_xy in diagonal_candidates:
+        dx = diagonal_xy[1][0] - diagonal_xy[0][0]
+        dy = diagonal_xy[1][1] - diagonal_xy[0][1]
+        if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
+            raise ValueError(
+                "single-coil port sheet diagonal must have positive length "
+                f"(stub_label={stub_primitive.label}, diagonal_start={diagonal_xy[0]}, diagonal_end={diagonal_xy[1]})"
+            )
+        diagonal_score = sum(
+            _perpendicular_distance_to_line_xy(
+                point_xy,
+                line_start_xy=inter_stub_centerline_start_xy,
+                line_end_xy=inter_stub_centerline_end_xy,
+            )
+            for point_xy in diagonal_xy
+        )
+        if diagonal_score > best_score + 1e-9:
+            best_diagonal_xy = diagonal_xy
+            best_score = diagonal_score
+    return best_diagonal_xy
+
+
+def _polygon_area_xy(polygon_xy: Polygon2) -> float:
+    area = 0.0
+    for first_point_xy, second_point_xy in zip(polygon_xy, polygon_xy[1:] + polygon_xy[:1]):
+        area += (first_point_xy[0] * second_point_xy[1]) - (second_point_xy[0] * first_point_xy[1])
+    return area / 2.0
+
+
+def _bridge_polygon_from_stub_diagonals(
+    *,
+    start_stub: CopperPrimitive,
+    end_stub: CopperPrimitive,
+    start_diagonal_xy: tuple[Point2, Point2],
+    end_diagonal_xy: tuple[Point2, Point2],
+) -> Polygon2:
+    candidate_polygons = (
+        (start_diagonal_xy[0], start_diagonal_xy[1], end_diagonal_xy[0], end_diagonal_xy[1]),
+        (start_diagonal_xy[0], start_diagonal_xy[1], end_diagonal_xy[1], end_diagonal_xy[0]),
+    )
+    best_polygon_xy = candidate_polygons[0]
+    best_area = -1.0
+    valid_polygon_found = False
+    for candidate_polygon_xy in candidate_polygons:
+        if not _polygon_is_simple(candidate_polygon_xy):
+            continue
+        valid_polygon_found = True
+        candidate_area = abs(_polygon_area_xy(candidate_polygon_xy))
+        if candidate_area > best_area + 1e-9:
+            best_polygon_xy = candidate_polygon_xy
+            best_area = candidate_area
+    if not valid_polygon_found:
+        raise ValueError(
+            "single-coil port sheet bridge polygon must remain simple "
+            f"(start_stub={start_stub.label}, end_stub={end_stub.label}, "
+            f"start_diagonal={start_diagonal_xy}, end_diagonal={end_diagonal_xy})"
+        )
+    return best_polygon_xy
 
 
 def _transform_box_spec(
@@ -238,6 +369,82 @@ def _extrude_face_on_plane(
     return part
 
 
+def _build_single_coil_port_sheet_shape(
+    *,
+    realized: RealizedSingleCoilRectVoid,
+    centerline: tuple[tuple[float, float], ...],
+    profile: SingleCoilProfile,
+    frame_origin_xyz: tuple[float, float, float],
+) -> bd.Face:
+    _require_single_coil_port_sheet_supported(realized, profile=profile)
+    copper_primitives = _copper_primitives_for_layer(
+        realized=realized,
+        centerline=centerline,
+        layer_index=0,
+        pcb_z=0.0,
+        profile=profile,
+    )
+    stub_primitives = tuple(primitive for primitive in copper_primitives if primitive.feature == "terminal_stub")
+    start_stub_primitives = tuple(
+        primitive for primitive in stub_primitives if primitive.terminal_column == "start"
+    )
+    end_stub_primitives = tuple(
+        primitive for primitive in stub_primitives if primitive.terminal_column == "end"
+    )
+    if len(start_stub_primitives) != 1 or len(end_stub_primitives) != 1:
+        raise ValueError(
+            "single-coil port sheet requires exactly one start/end terminal stub on layer 0 "
+            f"(start={len(start_stub_primitives)}, end={len(end_stub_primitives)}, total={len(stub_primitives)})"
+        )
+    start_stub = start_stub_primitives[0]
+    end_stub = end_stub_primitives[0]
+    if abs(start_stub.origin_z - end_stub.origin_z) > 1e-9:
+        raise ValueError(
+            "single-coil port sheet requires terminal stubs to share one bottom-face plane "
+            f"(start_z={start_stub.origin_z}, end_z={end_stub.origin_z})"
+        )
+    start_stub_center_xy = _stub_bottom_face_center_xy(start_stub)
+    end_stub_center_xy = _stub_bottom_face_center_xy(end_stub)
+    start_diagonal_xy = _select_widened_stub_diagonal_xy(
+        start_stub,
+        inter_stub_centerline_start_xy=start_stub_center_xy,
+        inter_stub_centerline_end_xy=end_stub_center_xy,
+    )
+    end_diagonal_xy = _select_widened_stub_diagonal_xy(
+        end_stub,
+        inter_stub_centerline_start_xy=start_stub_center_xy,
+        inter_stub_centerline_end_xy=end_stub_center_xy,
+    )
+    ordered_bridge_polygon_xy = _bridge_polygon_from_stub_diagonals(
+        start_stub=start_stub,
+        end_stub=end_stub,
+        start_diagonal_xy=start_diagonal_xy,
+        end_diagonal_xy=end_diagonal_xy,
+    )
+    bridge_edge_keys = {
+        frozenset((ordered_bridge_polygon_xy[index], ordered_bridge_polygon_xy[(index + 1) % len(ordered_bridge_polygon_xy)]))
+        for index in range(len(ordered_bridge_polygon_xy))
+    }
+    expected_diagonal_edge_keys = {
+        frozenset(start_diagonal_xy),
+        frozenset(end_diagonal_xy),
+    }
+    if not expected_diagonal_edge_keys.issubset(bridge_edge_keys):
+        raise ValueError(
+            "single-coil port sheet bridge polygon must include both stub diagonals as edges "
+            f"(start_stub={start_stub.label}, end_stub={end_stub.label}, polygon={ordered_bridge_polygon_xy})"
+        )
+    face_xy = _face_from_polygon_xy(ordered_bridge_polygon_xy)
+    plane = _plane_for_local_z(
+        profile=profile,
+        frame_origin_xyz=frame_origin_xyz,
+        local_z=start_stub.origin_z,
+    )
+    face = cast(bd.Face, face_xy.moved(plane.location))
+    face.label = _single_coil_port_sheet_label(profile)
+    return face
+
+
 def _box_xy_bounds(box: BoxSpec) -> RectBounds:
     origin_x, origin_y, _origin_z = box.origin_xyz
     size_x, size_y, _size_z = box.size_xyz
@@ -405,13 +612,14 @@ def _expected_exported_body_names(
     *,
     profile: SingleCoilProfile,
 ) -> tuple[str, ...]:
+    _require_single_coil_port_sheet_supported(realized, profile=profile)
     pcb_names = tuple(box.label for box in boxes if box.role == "pcb")
     if _is_tx_multilayer_parallel_stack(realized, profile=profile):
         copper_names = (f"{profile.copper_body_prefix}_stack",)
     else:
         copper_layer_indices = tuple(sorted({box.layer_index for box in boxes if box.role == "copper"}))
         copper_names = tuple(f"{profile.copper_body_prefix}_l{layer_index}" for layer_index in copper_layer_indices)
-    body_names = pcb_names + copper_names
+    body_names = pcb_names + copper_names + (_single_coil_port_sheet_label(profile),)
     if len(body_names) == 0:
         raise ValueError("tx rect/void STEP scene requires at least one exported body")
     if len(body_names) != len(set(body_names)):
@@ -644,7 +852,13 @@ def build_tx_rect_void_step_scene(
                 )
             )
         cut_pcb_shapes = tuple(cut_pcb_shapes_list)
-    shapes = cut_pcb_shapes + copper_shapes
+    port_sheet_shape = _build_single_coil_port_sheet_shape(
+        realized=realized,
+        centerline=centerline,
+        profile=profile,
+        frame_origin_xyz=frame_origin_xyz,
+    )
+    shapes = cut_pcb_shapes + copper_shapes + (port_sheet_shape,)
     actual_body_names = tuple(shape.label for shape in shapes)
     if actual_body_names != expected_body_names:
         raise RuntimeError(

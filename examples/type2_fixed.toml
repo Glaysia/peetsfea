@@ -15,6 +15,9 @@ authoring_tool = "build123d"
 solver_tool = "hfss"
 interchange_format = "step"
 
+[simulation]
+radiation_margin_mm = 3500.0
+
 [coordinate_system]
 origin = [0.0, 0.0, 0.0]
 x_axis = "+right_from_wall"

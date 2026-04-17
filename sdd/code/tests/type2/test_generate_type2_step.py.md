@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 20:11
 tags:
   - type2
   - step-export
@@ -43,12 +43,17 @@ tags:
 - modeled required field 누락(`terminal_path`)은 즉시 실패해야 한다.
 - invalid terminal path는 modeled export 단계에서 즉시 실패해야 한다.
 - scene `build123d.export_step()`가 `False`면 즉시 실패해야 한다.
-- 성공 케이스에서는 `type2_scene.step` 1개, metadata JSON, ledger JSON이 생성되고 ledger top-level `scene_step_path`, non-model `member_objects`, modeled expected body names/count, scene-absolute placement/terminal metadata가 기록되어야 한다.
+- 성공 케이스에서는 `type2_scene.step` 1개, metadata JSON, ledger JSON이 생성되고 ledger top-level `scene_step_path`, `em_policy`, non-model `member_objects`, modeled expected body names/count, scene-absolute placement/terminal metadata가 기록되어야 한다.
 - current regression explicitly covers scene STEP/ledger placement bounds and realized body naming without assuming TX multilayer example input.
 - generated `type2_scene.step`의 modeled PCB/copper body pair는 final exported solids 기준으로 shared volume이 없어야 한다.
+- single-layer scene regression must assert scene labels include `tx_port_sheet` and `rx_port_sheet`.
+- single-layer scene regression must assert those sheet bodies remain distinct top-level exported bodies and do not disappear into copper/PCB naming.
+- single-layer scene regression should also confirm the port-sheet face stays on the shared terminal-stub bottom-face plane, exports exactly four unique vertices, and bridges the two widened terminal-stub bottom-square diagonals chosen by maximum perpendicular spread away from the inter-stub centerline.
+- current TX multilayer port-sheet path is expected to fail fast until a multilayer sheet contract is implemented; regression should assert that explicit failure rather than papering over it.
 - future test obligations:
   - TX/RX shared generalized-engine parity regression
   - RX still fail-fast rejects multilayer after the first TX multilayer milestone
+  - expected body name/count assertions update for the two current sheet bodies `tx_port_sheet`, `rx_port_sheet`
 
 ## 직접 의존
 - `pytest`

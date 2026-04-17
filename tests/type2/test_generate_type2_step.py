@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import math
+import tempfile
 from pathlib import Path
 from typing import cast
 
@@ -10,9 +12,12 @@ import pytest
 from entry.generate_type2_step import export_type2_step_artifacts
 from entry.generate_type2_step import load_type2_step_spec
 from peetsfea.tx_rect_void import build_tx_rect_void_box_specs
+from peetsfea.tx_rect_void import build_tx_rect_void_centerline
 from peetsfea.tx_rect_void import load_tx_rect_void_spec
 from peetsfea.tx_rect_void import modeled_body_bounds_from_boxes
+from peetsfea.tx_rect_void import profile_for_modeled_role
 from peetsfea.tx_rect_void import realize_tx_rect_void_spec
+from peetsfea.type2_step_spec import render_tx_rect_void_toml
 
 
 def _range(is_integer: bool, start: float, end: float, count: int) -> str:
@@ -26,6 +31,7 @@ def _type2_spec_text(
     modeled_role: str = "tx_single_coil",
     terminal_path: str = "A_cw_to_a",
     layer_count: int = 1,
+    radiation_margin_mm: float = 3500.0,
 ) -> str:
     return f"""
 spec_version = "0.2.22"
@@ -34,6 +40,9 @@ runtime_compatible = false
 
 [design]
 units = "mm"
+
+[simulation]
+radiation_margin_mm = {radiation_margin_mm}
 
 [[non_model_objects]]
 id = "floor"
@@ -217,11 +226,251 @@ def _assert_zero_intersection_volume(first: object, second: object) -> None:
     assert shared_shape.volume == pytest.approx(0.0, abs=1e-9)
 
 
+def _single_coil_placement_offset_from_local_bounds(
+    *,
+    owner_origin_xyz: tuple[float, float, float],
+    owner_size_xyz: tuple[float, float, float],
+    local_bounds_min_xyz: tuple[float, float, float],
+    local_size_xyz: tuple[float, float, float],
+    profile: object,
+) -> tuple[float, float, float]:
+    assert hasattr(profile, "plane")
+    assert hasattr(profile, "world_size")
+    assert hasattr(profile, "world_delta")
+    plane = profile.plane
+    world_size_xyz = profile.world_size(local_size_xyz)
+    world_min_delta = profile.world_delta(local_bounds_min_xyz)
+    if plane == "XY":
+        target_world_min_xyz = (
+            owner_origin_xyz[0] + (owner_size_xyz[0] - world_size_xyz[0]) / 2.0,
+            owner_origin_xyz[1] + (owner_size_xyz[1] - world_size_xyz[1]) / 2.0,
+            owner_origin_xyz[2] + owner_size_xyz[2] - world_size_xyz[2],
+        )
+    else:
+        target_world_min_xyz = (
+            owner_origin_xyz[0] + owner_size_xyz[0] - world_size_xyz[0],
+            owner_origin_xyz[1] + (owner_size_xyz[1] - world_size_xyz[1]) / 2.0,
+            owner_origin_xyz[2],
+        )
+    return (
+        target_world_min_xyz[0] - world_min_delta[0],
+        target_world_min_xyz[1] - world_min_delta[1],
+        target_world_min_xyz[2] - world_min_delta[2],
+    )
+
+
+def _transform_box_to_world(
+    *,
+    origin_xyz: tuple[float, float, float],
+    size_xyz: tuple[float, float, float],
+    frame_origin_xyz: tuple[float, float, float],
+    profile: object,
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    assert hasattr(profile, "world_point")
+    assert hasattr(profile, "world_size")
+    return (
+        profile.world_point(origin_xyz, frame_origin_xyz=frame_origin_xyz),
+        profile.world_size(size_xyz),
+    )
+
+
+def _world_terminal_stub_boxes(
+    *,
+    source_toml: Path,
+    object_id: str,
+    seed: int,
+) -> tuple[tuple[tuple[float, float, float], tuple[float, float, float]], ...]:
+    type2_spec = load_type2_step_spec(source_toml)
+    modeled_spec = next(entry for entry in type2_spec.modeled_objects if entry.object_id == object_id)
+    profile = profile_for_modeled_role(modeled_spec.role)
+    owner_spec = next(spec for spec in type2_spec.non_model_objects if spec.object_id == profile.placement_owner_id)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        tx_rect_void_toml_path = Path(temp_dir) / f"{object_id}.toml"
+        tx_rect_void_toml_path.write_text(render_tx_rect_void_toml(modeled_spec), encoding="utf-8")
+        tx_rect_void_spec = load_tx_rect_void_spec(tx_rect_void_toml_path)
+        realized = realize_tx_rect_void_spec(tx_rect_void_spec, seed=seed, profile=profile)
+    local_boxes = build_tx_rect_void_box_specs(realized, profile=profile)
+    local_bounds_min_xyz, _local_bounds_max_xyz, local_size_xyz = modeled_body_bounds_from_boxes(local_boxes)
+    frame_origin_xyz = _single_coil_placement_offset_from_local_bounds(
+        owner_origin_xyz=owner_spec.origin_xyz,
+        owner_size_xyz=owner_spec.size_xyz,
+        local_bounds_min_xyz=local_bounds_min_xyz,
+        local_size_xyz=local_size_xyz,
+        profile=profile,
+    )
+    terminal_stub_boxes = tuple(box for box in local_boxes if box.feature == "terminal_stub")
+    return tuple(
+        _transform_box_to_world(
+            origin_xyz=box.origin_xyz,
+            size_xyz=box.size_xyz,
+            frame_origin_xyz=frame_origin_xyz,
+            profile=profile,
+        )
+        for box in terminal_stub_boxes
+    )
+
+
+def _shape_vertices(step_path: Path, *, label: str) -> tuple[tuple[float, float, float], ...]:
+    shape = bd.import_step(step_path)
+    children = tuple(shape.children) if tuple(shape.children) else (shape,)
+    matches = [child for child in children if child.label == label]
+    assert len(matches) == 1
+    unique_vertices: dict[tuple[float, float, float], tuple[float, float, float]] = {}
+    for vertex in matches[0].vertices():
+        rounded = (round(vertex.X, 8), round(vertex.Y, 8), round(vertex.Z, 8))
+        if rounded not in unique_vertices:
+            unique_vertices[rounded] = (vertex.X, vertex.Y, vertex.Z)
+    return tuple(unique_vertices.values())
+
+
+def _terminal_stub_bottom_face_square_plane_vertices(
+    *,
+    terminal_stub_boxes: tuple[tuple[tuple[float, float, float], tuple[float, float, float]], ...],
+    plane: str,
+) -> tuple[tuple[tuple[tuple[float, float], ...], float], tuple[tuple[tuple[float, float], ...], float]]:
+    assert len(terminal_stub_boxes) == 2
+    boxes_by_plane: list[tuple[tuple[tuple[float, float], ...], float]] = []
+    for box_origin_xyz, box_size_xyz in terminal_stub_boxes:
+        if plane == "XY":
+            square_side_a = box_size_xyz[0]
+            square_side_b = box_size_xyz[1]
+            bottom_plane_coordinate = box_origin_xyz[2]
+            plane_vertices = (
+                (box_origin_xyz[0], box_origin_xyz[1]),
+                (box_origin_xyz[0] + box_size_xyz[0], box_origin_xyz[1]),
+                (box_origin_xyz[0] + box_size_xyz[0], box_origin_xyz[1] + box_size_xyz[1]),
+                (box_origin_xyz[0], box_origin_xyz[1] + box_size_xyz[1]),
+            )
+        else:
+            square_side_a = box_size_xyz[1]
+            square_side_b = box_size_xyz[2]
+            bottom_plane_coordinate = box_origin_xyz[0]
+            plane_vertices = (
+                (box_origin_xyz[1], box_origin_xyz[2]),
+                (box_origin_xyz[1] + box_size_xyz[1], box_origin_xyz[2]),
+                (box_origin_xyz[1] + box_size_xyz[1], box_origin_xyz[2] + box_size_xyz[2]),
+                (box_origin_xyz[1], box_origin_xyz[2] + box_size_xyz[2]),
+            )
+        assert square_side_a > 0.0
+        assert square_side_b > 0.0
+        assert square_side_a == pytest.approx(square_side_b, abs=1e-8)
+        boxes_by_plane.append((plane_vertices, bottom_plane_coordinate))
+    first_box, second_box = boxes_by_plane
+    assert first_box[1] == pytest.approx(second_box[1], abs=1e-8)
+    return (first_box, second_box)
+
+
+def _stub_centerline_perpendicular_distance(
+    *,
+    point_xy: tuple[float, float],
+    first_center_xy: tuple[float, float],
+    second_center_xy: tuple[float, float],
+) -> float:
+    delta_x = second_center_xy[0] - first_center_xy[0]
+    delta_y = second_center_xy[1] - first_center_xy[1]
+    denominator = math.hypot(delta_x, delta_y)
+    assert denominator > 1e-12
+    numerator = abs(
+        delta_x * (first_center_xy[1] - point_xy[1])
+        - (first_center_xy[0] - point_xy[0]) * delta_y
+    )
+    return numerator / denominator
+
+
+def _widest_stub_bottom_face_diagonal_vertices(
+    *,
+    terminal_stub_boxes: tuple[tuple[tuple[float, float, float], tuple[float, float, float]], ...],
+    plane: str,
+) -> tuple[tuple[float, float, float], ...]:
+    first_box, second_box = _terminal_stub_bottom_face_square_plane_vertices(
+        terminal_stub_boxes=terminal_stub_boxes,
+        plane=plane,
+    )
+    first_plane_vertices, first_bottom_plane_coordinate = first_box
+    second_plane_vertices, second_bottom_plane_coordinate = second_box
+    first_center_xy = (
+        sum(point_xy[0] for point_xy in first_plane_vertices) / 4.0,
+        sum(point_xy[1] for point_xy in first_plane_vertices) / 4.0,
+    )
+    second_center_xy = (
+        sum(point_xy[0] for point_xy in second_plane_vertices) / 4.0,
+        sum(point_xy[1] for point_xy in second_plane_vertices) / 4.0,
+    )
+
+    def _selected_diagonal(
+        plane_vertices: tuple[tuple[float, float], ...],
+    ) -> tuple[tuple[float, float], tuple[float, float]]:
+        best_score = -1.0
+        best_diagonal: tuple[tuple[float, float], tuple[float, float]] | None = None
+        best_key: tuple[tuple[float, float], tuple[float, float]] | None = None
+        for first_index, second_index in ((0, 2), (1, 3)):
+            diagonal_vertices = (plane_vertices[first_index], plane_vertices[second_index])
+            score = sum(
+                _stub_centerline_perpendicular_distance(
+                    point_xy=point_xy,
+                    first_center_xy=first_center_xy,
+                    second_center_xy=second_center_xy,
+                )
+                for point_xy in diagonal_vertices
+            )
+            candidate_key = tuple(sorted(diagonal_vertices))
+            if (
+                score > best_score + 1e-9
+                or (abs(score - best_score) <= 1e-9 and (best_key is None or candidate_key < best_key))
+            ):
+                best_score = score
+                best_diagonal = diagonal_vertices
+                best_key = candidate_key
+        assert best_diagonal is not None
+        return best_diagonal
+
+    diagonal_vertices: list[tuple[float, float, float]] = []
+    for plane_vertices, bottom_plane_coordinate in (
+        (first_plane_vertices, first_bottom_plane_coordinate),
+        (second_plane_vertices, second_bottom_plane_coordinate),
+    ):
+        selected_diagonal = _selected_diagonal(plane_vertices)
+        for point_u, point_v in selected_diagonal:
+            if plane == "XY":
+                diagonal_vertices.append((point_u, point_v, bottom_plane_coordinate))
+            else:
+                diagonal_vertices.append((bottom_plane_coordinate, point_u, point_v))
+    return tuple(diagonal_vertices)
+
+
+def _assert_sheet_bridges_stub_bottom_face_diagonals(
+    *,
+    scene_step_path: Path,
+    sheet_label: str,
+    terminal_stub_boxes: tuple[tuple[tuple[float, float, float], tuple[float, float, float]], ...],
+    plane: str,
+) -> None:
+    sheet_vertices = _shape_vertices(scene_step_path, label=sheet_label)
+    assert len(sheet_vertices) == 4
+    expected_vertices = _widest_stub_bottom_face_diagonal_vertices(
+        terminal_stub_boxes=terminal_stub_boxes,
+        plane=plane,
+    )
+    if plane == "XY":
+        plane_coordinates = tuple(vertex[2] for vertex in sheet_vertices)
+    else:
+        plane_coordinates = tuple(vertex[0] for vertex in sheet_vertices)
+    assert max(plane_coordinates) - min(plane_coordinates) == pytest.approx(0.0, abs=1e-8)
+    assert {
+        (round(vertex[0], 8), round(vertex[1], 8), round(vertex[2], 8))
+        for vertex in sheet_vertices
+    } == {
+        (round(vertex[0], 8), round(vertex[1], 8), round(vertex[2], 8))
+        for vertex in expected_vertices
+    }
+
+
 def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     source_toml = repo_root / "examples" / "type2_fixed.toml"
     spec = load_type2_step_spec(source_toml)
 
+    assert spec.simulation.radiation_margin_mm == pytest.approx(3500.0)
     assert len(spec.non_model_objects) == 6
     assert len(spec.modeled_objects) == 2
     modeled_by_id = {entry.object_id: entry for entry in spec.modeled_objects}
@@ -263,6 +512,26 @@ def test_load_type2_step_spec_rejects_missing_required_modeled_field(tmp_path: P
         load_type2_step_spec(toml_path)
 
 
+def test_load_type2_step_spec_rejects_missing_simulation_radiation_margin(tmp_path: Path) -> None:
+    toml_text = "\n".join(
+        line for line in _type2_spec_text().splitlines() if line != "radiation_margin_mm = 3500.0"
+    )
+    toml_path = _write_spec(tmp_path, toml_text)
+
+    with pytest.raises(
+        ValueError,
+        match=r"type2_fixed\.toml\.simulation is missing required keys: \['radiation_margin_mm'\]",
+    ):
+        load_type2_step_spec(toml_path)
+
+
+def test_load_type2_step_spec_rejects_non_positive_simulation_radiation_margin(tmp_path: Path) -> None:
+    toml_path = _write_spec(tmp_path, _type2_spec_text(radiation_margin_mm=0.0))
+
+    with pytest.raises(ValueError, match=r"type2_fixed\.toml\.simulation\.radiation_margin_mm must be > 0"):
+        load_type2_step_spec(toml_path)
+
+
 def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     source_toml = repo_root / "examples" / "type2_fixed.toml"
@@ -285,6 +554,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert (output_dir / "type2_non_model_scene.step").exists() is False
     assert (output_dir / "type2_combined_preview.step").exists() is False
     assert (output_dir / "objects").exists() is False
+    assert ledger["em_policy"] == {"radiation_margin_mm": 3500.0}
     assert len(ledger["non_model_objects"]) == 1
     assert len(ledger["modeled_objects"]) == 2
     non_model_entry = ledger["non_model_objects"][0]
@@ -307,6 +577,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert rx_region_member["canonical_coordinates"]["outer_bounds_min_xyz"] == (0.0, -280.0, 139.0)
     payload = json.loads(ledger_path.read_text(encoding="utf-8"))
     assert payload["scene_step_path"] == str(scene_step_path)
+    assert payload["em_policy"] == {"radiation_margin_mm": 3500.0}
     modeled_by_id = {entry["object_id"]: entry for entry in payload["modeled_objects"]}
     assert set(modeled_by_id) == {"tx_rect_void_coil", "rx_rect_void_coil"}
     for modeled_entry in ledger["modeled_objects"]:
@@ -325,6 +596,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
         tx_expected_names.append("tx_copper_stack")
     else:
         tx_expected_names.append("tx_copper_l0")
+        tx_expected_names.append("tx_port_sheet")
     assert tx_entry["expected_exported_body_names"] == tx_expected_names
     assert tx_entry["expected_exported_body_count"] == len(tx_expected_names)
     modeled_canonical = tx_entry["canonical_coordinates"]
@@ -346,10 +618,37 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     imported_scene = bd.import_step(scene_step_path)
     scene_children = tuple(imported_scene.children)
     scene_children_by_label = {child.label: child for child in scene_children}
-    expected_scene_labels = {"environment", "tx_region", "rx_region_max", "rx_pcb_l0", "rx_copper_l0", *tx_expected_names}
+    expected_scene_labels = {"environment", "tx_region", "rx_region_max", "rx_pcb_l0", "rx_copper_l0", "rx_port_sheet", *tx_expected_names}
     assert set(scene_children_by_label) == expected_scene_labels
-    for label in expected_scene_labels:
+    solid_labels = expected_scene_labels.difference({"tx_port_sheet", "rx_port_sheet"})
+    for label in solid_labels:
         assert type(scene_children_by_label[label]).__name__ == "Solid"
+    assert "tx_port_sheet" in scene_children_by_label
+    assert "rx_port_sheet" in scene_children_by_label
+    assert scene_children_by_label["tx_port_sheet"] is not scene_children_by_label[tx_copper_label]
+    assert scene_children_by_label["tx_port_sheet"] is not scene_children_by_label[tx_expected_names[0]]
+    assert scene_children_by_label["rx_port_sheet"] is not scene_children_by_label["rx_copper_l0"]
+    assert scene_children_by_label["rx_port_sheet"] is not scene_children_by_label["rx_pcb_l0"]
+    _assert_sheet_bridges_stub_bottom_face_diagonals(
+        scene_step_path=scene_step_path,
+        sheet_label="tx_port_sheet",
+        terminal_stub_boxes=_world_terminal_stub_boxes(
+            source_toml=source_toml,
+            object_id="tx_rect_void_coil",
+            seed=0,
+        ),
+        plane="XY",
+    )
+    _assert_sheet_bridges_stub_bottom_face_diagonals(
+        scene_step_path=scene_step_path,
+        sheet_label="rx_port_sheet",
+        terminal_stub_boxes=_world_terminal_stub_boxes(
+            source_toml=source_toml,
+            object_id="rx_rect_void_coil",
+            seed=0,
+        ),
+        plane="YZ",
+    )
     _assert_zero_intersection_volume(scene_children_by_label[tx_expected_names[0]], scene_children_by_label[tx_copper_label])
     _assert_zero_intersection_volume(scene_children_by_label["rx_pcb_l0"], scene_children_by_label["rx_copper_l0"])
     rx_entry = modeled_by_id["rx_rect_void_coil"]
@@ -360,8 +659,8 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert rx_entry["role"] == "rx_single_coil"
     assert rx_entry["plane"] == "YZ"
     assert rx_entry["placement_owner_id"] == "rx_region_max"
-    assert rx_entry["expected_exported_body_names"] == ["rx_pcb_l0", "rx_copper_l0"]
-    assert rx_entry["expected_exported_body_count"] == 2
+    assert rx_entry["expected_exported_body_names"] == ["rx_pcb_l0", "rx_copper_l0", "rx_port_sheet"]
+    assert rx_entry["expected_exported_body_count"] == 3
     assert rx_min_x == pytest.approx(rx_region_min_x + rx_region_size_x - rx_size_x)
     assert rx_min_y == pytest.approx(rx_region_min_y + (rx_region_size_y - rx_size_y) / 2.0)
     assert rx_min_z == pytest.approx(rx_region_min_z)
@@ -374,27 +673,24 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert rx_step_min_xyz[2] == pytest.approx(rx_region_min_z)
 
 
-def test_export_type2_step_artifacts_cuts_pcb_volume_out_of_multilayer_tx_stack(tmp_path: Path) -> None:
+def test_export_type2_step_artifacts_fails_fast_for_multilayer_tx_port_sheet_path(tmp_path: Path) -> None:
     toml_path = _write_spec(tmp_path, _type2_spec_text(layer_count=2))
-    ledger = export_type2_step_artifacts(
-        toml_path=toml_path,
-        output_dir=tmp_path / "out",
-        ledger_path=tmp_path / "out" / "ledger.json",
-        seed=0,
-    )
-
-    imported_scene = bd.import_step(Path(ledger["scene_step_path"]))
-    scene_children_by_label = {child.label: child for child in tuple(imported_scene.children)}
-
-    assert set(("tx_pcb_l0", "tx_pcb_l1", "tx_copper_stack")).issubset(scene_children_by_label)
-    _assert_zero_intersection_volume(scene_children_by_label["tx_pcb_l0"], scene_children_by_label["tx_copper_stack"])
-    _assert_zero_intersection_volume(scene_children_by_label["tx_pcb_l1"], scene_children_by_label["tx_copper_stack"])
+    with pytest.raises(
+        ValueError,
+        match=r"single-coil port sheet.*supports only tx_single_coil\.layer_count == 1",
+    ):
+        export_type2_step_artifacts(
+            toml_path=toml_path,
+            output_dir=tmp_path / "out",
+            ledger_path=tmp_path / "out" / "ledger.json",
+            seed=0,
+        )
 
 
 def test_export_type2_step_artifacts_translates_terminal_metadata_with_tx_region_offset(tmp_path: Path) -> None:
-    toml_path = _write_spec(tmp_path, _type2_spec_text(layer_count=2))
+    toml_path = _write_spec(tmp_path, _type2_spec_text(layer_count=1))
     tx_rect_void_toml_path = tmp_path / "tx_rect_void.toml"
-    tx_rect_void_toml_path.write_text(_tx_rect_void_spec_text_with_layer_count(layer_count=2), encoding="utf-8")
+    tx_rect_void_toml_path.write_text(_tx_rect_void_spec_text_with_layer_count(layer_count=1), encoding="utf-8")
     ledger = export_type2_step_artifacts(
         toml_path=toml_path,
         output_dir=tmp_path / "out",
@@ -410,10 +706,9 @@ def test_export_type2_step_artifacts_translates_terminal_metadata_with_tx_region
     modeled_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_rect_void_coil")
     local_spec = load_tx_rect_void_spec(tx_rect_void_toml_path)
     local_realized = realize_tx_rect_void_spec(local_spec, seed=0)
+    local_centerline = build_tx_rect_void_centerline(local_realized)
     local_boxes = build_tx_rect_void_box_specs(local_realized)
     local_bounds_min_xyz, _local_bounds_max_xyz, local_size_xyz = modeled_body_bounds_from_boxes(local_boxes)
-    start_bus_box = next(box for box in local_boxes if box.label == "tx_copper_bus_start")
-    end_bus_box = next(box for box in local_boxes if box.label == "tx_copper_bus_end")
     region_min_x, region_min_y, region_min_z = tx_region_member["canonical_coordinates"]["outer_bounds_min_xyz"]
     region_size_x, region_size_y, _region_size_z = tx_region_member["canonical_coordinates"]["outer_bounds_size_xyz"]
     placement_offset_x = region_min_x + (region_size_x - local_size_xyz[0]) / 2.0 - local_bounds_min_xyz[0]
@@ -435,14 +730,14 @@ def test_export_type2_step_artifacts_translates_terminal_metadata_with_tx_region
     )
     assert modeled_entry["terminal_metadata"]["start_point_plane_mm"] == pytest.approx(
         (
-            start_bus_box.origin_xyz[0] + (start_bus_box.size_xyz[0] / 2.0) + placement_offset_x,
-            start_bus_box.origin_xyz[1] + (start_bus_box.size_xyz[1] / 2.0) + placement_offset_y,
+            local_centerline[0][0] + placement_offset_x,
+            local_centerline[0][1] + placement_offset_y,
         )
     )
     assert modeled_entry["terminal_metadata"]["end_point_plane_mm"] == pytest.approx(
         (
-            end_bus_box.origin_xyz[0] + (end_bus_box.size_xyz[0] / 2.0) + placement_offset_x,
-            end_bus_box.origin_xyz[1] + (end_bus_box.size_xyz[1] / 2.0) + placement_offset_y,
+            local_centerline[-1][0] + placement_offset_x,
+            local_centerline[-1][1] + placement_offset_y,
         )
     )
 
@@ -482,6 +777,22 @@ def test_export_type2_step_artifacts_places_rx_single_coil_on_rx_region_max_yz_p
         abs=1e-8,
     )
     assert rx_step_min_xyz[2] == pytest.approx(region_min_z)
+
+
+def test_export_type2_step_artifacts_propagates_custom_radiation_margin_into_step_ledger(tmp_path: Path) -> None:
+    toml_path = _write_spec(tmp_path, _type2_spec_text(radiation_margin_mm=4123.5))
+    ledger_path = tmp_path / "out" / "ledger.json"
+
+    ledger = export_type2_step_artifacts(
+        toml_path=toml_path,
+        output_dir=tmp_path / "out",
+        ledger_path=ledger_path,
+        seed=0,
+    )
+
+    assert ledger["em_policy"] == {"radiation_margin_mm": 4123.5}
+    payload = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert payload["em_policy"] == {"radiation_margin_mm": 4123.5}
 
 
 def test_export_type2_step_artifacts_fails_for_invalid_terminal_path(tmp_path: Path) -> None:

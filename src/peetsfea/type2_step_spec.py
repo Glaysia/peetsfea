@@ -31,6 +31,11 @@ class NonModelBoxSpec:
 
 
 @dataclass(frozen=True)
+class Type2SimulationPolicy:
+    radiation_margin_mm: float
+
+
+@dataclass(frozen=True)
 class ModeledTxSingleCoilSpec:
     object_id: str
     role: ModeledObjectRole
@@ -56,6 +61,7 @@ class ModeledTxSingleCoilSpec:
 @dataclass(frozen=True)
 class Type2StepSpec:
     source_toml_path: str
+    simulation: Type2SimulationPolicy
     non_model_objects: tuple[NonModelBoxSpec, ...]
     modeled_objects: tuple[ModeledTxSingleCoilSpec, ...]
 
@@ -158,6 +164,21 @@ def _require_range(
     if end < start:
         raise ValueError(f"{context}.{key}.range end must be >= start")
     return RangeSpec(is_integer=raw_is_integer, start=start, end=end, count=raw_count)
+
+
+def _parse_simulation_policy(root: dict[str, object], *, context: str) -> Type2SimulationPolicy:
+    simulation = _require_table(_require_key(root, "simulation", context), f"{context}.simulation")
+    expected_keys = {"radiation_margin_mm"}
+    missing_keys = sorted(expected_keys - set(simulation.keys()))
+    if missing_keys:
+        raise ValueError(f"{context}.simulation is missing required keys: {missing_keys}")
+    extra_keys = sorted(set(simulation.keys()) - expected_keys)
+    if extra_keys:
+        raise ValueError(f"{context}.simulation contains unsupported keys: {extra_keys}")
+    radiation_margin_mm = _require_float_value(simulation, "radiation_margin_mm", f"{context}.simulation")
+    if radiation_margin_mm <= 0.0:
+        raise ValueError(f"{context}.simulation.radiation_margin_mm must be > 0")
+    return Type2SimulationPolicy(radiation_margin_mm=radiation_margin_mm)
 
 
 def _parse_non_model_box(
@@ -293,6 +314,7 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
     )
     return Type2StepSpec(
         source_toml_path=str(toml_path),
+        simulation=_parse_simulation_policy(root, context=toml_path.name),
         non_model_objects=non_model_objects,
         modeled_objects=modeled_objects,
     )
@@ -354,6 +376,7 @@ __all__ = [
     "NonModelBoxSpec",
     "Point3",
     "RangeSpec",
+    "Type2SimulationPolicy",
     "Type2StepSpec",
     "load_type2_step_spec",
     "render_tx_rect_void_toml",

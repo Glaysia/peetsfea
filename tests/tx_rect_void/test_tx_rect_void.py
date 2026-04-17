@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 from pathlib import Path
 
@@ -9,8 +10,10 @@ import pytest
 
 from peetsfea.tx_rect_void import (
     BoxSpec,
+    RealizedSingleCoilRectVoid,
     RectBounds,
     RX_SINGLE_COIL_PROFILE,
+    SingleCoilProfile,
     TX_SINGLE_COIL_PROFILE,
     _copper_primitives_for_layer,
     _offset_join_point,
@@ -25,6 +28,7 @@ from peetsfea.tx_rect_void import (
     modeled_body_bounds_from_boxes,
     realize_tx_rect_void_spec,
 )
+from peetsfea.tx_rect_void_geometry import CopperPrimitive
 
 
 def _range(is_integer: bool, start: float, end: float, count: int) -> str:
@@ -133,6 +137,79 @@ def _point_distance_2d(first: tuple[float, float], second: tuple[float, float]) 
     return (dx * dx + dy * dy) ** 0.5
 
 
+def _point_distance_to_line_2d(
+    point_xy: tuple[float, float],
+    *,
+    line_start_xy: tuple[float, float],
+    line_end_xy: tuple[float, float],
+) -> float:
+    line_dx = line_end_xy[0] - line_start_xy[0]
+    line_dy = line_end_xy[1] - line_start_xy[1]
+    line_length = math.hypot(line_dx, line_dy)
+    assert line_length > 0.0
+    point_dx = point_xy[0] - line_start_xy[0]
+    point_dy = point_xy[1] - line_start_xy[1]
+    return abs((line_dx * point_dy) - (line_dy * point_dx)) / line_length
+
+
+def _polygon_center_2d(polygon_xy: tuple[tuple[float, float], ...]) -> tuple[float, float]:
+    assert len(polygon_xy) == 4
+    return (
+        sum(point_xy[0] for point_xy in polygon_xy) / 4.0,
+        sum(point_xy[1] for point_xy in polygon_xy) / 4.0,
+    )
+
+
+def _selected_stub_diagonal_world_points(
+    *,
+    stub_primitive: CopperPrimitive,
+    other_stub_primitive: CopperPrimitive,
+    profile: SingleCoilProfile,
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    stub_center_xy = _polygon_center_2d(stub_primitive.polygon_xy)
+    other_stub_center_xy = _polygon_center_2d(other_stub_primitive.polygon_xy)
+    diagonal_candidates = (
+        (stub_primitive.polygon_xy[0], stub_primitive.polygon_xy[2]),
+        (stub_primitive.polygon_xy[1], stub_primitive.polygon_xy[3]),
+    )
+    best_diagonal_xy = diagonal_candidates[0]
+    best_score = -1.0
+    for diagonal_xy in diagonal_candidates:
+        diagonal_score = sum(
+            _point_distance_to_line_2d(
+                point_xy,
+                line_start_xy=stub_center_xy,
+                line_end_xy=other_stub_center_xy,
+            )
+            for point_xy in diagonal_xy
+        )
+        if diagonal_score > best_score + 1e-9:
+            best_diagonal_xy = diagonal_xy
+            best_score = diagonal_score
+    alternate_diagonal_xy = diagonal_candidates[1] if best_diagonal_xy == diagonal_candidates[0] else diagonal_candidates[0]
+    best_score_check = sum(
+        _point_distance_to_line_2d(
+            point_xy,
+            line_start_xy=stub_center_xy,
+            line_end_xy=other_stub_center_xy,
+        )
+        for point_xy in best_diagonal_xy
+    )
+    alternate_score = sum(
+        _point_distance_to_line_2d(
+            point_xy,
+            line_start_xy=stub_center_xy,
+            line_end_xy=other_stub_center_xy,
+        )
+        for point_xy in alternate_diagonal_xy
+    )
+    assert best_score_check >= alternate_score - 1e-9
+    return tuple(
+        profile.world_point((point_xy[0], point_xy[1], stub_primitive.origin_z), frame_origin_xyz=(0.0, 0.0, 0.0))
+        for point_xy in best_diagonal_xy
+    )
+
+
 def _naive_offset_vertex(
     centerline: tuple[tuple[float, float], ...],
     *,
@@ -184,6 +261,106 @@ def _assert_zero_intersection_volume(first: object, second: object) -> None:
         return
     assert isinstance(shared_shape, bd.Shape)
     assert shared_shape.volume == pytest.approx(0.0, abs=1e-9)
+
+
+def _scene_child_by_label(scene: bd.Compound, *, label: str) -> bd.Shape:
+    matches = [shape for shape in scene.children if shape.label == label]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def _point3_key(point_xyz: tuple[float, float, float]) -> tuple[int, int, int]:
+    return tuple(int(round(coord * 1_000_000)) for coord in point_xyz)
+
+
+def _point3_edge_key(
+    first_point_xyz: tuple[float, float, float],
+    second_point_xyz: tuple[float, float, float],
+) -> frozenset[tuple[int, int, int]]:
+    return frozenset((_point3_key(first_point_xyz), _point3_key(second_point_xyz)))
+
+
+def _assert_port_sheet_bridges_terminal_stub_bottom_face_diagonals(
+    *,
+    realized: RealizedSingleCoilRectVoid,
+    scene: bd.Compound,
+    profile: SingleCoilProfile,
+) -> None:
+    copper_primitives = _copper_primitives_for_layer(
+        realized=realized,
+        centerline=build_tx_rect_void_centerline(realized),
+        layer_index=0,
+        pcb_z=0.0,
+        profile=profile,
+    )
+    stub_primitives = tuple(primitive for primitive in copper_primitives if primitive.feature == "terminal_stub")
+    assert len(stub_primitives) == 2
+    start_stub = next(primitive for primitive in stub_primitives if primitive.terminal_column == "start")
+    end_stub = next(primitive for primitive in stub_primitives if primitive.terminal_column == "end")
+    port_sheet_label = "tx_port_sheet" if profile.role == "tx_single_coil" else "rx_port_sheet"
+    port_sheet = _scene_child_by_label(scene, label=port_sheet_label)
+    assert len(tuple(port_sheet.solids())) == 0
+
+    start_diagonal_world_points = _selected_stub_diagonal_world_points(
+        stub_primitive=start_stub,
+        other_stub_primitive=end_stub,
+        profile=profile,
+    )
+    end_diagonal_world_points = _selected_stub_diagonal_world_points(
+        stub_primitive=end_stub,
+        other_stub_primitive=start_stub,
+        profile=profile,
+    )
+    expected_vertices = start_diagonal_world_points + end_diagonal_world_points
+    actual_vertices = tuple((vertex.X, vertex.Y, vertex.Z) for vertex in port_sheet.vertices())
+    assert sorted(_point3_key(point_xyz) for point_xyz in actual_vertices) == sorted(
+        _point3_key(point_xyz) for point_xyz in expected_vertices
+    )
+
+    actual_edge_keys = {
+        _point3_edge_key(
+            (edge.vertices()[0].X, edge.vertices()[0].Y, edge.vertices()[0].Z),
+            (edge.vertices()[1].X, edge.vertices()[1].Y, edge.vertices()[1].Z),
+        )
+        for edge in port_sheet.edges()
+    }
+    expected_diagonal_edge_keys = {
+        _point3_edge_key(*start_diagonal_world_points),
+        _point3_edge_key(*end_diagonal_world_points),
+    }
+    assert expected_diagonal_edge_keys.issubset(actual_edge_keys)
+    bridge_edge_keys = actual_edge_keys - expected_diagonal_edge_keys
+    assert len(bridge_edge_keys) == 2
+    start_diagonal_point_keys = {_point3_key(point_xyz) for point_xyz in start_diagonal_world_points}
+    end_diagonal_point_keys = {_point3_key(point_xyz) for point_xyz in end_diagonal_world_points}
+    for edge_key in bridge_edge_keys:
+        assert len(edge_key & start_diagonal_point_keys) == 1
+        assert len(edge_key & end_diagonal_point_keys) == 1
+
+    actual_z_values = {point_xyz[2 if profile.plane == "XY" else 0] for point_xyz in actual_vertices}
+    expected_bottom_z = start_stub.origin_z
+    assert len(actual_z_values) == 1
+    assert next(iter(actual_z_values)) == pytest.approx(expected_bottom_z)
+
+    actual_plane_normal = tuple(profile.world_delta((0.0, 0.0, 1.0)))
+    actual_norm = sum(component * component for component in actual_plane_normal) ** 0.5
+    assert actual_norm > 0.0
+
+    faces = tuple(port_sheet.faces())
+    assert len(faces) == 1
+    normal = faces[0].normal_at()
+    face_normal = (normal.X, normal.Y, normal.Z)
+    dot = sum(first * second for first, second in zip(face_normal, actual_plane_normal, strict=True))
+    face_norm = sum(component * component for component in face_normal) ** 0.5
+    assert abs(dot) == pytest.approx(face_norm * actual_norm, abs=1e-9)
+
+    bounding_box = port_sheet.bounding_box()
+    if profile.plane == "XY":
+        assert bounding_box.min.Z == pytest.approx(expected_bottom_z)
+        assert bounding_box.max.Z == pytest.approx(expected_bottom_z)
+    else:
+        assert bounding_box.min.X == pytest.approx(expected_bottom_z)
+        assert bounding_box.max.X == pytest.approx(expected_bottom_z)
 
 
 def test_load_and_realize_valid_spec_is_deterministic(tmp_path: Path) -> None:
@@ -261,12 +438,20 @@ def test_step_scene_exports_single_fused_copper_body(tmp_path: Path) -> None:
     scene = build_tx_rect_void_step_scene(realized, boxes)
 
     assert len([box for box in boxes if box.role == "copper"]) > 1
-    assert tuple(shape.label for shape in scene.children) == ("tx_pcb_l0", "tx_copper_l0")
+    assert tuple(shape.label for shape in scene.children) == ("tx_pcb_l0", "tx_copper_l0", "tx_port_sheet")
     assert len(scene.solids()) == 2
-    copper_bbox = scene.children[1].bounding_box()
+    copper_bbox = _scene_child_by_label(scene, label="tx_copper_l0").bounding_box()
     assert copper_bbox.min.Z == pytest.approx(-realized.terminal_stub_length_mm)
     assert copper_bbox.max.Z == pytest.approx(realized.pcb_thickness_mm + realized.copper_thickness_mm)
-    _assert_zero_intersection_volume(scene.children[0], scene.children[1])
+    _assert_port_sheet_bridges_terminal_stub_bottom_face_diagonals(
+        realized=realized,
+        scene=scene,
+        profile=TX_SINGLE_COIL_PROFILE,
+    )
+    _assert_zero_intersection_volume(
+        _scene_child_by_label(scene, label="tx_pcb_l0"),
+        _scene_child_by_label(scene, label="tx_copper_l0"),
+    )
 
 
 def test_rx_step_scene_exports_single_fused_copper_body_for_notebook_scale_geometry(tmp_path: Path) -> None:
@@ -293,9 +478,17 @@ def test_rx_step_scene_exports_single_fused_copper_body_for_notebook_scale_geome
     )
 
     assert len([box for box in boxes if box.role == "copper"]) > 1
-    assert tuple(shape.label for shape in scene.children) == ("rx_pcb_l0", "rx_copper_l0")
+    assert tuple(shape.label for shape in scene.children) == ("rx_pcb_l0", "rx_copper_l0", "rx_port_sheet")
     assert len(scene.solids()) == 2
-    _assert_zero_intersection_volume(scene.children[0], scene.children[1])
+    _assert_port_sheet_bridges_terminal_stub_bottom_face_diagonals(
+        realized=realized,
+        scene=scene,
+        profile=RX_SINGLE_COIL_PROFILE,
+    )
+    _assert_zero_intersection_volume(
+        _scene_child_by_label(scene, label="rx_pcb_l0"),
+        _scene_child_by_label(scene, label="rx_copper_l0"),
+    )
 
 
 def test_box_decomposition_keeps_planar_outline_and_adds_terminal_stubs(tmp_path: Path) -> None:
@@ -336,10 +529,19 @@ def test_step_scene_cuts_pcb_volume_out_of_copper_for_supported_profiles(
         scene = build_tx_rect_void_step_scene(realized, boxes, profile=RX_SINGLE_COIL_PROFILE)
 
     assert tuple(shape.label for shape in scene.children) in (
-        ("tx_pcb_l0", "tx_copper_l0"),
-        ("rx_pcb_l0", "rx_copper_l0"),
+        ("tx_pcb_l0", "tx_copper_l0", "tx_port_sheet"),
+        ("rx_pcb_l0", "rx_copper_l0", "rx_port_sheet"),
     )
-    _assert_zero_intersection_volume(scene.children[0], scene.children[1])
+    if profile_name == "tx":
+        _assert_zero_intersection_volume(
+            _scene_child_by_label(scene, label="tx_pcb_l0"),
+            _scene_child_by_label(scene, label="tx_copper_l0"),
+        )
+    else:
+        _assert_zero_intersection_volume(
+            _scene_child_by_label(scene, label="rx_pcb_l0"),
+            _scene_child_by_label(scene, label="rx_copper_l0"),
+        )
 
 
 def test_same_corner_terminal_path_seeds_outer_terminal_to_next_ring(tmp_path: Path) -> None:
@@ -480,7 +682,6 @@ def test_tx_multilayer_coil_builds_per_layer_bodies_and_union_bounds(tmp_path: P
 
     realized = realize_tx_rect_void_spec(load_tx_rect_void_spec(toml_path), seed=0)
     boxes = build_tx_rect_void_box_specs(realized)
-    scene = build_tx_rect_void_step_scene(realized, boxes)
     pcb_boxes = _pcb_boxes(boxes)
     copper_boxes = _copper_boxes(boxes)
     start_bus_box = _box_by_label(boxes, label="tx_copper_bus_start")
@@ -497,8 +698,6 @@ def test_tx_multilayer_coil_builds_per_layer_bodies_and_union_bounds(tmp_path: P
     assert tuple(box.label for box in pcb_boxes) == ("tx_pcb_l0", "tx_pcb_l1")
     assert len(pcb_boxes) == realized.layer_count
     assert {box.layer_index for box in copper_boxes} == {0, 1}
-    assert tuple(shape.label for shape in scene.children) == ("tx_pcb_l0", "tx_pcb_l1", "tx_copper_stack")
-    assert len(scene.solids()) == 3
     assert start_bus_box.origin_xyz[2] == pytest.approx(-realized.terminal_stub_length_mm)
     assert end_bus_box.origin_xyz[2] == pytest.approx(-realized.terminal_stub_length_mm)
     assert start_bus_box.size_xyz[2] == pytest.approx(expected_top_z + realized.terminal_stub_length_mm)
@@ -506,11 +705,25 @@ def test_tx_multilayer_coil_builds_per_layer_bodies_and_union_bounds(tmp_path: P
     assert modeled_min_xyz[2] == pytest.approx(-realized.terminal_stub_length_mm)
     assert modeled_max_xyz[2] == pytest.approx(expected_top_z)
     assert modeled_size_xyz[2] == pytest.approx(expected_top_z + realized.terminal_stub_length_mm)
-    _assert_zero_intersection_volume(scene.children[0], scene.children[2])
-    _assert_zero_intersection_volume(scene.children[1], scene.children[2])
+ 
+
+def test_tx_multilayer_step_scene_fails_fast_until_port_sheet_support_lands(tmp_path: Path) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _spec_text(layer_count=2, layer_gap=2.5, terminal_stub_length=99.0, turn_count=2),
+    )
+
+    realized = realize_tx_rect_void_spec(load_tx_rect_void_spec(toml_path), seed=0)
+    boxes = build_tx_rect_void_box_specs(realized)
+
+    with pytest.raises(
+        ValueError,
+        match=r"single-coil port sheet from widened terminal-stub bottom-face diagonals currently supports only tx_single_coil\.layer_count == 1",
+    ):
+        build_tx_rect_void_step_scene(realized, boxes)
 
 
-def test_tx_multilayer_export_uses_bottom_bus_face_centers_for_terminal_metadata(tmp_path: Path) -> None:
+def test_tx_multilayer_export_fails_fast_until_port_sheet_support_lands(tmp_path: Path) -> None:
     toml_path = _write_spec(
         tmp_path,
         _spec_text(layer_count=2, layer_gap=2.5, terminal_stub_length=99.0, turn_count=2),
@@ -518,30 +731,16 @@ def test_tx_multilayer_export_uses_bottom_bus_face_centers_for_terminal_metadata
     output_step_path = tmp_path / "out" / "tx_rect_void_multilayer.step"
     metadata_path = tmp_path / "out" / "tx_rect_void_multilayer.metadata.json"
 
-    result = export_tx_rect_void_step(
-        toml_path=toml_path,
-        output_step_path=output_step_path,
-        metadata_path=metadata_path,
-        seed=0,
-    )
-
-    start_bus_box = _box_by_label(result.boxes, label="tx_copper_bus_start")
-    end_bus_box = _box_by_label(result.boxes, label="tx_copper_bus_end")
-    modeled_object = result.modeled_objects[0]
-
-    assert modeled_object.expected_exported_body_names == ("tx_pcb_l0", "tx_pcb_l1", "tx_copper_stack")
-    assert modeled_object.terminal_metadata.start_point_plane_mm == pytest.approx(
-        (
-            start_bus_box.origin_xyz[0] + (start_bus_box.size_xyz[0] / 2.0),
-            start_bus_box.origin_xyz[1] + (start_bus_box.size_xyz[1] / 2.0),
+    with pytest.raises(
+        ValueError,
+        match=r"single-coil port sheet from widened terminal-stub bottom-face diagonals currently supports only tx_single_coil\.layer_count == 1",
+    ):
+        export_tx_rect_void_step(
+            toml_path=toml_path,
+            output_step_path=output_step_path,
+            metadata_path=metadata_path,
+            seed=0,
         )
-    )
-    assert modeled_object.terminal_metadata.end_point_plane_mm == pytest.approx(
-        (
-            end_bus_box.origin_xyz[0] + (end_bus_box.size_xyz[0] / 2.0),
-            end_bus_box.origin_xyz[1] + (end_bus_box.size_xyz[1] / 2.0),
-        )
-    )
 
 
 @pytest.mark.parametrize("layer_count", (2, 3))
@@ -568,8 +767,8 @@ def test_export_writes_step_and_metadata(tmp_path: Path) -> None:
     payload = json.loads(metadata_path.read_text(encoding="utf-8"))
     assert payload["output_step_path"] == str(output_step_path)
     assert payload["realized"]["turn_count"] == 1
-    assert payload["expected_exported_body_names"] == ["tx_pcb_l0", "tx_copper_l0"]
-    assert payload["expected_exported_body_count"] == 2
+    assert payload["expected_exported_body_names"] == ["tx_pcb_l0", "tx_copper_l0", "tx_port_sheet"]
+    assert payload["expected_exported_body_count"] == 3
     assert len(payload["boxes"]) == len(result.boxes)
     assert len(payload["modeled_objects"]) == 1
     modeled_object = payload["modeled_objects"][0]
@@ -580,8 +779,8 @@ def test_export_writes_step_and_metadata(tmp_path: Path) -> None:
     assert modeled_object["material"] == "composite"
     assert modeled_object["model_state"] is True
     assert modeled_object["step_path"] == str(output_step_path)
-    assert modeled_object["expected_exported_body_names"] == ["tx_pcb_l0", "tx_copper_l0"]
-    assert modeled_object["expected_exported_body_count"] == 2
+    assert modeled_object["expected_exported_body_names"] == ["tx_pcb_l0", "tx_copper_l0", "tx_port_sheet"]
+    assert modeled_object["expected_exported_body_count"] == 3
     assert modeled_object["canonical_coordinates"]["frame_origin_xyz"] == [0.0, 0.0, 0.0]
     expected_min_xyz, expected_max_xyz, expected_size_xyz = modeled_body_bounds_from_boxes(result.boxes)
     assert modeled_object["canonical_coordinates"]["outer_bounds_min_xyz"] == pytest.approx(expected_min_xyz)
@@ -664,13 +863,17 @@ def test_cli_smoke_uses_example_spec_and_writes_registry_aligned_metadata(tmp_pa
     assert output_step_path.stat().st_size > 0
     payload = json.loads(metadata_path.read_text(encoding="utf-8"))
     assert payload["source_toml_path"] == str(example_toml)
-    assert payload["modeled_objects"][0]["step_path"] == str(output_step_path)
-    assert payload["modeled_objects"][0]["terminal_metadata"]["path"] == payload["realized"]["terminal_path"]
-    expected_names = [f"tx_pcb_l{index}" for index in range(payload["realized"]["layer_count"])]
-    if payload["realized"]["layer_count"] > 1:
+    assert payload["scene_step_path"] == str(output_step_path)
+    assert payload["object_id"] == "tx_rect_void_coil"
+    assert payload["role"] == "tx_single_coil"
+    assert payload["terminal_metadata"]["path"] == "D_ccw_to_d"
+    layer_count = len(payload["canonical_coordinates"]["pcb_layer_z_positions_mm"])
+    expected_names = [f"tx_pcb_l{index}" for index in range(layer_count)]
+    if layer_count > 1:
         expected_names.append("tx_copper_stack")
     else:
         expected_names.append("tx_copper_l0")
-    assert payload["modeled_objects"][0]["expected_exported_body_names"] == expected_names
-    assert payload["modeled_objects"][0]["expected_exported_body_count"] == len(expected_names)
+        expected_names.append("tx_port_sheet")
+    assert payload["expected_exported_body_names"] == expected_names
+    assert payload["expected_exported_body_count"] == len(expected_names)
     assert "output STEP:" in completed.stdout
