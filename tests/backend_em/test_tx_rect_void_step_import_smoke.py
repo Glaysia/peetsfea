@@ -296,7 +296,7 @@ def test_tx_rect_void_modeled_step_import_smoke_auto_resolves_type2_generated_ar
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo_root = tmp_path / "repo"
-    type2_toml_path = repo_root / "examples" / "type2.toml"
+    type2_toml_path = repo_root / "examples" / "type2_fixed.toml"
     exporter_script_path = repo_root / "entry" / "generate_type2_step.py"
     step_path = repo_root / "run" / "step" / "type2" / "objects" / "tx_rect_void_coil.step"
     metadata_path = repo_root / "run" / "step" / "type2" / "metadata" / "tx_rect_void_coil.metadata.json"
@@ -339,7 +339,7 @@ def test_tx_rect_void_modeled_step_import_smoke_auto_resolve_invokes_type2_expor
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo_root = tmp_path / "repo"
-    type2_toml_path = repo_root / "examples" / "type2.toml"
+    type2_toml_path = repo_root / "examples" / "type2_fixed.toml"
     exporter_script_path = repo_root / "entry" / "generate_type2_step.py"
     generated_step_path = repo_root / "run" / "step" / "type2" / "objects" / "tx_rect_void_coil.step"
     generated_metadata_path = repo_root / "run" / "step" / "type2" / "metadata" / "tx_rect_void_coil.metadata.json"

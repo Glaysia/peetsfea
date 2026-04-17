@@ -1,3 +1,13 @@
+---
+title: test_tx_rect_void_step_import_smoke.py
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - type2
+  - tx-rect-void
+  - hfss-import
+---
+
 # test_tx_rect_void_step_import_smoke.py
 
 ## Source
@@ -9,7 +19,7 @@
 
 ## 역할
 - `import_tx_rect_void_step_to_hfss` modeled import smoke path를 AEDT launch 없이 fake sessions로 검증한다.
-- `type2.toml` 기반 generated artifact auto-resolve, exporter 1회 호출, import diff fail-fast, adapter integration point를 pure-Python으로 방어한다.
+- `type2_fixed.toml` 기반 generated artifact auto-resolve, exporter 1회 호출, import diff fail-fast, adapter integration point를 pure-Python으로 방어한다.
 
 ## 입력 / 출력
 - pytest tests under `tests/backend_em`
@@ -22,8 +32,8 @@
 
 ## Invariants / fail-fast
 - metadata 파일이 없으면 HFSS launch 전에 raise해야 한다.
-- 기본 입력(auto)에서는 `type2.toml` 기반 generated artifact가 없을 때 exporter가 1회 호출되어야 한다.
-- exporter 이후에도 `type2.toml` 기반 `tx_single_coil` artifact가 없으면 raise해야 한다.
+- 기본 입력(auto)에서는 `type2_fixed.toml` 기반 generated artifact가 없을 때 exporter가 1회 호출되어야 한다.
+- exporter 이후에도 `type2_fixed.toml` 기반 `tx_single_coil` artifact가 없으면 raise해야 한다.
 - `import_3d_cad(False)`는 즉시 raise해야 한다.
 - import diff duplicate는 즉시 raise해야 한다.
 - imported object count는 metadata의 `expected_exported_body_count`와 같아야 한다.

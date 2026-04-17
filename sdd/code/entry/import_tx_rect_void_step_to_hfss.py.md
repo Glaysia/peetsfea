@@ -1,3 +1,13 @@
+---
+title: import_tx_rect_void_step_to_hfss.py
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - type2
+  - tx-rect-void
+  - hfss-import
+---
+
 # import_tx_rect_void_step_to_hfss.py
 
 ## Source
@@ -8,16 +18,16 @@
 - Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 역할
-- `type2.toml`에서 생성된 `tx_single_coil` modeled STEP artifact를 headless HFSS 세션에 import하는 opt-in smoke script다.
+- `type2_fixed.toml`에서 생성된 `tx_single_coil` modeled STEP artifact를 headless HFSS 세션에 import하는 opt-in smoke script다.
 - metadata JSON의 `modeled_objects[0]`와 runtime import diff `imported_object_names`를 어댑터에 전달해 imported modeled ledger entry를 만든다.
 - `EmPipelineInput`, port/source/solve 단계는 다루지 않는다.
 
 ## 입력 / 출력
 - 기본 입력:
-  - `examples/type2.toml`
+  - `examples/type2_fixed.toml`
   - `entry/generate_type2_step.py` (artifact가 없을 때 1회 호출)
 - 기본 artifact 해석 규칙:
-  - `source_toml_path == examples/type2.toml`
+  - `source_toml_path == examples/type2_fixed.toml`
   - `modeled_objects` single-entry
   - `modeled_objects[0].role == tx_single_coil`
 - 출력 AEDT: `run/aedt/type2_step_import_smoke/type2_tx_single_coil_import.aedt`
@@ -28,12 +38,12 @@
 
 ## Canonical state
 - module-level mutable state는 없다.
-- canonical modeled source는 `type2.toml`에서 파생된 metadata JSON `modeled_objects[0]`다.
+- canonical modeled source는 `type2_fixed.toml`에서 파생된 metadata JSON `modeled_objects[0]`다.
 - canonical runtime import source는 HFSS import 전후 `modeler.object_names` diff다.
 
 ## Invariants / fail-fast
 - 기본 경로(auto)에서 artifact가 없으면 `generate_type2_step.py`를 먼저 실행하고 재해석한다.
-- 재해석 뒤에도 `type2.toml` 기반 `tx_single_coil` artifact를 찾지 못하면 즉시 raise한다.
+- 재해석 뒤에도 `type2_fixed.toml` 기반 `tx_single_coil` artifact를 찾지 못하면 즉시 raise한다.
 - explicit STEP/metadata 입력이 오면 두 값을 모두 요구한다(한쪽만 전달 금지).
 - metadata는 `modeled_objects` single-entry를 강제하고 `role == tx_single_coil`, `step_path` 문자열 일치를 강제한다.
 - metadata의 expected exported body names/count를 검증하고 import diff 수가 expected count와 다르면 즉시 실패한다.

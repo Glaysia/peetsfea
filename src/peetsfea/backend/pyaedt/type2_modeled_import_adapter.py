@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from pathlib import Path
 from typing import Literal, TypedDict, cast
 
-_TX_SINGLE_COIL_ROLE = "tx_single_coil"
+_SUPPORTED_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
+_SUPPORTED_PLANES: frozenset[str] = frozenset({"XY", "YZ"})
 _OUTER_CORNERS: frozenset[str] = frozenset({"A", "B", "C", "D"})
 _INNER_CORNERS: frozenset[str] = frozenset({"a", "b", "c", "d"})
 _PATH_DIRECTIONS: frozenset[str] = frozenset({"cw", "ccw"})
@@ -24,16 +24,17 @@ class ImportedModeledObjectTerminalMetadata(TypedDict):
     outer_corner: Literal["A", "B", "C", "D"]
     inner_corner: Literal["a", "b", "c", "d"]
     direction: Literal["cw", "ccw"]
-    start_point_xy_mm: tuple[float, float]
-    end_point_xy_mm: tuple[float, float]
+    start_point_plane_mm: tuple[float, float]
+    end_point_plane_mm: tuple[float, float]
 
 
 class ImportedModeledObjectEntry(TypedDict):
     object_id: str
-    role: Literal["tx_single_coil"]
+    role: Literal["tx_single_coil", "rx_single_coil"]
+    plane: Literal["XY", "YZ"]
+    placement_owner_id: str
     material: str
     model_state: Literal[True]
-    step_path: str
     canonical_coordinates: ImportedModeledObjectCanonicalCoordinates
     terminal_metadata: ImportedModeledObjectTerminalMetadata
     imported_object_names: tuple[str, ...]
@@ -191,13 +192,13 @@ def _parse_terminal_metadata(value: object) -> ImportedModeledObjectTerminalMeta
         "direction": _require_terminal_direction(
             _require_key(node, key="direction", context="modeled_object.terminal_metadata")
         ),
-        "start_point_xy_mm": _require_float_pair(
-            _require_key(node, key="start_point_xy_mm", context="modeled_object.terminal_metadata"),
-            context="modeled_object.terminal_metadata.start_point_xy_mm",
+        "start_point_plane_mm": _require_float_pair(
+            _require_key(node, key="start_point_plane_mm", context="modeled_object.terminal_metadata"),
+            context="modeled_object.terminal_metadata.start_point_plane_mm",
         ),
-        "end_point_xy_mm": _require_float_pair(
-            _require_key(node, key="end_point_xy_mm", context="modeled_object.terminal_metadata"),
-            context="modeled_object.terminal_metadata.end_point_xy_mm",
+        "end_point_plane_mm": _require_float_pair(
+            _require_key(node, key="end_point_plane_mm", context="modeled_object.terminal_metadata"),
+            context="modeled_object.terminal_metadata.end_point_plane_mm",
         ),
     }
 
@@ -205,18 +206,27 @@ def _parse_terminal_metadata(value: object) -> ImportedModeledObjectTerminalMeta
 def build_single_imported_modeled_object_entry(
     *,
     modeled_object: dict[str, object],
-    imported_step_path: Path,
     imported_object_names: Sequence[str],
 ) -> ImportedModeledObjectEntry:
     role = _require_non_empty_str(
         _require_key(modeled_object, key="role", context="modeled_object"),
         context="modeled_object.role",
     )
-    if role != _TX_SINGLE_COIL_ROLE:
+    if role not in _SUPPORTED_ROLES:
         raise ValueError(
-            f"modeled_object.role must be '{_TX_SINGLE_COIL_ROLE}' for single-coil prototype "
+            "modeled_object.role must be one of ['tx_single_coil', 'rx_single_coil'] for single-coil import "
             f"(actual={role!r})"
         )
+    plane = _require_non_empty_str(
+        _require_key(modeled_object, key="plane", context="modeled_object"),
+        context="modeled_object.plane",
+    )
+    if plane not in _SUPPORTED_PLANES:
+        raise ValueError(f"modeled_object.plane must be one of ['XY', 'YZ'] (actual={plane!r})")
+    placement_owner_id = _require_non_empty_str(
+        _require_key(modeled_object, key="placement_owner_id", context="modeled_object"),
+        context="modeled_object.placement_owner_id",
+    )
 
     material = _require_non_empty_str(
         _require_key(modeled_object, key="material", context="modeled_object"),
@@ -227,18 +237,6 @@ def build_single_imported_modeled_object_entry(
         raise TypeError("modeled_object.model_state must be bool")
     if model_state is not True:
         raise ValueError("modeled_object.model_state must be true for modeled import adapter")
-
-    step_path_raw = _require_non_empty_str(
-        _require_key(modeled_object, key="step_path", context="modeled_object"),
-        context="modeled_object.step_path",
-    )
-    modeled_step_path = Path(step_path_raw).resolve(strict=False)
-    input_step_path = imported_step_path.resolve(strict=False)
-    if modeled_step_path != input_step_path:
-        raise ValueError(
-            "modeled_object.step_path must match imported_step_path "
-            f"(modeled={modeled_step_path}, imported={input_step_path})"
-        )
 
     object_id = _require_non_empty_str(
         _require_key(modeled_object, key="object_id", context="modeled_object"),
@@ -254,10 +252,11 @@ def build_single_imported_modeled_object_entry(
 
     return {
         "object_id": object_id,
-        "role": cast(Literal["tx_single_coil"], role),
+        "role": cast(Literal["tx_single_coil", "rx_single_coil"], role),
+        "plane": cast(Literal["XY", "YZ"], plane),
+        "placement_owner_id": placement_owner_id,
         "material": material,
         "model_state": True,
-        "step_path": str(modeled_step_path),
         "canonical_coordinates": canonical_coordinates,
         "terminal_metadata": terminal_metadata,
         "imported_object_names": validated_object_names,

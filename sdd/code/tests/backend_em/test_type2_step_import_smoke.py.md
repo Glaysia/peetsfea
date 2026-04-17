@@ -1,3 +1,12 @@
+---
+title: test_type2_step_import_smoke.py
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - type2
+  - hfss-import
+---
+
 # test_type2_step_import_smoke.py
 
 ## Source

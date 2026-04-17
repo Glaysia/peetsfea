@@ -15,7 +15,7 @@ from peetsfea.aedt import Hfss
 from peetsfea.aedt.failfast import raise_on_false, validate_aedt_name
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_TYPE2_TOML_PATH = REPO_ROOT / "examples" / "type2.toml"
+DEFAULT_TYPE2_TOML_PATH = REPO_ROOT / "examples" / "type2_fixed.toml"
 DEFAULT_TYPE2_EXPORTER_PATH = REPO_ROOT / "entry" / "generate_type2_step.py"
 DEFAULT_OUTPUT_AEDT_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_import_smoke" / "type2_tx_single_coil_import.aedt"
 DEFAULT_DESIGN_NAME = "type2_tx_single_coil_import_smoke"
@@ -149,21 +149,21 @@ def _collect_type2_modeled_artifact_candidates(*, repo_root: Path, type2_toml_pa
         raw_modeled_objects = payload["modeled_objects"]
         if not isinstance(raw_modeled_objects, list):
             raise TypeError(f"metadata JSON key 'modeled_objects' must be a list: {metadata_path}")
-        if len(raw_modeled_objects) != 1:
-            raise ValueError(
-                "prototype metadata must contain exactly one modeled object "
-                f"(metadata={metadata_path}, count={len(raw_modeled_objects)})"
+        modeled_object_candidates: list[dict[str, object]] = []
+        for index, raw_modeled_object in enumerate(raw_modeled_objects):
+            modeled_object_entry = _require_table(raw_modeled_object, context=f"{metadata_path}.modeled_objects[{index}]")
+            raw_role = _require_non_empty_string(
+                modeled_object_entry.get("role"),
+                context=f"{metadata_path}.modeled_objects[{index}].role",
             )
-        modeled_object_entry = _require_table(raw_modeled_objects[0], context=f"{metadata_path}.modeled_objects[0]")
-        raw_role = _require_non_empty_string(
-            modeled_object_entry.get("role"),
-            context=f"{metadata_path}.modeled_objects[0].role",
-        )
-        if raw_role != _SUPPORTED_MODELED_ROLE:
+            if raw_role == _SUPPORTED_MODELED_ROLE:
+                modeled_object_candidates.append(modeled_object_entry)
+        if len(modeled_object_candidates) != 1:
             raise ValueError(
-                "prototype metadata modeled object role must be "
-                f"'{_SUPPORTED_MODELED_ROLE}' (metadata={metadata_path}, actual={raw_role})"
+                f"prototype metadata must contain exactly one {_SUPPORTED_MODELED_ROLE} modeled object "
+                f"(metadata={metadata_path}, count={len(modeled_object_candidates)})"
             )
+        modeled_object_entry = modeled_object_candidates[0]
         raw_step_path = _require_non_empty_string(
             modeled_object_entry.get("step_path"),
             context=f"{metadata_path}.modeled_objects[0].step_path",
@@ -219,17 +219,19 @@ def _require_modeled_object_entry(
     raw_modeled_objects = metadata_payload["modeled_objects"]
     if not isinstance(raw_modeled_objects, list):
         raise TypeError("metadata JSON key 'modeled_objects' must be a list")
-    if len(raw_modeled_objects) != 1:
-        raise ValueError("metadata JSON must contain exactly one modeled object for type2 tx_single_coil prototype")
-    modeled_object_entry = _require_table(raw_modeled_objects[0], context="metadata.modeled_objects[0]")
-    if "role" not in modeled_object_entry:
-        raise ValueError("metadata.modeled_objects[0] is missing required key 'role'")
-    raw_role = _require_non_empty_string(modeled_object_entry["role"], context="metadata.modeled_objects[0].role")
-    if raw_role != _SUPPORTED_MODELED_ROLE:
+    modeled_object_candidates: list[dict[str, object]] = []
+    for index, raw_modeled_object in enumerate(raw_modeled_objects):
+        modeled_object_entry = _require_table(raw_modeled_object, context=f"metadata.modeled_objects[{index}]")
+        if "role" not in modeled_object_entry:
+            raise ValueError(f"metadata.modeled_objects[{index}] is missing required key 'role'")
+        raw_role = _require_non_empty_string(modeled_object_entry["role"], context=f"metadata.modeled_objects[{index}].role")
+        if raw_role == _SUPPORTED_MODELED_ROLE:
+            modeled_object_candidates.append(modeled_object_entry)
+    if len(modeled_object_candidates) != 1:
         raise ValueError(
-            f"metadata.modeled_objects[0].role must be '{_SUPPORTED_MODELED_ROLE}' "
-            f"for the prototype import path (actual={raw_role})"
+            f"metadata JSON must contain exactly one {_SUPPORTED_MODELED_ROLE} modeled object for prototype import"
         )
+    modeled_object_entry = modeled_object_candidates[0]
     if "step_path" not in modeled_object_entry:
         raise ValueError("metadata.modeled_objects[0] is missing required key 'step_path'")
     raw_step_path = _require_non_empty_string(
