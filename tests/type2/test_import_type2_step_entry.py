@@ -4,7 +4,13 @@ import json
 from pathlib import Path
 from typing import cast
 
-from entry.import_type2_step import import_type2_step_from_args, parse_args
+from entry.import_type2_step import (
+    export_and_import_type2_step,
+    export_and_import_type2_step_into_hfss,
+    import_type2_step_from_args,
+    parse_args,
+)
+from peetsfea.aedt.protocols import HfssSession
 from peetsfea.backend.pyaedt.type2_step_import_pipeline import Type2ImportedLedger
 
 
@@ -16,13 +22,6 @@ def _result(*, step_ledger_path: Path, output_aedt_path: Path, imported_ledger_p
         "seed": 3,
         "aedt_path": str(output_aedt_path),
         "imported_ledger_path": str(imported_ledger_path),
-        "boundary": {
-            "type": "Radiation",
-            "offset_type": "Absolute Offset",
-            "offset_value": "3500.0",
-            "region_name": "Region_Abs_3500mm",
-            "face_count": "6",
-        },
         "non_model_objects": [],
         "modeled_objects": [],
     }
@@ -161,3 +160,108 @@ def test_import_type2_step_entry_uses_existing_ledger_without_export(tmp_path: P
         }
     ]
     assert result["source_step_ledger_path"] == str(existing_ledger_path)
+
+
+def test_export_and_import_type2_step_into_hfss_runs_export_then_attached_import(tmp_path: Path) -> None:
+    toml_path = tmp_path / "type2_fixed.toml"
+    output_dir = tmp_path / "step"
+    step_ledger_path = output_dir / "type2_step_ledger.json"
+    output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    exporter_calls: list[dict[str, object]] = []
+    importer_calls: list[dict[str, object]] = []
+    fake_hfss = cast(HfssSession, object())
+
+    def _exporter(**kwargs: object) -> object:
+        exporter_calls.append(dict(kwargs))
+        return {"ok": True}
+
+    def _importer(**kwargs: object) -> Type2ImportedLedger:
+        importer_calls.append(dict(kwargs))
+        return _result(
+            step_ledger_path=cast(Path, kwargs["step_ledger_path"]),
+            output_aedt_path=cast(Path, kwargs["output_aedt_path"]),
+            imported_ledger_path=cast(Path, kwargs["imported_ledger_path"]),
+        )
+
+    result = export_and_import_type2_step_into_hfss(
+        hfss=fake_hfss,
+        toml_path=toml_path,
+        output_dir=output_dir,
+        step_ledger_path=step_ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        seed=11,
+        exporter=_exporter,
+        importer=_importer,
+    )
+
+    assert exporter_calls == [
+        {
+            "toml_path": toml_path,
+            "output_dir": output_dir,
+            "ledger_path": step_ledger_path,
+            "seed": 11,
+        }
+    ]
+    assert importer_calls == [
+        {
+            "hfss": fake_hfss,
+            "step_ledger_path": step_ledger_path,
+            "output_aedt_path": output_aedt_path,
+            "imported_ledger_path": imported_ledger_path,
+        }
+    ]
+    assert result["source_step_ledger_path"] == str(step_ledger_path)
+
+
+def test_export_and_import_type2_step_runs_export_then_headless_import(tmp_path: Path) -> None:
+    toml_path = tmp_path / "type2_fixed.toml"
+    output_dir = tmp_path / "step"
+    step_ledger_path = output_dir / "type2_step_ledger.json"
+    output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    exporter_calls: list[dict[str, object]] = []
+    importer_calls: list[dict[str, object]] = []
+
+    def _exporter(**kwargs: object) -> object:
+        exporter_calls.append(dict(kwargs))
+        return {"ok": True}
+
+    def _importer(**kwargs: object) -> Type2ImportedLedger:
+        importer_calls.append(dict(kwargs))
+        return _result(
+            step_ledger_path=cast(Path, kwargs["step_ledger_path"]),
+            output_aedt_path=cast(Path, kwargs["output_aedt_path"]),
+            imported_ledger_path=cast(Path, kwargs["imported_ledger_path"]),
+        )
+
+    result = export_and_import_type2_step(
+        toml_path=toml_path,
+        output_dir=output_dir,
+        step_ledger_path=step_ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        seed=5,
+        design_name="headless_owner",
+        exporter=_exporter,
+        importer=_importer,
+    )
+
+    assert exporter_calls == [
+        {
+            "toml_path": toml_path,
+            "output_dir": output_dir,
+            "ledger_path": step_ledger_path,
+            "seed": 5,
+        }
+    ]
+    assert importer_calls == [
+        {
+            "step_ledger_path": step_ledger_path,
+            "output_aedt_path": output_aedt_path,
+            "imported_ledger_path": imported_ledger_path,
+            "design_name": "headless_owner",
+        }
+    ]
+    assert result["source_step_ledger_path"] == str(step_ledger_path)

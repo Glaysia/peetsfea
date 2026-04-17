@@ -26,6 +26,7 @@ class ImportedModeledObjectTerminalMetadata(TypedDict):
     direction: Literal["cw", "ccw"]
     start_point_plane_mm: tuple[float, float]
     end_point_plane_mm: tuple[float, float]
+    port_sheet_vertices_xyz: tuple[tuple[float, float, float], ...]
 
 
 class ImportedModeledObjectEntry(TypedDict):
@@ -97,6 +98,21 @@ def _require_non_empty_float_sequence(value: object, *, context: str) -> tuple[f
     for index, raw_item in enumerate(value):
         values.append(_require_float(raw_item, context=f"{context}[{index}]"))
     return tuple(values)
+
+
+def _require_float_triplet_sequence(
+    value: object,
+    *,
+    context: str,
+) -> tuple[tuple[float, float, float], ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        raise TypeError(f"{context} must be a sequence of 3D points")
+    vertices: list[tuple[float, float, float]] = []
+    for index, raw_vertex in enumerate(value):
+        vertices.append(_require_float_triplet(raw_vertex, context=f"{context}[{index}]"))
+    if len(vertices) != 4:
+        raise ValueError(f"{context} must contain exactly 4 vertices")
+    return tuple(vertices)
 
 
 def _require_imported_object_names(imported_object_names: Sequence[str]) -> tuple[str, ...]:
@@ -178,7 +194,7 @@ def _parse_canonical_coordinates(value: object) -> ImportedModeledObjectCanonica
 
 def _parse_terminal_metadata(value: object) -> ImportedModeledObjectTerminalMetadata:
     node = _require_table(value, context="modeled_object.terminal_metadata")
-    return {
+    terminal_metadata: dict[str, object] = {
         "path": _require_non_empty_str(
             _require_key(node, key="path", context="modeled_object.terminal_metadata"),
             context="modeled_object.terminal_metadata.path",
@@ -201,6 +217,12 @@ def _parse_terminal_metadata(value: object) -> ImportedModeledObjectTerminalMeta
             context="modeled_object.terminal_metadata.end_point_plane_mm",
         ),
     }
+    if "port_sheet_vertices_xyz" in node:
+        terminal_metadata["port_sheet_vertices_xyz"] = _require_float_triplet_sequence(
+            _require_key(node, key="port_sheet_vertices_xyz", context="modeled_object.terminal_metadata"),
+            context="modeled_object.terminal_metadata.port_sheet_vertices_xyz",
+        )
+    return cast(ImportedModeledObjectTerminalMetadata, terminal_metadata)
 
 
 def build_single_imported_modeled_object_entry(

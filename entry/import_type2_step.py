@@ -9,6 +9,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from entry.generate_type2_step import export_type2_step_artifacts
+from peetsfea.aedt.protocols import HfssSession
 from peetsfea.backend.pyaedt.type2_step_import_pipeline import (
     DEFAULT_DESIGN_NAME,
     DEFAULT_IMPORTED_LEDGER_PATH,
@@ -16,6 +17,7 @@ from peetsfea.backend.pyaedt.type2_step_import_pipeline import (
     DEFAULT_SOURCE_STEP_LEDGER_PATH,
     Type2ImportedLedger,
     import_type2_step_ledger,
+    import_type2_step_ledger_into_hfss,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +26,7 @@ DEFAULT_STEP_OUTPUT_DIR = REPO_ROOT / "run" / "step" / "type2"
 
 _Exporter = Callable[..., object]
 _Importer = Callable[..., Type2ImportedLedger]
+_AttachedImporter = Callable[..., Type2ImportedLedger]
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -39,6 +42,58 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def export_and_import_type2_step(
+    *,
+    toml_path: Path = DEFAULT_TYPE2_TOML_PATH,
+    output_dir: Path = DEFAULT_STEP_OUTPUT_DIR,
+    step_ledger_path: Path = DEFAULT_SOURCE_STEP_LEDGER_PATH,
+    output_aedt_path: Path = DEFAULT_OUTPUT_AEDT_PATH,
+    imported_ledger_path: Path = DEFAULT_IMPORTED_LEDGER_PATH,
+    seed: int = 0,
+    design_name: str = DEFAULT_DESIGN_NAME,
+    exporter: _Exporter = export_type2_step_artifacts,
+    importer: _Importer = import_type2_step_ledger,
+) -> Type2ImportedLedger:
+    exporter(
+        toml_path=toml_path,
+        output_dir=output_dir,
+        ledger_path=step_ledger_path,
+        seed=seed,
+    )
+    return importer(
+        step_ledger_path=step_ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        design_name=design_name,
+    )
+
+
+def export_and_import_type2_step_into_hfss(
+    *,
+    hfss: HfssSession,
+    toml_path: Path = DEFAULT_TYPE2_TOML_PATH,
+    output_dir: Path = DEFAULT_STEP_OUTPUT_DIR,
+    step_ledger_path: Path = DEFAULT_SOURCE_STEP_LEDGER_PATH,
+    output_aedt_path: Path = DEFAULT_OUTPUT_AEDT_PATH,
+    imported_ledger_path: Path = DEFAULT_IMPORTED_LEDGER_PATH,
+    seed: int = 0,
+    exporter: _Exporter = export_type2_step_artifacts,
+    importer: _AttachedImporter = import_type2_step_ledger_into_hfss,
+) -> Type2ImportedLedger:
+    exporter(
+        toml_path=toml_path,
+        output_dir=output_dir,
+        ledger_path=step_ledger_path,
+        seed=seed,
+    )
+    return importer(
+        hfss=hfss,
+        step_ledger_path=step_ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+    )
+
+
 def import_type2_step_from_args(
     args: argparse.Namespace,
     *,
@@ -47,20 +102,23 @@ def import_type2_step_from_args(
 ) -> Type2ImportedLedger:
     if args.ledger is not None:
         step_ledger_path = Path(args.ledger)
-    else:
-        step_ledger_path = Path(args.step_ledger)
-        exporter(
-            toml_path=Path(args.toml),
-            output_dir=Path(args.output_dir),
-            ledger_path=step_ledger_path,
-            seed=int(args.seed),
+        return importer(
+            step_ledger_path=step_ledger_path,
+            output_aedt_path=Path(args.output_aedt),
+            imported_ledger_path=Path(args.imported_ledger),
+            design_name=str(args.design_name),
         )
 
-    return importer(
-        step_ledger_path=step_ledger_path,
+    return export_and_import_type2_step(
+        toml_path=Path(args.toml),
+        output_dir=Path(args.output_dir),
+        step_ledger_path=Path(args.step_ledger),
         output_aedt_path=Path(args.output_aedt),
         imported_ledger_path=Path(args.imported_ledger),
+        seed=int(args.seed),
         design_name=str(args.design_name),
+        exporter=exporter,
+        importer=importer,
     )
 
 
@@ -72,12 +130,6 @@ def main(argv: list[str] | None = None) -> Type2ImportedLedger:
     print(f"source STEP ledger: {result['source_step_ledger_path']}")
     print(f"output AEDT: {result['aedt_path']}")
     print(f"imported ledger: {result['imported_ledger_path']}")
-    print(
-        "boundary: "
-        f"{result['boundary']['type']} region={result['boundary']['region_name']} "
-        f"faces={result['boundary']['face_count']} "
-        f"offset={result['boundary']['offset_value']}"
-    )
     print(f"non-model object count: {len(result['non_model_objects'])}")
     print(f"modeled object count: {len(result['modeled_objects'])}")
     return result

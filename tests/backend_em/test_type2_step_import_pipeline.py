@@ -103,14 +103,28 @@ def _modeled_entry(
     offset_y = origin_y - (-15.0)
     if expected_names is None:
         expected_names = (
-            ["tx_pcb_l0", "tx_copper_l0", "tx_port_sheet"]
+            ["tx_pcb_l0", "tx_copper_l0"]
             if role == "tx_single_coil"
-            else ["rx_pcb_l0", "rx_copper_l0", "rx_port_sheet"]
+            else ["rx_pcb_l0", "rx_copper_l0"]
         )
     if pcb_layer_positions_mm is None:
         pcb_layer_positions_mm = [origin_z]
     if copper_layer_positions_mm is None:
         copper_layer_positions_mm = [origin_z + 1.6]
+    if plane == "XY":
+        port_sheet_vertices_xyz = [
+            [origin_x, origin_y, origin_z],
+            [origin_x + 5.0, origin_y, origin_z],
+            [origin_x + 5.0, origin_y + 5.0, origin_z],
+            [origin_x, origin_y + 5.0, origin_z],
+        ]
+    else:
+        port_sheet_vertices_xyz = [
+            [origin_x, origin_y, origin_z],
+            [origin_x, origin_y + 5.0, origin_z],
+            [origin_x, origin_y + 5.0, origin_z + 5.0],
+            [origin_x, origin_y, origin_z + 5.0],
+        ]
     return {
         "object_id": object_id,
         "role": role,
@@ -135,6 +149,7 @@ def _modeled_entry(
             "direction": "cw",
             "start_point_plane_mm": [55.0, 15.0],
             "end_point_plane_mm": [70.0, 5.0],
+            "port_sheet_vertices_xyz": port_sheet_vertices_xyz,
         },
         "source_metadata_path": source_metadata_path,
     }
@@ -163,11 +178,145 @@ def _write_ledger(
 
 
 class _FakeObject:
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, *, valid_properties: tuple[str, ...] = ("Material", "Color", "Transparent")) -> None:
         self.name = name
         self.color = (0, 0, 0)
         self.transparency = 0.0
-        self.material_name = "vacuum"
+        self.valid_properties = list(valid_properties)
+        self._material_name = "vacuum"
+
+    @property
+    def material_name(self) -> str:
+        if "Material" not in self.valid_properties:
+            return ""
+        return self._material_name
+
+    @material_name.setter
+    def material_name(self, material_name: str) -> None:
+        if "Material" not in self.valid_properties:
+            raise AttributeError("Property 'Material' does not exist.")
+        self._material_name = material_name
+
+
+def _new_fake_sheet_object(name: str) -> _FakeObject:
+    return _FakeObject(name, valid_properties=("Color", "Transparent", "Surface Material"))
+
+
+class _FakeMaterial:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.permittivity = ""
+        self.permeability = ""
+        self.conductivity = ""
+        self.dielectric_loss_tangent = ""
+        self.magnetic_loss_tangent = ""
+
+
+class _FakeMaterials:
+    def __init__(self) -> None:
+        self.material_keys: dict[str, _FakeMaterial] = {}
+        self._pending_material_keys: dict[str, _FakeMaterial] = {}
+        self.delayed_lookup_material_names: set[str] = set()
+        self.aedmattolibrary_calls: list[str] = []
+
+    def exists_material(self, name: str) -> bool:
+        normalized_name = name.casefold()
+        return normalized_name in self.material_keys or normalized_name in self._pending_material_keys
+
+    def add_material(self, name: str) -> _FakeMaterial:
+        material = _FakeMaterial(name)
+        normalized_name = name.casefold()
+        if normalized_name in {delayed.casefold() for delayed in self.delayed_lookup_material_names}:
+            self._pending_material_keys[normalized_name] = material
+        else:
+            self.material_keys[normalized_name] = material
+        return material
+
+    def _aedmattolibrary(self, name: str) -> _FakeMaterial:
+        self.aedmattolibrary_calls.append(name)
+        normalized_name = name.casefold()
+        if normalized_name in self._pending_material_keys:
+            self.material_keys[normalized_name] = self._pending_material_keys.pop(normalized_name)
+        return self.material_keys[normalized_name]
+
+
+class _FakeDefinitionManager:
+    def __init__(self, *, materials: _FakeMaterials) -> None:
+        self.materials = materials
+        self.add_material_calls: list[list[object]] = []
+        self.edit_material_calls: list[tuple[str, list[object]]] = []
+
+    def GetProjectMaterialNames(self) -> list[str]:
+        return [material.name for material in self.materials.material_keys.values()]
+
+    def AddMaterial(self, payload: list[object]) -> None:
+        self.add_material_calls.append(list(payload))
+        self._apply_material_payload(payload)
+
+    def EditMaterial(self, name: str, payload: list[object]) -> None:
+        self.edit_material_calls.append((name, list(payload)))
+        self._apply_material_payload(payload)
+
+    def _apply_material_payload(self, payload: list[object]) -> None:
+        raw_name = payload[0]
+        assert isinstance(raw_name, str) and raw_name.startswith("NAME:"), "material payload must start with NAME:<material>"
+        material_name = raw_name.removeprefix("NAME:")
+        material = self.materials.material_keys.get(material_name.casefold())
+        if material is None:
+            material = _FakeMaterial(material_name)
+            self.materials.material_keys[material_name.casefold()] = material
+        for index, item in enumerate(payload[:-1]):
+            if item == "permittivity:=":
+                material.permittivity = str(payload[index + 1])
+            if item == "permeability:=":
+                material.permeability = str(payload[index + 1])
+            if item == "conductivity:=":
+                material.conductivity = str(payload[index + 1])
+            if item == "magnetic_loss_tangent:=":
+                material.magnetic_loss_tangent = str(payload[index + 1])
+
+
+class _FakeProject:
+    def __init__(self, *, materials: _FakeMaterials) -> None:
+        self.add_dataset_calls: list[list[object]] = []
+        self.definition_manager = _FakeDefinitionManager(materials=materials)
+
+    def AddDataset(self, payload: list[object]) -> object:
+        self.add_dataset_calls.append(payload)
+        return None
+
+    def GetDefinitionManager(self) -> object:
+        return self.definition_manager
+
+
+class _FakeMeshModule:
+    def __init__(self) -> None:
+        self.assign_length_op_result: object = True
+        self.assign_length_op_calls: list[list[object]] = []
+
+    def AssignLengthOp(self, props: list[object]) -> object:
+        self.assign_length_op_calls.append(list(props))
+        return self.assign_length_op_result
+
+
+class _FakeDesign:
+    def __init__(self, *, mesh_module: _FakeMeshModule) -> None:
+        self.mesh_module = mesh_module
+        self.get_module_calls: list[str] = []
+        self.import_dataset_calls: list[str] = []
+
+    def GetModule(self, name: str) -> object:
+        self.get_module_calls.append(name)
+        if name != "MeshSetup":
+            raise AssertionError(f"unexpected module lookup in fake design: {name}")
+        return self.mesh_module
+
+    def ImportDataset(self, path: str) -> object:
+        self.import_dataset_calls.append(path)
+        return None
+
+    def ValidateDesign(self) -> object:
+        return True
 
 
 class _FakeModeler:
@@ -176,28 +325,33 @@ class _FakeModeler:
         *,
         imported_name_batches: list[tuple[str, ...]],
         import_result: object = True,
-        region_faces: list[int] | None = None,
     ) -> None:
         self._object_names: tuple[str, ...] = ("existing",)
         self._imported_name_batches = list(imported_name_batches)
         self._import_result = import_result
         self.import_calls: list[Path] = []
+        self.import_kwargs_calls: list[dict[str, object]] = []
+        self.create_polyline_calls: list[dict[str, object]] = []
+        self.cover_lines_calls: list[str] = []
         self.model_state_calls: list[tuple[str, bool]] = []
         self.move_calls: list[tuple[list[str], list[float]]] = []
         self.objects: dict[str, _FakeObject] = {"existing": _FakeObject("existing")}
         self.created_region_name: str = ""
         self.created_region_pad_value: float = 0.0
         self.created_region_pad_type: str = ""
+        self.create_polyline_returns_false = False
+        self.cover_lines_returns_false = False
         self.create_region_returns_false = False
         self.get_object_faces_returns_false = False
-        self.region_faces = [10, 11, 12, 13, 14, 15] if region_faces is None else list(region_faces)
+        self.region_faces = [10, 11, 12, 13, 14, 15]
 
     @property
     def object_names(self) -> tuple[str, ...]:
         return self._object_names
 
-    def import_3d_cad(self, input_file: str | Path, **_: object) -> object:
+    def import_3d_cad(self, input_file: str | Path, **kwargs: object) -> object:
         self.import_calls.append(Path(input_file))
+        self.import_kwargs_calls.append(dict(kwargs))
         if self._import_result is not True:
             return self._import_result
         if not self._imported_name_batches:
@@ -211,6 +365,24 @@ class _FakeModeler:
     def set_object_model_state(self, name: str, model: bool) -> object:
         self.model_state_calls.append((name, model))
         return True
+
+    def create_polyline(self, **kwargs: object) -> object:
+        self.create_polyline_calls.append(dict(kwargs))
+        if self.create_polyline_returns_false:
+            return False
+        name = kwargs["name"]
+        assert isinstance(name, str)
+        self.objects[name] = _FakeObject(name)
+        if name not in self._object_names:
+            self._object_names = self._object_names + (name,)
+        return self.objects[name]
+
+    def cover_lines(self, assignment: str) -> object:
+        self.cover_lines_calls.append(assignment)
+        if self.cover_lines_returns_false:
+            return False
+        self.objects[assignment] = _new_fake_sheet_object(assignment)
+        return assignment
 
     def get_object_from_name(self, assignment: str) -> object:
         return self.objects[assignment]
@@ -256,6 +428,10 @@ class _FakeHfss:
         self._save_project_result = save_project_result
         self.mesh_module = _FakeMeshModule()
         self.design = _FakeDesign(mesh_module=self.mesh_module)
+        self.materials = _FakeMaterials()
+        self.oproject = _FakeProject(materials=self.materials)
+        self.design_name = "type2_step_import"
+        self.insert_design_calls: list[str] = []
         self.save_project_calls: list[str] = []
         self.radiation_boundary_result = True
         self.radiation_boundary_calls: list[tuple[list[int], str]] = []
@@ -268,6 +444,16 @@ class _FakeHfss:
     def save_project(self, path: str) -> object:
         self.save_project_calls.append(path)
         return self._save_project_result
+
+    def insert_design(self, name: str | None = None, solution_type: str | None = None) -> str:
+        _ = solution_type
+        requested_name = self.design_name if name is None else name
+        self.insert_design_calls.append(requested_name)
+        inserted_name = f"{requested_name}_1"
+        self.design_name = inserted_name
+        self.modeler._object_names = ()
+        self.modeler.objects = {}
+        return inserted_name
 
     def assign_radiation_boundary_to_faces(self, assignment: object, name: str) -> object:
         assert isinstance(assignment, list)
@@ -309,14 +495,48 @@ def _single_layer_imported_name_batch() -> tuple[str, ...]:
         "rx_region_max",
         "tx_pcb_l0",
         "tx_copper_l0",
-        "tx_port_sheet",
         "rx_pcb_l0",
         "rx_copper_l0",
-        "rx_port_sheet",
     )
 
 
-def _expected_mesh_length_payload() -> list[object]:
+def _tx_underlay_expected_names(*, repeat_count: int) -> list[str]:
+    expected_names: list[str] = []
+    for unit_index in range(repeat_count):
+        expected_names.extend(
+            [
+                f"tx_underlay_ferrite_u{unit_index}",
+                f"tx_underlay_pet_psa_u{unit_index}",
+                f"tx_underlay_air_u{unit_index}",
+            ]
+        )
+    return expected_names
+
+
+def _single_layer_modeled_objects_with_tx_underlay(tmp_path: Path, *, repeat_count: int) -> list[dict[str, object]]:
+    return [
+        _modeled_entry(
+            source_metadata_path=str(tmp_path / "tx.metadata.json"),
+            expected_names=["tx_pcb_l0", "tx_copper_l0", *_tx_underlay_expected_names(repeat_count=repeat_count)],
+        ),
+        _rx_single_coil_entry(tmp_path),
+    ]
+
+
+def _single_layer_imported_name_batch_with_tx_underlay(*, repeat_count: int) -> tuple[str, ...]:
+    return (
+        "environment",
+        "tx_region",
+        "rx_region_max",
+        "tx_pcb_l0",
+        "tx_copper_l0",
+        *_tx_underlay_expected_names(repeat_count=repeat_count),
+        "rx_pcb_l0",
+        "rx_copper_l0",
+    )
+
+
+def _expected_mesh_length_payload(*, tx_object_name: str = "tx_copper_l0") -> list[object]:
     return [
         "NAME:Length1",
         "RefineInside:=",
@@ -324,7 +544,7 @@ def _expected_mesh_length_payload() -> list[object]:
         "Enabled:=",
         True,
         "Objects:=",
-        ["tx_copper_l0", "rx_copper_l0"],
+        [tx_object_name, "rx_copper_l0"],
         "RestrictElem:=",
         False,
         "NumMaxElem:=",
@@ -336,31 +556,6 @@ def _expected_mesh_length_payload() -> list[object]:
     ]
 
 
-class _FakeMeshModule:
-    def __init__(self) -> None:
-        self.assign_length_op_result: object = True
-        self.assign_length_op_calls: list[list[object]] = []
-
-    def AssignLengthOp(self, props: list[object]) -> object:
-        self.assign_length_op_calls.append(list(props))
-        return self.assign_length_op_result
-
-
-class _FakeDesign:
-    def __init__(self, *, mesh_module: _FakeMeshModule) -> None:
-        self.mesh_module = mesh_module
-        self.get_module_calls: list[str] = []
-
-    def GetModule(self, name: str) -> object:
-        self.get_module_calls.append(name)
-        if name != "MeshSetup":
-            raise AssertionError(f"unexpected module lookup in fake design: {name}")
-        return self.mesh_module
-
-    def ValidateDesign(self) -> object:
-        return True
-
-
 def test_import_type2_step_ledger_imports_single_scene_and_writes_partitioned_ledger(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
     _write_ledger(
@@ -370,16 +565,9 @@ def test_import_type2_step_ledger_imports_single_scene_and_writes_partitioned_le
         modeled_objects=_single_layer_modeled_objects(tmp_path),
         radiation_margin_mm=4123.0,
     )
-    source_ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
-    assert source_ledger["em_policy"] == {"radiation_margin_mm": 4123.0}
-    assert "import_time_policy" not in source_ledger
     output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
     imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
-    session = _FakeHfss(
-        modeler=_FakeModeler(
-            imported_name_batches=[_single_layer_imported_name_batch()]
-        )
-    )
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[_single_layer_imported_name_batch()]))
 
     result = import_type2_step_ledger(
         step_ledger_path=ledger_path,
@@ -390,6 +578,7 @@ def test_import_type2_step_ledger_imports_single_scene_and_writes_partitioned_le
     )
 
     assert session.modeler.import_calls == [scene_step]
+    assert session.modeler.import_kwargs_calls == [{"import_free_surfaces": True}]
     assert session.modeler.model_state_calls == [
         ("environment", False),
         ("tx_region", False),
@@ -401,54 +590,123 @@ def test_import_type2_step_ledger_imports_single_scene_and_writes_partitioned_le
         ("rx_copper_l0", True),
         ("rx_port_sheet", True),
     ]
-    assert session.modeler.move_calls == []
-    assert session.modeler.objects["environment"].color == (128, 128, 128)
-    assert session.modeler.objects["environment"].transparency == pytest.approx(0.85)
-    assert session.modeler.objects["tx_pcb_l0"].material_name == "FR4_epoxy"
-    assert session.modeler.objects["tx_pcb_l0"].color == (0, 128, 0)
-    assert session.modeler.objects["tx_pcb_l0"].transparency == pytest.approx(0.85)
     assert session.modeler.objects["tx_copper_l0"].material_name == "copper"
-    assert session.modeler.objects["tx_copper_l0"].color == (184, 115, 51)
-    assert session.modeler.objects["tx_copper_l0"].transparency == pytest.approx(0.0)
-    assert session.modeler.objects["tx_port_sheet"].material_name == "vacuum"
-    assert session.modeler.objects["rx_pcb_l0"].material_name == "FR4_epoxy"
     assert session.modeler.objects["rx_copper_l0"].material_name == "copper"
-    assert session.modeler.objects["rx_port_sheet"].material_name == "vacuum"
-    assert session.design.get_module_calls == ["MeshSetup"]
-    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload()]
-    assert session.modeler.created_region_pad_value == pytest.approx(4123.0)
-    assert session.modeler.created_region_pad_type == "Absolute Offset"
-    assert session.modeler.created_region_name == "Region_Abs_4123mm"
-    assert session.radiation_boundary_calls == [
-        ([10], "Rad_RegionAbs_0"),
-        ([11], "Rad_RegionAbs_1"),
-        ([12], "Rad_RegionAbs_2"),
-        ([13], "Rad_RegionAbs_3"),
-        ([14], "Rad_RegionAbs_4"),
-        ([15], "Rad_RegionAbs_5"),
-    ]
+    assert session.design.import_dataset_calls == []
+    assert session.oproject.add_dataset_calls == []
+    assert session.oproject.definition_manager.add_material_calls == []
+    assert session.design.get_module_calls == []
+    assert session.mesh_module.assign_length_op_calls == []
+    assert session.modeler.created_region_name == ""
+    assert session.radiation_boundary_calls == []
     assert session.save_project_calls == [str(output_aedt_path)]
     assert session.desktop_class.release_calls == [(True, True)]
-    assert result["scene_step_path"] == str(scene_step)
-    assert result["boundary"] == {
-        "type": "radiation",
-        "offset_type": "Absolute Offset",
-        "offset_value": "4123.0",
-        "region_name": "Region_Abs_4123mm",
-        "face_count": "6",
-    }
-    assert result["non_model_objects"][0]["imported_object_names"] == ["environment", "tx_region", "rx_region_max"]
+    assert "mesh" not in result
+    assert "boundary" not in result
     modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
     assert modeled_by_id["tx_rect_void_coil"]["imported_object_names"] == ["tx_pcb_l0", "tx_copper_l0", "tx_port_sheet"]
     assert modeled_by_id["rx_rect_void_coil"]["imported_object_names"] == ["rx_pcb_l0", "rx_copper_l0", "rx_port_sheet"]
-
     written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
     assert written == result
 
 
-def test_import_type2_step_ledger_styles_multilayer_tx_parallel_stack_before_mesh_validation_fails(
-    tmp_path: Path,
-) -> None:
+def test_import_type2_step_ledger_allows_missing_optional_port_sheet_bodies(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=_single_layer_modeled_objects(tmp_path),
+    )
+    session = _FakeHfss(
+        modeler=_FakeModeler(
+            imported_name_batches=[
+                (
+                    "environment",
+                    "tx_region",
+                    "rx_region_max",
+                    "tx_pcb_l0",
+                    "tx_copper_l0",
+                    "rx_pcb_l0",
+                    "rx_copper_l0",
+                )
+            ]
+        )
+    )
+
+    result = import_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+        imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+        design_name="fake_type2_import",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    assert modeled_by_id["tx_rect_void_coil"]["imported_object_names"] == ["tx_pcb_l0", "tx_copper_l0", "tx_port_sheet"]
+    assert modeled_by_id["rx_rect_void_coil"]["imported_object_names"] == ["rx_pcb_l0", "rx_copper_l0", "rx_port_sheet"]
+    assert session.mesh_module.assign_length_op_calls == []
+    assert session.radiation_boundary_calls == []
+    assert "mesh" not in result
+    assert "boundary" not in result
+
+
+def test_import_type2_step_ledger_styles_tx_underlay_and_keeps_mesh_conductor_only(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=_single_layer_modeled_objects_with_tx_underlay(tmp_path, repeat_count=2),
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _FakeHfss(
+        modeler=_FakeModeler(
+            imported_name_batches=[_single_layer_imported_name_batch_with_tx_underlay(repeat_count=2)]
+        )
+    )
+    session.materials.delayed_lookup_material_names.add("PET_PSA")
+
+    result = import_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        design_name="fake_type2_import",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    assert session.design.import_dataset_calls == [str(Path(__file__).resolve().parents[2] / "notebooks" / "mu_p.tab")]
+    assert len(session.oproject.add_dataset_calls) == 2
+    assert session.oproject.definition_manager.add_material_calls[0][0] == "NAME:MULL12060ferrite"
+    assert session.materials.aedmattolibrary_calls == ["PET_PSA"]
+    assert session.materials.material_keys["pet_psa"].permittivity == "2.8"
+    assert session.modeler.objects["tx_underlay_ferrite_u0"].material_name == "MULL12060ferrite"
+    assert session.modeler.objects["tx_underlay_ferrite_u1"].material_name == "MULL12060ferrite"
+    assert session.modeler.objects["tx_underlay_pet_psa_u0"].material_name == "PET_PSA"
+    assert session.modeler.objects["tx_underlay_pet_psa_u1"].material_name == "PET_PSA"
+    assert session.modeler.objects["tx_underlay_air_u0"].material_name == "vacuum"
+    assert session.modeler.objects["tx_underlay_air_u1"].material_name == "vacuum"
+    assert session.mesh_module.assign_length_op_calls == []
+    assert "mesh" not in result
+    assert "boundary" not in result
+    modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    assert modeled_by_id["tx_rect_void_coil"]["imported_object_names"] == [
+        "tx_pcb_l0",
+        "tx_copper_l0",
+        "tx_underlay_ferrite_u0",
+        "tx_underlay_pet_psa_u0",
+        "tx_underlay_air_u0",
+        "tx_underlay_ferrite_u1",
+        "tx_underlay_pet_psa_u1",
+        "tx_underlay_air_u1",
+        "tx_port_sheet",
+    ]
+    written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
+    assert written == result
+
+
+def test_import_type2_step_ledger_styles_multilayer_tx_parallel_stack_before_mesh_validation_fails(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
     _write_ledger(
         ledger_path,
@@ -462,42 +720,29 @@ def test_import_type2_step_ledger_styles_multilayer_tx_parallel_stack_before_mes
             ),
         ],
     )
+    output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
     session = _FakeHfss(
         modeler=_FakeModeler(
-            imported_name_batches=[
-                ("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_pcb_l1", "tx_copper_stack"),
-            ]
+            imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_pcb_l1", "tx_copper_stack")]
         )
     )
 
-    with pytest.raises(ValueError, match=r"requires exact imported object names .*tx_copper_l0"):
-        import_type2_step_ledger(
-            step_ledger_path=ledger_path,
-            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
-            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
-            design_name="fake_type2_import",
-            hfss_factory=lambda _: cast(HfssSession, session),
-        )
+    result = import_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+        design_name="fake_type2_import",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
 
-    assert session.modeler.model_state_calls == [
-        ("environment", False),
-        ("tx_region", False),
-        ("rx_region_max", False),
-        ("tx_pcb_l0", True),
-        ("tx_pcb_l1", True),
-        ("tx_copper_stack", True),
-    ]
     assert session.modeler.objects["tx_pcb_l0"].material_name == "FR4_epoxy"
     assert session.modeler.objects["tx_pcb_l1"].material_name == "FR4_epoxy"
     assert session.modeler.objects["tx_copper_stack"].material_name == "copper"
-    assert session.modeler.objects["tx_pcb_l0"].color == (0, 128, 0)
-    assert session.modeler.objects["tx_pcb_l1"].color == (0, 128, 0)
-    assert session.modeler.objects["tx_copper_stack"].color == (184, 115, 51)
-    assert session.design.get_module_calls == []
     assert session.mesh_module.assign_length_op_calls == []
-    assert session.modeler.created_region_name == ""
     assert session.radiation_assigned_faces == []
-    assert session.save_project_calls == []
+    assert session.save_project_calls == [str(output_aedt_path)]
+    assert "mesh" not in result
+    assert "boundary" not in result
 
 
 def test_import_type2_step_ledger_fails_when_modeled_labels_are_not_preserved(tmp_path: Path) -> None:
@@ -508,11 +753,7 @@ def test_import_type2_step_ledger_fails_when_modeled_labels_are_not_preserved(tm
         non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry()],
     )
-    session = _FakeHfss(
-        modeler=_FakeModeler(
-            imported_name_batches=[("environment", "tx_region", "rx_region_max", "SOLID_7", "tx_copper_l0")]
-        )
-    )
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "rx_region_max", "SOLID_7", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"missing required modeled body name"):
         import_type2_step_ledger(
@@ -534,9 +775,7 @@ def test_import_type2_step_ledger_fails_when_scene_import_contains_unclaimed_obj
     )
     session = _FakeHfss(
         modeler=_FakeModeler(
-            imported_name_batches=[
-                ("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet", "mystery"),
-            ]
+            imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet", "mystery")]
         )
     )
 
@@ -558,11 +797,7 @@ def test_import_type2_step_ledger_fails_when_scene_import_missing_non_model_memb
         non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry()],
     )
-    session = _FakeHfss(
-        modeler=_FakeModeler(
-            imported_name_batches=[("environment", "tx_region", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet")]
-        )
-    )
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "tx_pcb_l0", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"missing non-model member object names"):
         import_type2_step_ledger(
@@ -582,11 +817,7 @@ def test_import_type2_step_ledger_fails_when_modeled_tx_is_not_centered_on_tx_re
         non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry(origin_xyz=(55.0, -16.0, 87.2))],
     )
-    session = _FakeHfss(
-        modeler=_FakeModeler(
-            imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet")]
-        )
-    )
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"center_y must already align with tx_region center_y"):
         import_type2_step_ledger(
@@ -606,11 +837,7 @@ def test_import_type2_step_ledger_fails_when_modeled_tx_does_not_fit_tx_region(t
         non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry(size_xyz=(170.0, 30.0, 2.8))],
     )
-    session = _FakeHfss(
-        modeler=_FakeModeler(
-            imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet")]
-        )
-    )
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"outer bounds must fit inside tx_region"):
         import_type2_step_ledger(
@@ -630,11 +857,7 @@ def test_import_type2_step_ledger_fails_when_modeled_tx_is_not_top_aligned_to_tx
         non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry(origin_xyz=(55.0, -15.0, 87.1))],
     )
-    session = _FakeHfss(
-        modeler=_FakeModeler(
-            imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet")]
-        )
-    )
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"outer bounds max_z must already touch tx_region max_z"):
         import_type2_step_ledger(
@@ -656,9 +879,7 @@ def test_import_type2_step_ledger_into_hfss_auto_detaches_after_import(tmp_path:
     )
     output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
     imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
-    session = _FakeHfss(
-        modeler=_FakeModeler(imported_name_batches=[_single_layer_imported_name_batch()])
-    )
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[_single_layer_imported_name_batch()]))
 
     result = import_type2_step_ledger_into_hfss(
         hfss=cast(HfssSession, session),
@@ -668,42 +889,15 @@ def test_import_type2_step_ledger_into_hfss_auto_detaches_after_import(tmp_path:
     )
 
     assert result["aedt_path"] == str(output_aedt_path)
+    assert session.insert_design_calls == ["type2_step_import"]
+    assert session.design_name == "type2_step_import_1"
     assert session.save_project_calls == [str(output_aedt_path)]
-    assert session.modeler.import_calls == [scene_step]
-    assert session.modeler.model_state_calls == [
-        ("environment", False),
-        ("tx_region", False),
-        ("rx_region_max", False),
-        ("tx_pcb_l0", True),
-        ("tx_copper_l0", True),
-        ("tx_port_sheet", True),
-        ("rx_pcb_l0", True),
-        ("rx_copper_l0", True),
-        ("rx_port_sheet", True),
-    ]
-    assert session.modeler.objects["environment"].color == (128, 128, 128)
-    assert session.modeler.objects["environment"].transparency == pytest.approx(0.85)
-    assert session.modeler.objects["tx_pcb_l0"].material_name == "FR4_epoxy"
-    assert session.modeler.objects["tx_pcb_l0"].color == (0, 128, 0)
-    assert session.modeler.objects["tx_pcb_l0"].transparency == pytest.approx(0.85)
-    assert session.modeler.objects["tx_copper_l0"].material_name == "copper"
-    assert session.modeler.objects["tx_copper_l0"].color == (184, 115, 51)
-    assert session.modeler.objects["tx_copper_l0"].transparency == pytest.approx(0.0)
-    assert session.modeler.objects["tx_port_sheet"].material_name == "vacuum"
-    assert session.modeler.objects["rx_pcb_l0"].material_name == "FR4_epoxy"
-    assert session.modeler.objects["rx_copper_l0"].material_name == "copper"
-    assert session.modeler.objects["rx_port_sheet"].material_name == "vacuum"
-    assert session.design.get_module_calls == ["MeshSetup"]
-    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload()]
-    assert session.modeler.created_region_name == "Region_Abs_3500mm"
-    assert session.radiation_assigned_faces == [10, 11, 12, 13, 14, 15]
-    assert result["boundary"] == {
-        "type": "radiation",
-        "offset_type": "Absolute Offset",
-        "offset_value": "3500.0",
-        "region_name": "Region_Abs_3500mm",
-        "face_count": "6",
-    }
+    assert session.design.get_module_calls == []
+    assert session.mesh_module.assign_length_op_calls == []
+    assert session.modeler.created_region_name == ""
+    assert session.radiation_assigned_faces == []
+    assert "mesh" not in result
+    assert "boundary" not in result
     assert session.desktop_class.release_calls == [(False, False)]
 
 
@@ -725,6 +919,7 @@ def test_import_type2_step_ledger_into_hfss_releases_desktop_when_import_returns
             imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
         )
 
+    assert session.insert_design_calls == ["type2_step_import"]
     assert session.desktop_class.release_calls == [(False, False)]
 
 
@@ -750,181 +945,8 @@ def test_import_type2_step_ledger_into_hfss_releases_desktop_when_save_project_r
             imported_ledger_path=imported_ledger_path,
         )
 
+    assert session.insert_design_calls == ["type2_step_import"]
     assert session.desktop_class.release_calls == [(False, False)]
-    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload()]
-    assert not imported_ledger_path.exists()
-
-
-def test_import_type2_step_ledger_raises_when_required_mesh_object_name_is_missing(tmp_path: Path) -> None:
-    scene_step, ledger_path = _source_paths(tmp_path)
-    _write_ledger(
-        ledger_path,
-        scene_step_path=scene_step,
-        non_model_objects=[_non_model_entry()],
-        modeled_objects=[_modeled_entry()],
-    )
-    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
-    session = _FakeHfss(
-        modeler=_FakeModeler(
-            imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet")]
-        )
-    )
-
-    with pytest.raises(ValueError, match=r"requires exact imported object names .*rx_copper_l0"):
-        import_type2_step_ledger(
-            step_ledger_path=ledger_path,
-            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
-            imported_ledger_path=imported_ledger_path,
-            hfss_factory=lambda _: cast(HfssSession, session),
-        )
-
-    assert session.design.get_module_calls == []
-    assert session.mesh_module.assign_length_op_calls == []
-    assert session.modeler.created_region_name == ""
-    assert session.radiation_boundary_calls == []
-    assert session.save_project_calls == []
-    assert session.desktop_class.release_calls == [(True, True)]
-    assert not imported_ledger_path.exists()
-
-
-def test_import_type2_step_ledger_raises_when_assign_length_op_returns_false(tmp_path: Path) -> None:
-    scene_step, ledger_path = _source_paths(tmp_path)
-    _write_ledger(
-        ledger_path,
-        scene_step_path=scene_step,
-        non_model_objects=[_non_model_entry()],
-        modeled_objects=_single_layer_modeled_objects(tmp_path),
-    )
-    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
-    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[_single_layer_imported_name_batch()]))
-    session.mesh_module.assign_length_op_result = False
-
-    with pytest.raises(RuntimeError, match=r"PyAEDT operation returned False: AssignLengthOp"):
-        import_type2_step_ledger(
-            step_ledger_path=ledger_path,
-            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
-            imported_ledger_path=imported_ledger_path,
-            hfss_factory=lambda _: cast(HfssSession, session),
-        )
-
-    assert session.design.get_module_calls == ["MeshSetup"]
-    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload()]
-    assert session.modeler.created_region_name == ""
-    assert session.radiation_boundary_calls == []
-    assert session.save_project_calls == []
-    assert session.desktop_class.release_calls == [(True, True)]
-    assert not imported_ledger_path.exists()
-
-
-def test_import_type2_step_ledger_raises_when_create_region_returns_false(tmp_path: Path) -> None:
-    scene_step, ledger_path = _source_paths(tmp_path)
-    _write_ledger(
-        ledger_path,
-        scene_step_path=scene_step,
-        non_model_objects=[_non_model_entry()],
-        modeled_objects=_single_layer_modeled_objects(tmp_path),
-    )
-    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
-    modeler = _FakeModeler(imported_name_batches=[_single_layer_imported_name_batch()])
-    modeler.create_region_returns_false = True
-    session = _FakeHfss(modeler=modeler)
-
-    with pytest.raises(RuntimeError, match=r"PyAEDT operation returned False: create_region"):
-        import_type2_step_ledger(
-            step_ledger_path=ledger_path,
-            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
-            imported_ledger_path=imported_ledger_path,
-            hfss_factory=lambda _: cast(HfssSession, session),
-        )
-
-    assert session.save_project_calls == []
-    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload()]
-    assert session.desktop_class.release_calls == [(True, True)]
-    assert not imported_ledger_path.exists()
-
-
-def test_import_type2_step_ledger_raises_when_get_object_faces_returns_false(tmp_path: Path) -> None:
-    scene_step, ledger_path = _source_paths(tmp_path)
-    _write_ledger(
-        ledger_path,
-        scene_step_path=scene_step,
-        non_model_objects=[_non_model_entry()],
-        modeled_objects=_single_layer_modeled_objects(tmp_path),
-    )
-    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
-    modeler = _FakeModeler(imported_name_batches=[_single_layer_imported_name_batch()])
-    modeler.get_object_faces_returns_false = True
-    session = _FakeHfss(modeler=modeler)
-
-    with pytest.raises(RuntimeError, match=r"PyAEDT operation returned False: get_object_faces"):
-        import_type2_step_ledger(
-            step_ledger_path=ledger_path,
-            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
-            imported_ledger_path=imported_ledger_path,
-            hfss_factory=lambda _: cast(HfssSession, session),
-        )
-
-    assert session.save_project_calls == []
-    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload()]
-    assert session.desktop_class.release_calls == [(True, True)]
-    assert not imported_ledger_path.exists()
-
-
-def test_import_type2_step_ledger_raises_when_created_region_does_not_expose_six_faces(tmp_path: Path) -> None:
-    scene_step, ledger_path = _source_paths(tmp_path)
-    _write_ledger(
-        ledger_path,
-        scene_step_path=scene_step,
-        non_model_objects=[_non_model_entry()],
-        modeled_objects=_single_layer_modeled_objects(tmp_path),
-    )
-    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
-    session = _FakeHfss(
-        modeler=_FakeModeler(
-            imported_name_batches=[_single_layer_imported_name_batch()],
-            region_faces=[10, 11, 12, 13, 14],
-        )
-    )
-
-    with pytest.raises(ValueError, match=r"Created region does not expose 6 faces required for radiation assignment"):
-        import_type2_step_ledger(
-            step_ledger_path=ledger_path,
-            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
-            imported_ledger_path=imported_ledger_path,
-            hfss_factory=lambda _: cast(HfssSession, session),
-        )
-
-    assert session.save_project_calls == []
-    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload()]
-    assert session.desktop_class.release_calls == [(True, True)]
-    assert not imported_ledger_path.exists()
-
-
-def test_import_type2_step_ledger_raises_when_radiation_assignment_returns_false(tmp_path: Path) -> None:
-    scene_step, ledger_path = _source_paths(tmp_path)
-    _write_ledger(
-        ledger_path,
-        scene_step_path=scene_step,
-        non_model_objects=[_non_model_entry()],
-        modeled_objects=_single_layer_modeled_objects(tmp_path),
-    )
-    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
-    session = _FakeHfss(
-        modeler=_FakeModeler(imported_name_batches=[_single_layer_imported_name_batch()])
-    )
-    session.radiation_boundary_result = False
-
-    with pytest.raises(RuntimeError, match=r"PyAEDT operation returned False: assign_radiation_boundary_to_faces"):
-        import_type2_step_ledger(
-            step_ledger_path=ledger_path,
-            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
-            imported_ledger_path=imported_ledger_path,
-            hfss_factory=lambda _: cast(HfssSession, session),
-        )
-
-    assert session.save_project_calls == []
-    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload()]
-    assert session.desktop_class.release_calls == [(True, True)]
     assert not imported_ledger_path.exists()
 
 
@@ -957,11 +979,10 @@ def test_import_type2_step_ledger_fails_for_missing_scene_step_before_hfss_launc
 
 def test_import_type2_step_ledger_fails_for_missing_required_field(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
-    non_model_entry = _non_model_entry()
     _write_ledger(
         ledger_path,
         scene_step_path=scene_step,
-        non_model_objects=[non_model_entry],
+        non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry()],
     )
     payload = json.loads(ledger_path.read_text(encoding="utf-8"))
@@ -1039,7 +1060,9 @@ def test_import_type2_step_ledger_raises_when_save_project_returns_false(tmp_pat
         )
 
     assert session.desktop_class.release_calls == [(True, True)]
-    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload()]
+    assert session.mesh_module.assign_length_op_calls == []
+    assert session.modeler.created_region_name == ""
+    assert session.radiation_boundary_calls == []
     assert not imported_ledger_path.exists()
 
 

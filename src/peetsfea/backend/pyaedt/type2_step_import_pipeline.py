@@ -1,329 +1,28 @@
 from __future__ import annotations
 
-import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
-from typing import TypedDict, cast
 
-from peetsfea.aedt import Hfss
 from peetsfea.aedt.failfast import raise_on_false
-from peetsfea.aedt.protocols import DesignSession, HfssSession, MeshModuleSession, ModelerSession
-from peetsfea.backend.pyaedt.em_pipeline.steps.boundary_port import build_boundary
-from peetsfea.backend.pyaedt.type2_modeled_import_adapter import build_single_imported_modeled_object_entry
-from peetsfea.backend.pyaedt.type2_step_import_ledger import (
-    ValidatedStepLedger,
-    find_owner_member,
-    load_step_ledger,
-    require_key,
-    require_non_empty_str,
-    validated_object_names,
+from peetsfea.aedt.protocols import HfssSession
+from peetsfea.backend.pyaedt.type2_step_import_core import (
+    Type2ImportedLedger,
+    build_imported_ledger,
+    write_imported_ledger,
 )
-from peetsfea.backend.pyaedt.type2_step_import_partition import (
-    new_imported_object_names,
-    partition_imported_scene_object_names,
+from peetsfea.backend.pyaedt.type2_step_import_ledger import load_step_ledger
+from peetsfea.backend.pyaedt.type2_step_runtime_common import (
+    create_headless_hfss,
+    prepare_attached_import_design,
 )
-from peetsfea.backend.pyaedt.type2_step_import_style import (
-    set_imported_object_model_state,
-    style_imported_modeled_objects,
-    style_non_model_objects,
-    validate_modeled_bounds_against_owner,
-)
-from peetsfea.types.manifest import EmPolicy
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_SOURCE_STEP_LEDGER_PATH = REPO_ROOT / "run" / "step" / "type2" / "type2_step_ledger.json"
 DEFAULT_OUTPUT_AEDT_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_import" / "type2_import.aedt"
 DEFAULT_IMPORTED_LEDGER_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_import" / "type2_imported_ledger.json"
 DEFAULT_DESIGN_NAME = "type2_step_import"
-MESH_MODULE_NAME = "MeshSetup"
-MESH_LENGTH_OPERATION_NAME = "Length1"
-MESH_LENGTH_OBJECT_NAMES = ("tx_copper_l0", "rx_copper_l0")
-MESH_LENGTH_MAX_ELEMENTS = "1000"
-MESH_LENGTH_MAX_LENGTH = "5mm"
-
-
-class Type2ImportedLedger(TypedDict):
-    source_toml_path: str
-    source_step_ledger_path: str
-    scene_step_path: str
-    seed: int
-    aedt_path: str
-    imported_ledger_path: str
-    boundary: dict[str, str]
-    non_model_objects: list[dict[str, object]]
-    modeled_objects: list[dict[str, object]]
-
 
 HfssFactory = Callable[[str], HfssSession]
-
-
-def create_headless_hfss(design_name: str) -> HfssSession:
-    return cast(HfssSession, Hfss(design=design_name, non_graphical=True, new_desktop=True))
-
-
-def _current_object_names(modeler: ModelerSession, *, context: str) -> list[str]:
-    return validated_object_names(cast(Sequence[object], modeler.object_names), context=context)
-
-
-def _import_scene_step(
-    *,
-    modeler: ModelerSession,
-    step_path: Path,
-    object_id: str,
-) -> list[str]:
-    before_import = _current_object_names(modeler, context=f"{object_id}.before_import")
-    import_result = modeler.import_3d_cad(input_file=step_path)
-    raise_on_false(import_result, operation="import_3d_cad", context={"object_id": object_id, "input_file": str(step_path)})
-    if not isinstance(import_result, bool):
-        raise TypeError(f"Modeler3D.import_3d_cad must return bool (actual={type(import_result).__name__})")
-    after_import = _current_object_names(modeler, context=f"{object_id}.after_import")
-    imported_names = new_imported_object_names(
-        before_import=before_import,
-        after_import=after_import,
-        step_path=step_path,
-    )
-    return imported_names
-
-
-def _imported_names_from_adapter_entry(entry: dict[str, object]) -> list[str]:
-    raw_imported_names = require_key(
-        entry,
-        key="imported_object_names",
-        context="imported_modeled_object_entry",
-    )
-    if isinstance(raw_imported_names, (str, bytes)) or not isinstance(raw_imported_names, Sequence):
-        raise TypeError("imported_modeled_object_entry.imported_object_names must be a sequence of strings")
-    return validated_object_names(
-        cast(Sequence[object], raw_imported_names),
-        context="imported_modeled_object_entry",
-    )
-
-
-def _merge_modeled_adapter_entry(
-    *,
-    export_entry: dict[str, object],
-    adapter_entry: dict[str, object],
-) -> dict[str, object]:
-    merged = dict(export_entry)
-    merged["imported_object_names"] = _imported_names_from_adapter_entry(adapter_entry)
-    return merged
-
-
-def _boundary_policy_from_ledger(ledger: ValidatedStepLedger) -> EmPolicy:
-    return cast(
-        EmPolicy,
-        {"radiation_margin_mm": ledger["em_policy"]["radiation_margin_mm"]},
-    )
-
-
-def _validated_boundary_summary(boundary: dict[str, str]) -> dict[str, str]:
-    required_keys = ("type", "offset_type", "offset_value", "region_name", "face_count")
-    raw_boundary = cast(dict[str, object], boundary)
-    validated_boundary: dict[str, str] = {}
-    for key in required_keys:
-        validated_boundary[key] = require_non_empty_str(
-            require_key(raw_boundary, key=key, context="boundary"),
-            context=f"boundary.{key}",
-        )
-    return validated_boundary
-
-
-def _mesh_assignment_payload(*, object_names: list[str]) -> list[object]:
-    return [
-        f"NAME:{MESH_LENGTH_OPERATION_NAME}",
-        "RefineInside:=",
-        False,
-        "Enabled:=",
-        True,
-        "Objects:=",
-        object_names,
-        "RestrictElem:=",
-        False,
-        "NumMaxElem:=",
-        MESH_LENGTH_MAX_ELEMENTS,
-        "RestrictLength:=",
-        True,
-        "MaxLength:=",
-        MESH_LENGTH_MAX_LENGTH,
-    ]
-
-
-def _mesh_setup_module(hfss: HfssSession) -> MeshModuleSession:
-    assert (_:=hfss.odesign)
-    assert isinstance(_, DesignSession)
-    design: DesignSession = _
-    mesh_module = raise_on_false(
-        design.GetModule(MESH_MODULE_NAME),
-        operation="GetModule",
-        context={"module_name": MESH_MODULE_NAME},
-    )
-    assert hasattr(mesh_module, "AssignLengthOp"), (
-        f"{MESH_MODULE_NAME} module must expose AssignLengthOp "
-        f"(module_type={type(mesh_module).__name__})"
-    )
-    assign_length_op = mesh_module.AssignLengthOp
-    assert callable(assign_length_op), (
-        f"{MESH_MODULE_NAME}.AssignLengthOp must be callable "
-        f"(module_type={type(mesh_module).__name__})"
-    )
-    return cast(MeshModuleSession, mesh_module)
-
-
-def _required_mesh_object_names(imported_modeled_objects: Sequence[dict[str, object]]) -> list[str]:
-    imported_object_names: list[str] = []
-    for index, imported_entry in enumerate(imported_modeled_objects):
-        context = f"imported_modeled_objects[{index}]"
-        raw_imported_names = require_key(
-            imported_entry,
-            key="imported_object_names",
-            context=context,
-        )
-        if isinstance(raw_imported_names, (str, bytes)) or not isinstance(raw_imported_names, Sequence):
-            raise TypeError(f"{context}.imported_object_names must be a sequence of strings")
-        imported_object_names.extend(
-            validated_object_names(
-                cast(Sequence[object], raw_imported_names),
-                context=f"{context}.imported_object_names",
-            )
-        )
-
-    mesh_object_names = list(MESH_LENGTH_OBJECT_NAMES)
-    missing_object_names = [name for name in mesh_object_names if name not in imported_object_names]
-    if missing_object_names:
-        raise ValueError(
-            "Post-import mesh assignment requires exact imported object names "
-            f"{mesh_object_names}; missing={missing_object_names}; available={imported_object_names}"
-        )
-    return mesh_object_names
-
-
-def _assign_post_import_mesh(
-    *,
-    hfss: HfssSession,
-    imported_modeled_objects: Sequence[dict[str, object]],
-) -> None:
-    mesh_object_names = _required_mesh_object_names(imported_modeled_objects)
-    mesh_module = _mesh_setup_module(hfss)
-    assign_result = mesh_module.AssignLengthOp(_mesh_assignment_payload(object_names=mesh_object_names))
-    raise_on_false(
-        assign_result,
-        operation="AssignLengthOp",
-        context={
-            "module_name": MESH_MODULE_NAME,
-            "operation_name": MESH_LENGTH_OPERATION_NAME,
-            "objects": mesh_object_names,
-            "restrict_elem": False,
-            "num_max_elem": MESH_LENGTH_MAX_ELEMENTS,
-            "restrict_length": True,
-            "max_length": MESH_LENGTH_MAX_LENGTH,
-        },
-    )
-
-
-def _import_validated_ledger(
-    *,
-    hfss: HfssSession,
-    step_ledger_path: Path,
-    output_aedt_path: Path,
-    imported_ledger_path: Path,
-    ledger: ValidatedStepLedger,
-) -> Type2ImportedLedger:
-    modeler = hfss.modeler
-    imported_scene_object_names = _import_scene_step(
-        modeler=modeler,
-        step_path=ledger["scene_step_path"],
-        object_id="type2_scene",
-    )
-    non_model_names_by_object_id, modeled_names_by_object_id = partition_imported_scene_object_names(
-        ledger=ledger,
-        imported_object_names=imported_scene_object_names,
-    )
-
-    imported_non_model_objects: list[dict[str, object]] = []
-    for validated_entry in ledger["non_model_objects"]:
-        imported_object_names = non_model_names_by_object_id[validated_entry["object_id"]]
-        set_imported_object_model_state(
-            modeler=modeler,
-            object_id=validated_entry["object_id"],
-            imported_object_names=imported_object_names,
-            model_state=False,
-        )
-        style_non_model_objects(
-            modeler=modeler,
-            object_id=validated_entry["object_id"],
-            imported_object_names=imported_object_names,
-        )
-        imported_entry = dict(validated_entry["entry"])
-        imported_entry["imported_object_names"] = imported_object_names
-        imported_non_model_objects.append(imported_entry)
-
-    imported_modeled_objects: list[dict[str, object]] = []
-    for index, validated_entry in enumerate(ledger["modeled_objects"]):
-        context = f"modeled_objects[{index}]"
-        owner_id = require_non_empty_str(
-            require_key(validated_entry["entry"], key="placement_owner_id", context=context),
-            context=f"{context}.placement_owner_id",
-        )
-        owner_member = find_owner_member(ledger["non_model_objects"], object_id=owner_id)
-        validate_modeled_bounds_against_owner(
-            modeled_entry=validated_entry["entry"],
-            owner_member=owner_member,
-            context=context,
-        )
-        imported_object_names = modeled_names_by_object_id[validated_entry["object_id"]]
-        set_imported_object_model_state(
-            modeler=modeler,
-            object_id=validated_entry["object_id"],
-            imported_object_names=imported_object_names,
-            model_state=True,
-        )
-        style_imported_modeled_objects(
-            modeler=modeler,
-            modeled_entry=validated_entry["entry"],
-            imported_object_names=imported_object_names,
-            context=context,
-        )
-        adapter_entry = build_single_imported_modeled_object_entry(
-            modeled_object=validated_entry["entry"],
-            imported_object_names=imported_object_names,
-        )
-        imported_modeled_objects.append(
-            _merge_modeled_adapter_entry(
-                export_entry=validated_entry["entry"],
-                adapter_entry=cast(dict[str, object], adapter_entry),
-            )
-        )
-
-    _assign_post_import_mesh(
-        hfss=hfss,
-        imported_modeled_objects=imported_modeled_objects,
-    )
-
-    boundary = _validated_boundary_summary(
-        build_boundary(
-            hfss=hfss,
-            modeler=modeler,
-            policy=_boundary_policy_from_ledger(ledger),
-        )
-    )
-
-    save_result = hfss.save_project(str(output_aedt_path))
-    raise_on_false(save_result, operation="save_project", context={"path": str(output_aedt_path)})
-
-    imported_ledger: Type2ImportedLedger = {
-        "source_toml_path": ledger["source_toml_path"],
-        "source_step_ledger_path": str(step_ledger_path),
-        "scene_step_path": str(ledger["scene_step_path"]),
-        "seed": ledger["seed"],
-        "aedt_path": str(output_aedt_path),
-        "imported_ledger_path": str(imported_ledger_path),
-        "boundary": boundary,
-        "non_model_objects": imported_non_model_objects,
-        "modeled_objects": imported_modeled_objects,
-    }
-    imported_ledger_path.parent.mkdir(parents=True, exist_ok=True)
-    imported_ledger_path.write_text(json.dumps(imported_ledger, ensure_ascii=False, indent=2), encoding="utf-8")
-    return imported_ledger
 
 
 def import_type2_step_ledger(
@@ -337,16 +36,19 @@ def import_type2_step_ledger(
     checked_step_ledger_path = step_ledger_path.resolve(strict=False)
     ledger = load_step_ledger(checked_step_ledger_path)
     output_aedt_path.parent.mkdir(parents=True, exist_ok=True)
-
     hfss = hfss_factory(design_name)
     try:
-        return _import_validated_ledger(
+        imported_ledger = build_imported_ledger(
             hfss=hfss,
             step_ledger_path=checked_step_ledger_path,
             output_aedt_path=output_aedt_path,
             imported_ledger_path=imported_ledger_path,
             ledger=ledger,
         )
+        save_result = hfss.save_project(str(output_aedt_path))
+        raise_on_false(save_result, operation="save_project", context={"path": str(output_aedt_path)})
+        write_imported_ledger(imported_ledger_path=imported_ledger_path, imported_ledger=imported_ledger)
+        return imported_ledger
     finally:
         release_result = hfss.desktop_class.release_desktop(close_projects=True, close_on_exit=True)
         raise_on_false(
@@ -367,13 +69,18 @@ def import_type2_step_ledger_into_hfss(
     try:
         ledger = load_step_ledger(checked_step_ledger_path)
         output_aedt_path.parent.mkdir(parents=True, exist_ok=True)
-        return _import_validated_ledger(
+        prepare_attached_import_design(hfss)
+        imported_ledger = build_imported_ledger(
             hfss=hfss,
             step_ledger_path=checked_step_ledger_path,
             output_aedt_path=output_aedt_path,
             imported_ledger_path=imported_ledger_path,
             ledger=ledger,
         )
+        save_result = hfss.save_project(str(output_aedt_path))
+        raise_on_false(save_result, operation="save_project", context={"path": str(output_aedt_path)})
+        write_imported_ledger(imported_ledger_path=imported_ledger_path, imported_ledger=imported_ledger)
+        return imported_ledger
     finally:
         release_result = hfss.desktop_class.release_desktop(close_projects=False, close_on_exit=False)
         raise_on_false(
