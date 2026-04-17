@@ -1,7 +1,7 @@
 ---
 title: type2_modeled_import_adapter.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 17:20
 tags:
   - type2
   - hfss-import
@@ -33,6 +33,7 @@ tags:
 - module-level mutable state는 없다.
 - canonical source of role/coordinates/terminal semantics is metadata `modeled_object`.
 - AEDT import side에서 canonical source는 `imported_object_names` only.
+- current exact-name modeled import contract may include separate port-sheet body names `tx_port_sheet`, `rx_port_sheet`.
 
 ## Invariants / fail-fast
 - `modeled_object.role` must be `tx_single_coil` 또는 `rx_single_coil`.
@@ -43,6 +44,7 @@ tags:
 - coordinate/path/terminal field는 타입과 최소 shape(길이, non-empty string)를 강제한다.
 - `imported_object_names`는 non-empty, all-string, duplicate-free여야 한다.
 - AEDT geometry reverse-calculation은 하지 않는다.
+- imported port-sheet names, when present, are preserved only as exact imported body names; this adapter does not project lumped-port assignment from them yet.
 
 ## 직접 의존
 - 표준 라이브러리: `typing`, `collections.abc`
@@ -57,6 +59,7 @@ tags:
 - [ ] imported entry가 direct `EmPipelineInput` 조립에 필요한 terminal/ownership projection까지 맡을지 결정한다.
 - [ ] role-neutral public naming이 정리되면 adapter fixture/object id naming도 함께 정리한다.
 - [ ] setup-ready slice에서 port candidate metadata를 adapter output에 포함할지 검토한다.
+- [ ] imported exact-name contract에 `tx_port_sheet` / `rx_port_sheet`를 반영한 future port-candidate projection shape를 확정한다.
 
 ## 변경 시 주의점
 - single-coil 제약을 완화해 multi-object adapter로 확장할 때는 role taxonomy와 imported-name ownership 규칙을 별도 계획으로 고정해야 한다.

@@ -16,6 +16,7 @@ from peetsfea.backend.pyaedt.type2_step_import_ledger import (
 
 _BODY_ROLE_PCB = "pcb"
 _BODY_ROLE_COPPER = "copper"
+_BODY_ROLE_PORT_SHEET = "port_sheet"
 
 
 def new_imported_object_names(*, before_import: list[str], after_import: list[str], step_path: Path) -> list[str]:
@@ -51,8 +52,11 @@ def _body_role_from_expected_name(expected_name: str, *, context: str) -> str:
         return _BODY_ROLE_PCB
     if expected_name.startswith(("tx_copper_l", "rx_copper_l")) or expected_name == "tx_copper_stack":
         return _BODY_ROLE_COPPER
+    if expected_name in ("tx_port_sheet", "rx_port_sheet"):
+        return _BODY_ROLE_PORT_SHEET
     raise ValueError(
-        "unsupported exported body name; expected tx_pcb_l*/tx_copper_l*/tx_copper_stack or rx_pcb_l*/rx_copper_l* "
+        "unsupported exported body name; expected tx_pcb_l*/tx_copper_l*/tx_copper_stack/tx_port_sheet "
+        "or rx_pcb_l*/rx_copper_l*/rx_port_sheet "
         f"(actual={expected_name!r}, context={context})"
     )
 
@@ -68,6 +72,11 @@ def resolve_modeled_body_names(
     if expected_roles.count(_BODY_ROLE_PCB) < 1 or expected_roles.count(_BODY_ROLE_COPPER) != 1:
         raise ValueError(
             "single-coil type2 import requires one or more PCB bodies and exactly one copper body "
+            f"(actual={expected_names})"
+        )
+    if expected_roles.count(_BODY_ROLE_PORT_SHEET) > 1:
+        raise ValueError(
+            "single-coil type2 import supports at most one port-sheet body per modeled object "
             f"(actual={expected_names})"
         )
     if len(imported_object_names) != len(expected_names):

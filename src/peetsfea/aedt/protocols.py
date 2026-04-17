@@ -12,6 +12,7 @@ __all__ = [
     "DesignSession",
     "HfssSession",
     "MaterialsSession",
+    "MeshModuleSession",
     "ModelerSession",
     "Object3dRef",
     "ReportSetupModuleSession",
@@ -50,6 +51,10 @@ class AnalysisSetupModuleSession(Protocol):
     def InsertSetup(self, setup_type: str, props: list[object]) -> object: ...
 
     def InsertFrequencySweep(self, setup_name: str, props: list[object]) -> object: ...
+
+
+class MeshModuleSession(Protocol):
+    def AssignLengthOp(self, props: list[object]) -> object: ...
 
 
 class ReportSetupModuleSession(Protocol):

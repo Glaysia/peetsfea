@@ -18,12 +18,14 @@ tags:
 ## 역할
 - AEDT/PyAEDT session boundary의 structural Protocol 타입을 정의한다.
 - production wrapper와 pure-Python fake tests가 공유하는 최소 interface contract를 제공한다.
+- current type2 setup-ready import work를 위해 mesh module lookup 이후 `AssignLengthOp(...)` boundary도 typed surface로 유지한다.
 
 ## 입력 / 출력
 - `HfssSession`, `ModelerSession`, module/session Protocol classes
 - `ModelerSession.object_names`
 - `ModelerSession.import_3d_cad(...) -> bool`
 - `ModelerSession.set_object_model_state(...) -> object`
+- `MeshModuleSession.AssignLengthOp(...) -> object`
 
 ## Canonical state
 - module-level mutable state는 없다.
@@ -32,6 +34,7 @@ tags:
 ## Invariants / fail-fast
 - Protocol은 fallback behavior를 구현하지 않고 required boundary shape만 선언한다.
 - `ModelerSession.import_3d_cad()` signature는 repo-pinned PyAEDT `0.25.1` wrapper와 일치해야 한다.
+- `MeshModuleSession`은 `MeshSetup` lookup 이후 explicit cast target이며 `False` return fail-fast enforcement는 runtime layer가 담당한다.
 - runtime validation은 [[sdd/code/src/peetsfea/aedt/wrappers.py]]가 담당한다.
 
 ## 직접 의존

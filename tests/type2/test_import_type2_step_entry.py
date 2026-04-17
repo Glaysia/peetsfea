@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import cast
 
@@ -11,12 +12,38 @@ def _result(*, step_ledger_path: Path, output_aedt_path: Path, imported_ledger_p
     return {
         "source_toml_path": str(step_ledger_path.with_name("type2_fixed.toml")),
         "source_step_ledger_path": str(step_ledger_path),
+        "scene_step_path": str(step_ledger_path.with_name("type2_scene.step")),
         "seed": 3,
         "aedt_path": str(output_aedt_path),
         "imported_ledger_path": str(imported_ledger_path),
+        "boundary": {
+            "type": "Radiation",
+            "offset_type": "Absolute Offset",
+            "offset_value": "3500.0",
+            "region_name": "Region_Abs_3500mm",
+            "face_count": "6",
+        },
         "non_model_objects": [],
         "modeled_objects": [],
     }
+
+
+def _write_canonical_step_ledger(path: Path, *, seed: int) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "source_toml_path": str(path.with_name("type2_fixed.toml")),
+                "output_dir": str(path.parent),
+                "scene_step_path": str(path.with_name("type2_scene.step")),
+                "seed": seed,
+                "em_policy": {"radiation_margin_mm": 3500.0},
+                "non_model_objects": [],
+                "modeled_objects": [],
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def test_import_type2_step_entry_generates_fresh_ledger_before_import(tmp_path: Path) -> None:
@@ -30,12 +57,17 @@ def test_import_type2_step_entry_generates_fresh_ledger_before_import(tmp_path: 
 
     def _exporter(**kwargs: object) -> object:
         exporter_calls.append(dict(kwargs))
+        _write_canonical_step_ledger(cast(Path, kwargs["ledger_path"]), seed=cast(int, kwargs["seed"]))
         return {"ok": True}
 
     def _importer(**kwargs: object) -> Type2ImportedLedger:
         importer_calls.append(dict(kwargs))
+        step_ledger_path_arg = cast(Path, kwargs["step_ledger_path"])
+        step_ledger_payload = json.loads(step_ledger_path_arg.read_text(encoding="utf-8"))
+        assert step_ledger_payload["em_policy"] == {"radiation_margin_mm": 3500.0}
+        assert "import_time_policy" not in step_ledger_payload
         return _result(
-            step_ledger_path=cast(Path, kwargs["step_ledger_path"]),
+            step_ledger_path=step_ledger_path_arg,
             output_aedt_path=cast(Path, kwargs["output_aedt_path"]),
             imported_ledger_path=cast(Path, kwargs["imported_ledger_path"]),
         )
@@ -82,6 +114,7 @@ def test_import_type2_step_entry_generates_fresh_ledger_before_import(tmp_path: 
 
 def test_import_type2_step_entry_uses_existing_ledger_without_export(tmp_path: Path) -> None:
     existing_ledger_path = tmp_path / "existing" / "type2_step_ledger.json"
+    _write_canonical_step_ledger(existing_ledger_path, seed=0)
     output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
     imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
     exporter_calls: list[dict[str, object]] = []
@@ -93,8 +126,12 @@ def test_import_type2_step_entry_uses_existing_ledger_without_export(tmp_path: P
 
     def _importer(**kwargs: object) -> Type2ImportedLedger:
         importer_calls.append(dict(kwargs))
+        step_ledger_path_arg = cast(Path, kwargs["step_ledger_path"])
+        step_ledger_payload = json.loads(step_ledger_path_arg.read_text(encoding="utf-8"))
+        assert step_ledger_payload["em_policy"] == {"radiation_margin_mm": 3500.0}
+        assert "import_time_policy" not in step_ledger_payload
         return _result(
-            step_ledger_path=cast(Path, kwargs["step_ledger_path"]),
+            step_ledger_path=step_ledger_path_arg,
             output_aedt_path=cast(Path, kwargs["output_aedt_path"]),
             imported_ledger_path=cast(Path, kwargs["imported_ledger_path"]),
         )

@@ -43,8 +43,13 @@ class ValidatedStepLedger(TypedDict):
     source_toml_path: str
     scene_step_path: Path
     seed: int
+    em_policy: "Type2ImportEmPolicy"
     non_model_objects: list[ValidatedStepEntry]
     modeled_objects: list[ValidatedStepEntry]
+
+
+class Type2ImportEmPolicy(TypedDict):
+    radiation_margin_mm: float
 
 
 def require_key(table: dict[str, object], *, key: str, context: str) -> object:
@@ -85,6 +90,13 @@ def _require_bool(value: object, *, context: str) -> bool:
     return value
 
 
+def _require_positive_float(value: object, *, context: str) -> float:
+    checked_value = _require_float(value, context=context)
+    if checked_value <= 0.0:
+        raise ValueError(f"{context} must be > 0")
+    return checked_value
+
+
 def _require_entry_list(value: object, *, context: str) -> list[dict[str, object]]:
     if not isinstance(value, list):
         raise TypeError(f"{context} must be a list")
@@ -121,6 +133,15 @@ def _require_required_fields(entry: dict[str, object], *, fields: tuple[str, ...
     for field_name in fields:
         if field_name not in entry:
             raise ValueError(f"{context} is missing required key '{field_name}'")
+
+
+def _validated_em_policy(raw_policy: object, *, context: str) -> Type2ImportEmPolicy:
+    policy = _require_table(raw_policy, context=context)
+    radiation_margin_mm = _require_positive_float(
+        require_key(policy, key="radiation_margin_mm", context=context),
+        context=f"{context}.radiation_margin_mm",
+    )
+    return {"radiation_margin_mm": radiation_margin_mm}
 
 
 def validated_object_names(raw_names: Sequence[object], *, context: str) -> list[str]:
@@ -270,6 +291,10 @@ def load_step_ledger(step_ledger_path: Path) -> ValidatedStepLedger:
         ledger_dir=ledger_dir,
     )
     seed = require_int(require_key(payload, key="seed", context="type2_step_ledger"), context="type2_step_ledger.seed")
+    em_policy = _validated_em_policy(
+        require_key(payload, key="em_policy", context="type2_step_ledger"),
+        context="type2_step_ledger.em_policy",
+    )
     raw_non_model_entries = _require_entry_list(
         require_key(payload, key="non_model_objects", context="type2_step_ledger"),
         context="type2_step_ledger.non_model_objects",
@@ -324,6 +349,7 @@ def load_step_ledger(step_ledger_path: Path) -> ValidatedStepLedger:
         "source_toml_path": source_toml_path,
         "scene_step_path": scene_step_path,
         "seed": seed,
+        "em_policy": em_policy,
         "non_model_objects": non_model_entries,
         "modeled_objects": modeled_entries,
     }
@@ -332,6 +358,7 @@ def load_step_ledger(step_ledger_path: Path) -> ValidatedStepLedger:
 __all__ = [
     "ValidatedStepEntry",
     "ValidatedStepLedger",
+    "Type2ImportEmPolicy",
     "find_owner_member",
     "load_step_ledger",
     "member_object_id",

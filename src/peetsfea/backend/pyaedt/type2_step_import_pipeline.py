@@ -7,7 +7,8 @@ from typing import TypedDict, cast
 
 from peetsfea.aedt import Hfss
 from peetsfea.aedt.failfast import raise_on_false
-from peetsfea.aedt.protocols import HfssSession, ModelerSession
+from peetsfea.aedt.protocols import DesignSession, HfssSession, MeshModuleSession, ModelerSession
+from peetsfea.backend.pyaedt.em_pipeline.steps.boundary_port import build_boundary
 from peetsfea.backend.pyaedt.type2_modeled_import_adapter import build_single_imported_modeled_object_entry
 from peetsfea.backend.pyaedt.type2_step_import_ledger import (
     ValidatedStepLedger,
@@ -27,12 +28,18 @@ from peetsfea.backend.pyaedt.type2_step_import_style import (
     style_non_model_objects,
     validate_modeled_bounds_against_owner,
 )
+from peetsfea.types.manifest import EmPolicy
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_SOURCE_STEP_LEDGER_PATH = REPO_ROOT / "run" / "step" / "type2" / "type2_step_ledger.json"
 DEFAULT_OUTPUT_AEDT_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_import" / "type2_import.aedt"
 DEFAULT_IMPORTED_LEDGER_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_import" / "type2_imported_ledger.json"
 DEFAULT_DESIGN_NAME = "type2_step_import"
+MESH_MODULE_NAME = "MeshSetup"
+MESH_LENGTH_OPERATION_NAME = "Length1"
+MESH_LENGTH_OBJECT_NAMES = ("tx_copper_l0", "rx_copper_l0")
+MESH_LENGTH_MAX_ELEMENTS = "1000"
+MESH_LENGTH_MAX_LENGTH = "5mm"
 
 
 class Type2ImportedLedger(TypedDict):
@@ -42,6 +49,7 @@ class Type2ImportedLedger(TypedDict):
     seed: int
     aedt_path: str
     imported_ledger_path: str
+    boundary: dict[str, str]
     non_model_objects: list[dict[str, object]]
     modeled_objects: list[dict[str, object]]
 
@@ -99,6 +107,117 @@ def _merge_modeled_adapter_entry(
     merged = dict(export_entry)
     merged["imported_object_names"] = _imported_names_from_adapter_entry(adapter_entry)
     return merged
+
+
+def _boundary_policy_from_ledger(ledger: ValidatedStepLedger) -> EmPolicy:
+    return cast(
+        EmPolicy,
+        {"radiation_margin_mm": ledger["em_policy"]["radiation_margin_mm"]},
+    )
+
+
+def _validated_boundary_summary(boundary: dict[str, str]) -> dict[str, str]:
+    required_keys = ("type", "offset_type", "offset_value", "region_name", "face_count")
+    raw_boundary = cast(dict[str, object], boundary)
+    validated_boundary: dict[str, str] = {}
+    for key in required_keys:
+        validated_boundary[key] = require_non_empty_str(
+            require_key(raw_boundary, key=key, context="boundary"),
+            context=f"boundary.{key}",
+        )
+    return validated_boundary
+
+
+def _mesh_assignment_payload(*, object_names: list[str]) -> list[object]:
+    return [
+        f"NAME:{MESH_LENGTH_OPERATION_NAME}",
+        "RefineInside:=",
+        False,
+        "Enabled:=",
+        True,
+        "Objects:=",
+        object_names,
+        "RestrictElem:=",
+        False,
+        "NumMaxElem:=",
+        MESH_LENGTH_MAX_ELEMENTS,
+        "RestrictLength:=",
+        True,
+        "MaxLength:=",
+        MESH_LENGTH_MAX_LENGTH,
+    ]
+
+
+def _mesh_setup_module(hfss: HfssSession) -> MeshModuleSession:
+    assert (_:=hfss.odesign)
+    assert isinstance(_, DesignSession)
+    design: DesignSession = _
+    mesh_module = raise_on_false(
+        design.GetModule(MESH_MODULE_NAME),
+        operation="GetModule",
+        context={"module_name": MESH_MODULE_NAME},
+    )
+    assert hasattr(mesh_module, "AssignLengthOp"), (
+        f"{MESH_MODULE_NAME} module must expose AssignLengthOp "
+        f"(module_type={type(mesh_module).__name__})"
+    )
+    assign_length_op = mesh_module.AssignLengthOp
+    assert callable(assign_length_op), (
+        f"{MESH_MODULE_NAME}.AssignLengthOp must be callable "
+        f"(module_type={type(mesh_module).__name__})"
+    )
+    return cast(MeshModuleSession, mesh_module)
+
+
+def _required_mesh_object_names(imported_modeled_objects: Sequence[dict[str, object]]) -> list[str]:
+    imported_object_names: list[str] = []
+    for index, imported_entry in enumerate(imported_modeled_objects):
+        context = f"imported_modeled_objects[{index}]"
+        raw_imported_names = require_key(
+            imported_entry,
+            key="imported_object_names",
+            context=context,
+        )
+        if isinstance(raw_imported_names, (str, bytes)) or not isinstance(raw_imported_names, Sequence):
+            raise TypeError(f"{context}.imported_object_names must be a sequence of strings")
+        imported_object_names.extend(
+            validated_object_names(
+                cast(Sequence[object], raw_imported_names),
+                context=f"{context}.imported_object_names",
+            )
+        )
+
+    mesh_object_names = list(MESH_LENGTH_OBJECT_NAMES)
+    missing_object_names = [name for name in mesh_object_names if name not in imported_object_names]
+    if missing_object_names:
+        raise ValueError(
+            "Post-import mesh assignment requires exact imported object names "
+            f"{mesh_object_names}; missing={missing_object_names}; available={imported_object_names}"
+        )
+    return mesh_object_names
+
+
+def _assign_post_import_mesh(
+    *,
+    hfss: HfssSession,
+    imported_modeled_objects: Sequence[dict[str, object]],
+) -> None:
+    mesh_object_names = _required_mesh_object_names(imported_modeled_objects)
+    mesh_module = _mesh_setup_module(hfss)
+    assign_result = mesh_module.AssignLengthOp(_mesh_assignment_payload(object_names=mesh_object_names))
+    raise_on_false(
+        assign_result,
+        operation="AssignLengthOp",
+        context={
+            "module_name": MESH_MODULE_NAME,
+            "operation_name": MESH_LENGTH_OPERATION_NAME,
+            "objects": mesh_object_names,
+            "restrict_elem": False,
+            "num_max_elem": MESH_LENGTH_MAX_ELEMENTS,
+            "restrict_length": True,
+            "max_length": MESH_LENGTH_MAX_LENGTH,
+        },
+    )
 
 
 def _import_validated_ledger(
@@ -175,6 +294,19 @@ def _import_validated_ledger(
             )
         )
 
+    _assign_post_import_mesh(
+        hfss=hfss,
+        imported_modeled_objects=imported_modeled_objects,
+    )
+
+    boundary = _validated_boundary_summary(
+        build_boundary(
+            hfss=hfss,
+            modeler=modeler,
+            policy=_boundary_policy_from_ledger(ledger),
+        )
+    )
+
     save_result = hfss.save_project(str(output_aedt_path))
     raise_on_false(save_result, operation="save_project", context={"path": str(output_aedt_path)})
 
@@ -185,6 +317,7 @@ def _import_validated_ledger(
         "seed": ledger["seed"],
         "aedt_path": str(output_aedt_path),
         "imported_ledger_path": str(imported_ledger_path),
+        "boundary": boundary,
         "non_model_objects": imported_non_model_objects,
         "modeled_objects": imported_modeled_objects,
     }

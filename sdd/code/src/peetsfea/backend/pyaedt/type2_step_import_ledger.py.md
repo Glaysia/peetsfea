@@ -32,9 +32,12 @@ tags:
 ## Canonical state
 - canonical import metadata source는 export ledger다.
 - `scene_step_path`는 파일 존재 검증을 통과한 절대 경로로 canonicalized 된다.
+- canonical docs 기준 retained boundary-policy field는 top-level `em_policy`다.
+- 현재 importer가 `import_time_policy`를 기대하는 구현은 known drift이며, 문서 계약은 그 이름으로 옮기지 않는다.
 
 ## Invariants / fail-fast
 - `scene_step_path` must exist.
+- canonical required-key contract는 `scene_step_path`, top-level `em_policy`, non-empty modeled/non-model sections를 포함한다.
 - modeled/non-model sections must be non-empty and satisfy required-key contract.
 - modeled `placement_owner_id`는 non-model member object에서 exact-one로 resolve되어야 한다.
 - duplicate object id와 duplicate member id는 hard failure다.
@@ -53,4 +56,5 @@ tags:
 
 ## 변경 시 주의점
 - AEDT runtime ops를 이 파일에 넣지 않는다.
+- retained policy key를 문서에서 `import_time_policy`로 재정의하지 않는다. current runtime mismatch는 follow-up code change로만 정리한다.
 - adapter merge logic를 ledger validation과 섞지 않는다.

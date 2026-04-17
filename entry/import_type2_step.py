@@ -72,6 +72,12 @@ def main(argv: list[str] | None = None) -> Type2ImportedLedger:
     print(f"source STEP ledger: {result['source_step_ledger_path']}")
     print(f"output AEDT: {result['aedt_path']}")
     print(f"imported ledger: {result['imported_ledger_path']}")
+    print(
+        "boundary: "
+        f"{result['boundary']['type']} region={result['boundary']['region_name']} "
+        f"faces={result['boundary']['face_count']} "
+        f"offset={result['boundary']['offset_value']}"
+    )
     print(f"non-model object count: {len(result['non_model_objects'])}")
     print(f"modeled object count: {len(result['modeled_objects'])}")
     return result
