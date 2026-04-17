@@ -1,15 +1,25 @@
+---
+title: test_tx_rect_void.py
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - type2
+  - tx-rect-void
+---
+
 # test_tx_rect_void.py
 
 ## Source
 - Path: `tests/tx_rect_void/test_tx_rect_void.py`
 - Code note path: `sdd/code/tests/tx_rect_void/test_tx_rect_void.py.md`
-- Related plan: [[sdd/plans/tx-rect-void-step-generator]]
-- Related code: [[sdd/code/src/peetsfea/tx_rect_void.py]]
+- Related plans: [[sdd/plans/tx-rect-void-step-generator]], [[sdd/plans/0.2.22-type2-single-coil-corner-relief]]
+- Related code: [[sdd/code/src/peetsfea/tx_rect_void.py]], [[sdd/code/src/peetsfea/tx_rect_void_geometry.py]]
 
 ## 역할
-- Type2 rect/void STEP generator의 parser, deterministic realization, geometry, single-layer, fused-body export 계약을 pure-Python pytest로 검증한다.
+- Type2 rect/void STEP generator의 parser, deterministic realization, geometry, TX multilayer body generation, RX single-layer scene export, fused-body export 계약을 pure-Python pytest로 검증한다.
 - AEDT/HFSS launch 없이 build123d STEP export smoke만 수행한다.
 - metadata JSON이 registry-aligned `modeled_objects` entry와 expected exported body contract를 포함하는지와 type2 TOML CLI smoke를 함께 검증한다.
+- terminal stub가 geometry, bbox, metadata Z bounds에 반영되는지, 그리고 runtime 길이가 `layer_gap_mm * 0.8` derived rule을 따르는지 검증한다.
 
 ## 입력 / 출력
 - 입력: test-local TOML strings written under pytest `tmp_path`.
@@ -21,14 +31,27 @@
 
 ## Invariants / fail-fast
 - missing keys, bad ranges, unsupported terminal path, layer gap below 2mm는 즉시 실패해야 한다.
-- supported corner/direction terminal paths는 axis-aligned route를 만들고 copper/void overlap을 만들면 안 된다.
+- supported corner/direction terminal paths는 blunt centerline을 만들어야 하며,
+  적어도 하나 이상의 45도 beveled segment를 포함해야 한다.
 - same-corner terminal path는 type1-derived planner를 사용해 outer terminal을 next-ring 좌표로 seed해야 한다.
-- segment boxes는 centerline endpoint가 아니라 corner vertices까지 half-trace 연장되어야 한다.
-- `layer_count=2` 또는 `3`은 via/layer contract가 없으므로 즉시 실패해야 한다.
-- STEP scene은 debug copper segment가 여러 개여도 exported body로는 `tx_pcb_l0`, `tx_copper_l0` 두 solid만 가져야 한다.
-- non-adjacent copper boxes가 겹치면 turn-to-turn short로 즉시 실패해야 한다.
+- debug `boxes` regression은 layer별 `planar_outline` AABB 1개와 terminal stub 2개 구조를 검증한다.
+- layer primitive regression은 authoring feature set이 `planar_segment + terminal_stub` 뿐인지 확인해 separate corner-join path 재도입을 막는다.
+- join regression은 representative corner에서 segment polygon이 naive endpoint가 아니라 offset-line intersection join vertex를 직접 포함하는지 검증한다.
+- terminal stub boxes는 layer마다 2개여야 하고, trace width의 60% 정사각형 단면과 `derived_stub + pcb + copper` 높이를 가져야 한다.
+- TX multilayer는 두 vertical bus box를 추가해야 하며, 두 bus의 바닥 face center가 exported terminal metadata가 되어야 한다.
+- exported PCB/copper body pair는 final STEP scene에서 shared volume이 없어야 한다.
+- TX `layer_count=2`는 성공해야 하고 layer-aware PCB/copper exported body 세트를 만들어야 한다.
+- RX `layer_count=2` 또는 `3`은 shared engine path를 타더라도 즉시 실패해야 한다.
+- STEP scene은 debug copper segment가 여러 개여도 single-layer TX/RX는 layer별 `*_pcb_l0` + `*_copper_l0`, TX multilayer는 `tx_pcb_l{n}` + `tx_copper_stack` body set만 가져야 한다.
+- notebook-scale RX single-layer example도 exported body로는 `rx_pcb_l0`, terminal stub까지 fuse된 `rx_copper_l0` solid만 가져야 한다.
+- non-adjacent planar segment strip이 겹치면 turn-to-turn short로 즉시 실패해야 한다.
 - export smoke는 non-empty STEP과 metadata JSON을 생성해야 한다.
-- metadata JSON은 single modeled object entry의 identity, role, model_state, expected body names/count, canonical coordinates, terminal metadata를 포함해야 한다.
+- metadata JSON은 single modeled object entry의 identity, role, model_state, expected body names/count, canonical coordinates, terminal metadata를 포함해야 하고 canonical bounds는 actual exported body union, Z bounds는 stub 하단까지 포함해야 한다.
+- explicit placement offset을 주는 export는 boxes와 modeled metadata를 같은 absolute offset으로 평행이동해야 한다.
+- future test obligations:
+  - generalized TX/RX single-coil engine parity regression beyond current role-specific fail-fast split
+  - RX export-path fail-fast regression after `entry/generate_type2_step.py` rewiring
+  - multilayer TX placement/import/notebook contract regression after later patches
 
 ## 직접 의존
 - `pytest`
@@ -39,6 +62,10 @@
 
 ## 관련 테스트
 - 이 파일 자체.
+
+## TODO
+- [ ] TX/RX direct parity regression을 추가해 같은 terminal path에서 blunt corner count, bounds, placement를 role pair로 검증한다.
+- [ ] bevel 존재 여부를 넘어서 actual exported solid face topology까지 확인하는 regression을 검토한다.
 
 ## 변경 시 주의점
 - TOML schema나 geometry semantics를 바꾸면 fixture builder와 expected failure messages를 같이 갱신한다.

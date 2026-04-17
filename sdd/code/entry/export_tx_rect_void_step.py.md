@@ -1,3 +1,13 @@
+---
+title: export_tx_rect_void_step.py
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - type2
+  - tx-rect-void
+  - step-export
+---
+
 # export_tx_rect_void_step.py
 
 ## Source
@@ -8,13 +18,13 @@
 - Related STEP viewer registry: [[sdd/plans/0.2.22-step-viewer-notebook-registry]]
 
 ## 역할
-- `examples/type2.toml`의 modeled `tx_single_coil` object를 STEP으로 export하는 얇은 CLI entrypoint다.
+- `examples/type2_fixed.toml`의 modeled `tx_single_coil` object를 STEP으로 export하는 얇은 CLI entrypoint다.
 - CLI argument parsing과 default path wiring만 담당하고, type2 parsing/export orchestration은 [[sdd/code/entry/generate_type2_step.py]]에 위임한다.
 - 출력 metadata JSON은 기존 export payload에 더해 registry-aligned `modeled_objects` proto-contract를 함께 기록한다.
 
 ## 입력 / 출력
 - 입력: `--toml`, `--output-step`, `--metadata`, `--seed`.
-- 기본 입력: `examples/type2.toml`.
+- 기본 입력: `examples/type2_fixed.toml`.
 - 기본 출력: `run/step/tx_rect_void_coil.step`, `run/step/tx_rect_void_coil.metadata.json`.
 - viewer notebook: `notebooks/view_step_files.ipynb`의 generated STEP viewer cell.
 
