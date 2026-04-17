@@ -1,3 +1,11 @@
+---
+title: Code Commandments
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - governance
+---
+
 # Code Commandments
 
 `CODE_COMMANDMENTS.md` is the canonical registry for repository-wide coding commandments.

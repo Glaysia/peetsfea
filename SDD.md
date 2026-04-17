@@ -1,3 +1,11 @@
+---
+title: SDD
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - governance
+---
+
 # SDD
 
 이 저장소의 Software Design Documentation 운영 규칙은 이 문서가 정한다. 실무 기준점은 `AGENTS.md`, `CODE_COMMANDMENTS.md`, `README.md`, `docs/current-pipeline.md`, 그리고 `sdd/sdd-index.md`다.
@@ -56,6 +64,7 @@
 ## 비코드 문서 체계
 - 계획 문서: `sdd/plans/`
   - 신규 기능, 큰 리팩터링, 장기 작업은 여기서 시작한다.
+  - `src/`와 `entry/`의 tracked Python 파일이 800줄을 넘으면 strong guideline 기준의 분리 검토를 계획 문서에서 먼저 고정한다.
 - 아키텍처 문서: `sdd/architecture/`
   - 계층, 경계, 실행 흐름, 협력 구조가 바뀌면 갱신한다.
 - 구조 문서: `sdd/structure/`
@@ -94,7 +103,12 @@
 - `src/`, `entry/`, `tests/`의 새 파일을 만들었는가: 대응 코드 노트를 만든다.
 - 기존 파일을 실질 수정했는가: 대응 코드 노트를 갱신한다.
 - 신규 기능 또는 큰 리팩터링인가: `sdd/plans/` 아래 계획 문서를 만든다.
+- `src/` 또는 `entry/`의 tracked Python 파일이 800줄을 넘는가: strong guideline 기준의 분리 검토 대상이다. 예외는 문서화된 ownership boundary 판단으로만 남긴다.
+- 위와 같은 분리에서 새 tracked Python 파일이 생기는가: 새 파일마다 대응 `sdd/code/<repo-relative-path>.md`를 같은 변경에 추가한다.
+- 위와 같은 분리를 여러 에이전트가 구현할 예정인가: target source path별 `sdd/code/<repo-relative-path>.md`를 코드보다 먼저 만들어 구현 경계를 선행 고정한다.
+- 위와 같은 분리 후 원본 파일이 남는가: 기존 `sdd/code/...md` 노트를 축소된 책임과 새 협력 관계에 맞게 갱신한다.
 - 경계/흐름/레이어가 바뀌는가: `sdd/architecture/`, `sdd/structure/`, `sdd/diagrams/` 중 필요한 문서를 만든다.
+- `tests/`는 ordinary SDD code-note coverage 대상이지만, 800줄 분리 기준에서는 제외한다.
 - 추적되는 `.step` / `.stp` artifact를 생성하는가: `notebooks/view_step_files.ipynb`에 registry 항목과 전용 viewer cell을 추가하고 관련 코드 노트를 갱신한다.
 - 정식 entrypoint/example workflow가 non-tracked `.step` / `.stp` artifact를 새로 생성하는가: `notebooks/view_step_files.ipynb`에 generated artifact viewer cell을 추가하고 생성 명령을 기록한다.
 - 기존 전체 코드를 한 번에 백필하려고 하는가: 사용자가 명시적으로 요청하지 않았다면 하지 않는다.

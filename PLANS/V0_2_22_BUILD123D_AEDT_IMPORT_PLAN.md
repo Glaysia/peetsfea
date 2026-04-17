@@ -1,3 +1,11 @@
+---
+title: 0.2.22 Build123d 기반 AEDT 임포트 전환 계획
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - governance
+---
+
 # 0.2.22 Build123d 기반 AEDT 임포트 전환 계획
 
 ## 목적

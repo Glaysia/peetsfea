@@ -1,3 +1,11 @@
+---
+title: peetsfea
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - governance
+---
+
 # peetsfea
 
 Spec-first deterministic device design and AEDT build pipeline for the `peetsfea` project.

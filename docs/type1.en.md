@@ -1,3 +1,11 @@
+---
+title: type1 Document
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - type1
+---
+
 # type1 Document
 
 ## What type1 Is

@@ -1,3 +1,11 @@
+---
+title: src/peetsfea/spec/loader.py
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - sdd
+---
+
 # src/peetsfea/spec/loader.py
 
 - Source path: `src/peetsfea/spec/loader.py`

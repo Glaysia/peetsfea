@@ -1,3 +1,11 @@
+---
+title: Source Note Template
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - sdd
+---
+
 # Source Note Template
 
 이 템플릿은 코드 대응 문서의 기본 골격이다. 실제 링크는 직접 관련 계획, 협력 코드, 테스트, 구체적 docs/architecture/diagram에만 추가한다.

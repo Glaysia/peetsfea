@@ -25,20 +25,6 @@
             "id": "df7bb9b5d31e2684",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "sdd/code/sdd-code-index.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "sdd-code-index"
-            }
-          },
-          {
-            "id": "d97b97bb73a8fdb6",
-            "type": "leaf",
-            "state": {
               "type": "graph",
               "state": {},
               "icon": "lucide-git-fork",
@@ -46,7 +32,7 @@
             }
           }
         ],
-        "currentTab": 2
+        "currentTab": 1
       }
     ],
     "direction": "vertical"
@@ -103,7 +89,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 200
+    "width": 229.5,
+    "collapsed": true
   },
   "right": {
     "id": "c4018ce1c1000166",
@@ -205,42 +192,43 @@
       "bases:Create new base": false
     }
   },
-  "active": "d97b97bb73a8fdb6",
+  "active": "df7bb9b5d31e2684",
   "lastOpenFiles": [
-    "sdd/architecture/type2-step-to-em-validate-pipeline.md",
-    "entry/__pycache__/import_non_model_step_to_hfss.cpython-312.pyc",
-    "entry/__pycache__/import_tx_rect_void_step_to_hfss.cpython-312.pyc",
-    "entry/__pycache__/generate_type2_step.cpython-312.pyc",
-    "sdd/architecture/XXO9iUL9",
-    "sdd/code/entry/XXRBult8",
-    "sdd/code/entry/import_tx_rect_void_step_to_hfss.py.md",
-    "sdd/code/entry/import_non_model_step_to_hfss.py.md",
-    "sdd/code/entry/generate_type2_step.py.md",
-    "sdd/code/entry/generate_non_model_step.py.md",
-    "notebooks/view_step_files.ipynb",
-    "entry/import_tx_rect_void_step_to_hfss.py",
-    "entry/import_non_model_step_to_hfss.py",
-    "entry/generate_non_model_step.py",
-    "entry/generate_type2_step.py",
-    "sdd/code/sdd-code-index.md",
-    "sdd/code/entry/export_tx_rect_void_step.py.md",
-    "sdd/code/entry/import_type2_step.py.md",
-    "sdd/code/entry/export_tx_rect_void_step.py 1.md",
-    "sdd/code/entry/export_tx_rect_void_step.py 2.md",
-    "sdd/code/entry/export_tx_rect_void_step.py 3.md",
-    "sdd/plans/0.2.22-type2-import-ledger-pipeline.md",
-    "sdd/plans/0.2.22-type2-step-to-em-validate-pipeline.md",
-    "sdd/plans/0.2.22-type2-tx-coil-geometry-repair.md",
-    "sdd/code/tests/type2/test_import_type2_step_entry.py.md",
-    "sdd/code/tests/backend_em/test_type2_step_import_pipeline.py.md",
+    "notebooks/asd.py",
+    "run/aedt/type2_step_import/type2_import.aedt.temp",
+    "run/aedt/type2_step_import/type2_import.aedt.lock",
+    "tests/tx_rect_void/__pycache__/test_tx_rect_void.cpython-312-pytest-9.0.3.pyc",
+    "tests/type2/__pycache__/test_generate_type2_step.cpython-312-pytest-9.0.3.pyc",
+    "tests/__pycache__/conftest.cpython-312-pytest-9.0.3.pyc",
+    "src/peetsfea/__pycache__/type2_step_spec.cpython-312.pyc",
+    "src/peetsfea/__pycache__/type2_step_scene.cpython-312.pyc",
+    "src/peetsfea/__pycache__/type2_step_ledger.cpython-312.pyc",
+    "src/peetsfea/__pycache__/type2_step_export.cpython-312.pyc",
+    "src/peetsfea/__pycache__/tx_rect_void_export.cpython-312.pyc",
+    "sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_style.py.md",
+    "sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_partition.py.md",
+    "sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py.md",
     "sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py.md",
+    "sdd/code/sdd-code-index.md",
+    "sdd/architecture/type2-step-to-em-validate-pipeline.md",
     "docs/tx-rect-void-step.md",
-    "sdd/plans/0.2.22-type2-pyaedt-step-import.md",
-    "sdd/code/tests/type2/test_generate_type2_step.py.md",
-    "sdd/code/examples/type2/generate_type2_step.py.md",
-    "sdd/plans/tx-rect-void-step-generator.md",
-    "sdd/plans/0.2.22-type2-toml-unification.md",
-    "sdd/code/tests/backend_em/test_tx_rect_void_step_import_smoke.py.md",
-    "sdd/code/examples/type2/import_tx_rect_void_step_to_hfss.py.md"
+    "sdd/templates/markdown-note.md",
+    "sdd/code/src/peetsfea/aedt/proxies_inspect.py.md",
+    "sdd/code/src/peetsfea/aedt/proxies_ops.py.md",
+    "sdd/code/src/peetsfea/aedt/proxies_base.py.md",
+    "sdd/code/src/peetsfea/aedt/wrappers_hfss.py.md",
+    "sdd/code/src/peetsfea/aedt/wrappers_modules.py.md",
+    "sdd/code/src/peetsfea/aedt/wrappers_common.py.md",
+    "sdd/code/src/peetsfea/backend/pyaedt/geometry/builders/tx_dd_neo_placement.py.md",
+    "sdd/code/src/peetsfea/backend/pyaedt/geometry/builders/tx_dd_neo_path.py.md",
+    "sdd/code/src/peetsfea/backend/pyaedt/geometry/builders/tx_dd_neo_build.py.md",
+    "sdd/code/src/peetsfea/type2_step_export.py.md",
+    "sdd/code/src/peetsfea/type2_step_ledger.py.md",
+    "sdd/code/src/peetsfea/type2_step_scene.py.md",
+    "sdd/code/src/peetsfea/type2_step_spec.py.md",
+    "sdd/code/src/peetsfea/tx_rect_void_export.py.md",
+    "sdd/code/src/peetsfea/tx_rect_void_centerline.py.md",
+    "sdd/code/src/peetsfea/tx_rect_void_spec.py.md",
+    "sdd/code/src/peetsfea/tx_rect_void_types.py.md"
   ]
 }

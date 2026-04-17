@@ -1,3 +1,11 @@
+---
+title: Structure Note Index
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - sdd
+---
+
 # Structure Note Index
 
 저장소 구조, 문서 구조, ownership map, 폴더 배치를 설명하는 문서는 여기서 관리한다. 상위 허브는 [[sdd/sdd-index]]다.

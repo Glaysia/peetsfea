@@ -1,3 +1,11 @@
+---
+title: Architecture Note Index
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - sdd
+---
+
 # Architecture Note Index
 
 계층, 경계, 실행 흐름, 협력 구조는 여기서 관리한다. 상위 허브는 [[sdd/sdd-index]], 템플릿은 [[sdd/templates/architecture-note]]다.

@@ -1,3 +1,11 @@
+---
+title: Architecture Note Template
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - sdd
+---
+
 # Architecture Note Template
 
 이 템플릿은 아키텍처 문서의 기본 골격이다. 실제 링크는 이 경계/흐름에 직접 등장하는 코드, 계획, 다이어그램에만 추가한다.

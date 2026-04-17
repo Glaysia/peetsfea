@@ -1,3 +1,11 @@
+---
+title: type1 문서
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - type1
+---
+
 # type1 문서
 
 ## type1이 무엇인가

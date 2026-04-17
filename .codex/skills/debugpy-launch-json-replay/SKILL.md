@@ -1,4 +1,9 @@
 ---
+title: Debugpy Launch Replay
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - governance
 name: debugpy-launch-json-replay
 description: Recreate this repository's VS Code `debugpy` launch configuration from the terminal by inspecting `.vscode/launch.json` and related task files. Use when the user asks to reproduce `launch.json`, replay the exact debug run, or compare terminal execution with the repo's VS Code debug path.
 ---

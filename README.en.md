@@ -1,3 +1,11 @@
+---
+title: peetsfea
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - governance
+---
+
 # peetsfea
 
 peetsfea is a Python project that deterministically generates HFSS (AEDT) designs from TOML specs.  

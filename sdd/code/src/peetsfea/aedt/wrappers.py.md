@@ -1,3 +1,11 @@
+---
+title: wrappers.py
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - aedt
+---
+
 # wrappers.py
 
 ## Source

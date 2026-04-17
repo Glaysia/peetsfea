@@ -1,3 +1,11 @@
+---
+title: Plan Note Template
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - sdd
+---
+
 # Plan Note Template
 
 이 템플릿은 계획 문서의 기본 골격이다. 실제 링크는 영향 받는 코드 노트와 직접 선행/후속 계획에만 추가한다.

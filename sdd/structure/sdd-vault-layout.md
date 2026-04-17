@@ -1,3 +1,11 @@
+---
+title: SDD Vault Layout
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - sdd
+---
+
 # SDD Vault Layout
 
 이 문서는 SDD 볼트 구조와 경로 규칙을 설명한다. 현재 도입 계획은 [[sdd/plans/0.2.22-sdd-adoption]]다.

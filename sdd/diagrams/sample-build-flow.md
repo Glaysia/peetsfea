@@ -1,3 +1,12 @@
+---
+title: Sample Build Flow
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - type1
+  - sdd
+---
+
 # Sample Build Flow
 
 이 구조도는 현재 샘플링에서 build replay로 넘어가는 흐름의 SDD 요약이다. 서술형 설명은 [[sdd/architecture/current-pipeline-sdd-view]], 자세한 분석은 [[docs/current-pipeline]]를 본다.
@@ -29,11 +38,11 @@ flowchart TD
 
 ## Type2 STEP Import Smoke Flow
 
-이 흐름은 `examples/type2.toml`에서 생성된 type2 STEP artifact를 HFSS로 가져오는 opt-in smoke path다. `entry/build.py` runtime replay나 EM pipeline에는 아직 연결하지 않는다.
+이 흐름은 `examples/type2_fixed.toml`에서 생성된 type2 STEP artifact를 HFSS로 가져오는 opt-in smoke path다. `entry/build.py` runtime replay나 EM pipeline에는 아직 연결하지 않는다.
 
 ```mermaid
 flowchart TD
-    Type2Toml["examples/type2.toml\nSSOT"]
+    Type2Toml["examples/type2_fixed.toml\nSSOT"]
     StepExport["entry/generate_type2_step.py"]
     StepArtifact["run/step/type2/objects/*.step"]
     SmokeImport["entry/import_tx_rect_void_step_to_hfss.py"]

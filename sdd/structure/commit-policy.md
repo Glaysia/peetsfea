@@ -1,3 +1,11 @@
+---
+title: Commit Policy
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - governance
+---
+
 # Commit Policy
 
 ## Goal

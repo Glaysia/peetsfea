@@ -1,3 +1,11 @@
+---
+title: Diagram Note Index
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - sdd
+---
+
 # Diagram Note Index
 
 Mermaid 기반 흐름도와 구조도는 여기서 모은다. 상위 허브는 [[sdd/sdd-index]]다.

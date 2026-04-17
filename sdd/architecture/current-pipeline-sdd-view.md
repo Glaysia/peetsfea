@@ -1,3 +1,12 @@
+---
+title: Current Pipeline SDD View
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - type1
+  - sdd
+---
+
 # Current Pipeline SDD View
 
 이 문서는 현재 파이프라인의 SDD 관점 요약이다. 자세한 분석은 [[docs/current-pipeline]]를 보고, 현재 도입 계획은 [[sdd/plans/0.2.22-sdd-adoption]]를 본다.

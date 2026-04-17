@@ -1,3 +1,11 @@
+---
+title: Code Note Index
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - sdd
+---
+
 # Code Note Index
 
 이 허브는 코드와 일대일 대응되는 노트의 진입점이다. 상위 허브는 [[sdd/sdd-index]]다.
@@ -45,6 +53,31 @@
 - [[sdd/code/tests/spec_resolver/test_sampling_registry.py.md]]
 - [[sdd/code/tests/tx_rect_void/test_tx_rect_void.py.md]]
 
+## Planned Split Notes
+- Active size-driven split planning may pre-create `sdd/code/...md` notes before the source files land, so implementing agents can code against fixed boundaries.
+- Current pre-created split notes follow [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]:
+  - [[sdd/code/src/peetsfea/tx_rect_void_types.py]]
+  - [[sdd/code/src/peetsfea/tx_rect_void_spec.py]]
+  - [[sdd/code/src/peetsfea/tx_rect_void_centerline.py]]
+  - [[sdd/code/src/peetsfea/tx_rect_void_export.py]]
+  - [[sdd/code/src/peetsfea/type2_step_spec.py]]
+  - [[sdd/code/src/peetsfea/type2_step_scene.py]]
+  - [[sdd/code/src/peetsfea/type2_step_ledger.py]]
+  - [[sdd/code/src/peetsfea/type2_step_export.py]]
+  - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py]]
+  - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_partition.py]]
+  - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_style.py]]
+  - [[sdd/code/src/peetsfea/backend/pyaedt/geometry/builders/tx_dd_neo_path.py]]
+  - [[sdd/code/src/peetsfea/backend/pyaedt/geometry/builders/tx_dd_neo_placement.py]]
+  - [[sdd/code/src/peetsfea/backend/pyaedt/geometry/builders/tx_dd_neo_build.py]]
+  - [[sdd/code/src/peetsfea/aedt/wrappers_common.py]]
+  - [[sdd/code/src/peetsfea/aedt/wrappers_modules.py]]
+  - [[sdd/code/src/peetsfea/aedt/wrappers_hfss.py]]
+  - [[sdd/code/src/peetsfea/aedt/proxies_base.py]]
+  - [[sdd/code/src/peetsfea/aedt/proxies_ops.py]]
+  - [[sdd/code/src/peetsfea/aedt/proxies_inspect.py]]
+
 ## 운영 메모
 - 이 인덱스는 전체 레포 백필 목록이 아니다.
 - `0.2.22+` 이후 새로 만들거나 실질 수정하는 파일부터 대응 노트를 늘린다.
+- 아직 source file이 없는 pre-created split note는 active plan이 가리키는 경우에만 허용한다.

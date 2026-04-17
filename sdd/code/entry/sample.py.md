@@ -1,3 +1,11 @@
+---
+title: entry/sample.py
+created: 2026-04-17 @ 09:09
+updated: 2026-04-17 @ 09:09
+tags:
+  - sampling
+---
+
 # entry/sample.py
 
 - Source path: `entry/sample.py`

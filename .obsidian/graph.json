@@ -1,22 +1,100 @@
 {
   "collapse-filter": false,
   "search": "",
-  "showTags": false,
+  "showTags": true,
   "showAttachments": false,
   "hideUnresolved": false,
   "showOrphans": false,
-  "collapse-color-groups": true,
-  "colorGroups": [],
+  "collapse-color-groups": false,
+  "colorGroups": [
+    {
+      "query": "tag:type1",
+      "color": {
+        "a": 1,
+        "rgb": 959977
+      }
+    },
+    {
+      "query": "tag:type2",
+      "color": {
+        "a": 1,
+        "rgb": 2278750
+      }
+    },
+    {
+      "query": "tag:tx-rect-void",
+      "color": {
+        "a": 1,
+        "rgb": 16096779
+      }
+    },
+    {
+      "query": "tag:step-export",
+      "color": {
+        "a": 1,
+        "rgb": 15381256
+      }
+    },
+    {
+      "query": "tag:hfss-import",
+      "color": {
+        "a": 1,
+        "rgb": 15485081
+      }
+    },
+    {
+      "query": "tag:aedt",
+      "color": {
+        "a": 1,
+        "rgb": 9133302
+      }
+    },
+    {
+      "query": "tag:build123d",
+      "color": {
+        "a": 1,
+        "rgb": 1357990
+      }
+    },
+    {
+      "query": "tag:sampling",
+      "color": {
+        "a": 1,
+        "rgb": 440020
+      }
+    },
+    {
+      "query": "tag:sdd",
+      "color": {
+        "a": 1,
+        "rgb": 6583435
+      }
+    },
+    {
+      "query": "tag:governance",
+      "color": {
+        "a": 1,
+        "rgb": 14427686
+      }
+    },
+    {
+      "query": "tag:release",
+      "color": {
+        "a": 1,
+        "rgb": 16347926
+      }
+    }
+  ],
   "collapse-display": false,
   "showArrow": true,
   "textFadeMultiplier": 0,
-  "nodeSizeMultiplier": 2.4734375,
-  "lineSizeMultiplier": 1.98854166666667,
+  "nodeSizeMultiplier": 1.0953125,
+  "lineSizeMultiplier": 1.325,
   "collapse-forces": false,
-  "centerStrength": 0.3125,
-  "repelStrength": 15.5208333333333,
-  "linkStrength": 0.609375,
+  "centerStrength": 0.348958333333333,
+  "repelStrength": 8.85416666666667,
+  "linkStrength": 1,
   "linkDistance": 282,
-  "scale": 0.13688338997661942,
-  "close": true
+  "scale": 0.20532508496492874,
+  "close": false
 }
