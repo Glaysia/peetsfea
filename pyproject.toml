@@ -55,4 +55,6 @@ reportMissingModuleSource = "none"
 markers = [
   "contract: pure-Python acceptance/contract tests for default CI",
   "pyaedt_integration: optional integration tests that require AEDT/Pyaedt runtime",
+  "legacy_type1: frozen legacy type1 tests excluded from default collection",
 ]
+norecursedirs = ["tests/legacy"]

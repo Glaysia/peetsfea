@@ -25,7 +25,7 @@ tags:
 - 코드 노트는 소스 경로를 그대로 미러링한다.
 - 예시:
   - `src/peetsfea/spec/loader.py` -> [[sdd/code/src/peetsfea/spec/loader.py]]
-  - `entry/sample.py` -> [[sdd/code/entry/sample.py]]
+  - `entry/legacy/type1/sample.py` -> [[sdd/code/entry/sample.py]]
   - `tests/spec_resolver/test_sampling_registry.py` -> [[sdd/code/tests/spec_resolver/test_sampling_registry.py]]
 - `__init__.py`도 예외 없이 같은 규칙을 따른다.
 

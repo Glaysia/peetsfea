@@ -2,11 +2,21 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run entry/sample_build.py from run/",
+      "name": "Run entry/import_type2_step.py from run/",
       "type": "debugpy",
       "request": "launch",
       "python": "${workspaceFolder}/.venv/bin/python3",
-      "program": "${workspaceFolder}/entry/sample_build.py",
+      "program": "${workspaceFolder}/entry/import_type2_step.py",
+      "cwd": "${workspaceFolder}/run",
+      "preLaunchTask": "prepare-build-debug",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "legacy-type1 Run entry/sample_build.py from run/",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/.venv/bin/python3",
+      "program": "${workspaceFolder}/entry/legacy/type1/sample_build.py",
       "cwd": "${workspaceFolder}/run",
       "env": {
         "PEETSFEA_DEBUG": "1"

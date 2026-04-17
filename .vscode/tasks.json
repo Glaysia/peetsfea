@@ -26,9 +26,23 @@
       "problemMatcher": []
     },
     {
-      "label": "run-sample-debug",
+      "label": "run-type2-import-debug",
       "type": "shell",
-      "command": "mkdir -p ${workspaceFolder}/run/toml && find ${workspaceFolder}/run/toml -mindepth 1 -maxdepth 1 -exec rm -rf {} + && ${workspaceFolder}/.venv/bin/python ../entry/sample.py",
+      "command": "${workspaceFolder}/.venv/bin/python ../entry/import_type2_step.py",
+      "options": {
+        "cwd": "${workspaceFolder}/run"
+      },
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "install-dev-editable",
+        "clean-run-aedt"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "legacy-type1-run-sample-debug",
+      "type": "shell",
+      "command": "mkdir -p ${workspaceFolder}/run/toml && find ${workspaceFolder}/run/toml -mindepth 1 -maxdepth 1 -exec rm -rf {} + && ${workspaceFolder}/.venv/bin/python ../entry/legacy/type1/sample.py",
       "options": {
         "cwd": "${workspaceFolder}/run"
       },

@@ -1,0 +1,187 @@
+from __future__ import annotations
+
+import pytest
+
+from peetsfea.legacy.type1.backend.pyaedt.geometry.rules.placement_rules import (
+    _current_direction_from_xy_points,
+    _realized_txdd_geometry,
+    _txdd_right_points,
+)
+from peetsfea.legacy.type1.topology.tx_dd import txdd_right_terminal_labels
+
+
+def test_realized_txdd_geometry_keeps_single_layer_geometry() -> None:
+    assert _realized_txdd_geometry(
+        turns=5,
+        outer_x=120.0,
+        outer_y=80.0,
+        trace=1.2,
+        gap=0.3,
+        instance_count=2,
+        layer_index=0,
+    ) == (5, 120.0, 80.0)
+
+
+def test_realized_txdd_geometry_uses_one_pitch_inset_on_lower_layer_for_four_layer_tx_dd() -> None:
+    lower = _realized_txdd_geometry(
+        turns=5,
+        outer_x=120.0,
+        outer_y=80.0,
+        trace=1.2,
+        gap=0.3,
+        instance_count=4,
+        layer_index=0,
+    )
+    upper = _realized_txdd_geometry(
+        turns=5,
+        outer_x=120.0,
+        outer_y=80.0,
+        trace=1.2,
+        gap=0.3,
+        instance_count=4,
+        layer_index=1,
+    )
+    assert lower == (5, 118.5, 78.5)
+    assert upper == (5, 120.0, 80.0)
+
+
+def test_realized_txdd_geometry_rejects_invalid_lower_layer_result() -> None:
+    with pytest.raises(ValueError, match="lower-layer interleave contract violation"):
+        _realized_txdd_geometry(
+            turns=6,
+            outer_x=12.0,
+            outer_y=12.0,
+            trace=1.2,
+            gap=0.3,
+            instance_count=4,
+            layer_index=0,
+        )
+
+
+def test_realized_txdd_geometry_supports_one_turn_for_four_layer_tx_dd() -> None:
+    assert _realized_txdd_geometry(
+        turns=1,
+        outer_x=120.0,
+        outer_y=80.0,
+        trace=1.2,
+        gap=0.3,
+        instance_count=4,
+        layer_index=0,
+    ) == (1, 118.5, 78.5)
+
+
+def test_txdd_right_points_use_gap_centered_lower_layer_interleave_with_aligned_a_for_four_layer_tx_dd() -> None:
+    lower_points = _txdd_right_points(
+        turns=5,
+        outer_x=120.0,
+        outer_y=80.0,
+        trace=1.2,
+        gap=0.3,
+        instance_count=4,
+        layer_index=0,
+    )
+    upper_points = _txdd_right_points(
+        turns=5,
+        outer_x=120.0,
+        outer_y=80.0,
+        trace=1.2,
+        gap=0.3,
+        instance_count=4,
+        layer_index=1,
+    )
+    pitch = 1.2 + 0.3
+    lower_ring_points = lower_points[:-2]
+    assert max(abs(point[0]) for point in lower_ring_points) == pytest.approx(
+        max(abs(point[0]) for point in upper_points) - (pitch / 2.0)
+    )
+    assert max(abs(point[1]) for point in lower_ring_points) == pytest.approx(
+        max(abs(point[1]) for point in upper_points) - (pitch / 2.0)
+    )
+    assert lower_points[-1][0] == pytest.approx(upper_points[0][0])
+    assert lower_points[-1][1] == pytest.approx(upper_points[0][1])
+
+
+def test_txdd_right_points_uses_same_winding_for_two_layer_and_upper_four_layer_right_halves() -> None:
+    points = _txdd_right_points(
+        turns=3,
+        outer_x=100.0,
+        outer_y=60.0,
+        trace=1.0,
+        gap=0.25,
+        instance_count=2,
+        layer_index=0,
+    )
+    upper_points = _txdd_right_points(
+        turns=3,
+        outer_x=100.0,
+        outer_y=60.0,
+        trace=1.0,
+        gap=0.25,
+        instance_count=4,
+        layer_index=1,
+    )
+    assert len(points) > 2
+    assert _current_direction_from_xy_points(points) == "ccw"
+    assert _current_direction_from_xy_points(upper_points) == "ccw"
+    assert len(points) + 1 == len(upper_points)
+    assert points[0] == upper_points[1]
+    assert points[-1] == upper_points[-1]
+
+
+def test_txdd_right_points_support_one_turn_for_two_and_four_layer_tx_dd() -> None:
+    two_layer_points = _txdd_right_points(
+        turns=1,
+        outer_x=100.0,
+        outer_y=60.0,
+        trace=1.0,
+        gap=0.25,
+        instance_count=2,
+        layer_index=0,
+    )
+    four_layer_points = _txdd_right_points(
+        turns=1,
+        outer_x=100.0,
+        outer_y=60.0,
+        trace=1.0,
+        gap=0.25,
+        instance_count=4,
+        layer_index=0,
+    )
+    upper_four_layer_points = _txdd_right_points(
+        turns=1,
+        outer_x=100.0,
+        outer_y=60.0,
+        trace=1.0,
+        gap=0.25,
+        instance_count=4,
+        layer_index=1,
+    )
+    assert two_layer_points == [
+        [-49.5, -29.5, 0.0],
+        [49.5, -29.5, 0.0],
+        [49.5, 28.25, 0.0],
+        [-48.25, 28.25, 0.0],
+        [-48.25, -28.25, 0.0],
+    ]
+    assert four_layer_points == [
+        [48.875, -28.875, 0.0],
+        [48.875, 28.875, 0.0],
+        [-48.875, 28.875, 0.0],
+        [-49.5, 28.875, 0.0],
+        [-49.5, 29.5, 0.0],
+    ]
+    assert two_layer_points == upper_four_layer_points[1:]
+    assert two_layer_points[0] != two_layer_points[-1]
+    assert four_layer_points[0] != four_layer_points[-1]
+    assert upper_four_layer_points[0] != upper_four_layer_points[-1]
+    assert _current_direction_from_xy_points(two_layer_points) == "ccw"
+    assert _current_direction_from_xy_points(upper_four_layer_points) == "ccw"
+
+
+def test_txdd_right_terminal_labels_use_d_to_d_for_single_layer() -> None:
+    assert txdd_right_terminal_labels(instance_count=2, layer_index=0) == ("D", "d")
+
+
+def test_txdd_right_terminal_labels_use_stacked_contract_for_four_layer_tx_dd() -> None:
+    assert txdd_right_terminal_labels(instance_count=4, layer_index=0) == ("c", "A")
+    assert txdd_right_terminal_labels(instance_count=4, layer_index=1) == ("A", "d")

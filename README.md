@@ -18,6 +18,8 @@ Repository runtime code under `src/` is assert-driven and fail-fast by design. D
 
 Nullable runtime state and fallback attribute/mapping access are forbidden across `src/`. Required values must be asserted and bound explicitly rather than defaulted.
 
+`type1`은 frozen legacy다. active/default surface는 `type2`만 다루며, `type1` 관련 entry/test/doc/example은 legacy 경로에서만 opt-in으로 사용한다.
+
 ## Debug Launch
 
 VS Code debug tasks in `.vscode/tasks.json` install the project in editable mode before running. This file exists so the package metadata declared in `pyproject.toml` has a valid readme target during that step.

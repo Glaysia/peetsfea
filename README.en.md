@@ -25,8 +25,9 @@ Release notes are managed by version and language under `release-notes/`.
 - For implementation rules, see [AGENTS.md](AGENTS.md). For the current build123d/AEDT import plan, see [PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md](PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md).
 
 ## What This Project Intends To Guarantee
-- Input: TOML spec (`examples/type1.toml`)
-- Process: spec validation + deterministic selection + HFSS design generation
+- Active input: type2 authoring spec (`examples/type2_fixed.toml`)
+- Active process: type2 STEP authoring plus headless HFSS import/setup-ready validation paths
+- Legacy type1 paths are retained only under explicit legacy entrypoints and legacy tests/docs
 - Output: HFSS design output plus snapshot data (`.aedt`, `.repro.toml`, `.dataset.toml`, `.source.toml`)
 - `repro.toml`: exact replay artifact for the realized design
 - `dataset.toml`: exact ledger artifact for canonical sampled-owner coordinates that affect the final design
@@ -41,7 +42,7 @@ cd run
 ../.venv/bin/pytest -q ../tests
 ```
 
-Default execution is split across `entry/sample.py` and `entry/build.py`: `entry/sample.py` writes batch-specific resolved TOMLs plus per-batch manifests under `run/toml/`, and `entry/build.py` replays those manifests into AEDT files under `run/aedt/`. `entry/sample_build.py` is the dedicated GUI-visible replay flow used by the VS Code F5 launch. The default runnable spec is `examples/type1.toml`.
+Active default execution is type2-oriented through the type2 STEP export/import entrypoints under `entry/`. Frozen type1 batch flows are still available only through explicit legacy entrypoints under `entry/legacy/type1/`.
 
 ## Core Artifacts
 - Zip export is temporarily disabled.
@@ -72,9 +73,9 @@ Default execution is split across `entry/sample.py` and `entry/build.py`: `entry
 - Adaptive defaults are standardized to `percent_refinement=22`, `maximum_passes=10`, `minimum_passes=8`, `minimum_converged_passes=10`, and `max_delta_s=0.007`.
 - Current detailed planning entry point: [PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md](PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md).
 
-## type1 Reference Docs
-- Korean overview: [docs/type1.md](docs/type1.md)
-- English overview: [docs/type1.en.md](docs/type1.en.md)
+## Legacy type1 Reference Docs
+- Korean overview: [docs/legacy/type1.md](docs/legacy/type1.md)
+- English overview: [docs/legacy/type1.en.md](docs/legacy/type1.en.md)
 
 ## Compatibility Policy
 - Long-term backward compatibility is not guaranteed.

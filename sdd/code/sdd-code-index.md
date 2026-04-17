@@ -14,8 +14,8 @@ tags:
 - 정규 규칙: `sdd/code/<repo-relative-code-path>.md`
 - 예시:
   - `src/peetsfea/spec/loader.py` -> [[sdd/code/src/peetsfea/spec/loader.py]]
-  - `entry/sample.py` -> [[sdd/code/entry/sample.py]]
-  - `tests/spec_resolver/test_sampling_registry.py` -> [[sdd/code/tests/spec_resolver/test_sampling_registry.py]]
+  - `entry/legacy/type1/sample.py` -> [[sdd/code/entry/sample.py]]
+  - `tests/legacy/type1/spec_resolver/test_sampling_registry.py` -> [[sdd/code/tests/spec_resolver/test_sampling_registry.py]]
   - `src/peetsfea/spec/__init__.py` -> `sdd/code/src/peetsfea/spec/__init__.py.md`
 
 ## 필수 내용

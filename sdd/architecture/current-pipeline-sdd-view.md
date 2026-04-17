@@ -9,16 +9,16 @@ tags:
 
 # Current Pipeline SDD View
 
-이 문서는 현재 파이프라인의 SDD 관점 요약이다. 자세한 분석은 [[docs/current-pipeline]]를 보고, 현재 도입 계획은 [[sdd/plans/0.2.22-sdd-adoption]]를 본다.
+이 문서는 frozen legacy type1 파이프라인의 SDD 관점 요약이다. active default path는 더 이상 이 문서를 기준으로 하지 않는다. 자세한 legacy 분석은 [[docs/legacy/current-pipeline-type1]]를 보고, active path는 [[docs/current-pipeline]]를 본다.
 
 ## Boundary
 - 입력 SSOT는 TOML spec이다.
-- 샘플링 entry는 [[sdd/code/entry/sample.py]]가 대표 예시다.
+- legacy 샘플링 entry는 [[sdd/code/entry/sample.py]]가 대표 예시다.
 - TOML 로딩과 최소 shape 검증은 [[sdd/code/src/peetsfea/spec/loader.py]]가 담당한다.
 - 샘플링 registry 계약은 [[sdd/code/tests/spec_resolver/test_sampling_registry.py]] 같은 테스트가 방어한다.
 
 ## Flow
-1. `entry/sample.py`가 batch profile을 계산한다.
+1. `entry/legacy/type1/sample.py`가 batch profile을 계산한다.
 2. seed selection과 sample artifact generation을 호출해 frozen TOML과 `manifest.json`을 만든다.
 3. build entry가 manifest replay를 통해 geometry build와 EM pipeline으로 넘긴다.
 4. selection, geometry, EM 단계는 fail-fast 계약을 지키며 중간 fallback 없이 멈춘다.

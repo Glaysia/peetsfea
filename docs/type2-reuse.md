@@ -48,11 +48,11 @@ write_sample_manifest(entries, manifest_path)
 
 | 대상 | 현재 역할 | 재사용 등급 | 재사용 이유 | type2에서 필요한 조치 |
 | --- | --- | --- | --- | --- |
-| `src/peetsfea/pipeline/run_design.py::run()` | spec 검증, deterministic selection, manifest 생성, `repro_snapshot`/`dataset_snapshot`/`source_toml_bytes` 구성을 담당한다. | 그대로 재사용 | `RunResult`와 manifest 골격은 형상 생성 전 단계의 공통 계약이다. | `SUPPORTED_SPEC_VERSION`과 spec parser가 `type2` 경로를 받아들일 수 있게만 확장한다. |
-| `src/peetsfea/pipeline/run_batch.py` | sample artifact 생성, resolved TOML 작성, frozen TOML gate, build 재진입, 실패 정리를 담당한다. | 그대로 재사용 | run/build를 분리한 2단 파이프라인 자체는 `type2`에도 그대로 필요하다. | geometry builder 진입점만 타입별 디스패치 가능하게 바꾼다. |
-| `src/peetsfea/pipeline/selection_snapshots.py` | `repro.toml`/`dataset.toml` 논리 산출물과 frozen range 변환을 정의한다. | 그대로 재사용 | sampled owner ledger와 replay snapshot의 역할 분리는 형상 타입과 독립적이다. | `type2` sampled owner set이 canonical registry를 따르도록 유지한다. |
-| `entry/sample.py`, `entry/build.py` | 현재 표준 배치 샘플/빌드 진입점을 제공한다. | 그대로 재사용 | entry 스크립트는 `run()`과 `run_batch` orchestration 위에 얹힌 thin wrapper다. | 기본 TOML 경로와 geometry dispatch만 `type2` 선택을 허용하면 된다. |
-| `entry/sample_build.py` | 미리 생성된 batch manifest를 GUI-visible runtime으로 순차 replay하는 디버그 플로우를 제공한다. | 조건부 재사용 | 디버그 워크플로 자체는 공통이지만 현재 기본 batch series와 source TOML이 `type1` 전용이다. | `type2` debug profile과 source TOML 선택 방식을 분리한다. |
+| `src/peetsfea/legacy/type1/pipeline/run_design.py::run()` | frozen legacy type1의 spec 검증, deterministic selection, manifest 생성, `repro_snapshot`/`dataset_snapshot`/`source_toml_bytes` 구성을 담당한다. | legacy reference only | 현재 active/default surface에서는 더 이상 직접 재사용하지 않는다. | 필요하면 공통 contract만 별도 shared 계층으로 다시 추출한다. |
+| `src/peetsfea/legacy/type1/pipeline/run_batch.py` | frozen legacy type1의 sample artifact 생성, resolved TOML 작성, frozen TOML gate, build 재진입, 실패 정리를 담당한다. | legacy reference only | run/build 2단 파이프라인 아이디어는 참고 가능하지만 구현체는 legacy로 격리됐다. | active type2 batch/runtime이 필요하면 새 active orchestration을 별도로 설계한다. |
+| `src/peetsfea/legacy/type1/pipeline/selection/selection_snapshots.py` | frozen legacy type1의 `repro.toml`/`dataset.toml` 논리 산출물과 frozen range 변환을 정의한다. | 조건부 재사용 | snapshot 역할 분리는 공통 개념이지만 현재 구현체는 legacy selection contract에 묶여 있다. | 필요한 helper만 shared 계층으로 재추출하고 legacy 구현 직접 의존은 피한다. |
+| `entry/legacy/type1/sample.py`, `entry/legacy/type1/build.py` | frozen legacy type1 batch 샘플/빌드 진입점을 제공한다. | legacy reference only | entry 스크립트는 기존 `run()`과 `run_batch` orchestration 위에 얹힌 thin wrapper다. | active root entry surface에서 제거하고 explicit legacy invocation만 유지한다. |
+| `entry/legacy/type1/sample_build.py` | frozen legacy type1 manifest를 GUI-visible runtime으로 순차 replay하는 디버그 플로우를 제공한다. | legacy reference only | 디버그 워크플로 자체는 남길 수 있지만 active/default path로 쓰면 안 된다. | type2 debug path와 분리된 explicit legacy debug profile로만 유지한다. |
 
 ## geometry primitive
 

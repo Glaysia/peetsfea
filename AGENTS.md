@@ -28,7 +28,7 @@ This document defines the project rules for coding agents working in this reposi
 
 ## Working principles
 - Follow the repository-wide commandments in `CODE_COMMANDMENTS.md`; this document supplements them and must not weaken them.
-- Current active design work is `type2`. `type1` is deprecated/frozen legacy state; do not modify `type1` code, docs, examples, tests, or spec artifacts unless the user explicitly asks for `type1` work in the current task.
+- Current active design work is `type2`. `type1` is deprecated/frozen legacy state; do not modify `type1` code, docs, examples, tests, or spec artifacts unless the user explicitly asks for `type1` work in the current task. Legacy `type1` paths live under explicit legacy boundaries such as `src/peetsfea/legacy/type1/`, `entry/legacy/type1/`, `tests/legacy/type1/`, `examples/legacy/`, and `docs/legacy/`.
 - Multiple agents may work in this repository concurrently; before editing, re-read any file that may have changed, keep changes scoped to the assigned task, and do not overwrite, revert, or reformat unrelated in-flight edits from other agents.
 - Coordinate by preserving other agents' in-flight work and integrating around it instead of forcing a file back to an earlier local snapshot.
 - Do not implement fallback behavior by default. If the intended path fails or is unsupported, raise immediately with actionable context instead of switching to an alternate path.
@@ -67,8 +67,8 @@ This document defines the project rules for coding agents working in this reposi
 - Legacy tracked files that remain untouched are exempt. Once a legacy file is substantively edited, add or update the matching `sdd/code/<repo-relative-path>.md` note in the same change.
 - Required code-note mapping examples:
   - `src/peetsfea/spec/loader.py` -> `sdd/code/src/peetsfea/spec/loader.py.md`
-  - `entry/sample.py` -> `sdd/code/entry/sample.py.md`
-  - `tests/spec_resolver/test_sampling_registry.py` -> `sdd/code/tests/spec_resolver/test_sampling_registry.py.md`
+  - `entry/legacy/type1/sample.py` -> `sdd/code/entry/sample.py.md`
+  - `tests/legacy/type1/spec_resolver/test_sampling_registry.py` -> `sdd/code/tests/spec_resolver/test_sampling_registry.py.md`
 - A substantive edit includes changes to logic, interfaces, runtime state, invariants, I/O, fail-fast behavior, or data flow. Formatting-only, comment-only, or purely mechanical non-behavioral changes do not trigger mandatory note updates.
 - Every code note must state the source path, single responsibility, inputs/outputs, canonical state, invariants, fail-fast points, collaborator modules, related tests, change hazards, and relevant Obsidian wikilink connections.
 - New features and large refactors must create or update a plan note under `sdd/plans/` before or alongside the code change.
@@ -106,18 +106,19 @@ This document defines the project rules for coding agents working in this reposi
 - Determinism tests are required; Pyaedt integration tests are optional.
 - Run commands from the `run/` directory when executing scripts/tests to avoid polluting the repo root with generated artifacts.
 - Prefer output paths under `run/` for manifests, AEDT files, logs, and temporary execution artifacts.
-- Use `entry/sample.py` for windowed batch TOML generation, `entry/build.py` for the derived batch-series AEDT generation, and `entry/sample_build.py` only for the GUI debug flow.
+- Active default execution should use type2 entrypoints. Frozen `type1` batch/runtime flows are legacy-only and live under `entry/legacy/type1/`.
 - Do not run those entry scripts directly from arbitrary cwd without the matching cleanup step.
-- Default execution must stay headless. Do not launch GUI-visible AEDT or `entry/sample_build.py` during routine implementation, refactoring, or automated validation.
+- Default execution must stay headless. Do not launch GUI-visible AEDT or legacy `entry/legacy/type1/sample_build.py` during routine implementation, refactoring, or automated validation.
 - GUI-mode AEDT verification is opt-in only and must not be run unless the user explicitly requests it for the current task.
 - Even when GUI verification is requested, treat it as a validation step only; the implementation itself must remain headless-compatible.
-- GUI validation is considered valid only when started through `.vscode/launch.json` using `Run entry/sample_build.py from run/`.
-- Ad-hoc GUI launches such as direct `python ../entry/sample_build.py`, direct manifest-entry execution, or direct `build_aedt_from_manifest_entry_with_options()` calls are not valid GUI validation evidence.
+- GUI validation is considered valid only when started through `.vscode/launch.json` using `legacy-type1 Run entry/sample_build.py from run/`.
+- Ad-hoc GUI launches such as direct `python ../entry/legacy/type1/sample_build.py`, direct manifest-entry execution, or direct `build_aedt_from_manifest_entry_with_options()` calls are not valid GUI validation evidence.
 - Agents must not infer product/runtime bugs from GUI behavior observed through non-regular launch paths.
 - Required sequence:
-  - For TOML generation, run the `run-sample-debug` task; it installs editable deps, clears `run/toml/`, and runs `../.venv/bin/python ../entry/sample.py` from `run/` in one task.
-  - For AEDT generation from existing batch manifests, run the `prepare-build-debug` task first (this clears `run/aedt/`), then run `../.venv/bin/python ../entry/build.py` from `run/`.
-  - For GUI validation, launch `Run entry/sample_build.py from run/`; its `preLaunchTask` is `prepare-build-debug`, so it clears `run/aedt/` before starting.
+  - For active type2 import/debug work, run the `run-type2-import-debug` task or launch `Run entry/import_type2_step.py from run/`.
+  - Frozen type1 TOML generation uses the `legacy-type1-run-sample-debug` task and `../entry/legacy/type1/sample.py`.
+  - Frozen type1 AEDT generation from existing batch manifests uses `../.venv/bin/python ../entry/legacy/type1/build.py` from `run/` after `prepare-build-debug`.
+  - Frozen type1 GUI validation uses `legacy-type1 Run entry/sample_build.py from run/`; its `preLaunchTask` is `prepare-build-debug`, so it clears `run/aedt/` before starting.
 - Build/run failures must be fail-fast by default:
   - Do not silently continue to the next design after a failed build.
   - Use `stop_on_error=True` / `raise_on_error=True` for execution paths unless the user explicitly requests best-effort continuation.
