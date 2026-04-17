@@ -1,6 +1,7 @@
 {
-    "python-envs.pythonProjects": [],
     "workbench.editorAssociations": {
         "*.copilotmd": "vscode.markdown.preview.editor",
-    }
+    },
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+
 }
