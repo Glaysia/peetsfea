@@ -72,7 +72,7 @@ def _non_model_entry(*, object_id: str = "type2_non_model_scene") -> dict[str, o
                 role="tx_region",
                 origin_xyz=(0.0, -140.0, 0.0),
                 size_xyz=(160.0, 280.0, 90.0),
-                plane="XY",
+                plane="YZ",
             ),
             _non_model_member_entry(
                 object_id="rx_region_max",
@@ -572,6 +572,114 @@ def _single_layer_imported_name_batch_with_role_aware_underlay(
     )
 
 
+def _tx_plate_stack_expected_names(*, ferrite_set_count: int = 10) -> list[str]:
+    return [
+        "tx_copper_wall",
+        "tx_pcb_wall",
+        *(f"tx_stack_ferrite_u{index}" for index in range(ferrite_set_count)),
+        *(f"tx_stack_pet_psa_u{index}" for index in range(ferrite_set_count)),
+        *(f"tx_stack_air_u{index}" for index in range(ferrite_set_count)),
+        "tx_pcb_coil",
+        "tx_copper_coil",
+    ]
+
+
+def _rx_plate_stack_expected_names(*, ferrite_set_count: int = 10) -> list[str]:
+    return [
+        "rx_copper_wall",
+        "rx_pcb_wall",
+        *(f"rx_stack_ferrite_u{index}" for index in range(ferrite_set_count)),
+        *(f"rx_stack_pet_psa_u{index}" for index in range(ferrite_set_count)),
+        *(f"rx_stack_air_u{index}" for index in range(ferrite_set_count)),
+        "rx_pcb_coil",
+        "rx_copper_coil",
+    ]
+
+
+def _plate_stack_modeled_entry(
+    *,
+    object_id: str,
+    role: str,
+    plane: str,
+    placement_owner_id: str,
+    origin_xyz: tuple[float, float, float],
+    size_xyz: tuple[float, float, float],
+    source_metadata_path: str,
+    expected_names: list[str],
+    pcb_layer_positions_mm: list[float],
+    copper_layer_positions_mm: list[float],
+) -> dict[str, object]:
+    origin_x, origin_y, origin_z = origin_xyz
+    size_x, size_y, size_z = size_xyz
+    return {
+        "object_id": object_id,
+        "role": role,
+        "plane": plane,
+        "placement_owner_id": placement_owner_id,
+        "material": "composite",
+        "model_state": True,
+        "expected_exported_body_names": expected_names,
+        "expected_exported_body_count": len(expected_names),
+        "canonical_coordinates": {
+            "frame_origin_xyz": [origin_x, origin_y, origin_z],
+            "outer_bounds_min_xyz": [origin_x, origin_y, origin_z],
+            "outer_bounds_max_xyz": [origin_x + size_x, origin_y + size_y, origin_z + size_z],
+            "outer_bounds_size_xyz": [size_x, size_y, size_z],
+            "pcb_layer_z_positions_mm": pcb_layer_positions_mm,
+            "copper_layer_z_positions_mm": copper_layer_positions_mm,
+        },
+        "terminal_metadata": {"kind": "none"},
+        "source_metadata_path": source_metadata_path,
+    }
+
+
+def _tx_plate_stack_entry(tmp_path: Path) -> dict[str, object]:
+    return _plate_stack_modeled_entry(
+        object_id="tx_plate_stack",
+        role="tx_plate_stack",
+        plane="YZ",
+        placement_owner_id="tx_region",
+        origin_xyz=(0.0, -140.0, 0.0),
+        size_xyz=(3.7, 280.0, 90.0),
+        source_metadata_path=str(tmp_path / "tx_plate_stack.metadata.json"),
+        expected_names=_tx_plate_stack_expected_names(),
+        pcb_layer_positions_mm=[0.2, 3.3],
+        copper_layer_positions_mm=[0.0, 3.5],
+    )
+
+
+def _rx_plate_stack_entry(tmp_path: Path) -> dict[str, object]:
+    return _plate_stack_modeled_entry(
+        object_id="rx_plate_stack",
+        role="rx_plate_stack",
+        plane="YZ",
+        placement_owner_id="rx_region_max",
+        origin_xyz=(0.0, -280.0, 139.0),
+        size_xyz=(3.7, 560.0, 360.0),
+        source_metadata_path=str(tmp_path / "rx_plate_stack.metadata.json"),
+        expected_names=_rx_plate_stack_expected_names(),
+        pcb_layer_positions_mm=[0.2, 3.3],
+        copper_layer_positions_mm=[0.0, 3.5],
+    )
+
+
+def _plate_stack_modeled_objects(tmp_path: Path) -> list[dict[str, object]]:
+    return [
+        _tx_plate_stack_entry(tmp_path),
+        _rx_plate_stack_entry(tmp_path),
+    ]
+
+
+def _plate_stack_imported_name_batch() -> tuple[str, ...]:
+    return (
+        "environment",
+        "tx_region",
+        "rx_region_max",
+        *_tx_plate_stack_expected_names(),
+        *_rx_plate_stack_expected_names(),
+    )
+
+
 def _expected_mesh_length_payload(*, tx_object_name: str = "tx_copper_l0") -> list[object]:
     return [
         "NAME:Length1",
@@ -753,6 +861,61 @@ def test_import_type2_step_ledger_styles_role_aware_underlay_and_keeps_mesh_cond
         "under_rx_air_u0",
         "rx_port_sheet",
     ]
+    written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
+    assert written == result
+
+
+def test_import_type2_step_ledger_accepts_tx_and_rx_plate_stack_geometry_only_roles(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=_plate_stack_modeled_objects(tmp_path),
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _FakeHfss(
+        modeler=_FakeModeler(imported_name_batches=[_plate_stack_imported_name_batch()])
+    )
+    session.materials.delayed_lookup_material_names.add("PET_PSA")
+
+    result = import_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        design_name="fake_type2_import",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    assert session.modeler.import_calls == [scene_step]
+    assert session.modeler.import_kwargs_calls == [{"import_free_surfaces": True}]
+    assert session.modeler.create_polyline_calls == []
+    assert session.modeler.cover_lines_calls == []
+    assert session.design.import_dataset_calls == [str(Path(__file__).resolve().parents[2] / "notebooks" / "mu_p.tab")]
+    assert len(session.oproject.add_dataset_calls) == 2
+    assert session.materials.aedmattolibrary_calls == ["PET_PSA"]
+    assert session.modeler.objects["tx_copper_wall"].material_name == "copper"
+    assert session.modeler.objects["tx_pcb_wall"].material_name == "FR4_epoxy"
+    assert session.modeler.objects["tx_stack_ferrite_u0"].material_name == "MULL12060ferrite"
+    assert session.modeler.objects["tx_stack_pet_psa_u0"].material_name == "PET_PSA"
+    assert session.modeler.objects["tx_stack_air_u0"].material_name == "vacuum"
+    assert session.modeler.objects["tx_copper_coil"].material_name == "copper"
+    assert session.modeler.objects["rx_copper_wall"].material_name == "copper"
+    assert session.modeler.objects["rx_pcb_wall"].material_name == "FR4_epoxy"
+    assert session.modeler.objects["rx_stack_ferrite_u0"].material_name == "MULL12060ferrite"
+    assert session.modeler.objects["rx_stack_pet_psa_u0"].material_name == "PET_PSA"
+    assert session.modeler.objects["rx_stack_air_u0"].material_name == "vacuum"
+    assert session.modeler.objects["rx_copper_coil"].material_name == "copper"
+    assert session.mesh_module.assign_length_op_calls == []
+    assert session.radiation_boundary_calls == []
+    assert "mesh" not in result
+    assert "boundary" not in result
+    modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    assert modeled_by_id["tx_plate_stack"]["imported_object_names"] == _tx_plate_stack_expected_names()
+    assert modeled_by_id["tx_plate_stack"]["terminal_metadata"] == {"kind": "none"}
+    assert modeled_by_id["rx_plate_stack"]["imported_object_names"] == _rx_plate_stack_expected_names()
+    assert modeled_by_id["rx_plate_stack"]["terminal_metadata"] == {"kind": "none"}
     written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
     assert written == result
 
@@ -1019,6 +1182,35 @@ def test_import_type2_step_ledger_into_hfss_releases_desktop_when_save_project_r
     assert session.insert_design_calls == ["type2_step_import"]
     assert session.desktop_class.release_calls == [(False, False)]
     assert not imported_ledger_path.exists()
+
+
+def test_import_type2_step_ledger_fails_for_plate_stack_terminal_metadata_before_hfss_launch(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    tx_entry = _tx_plate_stack_entry(tmp_path)
+    tx_entry["terminal_metadata"] = {"kind": "port"}
+    launch_count = 0
+
+    def _factory(_: str) -> HfssSession:
+        nonlocal launch_count
+        launch_count += 1
+        return cast(HfssSession, _FakeHfss(modeler=_FakeModeler(imported_name_batches=[])))
+
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=[tx_entry],
+    )
+
+    with pytest.raises(ValueError, match=r"terminal_metadata\.kind must be 'none'"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            hfss_factory=_factory,
+        )
+
+    assert launch_count == 0
 
 
 def test_import_type2_step_ledger_fails_for_missing_scene_step_before_hfss_launch(tmp_path: Path) -> None:

@@ -13,7 +13,6 @@ from typing import TypedDict, cast
 from peetsfea.spec.loader import TOMLTable, TOMLValue, load_toml_bytes
 from peetsfea.spec.toml_render import toml_dumps
 from peetsfea.type2_step_export import export_type2_step_artifacts
-from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import RangeSpec
@@ -26,6 +25,8 @@ DesignVariableEntry = tuple[str, str]
 _SampleExporter = Callable[..., object]
 _INTEGER_RANGE_FIELD_NAMES = ("turn_count", "layer_count", "underlay_repeat_count", "wall_parallel_stack_present")
 _SAMPLED_METADATA_TABLE = "sampled"
+_SAMPLED_SINGLE_COIL_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
+_PLATE_STACK_ROLE_SUFFIX = "_plate_stack"
 
 
 class Type2SampleMetadata(TypedDict):
@@ -81,15 +82,33 @@ class PreparedType2Build:
     imported_ledger_path: Path
     aedt_path: Path
     sampled_owner_paths: tuple[str, ...]
+    modeled_roles: tuple[str, ...]
     design_variables: tuple[DesignVariableEntry, ...]
+
+
+def _modeled_spec_role(modeled_spec: object) -> str:
+    assert hasattr(modeled_spec, "role"), "type2 modeled spec must expose role"
+    raw_role = getattr(modeled_spec, "role")
+    assert isinstance(raw_role, str), "type2 modeled spec role must be str"
+    return raw_role
+
+
+def _modeled_roles(spec: Type2StepSpec) -> tuple[str, ...]:
+    return tuple(_modeled_spec_role(modeled_spec) for modeled_spec in spec.modeled_objects)
 
 
 def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpec], ...]:
     owner_specs: list[tuple[str, RangeSpec]] = []
     for modeled_spec in spec.modeled_objects:
-        if isinstance(modeled_spec, ModeledRxPlateStackSpec):
+        role = _modeled_spec_role(modeled_spec)
+        if role in _SAMPLED_SINGLE_COIL_ROLES:
+            owner_specs.extend(
+                _single_coil_range_owner_specs(cast(ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec, modeled_spec))
+            )
             continue
-        owner_specs.extend(_single_coil_range_owner_specs(modeled_spec))
+        if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
+            continue
+        raise RuntimeError(f"unsupported modeled object role for sampled owner resolution: {role}")
     return tuple(owner_specs)
 
 
@@ -885,10 +904,17 @@ def _manifest_entry_from_sampled_toml(metadata: Type2SampleMetadata, sampled_tom
 def prepare_type2_build(sampled_toml_path: Path) -> PreparedType2Build:
     metadata = load_type2_sample_metadata(sampled_toml_path)
     sampled_spec = load_type2_step_spec(sampled_toml_path)
+    sampled_modeled_roles = _modeled_roles(sampled_spec)
     source_toml_path = Path(metadata["source_toml_path"]).resolve(strict=False)
     if not source_toml_path.is_file():
         raise FileNotFoundError(f"type2 sampled TOML references missing source_toml_path: {source_toml_path}")
     source_spec = load_type2_step_spec(source_toml_path)
+    source_modeled_roles = _modeled_roles(source_spec)
+    if sampled_modeled_roles != source_modeled_roles:
+        raise ValueError(
+            "type2 build input TOML modeled roles must match source TOML "
+            f"(expected={source_modeled_roles}, actual={sampled_modeled_roles})"
+        )
     expected_sampled_owner_paths = exportable_sampled_owner_paths(source_spec)
     if tuple(metadata["sampled_owner_paths"]) != expected_sampled_owner_paths:
         raise ValueError(
@@ -919,6 +945,7 @@ def prepare_type2_build(sampled_toml_path: Path) -> PreparedType2Build:
         imported_ledger_path=Path(manifest_entry["imported_ledger_path"]),
         aedt_path=Path(manifest_entry["aedt_path"]),
         sampled_owner_paths=tuple(manifest_entry["sampled_owner_paths"]),
+        modeled_roles=source_modeled_roles,
         design_variables=design_variables,
     )
 

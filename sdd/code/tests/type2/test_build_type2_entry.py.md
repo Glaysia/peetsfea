@@ -1,10 +1,11 @@
 ---
 title: test_build_type2_entry.py
-created: 2026-04-18 @ 09:09
-updated: 2026-04-19 @ 18:05
+created: 2026-04-19 @ 17:35
+updated: 2026-04-19 @ 21:47
 tags:
+  - tests
+  - type2
   - build
-  - test
 ---
 
 # test_build_type2_entry.py
@@ -12,25 +13,15 @@ tags:
 ## Source
 - Path: `tests/type2/test_build_type2_entry.py`
 - Code note path: `sdd/code/tests/type2/test_build_type2_entry.py.md`
-- Tested source:
-  - [[sdd/code/entry/build.py]]
-  - [[sdd/code/src/peetsfea/type2_sampled.py]]
-  - [[sdd/code/src/peetsfea/type2_runtime.py]]
 
 ## 역할
-- active build entry의 manifest config read, missing-only STEP policy, design variable handoff를 검증한다.
+- build entry/runtime wiring과 manifest-driven runner behavior를 검증한다.
 
-## Canonical state
-- prepared sampled build input과 runner call payload가 canonical assertion surface다.
-
-## Invariants / fail-fast
-- list manifest는 즉시 실패해야 한다.
-- missing `config.aedt_builder_n`는 즉시 실패해야 한다.
-- missing step ledger는 exporter를 거쳐 same-worker build로 이어져야 한다.
-- existing but broken step ledger는 runner 전에 즉시 실패해야 한다.
-- runner에는 sampled metadata-derived design variables만 전달되어야 한다.
-- runner에는 sampled metadata-derived design variables만 전달되어야 하므로, fixed `wall_parallel_stack_present`는 design-variable handoff에 들어가면 안 된다.
-- active source fixture에 포함된 fixed `rx_plate_stack` scalar도 design-variable handoff에 들어가면 안 된다.
+## Canonical coverage
+- active plate-stack manifest can still export missing STEP
+- active plate-stack build path does not auto-switch to import-only
+- setup-ready runner unsupported error surfaces clearly
+- design variable passing and manifest parallelism contracts remain intact
 
 ## 변경 시 주의점
-- full AEDT runtime regression을 이 파일에서 다시 구현하지 않는다.
+- geometry-view import-only policy를 build success expectation으로 바꾸지 않는다.

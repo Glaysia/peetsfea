@@ -25,6 +25,23 @@ DEFAULT_DESIGN_NAME = "type2_step_import"
 HfssFactory = Callable[[str], HfssSession]
 
 
+def import_type2_step_geometry_view(
+    *,
+    step_ledger_path: Path = DEFAULT_SOURCE_STEP_LEDGER_PATH,
+    output_aedt_path: Path = DEFAULT_OUTPUT_AEDT_PATH,
+    imported_ledger_path: Path = DEFAULT_IMPORTED_LEDGER_PATH,
+    design_name: str = DEFAULT_DESIGN_NAME,
+    hfss_factory: HfssFactory = create_headless_hfss,
+) -> Type2ImportedLedger:
+    return import_type2_step_ledger(
+        step_ledger_path=step_ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        design_name=design_name,
+        hfss_factory=hfss_factory,
+    )
+
+
 def import_type2_step_ledger(
     *,
     step_ledger_path: Path = DEFAULT_SOURCE_STEP_LEDGER_PATH,
@@ -98,6 +115,7 @@ __all__ = [
     "HfssFactory",
     "Type2ImportedLedger",
     "create_headless_hfss",
+    "import_type2_step_geometry_view",
     "import_type2_step_ledger_into_hfss",
     "import_type2_step_ledger",
 ]

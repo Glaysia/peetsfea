@@ -3,9 +3,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal, TypedDict, cast
 
-_SUPPORTED_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
+_SUPPORTED_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack"})
 _SUPPORTED_PLANES: frozenset[str] = frozenset({"XY", "YZ"})
-_GEOMETRY_ONLY_UNSUPPORTED_ROLES: frozenset[str] = frozenset({"rx_plate_stack"})
+_PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
 _OUTER_CORNERS: frozenset[str] = frozenset({"A", "B", "C", "D"})
 _INNER_CORNERS: frozenset[str] = frozenset({"a", "b", "c", "d"})
 _PATH_DIRECTIONS: frozenset[str] = frozenset({"cw", "ccw"})
@@ -20,25 +20,32 @@ class ImportedModeledObjectCanonicalCoordinates(TypedDict):
     copper_layer_z_positions_mm: tuple[float, ...]
 
 
-class ImportedModeledObjectTerminalMetadata(TypedDict):
+class ImportedSingleCoilTerminalMetadataBase(TypedDict):
     path: str
     outer_corner: Literal["A", "B", "C", "D"]
     inner_corner: Literal["a", "b", "c", "d"]
     direction: Literal["cw", "ccw"]
     start_point_plane_mm: tuple[float, float]
     end_point_plane_mm: tuple[float, float]
+
+
+class ImportedSingleCoilTerminalMetadata(ImportedSingleCoilTerminalMetadataBase, total=False):
     port_sheet_vertices_xyz: tuple[tuple[float, float, float], ...]
+
+
+class ImportedGeometryOnlyTerminalMetadata(TypedDict):
+    kind: Literal["none"]
 
 
 class ImportedModeledObjectEntry(TypedDict):
     object_id: str
-    role: Literal["tx_single_coil", "rx_single_coil"]
+    role: Literal["tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack"]
     plane: Literal["XY", "YZ"]
     placement_owner_id: str
     material: str
     model_state: Literal[True]
     canonical_coordinates: ImportedModeledObjectCanonicalCoordinates
-    terminal_metadata: ImportedModeledObjectTerminalMetadata
+    terminal_metadata: ImportedSingleCoilTerminalMetadata | ImportedGeometryOnlyTerminalMetadata
     imported_object_names: tuple[str, ...]
 
 
@@ -193,8 +200,17 @@ def _parse_canonical_coordinates(value: object) -> ImportedModeledObjectCanonica
     }
 
 
-def _parse_terminal_metadata(value: object) -> ImportedModeledObjectTerminalMetadata:
+def _parse_single_coil_terminal_metadata(value: object) -> ImportedSingleCoilTerminalMetadata:
     node = _require_table(value, context="modeled_object.terminal_metadata")
+    if "kind" in node:
+        raw_kind = _require_non_empty_str(
+            _require_key(node, key="kind", context="modeled_object.terminal_metadata"),
+            context="modeled_object.terminal_metadata.kind",
+        )
+        raise ValueError(
+            "modeled_object.terminal_metadata.kind is unsupported for coil import; "
+            f"coil roles require explicit terminal geometry metadata (actual={raw_kind!r})"
+        )
     terminal_metadata: dict[str, object] = {
         "path": _require_non_empty_str(
             _require_key(node, key="path", context="modeled_object.terminal_metadata"),
@@ -223,7 +239,26 @@ def _parse_terminal_metadata(value: object) -> ImportedModeledObjectTerminalMeta
             _require_key(node, key="port_sheet_vertices_xyz", context="modeled_object.terminal_metadata"),
             context="modeled_object.terminal_metadata.port_sheet_vertices_xyz",
         )
-    return cast(ImportedModeledObjectTerminalMetadata, terminal_metadata)
+    return cast(ImportedSingleCoilTerminalMetadata, terminal_metadata)
+
+
+def _parse_geometry_only_terminal_metadata(value: object, *, role: str) -> ImportedGeometryOnlyTerminalMetadata:
+    node = _require_table(value, context="modeled_object.terminal_metadata")
+    kind = _require_non_empty_str(
+        _require_key(node, key="kind", context="modeled_object.terminal_metadata"),
+        context="modeled_object.terminal_metadata.kind",
+    )
+    if kind != "none":
+        raise ValueError(
+            f"modeled_object.terminal_metadata.kind must be 'none' for {role} geometry-only import "
+            f"(actual={kind!r})"
+        )
+    if len(node) != 1:
+        raise ValueError(
+            "modeled_object.terminal_metadata must be exactly {'kind': 'none'} for geometry-only plate-stack import "
+            f"(actual_keys={sorted(node)})"
+        )
+    return {"kind": "none"}
 
 
 def build_single_imported_modeled_object_entry(
@@ -235,13 +270,9 @@ def build_single_imported_modeled_object_entry(
         _require_key(modeled_object, key="role", context="modeled_object"),
         context="modeled_object.role",
     )
-    if role in _GEOMETRY_ONLY_UNSUPPORTED_ROLES:
-        raise ValueError(
-            f"modeled_object.role {role!r} is a geometry-export-only role and is unsupported in type2 import/setup-ready/EM runtime"
-        )
     if role not in _SUPPORTED_ROLES:
         raise ValueError(
-            "modeled_object.role must be one of ['tx_single_coil', 'rx_single_coil'] for single-coil import "
+            "modeled_object.role must be one of ['tx_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack'] "
             f"(actual={role!r})"
         )
     plane = _require_non_empty_str(
@@ -272,14 +303,16 @@ def build_single_imported_modeled_object_entry(
     canonical_coordinates = _parse_canonical_coordinates(
         _require_key(modeled_object, key="canonical_coordinates", context="modeled_object")
     )
-    terminal_metadata = _parse_terminal_metadata(
-        _require_key(modeled_object, key="terminal_metadata", context="modeled_object")
-    )
+    raw_terminal_metadata = _require_key(modeled_object, key="terminal_metadata", context="modeled_object")
+    if role in _PLATE_STACK_ROLES:
+        terminal_metadata = _parse_geometry_only_terminal_metadata(raw_terminal_metadata, role=role)
+    else:
+        terminal_metadata = _parse_single_coil_terminal_metadata(raw_terminal_metadata)
     validated_object_names = _require_imported_object_names(imported_object_names)
 
     return {
         "object_id": object_id,
-        "role": cast(Literal["tx_single_coil", "rx_single_coil"], role),
+        "role": cast(Literal["tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack"], role),
         "plane": cast(Literal["XY", "YZ"], plane),
         "placement_owner_id": placement_owner_id,
         "material": material,

@@ -9,9 +9,11 @@ from peetsfea.aedt.failfast import validate_aedt_name
 from peetsfea.spec.outputs import parse_outputs_table
 from peetsfea.types.manifest import OutputsSpec
 
-_SUPPORTED_MODELED_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
+_SUPPORTED_MODELED_ROLES: frozenset[str] = frozenset(
+    {"tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack"}
+)
 _SUPPORTED_MODELED_PLANES: frozenset[str] = frozenset({"XY", "YZ"})
-_GEOMETRY_ONLY_UNSUPPORTED_MODELED_ROLES: frozenset[str] = frozenset({"rx_plate_stack"})
+_PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
 
 _NON_MODEL_REQUIRED_FIELDS = (
     "object_id",
@@ -148,6 +150,31 @@ def _validated_em_policy(raw_policy: object, *, context: str) -> Type2ImportEmPo
     return {"radiation_margin_mm": radiation_margin_mm}
 
 
+def _validated_terminal_metadata_kind_none(
+    raw_terminal_metadata: object,
+    *,
+    role: str,
+    context: str,
+) -> None:
+    terminal_metadata = _require_table(raw_terminal_metadata, context=f"{context}.terminal_metadata")
+    raw_kind = require_key(
+        terminal_metadata,
+        key="kind",
+        context=f"{context}.terminal_metadata",
+    )
+    kind = require_non_empty_str(raw_kind, context=f"{context}.terminal_metadata.kind")
+    if kind != "none":
+        raise ValueError(
+            f"{context}.terminal_metadata.kind must be 'none' for {role} import-only geometry metadata "
+            f"(actual={kind!r})"
+        )
+    if len(terminal_metadata) != 1:
+        raise ValueError(
+            f"{context}.terminal_metadata must be exactly {{'kind': 'none'}} for {role} import-only geometry metadata "
+            f"(actual_keys={sorted(terminal_metadata)})"
+        )
+
+
 def validated_object_names(raw_names: Sequence[object], *, context: str) -> list[str]:
     if isinstance(raw_names, (str, bytes)):
         raise TypeError(f"{context}.object_names must be a sequence of strings, not str/bytes")
@@ -191,18 +218,18 @@ def _validated_modeled_entry(
     _require_required_fields(entry, fields=_MODELED_REQUIRED_FIELDS, context=context)
     object_id = require_non_empty_str(require_key(entry, key="object_id", context=context), context=f"{context}.object_id")
     role = require_non_empty_str(require_key(entry, key="role", context=context), context=f"{context}.role")
-    if role in _GEOMETRY_ONLY_UNSUPPORTED_MODELED_ROLES:
-        raise ValueError(
-            f"{context}.role {role!r} is a geometry-export-only role and is unsupported in type2 import/setup-ready/EM runtime"
-        )
     if role not in _SUPPORTED_MODELED_ROLES:
         raise ValueError(
-            f"{context}.role must be one of ['tx_single_coil', 'rx_single_coil'] "
+            f"{context}.role must be one of ['tx_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack'] "
             f"(actual={role!r})"
         )
     plane = require_non_empty_str(require_key(entry, key="plane", context=context), context=f"{context}.plane")
     if plane not in _SUPPORTED_MODELED_PLANES:
         raise ValueError(f"{context}.plane must be one of ['XY', 'YZ'] (actual={plane!r})")
+    if role == "tx_plate_stack" and plane != "YZ":
+        raise ValueError(f"{context}.plane must be 'YZ' for tx_plate_stack import-only geometry (actual={plane!r})")
+    if role == "rx_plate_stack" and plane != "YZ":
+        raise ValueError(f"{context}.plane must be 'YZ' for rx_plate_stack import-only geometry (actual={plane!r})")
     require_non_empty_str(
         require_key(entry, key="placement_owner_id", context=context),
         context=f"{context}.placement_owner_id",
@@ -211,7 +238,7 @@ def _validated_modeled_entry(
     if _require_bool(require_key(entry, key="model_state", context=context), context=f"{context}.model_state") is not True:
         raise ValueError(f"{context}.model_state must be true")
     _require_table(require_key(entry, key="canonical_coordinates", context=context), context=f"{context}.canonical_coordinates")
-    validated_object_names(
+    expected_exported_body_names = validated_object_names(
         cast(
             Sequence[object],
             require_key(entry, key="expected_exported_body_names", context=context),
@@ -224,7 +251,29 @@ def _validated_modeled_entry(
     )
     if expected_exported_body_count < 1:
         raise ValueError(f"{context}.expected_exported_body_count must be >= 1")
-    _require_table(require_key(entry, key="terminal_metadata", context=context), context=f"{context}.terminal_metadata")
+    if expected_exported_body_count != len(expected_exported_body_names):
+        raise ValueError(
+            f"{context}.expected_exported_body_count must match expected_exported_body_names length "
+            f"(count={expected_exported_body_count}, names={len(expected_exported_body_names)})"
+        )
+    raw_terminal_metadata = require_key(entry, key="terminal_metadata", context=context)
+    if role in _PLATE_STACK_ROLES:
+        _validated_terminal_metadata_kind_none(
+            raw_terminal_metadata,
+            role=role,
+            context=context,
+        )
+    else:
+        terminal_metadata = _require_table(raw_terminal_metadata, context=f"{context}.terminal_metadata")
+        if "kind" in terminal_metadata:
+            kind = require_non_empty_str(
+                require_key(terminal_metadata, key="kind", context=f"{context}.terminal_metadata"),
+                context=f"{context}.terminal_metadata.kind",
+            )
+            raise ValueError(
+                f"{context}.terminal_metadata.kind {kind!r} is unsupported for coil import; "
+                "coil roles require explicit terminal geometry metadata"
+            )
     require_non_empty_str(
         require_key(entry, key="source_metadata_path", context=context),
         context=f"{context}.source_metadata_path",

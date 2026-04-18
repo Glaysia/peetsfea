@@ -15,6 +15,7 @@ MESH_MODULE_NAME = "MeshSetup"
 MESH_LENGTH_OPERATION_NAME = "Length1"
 _TX_ROLE = "tx_single_coil"
 _RX_ROLE = "rx_single_coil"
+_UNSUPPORTED_DIRECT_MESH_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
 _TX_MESH_OBJECT_CANDIDATES = ("tx_copper_l0", "tx_copper_stack")
 _RX_MESH_OBJECT_NAME = "rx_copper_l0"
 MESH_LENGTH_MAX_ELEMENTS = "1000"
@@ -73,21 +74,22 @@ def _mesh_setup_module(hfss: HfssSession) -> MeshModuleSession:
     assert (_ := hfss.odesign)
     assert isinstance(_, DesignSession)
     design: DesignSession = _
-    mesh_module = raise_on_false(
+    raw_mesh_module = raise_on_false(
         design.GetModule(MESH_MODULE_NAME),
         operation="GetModule",
         context={"module_name": MESH_MODULE_NAME},
     )
-    assert hasattr(mesh_module, "AssignLengthOp"), (
+    assert hasattr(raw_mesh_module, "AssignLengthOp"), (
         f"{MESH_MODULE_NAME} module must expose AssignLengthOp "
-        f"(module_type={type(mesh_module).__name__})"
+        f"(module_type={type(raw_mesh_module).__name__})"
     )
+    mesh_module = cast(MeshModuleSession, raw_mesh_module)
     assign_length_op = mesh_module.AssignLengthOp
     assert callable(assign_length_op), (
         f"{MESH_MODULE_NAME}.AssignLengthOp must be callable "
-        f"(module_type={type(mesh_module).__name__})"
+        f"(module_type={type(raw_mesh_module).__name__})"
     )
-    return cast(MeshModuleSession, mesh_module)
+    return mesh_module
 
 
 def _imported_object_names(entry: dict[str, object], *, context: str) -> list[str]:
@@ -116,6 +118,11 @@ def _required_modeled_entry_for_role(
             require_key(imported_entry, key="role", context=context),
             context=f"{context}.role",
         )
+        if entry_role in _UNSUPPORTED_DIRECT_MESH_ROLES:
+            raise ValueError(
+                f"{context}.role {entry_role!r} is unsupported in assign_post_import_mesh; "
+                "plate-stack roles must stop before direct mesh/port/EM helper execution"
+            )
         if entry_role == role:
             matches.append(imported_entry)
     if len(matches) != 1:

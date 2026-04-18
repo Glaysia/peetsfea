@@ -1,9 +1,11 @@
 ---
 title: import_type2_step.py
-created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+created: 2026-04-19 @ 21:42
+updated: 2026-04-19 @ 21:42
 tags:
-  - hfss-import
+  - entry
+  - import-only
+  - hfss
 ---
 
 # import_type2_step.py
@@ -11,39 +13,32 @@ tags:
 ## Source
 - Path: `entry/import_type2_step.py`
 - Code note path: `sdd/code/entry/import_type2_step.py.md`
-- Runtime module: [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py]]
+- Status: planned active
+- Related feature plan: [[sdd/plans/0.2.25-type2-tx-rx-shared-plate-stack-import-only]]
 
 ## 역할
-- type2 export + import-only runtime을 연결하는 CLI entrypoint다.
-- setup-ready owner는 [[sdd/code/entry/setup_type2_step.py]]로 분리됐다.
+- active type2 geometry를 import-only로 AEDT에 여는 entrypoint다.
+- plate-stack active example을 setup-ready가 아니라 import pipeline으로 보내는 human/agent 실행 경로를 제공한다.
 
 ## 입력 / 출력
-- 기본 입력:
-  - `examples/type2_fixed.toml`
-  - `entry/generate_type2_step.py`
-- 기본 출력:
-  - `run/step/type2/type2_step_ledger.json`
-  - `run/aedt/type2_step_import/type2_import.aedt`
-  - `run/aedt/type2_step_import/type2_imported_ledger.json`
+- 입력: type2 STEP ledger path, optional output/imported-ledger paths
+- 출력: imported `.aedt`, imported ledger JSON
 
 ## Canonical state
-- module-level mutable state는 없다.
-- code-owned orchestration surface는 `export_and_import_type2_step(...)`와 `export_and_import_type2_step_into_hfss(...)`다.
+- geometry-view 목적의 canonical runtime은 `type2_step_import_pipeline`이다.
+- active TX/RX plate-stack example은 이 entry를 통해 AEDT에서 시각 확인한다.
 
 ## Invariants / fail-fast
-- `--ledger` mode는 exporter를 호출하지 않는다.
-- default mode는 exporter 후 import-only runtime을 호출한다.
-- CLI는 import-only ledger count/path만 출력한다. mesh/boundary summary는 이 entry의 contract가 아니다.
+- setup-ready로 자동 우회하지 않는다.
+- ledger가 missing/malformed이면 HFSS launch 전에 실패해야 한다.
+- import-only contract를 넘어 mesh/port/EM 단계로 진행하지 않는다.
 
-## 직접 의존
-- [[sdd/code/entry/generate_type2_step.py]]
+## Collaborators
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py]]
-
-## 이 파일을 쓰는 곳
-- Human/agent opt-in import-only validation entrypoint.
+- [[sdd/code/entry/build.py]]
 
 ## 관련 테스트
-- [[sdd/code/tests/type2/test_import_type2_step_entry.py]]
+- [[sdd/code/tests/backend_em/test_type2_step_import_pipeline.py]]
 
 ## 변경 시 주의점
-- setup-ready owner surface를 다시 이 entry로 합치지 않는다.
+- geometry-view entry를 build/setup-ready entry와 섞지 않는다.

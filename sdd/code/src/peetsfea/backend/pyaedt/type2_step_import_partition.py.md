@@ -1,10 +1,10 @@
 ---
 title: type2_step_import_partition.py
-created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 00:25
+created: 2026-04-19 @ 17:35
+updated: 2026-04-19 @ 21:45
 tags:
   - hfss-import
-  - aedt
+  - partition
 ---
 
 # type2_step_import_partition.py
@@ -12,59 +12,32 @@ tags:
 ## Source
 - Path: `src/peetsfea/backend/pyaedt/type2_step_import_partition.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_partition.py.md`
-- Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
-- Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
-- Related feature plan: [[sdd/plans/0.2.23-type2-tx-wall-parallel-ferrite-stack]]
-- Related feature plan: [[sdd/plans/0.2.23-type2-ferrite-underlay-equivalent-thickness]]
-- Parent note: [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py]]
+- Status: active
+- Related feature plan: [[sdd/plans/0.2.25-type2-tx-rx-shared-plate-stack-import-only]]
 
 ## 역할
-- scene import diff를 non-model/member ownership과 modeled body ownership으로 partition한다.
-- modeled exported body-name contract를 PCB/copper role set과 role-aware TX/RX underlay exact-name set으로 resolve한다.
-- import 전후 object name diff의 non-empty/duplicate-free 검증을 담당한다.
-- current single-coil contract no longer expects `tx_port_sheet` / `rx_port_sheet` in STEP imported names. Those sheets are reconstructed later from terminal metadata.
+- imported HFSS object names를 modeled/non-model ownership과 body-material families로 partition한다.
 
 ## 입력 / 출력
-- 입력: validated ledger payload, before/after import object names
-- 출력:
-- `new_imported_object_names`
-- non-model names by object id
-- modeled names by object id
-- resolved PCB/copper/underlay body sets
-- modeled STEP body ownership for PCB/copper plus explicit role-aware underlay bodies
+- 입력: validated step ledger, imported object names
+- 출력: modeled object id별 imported names, non-model object id별 imported names, body-role grouping
 
 ## Canonical state
-- modeled ownership source는 `expected_exported_body_names`.
-- non-model ownership source는 `member_objects`.
-- PCB/copper names remain required exact semantic owners.
-- TX underlay exact names (`tx_underlay_ferrite_u0`, `tx_underlay_pet_psa_u0`, `tx_underlay_air_u0`) remain explicit modeled-body owners and must stay distinct from copper ownership.
-- TX wall exact names (`tx_wall_ferrite_u0`, `tx_wall_pet_psa_u0`, `tx_wall_air_u0`) also remain explicit modeled-body owners and share the same ferrite/PET/air role buckets.
-- RX underlay exact names (`under_rx_ferrite_u0`, `under_rx_pet_psa_u0`, `under_rx_air_u0`) also remain explicit modeled-body owners and must stay distinct from copper ownership.
-- `underlay_repeat_count` semantic changes do not change this module's responsibility: it validates only emitted exact names, not hidden repeat multiplicity.
-- resolved return shape groups TX/RX underlay bodies into shared ferrite/PET/air buckets because styling/material ownership is identical across roles.
-- new underlay exact object/body names must remain `<= 32` chars.
-- Port-sheet ownership is outside this partition layer and belongs to later reconstruction.
+- TX plate families는 `tx_copper_wall`, `tx_pcb_wall`, `tx_stack_*`, `tx_pcb_coil`, `tx_copper_coil`를 분류한다.
+- RX plate families는 `rx_copper_wall`, `rx_pcb_wall`, `rx_stack_*`, `rx_pcb_coil`, `rx_copper_coil`를 분류한다.
+- imported exact-name contract는 export ledger order와 동일한 label set을 요구한다.
 
 ## Invariants / fail-fast
-- imported names must be duplicate-free.
-- unclaimed names, duplicate claims, missing required PCB/copper modeled body names are hard failures.
-- generic `SOLID*` fallback resolution은 금지한다.
-- TX multilayer (`tx_pcb_l{n}` + `tx_copper_stack`) exact-name contract를 유지한다.
-- TX/RX underlay bodies are part of the planned STEP imported-name contract here; partition/runtime must not treat them as implicit copper/PCB aliases.
-- exact-name validation remains role-aware and fail-fast: missing or unexpected `under_rx_*` names fail the same way as `tx_underlay_*`.
-- port-sheet bodies are not part of the STEP imported-name contract here; partition/runtime must not treat reconstructed sheets as imported body aliases.
+- modeled exact-name drift와 unclaimed imported object는 hard failure다.
+- tri-layer ferrite/PET/air body counts는 서로 맞아야 한다.
+- plate role body partition은 copper/pcb가 각각 2장 계약을 유지해야 한다.
 
-## 직접 의존
+## Collaborators
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py]]
-
-## 이 파일을 쓰는 곳
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_style.py]]
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py]]
 
 ## 관련 테스트
 - [[sdd/code/tests/backend_em/test_type2_step_import_pipeline.py]]
 
 ## 변경 시 주의점
-- ownership partition과 visual styling을 다시 한 함수군에 섞지 않는다.
-- exported exact-name contract가 바뀌면 export side와 이 모듈을 같이 갱신한다.
-- underlay exact-name taxonomy와 reconstructed sheet ownership을 섞지 않는다. underlay is imported; port sheet is reconstructed.
+- legacy coil naming family와 plate-stack naming family를 같은 prefix 규칙으로 뭉개지 않는다.

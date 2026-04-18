@@ -15,7 +15,7 @@ from peetsfea.tx_rect_void import load_tx_rect_void_spec
 from peetsfea.tx_rect_void import modeled_body_bounds_from_boxes
 from peetsfea.tx_rect_void import profile_for_modeled_role
 from peetsfea.tx_rect_void import realize_tx_rect_void_spec
-from peetsfea.type2_rx_plate_stack import expected_rx_plate_stack_body_names
+from peetsfea.type2_plate_stack import expected_plate_stack_body_names
 from peetsfea.type2_step_ledger import Type2DirectModeledArtifact
 from peetsfea.type2_step_ledger import Type2ImportEmPolicy
 from peetsfea.type2_step_ledger import Type2StepLedger
@@ -28,10 +28,12 @@ from peetsfea.type2_step_scene import build_modeled_single_coil_scene_data
 from peetsfea.type2_step_scene import build_non_model_scene_entry
 from peetsfea.type2_step_scene import build_non_model_scene_shapes
 from peetsfea.type2_step_scene import require_non_model_object_spec
+from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec import Type2StepSpec
+from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
@@ -176,7 +178,7 @@ def _rx_underlay_expected_body_names(*, repeat_count: int) -> list[str]:
     ]
 
 
-def _require_single_coil_expected_body_contract(
+def _require_modeled_expected_body_contract(
     ledger: Type2StepLedger,
     *,
     spec: Type2StepSpec,
@@ -221,15 +223,21 @@ def _require_single_coil_expected_body_contract(
                     repeat_count=resolve_modeled_underlay_repeat_count(modeled_spec, seed=seed)
                 )
             )
-        elif role == "rx_plate_stack":
-            if not isinstance(modeled_spec, ModeledRxPlateStackSpec):
+        elif role in ("tx_plate_stack", "rx_plate_stack"):
+            if role == "tx_plate_stack" and not isinstance(modeled_spec, ModeledTxPlateStackSpec):
+                raise ValueError(
+                    f"type2 modeled object spec registry must retain ModeledTxPlateStackSpec for {object_id} "
+                    f"(actual={type(modeled_spec).__name__})"
+                )
+            if role == "rx_plate_stack" and not isinstance(modeled_spec, ModeledRxPlateStackSpec):
                 raise ValueError(
                     f"type2 modeled object spec registry must retain ModeledRxPlateStackSpec for {object_id} "
                     f"(actual={type(modeled_spec).__name__})"
                 )
             expected_names = list(
-                expected_rx_plate_stack_body_names(
-                    ferrite_set_count=modeled_spec.ferrite_set_count
+                expected_plate_stack_body_names(
+                    role=cast(ModeledPlateStackSpec, modeled_spec).role,
+                    ferrite_set_count=cast(ModeledPlateStackSpec, modeled_spec).ferrite_set_count,
                 )
             )
         else:
@@ -626,7 +634,7 @@ def export_type2_step_artifacts(
         modeled_objects=modeled_entries,
     )
     write_type2_step_ledger(ledger_path=ledger_path, ledger=ledger)
-    _require_single_coil_expected_body_contract(ledger, spec=spec, seed=seed)
+    _require_modeled_expected_body_contract(ledger, spec=spec, seed=seed)
     _require_port_sheet_geometry_contract(ledger=ledger, toml_path=toml_path, seed=seed)
     return ledger
 

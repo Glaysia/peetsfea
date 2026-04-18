@@ -17,7 +17,7 @@ from peetsfea.tx_rect_void import load_tx_rect_void_spec
 from peetsfea.tx_rect_void import modeled_body_bounds_from_boxes
 from peetsfea.tx_rect_void import profile_for_modeled_role
 from peetsfea.tx_rect_void import realize_tx_rect_void_spec
-from peetsfea.type2_rx_plate_stack import build_rx_plate_stack_scene_data
+from peetsfea.type2_plate_stack import build_plate_stack_scene_data
 from peetsfea.type2_step_ledger import CanonicalCoordinates
 from peetsfea.type2_step_ledger import ModeledObjectSceneData
 from peetsfea.type2_step_ledger import NonModelObjectLedgerEntry
@@ -25,6 +25,7 @@ from peetsfea.type2_step_ledger import NonModelSceneMemberLedgerEntry
 from peetsfea.type2_step_spec import ModeledObjectSpec
 from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
+from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import Point3
@@ -1073,8 +1074,8 @@ def build_modeled_scene_data(
     owner_spec: NonModelBoxSpec,
     seed: int,
 ) -> tuple[tuple[bd.Shape, ...], ModeledObjectSceneData]:
-    if isinstance(spec, ModeledRxPlateStackSpec):
-        return build_rx_plate_stack_scene_data(spec, owner_spec=owner_spec)
+    if isinstance(spec, (ModeledTxPlateStackSpec, ModeledRxPlateStackSpec)):
+        return build_plate_stack_scene_data(spec, owner_spec=owner_spec)
     return build_modeled_single_coil_scene_data(
         cast(ModeledSingleCoilSpec, spec),
         owner_spec=owner_spec,

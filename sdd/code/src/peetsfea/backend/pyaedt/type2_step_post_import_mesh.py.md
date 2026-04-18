@@ -1,8 +1,9 @@
 ---
 title: type2_step_post_import_mesh.py
-created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+created: 2026-04-19 @ 17:35
+updated: 2026-04-19 @ 21:47
 tags:
+  - hfss-import
   - mesh
 ---
 
@@ -11,41 +12,29 @@ tags:
 ## Source
 - Path: `src/peetsfea/backend/pyaedt/type2_step_post_import_mesh.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_post_import_mesh.py.md`
-- Related architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
+- Status: active
+- Related feature plan: [[sdd/plans/0.2.25-type2-tx-rx-shared-plate-stack-import-only]]
 
 ## 역할
-- import runtime shared helper로서 post-import mesh assignment를 소유한다.
-- role-aware imported modeled entries에서 conductor-only post-import mesh assignment를 소유한다.
-- current exact contract `tx_copper_l0` or `tx_copper_stack` + `rx_copper_l0` / `Length1` / `MaxLength=5mm` / `NumMaxElem=1000`를 고정한다.
+- setup-ready imported conductors에 mesh length operation을 할당한다.
 
 ## 입력 / 출력
-- 입력:
-  - `HfssSession`
-  - imported modeled ledger entries
-- 출력:
-  - mesh summary
+- 입력: HFSS session, imported modeled objects
+- 출력: mesh summary
 
 ## Canonical state
-- mesh summary의 canonical owner다.
+- current helper는 coil conductor mesh 전용이다.
+- active plate roles는 direct helper call에서도 unsupported로 처리된다.
 
 ## Invariants / fail-fast
-- mesh helper는 imported modeled entries에서 role `tx_single_coil` / `rx_single_coil`를 각각 정확히 하나씩 요구한다.
-- TX mesh target은 TX entry의 exact imported names `tx_copper_l0` 또는 `tx_copper_stack` 중 하나여야 하고, RX mesh target은 RX entry의 exact `rx_copper_l0`여야 한다.
-- `AssignLengthOp` false는 즉시 raise다.
-- TX `tx_underlay_*`, RX `under_rx_*`, reconstructed port sheets는 imported participant여도 mesh 대상에 들어가지 않는다.
+- plate roles에 conductor object candidate를 추론하려고 하면 안 된다.
+- mesh target은 conductor-only이며 ferrite/pcb/air는 제외한다.
 
-## 직접 의존
-- `peetsfea.aedt.protocols`
-- `peetsfea.aedt.failfast`
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py]]
-
-## 이 파일을 쓰는 곳
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py]]
+## Collaborators
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
 
 ## 관련 테스트
 - [[sdd/code/tests/backend_em/test_type2_step_setup_ready.py]]
 
 ## 변경 시 주의점
-- TX mesh target generalization은 conductor-only ownership을 유지한 채 움직여야 한다. `tx_copper_stack`을 허용하더라도 underlay bodies를 mesh set에 섞지 않는다.
-- future RX underlay import contract가 늘어나도 RX conductor owner는 계속 exact `rx_copper_l0` 하나여야 한다.
+- active plate roles를 임시 mesh candidate fallback으로 우회하지 않는다.

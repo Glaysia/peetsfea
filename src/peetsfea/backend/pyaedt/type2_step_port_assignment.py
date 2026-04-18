@@ -12,6 +12,8 @@ from peetsfea.backend.pyaedt.type2_step_import_ledger import require_key, requir
 from peetsfea.backend.pyaedt.type2_step_import_core import Type2ImportedLedger
 from peetsfea.types.manifest import EmPorts
 
+_UNSUPPORTED_DIRECT_PORT_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
+
 
 def _current_excitation_name_map(hfss: HfssSession) -> dict[str, str]:
     return normalized_excitation_name_map(list(hfss.excitation_names))
@@ -77,6 +79,11 @@ def _port_sheet_vertices(entry: dict[str, object], *, context: str) -> tuple[tup
 
 def _required_port_sheet_name(entry: dict[str, object], *, context: str) -> str:
     role = require_non_empty_str(require_key(entry, key="role", context=context), context=f"{context}.role")
+    if role in _UNSUPPORTED_DIRECT_PORT_ROLES:
+        raise ValueError(
+            f"{context}.role {role!r} is unsupported in assign_type2_lumped_ports; "
+            "plate-stack roles must stop before direct mesh/port/EM helper execution"
+        )
     raw_imported_names = require_key(entry, key="imported_object_names", context=context)
     if isinstance(raw_imported_names, (str, bytes)) or not isinstance(raw_imported_names, list):
         raise TypeError(f"{context}.imported_object_names must be a list of strings")
@@ -242,13 +249,13 @@ def assign_type2_lumped_ports(
     tx_matches = [
         entry
         for entry in imported_ledger["modeled_objects"]
-        if require_non_empty_str(require_key(entry, key="role", context="modeled_object"), context="modeled_object.role")
+        if _required_supported_role_for_direct_port_assignment(entry, context="modeled_object")
         == "tx_single_coil"
     ]
     rx_matches = [
         entry
         for entry in imported_ledger["modeled_objects"]
-        if require_non_empty_str(require_key(entry, key="role", context="modeled_object"), context="modeled_object.role")
+        if _required_supported_role_for_direct_port_assignment(entry, context="modeled_object")
         == "rx_single_coil"
     ]
     if len(tx_matches) != 1 or len(rx_matches) != 1:
@@ -271,6 +278,16 @@ def assign_type2_lumped_ports(
         context="modeled_objects[rx_single_coil]",
     )
     return {"tx": [tx_port], "rx": [rx_port]}
+
+
+def _required_supported_role_for_direct_port_assignment(entry: dict[str, object], *, context: str) -> str:
+    role = require_non_empty_str(require_key(entry, key="role", context=context), context=f"{context}.role")
+    if role in _UNSUPPORTED_DIRECT_PORT_ROLES:
+        raise ValueError(
+            f"{context}.role {role!r} is unsupported in assign_type2_lumped_ports; "
+            "plate-stack roles must stop before direct mesh/port/EM helper execution"
+        )
+    return role
 
 
 __all__ = ["assign_type2_lumped_ports"]

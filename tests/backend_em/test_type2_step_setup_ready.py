@@ -6,12 +6,16 @@ from typing import cast
 
 import pytest
 
-from peetsfea.aedt.protocols import HfssSession
+from peetsfea.aedt.protocols import HfssSession, ModelerSession
+from peetsfea.backend.pyaedt.type2_step_em_input import build_type2_em_input
+from peetsfea.backend.pyaedt.type2_step_import_core import Type2ImportedLedger
 from peetsfea.backend.pyaedt.type2_step_post_import_mesh import assign_post_import_mesh
+from peetsfea.backend.pyaedt.type2_step_port_assignment import assign_type2_lumped_ports
 from peetsfea.backend.pyaedt.type2_step_setup_ready import (
     setup_type2_step_ledger,
     setup_type2_step_ledger_into_hfss,
 )
+from peetsfea.types.manifest import EmPorts
 from tests.backend_em.test_type2_step_import_pipeline import (
     _FakeDesign as _ImportFakeDesign,
     _FakeHfss as _ImportFakeHfss,
@@ -293,6 +297,47 @@ def _role_aware_mesh_entries(*, tx_object_name: str = "tx_copper_l0") -> list[di
     ]
 
 
+def _plate_stack_modeled_entry(tmp_path: Path, *, role: str) -> dict[str, object]:
+    if role == "tx_plate_stack":
+        entry = _modeled_entry(
+            object_id="tx_plate_stack",
+            role="tx_plate_stack",
+            plane="XY",
+            placement_owner_id="tx_region",
+            source_metadata_path=str(tmp_path / "tx_plate_stack.metadata.json"),
+            expected_names=["tx_plate_stack_body"],
+        )
+    elif role == "rx_plate_stack":
+        entry = _modeled_entry(
+            object_id="rx_plate_stack",
+            role="rx_plate_stack",
+            plane="YZ",
+            placement_owner_id="rx_region_max",
+            source_metadata_path=str(tmp_path / "rx_plate_stack.metadata.json"),
+            expected_names=["rx_plate_stack_body"],
+        )
+    else:
+        raise AssertionError(f"unexpected plate-stack role for test helper: {role}")
+    entry["terminal_metadata"] = {"kind": "none"}
+    return entry
+
+
+def _coil_modeled_objects_with_imported_names(tmp_path: Path) -> list[dict[str, object]]:
+    modeled_objects = _single_layer_modeled_objects(tmp_path)
+    modeled_objects[0]["imported_object_names"] = ["tx_pcb_l0", "tx_copper_l0", "tx_port_sheet"]
+    modeled_objects[1]["imported_object_names"] = ["rx_pcb_l0", "rx_copper_l0", "rx_port_sheet"]
+    return modeled_objects
+
+
+def _minimal_em_input_ledger(*, modeled_objects: list[dict[str, object]]) -> dict[str, object]:
+    non_model_object = _non_model_entry()
+    non_model_object["imported_object_names"] = ["environment", "tx_region", "rx_region_max"]
+    return {
+        "non_model_objects": [non_model_object],
+        "modeled_objects": modeled_objects,
+    }
+
+
 def test_setup_type2_step_ledger_builds_mesh_boundary_ports_analysis_and_validation(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
     _write_ledger(
@@ -532,6 +577,51 @@ def test_assign_post_import_mesh_rejects_rx_underlay_names_without_rx_copper() -
         )
 
 
+@pytest.mark.parametrize("role", ["tx_plate_stack", "rx_plate_stack"])
+def test_assign_post_import_mesh_rejects_plate_stack_roles_explicitly(role: str) -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+    imported_modeled_objects = _role_aware_mesh_entries()
+    target_index = 0 if role == "tx_plate_stack" else 1
+    imported_modeled_objects[target_index]["role"] = role
+    imported_modeled_objects[target_index]["object_id"] = "tx_plate_stack" if role == "tx_plate_stack" else "rx_plate_stack"
+
+    with pytest.raises(ValueError, match=rf"{role}.*assign_post_import_mesh"):
+        assign_post_import_mesh(
+            hfss=cast(HfssSession, session),
+            imported_modeled_objects=imported_modeled_objects,
+        )
+
+
+@pytest.mark.parametrize("role", ["tx_plate_stack", "rx_plate_stack"])
+def test_assign_type2_lumped_ports_rejects_plate_stack_roles_explicitly(tmp_path: Path, role: str) -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+    modeled_objects = _coil_modeled_objects_with_imported_names(tmp_path)
+    target_index = 0 if role == "tx_plate_stack" else 1
+    modeled_objects[target_index] = _plate_stack_modeled_entry(tmp_path, role=role)
+    modeled_objects[target_index]["imported_object_names"] = ["tx_plate_stack_body"] if role == "tx_plate_stack" else ["rx_plate_stack_body"]
+
+    with pytest.raises(ValueError, match=rf"{role}.*assign_type2_lumped_ports"):
+        assign_type2_lumped_ports(
+            hfss=cast(HfssSession, session),
+            modeler=cast(ModelerSession, session.modeler),
+            imported_ledger=cast(Type2ImportedLedger, {"modeled_objects": modeled_objects}),
+        )
+
+
+@pytest.mark.parametrize("role", ["tx_plate_stack", "rx_plate_stack"])
+def test_build_type2_em_input_rejects_plate_stack_roles_explicitly(tmp_path: Path, role: str) -> None:
+    modeled_objects = _coil_modeled_objects_with_imported_names(tmp_path)
+    target_index = 0 if role == "tx_plate_stack" else 1
+    modeled_objects[target_index] = _plate_stack_modeled_entry(tmp_path, role=role)
+    modeled_objects[target_index]["imported_object_names"] = ["tx_plate_stack_body"] if role == "tx_plate_stack" else ["rx_plate_stack_body"]
+
+    with pytest.raises(ValueError, match=rf"{role}.*build_type2_em_input"):
+        build_type2_em_input(
+            imported_ledger=cast(Type2ImportedLedger, _minimal_em_input_ledger(modeled_objects=modeled_objects)),
+            ports=cast(EmPorts, {"tx": ["1_T1"], "rx": ["2_T1"]}),
+        )
+
+
 def test_setup_type2_step_ledger_raises_when_required_mesh_role_is_missing(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
     _write_ledger(
@@ -725,27 +815,23 @@ def test_setup_type2_step_ledger_raises_when_validate_design_returns_false(tmp_p
         )
 
 
-def test_setup_type2_step_ledger_rejects_geometry_only_rx_plate_stack_role(tmp_path: Path) -> None:
+@pytest.mark.parametrize("role", ["tx_plate_stack", "rx_plate_stack"])
+def test_setup_type2_step_ledger_rejects_plate_stack_roles_before_hfss(tmp_path: Path, role: str) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
-    rx_plate_stack_entry = _modeled_entry(
-        object_id="rx_plate_stack",
-        role="rx_plate_stack",
-        plane="YZ",
-        placement_owner_id="rx_region_max",
-        source_metadata_path=str(tmp_path / "rx_plate_stack.metadata.json"),
+    plate_stack_entry = _plate_stack_modeled_entry(tmp_path, role=role)
+    modeled_objects = (
+        [plate_stack_entry, _rx_single_coil_entry(tmp_path)]
+        if role == "tx_plate_stack"
+        else [_modeled_entry(source_metadata_path=str(tmp_path / "tx.metadata.json")), plate_stack_entry]
     )
-    rx_plate_stack_entry["terminal_metadata"] = {"kind": "none"}
     _write_ledger(
         ledger_path,
         scene_step_path=scene_step,
         non_model_objects=[_non_model_entry()],
-        modeled_objects=[
-            _modeled_entry(source_metadata_path=str(tmp_path / "tx.metadata.json")),
-            rx_plate_stack_entry,
-        ],
+        modeled_objects=modeled_objects,
     )
 
-    with pytest.raises(ValueError, match=r"geometry-export-only role"):
+    with pytest.raises(ValueError, match=rf"rejects plate-stack roles before HFSS work.*{role}"):
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_setup_ready.aedt",

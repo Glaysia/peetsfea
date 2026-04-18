@@ -11,6 +11,7 @@ from peetsfea.backend.pyaedt.type2_step_import_ledger import (
     require_int,
     require_key,
     require_member_objects,
+    require_non_empty_str,
     validated_object_names,
 )
 
@@ -19,29 +20,51 @@ _BODY_ROLE_COPPER = "copper"
 _BODY_ROLE_UNDERLAY_FERRITE = "underlay_ferrite"
 _BODY_ROLE_UNDERLAY_PET_PSA = "underlay_pet_psa"
 _BODY_ROLE_UNDERLAY_AIR = "underlay_air"
+_SINGLE_COIL_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
+_PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
+_TX_PCB_WALL_NAME = "tx_pcb_wall"
+_TX_PCB_COIL_NAME = "tx_pcb_coil"
+_TX_COPPER_WALL_NAME = "tx_copper_wall"
+_TX_COPPER_COIL_NAME = "tx_copper_coil"
+_RX_PCB_WALL_NAME = "rx_pcb_wall"
+_RX_PCB_COIL_NAME = "rx_pcb_coil"
+_RX_COPPER_WALL_NAME = "rx_copper_wall"
+_RX_COPPER_COIL_NAME = "rx_copper_coil"
 _TX_UNDERLAY_FERRITE_NAME_PREFIX = "tx_underlay_ferrite_u"
 _TX_UNDERLAY_PET_PSA_NAME_PREFIX = "tx_underlay_pet_psa_u"
 _TX_UNDERLAY_AIR_NAME_PREFIX = "tx_underlay_air_u"
 _TX_WALL_FERRITE_NAME_PREFIX = "tx_wall_ferrite_u"
 _TX_WALL_PET_PSA_NAME_PREFIX = "tx_wall_pet_psa_u"
 _TX_WALL_AIR_NAME_PREFIX = "tx_wall_air_u"
+_TX_STACK_FERRITE_NAME_PREFIX = "tx_stack_ferrite_u"
+_TX_STACK_PET_PSA_NAME_PREFIX = "tx_stack_pet_psa_u"
+_TX_STACK_AIR_NAME_PREFIX = "tx_stack_air_u"
 _RX_UNDERLAY_FERRITE_NAME_PREFIX = "under_rx_ferrite_u"
 _RX_UNDERLAY_PET_PSA_NAME_PREFIX = "under_rx_pet_psa_u"
 _RX_UNDERLAY_AIR_NAME_PREFIX = "under_rx_air_u"
+_RX_STACK_FERRITE_NAME_PREFIX = "rx_stack_ferrite_u"
+_RX_STACK_PET_PSA_NAME_PREFIX = "rx_stack_pet_psa_u"
+_RX_STACK_AIR_NAME_PREFIX = "rx_stack_air_u"
 _UNDERLAY_FERRITE_NAME_PREFIXES = (
     _TX_UNDERLAY_FERRITE_NAME_PREFIX,
     _TX_WALL_FERRITE_NAME_PREFIX,
     _RX_UNDERLAY_FERRITE_NAME_PREFIX,
+    _TX_STACK_FERRITE_NAME_PREFIX,
+    _RX_STACK_FERRITE_NAME_PREFIX,
 )
 _UNDERLAY_PET_PSA_NAME_PREFIXES = (
     _TX_UNDERLAY_PET_PSA_NAME_PREFIX,
     _TX_WALL_PET_PSA_NAME_PREFIX,
     _RX_UNDERLAY_PET_PSA_NAME_PREFIX,
+    _TX_STACK_PET_PSA_NAME_PREFIX,
+    _RX_STACK_PET_PSA_NAME_PREFIX,
 )
 _UNDERLAY_AIR_NAME_PREFIXES = (
     _TX_UNDERLAY_AIR_NAME_PREFIX,
     _TX_WALL_AIR_NAME_PREFIX,
     _RX_UNDERLAY_AIR_NAME_PREFIX,
+    _TX_STACK_AIR_NAME_PREFIX,
+    _RX_STACK_AIR_NAME_PREFIX,
 )
 
 
@@ -82,9 +105,21 @@ def expected_exported_body_names(modeled_entry: dict[str, object], *, context: s
 
 
 def _body_role_from_expected_name(expected_name: str, *, context: str) -> str:
-    if expected_name.startswith(("tx_pcb_l", "rx_pcb_l")):
+    if expected_name.startswith(("tx_pcb_l", "rx_pcb_l")) or expected_name in (
+        _TX_PCB_WALL_NAME,
+        _TX_PCB_COIL_NAME,
+        _RX_PCB_WALL_NAME,
+        _RX_PCB_COIL_NAME,
+    ):
         return _BODY_ROLE_PCB
-    if expected_name.startswith(("tx_copper_l", "rx_copper_l")) or expected_name in ("tx_copper_stack", "rx_copper_stack"):
+    if expected_name.startswith(("tx_copper_l", "rx_copper_l")) or expected_name in (
+        "tx_copper_stack",
+        "rx_copper_stack",
+        _TX_COPPER_WALL_NAME,
+        _TX_COPPER_COIL_NAME,
+        _RX_COPPER_WALL_NAME,
+        _RX_COPPER_COIL_NAME,
+    ):
         return _BODY_ROLE_COPPER
     if expected_name.startswith(_UNDERLAY_FERRITE_NAME_PREFIXES):
         return _BODY_ROLE_UNDERLAY_FERRITE
@@ -94,12 +129,76 @@ def _body_role_from_expected_name(expected_name: str, *, context: str) -> str:
         return _BODY_ROLE_UNDERLAY_AIR
     raise ValueError(
         "unsupported exported body name; expected tx_pcb_l*/tx_copper_l*/tx_copper_stack/"
+        "tx_copper_wall/tx_pcb_wall/tx_stack_ferrite_u*/tx_stack_pet_psa_u*/tx_stack_air_u*/tx_pcb_coil/tx_copper_coil "
         "tx_underlay_ferrite_u*/tx_underlay_pet_psa_u*/tx_underlay_air_u* "
         "tx_wall_ferrite_u*/tx_wall_pet_psa_u*/tx_wall_air_u* "
         "or rx_pcb_l*/rx_copper_l*/rx_copper_stack/"
+        "rx_copper_wall/rx_pcb_wall/rx_stack_ferrite_u*/rx_stack_pet_psa_u*/rx_stack_air_u*/rx_pcb_coil/rx_copper_coil "
         "under_rx_ferrite_u*/under_rx_pet_psa_u*/under_rx_air_u* "
         f"(actual={expected_name!r}, context={context})"
     )
+
+
+def _resolved_pcb_names(imported_object_names: list[str]) -> list[str]:
+    return [
+        name
+        for name in imported_object_names
+        if name.startswith(("tx_pcb_l", "rx_pcb_l"))
+        or name in (_TX_PCB_WALL_NAME, _TX_PCB_COIL_NAME, _RX_PCB_WALL_NAME, _RX_PCB_COIL_NAME)
+    ]
+
+
+def _resolved_copper_names(imported_object_names: list[str]) -> list[str]:
+    return [
+        name
+        for name in imported_object_names
+        if name.startswith(("tx_copper_l", "rx_copper_l"))
+        or name
+        in (
+            "tx_copper_stack",
+            "rx_copper_stack",
+            _TX_COPPER_WALL_NAME,
+            _TX_COPPER_COIL_NAME,
+            _RX_COPPER_WALL_NAME,
+            _RX_COPPER_COIL_NAME,
+        )
+    ]
+
+
+def _require_exact_name_contract(
+    *,
+    expected_names: list[str],
+    imported_object_names: list[str],
+    context: str,
+    role_label: str,
+) -> None:
+    missing_required_names = [expected_name for expected_name in expected_names if expected_name not in imported_object_names]
+    if missing_required_names:
+        raise ValueError(
+            f"{role_label} type2 import is missing required modeled body names after scene import "
+            f"(missing={missing_required_names}, expected={expected_names}, actual={imported_object_names})"
+        )
+    unexpected_names = [name for name in imported_object_names if name not in expected_names]
+    if unexpected_names:
+        raise ValueError(
+            f"{role_label} type2 import requires exact exported body labels after scene import "
+            f"(unexpected={unexpected_names}, expected={expected_names})"
+        )
+
+
+def _require_matching_tri_layer_counts(
+    *,
+    ferrite_names: list[str],
+    pet_psa_names: list[str],
+    air_names: list[str],
+    role_label: str,
+    imported_object_names: list[str],
+) -> None:
+    if not (len(ferrite_names) == len(pet_psa_names) == len(air_names)):
+        raise ValueError(
+            f"{role_label} type2 import requires matching TX/RX ferrite/PET/air tri-layer body counts after exact-name matching "
+            f"(ferrite={ferrite_names}, pet_psa={pet_psa_names}, air={air_names}, actual={imported_object_names})"
+        )
 
 
 def resolve_modeled_body_names(
@@ -108,47 +207,59 @@ def resolve_modeled_body_names(
     imported_object_names: list[str],
     context: str,
 ) -> ModeledBodyNames:
+    role = require_non_empty_str(require_key(modeled_entry, key="role", context=context), context=f"{context}.role")
     expected_names = expected_exported_body_names(modeled_entry, context=context)
     expected_roles = [_body_role_from_expected_name(name, context=context) for name in expected_names]
-    if expected_roles.count(_BODY_ROLE_PCB) < 1 or expected_roles.count(_BODY_ROLE_COPPER) != 1:
-        raise ValueError(
-            "single-coil type2 import requires one or more PCB bodies and exactly one copper body "
-            f"(actual={expected_names})"
-        )
-    missing_required_names = [expected_name for expected_name in expected_names if expected_name not in imported_object_names]
-    if missing_required_names:
-        raise ValueError(
-            "single-coil type2 import is missing required modeled body names after scene import "
-            f"(missing={missing_required_names}, expected={expected_names}, actual={imported_object_names})"
-        )
-    unexpected_names = [name for name in imported_object_names if name not in expected_names]
-    if unexpected_names:
-        raise ValueError(
-            "single-coil type2 import requires exact exported body labels after scene import "
-            f"(unexpected={unexpected_names}, expected={expected_names})"
-        )
-    pcb_names = [name for name in imported_object_names if name.startswith(("tx_pcb_l", "rx_pcb_l"))]
-    copper_names = [
-        name
-        for name in imported_object_names
-        if name.startswith(("tx_copper_l", "rx_copper_l")) or name in ("tx_copper_stack", "rx_copper_stack")
-    ]
+    if role in _SINGLE_COIL_ROLES:
+        if expected_roles.count(_BODY_ROLE_PCB) < 1 or expected_roles.count(_BODY_ROLE_COPPER) != 1:
+            raise ValueError(
+                "single-coil type2 import requires one or more PCB bodies and exactly one copper body "
+                f"(actual={expected_names})"
+            )
+    elif role in _PLATE_STACK_ROLES:
+        if expected_roles.count(_BODY_ROLE_PCB) != 2 or expected_roles.count(_BODY_ROLE_COPPER) != 2:
+            raise ValueError(
+                "plate-stack type2 import requires exactly two PCB bodies and exactly two copper bodies "
+                f"(actual={expected_names})"
+            )
+    else:
+        raise ValueError(f"{context}.role is unsupported for modeled body partition (actual={role!r})")
+    _require_exact_name_contract(
+        expected_names=expected_names,
+        imported_object_names=imported_object_names,
+        context=context,
+        role_label="single-coil" if role in _SINGLE_COIL_ROLES else "plate-stack",
+    )
+    pcb_names = _resolved_pcb_names(imported_object_names)
+    copper_names = _resolved_copper_names(imported_object_names)
     underlay_ferrite_names = [name for name in imported_object_names if name.startswith(_UNDERLAY_FERRITE_NAME_PREFIXES)]
     underlay_pet_psa_names = [name for name in imported_object_names if name.startswith(_UNDERLAY_PET_PSA_NAME_PREFIXES)]
     underlay_air_names = [name for name in imported_object_names if name.startswith(_UNDERLAY_AIR_NAME_PREFIXES)]
-    if len(pcb_names) < 1 or len(copper_names) != 1:
-        raise ValueError(
-            "single-coil type2 import requires one or more PCB bodies and exactly one copper body after exact-name matching "
-            f"(actual={imported_object_names})"
+    if role in _SINGLE_COIL_ROLES:
+        if len(pcb_names) < 1 or len(copper_names) != 1:
+            raise ValueError(
+                "single-coil type2 import requires one or more PCB bodies and exactly one copper body after exact-name matching "
+                f"(actual={imported_object_names})"
+            )
+        _require_matching_tri_layer_counts(
+            ferrite_names=underlay_ferrite_names,
+            pet_psa_names=underlay_pet_psa_names,
+            air_names=underlay_air_names,
+            role_label="single-coil",
+            imported_object_names=imported_object_names,
         )
-    if not (
-        len(underlay_ferrite_names)
-        == len(underlay_pet_psa_names)
-        == len(underlay_air_names)
-    ):
-        raise ValueError(
-            "single-coil type2 import requires matching TX/RX underlay tri-layer body counts after exact-name matching "
-            f"(ferrite={underlay_ferrite_names}, pet_psa={underlay_pet_psa_names}, air={underlay_air_names})"
+    else:
+        if len(pcb_names) != 2 or len(copper_names) != 2:
+            raise ValueError(
+                "plate-stack type2 import requires exactly two PCB bodies and exactly two copper bodies after exact-name matching "
+                f"(actual={imported_object_names})"
+            )
+        _require_matching_tri_layer_counts(
+            ferrite_names=underlay_ferrite_names,
+            pet_psa_names=underlay_pet_psa_names,
+            air_names=underlay_air_names,
+            role_label="plate-stack",
+            imported_object_names=imported_object_names,
         )
     return {
         "pcb_names": pcb_names,

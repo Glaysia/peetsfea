@@ -29,23 +29,35 @@ _TX_UNDERLAY_AIR_NAME_PREFIX = "tx_underlay_air_u"
 _TX_WALL_FERRITE_NAME_PREFIX = "tx_wall_ferrite_u"
 _TX_WALL_PET_PSA_NAME_PREFIX = "tx_wall_pet_psa_u"
 _TX_WALL_AIR_NAME_PREFIX = "tx_wall_air_u"
+_TX_STACK_FERRITE_NAME_PREFIX = "tx_stack_ferrite_u"
+_TX_STACK_PET_PSA_NAME_PREFIX = "tx_stack_pet_psa_u"
+_TX_STACK_AIR_NAME_PREFIX = "tx_stack_air_u"
 _RX_UNDERLAY_FERRITE_NAME_PREFIX = "under_rx_ferrite_u"
 _RX_UNDERLAY_PET_PSA_NAME_PREFIX = "under_rx_pet_psa_u"
 _RX_UNDERLAY_AIR_NAME_PREFIX = "under_rx_air_u"
+_RX_STACK_FERRITE_NAME_PREFIX = "rx_stack_ferrite_u"
+_RX_STACK_PET_PSA_NAME_PREFIX = "rx_stack_pet_psa_u"
+_RX_STACK_AIR_NAME_PREFIX = "rx_stack_air_u"
 _UNDERLAY_FERRITE_NAME_PREFIXES = (
     _TX_UNDERLAY_FERRITE_NAME_PREFIX,
     _TX_WALL_FERRITE_NAME_PREFIX,
     _RX_UNDERLAY_FERRITE_NAME_PREFIX,
+    _TX_STACK_FERRITE_NAME_PREFIX,
+    _RX_STACK_FERRITE_NAME_PREFIX,
 )
 _UNDERLAY_PET_PSA_NAME_PREFIXES = (
     _TX_UNDERLAY_PET_PSA_NAME_PREFIX,
     _TX_WALL_PET_PSA_NAME_PREFIX,
     _RX_UNDERLAY_PET_PSA_NAME_PREFIX,
+    _TX_STACK_PET_PSA_NAME_PREFIX,
+    _RX_STACK_PET_PSA_NAME_PREFIX,
 )
 _UNDERLAY_AIR_NAME_PREFIXES = (
     _TX_UNDERLAY_AIR_NAME_PREFIX,
     _TX_WALL_AIR_NAME_PREFIX,
     _RX_UNDERLAY_AIR_NAME_PREFIX,
+    _TX_STACK_AIR_NAME_PREFIX,
+    _RX_STACK_AIR_NAME_PREFIX,
 )
 _TX_UNDERLAY_FERRITE_COLOR = (89, 94, 107)
 _TX_UNDERLAY_FERRITE_TRANSPARENCY = 0.0
@@ -616,6 +628,7 @@ def validate_modeled_bounds_against_owner(
     owner_member: dict[str, object],
     context: str,
 ) -> None:
+    role = require_non_empty_str(require_key(modeled_entry, key="role", context=context), context=f"{context}.role")
     owner_id = require_non_empty_str(
         require_key(modeled_entry, key="placement_owner_id", context=context),
         context=f"{context}.placement_owner_id",
@@ -632,6 +645,64 @@ def validate_modeled_bounds_against_owner(
             f"(modeled_size={(modeled_size_x, modeled_size_y, modeled_size_z)}, "
             f"owner_size={(owner_size_x, owner_size_y, owner_size_z)})"
         )
+    if role == "tx_plate_stack":
+        if owner_id != "tx_region":
+            raise ValueError(
+                f"{context}.placement_owner_id must be 'tx_region' for tx_plate_stack import-only geometry "
+                f"(actual={owner_id!r})"
+            )
+        if plane != "YZ":
+            raise ValueError(f"{context}.plane must be 'YZ' for tx_plate_stack import-only geometry (actual={plane!r})")
+        if abs(modeled_size_y - owner_size_y) > _PLACEMENT_TOLERANCE or abs(modeled_size_z - owner_size_z) > _PLACEMENT_TOLERANCE:
+            raise ValueError(
+                "tx_plate_stack must already occupy the full tx_region YZ footprint "
+                f"(modeled_size={(modeled_size_y, modeled_size_z)}, owner_size={(owner_size_y, owner_size_z)})"
+            )
+        if abs(modeled_min_x - owner_min_x) > _PLACEMENT_TOLERANCE:
+            raise ValueError(
+                "tx_plate_stack outer bounds min_x must already touch tx_region min_x "
+                f"(actual={modeled_min_x}, expected={owner_min_x})"
+            )
+        if abs(modeled_min_y - owner_min_y) > _PLACEMENT_TOLERANCE:
+            raise ValueError(
+                "tx_plate_stack outer bounds min_y must already touch tx_region min_y "
+                f"(actual={modeled_min_y}, expected={owner_min_y})"
+            )
+        if abs(modeled_min_z - owner_min_z) > _PLACEMENT_TOLERANCE:
+            raise ValueError(
+                "tx_plate_stack outer bounds min_z must already touch tx_region min_z "
+                f"(actual={modeled_min_z}, expected={owner_min_z})"
+            )
+        return
+    if role == "rx_plate_stack":
+        if owner_id != "rx_region_max":
+            raise ValueError(
+                f"{context}.placement_owner_id must be 'rx_region_max' for rx_plate_stack import-only geometry "
+                f"(actual={owner_id!r})"
+            )
+        if plane != "YZ":
+            raise ValueError(f"{context}.plane must be 'YZ' for rx_plate_stack import-only geometry (actual={plane!r})")
+        if abs(modeled_size_y - owner_size_y) > _PLACEMENT_TOLERANCE or abs(modeled_size_z - owner_size_z) > _PLACEMENT_TOLERANCE:
+            raise ValueError(
+                "rx_plate_stack must already occupy the full rx_region_max YZ footprint "
+                f"(modeled_size={(modeled_size_y, modeled_size_z)}, owner_size={(owner_size_y, owner_size_z)})"
+            )
+        if abs(modeled_min_x - owner_min_x) > _PLACEMENT_TOLERANCE:
+            raise ValueError(
+                "rx_plate_stack outer bounds min_x must already touch rx_region_max min_x "
+                f"(actual={modeled_min_x}, expected={owner_min_x})"
+            )
+        if abs(modeled_min_y - owner_min_y) > _PLACEMENT_TOLERANCE:
+            raise ValueError(
+                "rx_plate_stack outer bounds min_y must already touch rx_region_max min_y "
+                f"(actual={modeled_min_y}, expected={owner_min_y})"
+            )
+        if abs(modeled_min_z - owner_min_z) > _PLACEMENT_TOLERANCE:
+            raise ValueError(
+                "rx_plate_stack outer bounds min_z must already touch rx_region_max min_z "
+                f"(actual={modeled_min_z}, expected={owner_min_z})"
+            )
+        return
     if plane == "XY":
         target_min_x = owner_min_x if owner_id == "tx_region" else owner_min_x + (owner_size_x - modeled_size_x) / 2.0
         target_min_y = owner_min_y + (owner_size_y - modeled_size_y) / 2.0
@@ -708,15 +779,15 @@ def style_imported_modeled_objects(
             transparency=_TX_PCB_TRANSPARENCY,
             context=f"{context}.pcb[{pcb_name}]",
         )
-    copper_name = resolved_body_names["copper_names"][0]
-    _apply_object_material_and_visual_state(
-        modeler=modeler,
-        object_name=copper_name,
-        material_name=_TX_COPPER_MATERIAL,
-        color=_TX_COPPER_COLOR,
-        transparency=_TX_COPPER_TRANSPARENCY,
-        context=f"{context}.copper[{copper_name}]",
-    )
+    for copper_name in resolved_body_names["copper_names"]:
+        _apply_object_material_and_visual_state(
+            modeler=modeler,
+            object_name=copper_name,
+            material_name=_TX_COPPER_MATERIAL,
+            color=_TX_COPPER_COLOR,
+            transparency=_TX_COPPER_TRANSPARENCY,
+            context=f"{context}.copper[{copper_name}]",
+        )
     for ferrite_name in resolved_body_names["underlay_ferrite_names"]:
         _apply_object_material_and_visual_state(
             modeler=modeler,

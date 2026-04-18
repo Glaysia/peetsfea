@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -34,6 +35,22 @@ def _modeled_object() -> dict[str, object]:
     }
 
 
+def _plate_stack_modeled_object(
+    *,
+    object_id: str,
+    role: str,
+    plane: str,
+    placement_owner_id: str,
+) -> dict[str, object]:
+    modeled_object = _modeled_object()
+    modeled_object["object_id"] = object_id
+    modeled_object["role"] = role
+    modeled_object["plane"] = plane
+    modeled_object["placement_owner_id"] = placement_owner_id
+    modeled_object["terminal_metadata"] = {"kind": "none"}
+    return modeled_object
+
+
 def test_build_single_imported_modeled_object_entry_returns_validated_contract(tmp_path: Path) -> None:
     modeled_object = _modeled_object()
 
@@ -49,7 +66,8 @@ def test_build_single_imported_modeled_object_entry_returns_validated_contract(t
     assert result["material"] == "composite"
     assert result["model_state"] is True
     assert result["canonical_coordinates"]["frame_origin_xyz"] == (0.0, 0.0, 0.0)
-    assert result["terminal_metadata"]["direction"] == "cw"
+    terminal_metadata = cast(dict[str, object], result["terminal_metadata"])
+    assert terminal_metadata["direction"] == "cw"
     assert result["imported_object_names"] == ("body_1", "body_2")
 
 
@@ -70,19 +88,38 @@ def test_build_single_imported_modeled_object_entry_accepts_rx_single_coil_role(
     assert result["placement_owner_id"] == "rx_region_actual"
 
 
-def test_build_single_imported_modeled_object_entry_rejects_geometry_only_rx_plate_stack_role(
+@pytest.mark.parametrize(
+    ("object_id", "role", "plane", "placement_owner_id"),
+    [
+        ("tx_plate_stack", "tx_plate_stack", "YZ", "tx_region"),
+        ("rx_plate_stack", "rx_plate_stack", "YZ", "rx_region_max"),
+    ],
+)
+def test_build_single_imported_modeled_object_entry_accepts_geometry_only_plate_stack_roles(
     tmp_path: Path,
+    object_id: str,
+    role: str,
+    plane: str,
+    placement_owner_id: str,
 ) -> None:
-    modeled_object = _modeled_object()
-    modeled_object["object_id"] = "rx_plate_stack"
-    modeled_object["role"] = "rx_plate_stack"
-    modeled_object["placement_owner_id"] = "rx_region_max"
+    modeled_object = _plate_stack_modeled_object(
+        object_id=object_id,
+        role=role,
+        plane=plane,
+        placement_owner_id=placement_owner_id,
+    )
 
-    with pytest.raises(ValueError, match=r"geometry-export-only role"):
-        build_single_imported_modeled_object_entry(
-            modeled_object=modeled_object,
-            imported_object_names=("body_1",),
-        )
+    result = build_single_imported_modeled_object_entry(
+        modeled_object=modeled_object,
+        imported_object_names=("body_1", "body_2"),
+    )
+
+    assert result["object_id"] == object_id
+    assert result["role"] == role
+    assert result["plane"] == plane
+    assert result["placement_owner_id"] == placement_owner_id
+    assert result["terminal_metadata"] == {"kind": "none"}
+    assert result["imported_object_names"] == ("body_1", "body_2")
 
 
 def test_build_single_imported_modeled_object_entry_rejects_model_state_false(tmp_path: Path) -> None:
@@ -122,6 +159,37 @@ def test_build_single_imported_modeled_object_entry_rejects_missing_terminal_met
     del modeled_object["terminal_metadata"]
 
     with pytest.raises(AssertionError, match=r"modeled_object is missing required key 'terminal_metadata'"):
+        build_single_imported_modeled_object_entry(
+            modeled_object=modeled_object,
+            imported_object_names=("body_1",),
+        )
+
+
+def test_build_single_imported_modeled_object_entry_rejects_geometry_only_terminal_metadata_for_single_coil(
+    tmp_path: Path,
+) -> None:
+    modeled_object = _modeled_object()
+    modeled_object["terminal_metadata"] = {"kind": "none"}
+
+    with pytest.raises(ValueError, match=r"unsupported for coil import"):
+        build_single_imported_modeled_object_entry(
+            modeled_object=modeled_object,
+            imported_object_names=("body_1",),
+        )
+
+
+def test_build_single_imported_modeled_object_entry_rejects_plate_stack_with_non_sentinel_terminal_metadata(
+    tmp_path: Path,
+) -> None:
+    modeled_object = _plate_stack_modeled_object(
+        object_id="tx_plate_stack",
+        role="tx_plate_stack",
+        plane="XY",
+        placement_owner_id="tx_region",
+    )
+    modeled_object["terminal_metadata"] = {"kind": "port"}
+
+    with pytest.raises(ValueError, match=r"terminal_metadata\.kind must be 'none'"):
         build_single_imported_modeled_object_entry(
             modeled_object=modeled_object,
             imported_object_names=("body_1",),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import TypedDict, cast
@@ -39,6 +40,7 @@ DEFAULT_SOURCE_STEP_LEDGER_PATH = REPO_ROOT / "run" / "step" / "type2" / "type2_
 DEFAULT_IMPORTED_LEDGER_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_import" / "type2_imported_ledger.json"
 DEFAULT_OUTPUT_AEDT_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_setup_ready" / "type2_setup_ready.aedt"
 DEFAULT_DESIGN_NAME = "type2_step_setup_ready"
+_UNSUPPORTED_PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
 
 HfssFactory = Callable[[str], HfssSession]
 
@@ -81,6 +83,30 @@ def _assign_design_variables(
 ) -> None:
     for variable_name, expression in design_variables:
         hfss[variable_name] = expression
+
+
+def _reject_unsupported_plate_stack_roles_from_raw_step_ledger(*, step_ledger_path: Path) -> None:
+    if not step_ledger_path.is_file():
+        return
+    raw_payload = json.loads(step_ledger_path.read_text(encoding="utf-8"))
+    if not isinstance(raw_payload, dict):
+        return
+    if "modeled_objects" not in raw_payload:
+        return
+    raw_modeled_objects = raw_payload["modeled_objects"]
+    if not isinstance(raw_modeled_objects, list):
+        return
+    for index, raw_entry in enumerate(raw_modeled_objects):
+        if not isinstance(raw_entry, dict):
+            continue
+        if "role" not in raw_entry:
+            continue
+        raw_role = raw_entry["role"]
+        if isinstance(raw_role, str) and raw_role in _UNSUPPORTED_PLATE_STACK_ROLES:
+            raise ValueError(
+                "type2 setup-ready rejects plate-stack roles before HFSS work "
+                f"(context=modeled_objects[{index}].role, role={raw_role!r})"
+            )
 
 
 def _setup_ready_from_loaded_ledger(
@@ -164,6 +190,7 @@ def setup_type2_step_ledger(
     design_variables: tuple[DesignVariableEntry, ...] = (),
 ) -> Type2SetupReadyResult:
     checked_step_ledger_path = step_ledger_path.resolve(strict=False)
+    _reject_unsupported_plate_stack_roles_from_raw_step_ledger(step_ledger_path=checked_step_ledger_path)
     ledger = load_step_ledger(checked_step_ledger_path)
     output_aedt_path.parent.mkdir(parents=True, exist_ok=True)
     hfss = hfss_factory(design_name)
@@ -195,6 +222,7 @@ def setup_type2_step_ledger_into_hfss(
 ) -> Type2SetupReadyResult:
     checked_step_ledger_path = step_ledger_path.resolve(strict=False)
     try:
+        _reject_unsupported_plate_stack_roles_from_raw_step_ledger(step_ledger_path=checked_step_ledger_path)
         ledger = load_step_ledger(checked_step_ledger_path)
         output_aedt_path.parent.mkdir(parents=True, exist_ok=True)
         prepare_attached_import_design(hfss)

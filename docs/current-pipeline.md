@@ -1,7 +1,7 @@
 ---
 title: current pipeline
 created: 2026-04-17 @ 15:55
-updated: 2026-04-17 @ 15:55
+updated: 2026-04-19 @ 21:20
 tags:
   - type2
   - pipeline
@@ -14,6 +14,8 @@ tags:
 - The canonical sampled authoring input is `examples/type2_sweep.toml`.
 - `examples/type2_fixed.toml` remains the fixed single-design reference.
 - Type2 TOML owns both the STEP authoring registry and the EM report/output-variable contract.
+- The active TX/RX plate-stack runtime boundary is documented in
+  [`docs/type2-plate-stack.md`](type2-plate-stack.md).
 - The active runtime flow is:
   1. `entry/sample.py`
   2. `entry/build.py`
@@ -27,6 +29,9 @@ tags:
 - `peetsfea.type2_step_export` remains the STEP export helper.
 - `peetsfea.backend.pyaedt.type2_step_import_pipeline` remains the import-only helper.
 - `peetsfea.backend.pyaedt.type2_step_setup_ready` remains the setup-ready helper.
+- The current setup-ready/EM helper surface is still coil-only. `tx_plate_stack` and `rx_plate_stack`
+  are rejected before HFSS work starts, and direct mesh/port/EM helpers reject them explicitly.
+- `docs/tx-rect-void-step.md` is now the legacy coil-only geometry reference.
 - These helpers are lower-level runtime surfaces; the active operator flow is sampled TOML first, then optional sample-side STEP export or build-side missing STEP export, then AEDT build.
 
 ## Legacy Path

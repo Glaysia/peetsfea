@@ -7,12 +7,14 @@ from peetsfea.backend.pyaedt.type2_step_import_ledger import require_key, requir
 from peetsfea.backend.pyaedt.type2_step_import_core import Type2ImportedLedger
 from peetsfea.types.manifest import EmPorts, GroupEndpointEntry
 
+_UNSUPPORTED_DIRECT_EM_INPUT_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
+
 
 def _modeled_entry_by_role(imported_ledger: Type2ImportedLedger, *, role: str) -> dict[str, object]:
     matches = [
         entry
         for entry in imported_ledger["modeled_objects"]
-        if require_non_empty_str(require_key(entry, key="role", context="modeled_object"), context="modeled_object.role")
+        if _required_supported_role_for_direct_em_input(entry, context="modeled_object")
         == role
     ]
     if len(matches) != 1:
@@ -85,6 +87,11 @@ def _endpoint_entry(
     role: str,
     context: str,
 ) -> GroupEndpointEntry:
+    if role in _UNSUPPORTED_DIRECT_EM_INPUT_ROLES:
+        raise ValueError(
+            f"{context}.role {role!r} is unsupported in build_type2_em_input; "
+            "plate-stack roles must stop before direct mesh/port/EM helper execution"
+        )
     terminal_metadata = require_key(entry, key="terminal_metadata", context=context)
     assert isinstance(terminal_metadata, dict), f"{context}.terminal_metadata must be a table/object"
     start_label = require_non_empty_str(
@@ -164,6 +171,16 @@ def build_type2_em_input(
             "rx": list(ports["rx"]),
         },
     }
+
+
+def _required_supported_role_for_direct_em_input(entry: dict[str, object], *, context: str) -> str:
+    role = require_non_empty_str(require_key(entry, key="role", context=context), context=f"{context}.role")
+    if role in _UNSUPPORTED_DIRECT_EM_INPUT_ROLES:
+        raise ValueError(
+            f"{context}.role {role!r} is unsupported in build_type2_em_input; "
+            "plate-stack roles must stop before direct mesh/port/EM helper execution"
+        )
+    return role
 
 
 __all__ = ["build_type2_em_input"]

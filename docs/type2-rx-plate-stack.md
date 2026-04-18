@@ -1,7 +1,7 @@
 ---
 title: type2-rx-plate-stack
 created: 2026-04-19 @ 18:05
-updated: 2026-04-19 @ 18:05
+updated: 2026-04-19 @ 21:20
 tags:
   - type2
   - rx
@@ -12,8 +12,16 @@ tags:
 # Type2 RX Plate Stack
 
 이 문서는 active `examples/type2_fixed.toml`, `examples/type2_sweep.toml`의 RX modeled object
-`role = "rx_plate_stack"` 계약을 설명한다. 이 역할은 geometry/export-only이며, 현재 phase에서는
-HFSS import/setup-ready/EM path를 지원하지 않는다.
+`role = "rx_plate_stack"` 계약을 설명한다. shared TX/RX plate-stack runtime boundary는
+[`docs/type2-plate-stack.md`](type2-plate-stack.md)에 정리되어 있다. 이 역할은
+geometry/export-only이며, 현재 phase에서는 HFSS import/setup-ready/EM path를 지원하지 않는다.
+
+## Runtime Boundary
+- `type2_step_setup_ready`는 `rx_plate_stack`를 HFSS work 시작 전에 reject한다.
+- direct helper `assign_post_import_mesh`, `assign_type2_lumped_ports`, `build_type2_em_input`도
+  `rx_plate_stack`를 명시적으로 reject한다.
+- `terminal_metadata = {"kind": "none"}` sentinel은 이 runtime boundary와 맞물린 계약이다.
+  current phase에서는 port-sheet reconstruction metadata를 만들지 않는다.
 
 ## 목적
 - `rx_region_max` full `YZ` footprint를 그대로 쓰는 넓은 RX copper/PCB stack을 만든다.

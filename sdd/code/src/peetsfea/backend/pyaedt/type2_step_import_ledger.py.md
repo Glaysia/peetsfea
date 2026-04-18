@@ -1,10 +1,10 @@
 ---
 title: type2_step_import_ledger.py
-created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 18:05
+created: 2026-04-19 @ 17:35
+updated: 2026-04-19 @ 21:45
 tags:
   - hfss-import
-  - aedt
+  - import-only
 ---
 
 # type2_step_import_ledger.py
@@ -12,50 +12,34 @@ tags:
 ## Source
 - Path: `src/peetsfea/backend/pyaedt/type2_step_import_ledger.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py.md`
-- Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
-- Parent note: [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py]]
+- Status: active
+- Related feature plan: [[sdd/plans/0.2.25-type2-tx-rx-shared-plate-stack-import-only]]
 
 ## 역할
-- type2 STEP ledger file load + required-field validation을 담당한다.
-- non-model/member ownership lookup helper와 canonical bounds reader를 제공한다.
-- modeled/non-model id uniqueness, placement owner uniqueness preflight를 fail-fast로 고정한다.
+- exported step ledger JSON을 import-only runtime이 신뢰할 수 있는 validated shape로 정규화한다.
 
 ## 입력 / 출력
-- 입력: step ledger path
-- 출력:
-  - `ValidatedStepLedger`
-  - owner/member lookup helpers
-  - outer-bounds reader helpers
-  - validated AEDT object name reader
+- 입력: `type2_step_ledger.json`
+- 출력: validated step ledger object, validated modeled/non-model entries
 
 ## Canonical state
-- canonical import metadata source는 export ledger다.
-- `scene_step_path`는 파일 존재 검증을 통과한 절대 경로로 canonicalized 된다.
-- canonical docs 기준 retained boundary-policy field는 top-level `em_policy`다.
-- canonical docs 기준 retained report contract는 top-level `outputs`다.
-- 현재 importer가 `import_time_policy`를 기대하는 구현은 known drift이며, 문서 계약은 그 이름으로 옮기지 않는다.
+- import-only path는 `tx_plate_stack`, `rx_plate_stack`, legacy single-coil roles를 모두 읽을 수 있다.
+- geometry-only plate roles terminal metadata는 `{"kind": "none"}` sentinel로 유지된다.
+- setup-ready/mesh/port/EM rejection은 downstream stage의 책임이며, 여기서는 import-only acceptance를 우선한다.
 
 ## Invariants / fail-fast
-- `scene_step_path` must exist.
-- canonical required-key contract는 `scene_step_path`, top-level `em_policy`, top-level `outputs`, non-empty modeled/non-model sections를 포함한다.
-- modeled/non-model sections must be non-empty and satisfy required-key contract.
-- geometry-export-only modeled role(`rx_plate_stack`)는 import/setup-ready/EM runtime 전에 이 layer에서 즉시 거절해야 한다.
-- modeled `placement_owner_id`는 non-model member object에서 exact-one로 resolve되어야 한다.
-- duplicate object id와 duplicate member id는 hard failure다.
+- required ledger keys와 retained `outputs`는 exact contract를 따라야 한다.
+- modeled expected body names/count mismatch는 hard failure다.
+- plane, owner id, source metadata path는 non-empty validated state여야 한다.
 
-## 직접 의존
-- `peetsfea.aedt.failfast.validate_aedt_name`
-- `peetsfea.aedt.protocols` 없음; pure ledger validation layer로 유지한다.
-
-## 이 파일을 쓰는 곳
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_partition.py]]
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_style.py]]
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py]]
+## Collaborators
+- [[sdd/code/src/peetsfea/type2_step_ledger.py]]
+- [[sdd/code/src/peetsfea/backend/pyaedt/type2_modeled_import_adapter.py]]
+- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py]]
 
 ## 관련 테스트
 - [[sdd/code/tests/backend_em/test_type2_step_import_pipeline.py]]
+- [[sdd/code/tests/backend_em/test_type2_step_setup_ready.py]]
 
 ## 변경 시 주의점
-- AEDT runtime ops를 이 파일에 넣지 않는다.
-- retained policy key를 문서에서 `import_time_policy`로 재정의하지 않는다. current runtime mismatch는 follow-up code change로만 정리한다.
-- adapter merge logic를 ledger validation과 섞지 않는다.
+- import-only acceptance와 setup-ready rejection 책임을 한 함수 안에 다시 섞지 않는다.

@@ -1,24 +1,30 @@
 ---
 title: tx-rect-void-step
 created: 2026-04-17 @ 04:20
-updated: 2026-04-18 @ 23:40
+updated: 2026-04-19 @ 21:20
 tags:
   - type2
   - tx-rect-void
   - step-export
+  - legacy
 ---
 
-# Rect/Void Type2 STEP 스펙
+# Legacy Rect/Void Type2 STEP 스펙
 
-이 문서는 `tx_rect_void` reusable geometry engine으로 만드는 modeled object 계약을 설명한다.
-active example TOML에서는 TX `role = "tx_single_coil"`이 여기에 해당하고, active RX는 더 이상
-이 문서의 대상이 아니다. active RX `role = "rx_plate_stack"` 계약은
-[`docs/type2-rx-plate-stack.md`](type2-rx-plate-stack.md)를 따른다.
+이 문서는 legacy coil-only `tx_rect_void` reusable geometry engine으로 만드는 modeled object
+계약을 설명한다. active TX/RX plate-stack direction과 current runtime boundary는
+[`docs/type2-plate-stack.md`](type2-plate-stack.md)를 따른다. 이 문서는 `tx_single_coil`과
+legacy `rx_single_coil` reference로만 유지된다.
+
+## Status
+- active TX/RX plate-stack contract 문서는 [`docs/type2-plate-stack.md`](type2-plate-stack.md)다.
+- active RX geometry detail은 [`docs/type2-rx-plate-stack.md`](type2-rx-plate-stack.md)다.
+- 이 문서의 `tx_rect_void` / legacy `rx_single_coil` path는 coil-only legacy reference다.
 
 ## 목적
-- TX와 legacy RX single-coil 직사각형 스파이럴 footprint를 생성한다.
+- legacy TX와 legacy RX single-coil 직사각형 스파이럴 footprint를 생성한다.
 - 코일은 외곽 직사각형과 이동 가능한 void keepout 직사각형으로 표현한다.
-- active TX path는 type1 routing contract를 재사용하는 multilayer parallel-bus single-coil을 지원한다. legacy `rx_single_coil` path는 single-layer만 지원한다.
+- legacy coil-runtime TX path는 type1 routing contract를 재사용하는 multilayer parallel-bus single-coil을 지원한다. legacy `rx_single_coil` path는 single-layer만 지원한다.
 - type2 scene export는 port sheet를 STEP body로 내보내지 않고 metadata로만 유지하며, TX에서는 optional explicit underlay tri-layer bodies를 scene layer에서 추가할 수 있다.
 - canonical corner geometry는 square corner가 아니라 always-on `45-degree beveled blunt corner`다.
 - Type1에서 해결한 same-corner terminal 문제를 그대로 따른다. `D_ccw_to_d`
@@ -116,7 +122,7 @@ active example TOML에서는 TX `role = "tx_single_coil"`이 여기에 해당하
 - `PET_PSA`는 air-like dielectric이며 explicit documented difference는 `permittivity = 2.8`이다.
 
 ## 출력
-- active sampled/build flow는 `entry/sample.py`가
+- legacy coil sampled/build flow는 `entry/sample.py`가
   항상 `run/sampled/type2/<design_id>/sampled.toml`을 만들고,
   `MAKE_STEP_ON_SAMPLE = true`일 때만 `type2_scene.step`,
   `type2_step_ledger.json`도 함께 만든다.
@@ -132,10 +138,10 @@ active example TOML에서는 TX `role = "tx_single_coil"`이 여기에 해당하
 - canonical bounds는 input routing envelope가 아니라 실제 exported PCB+copper union
   bounds를 기록한다. 하단 Z는 PCB 바닥이 아니라 terminal stub 끝점까지 내려간다.
 - expected body contract:
-  - single-layer TX without underlay: `["tx_pcb_l0", "tx_copper_l0"]`
-  - multilayer TX without underlay: `["tx_pcb_l0", ..., "tx_pcb_l{n}", "tx_copper_stack"]`
-  - TX with floor underlay only: append `tx_underlay_ferrite_u0`, `tx_underlay_pet_psa_u0`, `tx_underlay_air_u0` after the base TX body set
-  - TX with floor underlay + wall stack: append all `tx_underlay_*` first, then append `tx_wall_ferrite_u0`, `tx_wall_pet_psa_u0`, `tx_wall_air_u0`
+  - legacy single-layer `tx_single_coil` without underlay: `["tx_pcb_l0", "tx_copper_l0"]`
+  - legacy multilayer `tx_single_coil` without underlay: `["tx_pcb_l0", ..., "tx_pcb_l{n}", "tx_copper_stack"]`
+  - legacy `tx_single_coil` with floor underlay only: append `tx_underlay_ferrite_u0`, `tx_underlay_pet_psa_u0`, `tx_underlay_air_u0` after the base TX body set
+  - legacy `tx_single_coil` with floor underlay + wall stack: append all `tx_underlay_*` first, then append `tx_wall_ferrite_u0`, `tx_wall_pet_psa_u0`, `tx_wall_air_u0`
   - legacy `rx_single_coil`은 current milestone에서 `["rx_pcb_l0", "rx_copper_l0"]`
 - `boxes`는 export 전 internal primitive decomposition/debug payload다. STEP
   copper body는 planar trace와 terminal stub를 함께 fuse한 `tx_copper_l0` 또는 multilayer TX의 경우 `tx_copper_stack`이어야 한다.
@@ -166,7 +172,7 @@ active example TOML에서는 TX `role = "tx_single_coil"`이 여기에 해당하
 - type2 HFSS import는 modeled object를 다시 `move()`하지 않는다. export ledger가
   이미 최종 배치를 소유하고, import는 그 계약만 검증한다.
 - TX underlay bodies는 explicit STEP imported solids다. port sheet는 반대로 metadata-driven HFSS reconstruction surface다.
-- mesh ownership은 conductor-only다. `tx_copper_l0` / `tx_copper_stack`, legacy `rx_copper_l0` 같은 conductor bodies만 mesh 대상이고 underlay slabs는 대상이 아니다. active `rx_plate_stack`는 current phase에서 mesh/import 대상이 아니다.
+- mesh ownership은 conductor-only다. legacy `tx_copper_l0` / `tx_copper_stack`, legacy `rx_copper_l0` 같은 conductor bodies만 mesh 대상이고 underlay slabs는 대상이 아니다. plate-stack roles는 current phase에서 mesh/import/setup-ready/EM 대상이 아니다.
 
 ## 범위 제외
 - HFSS ports, sources, solving.

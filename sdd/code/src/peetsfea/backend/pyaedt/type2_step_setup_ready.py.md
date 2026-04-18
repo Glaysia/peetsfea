@@ -1,7 +1,7 @@
 ---
 title: type2_step_setup_ready.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-19 @ 21:47
 tags:
   - hfss-import
   - em
@@ -12,62 +12,36 @@ tags:
 ## Source
 - Path: `src/peetsfea/backend/pyaedt/type2_step_setup_ready.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py.md`
-- Related architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
-- Collaborators:
-  - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_runtime_common.py]]
-  - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py]]
-  - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_post_import_mesh.py]]
-  - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_em_input.py]]
-  - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_port_assignment.py]]
+- Status: active
+- Related feature plan: [[sdd/plans/0.2.25-type2-tx-rx-shared-plate-stack-import-only]]
 
 ## 역할
-- type2 full setup-ready runtime facade다.
-- import-only handoff를 이어받아 post-import mesh, radiation boundary, explicit lumped ports, source phase, analysis/report templates, validation, final save를 orchestrate한다.
+- type2 setup-ready facade다.
+- import-only handoff 이후 mesh, boundary, port, source, analysis, validation, save를 orchestrate한다.
 
 ## 입력 / 출력
-- 입력:
-  - type2 STEP ledger path
-  - output `.aedt` path
-  - imported ledger path
-  - optional caller-provided design variable tuple
-  - optional attached `HfssSession`
-- 출력:
-  - in-memory `Type2SetupReadyResult`
+- 입력: step ledger path, output/imported-ledger paths, optional design variables, optional attached HFSS session
+- 출력: `Type2SetupReadyResult`
 
 ## Canonical state
-- explicit ports, shared EM setup call order, final save/release의 canonical owner다.
-- import handoff가 남긴 imported ledger JSON을 그대로 write하고, setup-ready summary는 return value와 final `.aedt`에 남긴다.
-- setup-ready report/output-variable source of truth는 source TOML 재로드가 아니라 retained step ledger top-level `outputs`다.
-- sampled build caller가 전달한 AEDT design variable 적용 시점도 이 runtime이 소유한다.
+- active plate-stack example에서는 이 runtime이 unsupported preflight gate owner다.
+- preflight는 step ledger load 직후, HFSS launch 전에 수행된다.
+- geometry-view import-only는 sibling import pipeline의 책임이다.
 
 ## Invariants / fail-fast
-- import-only ledger 이후 post-import `mesh` -> `boundary` -> lumped ports -> sources -> analysis/report -> repo validation -> `ValidateDesign()` -> save 순서를 유지한다.
-- report generation은 hardcoded default fallback 없이 retained ledger `outputs`를 그대로 사용한다.
-- import core는 scene import까지만 소유하고, setup-ready가 mesh와 radiation boundary의 canonical owner다.
-- current baseline은 RX `rx_copper_l0`를 고정으로 유지하면서, TX mesh target으로 `tx_copper_l0` 또는 `tx_copper_stack`를 지원한다.
-- role-aware underlay exact-name bodies가 imported participant가 되더라도 setup-ready mesh target은 conductor-only를 유지한다.
-- caller-provided design variables는 import/build/save 전에 그대로 `hfss[...] = expression`으로 적용한다.
+- `tx_plate_stack` 또는 `rx_plate_stack`가 있으면 즉시 실패한다.
+- unsupported message는 mesh/port/EM helper와 의미를 맞춘다.
+- import-only acceptance를 이 facade 안에서 암묵적으로 우회하지 않는다.
 
-## 직접 의존
-- `peetsfea.backend.pyaedt.em_pipeline.contracts`
-- `peetsfea.backend.pyaedt.em_pipeline.steps.analysis`
-- `peetsfea.backend.pyaedt.em_pipeline.steps.sources`
-- `peetsfea.backend.pyaedt.em_pipeline.validate`
+## Collaborators
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_post_import_mesh.py]]
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_em_input.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_port_assignment.py]]
-
-## 이 파일을 쓰는 곳
-- [[sdd/code/entry/setup_type2_step.py]]
-- [[sdd/code/entry/build.py]]
+- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_em_input.py]]
 
 ## 관련 테스트
 - [[sdd/code/tests/backend_em/test_type2_step_setup_ready.py]]
-- [[sdd/code/tests/type2/test_setup_type2_step_entry.py]]
+- [[sdd/code/tests/type2/test_build_type2_entry.py]]
 
 ## 변경 시 주의점
-- `run_em_pipeline()`를 억지로 재사용해 boundary/mesh 중복 생성 경로를 만들지 않는다.
-- import-only ledger를 setup-ready summary persisted owner로 승격하지 않는다.
-- mesh/boundary owner를 다시 import 단계로 밀어 넣지 않는다.
-- sampled build caller의 design variable gate를 runtime 밖의 ad hoc HFSS mutation으로 흩뜨리지 않는다.
+- plate-role unsupported preflight를 import-only ledger loader 쪽으로 다시 밀어 넣지 않는다.
