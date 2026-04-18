@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import TypedDict
 
+from peetsfea.backend.pyaedt.type2_step_import_core import Type2ImportedLedger
+from peetsfea.backend.pyaedt.type2_step_import_pipeline import import_type2_step_ledger
 from peetsfea.backend.pyaedt.type2_step_setup_ready import Type2SetupReadyResult, setup_type2_step_ledger
 from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_sampled import PreparedType2Build, prepare_type2_build
@@ -52,6 +54,13 @@ def _assert_setup_ready_supported(prepared_build: PreparedType2Build) -> None:
             "type2 build/setup-ready requires exactly one tx_single_coil and one rx_single_coil modeled role "
             f"(actual={list(prepared_build.modeled_roles)})"
         )
+
+
+def _use_import_only_build(prepared_build: PreparedType2Build, *, runner: _Runner) -> bool:
+    if runner is not setup_type2_step_ledger:
+        return False
+    unsupported_roles = [role for role in prepared_build.modeled_roles if role not in _SETUP_READY_SUPPORTED_MODELED_ROLES]
+    return len(unsupported_roles) != 0
 
 
 def export_prepared_type2_design(
@@ -139,15 +148,24 @@ def build_prepared_type2_design(
     exporter: _Exporter = export_type2_step_artifacts,
     runner: _Runner = setup_type2_step_ledger,
 ) -> Type2BuiltArtifact:
-    _assert_setup_ready_supported(prepared_build)
     ensure_prepared_type2_step_ledger(prepared_build, exporter=exporter)
-    result = runner(
-        step_ledger_path=prepared_build.step_ledger_path,
-        output_aedt_path=prepared_build.aedt_path,
-        imported_ledger_path=prepared_build.imported_ledger_path,
-        design_name=prepared_build.design_id,
-        design_variables=prepared_build.design_variables,
-    )
+    result: Type2SetupReadyResult | Type2ImportedLedger
+    if _use_import_only_build(prepared_build, runner=runner):
+        result = import_type2_step_ledger(
+            step_ledger_path=prepared_build.step_ledger_path,
+            output_aedt_path=prepared_build.aedt_path,
+            imported_ledger_path=prepared_build.imported_ledger_path,
+            design_name=prepared_build.design_id,
+        )
+    else:
+        _assert_setup_ready_supported(prepared_build)
+        result = runner(
+            step_ledger_path=prepared_build.step_ledger_path,
+            output_aedt_path=prepared_build.aedt_path,
+            imported_ledger_path=prepared_build.imported_ledger_path,
+            design_name=prepared_build.design_id,
+            design_variables=prepared_build.design_variables,
+        )
     return {
         "design_id": prepared_build.design_id,
         "sampled_toml_path": str(prepared_build.sampled_toml_path),
@@ -173,8 +191,6 @@ def build_prepared_type2_designs(
         raise ValueError("jobs must be >= 1")
     if len(prepared_builds) == 0:
         return []
-    for prepared_build in prepared_builds:
-        _assert_setup_ready_supported(prepared_build)
     if jobs == 1 or runner is not setup_type2_step_ledger or exporter is not export_type2_step_artifacts:
         return [build_prepared_type2_design(prepared_build, exporter=exporter, runner=runner) for prepared_build in prepared_builds]
     with ProcessPoolExecutor(max_workers=jobs) as executor:

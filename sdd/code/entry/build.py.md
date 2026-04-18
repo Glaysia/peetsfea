@@ -17,7 +17,7 @@ tags:
 
 ## 역할
 - manifest 기반 active type2 build entrypoint다.
-- sampled outputs를 setup-ready runner로 전달하는 thin entry layer를 유지한다.
+- sampled outputs를 role-aware runtime selection으로 넘겨 `.aedt` generation을 수행한다.
 
 ## 입력 / 출력
 - 입력: manifest path
@@ -26,12 +26,13 @@ tags:
 ## Canonical state
 - default manifest path는 `entry.sample.MANIFEST_PATH`다.
 - `config.aedt_builder_n`이 build parallelism source of truth다.
-- active plate-stack manifest를 build로 태우면 runner의 explicit unsupported error가 surface로 전파된다.
+- active plate-stack manifest는 default build path에서 import-only AEDT generation으로 간다.
+- coil pair manifest는 기존 setup-ready 경로를 유지한다.
 
 ## Invariants / fail-fast
-- build entry는 import-only로 자동 갈라지지 않는다.
 - missing-only STEP policy를 유지한다.
 - existing ledger corruption은 rebuild fallback 없이 실패한다.
+- custom runner를 caller가 명시하면 build entry는 그 runner override를 그대로 존중한다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_runtime.py]]
@@ -43,4 +44,4 @@ tags:
 - [[sdd/code/tests/type2/test_build_type2_entry.py]]
 
 ## 변경 시 주의점
-- active plate-stack geometry-view path를 여기의 EM build semantics 안에 숨기지 않는다.
+- active plate-stack import-only build selection과 direct setup-ready override semantics를 혼동하지 않는다.

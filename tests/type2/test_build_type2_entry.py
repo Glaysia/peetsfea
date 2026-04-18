@@ -3,12 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 import entry.build as build_entry
+import peetsfea.type2_runtime as type2_runtime
 import peetsfea.type2_sampled as type2_sampled
 from entry.build import build_type2
+from peetsfea.backend.pyaedt.type2_step_import_core import Type2ImportedLedger
 from entry.sample import sample_type2
 from peetsfea.backend.pyaedt.type2_step_setup_ready import Type2SetupReadyResult
 from peetsfea.type2_sampled import PreparedType2Build
@@ -212,7 +215,7 @@ def test_build_type2_reads_aedt_builder_n_from_manifest(
     ]
 
 
-def test_build_type2_rejects_plate_stack_manifest_before_export_or_runner(
+def test_build_type2_uses_import_only_runner_for_plate_stack_manifest(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -232,23 +235,80 @@ def test_build_type2_rejects_plate_stack_manifest_before_export_or_runner(
         make_step_on_sample=False,
     )
     exporter_calls: list[dict[str, object]] = []
-    runner_calls: list[dict[str, object]] = []
+    import_runner_calls: list[dict[str, object]] = []
 
     def _build_exporter(**kwargs: object) -> object:
         exporter_calls.append(dict(kwargs))
-        raise AssertionError("build exporter must not be called for setup-ready-unsupported plate-stack manifests")
+        output_dir = cast(Path, kwargs["output_dir"])
+        ledger_path = cast(Path, kwargs["ledger_path"])
+        scene_step_path = output_dir / "type2_scene.step"
+        scene_step_path.write_text("STEP", encoding="utf-8")
+        ledger_path.write_text(json.dumps({"scene_step_path": str(scene_step_path)}, indent=2), encoding="utf-8")
+        return {"ok": True}
+
+    def _import_runner(**kwargs: object) -> Type2ImportedLedger:
+        import_runner_calls.append(dict(kwargs))
+        step_ledger_path = cast(Path, kwargs["step_ledger_path"])
+        output_aedt_path = cast(Path, kwargs["output_aedt_path"])
+        imported_ledger_path = cast(Path, kwargs["imported_ledger_path"])
+        return {
+            "source_toml_path": str(step_ledger_path.with_name("sampled.toml")),
+            "source_step_ledger_path": str(step_ledger_path),
+            "scene_step_path": str(step_ledger_path.with_name("type2_scene.step")),
+            "seed": 8,
+            "aedt_path": str(output_aedt_path),
+            "imported_ledger_path": str(imported_ledger_path),
+            "non_model_objects": [],
+            "modeled_objects": [],
+        }
+
+    monkeypatch.setattr(type2_runtime, "import_type2_step_ledger", _import_runner)
+    results = build_type2(manifest_path=manifest_path, exporter=_build_exporter)
+
+    assert len(results) == 1
+    assert exporter_calls != []
+    assert len(import_runner_calls) == 1
+    assert results[0]["aedt_path"] == str(cast(Path, import_runner_calls[0]["output_aedt_path"]))
+    assert results[0]["imported_ledger_path"] == str(cast(Path, import_runner_calls[0]["imported_ledger_path"]))
+    assert results[0]["source_step_ledger_path"] == str(cast(Path, import_runner_calls[0]["step_ledger_path"]))
+
+
+def test_build_type2_rejects_plate_stack_manifest_when_forced_to_setup_ready_runner(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _patch_plate_stack_spec_loader(monkeypatch)
+    source_toml_path = _write_source_type2_toml(tmp_path)
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+
+    sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=8,
+        seed_n=1,
+        sampler_n=1,
+        aedt_builder_n=2,
+        make_step_on_sample=False,
+    )
+
+    def _build_exporter(**kwargs: object) -> object:
+        output_dir_arg = cast(Path, kwargs["output_dir"])
+        ledger_path = cast(Path, kwargs["ledger_path"])
+        scene_step_path = output_dir_arg / "type2_scene.step"
+        scene_step_path.write_text("STEP", encoding="utf-8")
+        ledger_path.write_text(json.dumps({"scene_step_path": str(scene_step_path)}, indent=2), encoding="utf-8")
+        return {"ok": True}
 
     def _runner(**kwargs: object) -> Type2SetupReadyResult:
-        runner_calls.append(dict(kwargs))
-        raise AssertionError("runner must not be called for setup-ready-unsupported plate-stack manifests")
+        raise AssertionError("forced setup-ready runner must not be called for plate-stack manifests")
 
     with pytest.raises(
         ValueError,
         match=r"type2 build/setup-ready is unsupported for modeled roles \['tx_plate_stack', 'rx_plate_stack'\]",
     ):
         build_type2(manifest_path=manifest_path, exporter=_build_exporter, runner=_runner)
-    assert exporter_calls == []
-    assert runner_calls == []
 
 
 def test_build_type2_rejects_list_manifest_payload(tmp_path: Path) -> None:

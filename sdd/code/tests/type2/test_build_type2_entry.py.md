@@ -19,9 +19,9 @@ tags:
 
 ## Canonical coverage
 - active plate-stack manifest can still export missing STEP
-- active plate-stack build path does not auto-switch to import-only
-- setup-ready runner unsupported error surfaces clearly
+- default build path auto-switches plate-stack manifests to import-only AEDT generation
+- forced setup-ready runner still rejects unsupported plate roles clearly
 - design variable passing and manifest parallelism contracts remain intact
 
 ## 변경 시 주의점
-- geometry-view import-only policy를 build success expectation으로 바꾸지 않는다.
+- default build auto-switch와 explicit runner override rejection을 같은 behavior로 뭉개지 않는다.

@@ -23,12 +23,14 @@ tags:
   4. optional STEP inspection via `notebooks/view_step_files.ipynb` using `VIEW_INDEX = -1` for the fixed example or manifest entry order for sampled outputs
 - `entry/sample.py` always writes `sampled.toml` and may also write STEP artifacts depending on `MAKE_STEP_ON_SAMPLE`.
 - `entry/build.py` always owns `.aedt` generation and will reuse existing STEP artifacts or generate missing STEP per entry before AEDT build.
+- For active plate-stack manifests, `entry/build.py` routes AEDT generation through the import-only helper rather than the setup-ready helper.
 - If `MAKE_STEP_ON_SAMPLE = False`, sampled STEP inspection can fail until `entry/build.py` has processed that entry.
 
 ## Internal Helpers
 - `peetsfea.type2_step_export` remains the STEP export helper.
 - `peetsfea.backend.pyaedt.type2_step_import_pipeline` remains the import-only helper.
 - `peetsfea.backend.pyaedt.type2_step_setup_ready` remains the setup-ready helper.
+- `entry/build.py` chooses between setup-ready and import-only based on modeled roles: coil pairs stay on setup-ready, plate-stack manifests use import-only.
 - The current setup-ready/EM helper surface is still coil-only. `tx_plate_stack` and `rx_plate_stack`
   are rejected before HFSS work starts, and direct mesh/port/EM helpers reject them explicitly.
 - `docs/tx-rect-void-step.md` is now the legacy coil-only geometry reference.

@@ -23,14 +23,14 @@ tags:
 - 출력: stepped artifacts, built artifacts
 
 ## Canonical state
-- default build runner는 setup-ready facade다.
-- active plate-stack example에서는 setup-ready runner가 explicit unsupported error를 내는 것이 canonical behavior다.
-- import-only geometry viewing은 separate import entry/pipeline의 책임이다.
+- default build runner selection은 role-aware다.
+- coil pair manifest는 setup-ready facade를 쓴다.
+- active plate-stack manifest는 import-only facade로 자동 전환되어 `.aedt` geometry-view artifact를 만든다.
 
 ## Invariants / fail-fast
-- build path는 import-only로 자동 우회하지 않는다.
 - existing broken ledger는 rebuild fallback 없이 실패한다.
-- sampled metadata-derived design variables만 runner에 전달한다.
+- sampled metadata-derived design variables는 setup-ready path에만 전달한다.
+- custom runner를 강제로 주면 그 runner contract를 유지하고, unsupported plate roles는 여전히 fail-fast 한다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_sampled.py]]
@@ -42,5 +42,5 @@ tags:
 - [[sdd/code/tests/type2/test_build_type2_entry.py]]
 
 ## 변경 시 주의점
-- active plate-stack runtime policy를 hidden fallback으로 가리지 않는다.
-- geometry-view import-only path와 EM build path를 같은 entrypoint 안에서 섞지 않는다.
+- role-aware runner selection과 direct import entry semantics를 서로 엇갈리게 만들지 않는다.
+- setup-ready path에 import-only parameter shape를 억지로 밀어 넣지 않는다.
