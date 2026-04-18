@@ -1,7 +1,7 @@
 ---
 title: type2_step_port_assignment.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-19 @ 21:47
+updated: 2026-04-20 @ 02:16
 tags:
   - hfss-import
   - port
@@ -13,21 +13,25 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_port_assignment.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_port_assignment.py.md`
 - Status: active
-- Related feature plan: [[sdd/plans/0.2.25-type2-tx-rx-shared-plate-stack-import-only]]
+- Related feature plan: [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]]
 
 ## 역할
-- setup-ready coil imported objects에 lumped port를 할당한다.
+- setup/runtime imported objects에 explicit lumped port를 할당한다.
 
 ## 입력 / 출력
 - 입력: HFSS session, modeler, imported ledger
 - 출력: `EmPorts`
 
 ## Canonical state
-- 현재 helper는 `tx_single_coil` / `rx_single_coil` exact pair 전용이다.
-- active plate roles는 port-sheet를 갖지 않으므로 direct helper call에서도 unsupported다.
+- helper는 reconstructed port-sheet ownership을 사용한다.
+  - coil: `tx_port_sheet` / `rx_port_sheet`
+  - plate-stack: `tx_plate_port_sheet` / `rx_plate_port_sheet`
+- active plate roles도 direct port assignment를 허용하지만, 이것이 EM input ownership까지 열어 주지는 않는다.
 
 ## Invariants / fail-fast
-- `terminal_metadata.kind == "none"` role에 port-sheet vertices를 요구하면 안 된다.
+- direct assignment preflight requires exactly two modeled entries and one exact tx/rx family pair.
+- `terminal_metadata.kind == "stub_port"` roles는 metadata vertices와 reconstructed sheet가 모두 있어야 한다.
+- numeric boundary/excitation naming은 계속 `1` / `2`, `1_T1` / `2_T1` 고정이다.
 - plate roles를 coil endpoint fallback으로 취급하면 안 된다.
 
 ## Collaborators
@@ -38,5 +42,4 @@ tags:
 - [[sdd/code/tests/backend_em/test_type2_step_setup_ready.py]]
 
 ## 변경 시 주의점
-- active plate roles에 synthetic sheet를 만들어 setup-ready를 통과시키지 않는다.
-
+- direct port helper 확장은 EM input helper 확장과 분리해서 유지한다.

@@ -13,7 +13,7 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py.md`
 - Status: active
-- Related feature plan: [[sdd/plans/0.2.25-type2-tx-rx-shared-plate-stack-import-only]]
+- Related feature plan: [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]]
 
 ## 역할
 - import-only AEDT generation facade다.

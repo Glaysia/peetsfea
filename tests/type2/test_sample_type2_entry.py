@@ -13,12 +13,17 @@ import pytest
 import peetsfea.type2_sampled as type2_sampled
 from entry.sample import sample_type2
 from peetsfea.type2_sampled import manifest_entry_for_sample_index
+from peetsfea.type2_step_spec import RangeSpec
+
+_PLATE_STACK_PCB_TOTAL_THICKNESS_MM = 0.4
 
 
 @dataclass(frozen=True)
 class _FakePlateStackModeledSpec:
     object_id: str
     role: str
+    turn_count: RangeSpec
+    metal_fill_factor: RangeSpec
 
 
 @dataclass(frozen=True)
@@ -27,19 +32,31 @@ class _FakePlateStackType2Spec:
 
 
 def _patch_plate_stack_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
+    fixed_turn_count = RangeSpec(is_integer=True, start=3.0, end=3.0, count=1)
+    fixed_fill_factor = RangeSpec(is_integer=False, start=0.4, end=0.4, count=1)
     fake_spec = _FakePlateStackType2Spec(
         modeled_objects=(
-            _FakePlateStackModeledSpec(object_id="tx_plate_stack", role="tx_plate_stack"),
-            _FakePlateStackModeledSpec(object_id="rx_plate_stack", role="rx_plate_stack"),
+            _FakePlateStackModeledSpec(
+                object_id="tx_plate_stack",
+                role="tx_plate_stack",
+                turn_count=fixed_turn_count,
+                metal_fill_factor=fixed_fill_factor,
+            ),
+            _FakePlateStackModeledSpec(
+                object_id="rx_plate_stack",
+                role="rx_plate_stack",
+                turn_count=fixed_turn_count,
+                metal_fill_factor=fixed_fill_factor,
+            ),
         )
     )
     monkeypatch.setattr(type2_sampled, "load_type2_step_spec", lambda _path: fake_spec)
 
 
 def _source_type2_toml_text() -> str:
-    return """
+    return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v1"
+schema_id = "peetsfea.type2.step.v2"
 runtime_compatible = false
 
 [design]
@@ -135,18 +152,26 @@ object_id = "tx_plate_stack"
 role = "tx_plate_stack"
 material = "composite"
 model_state = true
-pcb_total_thickness_mm = 1.6
+pcb_total_thickness_mm = {_PLATE_STACK_PCB_TOTAL_THICKNESS_MM}
 copper_thickness_mm = 0.035
 ferrite_set_count = 10
+[modeled_objects.turn_count]
+range = [true, 3, 3, 1]
+[modeled_objects.metal_fill_factor]
+range = [false, 0.4, 0.4, 1]
 
 [[modeled_objects]]
 object_id = "rx_plate_stack"
 role = "rx_plate_stack"
 material = "composite"
 model_state = true
-pcb_total_thickness_mm = 0.4
+pcb_total_thickness_mm = {_PLATE_STACK_PCB_TOTAL_THICKNESS_MM}
 copper_thickness_mm = 0.1
 ferrite_set_count = 10
+[modeled_objects.turn_count]
+range = [true, 3, 3, 1]
+[modeled_objects.metal_fill_factor]
+range = [false, 0.4, 0.4, 1]
 """.strip()
 
 
@@ -246,9 +271,12 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     tx_modeled_object = sampled_payload["modeled_objects"][0]
     assert tx_modeled_object["object_id"] == "tx_plate_stack"
     assert tx_modeled_object["role"] == "tx_plate_stack"
-    assert tx_modeled_object["pcb_total_thickness_mm"] == 1.6
+    assert tx_modeled_object["pcb_total_thickness_mm"] == _PLATE_STACK_PCB_TOTAL_THICKNESS_MM
     assert tx_modeled_object["copper_thickness_mm"] == 0.035
     assert tx_modeled_object["ferrite_set_count"] == 10
+    assert tx_modeled_object["turn_count"]["range"] == [True, 3, 3, 1]
+    assert tx_modeled_object["metal_fill_factor"]["range"] == [False, 0.4, 0.4, 1]
+    assert "shoe_depth_mm" not in tx_modeled_object
     assert "outer_x_mm" not in tx_modeled_object
     assert "underlay_gap_mm" not in tx_modeled_object
     assert "terminal_path" not in tx_modeled_object
@@ -256,9 +284,12 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     rx_modeled_object = sampled_payload["modeled_objects"][1]
     assert rx_modeled_object["object_id"] == "rx_plate_stack"
     assert rx_modeled_object["role"] == "rx_plate_stack"
-    assert rx_modeled_object["pcb_total_thickness_mm"] == 0.4
+    assert rx_modeled_object["pcb_total_thickness_mm"] == _PLATE_STACK_PCB_TOTAL_THICKNESS_MM
     assert rx_modeled_object["copper_thickness_mm"] == 0.1
     assert rx_modeled_object["ferrite_set_count"] == 10
+    assert rx_modeled_object["turn_count"]["range"] == [True, 3, 3, 1]
+    assert rx_modeled_object["metal_fill_factor"]["range"] == [False, 0.4, 0.4, 1]
+    assert "shoe_depth_mm" not in rx_modeled_object
     assert "outer_x_mm" not in rx_modeled_object
     assert "underlay_gap_mm" not in rx_modeled_object
     assert "terminal_path" not in rx_modeled_object

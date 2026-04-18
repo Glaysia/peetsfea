@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TypedDict, cast
 
+from peetsfea.aedt.proxies import create_group
 from peetsfea.aedt.protocols import HfssSession, ModelerSession
 from peetsfea.backend.pyaedt.failfast import raise_on_false
 from peetsfea.backend.pyaedt.type2_modeled_import_adapter import build_single_imported_modeled_object_entry
@@ -16,8 +17,10 @@ from peetsfea.backend.pyaedt.type2_step_import_ledger import (
     validated_object_names,
 )
 from peetsfea.backend.pyaedt.type2_step_import_partition import (
+    ImportedBodyGroupEntry,
     new_imported_object_names,
     partition_imported_scene_object_names,
+    resolve_imported_body_groups,
 )
 from peetsfea.backend.pyaedt.type2_step_import_style import (
     ensure_underlay_materials,
@@ -77,10 +80,52 @@ def _merge_modeled_adapter_entry(
     *,
     export_entry: dict[str, object],
     adapter_entry: dict[str, object],
+    imported_body_groups: list[ImportedBodyGroupEntry],
 ) -> dict[str, object]:
     merged = dict(export_entry)
     merged["imported_object_names"] = _imported_names_from_adapter_entry(adapter_entry)
+    merged["imported_body_groups"] = imported_body_groups
     return merged
+
+
+def _recreate_imported_body_groups(
+    *,
+    modeler: ModelerSession,
+    modeled_entry: dict[str, object],
+    imported_object_names: list[str],
+    context: str,
+) -> list[ImportedBodyGroupEntry]:
+    imported_body_groups = resolve_imported_body_groups(
+        modeled_entry=modeled_entry,
+        imported_object_names=imported_object_names,
+        context=context,
+    )
+    recreated_groups: list[ImportedBodyGroupEntry] = []
+    recreated_group_names: set[str] = set()
+    for group_entry in imported_body_groups:
+        if group_entry["group_name"] in recreated_group_names:
+            raise ValueError(
+                f"{context}.imported_body_groups contains duplicate group_name "
+                f"(group_name={group_entry['group_name']!r})"
+            )
+        recreated_group_names.add(group_entry["group_name"])
+        created_group_name = create_group(
+            modeler,
+            objects=list(group_entry["member_object_names"]),
+            group_name=group_entry["group_name"],
+        )
+        if created_group_name != group_entry["group_name"]:
+            raise RuntimeError(
+                f"{context} recreated body group name drifted after HFSS create_group "
+                f"(requested={group_entry['group_name']!r}, actual={created_group_name!r})"
+            )
+        recreated_groups.append(
+            {
+                "group_name": created_group_name,
+                "member_object_names": group_entry["member_object_names"],
+            }
+        )
+    return recreated_groups
 
 
 def _all_imported_modeled_object_names(modeled_names_by_object_id: dict[str, list[str]]) -> list[str]:
@@ -159,6 +204,12 @@ def build_imported_ledger(
             imported_object_names=imported_object_names,
             context=context,
         )
+        imported_body_groups = _recreate_imported_body_groups(
+            modeler=modeler,
+            modeled_entry=validated_entry["entry"],
+            imported_object_names=final_imported_object_names,
+            context=context,
+        )
         adapter_entry = build_single_imported_modeled_object_entry(
             modeled_object=validated_entry["entry"],
             imported_object_names=final_imported_object_names,
@@ -167,6 +218,7 @@ def build_imported_ledger(
             _merge_modeled_adapter_entry(
                 export_entry=validated_entry["entry"],
                 adapter_entry=cast(dict[str, object], adapter_entry),
+                imported_body_groups=imported_body_groups,
             )
         )
 

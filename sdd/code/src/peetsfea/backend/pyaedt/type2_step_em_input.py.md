@@ -1,7 +1,7 @@
 ---
 title: type2_step_em_input.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-19 @ 21:47
+updated: 2026-04-19 @ 23:59
 tags:
   - hfss-import
   - em
@@ -13,7 +13,7 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_em_input.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_em_input.py.md`
 - Status: active
-- Related feature plan: [[sdd/plans/0.2.25-type2-tx-rx-shared-plate-stack-import-only]]
+- Related feature plan: [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]]
 
 ## 역할
 - imported coil objects와 assigned ports를 EM pipeline input으로 정리한다.
@@ -24,11 +24,14 @@ tags:
 
 ## Canonical state
 - current EM input helper는 coil conductor/endpoint semantics 전용이다.
-- active plate roles는 EM endpoint를 만들지 않으므로 unsupported다.
+- active plate roles는 port-ready branch 이후에도 EM endpoint를 만들지 않으므로 unsupported다.
+- plate-stack import metadata가 `stub_port` + reconstructed port sheets로 바뀌어도 direct EM input은 계속 unsupported다.
+- boundary + explicit ports + final save ownership은 setup-ready facade가 가진다.
 
 ## Invariants / fail-fast
 - plate roles imported names에서 endpoint나 conductor group을 추론하지 않는다.
 - unsupported rejection은 setup-ready/port helper와 의미를 맞춘다.
+- plate roles를 `EmPipelineInput`으로 직접 변환하려는 요청은 즉시 실패해야 한다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
@@ -39,4 +42,5 @@ tags:
 
 ## 변경 시 주의점
 - active plate roles에 fake endpoint metadata를 넣어 EM pipeline으로 넘기지 않는다.
-
+- plate-stack port-ready support를 이유로 이 helper scope를 암묵적으로 넓히지 않는다.
+- setup-ready가 소유한 reconstructed port-sheet/explicit-port 결과를 direct EM helper ownership으로 역이관하지 않는다.

@@ -19,6 +19,7 @@ from peetsfea.tx_rect_void import profile_for_modeled_role
 from peetsfea.tx_rect_void import realize_tx_rect_void_spec
 from peetsfea.type2_plate_stack import build_plate_stack_scene_data
 from peetsfea.type2_step_ledger import CanonicalCoordinates
+from peetsfea.type2_step_ledger import ExportedBodyGroup
 from peetsfea.type2_step_ledger import ModeledObjectSceneData
 from peetsfea.type2_step_ledger import NonModelObjectLedgerEntry
 from peetsfea.type2_step_ledger import NonModelSceneMemberLedgerEntry
@@ -43,6 +44,8 @@ _UNDERLAY_FERRITE_THICKNESS_MM = 0.20
 _UNDERLAY_PET_PSA_THICKNESS_MM = 0.15
 _UNDERLAY_AIR_THICKNESS_MM = 0.02
 _UNDERLAY_MAX_LABEL_LENGTH = 32
+_TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
+_RX_FERRITE_GROUP_NAME = "g_ferrite_rx"
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,14 @@ class _TxUnderlayPlacementDescriptor:
     wall_origin_z: float
     wall_size_y: float
     wall_size_z: float
+
+
+def _ferrite_group_name_for_modeled_role(*, role: Literal["tx_single_coil", "rx_single_coil"]) -> str:
+    if role == "tx_single_coil":
+        return _TX_FERRITE_GROUP_NAME
+    if role == "rx_single_coil":
+        return _RX_FERRITE_GROUP_NAME
+    raise RuntimeError(f"unsupported ferrite grouping role: {role}")
 
 
 def _build_non_model_shape(spec: NonModelBoxSpec) -> bd.Shape:
@@ -740,6 +751,78 @@ def _build_labeled_solid_box(
     return solid
 
 
+def _build_labeled_group(*, label: str, children: tuple[bd.Shape, ...]) -> bd.Shape:
+    if len(label) > _UNDERLAY_MAX_LABEL_LENGTH:
+        raise RuntimeError(
+            "type2 underlay group label must be <= 32 chars "
+            f"(label={label}, length={len(label)})"
+        )
+    if len(children) == 0:
+        raise RuntimeError(f"type2 underlay group must contain children (label={label})")
+    group = bd.Compound(children=children, label=label)
+    return cast(bd.Shape, group)
+
+
+def _single_coil_expected_ferrite_groups(
+    *,
+    role: Literal["tx_single_coil", "rx_single_coil"],
+    underlay_scene_children: tuple[bd.Shape, ...],
+) -> tuple[ExportedBodyGroup, ...]:
+    if len(underlay_scene_children) == 0:
+        return ()
+    member_body_names = tuple(shape.label for shape in underlay_scene_children)
+    if any(member_name == "" for member_name in member_body_names):
+        raise RuntimeError(
+            "type2 ferrite grouping requires labeled underlay members "
+            f"(role={role}, member_body_names={member_body_names})"
+        )
+    return (
+        {
+            "group_name": _ferrite_group_name_for_modeled_role(role=role),
+            "member_body_names": member_body_names,
+        },
+    )
+
+
+def _single_coil_scene_children_with_grouped_ferrite_family(
+    *,
+    base_scene_children: tuple[bd.Shape, ...],
+    underlay_scene_children: tuple[bd.Shape, ...],
+    expected_exported_body_groups: tuple[ExportedBodyGroup, ...],
+) -> tuple[bd.Shape, ...]:
+    if len(underlay_scene_children) == 0:
+        if len(expected_exported_body_groups) != 0:
+            raise RuntimeError(
+                "type2 ferrite group contract mismatch: no underlay members but groups were declared "
+                f"(groups={expected_exported_body_groups})"
+            )
+        return base_scene_children
+    if len(expected_exported_body_groups) != 1:
+        raise RuntimeError(
+            "type2 ferrite group contract requires exactly one group when underlay members are exported "
+            f"(group_count={len(expected_exported_body_groups)})"
+        )
+    group_entry = expected_exported_body_groups[0]
+    member_body_names = group_entry["member_body_names"]
+    underlay_member_body_names = tuple(shape.label for shape in underlay_scene_children)
+    if member_body_names != underlay_member_body_names:
+        raise RuntimeError(
+            "type2 ferrite group members must match underlay export order "
+            f"(expected={member_body_names}, actual={underlay_member_body_names})"
+        )
+    shapes_by_label = {shape.label: shape for shape in underlay_scene_children}
+    if len(shapes_by_label) != len(underlay_scene_children):
+        raise RuntimeError(
+            "type2 underlay scene body names must be unique for ferrite grouping "
+            f"(body_names={underlay_member_body_names})"
+        )
+    ferrite_group_shape = _build_labeled_group(
+        label=group_entry["group_name"],
+        children=tuple(shapes_by_label[member_name] for member_name in member_body_names),
+    )
+    return base_scene_children + (ferrite_group_shape,)
+
+
 def _shape_min_max_xyz(shape: bd.Shape) -> tuple[Point3, Point3]:
     bbox = shape.bounding_box()
     return (
@@ -1031,13 +1114,24 @@ def build_modeled_single_coil_scene_data(
                 if underlay_repeat_count > 0
                 else ()
             )
-        scene_children = base_scene_children + underlay_scene_children
-        expected_exported_body_names = tuple(shape.label for shape in scene_children)
+        expected_exported_body_names = tuple(
+            shape.label for shape in (base_scene_children + underlay_scene_children)
+        )
         if len(set(expected_exported_body_names)) != len(expected_exported_body_names):
             raise RuntimeError(
                 "type2 modeled scene body names must be unique "
                 f"(object_id={spec.object_id}, names={expected_exported_body_names})"
             )
+        modeled_role = cast(Literal["tx_single_coil", "rx_single_coil"], profile.role)
+        expected_exported_body_groups = _single_coil_expected_ferrite_groups(
+            role=modeled_role,
+            underlay_scene_children=underlay_scene_children,
+        )
+        scene_children = _single_coil_scene_children_with_grouped_ferrite_family(
+            base_scene_children=base_scene_children,
+            underlay_scene_children=underlay_scene_children,
+            expected_exported_body_groups=expected_exported_body_groups,
+        )
         canonical_coordinates = _modeled_canonical_coordinates(
             transformed_boxes=transformed_boxes,
             profile=profile,
@@ -1062,6 +1156,7 @@ def build_modeled_single_coil_scene_data(
             "model_state": True,
             "expected_exported_body_names": expected_exported_body_names,
             "expected_exported_body_count": len(expected_exported_body_names),
+            "expected_exported_body_groups": expected_exported_body_groups,
             "canonical_coordinates": canonical_coordinates,
             "terminal_metadata": terminal_metadata,
         },
@@ -1075,7 +1170,7 @@ def build_modeled_scene_data(
     seed: int,
 ) -> tuple[tuple[bd.Shape, ...], ModeledObjectSceneData]:
     if isinstance(spec, (ModeledTxPlateStackSpec, ModeledRxPlateStackSpec)):
-        return build_plate_stack_scene_data(spec, owner_spec=owner_spec)
+        return build_plate_stack_scene_data(spec, owner_spec=owner_spec, seed=seed)
     return build_modeled_single_coil_scene_data(
         cast(ModeledSingleCoilSpec, spec),
         owner_spec=owner_spec,

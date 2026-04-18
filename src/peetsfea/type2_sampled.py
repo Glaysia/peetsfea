@@ -13,6 +13,7 @@ from typing import TypedDict, cast
 from peetsfea.spec.loader import TOMLTable, TOMLValue, load_toml_bytes
 from peetsfea.spec.toml_render import toml_dumps
 from peetsfea.type2_step_export import export_type2_step_artifacts
+from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import RangeSpec
@@ -107,6 +108,7 @@ def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpe
             )
             continue
         if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
+            owner_specs.extend(_plate_stack_range_owner_specs(cast(ModeledPlateStackSpec, modeled_spec)))
             continue
         raise RuntimeError(f"unsupported modeled object role for sampled owner resolution: {role}")
     return tuple(owner_specs)
@@ -159,6 +161,15 @@ def _single_coil_range_owner_specs(
             )
         )
     return tuple(owner_specs)
+
+
+def _plate_stack_range_owner_specs(
+    modeled_spec: ModeledPlateStackSpec,
+) -> tuple[tuple[str, RangeSpec], ...]:
+    return (
+        (f"modeled_objects.{modeled_spec.object_id}.turn_count", modeled_spec.turn_count),
+        (f"modeled_objects.{modeled_spec.object_id}.metal_fill_factor", modeled_spec.metal_fill_factor),
+    )
 
 
 def exportable_sampled_owner_paths(spec: Type2StepSpec) -> tuple[str, ...]:

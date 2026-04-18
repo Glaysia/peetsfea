@@ -9,7 +9,35 @@ import pytest
 from peetsfea.aedt.protocols import HfssSession
 from peetsfea.backend.pyaedt.type2_step_import_pipeline import import_type2_step_ledger
 from peetsfea.backend.pyaedt.type2_step_import_pipeline import import_type2_step_ledger_into_hfss
+from peetsfea.type2_plate_stack import expected_plate_stack_body_names
+from peetsfea.type2_step_ledger import ExportedBodyGroup
 from tests.fixtures.legacy.type1_spec import type1_outputs_spec
+
+_PLATE_STACK_FERRITE_SET_COUNT = 10
+_PLATE_STACK_TURN_COUNT = 3
+_PLATE_STACK_STUB_LENGTH_MM = 5.0
+_PLATE_STACK_PCB_TOTAL_THICKNESS_MM = 0.4
+_TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
+_RX_FERRITE_GROUP_NAME = "g_ferrite_rx"
+_TX_FERRITE_GROUP_MEMBER_PREFIXES: tuple[str, ...] = (
+    "tx_underlay_ferrite_u",
+    "tx_underlay_pet_psa_u",
+    "tx_underlay_air_u",
+    "tx_wall_ferrite_u",
+    "tx_wall_pet_psa_u",
+    "tx_wall_air_u",
+    "tx_stack_ferrite_u",
+    "tx_stack_pet_psa_u",
+    "tx_stack_air_u",
+)
+_RX_FERRITE_GROUP_MEMBER_PREFIXES: tuple[str, ...] = (
+    "under_rx_ferrite_u",
+    "under_rx_pet_psa_u",
+    "under_rx_air_u",
+    "rx_stack_ferrite_u",
+    "rx_stack_pet_psa_u",
+    "rx_stack_air_u",
+)
 
 
 def _write_step(path: Path) -> Path:
@@ -78,7 +106,7 @@ def _non_model_entry(*, object_id: str = "type2_non_model_scene") -> dict[str, o
                 object_id="rx_region_max",
                 role="rx_region_max",
                 origin_xyz=(0.0, -280.0, 139.0),
-                size_xyz=(4.0, 560.0, 360.0),
+                size_xyz=(4.5, 560.0, 360.0),
                 plane="YZ",
             ),
         ],
@@ -95,6 +123,7 @@ def _modeled_entry(
     size_xyz: tuple[float, float, float] = (50.0, 30.0, 2.8),
     source_metadata_path: str = "/tmp/type2.metadata.json",
     expected_names: list[str] | None = None,
+    expected_groups: list[ExportedBodyGroup] | None = None,
     pcb_layer_positions_mm: list[float] | None = None,
     copper_layer_positions_mm: list[float] | None = None,
 ) -> dict[str, object]:
@@ -111,7 +140,9 @@ def _modeled_entry(
     if pcb_layer_positions_mm is None:
         pcb_layer_positions_mm = [origin_z]
     if copper_layer_positions_mm is None:
-        copper_layer_positions_mm = [origin_z + 1.6]
+        copper_layer_positions_mm = [origin_z + 0.4]
+    if expected_groups is None:
+        expected_groups = []
     if plane == "XY":
         port_sheet_vertices_xyz = [
             [origin_x, origin_y, origin_z],
@@ -135,6 +166,7 @@ def _modeled_entry(
         "model_state": True,
         "expected_exported_body_names": expected_names,
         "expected_exported_body_count": len(expected_names),
+        "expected_exported_body_groups": expected_groups,
         "canonical_coordinates": {
             "frame_origin_xyz": [offset_x, offset_y, origin_z],
             "outer_bounds_min_xyz": [origin_x, origin_y, origin_z],
@@ -335,6 +367,7 @@ class _FakeModeler:
         self.import_kwargs_calls: list[dict[str, object]] = []
         self.create_polyline_calls: list[dict[str, object]] = []
         self.cover_lines_calls: list[str] = []
+        self.create_group_calls: list[tuple[list[str], str]] = []
         self.model_state_calls: list[tuple[str, bool]] = []
         self.move_calls: list[tuple[list[str], list[float]]] = []
         self.objects: dict[str, _FakeObject] = {"existing": _FakeObject("existing")}
@@ -385,6 +418,10 @@ class _FakeModeler:
             return False
         self.objects[assignment] = _new_fake_sheet_object(assignment)
         return assignment
+
+    def create_group(self, objects: list[str], group_name: str) -> str:
+        self.create_group_calls.append((list(objects), group_name))
+        return group_name
 
     def get_object_from_name(self, assignment: str) -> object:
         return self.objects[assignment]
@@ -481,7 +518,7 @@ def _rx_single_coil_entry(tmp_path: Path) -> dict[str, object]:
         role="rx_single_coil",
         plane="YZ",
         placement_owner_id="rx_region_max",
-        origin_xyz=(1.2, -25.0, 139.0),
+        origin_xyz=(1.7, -25.0, 139.0),
         size_xyz=(2.8, 50.0, 30.0),
         source_metadata_path=str(tmp_path / "rx.metadata.json"),
     )
@@ -532,24 +569,28 @@ def _single_layer_modeled_objects_with_role_aware_underlay(
     tx_wall_repeat_count: int = 0,
     rx_repeat_count: int,
 ) -> list[dict[str, object]]:
+    tx_expected_names = [
+        "tx_pcb_l0",
+        "tx_copper_l0",
+        *_tx_wall_expected_names(repeat_count=tx_wall_repeat_count),
+    ]
+    rx_expected_names = ["rx_pcb_l0", "rx_copper_l0", *_rx_underlay_expected_names(repeat_count=rx_repeat_count)]
     return [
         _modeled_entry(
             source_metadata_path=str(tmp_path / "tx.metadata.json"),
-            expected_names=[
-                "tx_pcb_l0",
-                "tx_copper_l0",
-                *_tx_wall_expected_names(repeat_count=tx_wall_repeat_count),
-            ],
+            expected_names=tx_expected_names,
+            expected_groups=_expected_ferrite_group_for_role(role="tx_single_coil", expected_names=tx_expected_names),
         ),
         _modeled_entry(
             object_id="rx_rect_void_coil",
             role="rx_single_coil",
             plane="YZ",
             placement_owner_id="rx_region_max",
-            origin_xyz=(1.2, -25.0, 139.0),
+            origin_xyz=(1.7, -25.0, 139.0),
             size_xyz=(2.8, 50.0, 30.0),
             source_metadata_path=str(tmp_path / "rx.metadata.json"),
-            expected_names=["rx_pcb_l0", "rx_copper_l0", *_rx_underlay_expected_names(repeat_count=rx_repeat_count)],
+            expected_names=rx_expected_names,
+            expected_groups=_expected_ferrite_group_for_role(role="rx_single_coil", expected_names=rx_expected_names),
         ),
     ]
 
@@ -572,28 +613,76 @@ def _single_layer_imported_name_batch_with_role_aware_underlay(
     )
 
 
-def _tx_plate_stack_expected_names(*, ferrite_set_count: int = 10) -> list[str]:
-    return [
-        "tx_copper_wall",
-        "tx_pcb_wall",
-        *(f"tx_stack_ferrite_u{index}" for index in range(ferrite_set_count)),
-        *(f"tx_stack_pet_psa_u{index}" for index in range(ferrite_set_count)),
-        *(f"tx_stack_air_u{index}" for index in range(ferrite_set_count)),
-        "tx_pcb_coil",
-        "tx_copper_coil",
-    ]
+def _tx_plate_stack_expected_names(
+    *,
+    ferrite_set_count: int = _PLATE_STACK_FERRITE_SET_COUNT,
+    turn_count: int = _PLATE_STACK_TURN_COUNT,
+    pcb_total_thickness_mm: float = _PLATE_STACK_PCB_TOTAL_THICKNESS_MM,
+) -> list[str]:
+    return list(
+        expected_plate_stack_body_names(
+            role="tx_plate_stack",
+            ferrite_set_count=ferrite_set_count,
+            turn_count=turn_count,
+            pcb_total_thickness_mm=pcb_total_thickness_mm,
+        )
+    )
 
 
-def _rx_plate_stack_expected_names(*, ferrite_set_count: int = 10) -> list[str]:
-    return [
-        "rx_copper_wall",
-        "rx_pcb_wall",
-        *(f"rx_stack_ferrite_u{index}" for index in range(ferrite_set_count)),
-        *(f"rx_stack_pet_psa_u{index}" for index in range(ferrite_set_count)),
-        *(f"rx_stack_air_u{index}" for index in range(ferrite_set_count)),
-        "rx_pcb_coil",
-        "rx_copper_coil",
-    ]
+def _rx_plate_stack_expected_names(
+    *,
+    ferrite_set_count: int = _PLATE_STACK_FERRITE_SET_COUNT,
+    turn_count: int = _PLATE_STACK_TURN_COUNT,
+    pcb_total_thickness_mm: float = _PLATE_STACK_PCB_TOTAL_THICKNESS_MM,
+) -> list[str]:
+    return list(
+        expected_plate_stack_body_names(
+            role="rx_plate_stack",
+            ferrite_set_count=ferrite_set_count,
+            turn_count=turn_count,
+            pcb_total_thickness_mm=pcb_total_thickness_mm,
+        )
+    )
+
+
+def _ferrite_group_members_for_role(*, role: str, expected_names: list[str]) -> tuple[str, ...]:
+    member_prefixes: tuple[str, ...]
+    if role.startswith("tx_"):
+        member_prefixes = _TX_FERRITE_GROUP_MEMBER_PREFIXES
+    elif role.startswith("rx_"):
+        member_prefixes = _RX_FERRITE_GROUP_MEMBER_PREFIXES
+    else:
+        raise ValueError(f"unsupported ferrite group role in test helper: {role!r}")
+    return tuple(name for name in expected_names if name.startswith(member_prefixes))
+
+
+def _expected_ferrite_group_for_role(*, role: str, expected_names: list[str]) -> list[ExportedBodyGroup]:
+    member_body_names = _ferrite_group_members_for_role(role=role, expected_names=expected_names)
+    if len(member_body_names) == 0:
+        return []
+    if role.startswith("tx_"):
+        group_name = _TX_FERRITE_GROUP_NAME
+    elif role.startswith("rx_"):
+        group_name = _RX_FERRITE_GROUP_NAME
+    else:
+        raise ValueError(f"unsupported ferrite group role in test helper: {role!r}")
+    return [{"group_name": group_name, "member_body_names": member_body_names}]
+
+
+def _tx_plate_stack_expected_groups(
+    *,
+    ferrite_set_count: int = _PLATE_STACK_FERRITE_SET_COUNT,
+) -> list[ExportedBodyGroup]:
+    expected_names = _tx_plate_stack_expected_names(ferrite_set_count=ferrite_set_count)
+    return _expected_ferrite_group_for_role(role="tx_plate_stack", expected_names=expected_names)
+
+
+def _rx_plate_stack_expected_groups(
+    *,
+    ferrite_set_count: int = _PLATE_STACK_FERRITE_SET_COUNT,
+) -> list[ExportedBodyGroup]:
+    expected_names = _rx_plate_stack_expected_names(ferrite_set_count=ferrite_set_count)
+    return _expected_ferrite_group_for_role(role="rx_plate_stack", expected_names=expected_names)
 
 
 def _plate_stack_modeled_entry(
@@ -606,8 +695,10 @@ def _plate_stack_modeled_entry(
     size_xyz: tuple[float, float, float],
     source_metadata_path: str,
     expected_names: list[str],
+    expected_groups: list[ExportedBodyGroup],
     pcb_layer_positions_mm: list[float],
     copper_layer_positions_mm: list[float],
+    terminal_metadata: dict[str, object],
 ) -> dict[str, object]:
     origin_x, origin_y, origin_z = origin_xyz
     size_x, size_y, size_z = size_xyz
@@ -620,6 +711,7 @@ def _plate_stack_modeled_entry(
         "model_state": True,
         "expected_exported_body_names": expected_names,
         "expected_exported_body_count": len(expected_names),
+        "expected_exported_body_groups": expected_groups,
         "canonical_coordinates": {
             "frame_origin_xyz": [origin_x, origin_y, origin_z],
             "outer_bounds_min_xyz": [origin_x, origin_y, origin_z],
@@ -628,8 +720,42 @@ def _plate_stack_modeled_entry(
             "pcb_layer_z_positions_mm": pcb_layer_positions_mm,
             "copper_layer_z_positions_mm": copper_layer_positions_mm,
         },
-        "terminal_metadata": {"kind": "none"},
+        "terminal_metadata": terminal_metadata,
         "source_metadata_path": source_metadata_path,
+    }
+
+
+def _plate_stack_terminal_metadata(
+    *,
+    owner_origin_y: float,
+    owner_size_y: float,
+    owner_origin_z: float,
+    owner_size_z: float,
+    copper_thickness_mm: float,
+    turn_count: int = _PLATE_STACK_TURN_COUNT,
+    metal_fill_factor: float = 0.4,
+    prefix: str,
+) -> dict[str, object]:
+    pitch_z = owner_size_z / float(turn_count)
+    trace_height_z = pitch_z * metal_fill_factor
+    conductor_origin_z = owner_origin_z
+    input_origin_z = conductor_origin_z
+    output_origin_z = conductor_origin_z + (pitch_z * float(turn_count - 1))
+    sheet_y = owner_origin_y + owner_size_y + _PLATE_STACK_STUB_LENGTH_MM
+    z_min = input_origin_z
+    z_max = output_origin_z + trace_height_z
+    return {
+        "kind": "stub_port",
+        "input_stub_body_name": f"{prefix}_stub_in",
+        "output_stub_body_name": f"{prefix}_stub_out",
+        "start_point_plane_mm": [sheet_y, input_origin_z + (trace_height_z / 2.0)],
+        "end_point_plane_mm": [sheet_y, output_origin_z + (trace_height_z / 2.0)],
+        "port_sheet_vertices_xyz": [
+            [0.0, sheet_y, z_min],
+            [copper_thickness_mm, sheet_y, z_min],
+            [copper_thickness_mm, sheet_y, z_max],
+            [0.0, sheet_y, z_max],
+        ],
     }
 
 
@@ -640,11 +766,20 @@ def _tx_plate_stack_entry(tmp_path: Path) -> dict[str, object]:
         plane="YZ",
         placement_owner_id="tx_region",
         origin_xyz=(0.0, -140.0, 0.0),
-        size_xyz=(3.7, 280.0, 90.0),
+        size_xyz=(6.9, 285.0, 90.0),
         source_metadata_path=str(tmp_path / "tx_plate_stack.metadata.json"),
         expected_names=_tx_plate_stack_expected_names(),
-        pcb_layer_positions_mm=[0.2, 3.3],
-        copper_layer_positions_mm=[0.0, 3.5],
+        expected_groups=_tx_plate_stack_expected_groups(),
+        pcb_layer_positions_mm=[0.035, 5.3],
+        copper_layer_positions_mm=[0.0, 6.865],
+        terminal_metadata=_plate_stack_terminal_metadata(
+            owner_origin_y=-140.0,
+            owner_size_y=280.0,
+            owner_origin_z=0.0,
+            owner_size_z=90.0,
+            copper_thickness_mm=0.035,
+            prefix="tx",
+        ),
     )
 
 
@@ -655,11 +790,20 @@ def _rx_plate_stack_entry(tmp_path: Path) -> dict[str, object]:
         plane="YZ",
         placement_owner_id="rx_region_max",
         origin_xyz=(0.0, -280.0, 139.0),
-        size_xyz=(3.7, 560.0, 360.0),
+        size_xyz=(4.5, 565.0, 360.0),
         source_metadata_path=str(tmp_path / "rx_plate_stack.metadata.json"),
         expected_names=_rx_plate_stack_expected_names(),
-        pcb_layer_positions_mm=[0.2, 3.3],
-        copper_layer_positions_mm=[0.0, 3.5],
+        expected_groups=_rx_plate_stack_expected_groups(),
+        pcb_layer_positions_mm=[0.1, 4.1],
+        copper_layer_positions_mm=[0.0, 4.4],
+        terminal_metadata=_plate_stack_terminal_metadata(
+            owner_origin_y=-280.0,
+            owner_size_y=560.0,
+            owner_origin_z=139.0,
+            owner_size_z=360.0,
+            copper_thickness_mm=0.1,
+            prefix="rx",
+        ),
     )
 
 
@@ -861,6 +1005,36 @@ def test_import_type2_step_ledger_styles_role_aware_underlay_and_keeps_mesh_cond
         "under_rx_air_u0",
         "rx_port_sheet",
     ]
+    assert modeled_by_id["tx_rect_void_coil"]["imported_body_groups"] == [
+        {
+            "group_name": _TX_FERRITE_GROUP_NAME,
+            "member_object_names": [
+                "tx_wall_ferrite_u0",
+                "tx_wall_pet_psa_u0",
+                "tx_wall_air_u0",
+            ],
+        }
+    ]
+    assert modeled_by_id["rx_rect_void_coil"]["imported_body_groups"] == [
+        {
+            "group_name": _RX_FERRITE_GROUP_NAME,
+            "member_object_names": [
+                "under_rx_ferrite_u0",
+                "under_rx_pet_psa_u0",
+                "under_rx_air_u0",
+            ],
+        }
+    ]
+    assert session.modeler.create_group_calls == [
+        (
+            ["tx_wall_ferrite_u0", "tx_wall_pet_psa_u0", "tx_wall_air_u0"],
+            _TX_FERRITE_GROUP_NAME,
+        ),
+        (
+            ["under_rx_ferrite_u0", "under_rx_pet_psa_u0", "under_rx_air_u0"],
+            _RX_FERRITE_GROUP_NAME,
+        ),
+    ]
     written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
     assert written == result
 
@@ -890,32 +1064,74 @@ def test_import_type2_step_ledger_accepts_tx_and_rx_plate_stack_geometry_only_ro
 
     assert session.modeler.import_calls == [scene_step]
     assert session.modeler.import_kwargs_calls == [{"import_free_surfaces": True}]
-    assert session.modeler.create_polyline_calls == []
-    assert session.modeler.cover_lines_calls == []
+    assert [call["name"] for call in session.modeler.create_polyline_calls] == [
+        "tx_plate_port_sheet",
+        "rx_plate_port_sheet",
+    ]
+    assert session.modeler.cover_lines_calls == ["tx_plate_port_sheet", "rx_plate_port_sheet"]
     assert session.design.import_dataset_calls == [str(Path(__file__).resolve().parents[2] / "notebooks" / "mu_p.tab")]
     assert len(session.oproject.add_dataset_calls) == 2
     assert session.materials.aedmattolibrary_calls == ["PET_PSA"]
-    assert session.modeler.objects["tx_copper_wall"].material_name == "copper"
+    assert session.modeler.objects["tx_copper_wall_t0"].material_name == "copper"
     assert session.modeler.objects["tx_pcb_wall"].material_name == "FR4_epoxy"
     assert session.modeler.objects["tx_stack_ferrite_u0"].material_name == "MULL12060ferrite"
     assert session.modeler.objects["tx_stack_pet_psa_u0"].material_name == "PET_PSA"
     assert session.modeler.objects["tx_stack_air_u0"].material_name == "vacuum"
-    assert session.modeler.objects["tx_copper_coil"].material_name == "copper"
-    assert session.modeler.objects["rx_copper_wall"].material_name == "copper"
+    assert session.modeler.objects["tx_copper_coil_t0"].material_name == "copper"
+    assert session.modeler.objects["tx_bridge_s0"].material_name == "copper"
+    assert session.modeler.objects["tx_stub_in"].material_name == "copper"
+    assert session.modeler.objects["tx_stub_out"].material_name == "copper"
+    assert session.modeler.objects["rx_copper_wall_t0"].material_name == "copper"
     assert session.modeler.objects["rx_pcb_wall"].material_name == "FR4_epoxy"
     assert session.modeler.objects["rx_stack_ferrite_u0"].material_name == "MULL12060ferrite"
     assert session.modeler.objects["rx_stack_pet_psa_u0"].material_name == "PET_PSA"
     assert session.modeler.objects["rx_stack_air_u0"].material_name == "vacuum"
-    assert session.modeler.objects["rx_copper_coil"].material_name == "copper"
+    assert session.modeler.objects["rx_copper_coil_t0"].material_name == "copper"
+    assert session.modeler.objects["rx_bridge_s0"].material_name == "copper"
+    assert session.modeler.objects["rx_stub_in"].material_name == "copper"
+    assert session.modeler.objects["rx_stub_out"].material_name == "copper"
     assert session.mesh_module.assign_length_op_calls == []
     assert session.radiation_boundary_calls == []
     assert "mesh" not in result
     assert "boundary" not in result
     modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
-    assert modeled_by_id["tx_plate_stack"]["imported_object_names"] == _tx_plate_stack_expected_names()
-    assert modeled_by_id["tx_plate_stack"]["terminal_metadata"] == {"kind": "none"}
-    assert modeled_by_id["rx_plate_stack"]["imported_object_names"] == _rx_plate_stack_expected_names()
-    assert modeled_by_id["rx_plate_stack"]["terminal_metadata"] == {"kind": "none"}
+    assert modeled_by_id["tx_plate_stack"]["imported_object_names"] == [
+        *_tx_plate_stack_expected_names(),
+        "tx_plate_port_sheet",
+    ]
+    assert modeled_by_id["tx_plate_stack"]["imported_body_groups"] == [
+        {
+            "group_name": cast(str, group_entry["group_name"]),
+            "member_object_names": list(cast(tuple[str, ...], group_entry["member_body_names"])),
+        }
+        for group_entry in _tx_plate_stack_expected_groups()
+    ]
+    assert cast(dict[str, object], modeled_by_id["tx_plate_stack"]["terminal_metadata"])["kind"] == "stub_port"
+    assert modeled_by_id["rx_plate_stack"]["imported_object_names"] == [
+        *_rx_plate_stack_expected_names(),
+        "rx_plate_port_sheet",
+    ]
+    assert modeled_by_id["rx_plate_stack"]["imported_body_groups"] == [
+        {
+            "group_name": cast(str, group_entry["group_name"]),
+            "member_object_names": list(cast(tuple[str, ...], group_entry["member_body_names"])),
+        }
+        for group_entry in _rx_plate_stack_expected_groups()
+    ]
+    assert cast(dict[str, object], modeled_by_id["rx_plate_stack"]["terminal_metadata"])["kind"] == "stub_port"
+    assert session.modeler.create_group_calls == [
+        (
+            list(cast(tuple[str, ...], group_entry["member_body_names"])),
+            cast(str, group_entry["group_name"]),
+        )
+        for group_entry in _tx_plate_stack_expected_groups()
+    ] + [
+        (
+            list(cast(tuple[str, ...], group_entry["member_body_names"])),
+            cast(str, group_entry["group_name"]),
+        )
+        for group_entry in _rx_plate_stack_expected_groups()
+    ]
     written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
     assert written == result
 
@@ -1202,7 +1418,7 @@ def test_import_type2_step_ledger_fails_for_plate_stack_terminal_metadata_before
         modeled_objects=[tx_entry],
     )
 
-    with pytest.raises(ValueError, match=r"terminal_metadata\.kind must be 'none'"):
+    with pytest.raises(ValueError, match=r"terminal_metadata\.kind must be 'stub_port'"):
         import_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",

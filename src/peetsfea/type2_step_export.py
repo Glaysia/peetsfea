@@ -16,6 +16,7 @@ from peetsfea.tx_rect_void import modeled_body_bounds_from_boxes
 from peetsfea.tx_rect_void import profile_for_modeled_role
 from peetsfea.tx_rect_void import realize_tx_rect_void_spec
 from peetsfea.type2_plate_stack import expected_plate_stack_body_names
+from peetsfea.type2_plate_stack import expected_plate_stack_body_groups
 from peetsfea.type2_step_ledger import Type2DirectModeledArtifact
 from peetsfea.type2_step_ledger import Type2ImportEmPolicy
 from peetsfea.type2_step_ledger import Type2StepLedger
@@ -39,6 +40,7 @@ from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 from peetsfea.type2_step_spec import placement_owner_id_for_role
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
+from peetsfea.type2_step_spec import resolve_modeled_plate_stack_turn_count
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
 from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
 
@@ -47,9 +49,16 @@ SOURCE_TOML_PATH = REPO_ROOT / "examples" / "type2_fixed.toml"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "run" / "step" / "type2"
 DEFAULT_LEDGER_PATH = DEFAULT_OUTPUT_DIR / "type2_step_ledger.json"
 DEFAULT_SCENE_STEP_PATH = DEFAULT_OUTPUT_DIR / "type2_scene.step"
+_TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
+_RX_FERRITE_GROUP_NAME = "g_ferrite_rx"
 
 
 def _validate_top_level_scene_child(shape: bd.Shape) -> None:
+    children = tuple(shape.children)
+    if children:
+        for child in children:
+            _validate_top_level_scene_child(cast(bd.Shape, child))
+        return
     solid_count = len(tuple(shape.solids()))
     if solid_count == 1:
         return
@@ -126,6 +135,7 @@ def _export_modeled_single_coil(
         "step_path": str(output_path),
         "expected_exported_body_names": scene_data["expected_exported_body_names"],
         "expected_exported_body_count": scene_data["expected_exported_body_count"],
+        "expected_exported_body_groups": scene_data["expected_exported_body_groups"],
         "canonical_coordinates": scene_data["canonical_coordinates"],
         "terminal_metadata": scene_data["terminal_metadata"],
         "source_metadata_path": str(metadata_path),
@@ -178,6 +188,17 @@ def _rx_underlay_expected_body_names(*, repeat_count: int) -> list[str]:
     ]
 
 
+def _ferrite_group_name_for_modeled_role(
+    *,
+    role: Literal["tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack"],
+) -> str:
+    if role in ("tx_single_coil", "tx_plate_stack"):
+        return _TX_FERRITE_GROUP_NAME
+    if role in ("rx_single_coil", "rx_plate_stack"):
+        return _RX_FERRITE_GROUP_NAME
+    raise RuntimeError(f"unsupported ferrite grouping role: {role}")
+
+
 def _require_modeled_expected_body_contract(
     ledger: Type2StepLedger,
     *,
@@ -193,6 +214,7 @@ def _require_modeled_expected_body_contract(
         role = modeled_entry["role"]
         expected_body_names = modeled_entry["expected_exported_body_names"]
         expected_body_count = modeled_entry["expected_exported_body_count"]
+        expected_body_groups = modeled_entry["expected_exported_body_groups"]
         if role == "tx_single_coil":
             if not isinstance(modeled_spec, ModeledTxSingleCoilSpec):
                 raise ValueError(
@@ -209,8 +231,22 @@ def _require_modeled_expected_body_contract(
             else:
                 expected_names.append("tx_copper_stack")
             repeat_count = resolve_modeled_underlay_repeat_count(modeled_spec, seed=seed)
-            if repeat_count > 0 and resolve_modeled_wall_parallel_stack_present(modeled_spec, seed=seed):
-                expected_names.extend(_tx_wall_expected_body_names(repeat_count=repeat_count))
+            tx_wall_names = (
+                _tx_wall_expected_body_names(repeat_count=repeat_count)
+                if repeat_count > 0 and resolve_modeled_wall_parallel_stack_present(modeled_spec, seed=seed)
+                else []
+            )
+            expected_names.extend(tx_wall_names)
+            expected_groups = (
+                [
+                    {
+                        "group_name": _ferrite_group_name_for_modeled_role(role=role),
+                        "member_body_names": tuple(tx_wall_names),
+                    }
+                ]
+                if len(tx_wall_names) > 0
+                else []
+            )
         elif role == "rx_single_coil":
             if not isinstance(modeled_spec, ModeledRxSingleCoilSpec):
                 raise ValueError(
@@ -218,10 +254,19 @@ def _require_modeled_expected_body_contract(
                     f"(actual={type(modeled_spec).__name__})"
                 )
             expected_names = ["rx_pcb_l0", "rx_copper_l0"]
-            expected_names.extend(
-                _rx_underlay_expected_body_names(
-                    repeat_count=resolve_modeled_underlay_repeat_count(modeled_spec, seed=seed)
-                )
+            rx_underlay_names = _rx_underlay_expected_body_names(
+                repeat_count=resolve_modeled_underlay_repeat_count(modeled_spec, seed=seed)
+            )
+            expected_names.extend(rx_underlay_names)
+            expected_groups = (
+                [
+                    {
+                        "group_name": _ferrite_group_name_for_modeled_role(role=role),
+                        "member_body_names": tuple(rx_underlay_names),
+                    }
+                ]
+                if len(rx_underlay_names) > 0
+                else []
             )
         elif role in ("tx_plate_stack", "rx_plate_stack"):
             if role == "tx_plate_stack" and not isinstance(modeled_spec, ModeledTxPlateStackSpec):
@@ -238,6 +283,14 @@ def _require_modeled_expected_body_contract(
                 expected_plate_stack_body_names(
                     role=cast(ModeledPlateStackSpec, modeled_spec).role,
                     ferrite_set_count=cast(ModeledPlateStackSpec, modeled_spec).ferrite_set_count,
+                    turn_count=resolve_modeled_plate_stack_turn_count(cast(ModeledPlateStackSpec, modeled_spec), seed=seed),
+                    pcb_total_thickness_mm=cast(ModeledPlateStackSpec, modeled_spec).pcb_total_thickness_mm,
+                )
+            )
+            expected_groups = list(
+                expected_plate_stack_body_groups(
+                    role=cast(ModeledPlateStackSpec, modeled_spec).role,
+                    ferrite_set_count=cast(ModeledPlateStackSpec, modeled_spec).ferrite_set_count,
                 )
             )
         else:
@@ -251,6 +304,11 @@ def _require_modeled_expected_body_contract(
             raise ValueError(
                 "type2 modeled export expected body count mismatch "
                 f"(role={role}, expected={len(expected_names)}, actual={expected_body_count})"
+            )
+        if list(expected_body_groups) != expected_groups:
+            raise ValueError(
+                "type2 modeled export expected body group contract mismatch "
+                f"(role={role}, expected={expected_groups}, actual={list(expected_body_groups)})"
             )
 
 
@@ -492,6 +550,22 @@ def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path:
     for modeled_spec in spec.modeled_objects:
         modeled_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == modeled_spec.object_id)
         terminal_metadata = cast(dict[str, object], modeled_entry["terminal_metadata"])
+        owner_spec = next(
+            non_model for non_model in spec.non_model_objects if non_model.object_id == placement_owner_id_for_role(modeled_spec.role)
+        )
+        if isinstance(modeled_spec, (ModeledTxPlateStackSpec, ModeledRxPlateStackSpec)):
+            _scene_children, expected_scene_data = build_modeled_scene_data(
+                modeled_spec,
+                owner_spec=owner_spec,
+                seed=seed,
+            )
+            expected_terminal_metadata = expected_scene_data["terminal_metadata"]
+            if terminal_metadata != expected_terminal_metadata:
+                raise RuntimeError(
+                    "type2 plate-stack terminal metadata drifted from geometry contract "
+                    f"(object_id={modeled_spec.object_id}, actual={terminal_metadata}, expected={expected_terminal_metadata})"
+                )
+            continue
         if "kind" in terminal_metadata:
             raw_kind = terminal_metadata["kind"]
             if not isinstance(raw_kind, str):
@@ -499,15 +573,12 @@ def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path:
                     "type2 terminal metadata kind sentinel must be str "
                     f"(object_id={modeled_spec.object_id}, actual={raw_kind!r})"
                 )
-            if raw_kind == "none":
-                continue
             raise RuntimeError(
                 "type2 terminal metadata kind sentinel is unsupported "
                 f"(object_id={modeled_spec.object_id}, kind={raw_kind!r})"
             )
         single_coil_spec = cast(ModeledSingleCoilSpec, modeled_spec)
         profile = profile_for_modeled_role(single_coil_spec.role)
-        owner_spec = next(non_model for non_model in spec.non_model_objects if non_model.object_id == profile.placement_owner_id)
         with tempfile.TemporaryDirectory() as temp_dir:
             tx_rect_void_toml_path = Path(temp_dir) / f"{single_coil_spec.object_id}.toml"
             tx_rect_void_toml_path.write_text(render_tx_rect_void_toml(single_coil_spec), encoding="utf-8")

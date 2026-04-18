@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import cast
-
 from peetsfea.aedt.proxies import assign_lumped_port, get_boundary_names
 from peetsfea.aedt.protocols import HfssSession, ModelerSession
 from peetsfea.backend.pyaedt.em_pipeline.steps.excitation_names import (
@@ -12,7 +10,9 @@ from peetsfea.backend.pyaedt.type2_step_import_ledger import require_key, requir
 from peetsfea.backend.pyaedt.type2_step_import_core import Type2ImportedLedger
 from peetsfea.types.manifest import EmPorts
 
-_UNSUPPORTED_DIRECT_PORT_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
+_COIL_ROLE_PAIR: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
+_PLATE_STACK_ROLE_PAIR: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
+_ALL_SUPPORTED_ROLES: frozenset[str] = frozenset({*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR})
 
 
 def _current_excitation_name_map(hfss: HfssSession) -> dict[str, str]:
@@ -79,11 +79,6 @@ def _port_sheet_vertices(entry: dict[str, object], *, context: str) -> tuple[tup
 
 def _required_port_sheet_name(entry: dict[str, object], *, context: str) -> str:
     role = require_non_empty_str(require_key(entry, key="role", context=context), context=f"{context}.role")
-    if role in _UNSUPPORTED_DIRECT_PORT_ROLES:
-        raise ValueError(
-            f"{context}.role {role!r} is unsupported in assign_type2_lumped_ports; "
-            "plate-stack roles must stop before direct mesh/port/EM helper execution"
-        )
     raw_imported_names = require_key(entry, key="imported_object_names", context=context)
     if isinstance(raw_imported_names, (str, bytes)) or not isinstance(raw_imported_names, list):
         raise TypeError(f"{context}.imported_object_names must be a list of strings")
@@ -95,8 +90,15 @@ def _required_port_sheet_name(entry: dict[str, object], *, context: str) -> str:
         expected_name = "tx_port_sheet"
     elif role == "rx_single_coil":
         expected_name = "rx_port_sheet"
+    elif role == "tx_plate_stack":
+        expected_name = "tx_plate_port_sheet"
+    elif role == "rx_plate_stack":
+        expected_name = "rx_plate_port_sheet"
     else:
-        raise ValueError(f"{context}.role must be tx_single_coil or rx_single_coil (actual={role!r})")
+        raise ValueError(
+            f"{context}.role must be one of ['tx_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack'] "
+            f"(actual={role!r})"
+        )
     if expected_name not in imported_object_names:
         raise ValueError(f"{context}.imported_object_names must contain reconstructed port sheet {expected_name!r}")
     return expected_name
@@ -189,6 +191,7 @@ def _assign_role_port(
     role: str,
     context: str,
 ) -> str:
+    entry_role = _required_supported_role_for_direct_port_assignment(entry, context=context)
     raw_imported_names = require_key(entry, key="imported_object_names", context=context)
     if isinstance(raw_imported_names, (str, bytes)) or not isinstance(raw_imported_names, list):
         raise TypeError(f"{context}.imported_object_names must be a list of strings")
@@ -196,13 +199,14 @@ def _assign_role_port(
         require_non_empty_str(raw_name, context=f"{context}.imported_object_names[{index}]")
         for index, raw_name in enumerate(raw_imported_names)
     ]
-    copper_names = [
-        name
-        for name in imported_object_names
-        if name.startswith(("tx_copper_l", "rx_copper_l")) or name in ("tx_copper_stack", "rx_copper_stack")
-    ]
-    if len(copper_names) != 1:
-        raise ValueError(f"{context}.imported_object_names must contain exactly one copper body before port assignment")
+    if entry_role in ("tx_single_coil", "rx_single_coil"):
+        copper_names = [
+            name
+            for name in imported_object_names
+            if name.startswith(("tx_copper_l", "rx_copper_l")) or name in ("tx_copper_stack", "rx_copper_stack")
+        ]
+        if len(copper_names) != 1:
+            raise ValueError(f"{context}.imported_object_names must contain exactly one copper body before port assignment")
     sheet_name = _required_port_sheet_name(entry, context=context)
     vertices = _port_sheet_vertices(entry, context=context)
     signal_edge_id = _resolve_sheet_edge_id(
@@ -246,46 +250,73 @@ def assign_type2_lumped_ports(
     modeler: ModelerSession,
     imported_ledger: Type2ImportedLedger,
 ) -> EmPorts:
-    tx_matches = [
-        entry
-        for entry in imported_ledger["modeled_objects"]
-        if _required_supported_role_for_direct_port_assignment(entry, context="modeled_object")
-        == "tx_single_coil"
-    ]
-    rx_matches = [
-        entry
-        for entry in imported_ledger["modeled_objects"]
-        if _required_supported_role_for_direct_port_assignment(entry, context="modeled_object")
-        == "rx_single_coil"
-    ]
-    if len(tx_matches) != 1 or len(rx_matches) != 1:
-        raise ValueError(
-            "type2 setup-ready requires exactly one tx_single_coil and one rx_single_coil modeled entry "
-            f"(tx={len(tx_matches)}, rx={len(rx_matches)})"
-        )
+    tx_entry, rx_entry, tx_context, rx_context = _resolve_exact_pair_for_direct_port_assignment(
+        imported_ledger["modeled_objects"]
+    )
     tx_port = _assign_role_port(
         hfss=hfss,
         modeler=modeler,
-        entry=tx_matches[0],
+        entry=tx_entry,
         role="tx",
-        context="modeled_objects[tx_single_coil]",
+        context=tx_context,
     )
     rx_port = _assign_role_port(
         hfss=hfss,
         modeler=modeler,
-        entry=rx_matches[0],
+        entry=rx_entry,
         role="rx",
-        context="modeled_objects[rx_single_coil]",
+        context=rx_context,
     )
     return {"tx": [tx_port], "rx": [rx_port]}
 
 
+def _resolve_exact_pair_for_direct_port_assignment(
+    modeled_objects: list[dict[str, object]],
+) -> tuple[dict[str, object], dict[str, object], str, str]:
+    if len(modeled_objects) != 2:
+        raise ValueError(
+            "type2 setup-ready direct port assignment requires exactly two modeled_objects entries "
+            f"(actual={len(modeled_objects)})"
+        )
+    entry_by_role: dict[str, dict[str, object]] = {}
+    modeled_roles: list[str] = []
+    for index, modeled_object in enumerate(modeled_objects):
+        role = _required_supported_role_for_direct_port_assignment(modeled_object, context=f"modeled_objects[{index}]")
+        if role in entry_by_role:
+            raise ValueError(
+                "type2 setup-ready direct port assignment requires an exact tx/rx role pair without duplicates "
+                f"(roles={modeled_roles + [role]})"
+            )
+        entry_by_role[role] = modeled_object
+        modeled_roles.append(role)
+    role_set = frozenset(modeled_roles)
+    if role_set == _COIL_ROLE_PAIR:
+        return (
+            entry_by_role["tx_single_coil"],
+            entry_by_role["rx_single_coil"],
+            "modeled_objects[tx_single_coil]",
+            "modeled_objects[rx_single_coil]",
+        )
+    if role_set == _PLATE_STACK_ROLE_PAIR:
+        return (
+            entry_by_role["tx_plate_stack"],
+            entry_by_role["rx_plate_stack"],
+            "modeled_objects[tx_plate_stack]",
+            "modeled_objects[rx_plate_stack]",
+        )
+    raise ValueError(
+        "type2 setup-ready direct port assignment requires one exact supported tx/rx role pair: "
+        "['tx_single_coil', 'rx_single_coil'] or ['tx_plate_stack', 'rx_plate_stack'] "
+        f"(roles={modeled_roles})"
+    )
+
+
 def _required_supported_role_for_direct_port_assignment(entry: dict[str, object], *, context: str) -> str:
     role = require_non_empty_str(require_key(entry, key="role", context=context), context=f"{context}.role")
-    if role in _UNSUPPORTED_DIRECT_PORT_ROLES:
+    if role not in _ALL_SUPPORTED_ROLES:
         raise ValueError(
-            f"{context}.role {role!r} is unsupported in assign_type2_lumped_ports; "
-            "plate-stack roles must stop before direct mesh/port/EM helper execution"
+            f"{context}.role must be one of ['tx_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack'] "
+            f"(actual={role!r})"
         )
     return role
 

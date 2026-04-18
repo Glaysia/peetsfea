@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import TypedDict, cast
@@ -40,7 +39,11 @@ DEFAULT_SOURCE_STEP_LEDGER_PATH = REPO_ROOT / "run" / "step" / "type2" / "type2_
 DEFAULT_IMPORTED_LEDGER_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_import" / "type2_imported_ledger.json"
 DEFAULT_OUTPUT_AEDT_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_setup_ready" / "type2_setup_ready.aedt"
 DEFAULT_DESIGN_NAME = "type2_step_setup_ready"
-_UNSUPPORTED_PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
+_COIL_ROLE_PAIR: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
+_PLATE_STACK_ROLE_PAIR: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
+_ALL_SUPPORTED_ROLE_PAIRS: frozenset[str] = frozenset({*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR})
+_SETUP_BRANCH_COIL_FULL_READY = "coil_full_setup_ready"
+_SETUP_BRANCH_PLATE_STACK_PORT_READY = "plate_stack_port_ready"
 
 HfssFactory = Callable[[str], HfssSession]
 
@@ -58,6 +61,20 @@ class Type2SetupReadyResult(TypedDict):
     sources: dict[str, str]
     analysis: dict[str, float | str]
     validation_report: dict[str, str | bool]
+
+
+class Type2PlateStackPortReadyResult(TypedDict):
+    source_toml_path: str
+    source_step_ledger_path: str
+    scene_step_path: str
+    seed: int
+    aedt_path: str
+    imported_ledger_path: str
+    boundary: dict[str, str]
+    ports: EmPorts
+
+
+Type2StepSetupFacadeResult = Type2SetupReadyResult | Type2PlateStackPortReadyResult
 
 
 def _setup_ready_policy(ledger: ValidatedStepLedger) -> EmPolicy:
@@ -85,31 +102,56 @@ def _assign_design_variables(
         hfss[variable_name] = expression
 
 
-def _reject_unsupported_plate_stack_roles_from_raw_step_ledger(*, step_ledger_path: Path) -> None:
-    if not step_ledger_path.is_file():
-        return
-    raw_payload = json.loads(step_ledger_path.read_text(encoding="utf-8"))
-    if not isinstance(raw_payload, dict):
-        return
-    if "modeled_objects" not in raw_payload:
-        return
-    raw_modeled_objects = raw_payload["modeled_objects"]
-    if not isinstance(raw_modeled_objects, list):
-        return
-    for index, raw_entry in enumerate(raw_modeled_objects):
-        if not isinstance(raw_entry, dict):
-            continue
-        if "role" not in raw_entry:
-            continue
-        raw_role = raw_entry["role"]
-        if isinstance(raw_role, str) and raw_role in _UNSUPPORTED_PLATE_STACK_ROLES:
-            raise ValueError(
-                "type2 setup-ready rejects plate-stack roles before HFSS work "
-                f"(context=modeled_objects[{index}].role, role={raw_role!r})"
+def _modeled_role(*, entry: dict[str, object], context: str) -> str:
+    if "role" not in entry:
+        raise ValueError(f"{context} is missing required key 'role'")
+    raw_role = entry["role"]
+    if not isinstance(raw_role, str):
+        raise TypeError(f"{context}.role must be str")
+    if raw_role == "":
+        raise ValueError(f"{context}.role must be non-empty")
+    return raw_role
+
+
+def _resolve_setup_branch(ledger: ValidatedStepLedger) -> str:
+    modeled_entries = ledger["modeled_objects"]
+    if len(modeled_entries) != 2:
+        raise ValueError(
+            "type2 setup facade requires exactly two modeled_objects entries "
+            f"(actual={len(modeled_entries)})"
+        )
+    modeled_roles: list[str] = []
+    for index, modeled_entry in enumerate(modeled_entries):
+        modeled_roles.append(
+            _modeled_role(
+                entry=modeled_entry["entry"],
+                context=f"modeled_objects[{index}]",
             )
+        )
+    role_set = frozenset(modeled_roles)
+    if len(role_set) != 2:
+        raise ValueError(
+            "type2 setup facade requires an exact tx/rx role pair without duplicates "
+            f"(roles={modeled_roles})"
+        )
+    unsupported_roles = role_set.difference(_ALL_SUPPORTED_ROLE_PAIRS)
+    if unsupported_roles:
+        raise ValueError(
+            "type2 setup facade encountered unsupported modeled roles "
+            f"(roles={modeled_roles}, unsupported={sorted(unsupported_roles)})"
+        )
+    if role_set == _COIL_ROLE_PAIR:
+        return _SETUP_BRANCH_COIL_FULL_READY
+    if role_set == _PLATE_STACK_ROLE_PAIR:
+        return _SETUP_BRANCH_PLATE_STACK_PORT_READY
+    raise ValueError(
+        "type2 setup facade rejects mixed modeled role families; expected exact pair "
+        "['tx_single_coil', 'rx_single_coil'] or ['tx_plate_stack', 'rx_plate_stack'] "
+        f"(roles={modeled_roles})"
+    )
 
 
-def _setup_ready_from_loaded_ledger(
+def _setup_ready_from_loaded_ledger_coil(
     *,
     hfss: HfssSession,
     step_ledger_path: Path,
@@ -180,6 +222,80 @@ def _setup_ready_from_loaded_ledger(
     }
 
 
+def _setup_ready_from_loaded_ledger_plate_stack(
+    *,
+    hfss: HfssSession,
+    step_ledger_path: Path,
+    output_aedt_path: Path,
+    imported_ledger_path: Path,
+    ledger: ValidatedStepLedger,
+    design_variables: tuple[DesignVariableEntry, ...],
+) -> Type2PlateStackPortReadyResult:
+    _assign_design_variables(hfss, design_variables=design_variables)
+    imported_ledger: Type2ImportedLedger = build_imported_ledger(
+        hfss=hfss,
+        step_ledger_path=step_ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        ledger=ledger,
+    )
+    em_policy = _setup_ready_policy(ledger)
+    boundary = build_boundary(
+        hfss=hfss,
+        modeler=hfss.modeler,
+        policy=em_policy,
+    )
+    ports = assign_type2_lumped_ports(
+        hfss=hfss,
+        modeler=hfss.modeler,
+        imported_ledger=imported_ledger,
+    )
+    save_result = hfss.save_project(str(output_aedt_path))
+    raise_on_false(save_result, operation="save_project", context={"path": str(output_aedt_path)})
+    write_imported_ledger(imported_ledger_path=imported_ledger_path, imported_ledger=imported_ledger)
+    return {
+        "source_toml_path": imported_ledger["source_toml_path"],
+        "source_step_ledger_path": imported_ledger["source_step_ledger_path"],
+        "scene_step_path": imported_ledger["scene_step_path"],
+        "seed": imported_ledger["seed"],
+        "aedt_path": str(output_aedt_path),
+        "imported_ledger_path": str(imported_ledger_path),
+        "boundary": boundary,
+        "ports": ports,
+    }
+
+
+def _setup_ready_from_loaded_ledger_by_branch(
+    *,
+    hfss: HfssSession,
+    step_ledger_path: Path,
+    output_aedt_path: Path,
+    imported_ledger_path: Path,
+    ledger: ValidatedStepLedger,
+    design_variables: tuple[DesignVariableEntry, ...],
+    setup_branch: str,
+) -> Type2StepSetupFacadeResult:
+    if setup_branch == _SETUP_BRANCH_COIL_FULL_READY:
+        return _setup_ready_from_loaded_ledger_coil(
+            hfss=hfss,
+            step_ledger_path=step_ledger_path,
+            output_aedt_path=output_aedt_path,
+            imported_ledger_path=imported_ledger_path,
+            ledger=ledger,
+            design_variables=design_variables,
+        )
+    if setup_branch == _SETUP_BRANCH_PLATE_STACK_PORT_READY:
+        return _setup_ready_from_loaded_ledger_plate_stack(
+            hfss=hfss,
+            step_ledger_path=step_ledger_path,
+            output_aedt_path=output_aedt_path,
+            imported_ledger_path=imported_ledger_path,
+            ledger=ledger,
+            design_variables=design_variables,
+        )
+    raise ValueError(f"type2 setup facade branch is unsupported (branch={setup_branch!r})")
+
+
 def setup_type2_step_ledger(
     *,
     step_ledger_path: Path = DEFAULT_SOURCE_STEP_LEDGER_PATH,
@@ -188,20 +304,21 @@ def setup_type2_step_ledger(
     design_name: str = DEFAULT_DESIGN_NAME,
     hfss_factory: HfssFactory = create_headless_hfss,
     design_variables: tuple[DesignVariableEntry, ...] = (),
-) -> Type2SetupReadyResult:
+) -> Type2StepSetupFacadeResult:
     checked_step_ledger_path = step_ledger_path.resolve(strict=False)
-    _reject_unsupported_plate_stack_roles_from_raw_step_ledger(step_ledger_path=checked_step_ledger_path)
     ledger = load_step_ledger(checked_step_ledger_path)
+    setup_branch = _resolve_setup_branch(ledger)
     output_aedt_path.parent.mkdir(parents=True, exist_ok=True)
     hfss = hfss_factory(design_name)
     try:
-        return _setup_ready_from_loaded_ledger(
+        return _setup_ready_from_loaded_ledger_by_branch(
             hfss=hfss,
             step_ledger_path=checked_step_ledger_path,
             output_aedt_path=output_aedt_path,
             imported_ledger_path=imported_ledger_path,
             ledger=ledger,
             design_variables=design_variables,
+            setup_branch=setup_branch,
         )
     finally:
         release_result = hfss.desktop_class.release_desktop(close_projects=True, close_on_exit=True)
@@ -219,20 +336,21 @@ def setup_type2_step_ledger_into_hfss(
     output_aedt_path: Path = DEFAULT_OUTPUT_AEDT_PATH,
     imported_ledger_path: Path = DEFAULT_IMPORTED_LEDGER_PATH,
     design_variables: tuple[DesignVariableEntry, ...] = (),
-) -> Type2SetupReadyResult:
+) -> Type2StepSetupFacadeResult:
     checked_step_ledger_path = step_ledger_path.resolve(strict=False)
     try:
-        _reject_unsupported_plate_stack_roles_from_raw_step_ledger(step_ledger_path=checked_step_ledger_path)
         ledger = load_step_ledger(checked_step_ledger_path)
+        setup_branch = _resolve_setup_branch(ledger)
         output_aedt_path.parent.mkdir(parents=True, exist_ok=True)
         prepare_attached_import_design(hfss)
-        return _setup_ready_from_loaded_ledger(
+        return _setup_ready_from_loaded_ledger_by_branch(
             hfss=hfss,
             step_ledger_path=checked_step_ledger_path,
             output_aedt_path=output_aedt_path,
             imported_ledger_path=imported_ledger_path,
             ledger=ledger,
             design_variables=design_variables,
+            setup_branch=setup_branch,
         )
     finally:
         release_result = hfss.desktop_class.release_desktop(close_projects=False, close_on_exit=False)
@@ -249,6 +367,8 @@ __all__ = [
     "DEFAULT_OUTPUT_AEDT_PATH",
     "DEFAULT_SOURCE_STEP_LEDGER_PATH",
     "HfssFactory",
+    "Type2PlateStackPortReadyResult",
+    "Type2StepSetupFacadeResult",
     "Type2SetupReadyResult",
     "setup_type2_step_ledger",
     "setup_type2_step_ledger_into_hfss",

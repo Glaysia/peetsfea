@@ -14,7 +14,7 @@ tags:
 - Path: `entry/import_type2_step.py`
 - Code note path: `sdd/code/entry/import_type2_step.py.md`
 - Status: planned active
-- Related feature plan: [[sdd/plans/0.2.25-type2-tx-rx-shared-plate-stack-import-only]]
+- Related feature plan: [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]]
 
 ## 역할
 - active type2 geometry를 import-only로 AEDT에 여는 entrypoint다.

@@ -1,7 +1,7 @@
 ---
 title: test_sample_type2_entry.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-19 @ 21:47
+updated: 2026-04-19 @ 23:58
 tags:
   - tests
   - type2
@@ -19,8 +19,11 @@ tags:
 
 ## Canonical coverage
 - active example uses `tx_plate_stack` + `rx_plate_stack`
-- plate roles do not contribute sampled owner paths
+- active example plate-stack PCB total uses a shared TX/RX baseline of `0.4 mm`
+- plate roles can own sampled ranges, but current fixed example does not contribute sampled owner paths
 - sampled TOML keeps plate scalar fields fixed
+- sampled TOML keeps fixed `turn_count`, `metal_fill_factor` range tables losslessly
+- sampled TOML excludes removed `shoe_depth_mm` from both modeled payload and sampled metadata
 - manifest identity and hash contract remain unchanged
 
 ## 변경 시 주의점

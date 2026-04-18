@@ -13,8 +13,8 @@ tags:
 - Code note path: `sdd/code/entry/generate_type2_step.py.md`
 - Related plan: [[sdd/plans/0.2.22-type2-toml-unification]]
 - Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
-- Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
-- Related feature plan: [[sdd/plans/0.2.23-type2-ferrite-underlay-equivalent-thickness]]
+- Related feature plan: [[sdd/plans/0.2.22-type2-underlay-region-footprint-tx-gap-rx-support]]
+- Related feature plan: [[sdd/plans/0.2.22-type2-ferrite-underlay-equivalent-thickness]]
 - Related architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 - Related test: [[sdd/code/tests/type2/test_generate_type2_step.py]]
 
@@ -28,7 +28,7 @@ tags:
 - placement는 routing envelope가 아니라 derived modeled bbox를 기준으로 계산한다.
 - current implementation delegates to the generalized single-coil core and consumes TX multilayer parallel-bus outputs directly.
 - entry-facing modeled export contract keeps port-sheet ownership in `terminal_metadata.port_sheet_vertices_xyz` only and never reintroduces port-sheet STEP bodies.
-- 0.2.23 document contract adds role-aware scene-layer explicit tri-layer solids while keeping underlay responsibility outside the `tx_rect_void` core.
+- 0.2.22 document contract adds role-aware scene-layer explicit tri-layer solids while keeping underlay responsibility outside the `tx_rect_void` core.
 - the entry surface fail-fast validates expected body names/count for single-layer TX/RX and TX multilayer before returning the ledger to callers.
 - the entry surface fail-fast validates the metadata-owned port-sheet geometry rule:
   - the sheet lies in the shared plane of the two canonical owner bottom faces

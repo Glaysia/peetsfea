@@ -18,6 +18,7 @@ _UNDERLAY_REPEAT_COUNT_CANDIDATES = (0, 2, 4, 6, 8)
 _TX_UNDERLAY_GAP_MM_CANDIDATES = (1.0, 4.0, 7.0, 10.0)
 _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES = (0, 1)
 _PLATE_STACK_FERRITE_SET_COUNT = 10
+_TYPE2_SCHEMA_ID = "peetsfea.type2.step.v2"
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,8 @@ class ModeledPlateStackCommonSpec:
     pcb_total_thickness_mm: float
     copper_thickness_mm: float
     ferrite_set_count: int
+    turn_count: RangeSpec
+    metal_fill_factor: RangeSpec
 
 
 @dataclass(frozen=True)
@@ -459,6 +462,20 @@ def _parse_modeled_plate_stack(
             f"{context}.ferrite_set_count must be {_PLATE_STACK_FERRITE_SET_COUNT} "
             f"(actual={ferrite_set_count})"
         )
+    turn_count = _require_range(table, "turn_count", context, expect_integer=True)
+    turn_count_candidates = _integer_range_candidates(turn_count)
+    if any(candidate < 2 for candidate in turn_count_candidates):
+        raise ValueError(
+            f"{context}.turn_count must realize to integers >= 2 "
+            f"(actual={turn_count_candidates})"
+        )
+    metal_fill_factor = _require_range(table, "metal_fill_factor", context, expect_integer=False)
+    metal_fill_factor_candidates = _float_range_candidates(metal_fill_factor)
+    if any(candidate <= 0.0 or candidate > 0.5 for candidate in metal_fill_factor_candidates):
+        raise ValueError(
+            f"{context}.metal_fill_factor must realize to values > 0 and <= 0.5 "
+            f"(actual={metal_fill_factor_candidates})"
+        )
     allowed_keys = {
         "object_id",
         "role",
@@ -467,6 +484,8 @@ def _parse_modeled_plate_stack(
         "pcb_total_thickness_mm",
         "copper_thickness_mm",
         "ferrite_set_count",
+        "turn_count",
+        "metal_fill_factor",
     }
     extra_keys = sorted(set(table.keys()) - allowed_keys)
     if extra_keys:
@@ -483,6 +502,8 @@ def _parse_modeled_plate_stack(
             pcb_total_thickness_mm=pcb_total_thickness_mm,
             copper_thickness_mm=copper_thickness_mm,
             ferrite_set_count=ferrite_set_count,
+            turn_count=turn_count,
+            metal_fill_factor=metal_fill_factor,
         )
     return ModeledRxPlateStackSpec(
         object_id=object_id,
@@ -492,6 +513,8 @@ def _parse_modeled_plate_stack(
         pcb_total_thickness_mm=pcb_total_thickness_mm,
         copper_thickness_mm=copper_thickness_mm,
         ferrite_set_count=ferrite_set_count,
+        turn_count=turn_count,
+        metal_fill_factor=metal_fill_factor,
     )
 
 
@@ -655,10 +678,49 @@ def resolve_modeled_wall_parallel_stack_present(spec: ModeledTxSingleCoilSpec, *
     return bool(candidates[index])
 
 
+def resolve_modeled_plate_stack_turn_count(spec: ModeledPlateStackSpec, *, seed: int) -> int:
+    candidates = _integer_range_candidates(spec.turn_count)
+    if any(candidate < 2 for candidate in candidates):
+        raise ValueError(
+            f"{spec.role}.turn_count must realize to integers >= 2 "
+            f"(actual={candidates})"
+        )
+    if len(candidates) == 1:
+        return candidates[0]
+    range_path = f"modeled_objects.{spec.object_id}.turn_count"
+    index = _resolve_seeded_candidate_index(seed=seed, range_path=range_path, candidate_count=len(candidates))
+    return candidates[index]
+
+
+def resolve_modeled_plate_stack_metal_fill_factor(spec: ModeledPlateStackSpec, *, seed: int) -> float:
+    candidates = _float_range_candidates(spec.metal_fill_factor)
+    if any(candidate <= 0.0 or candidate > 0.5 for candidate in candidates):
+        raise ValueError(
+            f"{spec.role}.metal_fill_factor must realize to values > 0 and <= 0.5 "
+            f"(actual={candidates})"
+        )
+    if len(candidates) == 1:
+        return candidates[0]
+    range_path = f"modeled_objects.{spec.object_id}.metal_fill_factor"
+    index = _resolve_seeded_candidate_index(seed=seed, range_path=range_path, candidate_count=len(candidates))
+    return candidates[index]
+
+
+def _require_type2_schema_id(root: dict[str, object], *, context: str) -> str:
+    schema_id = _require_non_empty_str(root, "schema_id", context)
+    if schema_id != _TYPE2_SCHEMA_ID:
+        raise ValueError(
+            f"{context}.schema_id must be '{_TYPE2_SCHEMA_ID}' for active type2 inputs "
+            f"(actual={schema_id!r})"
+        )
+    return schema_id
+
+
 def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
     raw_text = toml_path.read_text(encoding="utf-8")
     raw_spec = tomllib.loads(raw_text)
     root = _require_table(raw_spec, toml_path.name)
+    _require_type2_schema_id(root, context=toml_path.name)
 
     design = _require_table(_require_key(root, "design", toml_path.name), "design")
     units = _require_non_empty_str(design, "units", "design")
@@ -776,6 +838,8 @@ __all__ = [
     "modeled_object_id_for_role",
     "modeled_plane_for_role",
     "placement_owner_id_for_role",
+    "resolve_modeled_plate_stack_metal_fill_factor",
+    "resolve_modeled_plate_stack_turn_count",
     "resolve_modeled_underlay_gap_mm",
     "resolve_modeled_underlay_repeat_count",
     "resolve_modeled_wall_parallel_stack_present",

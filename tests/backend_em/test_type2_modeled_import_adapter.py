@@ -22,7 +22,7 @@ def _modeled_object() -> dict[str, object]:
             "outer_bounds_max_xyz": [25.0, 15.0, 2.8],
             "outer_bounds_size_xyz": [50.0, 30.0, 2.8],
             "pcb_layer_z_positions_mm": [0.0, 2.5],
-            "copper_layer_z_positions_mm": [1.6, 4.1],
+            "copper_layer_z_positions_mm": [0.4, 2.9],
         },
         "terminal_metadata": {
             "path": "A_cw_to_a",
@@ -47,7 +47,19 @@ def _plate_stack_modeled_object(
     modeled_object["role"] = role
     modeled_object["plane"] = plane
     modeled_object["placement_owner_id"] = placement_owner_id
-    modeled_object["terminal_metadata"] = {"kind": "none"}
+    modeled_object["terminal_metadata"] = {
+        "kind": "stub_port",
+        "input_stub_body_name": f"{object_id}_stub_in",
+        "output_stub_body_name": f"{object_id}_stub_out",
+        "start_point_plane_mm": [145.0, 5.5],
+        "end_point_plane_mm": [145.0, 60.5],
+        "port_sheet_vertices_xyz": [
+            [0.0, 145.0, 0.0],
+            [0.035, 145.0, 0.0],
+            [0.035, 145.0, 66.0],
+            [0.0, 145.0, 66.0],
+        ],
+    }
     return modeled_object
 
 
@@ -118,7 +130,10 @@ def test_build_single_imported_modeled_object_entry_accepts_geometry_only_plate_
     assert result["role"] == role
     assert result["plane"] == plane
     assert result["placement_owner_id"] == placement_owner_id
-    assert result["terminal_metadata"] == {"kind": "none"}
+    terminal_metadata = cast(dict[str, object], result["terminal_metadata"])
+    assert terminal_metadata["kind"] == "stub_port"
+    assert terminal_metadata["input_stub_body_name"] == f"{object_id}_stub_in"
+    assert terminal_metadata["output_stub_body_name"] == f"{object_id}_stub_out"
     assert result["imported_object_names"] == ("body_1", "body_2")
 
 
@@ -169,7 +184,7 @@ def test_build_single_imported_modeled_object_entry_rejects_geometry_only_termin
     tmp_path: Path,
 ) -> None:
     modeled_object = _modeled_object()
-    modeled_object["terminal_metadata"] = {"kind": "none"}
+    modeled_object["terminal_metadata"] = {"kind": "stub_port"}
 
     with pytest.raises(ValueError, match=r"unsupported for coil import"):
         build_single_imported_modeled_object_entry(
@@ -189,7 +204,7 @@ def test_build_single_imported_modeled_object_entry_rejects_plate_stack_with_non
     )
     modeled_object["terminal_metadata"] = {"kind": "port"}
 
-    with pytest.raises(ValueError, match=r"terminal_metadata\.kind must be 'none'"):
+    with pytest.raises(ValueError, match=r"terminal_metadata\.kind must be 'stub_port'"):
         build_single_imported_modeled_object_entry(
             modeled_object=modeled_object,
             imported_object_names=("body_1",),

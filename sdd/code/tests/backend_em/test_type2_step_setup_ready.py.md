@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_setup_ready.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-19 @ 21:47
+updated: 2026-04-20 @ 02:16
 tags:
   - tests
   - backend-em
@@ -18,9 +18,11 @@ tags:
 - setup-ready preflight, mesh/port/EM wiring, fail-fast behavior를 검증한다.
 
 ## Canonical coverage
-- active plate roles are rejected before HFSS launch
-- direct mesh/port/EM helpers also reject plate roles
-- legacy coil path expectations remain intact where still supported
+- setup facade enforces exact two-entry tx/rx role pairs before HFSS launch
+- mixed role families are rejected fail-fast before runtime attach
+- direct mesh helper rejects plate-stack roles while direct port assignment accepts only exact tx/rx family pairs
+- plate-stack fixtures use active `terminal_metadata.kind == "stub_port"` contract from import-pipeline helpers
+- legacy coil full setup path expectations remain intact where still supported
 
 ## 변경 시 주의점
-- active plate roles를 partial setup-ready support로 넓히지 않는다.
+- setup facade role-pair gate보다 뒤 단계의 오류를 먼저 기대하는 assertion을 만들지 않는다.

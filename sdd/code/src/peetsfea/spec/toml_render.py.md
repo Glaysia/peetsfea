@@ -12,7 +12,7 @@ tags:
 ## Source
 - Path: `src/peetsfea/spec/toml_render.py`
 - Code note path: `sdd/code/src/peetsfea/spec/toml_render.py.md`
-- Related plan: [[sdd/plans/0.2.23-type2-sampled-build-split]]
+- Related plan: [[sdd/plans/0.2.22-type2-sampled-build-split]]
 
 ## 역할
 - active path에서 사용할 generic TOML serializer를 제공한다.

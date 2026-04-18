@@ -20,6 +20,16 @@ class CanonicalCoordinates(TypedDict):
     outer_bounds_size_xyz: Point3
 
 
+class ExportedBodyGroup(TypedDict):
+    group_name: str
+    member_body_names: tuple[str, ...]
+
+
+class ImportedBodyGroup(TypedDict):
+    group_name: str
+    member_object_names: list[str]
+
+
 class NonModelSceneMemberLedgerEntry(TypedDict):
     object_id: str
     role: str
@@ -51,6 +61,7 @@ class ModeledObjectSceneData(TypedDict):
     model_state: Literal[True]
     expected_exported_body_names: tuple[str, ...]
     expected_exported_body_count: int
+    expected_exported_body_groups: tuple[ExportedBodyGroup, ...]
     canonical_coordinates: dict[str, object]
     terminal_metadata: dict[str, object]
 
@@ -89,6 +100,7 @@ def write_modeled_source_metadata(
         "role": scene_data["role"],
         "expected_exported_body_names": scene_data["expected_exported_body_names"],
         "expected_exported_body_count": scene_data["expected_exported_body_count"],
+        "expected_exported_body_groups": scene_data["expected_exported_body_groups"],
         "canonical_coordinates": scene_data["canonical_coordinates"],
         "terminal_metadata": scene_data["terminal_metadata"],
     }
@@ -110,6 +122,7 @@ def build_modeled_object_ledger_entry(
         "model_state": scene_data["model_state"],
         "expected_exported_body_names": scene_data["expected_exported_body_names"],
         "expected_exported_body_count": scene_data["expected_exported_body_count"],
+        "expected_exported_body_groups": scene_data["expected_exported_body_groups"],
         "canonical_coordinates": scene_data["canonical_coordinates"],
         "terminal_metadata": scene_data["terminal_metadata"],
         "source_metadata_path": str(source_metadata_path),
@@ -146,6 +159,8 @@ def write_type2_step_ledger(*, ledger_path: Path, ledger: Type2StepLedger) -> No
 
 __all__ = [
     "CanonicalCoordinates",
+    "ExportedBodyGroup",
+    "ImportedBodyGroup",
     "ModeledObjectLedgerEntry",
     "ModeledObjectSceneData",
     "NonModelObjectLedgerEntry",

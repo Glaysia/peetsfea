@@ -1,7 +1,7 @@
 ---
 title: type2_step_post_import_mesh.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-19 @ 21:47
+updated: 2026-04-19 @ 23:59
 tags:
   - hfss-import
   - mesh
@@ -13,7 +13,7 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_post_import_mesh.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_post_import_mesh.py.md`
 - Status: active
-- Related feature plan: [[sdd/plans/0.2.25-type2-tx-rx-shared-plate-stack-import-only]]
+- Related feature plan: [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]]
 
 ## 역할
 - setup-ready imported conductors에 mesh length operation을 할당한다.
@@ -24,7 +24,7 @@ tags:
 
 ## Canonical state
 - current helper는 coil conductor mesh 전용이다.
-- active plate roles는 direct helper call에서도 unsupported로 처리된다.
+- active plate roles는 port-ready branch 이후에도 direct helper call에서 unsupported로 처리된다.
 
 ## Invariants / fail-fast
 - plate roles에 conductor object candidate를 추론하려고 하면 안 된다.
@@ -38,3 +38,4 @@ tags:
 
 ## 변경 시 주의점
 - active plate roles를 임시 mesh candidate fallback으로 우회하지 않는다.
+- plate-stack setup facade branch가 생겨도 이 helper ownership은 coil-only로 유지한다.

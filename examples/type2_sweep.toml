@@ -4,7 +4,7 @@
 # Non-model guide objects and modeled objects are declared together.
 
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v1"
+schema_id = "peetsfea.type2.step.v2"
 runtime_compatible = false
 
 [design]
@@ -226,9 +226,13 @@ object_id = "tx_plate_stack"
 role = "tx_plate_stack"
 material = "composite"
 model_state = true
-pcb_total_thickness_mm = 1.6
+pcb_total_thickness_mm = 0.4
 copper_thickness_mm = 0.035
 ferrite_set_count = 10
+[modeled_objects.turn_count]
+range = [true, 4, 4, 1]
+[modeled_objects.metal_fill_factor]
+range = [false, 0.4, 0.4, 1]
 
 [[modeled_objects]]
 object_id = "rx_plate_stack"
@@ -238,3 +242,7 @@ model_state = true
 pcb_total_thickness_mm = 0.4
 copper_thickness_mm = 0.1
 ferrite_set_count = 10
+[modeled_objects.turn_count]
+range = [true, 4, 4, 1]
+[modeled_objects.metal_fill_factor]
+range = [false, 0.4, 0.4, 1]

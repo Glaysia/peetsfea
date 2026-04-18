@@ -119,6 +119,7 @@ _MU_TAND_M_DATASET_POINTS = (
     (1.0, 1.0),
 )
 _PLACEMENT_TOLERANCE = 1e-9
+_PLATE_STACK_STUB_LENGTH_MM = 5.0
 
 
 def _unwrap_raw(value: object, *, context: str) -> object:
@@ -407,11 +408,6 @@ def ensure_underlay_materials(hfss: HfssSession, *, imported_modeled_object_name
     ]
     if not underlay_ferrite_names and not underlay_pet_psa_names and not underlay_air_names:
         return
-    if not (len(underlay_ferrite_names) == len(underlay_pet_psa_names) == len(underlay_air_names)):
-        raise ValueError(
-            "Role-aware TX/RX underlay import requires matching ferrite/PET/air body counts before material setup "
-            f"(ferrite={underlay_ferrite_names}, pet_psa={underlay_pet_psa_names}, air={underlay_air_names})"
-        )
     ensure_notebook_dataset_ferrite_material(hfss)
     ensure_pet_psa_material(hfss)
 
@@ -469,6 +465,10 @@ def _expected_port_sheet_name(modeled_entry: dict[str, object], *, context: str)
         return "tx_port_sheet"
     if role == "rx_single_coil":
         return "rx_port_sheet"
+    if role == "tx_plate_stack":
+        return "tx_plate_port_sheet"
+    if role == "rx_plate_stack":
+        return "rx_plate_port_sheet"
     return None
 
 
@@ -639,11 +639,12 @@ def validate_modeled_bounds_against_owner(
     owner_context = f"non_model_objects[*].member_objects[{owner_id}]"
     owner_min_x, owner_min_y, owner_min_z = outer_bounds_min_xyz(owner_member, context=owner_context)
     owner_size_x, owner_size_y, owner_size_z = outer_bounds_size_xyz(owner_member, context=owner_context)
-    if modeled_size_x > owner_size_x or modeled_size_y > owner_size_y or modeled_size_z > owner_size_z:
+    allowed_modeled_size_y = owner_size_y + _PLATE_STACK_STUB_LENGTH_MM if role in ("tx_plate_stack", "rx_plate_stack") else owner_size_y
+    if modeled_size_x > owner_size_x or modeled_size_y > allowed_modeled_size_y or modeled_size_z > owner_size_z:
         raise ValueError(
             f"{context} outer bounds must fit inside {owner_id} "
             f"(modeled_size={(modeled_size_x, modeled_size_y, modeled_size_z)}, "
-            f"owner_size={(owner_size_x, owner_size_y, owner_size_z)})"
+            f"owner_size={(owner_size_x, allowed_modeled_size_y, owner_size_z)})"
         )
     if role == "tx_plate_stack":
         if owner_id != "tx_region":
@@ -653,10 +654,13 @@ def validate_modeled_bounds_against_owner(
             )
         if plane != "YZ":
             raise ValueError(f"{context}.plane must be 'YZ' for tx_plate_stack import-only geometry (actual={plane!r})")
-        if abs(modeled_size_y - owner_size_y) > _PLACEMENT_TOLERANCE or abs(modeled_size_z - owner_size_z) > _PLACEMENT_TOLERANCE:
+        if (
+            abs(modeled_size_y - (owner_size_y + _PLATE_STACK_STUB_LENGTH_MM)) > _PLACEMENT_TOLERANCE
+            or abs(modeled_size_z - owner_size_z) > _PLACEMENT_TOLERANCE
+        ):
             raise ValueError(
-                "tx_plate_stack must already occupy the full tx_region YZ footprint "
-                f"(modeled_size={(modeled_size_y, modeled_size_z)}, owner_size={(owner_size_y, owner_size_z)})"
+                "tx_plate_stack must already occupy the full tx_region YZ footprint plus +Y stub overhang "
+                f"(modeled_size={(modeled_size_y, modeled_size_z)}, owner_size={(owner_size_y + _PLATE_STACK_STUB_LENGTH_MM, owner_size_z)})"
             )
         if abs(modeled_min_x - owner_min_x) > _PLACEMENT_TOLERANCE:
             raise ValueError(
@@ -682,10 +686,13 @@ def validate_modeled_bounds_against_owner(
             )
         if plane != "YZ":
             raise ValueError(f"{context}.plane must be 'YZ' for rx_plate_stack import-only geometry (actual={plane!r})")
-        if abs(modeled_size_y - owner_size_y) > _PLACEMENT_TOLERANCE or abs(modeled_size_z - owner_size_z) > _PLACEMENT_TOLERANCE:
+        if (
+            abs(modeled_size_y - (owner_size_y + _PLATE_STACK_STUB_LENGTH_MM)) > _PLACEMENT_TOLERANCE
+            or abs(modeled_size_z - owner_size_z) > _PLACEMENT_TOLERANCE
+        ):
             raise ValueError(
-                "rx_plate_stack must already occupy the full rx_region_max YZ footprint "
-                f"(modeled_size={(modeled_size_y, modeled_size_z)}, owner_size={(owner_size_y, owner_size_z)})"
+                "rx_plate_stack must already occupy the full rx_region_max YZ footprint plus +Y stub overhang "
+                f"(modeled_size={(modeled_size_y, modeled_size_z)}, owner_size={(owner_size_y + _PLATE_STACK_STUB_LENGTH_MM, owner_size_z)})"
             )
         if abs(modeled_min_x - owner_min_x) > _PLACEMENT_TOLERANCE:
             raise ValueError(

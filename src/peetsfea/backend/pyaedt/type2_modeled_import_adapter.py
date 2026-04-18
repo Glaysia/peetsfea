@@ -33,8 +33,13 @@ class ImportedSingleCoilTerminalMetadata(ImportedSingleCoilTerminalMetadataBase,
     port_sheet_vertices_xyz: tuple[tuple[float, float, float], ...]
 
 
-class ImportedGeometryOnlyTerminalMetadata(TypedDict):
-    kind: Literal["none"]
+class ImportedPlateStackTerminalMetadata(TypedDict):
+    kind: Literal["stub_port"]
+    input_stub_body_name: str
+    output_stub_body_name: str
+    start_point_plane_mm: tuple[float, float]
+    end_point_plane_mm: tuple[float, float]
+    port_sheet_vertices_xyz: tuple[tuple[float, float, float], ...]
 
 
 class ImportedModeledObjectEntry(TypedDict):
@@ -45,7 +50,7 @@ class ImportedModeledObjectEntry(TypedDict):
     material: str
     model_state: Literal[True]
     canonical_coordinates: ImportedModeledObjectCanonicalCoordinates
-    terminal_metadata: ImportedSingleCoilTerminalMetadata | ImportedGeometryOnlyTerminalMetadata
+    terminal_metadata: ImportedSingleCoilTerminalMetadata | ImportedPlateStackTerminalMetadata
     imported_object_names: tuple[str, ...]
 
 
@@ -242,23 +247,60 @@ def _parse_single_coil_terminal_metadata(value: object) -> ImportedSingleCoilTer
     return cast(ImportedSingleCoilTerminalMetadata, terminal_metadata)
 
 
-def _parse_geometry_only_terminal_metadata(value: object, *, role: str) -> ImportedGeometryOnlyTerminalMetadata:
+def _parse_plate_stack_terminal_metadata(value: object, *, role: str) -> ImportedPlateStackTerminalMetadata:
     node = _require_table(value, context="modeled_object.terminal_metadata")
     kind = _require_non_empty_str(
         _require_key(node, key="kind", context="modeled_object.terminal_metadata"),
         context="modeled_object.terminal_metadata.kind",
     )
-    if kind != "none":
+    if kind != "stub_port":
         raise ValueError(
-            f"modeled_object.terminal_metadata.kind must be 'none' for {role} geometry-only import "
+            f"modeled_object.terminal_metadata.kind must be 'stub_port' for {role} geometry-only import "
             f"(actual={kind!r})"
         )
-    if len(node) != 1:
+    expected_keys = {
+        "kind",
+        "input_stub_body_name",
+        "output_stub_body_name",
+        "start_point_plane_mm",
+        "end_point_plane_mm",
+        "port_sheet_vertices_xyz",
+    }
+    if set(node.keys()) != expected_keys:
         raise ValueError(
-            "modeled_object.terminal_metadata must be exactly {'kind': 'none'} for geometry-only plate-stack import "
+            "modeled_object.terminal_metadata must match the stub_port plate-stack import contract "
             f"(actual_keys={sorted(node)})"
         )
-    return {"kind": "none"}
+    input_stub_body_name = _require_non_empty_str(
+        _require_key(node, key="input_stub_body_name", context="modeled_object.terminal_metadata"),
+        context="modeled_object.terminal_metadata.input_stub_body_name",
+    )
+    output_stub_body_name = _require_non_empty_str(
+        _require_key(node, key="output_stub_body_name", context="modeled_object.terminal_metadata"),
+        context="modeled_object.terminal_metadata.output_stub_body_name",
+    )
+    if input_stub_body_name == output_stub_body_name:
+        raise ValueError(
+            "modeled_object.terminal_metadata input/output stub body names must differ "
+            f"(actual={input_stub_body_name!r})"
+        )
+    return {
+        "kind": "stub_port",
+        "input_stub_body_name": input_stub_body_name,
+        "output_stub_body_name": output_stub_body_name,
+        "start_point_plane_mm": _require_float_pair(
+            _require_key(node, key="start_point_plane_mm", context="modeled_object.terminal_metadata"),
+            context="modeled_object.terminal_metadata.start_point_plane_mm",
+        ),
+        "end_point_plane_mm": _require_float_pair(
+            _require_key(node, key="end_point_plane_mm", context="modeled_object.terminal_metadata"),
+            context="modeled_object.terminal_metadata.end_point_plane_mm",
+        ),
+        "port_sheet_vertices_xyz": _require_float_triplet_sequence(
+            _require_key(node, key="port_sheet_vertices_xyz", context="modeled_object.terminal_metadata"),
+            context="modeled_object.terminal_metadata.port_sheet_vertices_xyz",
+        ),
+    }
 
 
 def build_single_imported_modeled_object_entry(
@@ -305,7 +347,7 @@ def build_single_imported_modeled_object_entry(
     )
     raw_terminal_metadata = _require_key(modeled_object, key="terminal_metadata", context="modeled_object")
     if role in _PLATE_STACK_ROLES:
-        terminal_metadata = _parse_geometry_only_terminal_metadata(raw_terminal_metadata, role=role)
+        terminal_metadata = _parse_plate_stack_terminal_metadata(raw_terminal_metadata, role=role)
     else:
         terminal_metadata = _parse_single_coil_terminal_metadata(raw_terminal_metadata)
     validated_object_names = _require_imported_object_names(imported_object_names)
