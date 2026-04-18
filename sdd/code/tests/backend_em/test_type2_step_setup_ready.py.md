@@ -24,6 +24,7 @@ tags:
 - sampled build caller가 준 AEDT design variable handoff도 같은 fake HFSS seam에서 검증한다.
 - direct mesh-helper seam을 통해 future role-aware RX underlay imported-name contract도 pure-Python으로 고정한다.
 - TX-only underlay regression도 shared role-aware imported-name helper를 `rx_repeat_count=0`으로 호출해 검증한다.
+- TX wall-parallel underlay regression도 shared imported-name helper contract 위에서 conductor-only mesh invariants를 유지해야 한다.
 
 ## 입력 / 출력
 - 입력:
@@ -43,6 +44,7 @@ tags:
 - attached-session path도 same setup-ready contract를 공유해야 한다.
 - setup-ready mesh coverage는 TX `tx_copper_l0`뿐 아니라 multilayer `tx_copper_stack` conductor path도 검증해야 한다.
 - TX underlay exact-name bodies가 full setup-ready path에 들어와도 mesh target은 conductor-only여야 한다.
+- TX wall exact-name bodies가 full setup-ready path에 들어와도 mesh target은 conductor-only여야 한다.
 - future RX role-aware import contract에서도 TX/RX underlay exact-name bodies는 setup-ready mesh target과 port ownership 바깥에 남아야 한다.
 - missing copper names, missing/malformed port sheet vertices, edge mismatch, `AssignLumpedPort` false, boundary false, `ValidateDesign` false는 즉시 raise다.
 - caller-provided design variables는 import/save 이전에 HFSS session에 그대로 반영되어야 한다.

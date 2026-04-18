@@ -14,6 +14,7 @@ tags:
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_style.py.md`
 - Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
+- Related feature plan: [[sdd/plans/0.2.23-type2-tx-wall-parallel-ferrite-stack]]
 - Parent note: [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py]]
 
 ## 역할
@@ -32,6 +33,7 @@ tags:
 - modeled TX/RX underlay ferrite body: exact `MULL12060ferrite`.
 - modeled TX/RX underlay dielectric body: exact `PET_PSA`, with air-like dielectric baseline and documented `permittivity = 2.8`.
 - modeled TX/RX underlay air body: explicit `vacuum`.
+- TX wall-parallel `tx_wall_*` bodies use the same ferrite / PET_PSA / vacuum material contract as `tx_underlay_*`.
 - modeled port sheet: STEP import object set에 존재하지 않는 것이 기본이며, terminal metadata의 canonical `port_sheet_vertices_xyz`로 HFSS에서 재생성한 sheet다. live AEDT object가 volume `Material` 속성을 노출할 때만 vacuum volume material mutation을 시도하고, 일반 sheet처럼 그 속성이 없으면 volume-material mutation은 건너뛴다.
 - ferrite dataset canonical source는 `notebooks/mu_p.tab`, `$mu_r_real`, `$mu_tand_m` payload다.
 - ferrite material canonical writer는 project `DefinitionManager.AddMaterial/EditMaterial`이며, geometry styling 전에 PyAEDT material lookup과 동기화돼야 한다.
@@ -48,6 +50,7 @@ tags:
 - TX multilayer exact-name body set도 conductor-vs-underlay styling contract를 그대로 적용한다.
 - TX/RX underlay exact-name bodies must not be restyled as copper or FR4, and explicit air bodies must remain `vacuum`.
 - RX `under_rx_*` exact names use the same ferrite/PET/air styling contract as TX `tx_underlay_*`.
+- TX `tx_wall_*` exact names also use the same ferrite/PET/air styling contract as TX `tx_underlay_*`.
 
 ## 직접 의존
 - `peetsfea.aedt.failfast`

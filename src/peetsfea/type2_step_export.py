@@ -32,6 +32,7 @@ from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
+from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_TOML_PATH = REPO_ROOT / "examples" / "type2_fixed.toml"
@@ -162,6 +163,19 @@ def _tx_underlay_expected_body_names(*, repeat_count: int) -> list[str]:
     return body_names
 
 
+def _tx_wall_expected_body_names(*, repeat_count: int) -> list[str]:
+    body_names: list[str] = []
+    for unit_index in range(repeat_count):
+        body_names.extend(
+            (
+                f"tx_wall_ferrite_u{unit_index}",
+                f"tx_wall_pet_psa_u{unit_index}",
+                f"tx_wall_air_u{unit_index}",
+            )
+        )
+    return body_names
+
+
 def _rx_underlay_expected_body_names(*, repeat_count: int) -> list[str]:
     body_names: list[str] = []
     for unit_index in range(repeat_count):
@@ -200,11 +214,14 @@ def _require_single_coil_expected_body_contract(
                 expected_names.append("tx_copper_l0")
             else:
                 expected_names.append("tx_copper_stack")
+            repeat_count = resolve_modeled_underlay_repeat_count(modeled_spec, seed=seed)
             expected_names.extend(
                 _tx_underlay_expected_body_names(
-                    repeat_count=resolve_modeled_underlay_repeat_count(modeled_spec, seed=seed)
+                    repeat_count=repeat_count
                 )
             )
+            if repeat_count > 0 and resolve_modeled_wall_parallel_stack_present(cast(ModeledTxSingleCoilSpec, modeled_spec), seed=seed):
+                expected_names.extend(_tx_wall_expected_body_names(repeat_count=repeat_count))
         elif role == "rx_single_coil":
             expected_names = ["rx_pcb_l0", "rx_copper_l0"]
             expected_names.extend(

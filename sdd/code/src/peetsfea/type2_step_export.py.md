@@ -14,6 +14,7 @@ tags:
 - Status: active
 - Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
+- Related feature plan: [[sdd/plans/0.2.23-type2-tx-wall-parallel-ferrite-stack]]
 - Parent note: [[sdd/code/entry/generate_type2_step.py]]
 
 ## 역할
@@ -35,6 +36,7 @@ tags:
   - single-layer TX base: `tx_pcb_l0`, `tx_copper_l0`
   - multilayer TX base: `tx_pcb_l{n}` + `tx_copper_stack`
   - TX underlay extension: append `tx_underlay_ferrite_u{n}`, `tx_underlay_pet_psa_u{n}`, `tx_underlay_air_u{n}` in semantic unit order
+  - TX wall extension: append `tx_wall_ferrite_u{n}`, `tx_wall_pet_psa_u{n}`, `tx_wall_air_u{n}` after every `tx_underlay_*` exact body
   - RX base: `rx_pcb_l0`, `rx_copper_l0`
   - RX underlay extension: append `under_rx_ferrite_u{n}`, `under_rx_pet_psa_u{n}`, `under_rx_air_u{n}` in semantic unit order
 - underlay exact object/body names must remain `<= 32` chars.

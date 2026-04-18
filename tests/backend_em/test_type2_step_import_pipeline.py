@@ -519,6 +519,19 @@ def _tx_underlay_expected_names(*, repeat_count: int) -> list[str]:
     return expected_names
 
 
+def _tx_wall_expected_names(*, repeat_count: int) -> list[str]:
+    expected_names: list[str] = []
+    for unit_index in range(repeat_count):
+        expected_names.extend(
+            [
+                f"tx_wall_ferrite_u{unit_index}",
+                f"tx_wall_pet_psa_u{unit_index}",
+                f"tx_wall_air_u{unit_index}",
+            ]
+        )
+    return expected_names
+
+
 def _rx_underlay_expected_names(*, repeat_count: int) -> list[str]:
     expected_names: list[str] = []
     for unit_index in range(repeat_count):
@@ -536,12 +549,18 @@ def _single_layer_modeled_objects_with_role_aware_underlay(
     tmp_path: Path,
     *,
     tx_repeat_count: int,
+    tx_wall_repeat_count: int = 0,
     rx_repeat_count: int,
 ) -> list[dict[str, object]]:
     return [
         _modeled_entry(
             source_metadata_path=str(tmp_path / "tx.metadata.json"),
-            expected_names=["tx_pcb_l0", "tx_copper_l0", *_tx_underlay_expected_names(repeat_count=tx_repeat_count)],
+            expected_names=[
+                "tx_pcb_l0",
+                "tx_copper_l0",
+                *_tx_underlay_expected_names(repeat_count=tx_repeat_count),
+                *_tx_wall_expected_names(repeat_count=tx_wall_repeat_count),
+            ],
         ),
         _modeled_entry(
             object_id="rx_rect_void_coil",
@@ -559,6 +578,7 @@ def _single_layer_modeled_objects_with_role_aware_underlay(
 def _single_layer_imported_name_batch_with_role_aware_underlay(
     *,
     tx_repeat_count: int,
+    tx_wall_repeat_count: int = 0,
     rx_repeat_count: int,
 ) -> tuple[str, ...]:
     return (
@@ -568,6 +588,7 @@ def _single_layer_imported_name_batch_with_role_aware_underlay(
         "tx_pcb_l0",
         "tx_copper_l0",
         *_tx_underlay_expected_names(repeat_count=tx_repeat_count),
+        *_tx_wall_expected_names(repeat_count=tx_wall_repeat_count),
         "rx_pcb_l0",
         "rx_copper_l0",
         *_rx_underlay_expected_names(repeat_count=rx_repeat_count),
@@ -698,6 +719,7 @@ def test_import_type2_step_ledger_styles_role_aware_underlay_and_keeps_mesh_cond
         modeled_objects=_single_layer_modeled_objects_with_role_aware_underlay(
             tmp_path,
             tx_repeat_count=2,
+            tx_wall_repeat_count=2,
             rx_repeat_count=1,
         ),
     )
@@ -708,6 +730,7 @@ def test_import_type2_step_ledger_styles_role_aware_underlay_and_keeps_mesh_cond
             imported_name_batches=[
                 _single_layer_imported_name_batch_with_role_aware_underlay(
                     tx_repeat_count=2,
+                    tx_wall_repeat_count=2,
                     rx_repeat_count=1,
                 )
             ]
@@ -734,6 +757,12 @@ def test_import_type2_step_ledger_styles_role_aware_underlay_and_keeps_mesh_cond
     assert session.modeler.objects["tx_underlay_pet_psa_u1"].material_name == "PET_PSA"
     assert session.modeler.objects["tx_underlay_air_u0"].material_name == "vacuum"
     assert session.modeler.objects["tx_underlay_air_u1"].material_name == "vacuum"
+    assert session.modeler.objects["tx_wall_ferrite_u0"].material_name == "MULL12060ferrite"
+    assert session.modeler.objects["tx_wall_ferrite_u1"].material_name == "MULL12060ferrite"
+    assert session.modeler.objects["tx_wall_pet_psa_u0"].material_name == "PET_PSA"
+    assert session.modeler.objects["tx_wall_pet_psa_u1"].material_name == "PET_PSA"
+    assert session.modeler.objects["tx_wall_air_u0"].material_name == "vacuum"
+    assert session.modeler.objects["tx_wall_air_u1"].material_name == "vacuum"
     assert session.modeler.objects["under_rx_ferrite_u0"].material_name == "MULL12060ferrite"
     assert session.modeler.objects["under_rx_pet_psa_u0"].material_name == "PET_PSA"
     assert session.modeler.objects["under_rx_air_u0"].material_name == "vacuum"
@@ -750,6 +779,12 @@ def test_import_type2_step_ledger_styles_role_aware_underlay_and_keeps_mesh_cond
         "tx_underlay_ferrite_u1",
         "tx_underlay_pet_psa_u1",
         "tx_underlay_air_u1",
+        "tx_wall_ferrite_u0",
+        "tx_wall_pet_psa_u0",
+        "tx_wall_air_u0",
+        "tx_wall_ferrite_u1",
+        "tx_wall_pet_psa_u1",
+        "tx_wall_air_u1",
         "tx_port_sheet",
     ]
     assert modeled_by_id["rx_rect_void_coil"]["imported_object_names"] == [

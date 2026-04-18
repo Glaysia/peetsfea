@@ -14,6 +14,7 @@ tags:
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_partition.py.md`
 - Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
+- Related feature plan: [[sdd/plans/0.2.23-type2-tx-wall-parallel-ferrite-stack]]
 - Parent note: [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py]]
 
 ## 역할
@@ -36,6 +37,7 @@ tags:
 - non-model ownership source는 `member_objects`.
 - PCB/copper names remain required exact semantic owners.
 - TX underlay exact names (`tx_underlay_ferrite_u{n}`, `tx_underlay_pet_psa_u{n}`, `tx_underlay_air_u{n}`) remain explicit modeled-body owners and must stay distinct from copper ownership.
+- TX wall exact names (`tx_wall_ferrite_u{n}`, `tx_wall_pet_psa_u{n}`, `tx_wall_air_u{n}`) also remain explicit modeled-body owners and share the same ferrite/PET/air role buckets.
 - RX underlay exact names (`under_rx_ferrite_u{n}`, `under_rx_pet_psa_u{n}`, `under_rx_air_u{n}`) also remain explicit modeled-body owners and must stay distinct from copper ownership.
 - resolved return shape groups TX/RX underlay bodies into shared ferrite/PET/air buckets because styling/material ownership is identical across roles.
 - new underlay exact object/body names must remain `<= 32` chars.

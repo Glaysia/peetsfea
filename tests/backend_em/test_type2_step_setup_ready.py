@@ -275,6 +275,9 @@ def _role_aware_mesh_entries(*, tx_object_name: str = "tx_copper_l0") -> list[di
                 "tx_underlay_ferrite_u0",
                 "tx_underlay_pet_psa_u0",
                 "tx_underlay_air_u0",
+                "tx_wall_ferrite_u0",
+                "tx_wall_pet_psa_u0",
+                "tx_wall_air_u0",
                 "tx_port_sheet",
             ],
         },
@@ -402,6 +405,7 @@ def test_setup_type2_step_ledger_keeps_mesh_conductor_only_when_tx_entry_include
         modeled_objects=_single_layer_modeled_objects_with_role_aware_underlay(
             tmp_path,
             tx_repeat_count=2,
+            tx_wall_repeat_count=1,
             rx_repeat_count=0,
         ),
     )
@@ -412,6 +416,7 @@ def test_setup_type2_step_ledger_keeps_mesh_conductor_only_when_tx_entry_include
             imported_name_batches=[
                 _single_layer_imported_name_batch_with_role_aware_underlay(
                     tx_repeat_count=2,
+                    tx_wall_repeat_count=1,
                     rx_repeat_count=0,
                 )
             ]

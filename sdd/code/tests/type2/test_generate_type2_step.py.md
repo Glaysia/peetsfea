@@ -14,6 +14,7 @@ tags:
 - Related code: [[sdd/code/entry/generate_type2_step.py]]
 - Related plan: [[sdd/plans/0.2.22-type2-toml-unification]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
+- Related feature plan: [[sdd/plans/0.2.23-type2-tx-wall-parallel-ferrite-stack]]
 
 ## 역할
 - `generate_type2_step.py`의 type2 parser와 single scene export 계약을 pure-Python pytest로 검증한다.
@@ -37,6 +38,7 @@ tags:
 ## Invariants / fail-fast
 - example `type2_fixed.toml`은 6 non-model + 2 modeled objects로 파싱되어야 하며 underlay/gap/sample fields가 single-candidate로 고정돼야 한다.
 - companion example `type2_sweep.toml`은 같은 registry shape를 유지하면서 underlay/sample fields가 canonical sweep ranges를 유지해야 한다.
+- TX-only `wall_parallel_stack_present` example contract도 fixed/sweep companion pair에서 각각 fixed `1` / canonical `[true, 0, 1, 2]`를 유지해야 한다.
 - both example paths must also parse the full retained legacy-type1 `outputs` contract.
 - active example baseline regression은 global Z rebase 결과를 직접 검증해야 한다. `tx_region.bottom == 0`, environment/rx region은 같은 relative spacing을 유지한 채 같이 내려가야 한다.
 - export runtime regression은 active example 그대로를 사용하고, copper body label expectation은 realized layer count에 맞춰 결정한다. TX underlay label expectation은 resolved `underlay_repeat_count`에 맞춰 결정한다.
@@ -57,6 +59,7 @@ tags:
   - `underlay_repeat_count = 8`이면 upper-bound body count와 deterministic `u0..u7` ordering이 유지된다
 - TX/RX underlay body semantic order is geometry contract: each unit must emit `ferrite -> pet_psa -> air`, and the explicit `air` body must be modeled as exported `vacuum`, not spacing-only omission.
 - TX underlay placement regression should assert `tx_region` full footprint + TX-only `underlay_gap_mm`.
+- TX wall-stack placement regression should assert `tx_region.max_x` wall contact + `-X` growth + `tx_region` full Y span + remaining-space Z ownership.
 - RX underlay placement regression should assert `rx_region_max` full footprint + `-X` boundary anchor + coil-facing ferrite.
 - single-layer scene regression should still confirm the metadata-owned canonical port-sheet polygon stays on the shared terminal-stub bottom-face plane, contains exactly four unique vertices, and bridges the two widened terminal-stub bottom-square diagonals chosen by maximum perpendicular spread away from the inter-stub centerline.
 - terminal metadata must also persist canonical `port_sheet_vertices_xyz` that match the expected sheet geometry so downstream HFSS reconstruction can reuse the exact face polygon without relying on STEP sheet bodies.

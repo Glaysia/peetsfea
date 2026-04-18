@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
@@ -27,6 +28,7 @@ from peetsfea.type2_step_spec import Point3
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
 from peetsfea.type2_step_spec import resolve_modeled_underlay_gap_mm
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
+from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
 
 _NON_MODEL_VISIBLE_GROUPS: tuple[tuple[str, str, Literal["XY", "YZ", "ZX", "mixed"], tuple[str, ...]], ...] = (
     ("environment", "environment", "mixed", ("floor", "shelf", "wall", "tv")),
@@ -37,6 +39,22 @@ _UNDERLAY_FERRITE_THICKNESS_MM = 0.20
 _UNDERLAY_PET_PSA_THICKNESS_MM = 0.15
 _UNDERLAY_AIR_THICKNESS_MM = 0.02
 _UNDERLAY_MAX_LABEL_LENGTH = 32
+
+
+@dataclass(frozen=True)
+class _TxUnderlayPlacementDescriptor:
+    repeat_count: int
+    floor_origin_x: float
+    floor_origin_y: float
+    floor_size_x: float
+    floor_size_y: float
+    floor_top_z: float
+    floor_min_z: float
+    wall_max_x: float
+    wall_origin_y: float
+    wall_origin_z: float
+    wall_size_y: float
+    wall_size_z: float
 
 
 def _build_non_model_shape(spec: NonModelBoxSpec) -> bd.Shape:
@@ -110,7 +128,7 @@ def _build_non_model_group_shape(*, object_id: str, specs: tuple[NonModelBoxSpec
         raise ValueError(f"non-model group shape requires at least one spec ({object_id})")
     fused_shape = _build_non_model_shape(specs[0])
     for spec in specs[1:]:
-        fused_shape = fused_shape.fuse(_build_non_model_shape(spec))
+        fused_shape = cast(bd.Shape, fused_shape.fuse(_build_non_model_shape(spec)))
     solids = tuple(fused_shape.solids())
     if len(solids) != 1:
         raise RuntimeError(
@@ -531,7 +549,9 @@ def _build_single_coil_port_sheet_shape(
     )
     with bd.BuildLine() as builder:
         bd.Polyline(*vertices, close=True)
-    face = cast(bd.Face, bd.make_face(builder.line.wires()[0]))
+    assert builder.line is not None, "type2 port-sheet line builder must produce a wire"
+    port_wire = builder.line.wires()[0]
+    face = cast(bd.Face, bd.make_face(edges=tuple(port_wire.edges())))
     face.label = _port_sheet_label_for_profile(profile)
     return face
 
@@ -728,13 +748,14 @@ def _underlay_unit_thickness_mm() -> float:
     return _UNDERLAY_FERRITE_THICKNESS_MM + _UNDERLAY_PET_PSA_THICKNESS_MM + _UNDERLAY_AIR_THICKNESS_MM
 
 
-def _build_tx_underlay_scene_shapes(
+def _resolve_tx_underlay_placement_descriptor(
     *,
     owner_spec: NonModelBoxSpec,
     modeled_min_z: float,
+    modeled_max_x: float,
     repeat_count: int,
     gap_mm: float,
-) -> tuple[bd.Shape, ...]:
+) -> _TxUnderlayPlacementDescriptor:
     if owner_spec.plane != "XY":
         raise RuntimeError(f"type2 tx underlay requires XY owner plane (owner={owner_spec.object_id})")
     if repeat_count < 1:
@@ -753,24 +774,58 @@ def _build_tx_underlay_scene_shapes(
         )
     unit_thickness_mm = _underlay_unit_thickness_mm()
     total_thickness_mm = repeat_count * unit_thickness_mm
-    underlay_min_z = modeled_min_z - gap_mm - total_thickness_mm
-    if underlay_min_z < footprint_origin_z:
+    floor_min_z = modeled_min_z - gap_mm - total_thickness_mm
+    if floor_min_z < footprint_origin_z:
         raise RuntimeError(
             "type2 tx underlay stack must fit inside tx_region thickness "
-            f"(owner={owner_spec.object_id}, owner_min_z={footprint_origin_z}, underlay_min_z={underlay_min_z}, "
+            f"(owner={owner_spec.object_id}, owner_min_z={footprint_origin_z}, underlay_min_z={floor_min_z}, "
             f"modeled_min_z={modeled_min_z}, gap_mm={gap_mm}, repeat_count={repeat_count})"
         )
+    wall_max_x = footprint_origin_x + footprint_size_x
+    remaining_wall_thickness_mm = wall_max_x - modeled_max_x
+    if total_thickness_mm > remaining_wall_thickness_mm:
+        raise RuntimeError(
+            "type2 tx wall underlay stack must fit inside remaining tx_region wall corridor "
+            f"(owner={owner_spec.object_id}, wall_max_x={wall_max_x}, modeled_max_x={modeled_max_x}, "
+            f"required_thickness_mm={total_thickness_mm}, remaining_thickness_mm={remaining_wall_thickness_mm}, "
+            f"repeat_count={repeat_count})"
+        )
+    wall_size_z = floor_min_z - footprint_origin_z
+    if wall_size_z <= 0.0:
+        raise RuntimeError(
+            "type2 tx wall underlay stack requires positive remaining height below XY underlay "
+            f"(owner={owner_spec.object_id}, owner_min_z={footprint_origin_z}, floor_underlay_min_z={floor_min_z})"
+        )
+    return _TxUnderlayPlacementDescriptor(
+        repeat_count=repeat_count,
+        floor_origin_x=footprint_origin_x,
+        floor_origin_y=footprint_origin_y,
+        floor_size_x=footprint_size_x,
+        floor_size_y=footprint_size_y,
+        floor_top_z=modeled_min_z - gap_mm,
+        floor_min_z=floor_min_z,
+        wall_max_x=wall_max_x,
+        wall_origin_y=footprint_origin_y,
+        wall_origin_z=footprint_origin_z,
+        wall_size_y=footprint_size_y,
+        wall_size_z=wall_size_z,
+    )
+
+
+def _build_tx_underlay_scene_shapes(
+    descriptor: _TxUnderlayPlacementDescriptor,
+) -> tuple[bd.Shape, ...]:
     shapes: list[bd.Shape] = []
-    current_top_z = modeled_min_z - gap_mm
-    for unit_index in range(repeat_count):
+    current_top_z = descriptor.floor_top_z
+    for unit_index in range(descriptor.repeat_count):
         ferrite_origin_z = current_top_z - _UNDERLAY_FERRITE_THICKNESS_MM
         shapes.append(
             _build_labeled_solid_box(
                 label=f"tx_underlay_ferrite_u{unit_index}",
-                origin_xyz=(footprint_origin_x, footprint_origin_y, ferrite_origin_z),
+                origin_xyz=(descriptor.floor_origin_x, descriptor.floor_origin_y, ferrite_origin_z),
                 size_xyz=(
-                    footprint_size_x,
-                    footprint_size_y,
+                    descriptor.floor_size_x,
+                    descriptor.floor_size_y,
                     _UNDERLAY_FERRITE_THICKNESS_MM,
                 ),
             )
@@ -779,10 +834,10 @@ def _build_tx_underlay_scene_shapes(
         shapes.append(
             _build_labeled_solid_box(
                 label=f"tx_underlay_pet_psa_u{unit_index}",
-                origin_xyz=(footprint_origin_x, footprint_origin_y, pet_origin_z),
+                origin_xyz=(descriptor.floor_origin_x, descriptor.floor_origin_y, pet_origin_z),
                 size_xyz=(
-                    footprint_size_x,
-                    footprint_size_y,
+                    descriptor.floor_size_x,
+                    descriptor.floor_size_y,
                     _UNDERLAY_PET_PSA_THICKNESS_MM,
                 ),
             )
@@ -791,15 +846,61 @@ def _build_tx_underlay_scene_shapes(
         shapes.append(
             _build_labeled_solid_box(
                 label=f"tx_underlay_air_u{unit_index}",
-                origin_xyz=(footprint_origin_x, footprint_origin_y, air_origin_z),
+                origin_xyz=(descriptor.floor_origin_x, descriptor.floor_origin_y, air_origin_z),
                 size_xyz=(
-                    footprint_size_x,
-                    footprint_size_y,
+                    descriptor.floor_size_x,
+                    descriptor.floor_size_y,
                     _UNDERLAY_AIR_THICKNESS_MM,
                 ),
             )
         )
         current_top_z = air_origin_z
+    return tuple(shapes)
+
+
+def _build_tx_wall_parallel_scene_shapes(
+    descriptor: _TxUnderlayPlacementDescriptor,
+) -> tuple[bd.Shape, ...]:
+    shapes: list[bd.Shape] = []
+    current_wall_face_x = descriptor.wall_max_x
+    for unit_index in range(descriptor.repeat_count):
+        ferrite_origin_x = current_wall_face_x - _UNDERLAY_FERRITE_THICKNESS_MM
+        shapes.append(
+            _build_labeled_solid_box(
+                label=f"tx_wall_ferrite_u{unit_index}",
+                origin_xyz=(ferrite_origin_x, descriptor.wall_origin_y, descriptor.wall_origin_z),
+                size_xyz=(
+                    _UNDERLAY_FERRITE_THICKNESS_MM,
+                    descriptor.wall_size_y,
+                    descriptor.wall_size_z,
+                ),
+            )
+        )
+        pet_origin_x = ferrite_origin_x - _UNDERLAY_PET_PSA_THICKNESS_MM
+        shapes.append(
+            _build_labeled_solid_box(
+                label=f"tx_wall_pet_psa_u{unit_index}",
+                origin_xyz=(pet_origin_x, descriptor.wall_origin_y, descriptor.wall_origin_z),
+                size_xyz=(
+                    _UNDERLAY_PET_PSA_THICKNESS_MM,
+                    descriptor.wall_size_y,
+                    descriptor.wall_size_z,
+                ),
+            )
+        )
+        air_origin_x = pet_origin_x - _UNDERLAY_AIR_THICKNESS_MM
+        shapes.append(
+            _build_labeled_solid_box(
+                label=f"tx_wall_air_u{unit_index}",
+                origin_xyz=(air_origin_x, descriptor.wall_origin_y, descriptor.wall_origin_z),
+                size_xyz=(
+                    _UNDERLAY_AIR_THICKNESS_MM,
+                    descriptor.wall_size_y,
+                    descriptor.wall_size_z,
+                ),
+            )
+        )
+        current_wall_face_x = air_origin_x
     return tuple(shapes)
 
 
@@ -910,7 +1011,7 @@ def build_modeled_single_coil_scene_data(
         base_scene_children = tuple(shape for shape in existing_scene_children if shape.label != port_sheet_label)
         if not base_scene_children:
             raise RuntimeError(f"type2 modeled scene must expose child bodies: {spec.object_id}")
-        modeled_bounds_min_xyz, _modeled_bounds_max_xyz, _modeled_bounds_size_xyz = modeled_body_bounds_from_boxes(
+        modeled_bounds_min_xyz, modeled_bounds_max_xyz, _modeled_bounds_size_xyz = modeled_body_bounds_from_boxes(
             transformed_boxes
         )
         underlay_repeat_count = resolve_modeled_underlay_repeat_count(spec, seed=seed)
@@ -919,16 +1020,29 @@ def build_modeled_single_coil_scene_data(
                 raise RuntimeError(f"type2 tx underlay requires XY modeled plane (actual={profile.plane})")
             if not isinstance(spec, ModeledTxSingleCoilSpec):
                 raise RuntimeError(f"type2 tx underlay gap requires tx modeled spec (object_id={spec.object_id})")
-            underlay_scene_children = (
-                _build_tx_underlay_scene_shapes(
+            tx_underlay_descriptor = (
+                _resolve_tx_underlay_placement_descriptor(
                     owner_spec=owner_spec,
                     modeled_min_z=modeled_bounds_min_xyz[2],
+                    modeled_max_x=modeled_bounds_max_xyz[0],
                     repeat_count=underlay_repeat_count,
                     gap_mm=resolve_modeled_underlay_gap_mm(spec, seed=seed),
                 )
                 if underlay_repeat_count > 0
+                else None
+            )
+            floor_underlay_scene_children = (
+                _build_tx_underlay_scene_shapes(tx_underlay_descriptor)
+                if tx_underlay_descriptor is not None
                 else ()
             )
+            wall_underlay_scene_children = (
+                _build_tx_wall_parallel_scene_shapes(tx_underlay_descriptor)
+                if tx_underlay_descriptor is not None
+                and resolve_modeled_wall_parallel_stack_present(spec, seed=seed)
+                else ()
+            )
+            underlay_scene_children = floor_underlay_scene_children + wall_underlay_scene_children
         else:
             underlay_scene_children = (
                 _build_rx_underlay_scene_shapes(

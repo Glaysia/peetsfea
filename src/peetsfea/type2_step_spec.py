@@ -14,6 +14,7 @@ Point3 = tuple[float, float, float]
 ModeledObjectRole = Literal["tx_single_coil", "rx_single_coil"]
 _UNDERLAY_REPEAT_COUNT_CANDIDATES = (0, 2, 4, 6, 8)
 _TX_UNDERLAY_GAP_MM_CANDIDATES = (1.0, 4.0, 7.0, 10.0)
+_TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES = (0, 1)
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,7 @@ class ModeledSingleCoilCommonSpec:
 class ModeledTxSingleCoilSpec(ModeledSingleCoilCommonSpec):
     role: Literal["tx_single_coil"]
     underlay_gap_mm: RangeSpec
+    wall_parallel_stack_present: RangeSpec
 
 
 @dataclass(frozen=True)
@@ -321,9 +323,12 @@ def _parse_modeled_single_coil(
             metal_fill_factor=metal_fill_factor,
             terminal_path=terminal_path,
             underlay_gap_mm=_require_underlay_gap_range(table, context=context),
+            wall_parallel_stack_present=_require_wall_parallel_stack_present_range(table, context=context),
         )
     if "underlay_gap_mm" in table:
         raise ValueError(f"{context}.underlay_gap_mm is unsupported for rx_single_coil")
+    if "wall_parallel_stack_present" in table:
+        raise ValueError(f"{context}.wall_parallel_stack_present is unsupported for rx_single_coil")
     return ModeledRxSingleCoilSpec(
         object_id=object_id,
         role="rx_single_coil",
@@ -399,6 +404,29 @@ def _require_underlay_gap_range(
     return range_spec
 
 
+def _require_wall_parallel_stack_present_range(
+    table: dict[str, object],
+    *,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, "wall_parallel_stack_present", context, expect_integer=True)
+    candidates = _integer_range_candidates(range_spec)
+    if candidates == _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES:
+        return range_spec
+    if (
+        range_spec.count == 1
+        and range_spec.start == range_spec.end
+        and len(candidates) == 1
+        and candidates[0] in _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES
+    ):
+        return range_spec
+    raise ValueError(
+        f"{context}.wall_parallel_stack_present.range must be canonical [true, 0, 1, 2] "
+        f"or fixed [true, b, b, 1] for b in {_TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES} for tx_single_coil "
+        f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
+    )
+
+
 def _integer_range_candidates(range_spec: RangeSpec) -> tuple[int, ...]:
     if range_spec.is_integer is not True:
         raise ValueError("integer range candidates require integer range spec")
@@ -468,6 +496,23 @@ def resolve_modeled_underlay_gap_mm(spec: ModeledTxSingleCoilSpec, *, seed: int)
     range_path = f"modeled_objects.{spec.object_id}.underlay_gap_mm"
     index = _resolve_seeded_candidate_index(seed=seed, range_path=range_path, candidate_count=len(candidates))
     return candidates[index]
+
+
+def resolve_modeled_wall_parallel_stack_present(spec: ModeledTxSingleCoilSpec, *, seed: int) -> bool:
+    candidates = _integer_range_candidates(spec.wall_parallel_stack_present)
+    if candidates != _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES and not (
+        len(candidates) == 1 and candidates[0] in _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES
+    ):
+        raise ValueError(
+            "tx_single_coil.wall_parallel_stack_present must realize to canonical candidates "
+            f"{_TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES} or a fixed single candidate from that set "
+            f"(actual={candidates})"
+        )
+    if len(candidates) == 1:
+        return bool(candidates[0])
+    range_path = f"modeled_objects.{spec.object_id}.wall_parallel_stack_present"
+    index = _resolve_seeded_candidate_index(seed=seed, range_path=range_path, candidate_count=len(candidates))
+    return bool(candidates[index])
 
 
 def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
@@ -574,5 +619,6 @@ __all__ = [
     "load_type2_step_spec",
     "resolve_modeled_underlay_gap_mm",
     "resolve_modeled_underlay_repeat_count",
+    "resolve_modeled_wall_parallel_stack_present",
     "render_tx_rect_void_toml",
 ]

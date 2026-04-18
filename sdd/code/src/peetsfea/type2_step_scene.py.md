@@ -13,6 +13,7 @@ tags:
 - Code note path: `sdd/code/src/peetsfea/type2_step_scene.py.md`
 - Status: active
 - Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
+- Related feature plan: [[sdd/plans/0.2.23-type2-tx-wall-parallel-ferrite-stack]]
 - Parent note: [[sdd/code/entry/generate_type2_step.py]]
 
 ## 역할
@@ -38,6 +39,10 @@ tags:
 - RX underlay footprint canonical source는 `rx_region_max` full `YZ` bounds다.
 - TX underlay unit order는 `MULL12060ferrite` 0.20 mm -> `PET_PSA` 0.15 mm -> explicit `vacuum` air body 0.02 mm이며, `u0`가 TX에 가장 가까운 첫 unit이다.
 - TX underlay exact names는 `tx_underlay_ferrite_u{n}`, `tx_underlay_pet_psa_u{n}`, `tx_underlay_air_u{n}` order로 append된다.
+- TX wall-parallel exact names는 `tx_wall_ferrite_u{n}`, `tx_wall_pet_psa_u{n}`, `tx_wall_air_u{n}` order로 append되며, `u0`는 wall-adjacent first unit이다.
+- TX wall-parallel stack은 `tx_region.max_x` wall에 붙고 `-X` 방향으로 자란다.
+- TX wall-parallel unit physical order는 `wall -> coil = ferrite -> PET_PSA -> air`다.
+- TX wall-parallel footprint source는 `modeled_max_x .. tx_region.max_x` corridor + `tx_region` full Y span + `tx_region.min_z .. floor_underlay_min_z` remaining Z span이다.
 - RX underlay exact names는 `under_rx_ferrite_u{n}`, `under_rx_pet_psa_u{n}`, `under_rx_air_u{n}` order로 append된다.
 - RX underlay는 `rx_region_max`의 `-X` boundary에 anchor하고, coil-facing material은 ferrite다. 따라서 physical `-X -> +X` order는 `air -> PET_PSA -> ferrite`다.
 - new underlay exact object/body names는 feature-local rule로 `<= 32` chars여야 한다.
@@ -53,6 +58,8 @@ tags:
 - modeled scene child body names must be unique
 - TX/RX `underlay_repeat_count` resolved value는 `{0, 2, 4, 6, 8}` contract를 따른다.
 - TX underlay first ferrite top face는 modeled object canonical minimum-Z plane보다 `underlay_gap_mm`만큼 아래에 와야 하며, every later slab는 같은 semantic tri-layer order로 stack된다.
+- TX wall-parallel stack은 XY underlay placement descriptor가 계산한 floor-underlay minimum-Z 위 공간을 침범하면 안 된다.
+- TX wall-parallel stack은 `repeat_count * 0.37 mm` X thickness가 remaining wall corridor에 들어가야 하며, remaining height도 양수여야 한다.
 - RX underlay first exported unit must start on the owner `-X` boundary and consume owner thickness toward `+X` without changing RX coil max-X placement.
 - TX underlay air 20 um와 RX underlay air 20 um는 spacing-only gap이 아니라 explicit exported `vacuum` body여야 한다.
 - TX/RX underlay footprint는 coil bounds가 아니라 owner region full bounds를 canonical source로 삼는다.

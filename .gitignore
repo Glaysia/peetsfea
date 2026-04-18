@@ -73,6 +73,7 @@ run*/aedt*/*
 run*/step*/*
 run*/toml*/*
 run*/sampled*/*
+run*/benchmark*/*
 
 tmp*/*
 .obsidian/workspace.json

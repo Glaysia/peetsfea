@@ -34,12 +34,14 @@ tags:
 - fake materials seam은 `add_material()` 성공 후에도 `material_keys` visibility가 지연되는 PyAEDT cache drift를 재현할 수 있어야 한다.
 - shared fake mesh-payload helper는 setup-ready reuse를 위해 `tx_copper_l0`와 `tx_copper_stack` 둘 다 표현할 수 있어야 한다.
 - role-aware underlay contract에서는 TX `tx_underlay_*`와 RX `under_rx_*` exact names를 imported modeled solids로 재현할 수 있어야 한다.
+- TX wall-parallel contract에서는 `tx_wall_*` exact names도 same underlay material family로 재현할 수 있어야 한다.
 - shared step-ledger helper는 retained top-level `outputs` contract를 항상 포함해야 한다.
 
 ## Invariants / fail-fast
 - import-only runtime은 conductor-only `AssignLengthOp`와 radiation boundary summary를 imported ledger handoff에 포함하고, explicit lumped port는 호출하지 않는다.
 - missing optional port-sheet STEP body는 HFSS-side reconstruction으로 보정하되, modeled exact-name ownership은 PCB/copper에서만 평가한다.
 - role-aware underlay pass에서도 conductor-only mesh rule은 유지돼야 하며, TX/RX underlay bodies는 mesh 대상에 들어가면 안 된다.
+- `tx_wall_*` exact solids도 same non-mesh underlay family로 남아야 한다.
 - underlay material bootstrap은 TX/RX underlay bodies가 함께 있어도 dataset/material setup 1회만 발생해야 한다.
 - missing scene STEP, missing required field, missing retained `outputs`, duplicate object id, bad import diff, missing non-model member, placement violation, `import_3d_cad` false, `save_project` false는 모두 raise다. TX placement violation은 `tx_region.min_x` touch + centered Y + max-Z touch contract를 기준으로 한다.
 

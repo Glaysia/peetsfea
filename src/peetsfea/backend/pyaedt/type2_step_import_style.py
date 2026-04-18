@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import cast
 
 from peetsfea.aedt.failfast import raise_on_false, validate_aedt_name
 from peetsfea.aedt.proxies import cover_lines, create_polyline, set_object_color, set_object_transparency
-from peetsfea.aedt.protocols import HfssSession, ModelerSession
+from peetsfea.aedt.protocols import HfssSession, MaterialsSession, ModelerSession
 from peetsfea.backend.pyaedt.type2_step_import_ledger import (
     outer_bounds_min_xyz,
     outer_bounds_size_xyz,
@@ -25,12 +26,27 @@ _TX_COPPER_MATERIAL = "copper"
 _TX_UNDERLAY_FERRITE_NAME_PREFIX = "tx_underlay_ferrite_u"
 _TX_UNDERLAY_PET_PSA_NAME_PREFIX = "tx_underlay_pet_psa_u"
 _TX_UNDERLAY_AIR_NAME_PREFIX = "tx_underlay_air_u"
+_TX_WALL_FERRITE_NAME_PREFIX = "tx_wall_ferrite_u"
+_TX_WALL_PET_PSA_NAME_PREFIX = "tx_wall_pet_psa_u"
+_TX_WALL_AIR_NAME_PREFIX = "tx_wall_air_u"
 _RX_UNDERLAY_FERRITE_NAME_PREFIX = "under_rx_ferrite_u"
 _RX_UNDERLAY_PET_PSA_NAME_PREFIX = "under_rx_pet_psa_u"
 _RX_UNDERLAY_AIR_NAME_PREFIX = "under_rx_air_u"
-_UNDERLAY_FERRITE_NAME_PREFIXES = (_TX_UNDERLAY_FERRITE_NAME_PREFIX, _RX_UNDERLAY_FERRITE_NAME_PREFIX)
-_UNDERLAY_PET_PSA_NAME_PREFIXES = (_TX_UNDERLAY_PET_PSA_NAME_PREFIX, _RX_UNDERLAY_PET_PSA_NAME_PREFIX)
-_UNDERLAY_AIR_NAME_PREFIXES = (_TX_UNDERLAY_AIR_NAME_PREFIX, _RX_UNDERLAY_AIR_NAME_PREFIX)
+_UNDERLAY_FERRITE_NAME_PREFIXES = (
+    _TX_UNDERLAY_FERRITE_NAME_PREFIX,
+    _TX_WALL_FERRITE_NAME_PREFIX,
+    _RX_UNDERLAY_FERRITE_NAME_PREFIX,
+)
+_UNDERLAY_PET_PSA_NAME_PREFIXES = (
+    _TX_UNDERLAY_PET_PSA_NAME_PREFIX,
+    _TX_WALL_PET_PSA_NAME_PREFIX,
+    _RX_UNDERLAY_PET_PSA_NAME_PREFIX,
+)
+_UNDERLAY_AIR_NAME_PREFIXES = (
+    _TX_UNDERLAY_AIR_NAME_PREFIX,
+    _TX_WALL_AIR_NAME_PREFIX,
+    _RX_UNDERLAY_AIR_NAME_PREFIX,
+)
 _TX_UNDERLAY_FERRITE_COLOR = (89, 94, 107)
 _TX_UNDERLAY_FERRITE_TRANSPARENCY = 0.0
 _TX_UNDERLAY_PET_PSA_COLOR = (227, 205, 120)
@@ -132,8 +148,12 @@ def _raw_materials(hfss: HfssSession) -> object:
     return _unwrap_raw(hfss.materials, context="hfss.materials")
 
 
+def _materials_session(hfss: HfssSession) -> MaterialsSession:
+    return cast(MaterialsSession, _unwrap_raw(hfss.materials, context="hfss.materials"))
+
+
 def _material_ref_from_material_keys(hfss: HfssSession, *, material_name: str) -> object | None:
-    material_keys = hfss.materials.material_keys
+    material_keys = _materials_session(hfss).material_keys
     normalized_name = material_name.casefold()
     if normalized_name not in material_keys:
         return None
@@ -322,9 +342,10 @@ def _project_material_ref(hfss: HfssSession, *, material_name: str) -> object:
     material_ref = _material_ref_from_material_keys(hfss, material_name=material_name)
     if material_ref is not None:
         return material_ref
-    if not bool(hfss.materials.exists_material(material_name)):
+    materials = _materials_session(hfss)
+    if not bool(materials.exists_material(material_name)):
         raise_on_false(
-            hfss.materials.add_material(material_name),
+            materials.add_material(material_name),
             operation="add_material",
             context={"name": material_name},
         )

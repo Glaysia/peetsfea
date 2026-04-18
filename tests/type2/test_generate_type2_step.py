@@ -22,6 +22,7 @@ from peetsfea.type2_step_spec import load_type2_step_spec
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
 from peetsfea.type2_step_spec import resolve_modeled_underlay_gap_mm
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
+from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
 from tests.fixtures.legacy.type1_spec import TYPE1_OUTPUT_VARIABLES, type1_outputs_spec
 
 _TX_UNDERLAY_FERRITE_THICKNESS_MM = 0.20
@@ -75,21 +76,34 @@ def _type2_spec_text(
     radiation_margin_mm: float = 3500.0,
     underlay_repeat_count_range: str | None = None,
     underlay_gap_range: str | None = None,
+    wall_parallel_stack_present_range: str | None = None,
 ) -> str:
     if underlay_repeat_count_range is None:
         underlay_repeat_count_range = _range(True, 0.0, 8.0, 5)
     underlay_gap_section = ""
+    wall_parallel_stack_present_section = ""
     if modeled_role == "tx_single_coil":
         if underlay_gap_range is None:
             underlay_gap_range = _range(False, 1.0, 10.0, 4)
+        if wall_parallel_stack_present_range is None:
+            wall_parallel_stack_present_range = _range(True, 0.0, 0.0, 1)
         underlay_gap_section = f"""
 [modeled_objects.underlay_gap_mm]
 range = {underlay_gap_range}
+""".rstrip()
+        wall_parallel_stack_present_section = f"""
+[modeled_objects.wall_parallel_stack_present]
+range = {wall_parallel_stack_present_range}
 """.rstrip()
     elif underlay_gap_range is not None:
         underlay_gap_section = f"""
 [modeled_objects.underlay_gap_mm]
 range = {underlay_gap_range}
+""".rstrip()
+    elif wall_parallel_stack_present_range is not None:
+        wall_parallel_stack_present_section = f"""
+[modeled_objects.wall_parallel_stack_present]
+range = {wall_parallel_stack_present_range}
 """.rstrip()
     return f"""
 spec_version = "0.2.22"
@@ -189,6 +203,7 @@ range = {_range(True, float(layer_count), float(layer_count), 1)}
 [modeled_objects.underlay_repeat_count]
 range = {underlay_repeat_count_range}
 {underlay_gap_section}
+{wall_parallel_stack_present_section}
 [modeled_objects.layer_gap_mm]
 range = {_range(False, 2.0, 2.0, 1)}
 [modeled_objects.terminal_stub_length_mm]
@@ -292,6 +307,19 @@ def _tx_underlay_expected_body_names(*, repeat_count: int) -> tuple[str, ...]:
     return tuple(body_names)
 
 
+def _tx_wall_expected_body_names(*, repeat_count: int) -> tuple[str, ...]:
+    body_names: list[str] = []
+    for unit_index in range(repeat_count):
+        body_names.extend(
+            (
+                f"tx_wall_ferrite_u{unit_index}",
+                f"tx_wall_pet_psa_u{unit_index}",
+                f"tx_wall_air_u{unit_index}",
+            )
+        )
+    return tuple(body_names)
+
+
 def _rx_underlay_expected_body_names(*, repeat_count: int) -> tuple[str, ...]:
     body_names: list[str] = []
     for unit_index in range(repeat_count):
@@ -305,13 +333,20 @@ def _rx_underlay_expected_body_names(*, repeat_count: int) -> tuple[str, ...]:
     return tuple(body_names)
 
 
-def _tx_expected_body_names(*, pcb_layer_count: int, underlay_repeat_count: int) -> tuple[str, ...]:
+def _tx_expected_body_names(
+    *,
+    pcb_layer_count: int,
+    underlay_repeat_count: int,
+    wall_parallel_stack_present: bool,
+) -> tuple[str, ...]:
     names = [f"tx_pcb_l{index}" for index in range(pcb_layer_count)]
     if pcb_layer_count > 1:
         names.append("tx_copper_stack")
     else:
         names.append("tx_copper_l0")
     names.extend(_tx_underlay_expected_body_names(repeat_count=underlay_repeat_count))
+    if wall_parallel_stack_present and underlay_repeat_count > 0:
+        names.extend(_tx_wall_expected_body_names(repeat_count=underlay_repeat_count))
     return tuple(names)
 
 
@@ -633,6 +668,9 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert tx_entry.underlay_gap_mm.start == pytest.approx(4.0)
     assert tx_entry.underlay_gap_mm.end == pytest.approx(4.0)
     assert tx_entry.underlay_gap_mm.count == 1
+    assert tx_entry.wall_parallel_stack_present.start == pytest.approx(1.0)
+    assert tx_entry.wall_parallel_stack_present.end == pytest.approx(1.0)
+    assert tx_entry.wall_parallel_stack_present.count == 1
     assert tx_entry.void_x_over_outer_x.start == pytest.approx(0.43)
     assert tx_entry.void_y_over_outer_y.end == pytest.approx(0.43)
     assert tx_entry.margin_ratio.start == pytest.approx(0.05)
@@ -646,6 +684,7 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert rx_entry.underlay_repeat_count.end == pytest.approx(4.0)
     assert rx_entry.underlay_repeat_count.count == 1
     assert hasattr(rx_entry, "underlay_gap_mm") is False
+    assert hasattr(rx_entry, "wall_parallel_stack_present") is False
 
 
 def test_load_sweep_example_type2_toml_parses_expected_sampling_contract() -> None:
@@ -667,6 +706,9 @@ def test_load_sweep_example_type2_toml_parses_expected_sampling_contract() -> No
     assert tx_entry.underlay_gap_mm.start == pytest.approx(1.0)
     assert tx_entry.underlay_gap_mm.end == pytest.approx(10.0)
     assert tx_entry.underlay_gap_mm.count == 4
+    assert tx_entry.wall_parallel_stack_present.start == pytest.approx(0.0)
+    assert tx_entry.wall_parallel_stack_present.end == pytest.approx(1.0)
+    assert tx_entry.wall_parallel_stack_present.count == 2
     assert tx_entry.void_x_over_outer_x.start == pytest.approx(0.20)
     assert tx_entry.void_x_over_outer_x.end == pytest.approx(0.50)
     assert tx_entry.void_x_over_outer_x.count == 31
@@ -677,6 +719,7 @@ def test_load_sweep_example_type2_toml_parses_expected_sampling_contract() -> No
     assert rx_entry.underlay_repeat_count.end == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.count == 5
     assert hasattr(rx_entry, "underlay_gap_mm") is False
+    assert hasattr(rx_entry, "wall_parallel_stack_present") is False
 
 
 def test_load_type2_step_spec_rejects_duplicate_object_id(tmp_path: Path) -> None:
@@ -738,6 +781,7 @@ def test_load_type2_step_spec_accepts_fixed_underlay_contract_values(tmp_path: P
         _type2_spec_text(
             underlay_repeat_count_range=_range(True, 6.0, 6.0, 1),
             underlay_gap_range=_range(False, 4.0, 4.0, 1),
+            wall_parallel_stack_present_range=_range(True, 1.0, 1.0, 1),
         ),
     )
 
@@ -747,6 +791,7 @@ def test_load_type2_step_spec_accepts_fixed_underlay_contract_values(tmp_path: P
 
     assert resolve_modeled_underlay_repeat_count(tx_entry, seed=0) == 6
     assert resolve_modeled_underlay_gap_mm(tx_entry, seed=0) == pytest.approx(4.0)
+    assert resolve_modeled_wall_parallel_stack_present(tx_entry, seed=0) is True
 
 
 def test_load_type2_step_spec_rejects_rx_underlay_gap_mm(tmp_path: Path) -> None:
@@ -760,6 +805,36 @@ def test_load_type2_step_spec_rejects_rx_underlay_gap_mm(tmp_path: Path) -> None
     )
 
     with pytest.raises(ValueError, match=r"modeled_objects\[0\]\.underlay_gap_mm is unsupported for rx_single_coil"):
+        load_type2_step_spec(toml_path)
+
+
+def test_load_type2_step_spec_rejects_non_canonical_tx_wall_parallel_stack_present(tmp_path: Path) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_spec_text(wall_parallel_stack_present_range=_range(True, 0.0, 2.0, 3)),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"modeled_objects\[0\]\.wall_parallel_stack_present\.range must be canonical \[true, 0, 1, 2\] or fixed \[true, b, b, 1\]",
+    ):
+        load_type2_step_spec(toml_path)
+
+
+def test_load_type2_step_spec_rejects_rx_wall_parallel_stack_present(tmp_path: Path) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_spec_text(
+            modeled_object_id="rx_rect_void_coil",
+            modeled_role="rx_single_coil",
+            wall_parallel_stack_present_range=_range(True, 0.0, 1.0, 2),
+        ),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"modeled_objects\[0\]\.wall_parallel_stack_present is unsupported for rx_single_coil",
+    ):
         load_type2_step_spec(toml_path)
 
 
@@ -866,6 +941,7 @@ def test_render_tx_rect_void_toml_omits_type2_underlay_fields_from_core_bridge(t
 
     assert "underlay_repeat_count" not in rendered
     assert "underlay_gap_mm" not in rendered
+    assert "wall_parallel_stack_present" not in rendered
 
 
 def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_path: Path) -> None:
@@ -877,6 +953,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert tx_modeled_spec.role == "tx_single_coil"
     tx_underlay_repeat_count = resolve_modeled_underlay_repeat_count(tx_modeled_spec, seed=0)
     tx_underlay_gap_mm = resolve_modeled_underlay_gap_mm(tx_modeled_spec, seed=0)
+    tx_wall_parallel_stack_present = resolve_modeled_wall_parallel_stack_present(tx_modeled_spec, seed=0)
     rx_underlay_repeat_count = resolve_modeled_underlay_repeat_count(rx_modeled_spec, seed=0)
     output_dir = tmp_path / "out"
     ledger_path = tmp_path / "out" / "type2_ledger.json"
@@ -942,12 +1019,13 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
         _tx_expected_body_names(
             pcb_layer_count=len(tx_entry["canonical_coordinates"]["pcb_layer_z_positions_mm"]),
             underlay_repeat_count=tx_underlay_repeat_count,
+            wall_parallel_stack_present=tx_wall_parallel_stack_present,
         )
     )
     rx_expected_names = list(_rx_expected_body_names(underlay_repeat_count=rx_underlay_repeat_count))
     assert tx_entry["expected_exported_body_names"] == tx_expected_names
     assert tx_entry["expected_exported_body_count"] == len(tx_expected_names)
-    assert all(len(name) <= 32 for name in tx_expected_names if "underlay" in name)
+    assert all(len(name) <= 32 for name in tx_expected_names if "underlay" in name or "tx_wall_" in name)
     modeled_canonical = tx_entry["canonical_coordinates"]
     tx_min_x, tx_min_y, tx_min_z = modeled_canonical["outer_bounds_min_xyz"]
     tx_size_x, tx_size_y, tx_size_z = modeled_canonical["outer_bounds_size_xyz"]
@@ -1010,6 +1088,39 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
         assert air_min_xyz[2] == pytest.approx(
             pet_min_xyz[2] - _TX_UNDERLAY_AIR_THICKNESS_MM
         )
+        if tx_wall_parallel_stack_present:
+            floor_bottom_min_xyz, floor_bottom_max_xyz = _body_bbox(
+                scene_step_path,
+                label=f"tx_underlay_air_u{tx_underlay_repeat_count - 1}",
+            )
+            wall_ferrite_min_xyz, wall_ferrite_max_xyz = _body_bbox(scene_step_path, label="tx_wall_ferrite_u0")
+            wall_pet_min_xyz, wall_pet_max_xyz = _body_bbox(scene_step_path, label="tx_wall_pet_psa_u0")
+            wall_air_min_xyz, wall_air_max_xyz = _body_bbox(scene_step_path, label="tx_wall_air_u0")
+            assert wall_ferrite_max_xyz[0] == pytest.approx(region_min_x + region_size_x)
+            assert wall_ferrite_min_xyz[0] == pytest.approx(
+                wall_ferrite_max_xyz[0] - _TX_UNDERLAY_FERRITE_THICKNESS_MM
+            )
+            assert wall_pet_max_xyz[0] == pytest.approx(wall_ferrite_min_xyz[0])
+            assert wall_pet_min_xyz[0] == pytest.approx(
+                wall_pet_max_xyz[0] - _TX_UNDERLAY_PET_PSA_THICKNESS_MM
+            )
+            assert wall_air_max_xyz[0] == pytest.approx(wall_pet_min_xyz[0])
+            assert wall_air_min_xyz[0] == pytest.approx(
+                wall_air_max_xyz[0] - _TX_UNDERLAY_AIR_THICKNESS_MM
+            )
+            for min_xyz, max_xyz in (
+                (wall_ferrite_min_xyz, wall_ferrite_max_xyz),
+                (wall_pet_min_xyz, wall_pet_max_xyz),
+                (wall_air_min_xyz, wall_air_max_xyz),
+            ):
+                assert min_xyz[1] == pytest.approx(region_min_y)
+                assert max_xyz[1] == pytest.approx(region_min_y + region_size_y)
+                assert min_xyz[2] == pytest.approx(region_min_z)
+                assert max_xyz[2] == pytest.approx(floor_bottom_min_xyz[2])
+            _assert_zero_intersection_volume(
+                scene_children_by_label[f"tx_underlay_air_u{tx_underlay_repeat_count - 1}"],
+                scene_children_by_label["tx_wall_ferrite_u0"],
+            )
     _assert_zero_intersection_volume(scene_children_by_label[tx_expected_names[0]], scene_children_by_label[tx_copper_label])
     _assert_zero_intersection_volume(scene_children_by_label["rx_pcb_l0"], scene_children_by_label["rx_copper_l0"])
     rx_min_x, rx_min_y, rx_min_z = rx_entry["canonical_coordinates"]["outer_bounds_min_xyz"]
@@ -1077,6 +1188,7 @@ def test_export_type2_step_artifacts_supports_multilayer_tx_port_sheet_path(
     assert tx_entry["expected_exported_body_names"] == _tx_expected_body_names(
         pcb_layer_count=layer_count,
         underlay_repeat_count=tx_underlay_repeat_count,
+        wall_parallel_stack_present=False,
     )
     _assert_sheet_vertices_bridge_stub_bottom_face_diagonals(
         sheet_vertices=_vertex_triplets(cast(list[list[float]], terminal_metadata["port_sheet_vertices_xyz"])),
@@ -1116,6 +1228,7 @@ def test_export_type2_step_artifacts_resolves_tx_underlay_repeat_count_contract(
     expected_names = _tx_expected_body_names(
         pcb_layer_count=2,
         underlay_repeat_count=expected_repeat_count,
+        wall_parallel_stack_present=False,
     )
     assert tx_entry["expected_exported_body_names"] == expected_names
     assert tx_entry["expected_exported_body_count"] == len(expected_names)

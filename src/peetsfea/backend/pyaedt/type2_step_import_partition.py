@@ -22,12 +22,27 @@ _BODY_ROLE_UNDERLAY_AIR = "underlay_air"
 _TX_UNDERLAY_FERRITE_NAME_PREFIX = "tx_underlay_ferrite_u"
 _TX_UNDERLAY_PET_PSA_NAME_PREFIX = "tx_underlay_pet_psa_u"
 _TX_UNDERLAY_AIR_NAME_PREFIX = "tx_underlay_air_u"
+_TX_WALL_FERRITE_NAME_PREFIX = "tx_wall_ferrite_u"
+_TX_WALL_PET_PSA_NAME_PREFIX = "tx_wall_pet_psa_u"
+_TX_WALL_AIR_NAME_PREFIX = "tx_wall_air_u"
 _RX_UNDERLAY_FERRITE_NAME_PREFIX = "under_rx_ferrite_u"
 _RX_UNDERLAY_PET_PSA_NAME_PREFIX = "under_rx_pet_psa_u"
 _RX_UNDERLAY_AIR_NAME_PREFIX = "under_rx_air_u"
-_UNDERLAY_FERRITE_NAME_PREFIXES = (_TX_UNDERLAY_FERRITE_NAME_PREFIX, _RX_UNDERLAY_FERRITE_NAME_PREFIX)
-_UNDERLAY_PET_PSA_NAME_PREFIXES = (_TX_UNDERLAY_PET_PSA_NAME_PREFIX, _RX_UNDERLAY_PET_PSA_NAME_PREFIX)
-_UNDERLAY_AIR_NAME_PREFIXES = (_TX_UNDERLAY_AIR_NAME_PREFIX, _RX_UNDERLAY_AIR_NAME_PREFIX)
+_UNDERLAY_FERRITE_NAME_PREFIXES = (
+    _TX_UNDERLAY_FERRITE_NAME_PREFIX,
+    _TX_WALL_FERRITE_NAME_PREFIX,
+    _RX_UNDERLAY_FERRITE_NAME_PREFIX,
+)
+_UNDERLAY_PET_PSA_NAME_PREFIXES = (
+    _TX_UNDERLAY_PET_PSA_NAME_PREFIX,
+    _TX_WALL_PET_PSA_NAME_PREFIX,
+    _RX_UNDERLAY_PET_PSA_NAME_PREFIX,
+)
+_UNDERLAY_AIR_NAME_PREFIXES = (
+    _TX_UNDERLAY_AIR_NAME_PREFIX,
+    _TX_WALL_AIR_NAME_PREFIX,
+    _RX_UNDERLAY_AIR_NAME_PREFIX,
+)
 
 
 class ModeledBodyNames(TypedDict):
@@ -80,6 +95,7 @@ def _body_role_from_expected_name(expected_name: str, *, context: str) -> str:
     raise ValueError(
         "unsupported exported body name; expected tx_pcb_l*/tx_copper_l*/tx_copper_stack/"
         "tx_underlay_ferrite_u*/tx_underlay_pet_psa_u*/tx_underlay_air_u* "
+        "tx_wall_ferrite_u*/tx_wall_pet_psa_u*/tx_wall_air_u* "
         "or rx_pcb_l*/rx_copper_l*/rx_copper_stack/"
         "under_rx_ferrite_u*/under_rx_pet_psa_u*/under_rx_air_u* "
         f"(actual={expected_name!r}, context={context})"
