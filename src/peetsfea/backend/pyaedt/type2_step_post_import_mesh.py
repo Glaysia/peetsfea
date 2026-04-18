@@ -5,10 +5,16 @@ from typing import TypedDict, cast
 
 from peetsfea.aedt.protocols import DesignSession, HfssSession, MeshModuleSession
 from peetsfea.backend.pyaedt.failfast import raise_on_false
-from peetsfea.backend.pyaedt.type2_step_import_ledger import require_key, validated_object_names
+from peetsfea.backend.pyaedt.type2_step_import_ledger import (
+    require_key,
+    require_non_empty_str,
+    validated_object_names,
+)
 
 MESH_MODULE_NAME = "MeshSetup"
 MESH_LENGTH_OPERATION_NAME = "Length1"
+_TX_ROLE = "tx_single_coil"
+_RX_ROLE = "rx_single_coil"
 _TX_MESH_OBJECT_CANDIDATES = ("tx_copper_l0", "tx_copper_stack")
 _RX_MESH_OBJECT_NAME = "rx_copper_l0"
 MESH_LENGTH_MAX_ELEMENTS = "1000"
@@ -84,45 +90,73 @@ def _mesh_setup_module(hfss: HfssSession) -> MeshModuleSession:
     return cast(MeshModuleSession, mesh_module)
 
 
-def _required_mesh_object_names(imported_modeled_objects: Sequence[dict[str, object]]) -> list[str]:
-    imported_object_names: list[str] = []
+def _imported_object_names(entry: dict[str, object], *, context: str) -> list[str]:
+    raw_imported_names = require_key(
+        entry,
+        key="imported_object_names",
+        context=context,
+    )
+    if isinstance(raw_imported_names, (str, bytes)) or not isinstance(raw_imported_names, Sequence):
+        raise TypeError(f"{context}.imported_object_names must be a sequence of strings")
+    return validated_object_names(
+        cast(Sequence[object], raw_imported_names),
+        context=f"{context}.imported_object_names",
+    )
+
+
+def _required_modeled_entry_for_role(
+    imported_modeled_objects: Sequence[dict[str, object]],
+    *,
+    role: str,
+) -> dict[str, object]:
+    matches: list[dict[str, object]] = []
     for index, imported_entry in enumerate(imported_modeled_objects):
         context = f"imported_modeled_objects[{index}]"
-        raw_imported_names = require_key(
-            imported_entry,
-            key="imported_object_names",
-            context=context,
+        entry_role = require_non_empty_str(
+            require_key(imported_entry, key="role", context=context),
+            context=f"{context}.role",
         )
-        if isinstance(raw_imported_names, (str, bytes)) or not isinstance(raw_imported_names, Sequence):
-            raise TypeError(f"{context}.imported_object_names must be a sequence of strings")
-        imported_object_names.extend(
-            validated_object_names(
-                cast(Sequence[object], raw_imported_names),
-                context=f"{context}.imported_object_names",
-            )
-        )
-
-    tx_mesh_object_name = next(
-        (candidate_name for candidate_name in _TX_MESH_OBJECT_CANDIDATES if candidate_name in imported_object_names),
-        None,
-    )
-    mesh_object_names: list[str] = []
-    missing_object_names: list[str] = []
-    if tx_mesh_object_name is None:
-        missing_object_names.extend(_TX_MESH_OBJECT_CANDIDATES)
-    else:
-        mesh_object_names.append(tx_mesh_object_name)
-    if _RX_MESH_OBJECT_NAME not in imported_object_names:
-        missing_object_names.append(_RX_MESH_OBJECT_NAME)
-    else:
-        mesh_object_names.append(_RX_MESH_OBJECT_NAME)
-    if missing_object_names:
+        if entry_role == role:
+            matches.append(imported_entry)
+    if len(matches) != 1:
         raise ValueError(
-            "Post-import mesh assignment requires exact imported object names "
-            f"{[*_TX_MESH_OBJECT_CANDIDATES, _RX_MESH_OBJECT_NAME]}; "
-            f"missing={missing_object_names}; available={imported_object_names}"
+            "Post-import mesh assignment requires exactly one modeled entry for each mesh role "
+            f"(role={role!r}, actual={len(matches)})"
         )
-    return mesh_object_names
+    return matches[0]
+
+
+def _required_tx_mesh_object_name(entry: dict[str, object], *, context: str) -> str:
+    imported_object_names = _imported_object_names(entry, context=context)
+    tx_matches = [name for name in imported_object_names if name in _TX_MESH_OBJECT_CANDIDATES]
+    if len(tx_matches) != 1:
+        raise ValueError(
+            "Post-import mesh assignment requires tx_single_coil exact imported object name "
+            f"from {_TX_MESH_OBJECT_CANDIDATES} "
+            f"(actual={tx_matches}, available={imported_object_names})"
+        )
+    return tx_matches[0]
+
+
+def _required_rx_mesh_object_name(entry: dict[str, object], *, context: str) -> str:
+    imported_object_names = _imported_object_names(entry, context=context)
+    rx_matches = [name for name in imported_object_names if name == _RX_MESH_OBJECT_NAME]
+    if len(rx_matches) != 1:
+        raise ValueError(
+            "Post-import mesh assignment requires rx_single_coil exact imported object name "
+            f"{_RX_MESH_OBJECT_NAME!r} "
+            f"(actual={rx_matches}, available={imported_object_names})"
+        )
+    return rx_matches[0]
+
+
+def _required_mesh_object_names(imported_modeled_objects: Sequence[dict[str, object]]) -> list[str]:
+    tx_entry = _required_modeled_entry_for_role(imported_modeled_objects, role=_TX_ROLE)
+    rx_entry = _required_modeled_entry_for_role(imported_modeled_objects, role=_RX_ROLE)
+    return [
+        _required_tx_mesh_object_name(tx_entry, context=f"modeled_objects[{_TX_ROLE}]"),
+        _required_rx_mesh_object_name(rx_entry, context=f"modeled_objects[{_RX_ROLE}]"),
+    ]
 
 
 def assign_post_import_mesh(

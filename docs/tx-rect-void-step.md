@@ -99,14 +99,18 @@ tags:
 - `PET_PSA`는 air-like dielectric이며 explicit documented difference는 `permittivity = 2.8`이다.
 
 ## 출력
-- `entry/generate_type2_step.py`는 기본적으로 `run/step/type2/`
-  아래에 object-level STEP과 metadata ledger를 기록한다.
+- active sampled/build flow는 `entry/sample.py`가
+  `run/sampled/type2/<design_id>/sampled.toml`, `type2_scene.step`,
+  `type2_step_ledger.json`을 만들고,
+  `entry/build.py`가 같은 design directory 아래에 imported ledger와 `.aedt`를 기록한다.
+- `entry/generate_type2_step.py`는 build helper로서 sampled TOML을 받아
+  per-design directory 아래에 scene STEP과 metadata ledger를 기록한다.
 - `entry/export_tx_rect_void_step.py`는 같은 type2 TOML에서 modeled
   `tx_single_coil`만 직접 export하는 얇은 CLI다.
 - metadata JSON은 realized parameters, bounds, debug `boxes`, single-entry
   `modeled_objects`, 그리고 expected exported body 정보를 담는다.
 - type2 경로는 role별 placement owner를 가진다.
-  - `tx_single_coil`: `tx_region` 내부 중앙-X, 중앙-Y, owner max-Z 접촉
+  - `tx_single_coil`: `tx_region` `-X` wall 접촉, 중앙-Y, owner max-Z 접촉
   - `rx_single_coil`: `rx_region_actual` 내부 중앙-Y, 바닥 Z 접촉, owner max-X 접촉
 - active example `examples/type2_fixed.toml`은 scene 전체를 global Z rebase한 상태를 canonical baseline으로 사용한다. 즉 `tx_region` 바닥면이 `z = 0`이고, generator/export는 이 explicit world-coordinate를 다시 정규화하지 않는다.
 - canonical bounds는 input routing envelope가 아니라 실제 exported PCB+copper union

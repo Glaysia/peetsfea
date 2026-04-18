@@ -15,8 +15,8 @@ tags:
 - `examples/type2_fixed.toml` remains the fixed single-design reference.
 - Type2 TOML owns both the STEP authoring registry and the EM report/output-variable contract.
 - The active runtime flow is:
-  1. `entry/sample_type2.py`
-  2. `entry/build_type2.py`
+  1. `entry/sample.py`
+  2. `entry/build.py`
   3. optional artifact inspection via `notebooks/hfss_sampled.ipynb`
 
 ## Internal Helpers

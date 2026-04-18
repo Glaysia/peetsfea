@@ -25,6 +25,12 @@ _TX_COPPER_MATERIAL = "copper"
 _TX_UNDERLAY_FERRITE_NAME_PREFIX = "tx_underlay_ferrite_u"
 _TX_UNDERLAY_PET_PSA_NAME_PREFIX = "tx_underlay_pet_psa_u"
 _TX_UNDERLAY_AIR_NAME_PREFIX = "tx_underlay_air_u"
+_RX_UNDERLAY_FERRITE_NAME_PREFIX = "under_rx_ferrite_u"
+_RX_UNDERLAY_PET_PSA_NAME_PREFIX = "under_rx_pet_psa_u"
+_RX_UNDERLAY_AIR_NAME_PREFIX = "under_rx_air_u"
+_UNDERLAY_FERRITE_NAME_PREFIXES = (_TX_UNDERLAY_FERRITE_NAME_PREFIX, _RX_UNDERLAY_FERRITE_NAME_PREFIX)
+_UNDERLAY_PET_PSA_NAME_PREFIXES = (_TX_UNDERLAY_PET_PSA_NAME_PREFIX, _RX_UNDERLAY_PET_PSA_NAME_PREFIX)
+_UNDERLAY_AIR_NAME_PREFIXES = (_TX_UNDERLAY_AIR_NAME_PREFIX, _RX_UNDERLAY_AIR_NAME_PREFIX)
 _TX_UNDERLAY_FERRITE_COLOR = (89, 94, 107)
 _TX_UNDERLAY_FERRITE_TRANSPARENCY = 0.0
 _TX_UNDERLAY_PET_PSA_COLOR = (227, 205, 120)
@@ -356,21 +362,21 @@ def ensure_pet_psa_material(hfss: HfssSession) -> str:
     return _PET_PSA_MATERIAL
 
 
-def ensure_tx_underlay_materials(hfss: HfssSession, *, imported_modeled_object_names: Sequence[str]) -> None:
+def ensure_underlay_materials(hfss: HfssSession, *, imported_modeled_object_names: Sequence[str]) -> None:
     underlay_ferrite_names = [
-        name for name in imported_modeled_object_names if name.startswith(_TX_UNDERLAY_FERRITE_NAME_PREFIX)
+        name for name in imported_modeled_object_names if name.startswith(_UNDERLAY_FERRITE_NAME_PREFIXES)
     ]
     underlay_pet_psa_names = [
-        name for name in imported_modeled_object_names if name.startswith(_TX_UNDERLAY_PET_PSA_NAME_PREFIX)
+        name for name in imported_modeled_object_names if name.startswith(_UNDERLAY_PET_PSA_NAME_PREFIXES)
     ]
     underlay_air_names = [
-        name for name in imported_modeled_object_names if name.startswith(_TX_UNDERLAY_AIR_NAME_PREFIX)
+        name for name in imported_modeled_object_names if name.startswith(_UNDERLAY_AIR_NAME_PREFIXES)
     ]
     if not underlay_ferrite_names and not underlay_pet_psa_names and not underlay_air_names:
         return
     if not (len(underlay_ferrite_names) == len(underlay_pet_psa_names) == len(underlay_air_names)):
         raise ValueError(
-            "TX underlay import requires matching ferrite/PET/air body counts before material setup "
+            "Role-aware TX/RX underlay import requires matching ferrite/PET/air body counts before material setup "
             f"(ferrite={underlay_ferrite_names}, pet_psa={underlay_pet_psa_names}, air={underlay_air_names})"
         )
     ensure_notebook_dataset_ferrite_material(hfss)
@@ -606,13 +612,13 @@ def validate_modeled_bounds_against_owner(
             f"owner_size={(owner_size_x, owner_size_y, owner_size_z)})"
         )
     if plane == "XY":
-        target_min_x = owner_min_x + (owner_size_x - modeled_size_x) / 2.0
+        target_min_x = owner_min_x if owner_id == "tx_region" else owner_min_x + (owner_size_x - modeled_size_x) / 2.0
         target_min_y = owner_min_y + (owner_size_y - modeled_size_y) / 2.0
         target_min_z = owner_min_z + owner_size_z - modeled_size_z
         if abs(modeled_min_x - target_min_x) > _PLACEMENT_TOLERANCE:
             if owner_id == "tx_region":
                 raise ValueError(
-                    "tx_rect_void_coil outer bounds min_x must already be centered inside tx_region "
+                    "tx_rect_void_coil outer bounds min_x must already touch tx_region min_x "
                     f"(actual={modeled_min_x}, expected={target_min_x})"
                 )
             raise ValueError(
@@ -690,32 +696,32 @@ def style_imported_modeled_objects(
         transparency=_TX_COPPER_TRANSPARENCY,
         context=f"{context}.copper[{copper_name}]",
     )
-    for ferrite_name in resolved_body_names["tx_underlay_ferrite_names"]:
+    for ferrite_name in resolved_body_names["underlay_ferrite_names"]:
         _apply_object_material_and_visual_state(
             modeler=modeler,
             object_name=ferrite_name,
             material_name=_DATASET_FERRITE_MATERIAL,
             color=_TX_UNDERLAY_FERRITE_COLOR,
             transparency=_TX_UNDERLAY_FERRITE_TRANSPARENCY,
-            context=f"{context}.tx_underlay_ferrite[{ferrite_name}]",
+            context=f"{context}.underlay_ferrite[{ferrite_name}]",
         )
-    for pet_psa_name in resolved_body_names["tx_underlay_pet_psa_names"]:
+    for pet_psa_name in resolved_body_names["underlay_pet_psa_names"]:
         _apply_object_material_and_visual_state(
             modeler=modeler,
             object_name=pet_psa_name,
             material_name=_PET_PSA_MATERIAL,
             color=_TX_UNDERLAY_PET_PSA_COLOR,
             transparency=_TX_UNDERLAY_PET_PSA_TRANSPARENCY,
-            context=f"{context}.tx_underlay_pet_psa[{pet_psa_name}]",
+            context=f"{context}.underlay_pet_psa[{pet_psa_name}]",
         )
-    for air_name in resolved_body_names["tx_underlay_air_names"]:
+    for air_name in resolved_body_names["underlay_air_names"]:
         _apply_object_material_and_visual_state(
             modeler=modeler,
             object_name=air_name,
             material_name="vacuum",
             color=_TX_UNDERLAY_AIR_COLOR,
             transparency=_TX_UNDERLAY_AIR_TRANSPARENCY,
-            context=f"{context}.tx_underlay_air[{air_name}]",
+            context=f"{context}.underlay_air[{air_name}]",
         )
     reconstructed_port_sheet_names = _reconstruct_port_sheet_if_needed(
         modeler=modeler,
@@ -726,9 +732,9 @@ def style_imported_modeled_objects(
 
 
 __all__ = [
+    "ensure_underlay_materials",
     "ensure_pet_psa_material",
     "ensure_notebook_dataset_ferrite_material",
-    "ensure_tx_underlay_materials",
     "set_imported_object_model_state",
     "style_imported_modeled_objects",
     "style_non_model_objects",

@@ -235,7 +235,7 @@ def _validate_tx_placement(modeled_entry: dict[str, object], owner_entry: dict[s
         context="tx_single_coil",
     )
     owner_size_xyz = _outer_bounds_size_xyz(owner_entry, context="tx_single_coil.owner")
-    expected_min_x = owner_min_xyz[0] + (owner_size_xyz[0] - modeled_size_xyz[0]) / 2.0
+    expected_min_x = owner_min_xyz[0]
     expected_min_y = owner_min_xyz[1] + (owner_size_xyz[1] - modeled_size_xyz[1]) / 2.0
     expected_min_z = owner_min_xyz[2] + owner_size_xyz[2] - modeled_size_xyz[2]
     _assert_close(actual=modeled_min_xyz[0], expected=expected_min_x, context="tx_single_coil.min_x")

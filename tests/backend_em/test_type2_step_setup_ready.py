@@ -7,6 +7,7 @@ from typing import cast
 import pytest
 
 from peetsfea.aedt.protocols import HfssSession
+from peetsfea.backend.pyaedt.type2_step_post_import_mesh import assign_post_import_mesh
 from peetsfea.backend.pyaedt.type2_step_setup_ready import (
     setup_type2_step_ledger,
     setup_type2_step_ledger_into_hfss,
@@ -14,16 +15,20 @@ from peetsfea.backend.pyaedt.type2_step_setup_ready import (
 from tests.backend_em.test_type2_step_import_pipeline import (
     _FakeDesign as _ImportFakeDesign,
     _FakeHfss as _ImportFakeHfss,
+    _FakeMeshModule,
     _FakeModeler as _ImportFakeModeler,
     _expected_mesh_length_payload,
     _modeled_entry,
     _non_model_entry,
     _rx_single_coil_entry,
     _single_layer_imported_name_batch,
+    _single_layer_imported_name_batch_with_role_aware_underlay,
     _single_layer_modeled_objects,
+    _single_layer_modeled_objects_with_role_aware_underlay,
     _source_paths,
     _write_ledger,
 )
+from tests.fixtures.legacy.type1_spec import TYPE1_OUTPUT_VARIABLES, type1_outputs_spec
 
 
 class _FakeBoundaryModule:
@@ -110,8 +115,8 @@ class _FakeReportSetupModule:
 
 
 class _SetupReadyDesign(_ImportFakeDesign):
-    def __init__(self, *, mesh_module: object, parent: "_SetupReadyHfss") -> None:
-        super().__init__(mesh_module=cast(object, mesh_module))
+    def __init__(self, *, mesh_module: _FakeMeshModule, parent: "_SetupReadyHfss") -> None:
+        super().__init__(mesh_module=mesh_module)
         self._parent = parent
 
     def GetModule(self, name: str) -> object:
@@ -246,6 +251,48 @@ def _imported_ledger_payload(path: Path) -> dict[str, object]:
     return cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
 
 
+def _expected_output_variables() -> list[tuple[str, str, str]]:
+    outputs = type1_outputs_spec()
+    solution_name = outputs["solution_name"]
+    return [
+        (
+            name,
+            expression.replace("TX_TML", "1_T1").replace("RX_TML", "2_T1"),
+            solution_name,
+        )
+        for name, expression in TYPE1_OUTPUT_VARIABLES
+    ]
+
+
+def _role_aware_mesh_entries(*, tx_object_name: str = "tx_copper_l0") -> list[dict[str, object]]:
+    return [
+        {
+            "object_id": "tx_rect_void_coil",
+            "role": "tx_single_coil",
+            "imported_object_names": [
+                "tx_pcb_l0",
+                tx_object_name,
+                "tx_underlay_ferrite_u0",
+                "tx_underlay_pet_psa_u0",
+                "tx_underlay_air_u0",
+                "tx_port_sheet",
+            ],
+        },
+        {
+            "object_id": "rx_rect_void_coil",
+            "role": "rx_single_coil",
+            "imported_object_names": [
+                "rx_pcb_l0",
+                "rx_copper_l0",
+                "under_rx_ferrite_u0",
+                "under_rx_pet_psa_u0",
+                "under_rx_air_u0",
+                "rx_port_sheet",
+            ],
+        },
+    ]
+
+
 def test_setup_type2_step_ledger_builds_mesh_boundary_ports_analysis_and_validation(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
     _write_ledger(
@@ -282,10 +329,20 @@ def test_setup_type2_step_ledger_builds_mesh_boundary_ports_analysis_and_validat
     assert session._excitation_names == ["1_T1", "2_T1"]
     assert session.edited_sources_payloads
     assert session.inserted_setup_types == ["HfssDriven"]
-    assert session.created_output_variables == [
-        ("S21_mag_ratio", "mag(S(1_T1,2_T1))", "Setup1 : LastAdaptive")
-    ]
+    outputs = type1_outputs_spec()
+    expected_trace_names = [name for name, _ in TYPE1_OUTPUT_VARIABLES]
+    assert session.created_output_variables == _expected_output_variables()
     assert session.created_reports[0]["plot_name"] == "Output Variables Table1"
+    assert session.created_reports[0]["report_category"] == outputs["report_category"]
+    assert session.created_reports[0]["plot_type"] == outputs["plot_type"]
+    assert session.created_reports[0]["setup_sweep_name"] == outputs["solution_name"]
+    assert session.created_reports[0]["variations"] == [f"{outputs['primary_sweep']}:=", ["All"]]
+    assert session.created_reports[0]["components"] == [
+        "X Component:=",
+        outputs["primary_sweep"],
+        "Y Component:=",
+        expected_trace_names,
+    ]
     assert session.save_project_calls == [str(output_aedt_path)]
     assert session.desktop_class.release_calls == [(True, True)]
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
@@ -298,6 +355,79 @@ def test_setup_type2_step_ledger_builds_mesh_boundary_ports_analysis_and_validat
     assert "mesh" not in imported_payload
     assert "boundary" not in imported_payload
     assert imported_payload["aedt_path"] == str(output_aedt_path)
+
+
+def test_setup_type2_step_ledger_assigns_requested_design_variables_before_save(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=_single_layer_modeled_objects(tmp_path),
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_setup_ready.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[_single_layer_imported_name_batch()]))
+
+    result = setup_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        design_name="fake_type2_setup_ready",
+        hfss_factory=lambda _: cast(HfssSession, session),
+        design_variables=(
+            ("modeled_objects_tx_rect_void_coil_outer_x_mm", "157.8mm"),
+            ("modeled_objects_tx_rect_void_coil_margin_ratio", "0.05"),
+            ("modeled_objects_tx_rect_void_coil_turn_count", "2"),
+        ),
+    )
+
+    assert session.design_variables == {
+        "modeled_objects_tx_rect_void_coil_outer_x_mm": "157.8mm",
+        "modeled_objects_tx_rect_void_coil_margin_ratio": "0.05",
+        "modeled_objects_tx_rect_void_coil_turn_count": "2",
+    }
+    assert result["aedt_path"] == str(output_aedt_path)
+    assert session.save_project_calls == [str(output_aedt_path)]
+
+
+def test_setup_type2_step_ledger_keeps_mesh_conductor_only_when_tx_entry_includes_underlay_bodies(
+    tmp_path: Path,
+) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=_single_layer_modeled_objects_with_role_aware_underlay(
+            tmp_path,
+            tx_repeat_count=2,
+            rx_repeat_count=0,
+        ),
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_setup_ready.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _SetupReadyHfss(
+        modeler=_SetupReadyModeler(
+            imported_name_batches=[
+                _single_layer_imported_name_batch_with_role_aware_underlay(
+                    tx_repeat_count=2,
+                    rx_repeat_count=0,
+                )
+            ]
+        )
+    )
+
+    result = setup_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        design_name="fake_type2_setup_ready",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload()]
+    assert result["mesh"]["objects"] == ["tx_copper_l0", "rx_copper_l0"]
 
 
 def test_setup_type2_step_ledger_into_hfss_auto_detaches_after_setup(tmp_path: Path) -> None:
@@ -372,7 +502,37 @@ def test_setup_type2_step_ledger_accepts_multilayer_tx_copper_stack_mesh(tmp_pat
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
 
 
-def test_setup_type2_step_ledger_raises_when_required_mesh_object_name_is_missing(tmp_path: Path) -> None:
+def test_assign_post_import_mesh_ignores_tx_and_rx_underlay_exact_name_bodies() -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+
+    result = assign_post_import_mesh(
+        hfss=cast(HfssSession, session),
+        imported_modeled_objects=_role_aware_mesh_entries(tx_object_name="tx_copper_stack"),
+    )
+
+    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload(tx_object_name="tx_copper_stack")]
+    assert result["objects"] == ["tx_copper_stack", "rx_copper_l0"]
+
+
+def test_assign_post_import_mesh_rejects_rx_underlay_names_without_rx_copper() -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+    imported_modeled_objects = _role_aware_mesh_entries()
+    imported_modeled_objects[1]["imported_object_names"] = [
+        "rx_pcb_l0",
+        "under_rx_ferrite_u0",
+        "under_rx_pet_psa_u0",
+        "under_rx_air_u0",
+        "rx_port_sheet",
+    ]
+
+    with pytest.raises(ValueError, match=r"requires rx_single_coil exact imported object name 'rx_copper_l0'"):
+        assign_post_import_mesh(
+            hfss=cast(HfssSession, session),
+            imported_modeled_objects=imported_modeled_objects,
+        )
+
+
+def test_setup_type2_step_ledger_raises_when_required_mesh_role_is_missing(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
     _write_ledger(
         ledger_path,
@@ -387,7 +547,7 @@ def test_setup_type2_step_ledger_raises_when_required_mesh_object_name_is_missin
         )
     )
 
-    with pytest.raises(ValueError, match=r"requires exact imported object names .*rx_copper_l0"):
+    with pytest.raises(ValueError, match=r"requires exactly one modeled entry for each mesh role .*rx_single_coil"):
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_setup_ready.aedt",

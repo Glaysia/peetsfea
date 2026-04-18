@@ -20,7 +20,7 @@ from peetsfea.backend.pyaedt.type2_step_import_partition import (
     partition_imported_scene_object_names,
 )
 from peetsfea.backend.pyaedt.type2_step_import_style import (
-    ensure_tx_underlay_materials,
+    ensure_underlay_materials,
     set_imported_object_model_state,
     style_imported_modeled_objects,
     style_non_model_objects,
@@ -83,6 +83,15 @@ def _merge_modeled_adapter_entry(
     return merged
 
 
+def _all_imported_modeled_object_names(modeled_names_by_object_id: dict[str, list[str]]) -> list[str]:
+    imported_object_names: list[str] = []
+    for object_id, modeled_object_names in modeled_names_by_object_id.items():
+        if not modeled_object_names:
+            raise ValueError(f"modeled import partition must claim at least one body per modeled object (object_id={object_id})")
+        imported_object_names.extend(modeled_object_names)
+    return imported_object_names
+
+
 def build_imported_ledger(
     *,
     hfss: HfssSession,
@@ -100,6 +109,10 @@ def build_imported_ledger(
     non_model_names_by_object_id, modeled_names_by_object_id = partition_imported_scene_object_names(
         ledger=ledger,
         imported_object_names=imported_scene_object_names,
+    )
+    ensure_underlay_materials(
+        hfss,
+        imported_modeled_object_names=_all_imported_modeled_object_names(modeled_names_by_object_id),
     )
 
     imported_non_model_objects: list[dict[str, object]] = []
@@ -140,7 +153,6 @@ def build_imported_ledger(
             imported_object_names=imported_object_names,
             model_state=True,
         )
-        ensure_tx_underlay_materials(hfss, imported_modeled_object_names=imported_object_names)
         final_imported_object_names = style_imported_modeled_objects(
             modeler=modeler,
             modeled_entry=validated_entry["entry"],

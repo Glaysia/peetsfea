@@ -20,10 +20,12 @@ from peetsfea.type2_step_ledger import CanonicalCoordinates
 from peetsfea.type2_step_ledger import ModeledObjectSceneData
 from peetsfea.type2_step_ledger import NonModelObjectLedgerEntry
 from peetsfea.type2_step_ledger import NonModelSceneMemberLedgerEntry
+from peetsfea.type2_step_spec import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import Point3
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
+from peetsfea.type2_step_spec import resolve_modeled_underlay_gap_mm
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
 
 _NON_MODEL_VISIBLE_GROUPS: tuple[tuple[str, str, Literal["XY", "YZ", "ZX", "mixed"], tuple[str, ...]], ...] = (
@@ -31,9 +33,10 @@ _NON_MODEL_VISIBLE_GROUPS: tuple[tuple[str, str, Literal["XY", "YZ", "ZX", "mixe
     ("tx_region", "tx_region", "XY", ("tx_region",)),
     ("rx_region_max", "rx_region_max", "YZ", ("rx_region_max",)),
 )
-_TX_UNDERLAY_FERRITE_THICKNESS_MM = 0.20
-_TX_UNDERLAY_PET_PSA_THICKNESS_MM = 0.15
-_TX_UNDERLAY_AIR_THICKNESS_MM = 0.02
+_UNDERLAY_FERRITE_THICKNESS_MM = 0.20
+_UNDERLAY_PET_PSA_THICKNESS_MM = 0.15
+_UNDERLAY_AIR_THICKNESS_MM = 0.02
+_UNDERLAY_MAX_LABEL_LENGTH = 32
 
 
 def _build_non_model_shape(spec: NonModelBoxSpec) -> bd.Shape:
@@ -208,7 +211,7 @@ def _single_coil_placement_offset_from_local_bounds(
         )
     if profile.plane == "XY":
         target_world_min_xyz = (
-            owner_origin_x + (owner_size_x - world_size_xyz[0]) / 2.0,
+            owner_origin_x,
             owner_origin_y + (owner_size_y - world_size_xyz[1]) / 2.0,
             owner_origin_z + owner_size_z - world_size_xyz[2],
         )
@@ -685,6 +688,11 @@ def _build_labeled_solid_box(
     origin_xyz: Point3,
     size_xyz: Point3,
 ) -> bd.Shape:
+    if len(label) > _UNDERLAY_MAX_LABEL_LENGTH:
+        raise RuntimeError(
+            "type2 underlay body label must be <= 32 chars "
+            f"(label={label}, length={len(label)})"
+        )
     size_x, size_y, size_z = size_xyz
     if size_x <= 0.0 or size_y <= 0.0 or size_z <= 0.0:
         raise RuntimeError(
@@ -716,69 +724,78 @@ def _shape_min_max_xyz(shape: bd.Shape) -> tuple[Point3, Point3]:
     )
 
 
-def _tx_underlay_planar_bounds(scene_children: tuple[bd.Shape, ...]) -> tuple[float, float, float, float]:
-    if not scene_children:
-        raise RuntimeError("type2 tx underlay bounds require at least one modeled body")
-    min_x = min(_shape_min_max_xyz(shape)[0][0] for shape in scene_children)
-    min_y = min(_shape_min_max_xyz(shape)[0][1] for shape in scene_children)
-    max_x = max(_shape_min_max_xyz(shape)[1][0] for shape in scene_children)
-    max_y = max(_shape_min_max_xyz(shape)[1][1] for shape in scene_children)
-    if max_x <= min_x or max_y <= min_y:
-        raise RuntimeError(
-            "type2 tx underlay planar bounds must be positive "
-            f"(min=({min_x}, {min_y}), max=({max_x}, {max_y}))"
-        )
-    return (min_x, min_y, max_x, max_y)
+def _underlay_unit_thickness_mm() -> float:
+    return _UNDERLAY_FERRITE_THICKNESS_MM + _UNDERLAY_PET_PSA_THICKNESS_MM + _UNDERLAY_AIR_THICKNESS_MM
 
 
 def _build_tx_underlay_scene_shapes(
     *,
-    scene_children: tuple[bd.Shape, ...],
+    owner_spec: NonModelBoxSpec,
     modeled_min_z: float,
     repeat_count: int,
+    gap_mm: float,
 ) -> tuple[bd.Shape, ...]:
+    if owner_spec.plane != "XY":
+        raise RuntimeError(f"type2 tx underlay requires XY owner plane (owner={owner_spec.object_id})")
     if repeat_count < 1:
         raise RuntimeError(f"type2 tx underlay repeat count must be >= 1 when underlay is emitted (actual={repeat_count})")
-    min_x, min_y, max_x, max_y = _tx_underlay_planar_bounds(scene_children)
-    footprint_size_xyz: Point3 = (max_x - min_x, max_y - min_y, 0.0)
-    if footprint_size_xyz[0] <= 0.0 or footprint_size_xyz[1] <= 0.0:
-        raise RuntimeError(f"type2 tx underlay footprint must be positive (size={footprint_size_xyz})")
+    if gap_mm <= 0.0:
+        raise RuntimeError(
+            "type2 tx underlay gap must be positive "
+            f"(object_id={owner_spec.object_id}, gap_mm={gap_mm})"
+        )
+    footprint_origin_x, footprint_origin_y, footprint_origin_z = owner_spec.origin_xyz
+    footprint_size_x, footprint_size_y, owner_size_z = owner_spec.size_xyz
+    if footprint_size_x <= 0.0 or footprint_size_y <= 0.0:
+        raise RuntimeError(
+            "type2 tx underlay footprint must be positive "
+            f"(object_id={owner_spec.object_id}, size={owner_spec.size_xyz})"
+        )
+    unit_thickness_mm = _underlay_unit_thickness_mm()
+    total_thickness_mm = repeat_count * unit_thickness_mm
+    underlay_min_z = modeled_min_z - gap_mm - total_thickness_mm
+    if underlay_min_z < footprint_origin_z:
+        raise RuntimeError(
+            "type2 tx underlay stack must fit inside tx_region thickness "
+            f"(owner={owner_spec.object_id}, owner_min_z={footprint_origin_z}, underlay_min_z={underlay_min_z}, "
+            f"modeled_min_z={modeled_min_z}, gap_mm={gap_mm}, repeat_count={repeat_count})"
+        )
     shapes: list[bd.Shape] = []
-    current_top_z = modeled_min_z
+    current_top_z = modeled_min_z - gap_mm
     for unit_index in range(repeat_count):
-        ferrite_origin_z = current_top_z - _TX_UNDERLAY_FERRITE_THICKNESS_MM
+        ferrite_origin_z = current_top_z - _UNDERLAY_FERRITE_THICKNESS_MM
         shapes.append(
             _build_labeled_solid_box(
                 label=f"tx_underlay_ferrite_u{unit_index}",
-                origin_xyz=(min_x, min_y, ferrite_origin_z),
+                origin_xyz=(footprint_origin_x, footprint_origin_y, ferrite_origin_z),
                 size_xyz=(
-                    footprint_size_xyz[0],
-                    footprint_size_xyz[1],
-                    _TX_UNDERLAY_FERRITE_THICKNESS_MM,
+                    footprint_size_x,
+                    footprint_size_y,
+                    _UNDERLAY_FERRITE_THICKNESS_MM,
                 ),
             )
         )
-        pet_origin_z = ferrite_origin_z - _TX_UNDERLAY_PET_PSA_THICKNESS_MM
+        pet_origin_z = ferrite_origin_z - _UNDERLAY_PET_PSA_THICKNESS_MM
         shapes.append(
             _build_labeled_solid_box(
                 label=f"tx_underlay_pet_psa_u{unit_index}",
-                origin_xyz=(min_x, min_y, pet_origin_z),
+                origin_xyz=(footprint_origin_x, footprint_origin_y, pet_origin_z),
                 size_xyz=(
-                    footprint_size_xyz[0],
-                    footprint_size_xyz[1],
-                    _TX_UNDERLAY_PET_PSA_THICKNESS_MM,
+                    footprint_size_x,
+                    footprint_size_y,
+                    _UNDERLAY_PET_PSA_THICKNESS_MM,
                 ),
             )
         )
-        air_origin_z = pet_origin_z - _TX_UNDERLAY_AIR_THICKNESS_MM
+        air_origin_z = pet_origin_z - _UNDERLAY_AIR_THICKNESS_MM
         shapes.append(
             _build_labeled_solid_box(
                 label=f"tx_underlay_air_u{unit_index}",
-                origin_xyz=(min_x, min_y, air_origin_z),
+                origin_xyz=(footprint_origin_x, footprint_origin_y, air_origin_z),
                 size_xyz=(
-                    footprint_size_xyz[0],
-                    footprint_size_xyz[1],
-                    _TX_UNDERLAY_AIR_THICKNESS_MM,
+                    footprint_size_x,
+                    footprint_size_y,
+                    _UNDERLAY_AIR_THICKNESS_MM,
                 ),
             )
         )
@@ -786,8 +803,75 @@ def _build_tx_underlay_scene_shapes(
     return tuple(shapes)
 
 
+def _build_rx_underlay_scene_shapes(
+    *,
+    owner_spec: NonModelBoxSpec,
+    repeat_count: int,
+) -> tuple[bd.Shape, ...]:
+    if owner_spec.plane != "YZ":
+        raise RuntimeError(f"type2 rx underlay requires YZ owner plane (owner={owner_spec.object_id})")
+    if repeat_count < 1:
+        raise RuntimeError(f"type2 rx underlay repeat count must be >= 1 when underlay is emitted (actual={repeat_count})")
+    owner_origin_x, owner_origin_y, owner_origin_z = owner_spec.origin_xyz
+    owner_size_x, owner_size_y, owner_size_z = owner_spec.size_xyz
+    if owner_size_y <= 0.0 or owner_size_z <= 0.0:
+        raise RuntimeError(
+            "type2 rx underlay footprint must be positive "
+            f"(object_id={owner_spec.object_id}, size={owner_spec.size_xyz})"
+        )
+    unit_thickness_mm = _underlay_unit_thickness_mm()
+    total_thickness_mm = repeat_count * unit_thickness_mm
+    if total_thickness_mm > owner_size_x:
+        raise RuntimeError(
+            "type2 rx underlay stack must fit inside rx_region_max thickness "
+            f"(owner={owner_spec.object_id}, owner_size_x={owner_size_x}, total_thickness_mm={total_thickness_mm}, "
+            f"repeat_count={repeat_count})"
+        )
+    shapes: list[bd.Shape] = []
+    current_min_x = owner_origin_x
+    for unit_index in range(repeat_count):
+        air_origin_x = current_min_x
+        pet_origin_x = air_origin_x + _UNDERLAY_AIR_THICKNESS_MM
+        ferrite_origin_x = pet_origin_x + _UNDERLAY_PET_PSA_THICKNESS_MM
+        shapes.append(
+            _build_labeled_solid_box(
+                label=f"under_rx_ferrite_u{unit_index}",
+                origin_xyz=(ferrite_origin_x, owner_origin_y, owner_origin_z),
+                size_xyz=(
+                    _UNDERLAY_FERRITE_THICKNESS_MM,
+                    owner_size_y,
+                    owner_size_z,
+                ),
+            )
+        )
+        shapes.append(
+            _build_labeled_solid_box(
+                label=f"under_rx_pet_psa_u{unit_index}",
+                origin_xyz=(pet_origin_x, owner_origin_y, owner_origin_z),
+                size_xyz=(
+                    _UNDERLAY_PET_PSA_THICKNESS_MM,
+                    owner_size_y,
+                    owner_size_z,
+                ),
+            )
+        )
+        shapes.append(
+            _build_labeled_solid_box(
+                label=f"under_rx_air_u{unit_index}",
+                origin_xyz=(air_origin_x, owner_origin_y, owner_origin_z),
+                size_xyz=(
+                    _UNDERLAY_AIR_THICKNESS_MM,
+                    owner_size_y,
+                    owner_size_z,
+                ),
+            )
+        )
+        current_min_x += unit_thickness_mm
+    return tuple(shapes)
+
+
 def build_modeled_single_coil_scene_data(
-    spec: ModeledTxSingleCoilSpec,
+    spec: ModeledSingleCoilSpec,
     *,
     owner_spec: NonModelBoxSpec,
     seed: int,
@@ -833,22 +917,27 @@ def build_modeled_single_coil_scene_data(
         if profile.role == "tx_single_coil":
             if cast(Literal["XY", "YZ"], profile.plane) != "XY":
                 raise RuntimeError(f"type2 tx underlay requires XY modeled plane (actual={profile.plane})")
+            if not isinstance(spec, ModeledTxSingleCoilSpec):
+                raise RuntimeError(f"type2 tx underlay gap requires tx modeled spec (object_id={spec.object_id})")
             underlay_scene_children = (
                 _build_tx_underlay_scene_shapes(
-                    scene_children=base_scene_children,
+                    owner_spec=owner_spec,
                     modeled_min_z=modeled_bounds_min_xyz[2],
                     repeat_count=underlay_repeat_count,
+                    gap_mm=resolve_modeled_underlay_gap_mm(spec, seed=seed),
                 )
                 if underlay_repeat_count > 0
                 else ()
             )
         else:
-            if underlay_repeat_count != 0:
-                raise RuntimeError(
-                    "type2 rx_single_coil underlay is unsupported until RX underlay support exists "
-                    f"(object_id={spec.object_id}, repeat_count={underlay_repeat_count})"
+            underlay_scene_children = (
+                _build_rx_underlay_scene_shapes(
+                    owner_spec=owner_spec,
+                    repeat_count=underlay_repeat_count,
                 )
-            underlay_scene_children = ()
+                if underlay_repeat_count > 0
+                else ()
+            )
         scene_children = base_scene_children + underlay_scene_children
         expected_exported_body_names = tuple(shape.label for shape in scene_children)
         if len(set(expected_exported_body_names)) != len(expected_exported_body_names):

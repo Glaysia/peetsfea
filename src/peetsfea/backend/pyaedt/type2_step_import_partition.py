@@ -16,17 +16,26 @@ from peetsfea.backend.pyaedt.type2_step_import_ledger import (
 
 _BODY_ROLE_PCB = "pcb"
 _BODY_ROLE_COPPER = "copper"
-_BODY_ROLE_TX_UNDERLAY_FERRITE = "tx_underlay_ferrite"
-_BODY_ROLE_TX_UNDERLAY_PET_PSA = "tx_underlay_pet_psa"
-_BODY_ROLE_TX_UNDERLAY_AIR = "tx_underlay_air"
+_BODY_ROLE_UNDERLAY_FERRITE = "underlay_ferrite"
+_BODY_ROLE_UNDERLAY_PET_PSA = "underlay_pet_psa"
+_BODY_ROLE_UNDERLAY_AIR = "underlay_air"
+_TX_UNDERLAY_FERRITE_NAME_PREFIX = "tx_underlay_ferrite_u"
+_TX_UNDERLAY_PET_PSA_NAME_PREFIX = "tx_underlay_pet_psa_u"
+_TX_UNDERLAY_AIR_NAME_PREFIX = "tx_underlay_air_u"
+_RX_UNDERLAY_FERRITE_NAME_PREFIX = "under_rx_ferrite_u"
+_RX_UNDERLAY_PET_PSA_NAME_PREFIX = "under_rx_pet_psa_u"
+_RX_UNDERLAY_AIR_NAME_PREFIX = "under_rx_air_u"
+_UNDERLAY_FERRITE_NAME_PREFIXES = (_TX_UNDERLAY_FERRITE_NAME_PREFIX, _RX_UNDERLAY_FERRITE_NAME_PREFIX)
+_UNDERLAY_PET_PSA_NAME_PREFIXES = (_TX_UNDERLAY_PET_PSA_NAME_PREFIX, _RX_UNDERLAY_PET_PSA_NAME_PREFIX)
+_UNDERLAY_AIR_NAME_PREFIXES = (_TX_UNDERLAY_AIR_NAME_PREFIX, _RX_UNDERLAY_AIR_NAME_PREFIX)
 
 
 class ModeledBodyNames(TypedDict):
     pcb_names: list[str]
     copper_names: list[str]
-    tx_underlay_ferrite_names: list[str]
-    tx_underlay_pet_psa_names: list[str]
-    tx_underlay_air_names: list[str]
+    underlay_ferrite_names: list[str]
+    underlay_pet_psa_names: list[str]
+    underlay_air_names: list[str]
 
 
 def new_imported_object_names(*, before_import: list[str], after_import: list[str], step_path: Path) -> list[str]:
@@ -62,16 +71,17 @@ def _body_role_from_expected_name(expected_name: str, *, context: str) -> str:
         return _BODY_ROLE_PCB
     if expected_name.startswith(("tx_copper_l", "rx_copper_l")) or expected_name in ("tx_copper_stack", "rx_copper_stack"):
         return _BODY_ROLE_COPPER
-    if expected_name.startswith("tx_underlay_ferrite_u"):
-        return _BODY_ROLE_TX_UNDERLAY_FERRITE
-    if expected_name.startswith("tx_underlay_pet_psa_u"):
-        return _BODY_ROLE_TX_UNDERLAY_PET_PSA
-    if expected_name.startswith("tx_underlay_air_u"):
-        return _BODY_ROLE_TX_UNDERLAY_AIR
+    if expected_name.startswith(_UNDERLAY_FERRITE_NAME_PREFIXES):
+        return _BODY_ROLE_UNDERLAY_FERRITE
+    if expected_name.startswith(_UNDERLAY_PET_PSA_NAME_PREFIXES):
+        return _BODY_ROLE_UNDERLAY_PET_PSA
+    if expected_name.startswith(_UNDERLAY_AIR_NAME_PREFIXES):
+        return _BODY_ROLE_UNDERLAY_AIR
     raise ValueError(
         "unsupported exported body name; expected tx_pcb_l*/tx_copper_l*/tx_copper_stack/"
         "tx_underlay_ferrite_u*/tx_underlay_pet_psa_u*/tx_underlay_air_u* "
-        "or rx_pcb_l*/rx_copper_l*/rx_copper_stack "
+        "or rx_pcb_l*/rx_copper_l*/rx_copper_stack/"
+        "under_rx_ferrite_u*/under_rx_pet_psa_u*/under_rx_air_u* "
         f"(actual={expected_name!r}, context={context})"
     )
 
@@ -107,29 +117,29 @@ def resolve_modeled_body_names(
         for name in imported_object_names
         if name.startswith(("tx_copper_l", "rx_copper_l")) or name in ("tx_copper_stack", "rx_copper_stack")
     ]
-    tx_underlay_ferrite_names = [name for name in imported_object_names if name.startswith("tx_underlay_ferrite_u")]
-    tx_underlay_pet_psa_names = [name for name in imported_object_names if name.startswith("tx_underlay_pet_psa_u")]
-    tx_underlay_air_names = [name for name in imported_object_names if name.startswith("tx_underlay_air_u")]
+    underlay_ferrite_names = [name for name in imported_object_names if name.startswith(_UNDERLAY_FERRITE_NAME_PREFIXES)]
+    underlay_pet_psa_names = [name for name in imported_object_names if name.startswith(_UNDERLAY_PET_PSA_NAME_PREFIXES)]
+    underlay_air_names = [name for name in imported_object_names if name.startswith(_UNDERLAY_AIR_NAME_PREFIXES)]
     if len(pcb_names) < 1 or len(copper_names) != 1:
         raise ValueError(
             "single-coil type2 import requires one or more PCB bodies and exactly one copper body after exact-name matching "
             f"(actual={imported_object_names})"
         )
     if not (
-        len(tx_underlay_ferrite_names)
-        == len(tx_underlay_pet_psa_names)
-        == len(tx_underlay_air_names)
+        len(underlay_ferrite_names)
+        == len(underlay_pet_psa_names)
+        == len(underlay_air_names)
     ):
         raise ValueError(
-            "single-coil type2 import requires matching TX underlay tri-layer body counts after exact-name matching "
-            f"(ferrite={tx_underlay_ferrite_names}, pet_psa={tx_underlay_pet_psa_names}, air={tx_underlay_air_names})"
+            "single-coil type2 import requires matching TX/RX underlay tri-layer body counts after exact-name matching "
+            f"(ferrite={underlay_ferrite_names}, pet_psa={underlay_pet_psa_names}, air={underlay_air_names})"
         )
     return {
         "pcb_names": pcb_names,
         "copper_names": copper_names,
-        "tx_underlay_ferrite_names": tx_underlay_ferrite_names,
-        "tx_underlay_pet_psa_names": tx_underlay_pet_psa_names,
-        "tx_underlay_air_names": tx_underlay_air_names,
+        "underlay_ferrite_names": underlay_ferrite_names,
+        "underlay_pet_psa_names": underlay_pet_psa_names,
+        "underlay_air_names": underlay_air_names,
     }
 
 

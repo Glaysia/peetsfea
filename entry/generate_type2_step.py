@@ -45,6 +45,19 @@ def _tx_underlay_expected_body_names(*, repeat_count: int) -> list[str]:
     return body_names
 
 
+def _rx_underlay_expected_body_names(*, repeat_count: int) -> list[str]:
+    body_names: list[str] = []
+    for unit_index in range(repeat_count):
+        body_names.extend(
+            (
+                f"under_rx_ferrite_u{unit_index}",
+                f"under_rx_pet_psa_u{unit_index}",
+                f"under_rx_air_u{unit_index}",
+            )
+        )
+    return body_names
+
+
 def _require_single_coil_expected_body_contract(
     ledger: Type2StepLedger,
     *,
@@ -74,6 +87,11 @@ def _require_single_coil_expected_body_contract(
             )
         elif role == "rx_single_coil":
             expected_names = ["rx_pcb_l0", "rx_copper_l0"]
+            expected_names.extend(
+                _rx_underlay_expected_body_names(
+                    repeat_count=resolve_modeled_underlay_repeat_count(modeled_spec, seed=seed)
+                )
+            )
         else:
             raise ValueError(f"unsupported modeled object role in type2 ledger: {role}")
         if list(expected_body_names) != expected_names:
@@ -86,6 +104,7 @@ def _require_single_coil_expected_body_contract(
                 "type2 single-coil export expected body count mismatch "
                 f"(role={role}, expected={len(expected_names)}, actual={expected_body_count})"
             )
+
 
 def _shape_vertices(scene_step_path: Path, *, label: str) -> tuple[tuple[float, float, float], ...]:
     scene = bd.import_step(scene_step_path)
@@ -250,7 +269,7 @@ def _single_coil_placement_offset_from_local_bounds(
     world_min_delta = profile.world_delta(local_bounds_min_xyz)
     if plane == "XY":
         target_world_min_xyz = (
-            owner_origin_xyz[0] + (owner_size_xyz[0] - world_size_xyz[0]) / 2.0,
+            owner_origin_xyz[0],
             owner_origin_xyz[1] + (owner_size_xyz[1] - world_size_xyz[1]) / 2.0,
             owner_origin_xyz[2] + owner_size_xyz[2] - world_size_xyz[2],
         )

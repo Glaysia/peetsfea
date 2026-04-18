@@ -9,6 +9,7 @@ import pytest
 from peetsfea.aedt.protocols import HfssSession
 from peetsfea.backend.pyaedt.type2_step_import_pipeline import import_type2_step_ledger
 from peetsfea.backend.pyaedt.type2_step_import_pipeline import import_type2_step_ledger_into_hfss
+from tests.fixtures.legacy.type1_spec import type1_outputs_spec
 
 
 def _write_step(path: Path) -> Path:
@@ -90,7 +91,7 @@ def _modeled_entry(
     role: str = "tx_single_coil",
     plane: str = "XY",
     placement_owner_id: str = "tx_region",
-    origin_xyz: tuple[float, float, float] = (55.0, -15.0, 87.2),
+    origin_xyz: tuple[float, float, float] = (0.0, -15.0, 87.2),
     size_xyz: tuple[float, float, float] = (50.0, 30.0, 2.8),
     source_metadata_path: str = "/tmp/type2.metadata.json",
     expected_names: list[str] | None = None,
@@ -169,6 +170,7 @@ def _write_ledger(
         "scene_step_path": str(scene_step_path),
         "seed": 7,
         "em_policy": {"radiation_margin_mm": radiation_margin_mm},
+        "outputs": type1_outputs_spec(),
         "non_model_objects": non_model_objects,
         "modeled_objects": modeled_objects,
     }
@@ -436,6 +438,7 @@ class _FakeHfss:
         self.radiation_boundary_result = True
         self.radiation_boundary_calls: list[tuple[list[int], str]] = []
         self.radiation_assigned_faces: list[int] = []
+        self.design_variables: dict[str, str] = {}
 
     @property
     def odesign(self) -> object:
@@ -444,6 +447,9 @@ class _FakeHfss:
     def save_project(self, path: str) -> object:
         self.save_project_calls.append(path)
         return self._save_project_result
+
+    def __setitem__(self, key: str, value: str) -> None:
+        self.design_variables[key] = value
 
     def insert_design(self, name: str | None = None, solution_type: str | None = None) -> str:
         _ = solution_type
@@ -513,26 +519,58 @@ def _tx_underlay_expected_names(*, repeat_count: int) -> list[str]:
     return expected_names
 
 
-def _single_layer_modeled_objects_with_tx_underlay(tmp_path: Path, *, repeat_count: int) -> list[dict[str, object]]:
+def _rx_underlay_expected_names(*, repeat_count: int) -> list[str]:
+    expected_names: list[str] = []
+    for unit_index in range(repeat_count):
+        expected_names.extend(
+            [
+                f"under_rx_ferrite_u{unit_index}",
+                f"under_rx_pet_psa_u{unit_index}",
+                f"under_rx_air_u{unit_index}",
+            ]
+        )
+    return expected_names
+
+
+def _single_layer_modeled_objects_with_role_aware_underlay(
+    tmp_path: Path,
+    *,
+    tx_repeat_count: int,
+    rx_repeat_count: int,
+) -> list[dict[str, object]]:
     return [
         _modeled_entry(
             source_metadata_path=str(tmp_path / "tx.metadata.json"),
-            expected_names=["tx_pcb_l0", "tx_copper_l0", *_tx_underlay_expected_names(repeat_count=repeat_count)],
+            expected_names=["tx_pcb_l0", "tx_copper_l0", *_tx_underlay_expected_names(repeat_count=tx_repeat_count)],
         ),
-        _rx_single_coil_entry(tmp_path),
+        _modeled_entry(
+            object_id="rx_rect_void_coil",
+            role="rx_single_coil",
+            plane="YZ",
+            placement_owner_id="rx_region_max",
+            origin_xyz=(1.2, -25.0, 139.0),
+            size_xyz=(2.8, 50.0, 30.0),
+            source_metadata_path=str(tmp_path / "rx.metadata.json"),
+            expected_names=["rx_pcb_l0", "rx_copper_l0", *_rx_underlay_expected_names(repeat_count=rx_repeat_count)],
+        ),
     ]
 
 
-def _single_layer_imported_name_batch_with_tx_underlay(*, repeat_count: int) -> tuple[str, ...]:
+def _single_layer_imported_name_batch_with_role_aware_underlay(
+    *,
+    tx_repeat_count: int,
+    rx_repeat_count: int,
+) -> tuple[str, ...]:
     return (
         "environment",
         "tx_region",
         "rx_region_max",
         "tx_pcb_l0",
         "tx_copper_l0",
-        *_tx_underlay_expected_names(repeat_count=repeat_count),
+        *_tx_underlay_expected_names(repeat_count=tx_repeat_count),
         "rx_pcb_l0",
         "rx_copper_l0",
+        *_rx_underlay_expected_names(repeat_count=rx_repeat_count),
     )
 
 
@@ -651,19 +689,28 @@ def test_import_type2_step_ledger_allows_missing_optional_port_sheet_bodies(tmp_
     assert "boundary" not in result
 
 
-def test_import_type2_step_ledger_styles_tx_underlay_and_keeps_mesh_conductor_only(tmp_path: Path) -> None:
+def test_import_type2_step_ledger_styles_role_aware_underlay_and_keeps_mesh_conductor_only(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
     _write_ledger(
         ledger_path,
         scene_step_path=scene_step,
         non_model_objects=[_non_model_entry()],
-        modeled_objects=_single_layer_modeled_objects_with_tx_underlay(tmp_path, repeat_count=2),
+        modeled_objects=_single_layer_modeled_objects_with_role_aware_underlay(
+            tmp_path,
+            tx_repeat_count=2,
+            rx_repeat_count=1,
+        ),
     )
     output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
     imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
     session = _FakeHfss(
         modeler=_FakeModeler(
-            imported_name_batches=[_single_layer_imported_name_batch_with_tx_underlay(repeat_count=2)]
+            imported_name_batches=[
+                _single_layer_imported_name_batch_with_role_aware_underlay(
+                    tx_repeat_count=2,
+                    rx_repeat_count=1,
+                )
+            ]
         )
     )
     session.materials.delayed_lookup_material_names.add("PET_PSA")
@@ -687,6 +734,9 @@ def test_import_type2_step_ledger_styles_tx_underlay_and_keeps_mesh_conductor_on
     assert session.modeler.objects["tx_underlay_pet_psa_u1"].material_name == "PET_PSA"
     assert session.modeler.objects["tx_underlay_air_u0"].material_name == "vacuum"
     assert session.modeler.objects["tx_underlay_air_u1"].material_name == "vacuum"
+    assert session.modeler.objects["under_rx_ferrite_u0"].material_name == "MULL12060ferrite"
+    assert session.modeler.objects["under_rx_pet_psa_u0"].material_name == "PET_PSA"
+    assert session.modeler.objects["under_rx_air_u0"].material_name == "vacuum"
     assert session.mesh_module.assign_length_op_calls == []
     assert "mesh" not in result
     assert "boundary" not in result
@@ -701,6 +751,14 @@ def test_import_type2_step_ledger_styles_tx_underlay_and_keeps_mesh_conductor_on
         "tx_underlay_pet_psa_u1",
         "tx_underlay_air_u1",
         "tx_port_sheet",
+    ]
+    assert modeled_by_id["rx_rect_void_coil"]["imported_object_names"] == [
+        "rx_pcb_l0",
+        "rx_copper_l0",
+        "under_rx_ferrite_u0",
+        "under_rx_pet_psa_u0",
+        "under_rx_air_u0",
+        "rx_port_sheet",
     ]
     written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
     assert written == result
@@ -815,11 +873,31 @@ def test_import_type2_step_ledger_fails_when_modeled_tx_is_not_centered_on_tx_re
         ledger_path,
         scene_step_path=scene_step,
         non_model_objects=[_non_model_entry()],
-        modeled_objects=[_modeled_entry(origin_xyz=(55.0, -16.0, 87.2))],
+        modeled_objects=[_modeled_entry(origin_xyz=(0.0, -16.0, 87.2))],
     )
     session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"center_y must already align with tx_region center_y"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            design_name="fake_type2_import",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
+
+
+def test_import_type2_step_ledger_fails_when_modeled_tx_does_not_touch_tx_region_min_x(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=[_modeled_entry(origin_xyz=(0.1, -15.0, 87.2))],
+    )
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
+
+    with pytest.raises(ValueError, match=r"outer bounds min_x must already touch tx_region min_x"):
         import_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
@@ -855,7 +933,7 @@ def test_import_type2_step_ledger_fails_when_modeled_tx_is_not_top_aligned_to_tx
         ledger_path,
         scene_step_path=scene_step,
         non_model_objects=[_non_model_entry()],
-        modeled_objects=[_modeled_entry(origin_xyz=(55.0, -15.0, 87.1))],
+        modeled_objects=[_modeled_entry(origin_xyz=(0.0, -15.0, 87.1))],
     )
     session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
 
@@ -990,6 +1068,27 @@ def test_import_type2_step_ledger_fails_for_missing_required_field(tmp_path: Pat
     ledger_path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(ValueError, match=r"type2_step_ledger is missing required key 'scene_step_path'"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            hfss_factory=lambda _: cast(HfssSession, _FakeHfss(modeler=_FakeModeler(imported_name_batches=[]))),
+        )
+
+
+def test_import_type2_step_ledger_fails_for_missing_outputs_field(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=[_modeled_entry()],
+    )
+    payload = json.loads(ledger_path.read_text(encoding="utf-8"))
+    del payload["outputs"]
+    ledger_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"type2_step_ledger is missing required key 'outputs'"):
         import_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
