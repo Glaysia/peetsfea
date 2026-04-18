@@ -1,0 +1,325 @@
+# Unified type2 STEP authoring input.
+# ----------------------------------------------------------------------------
+# This is the single public type2 authoring TOML for build123d STEP export.
+# Non-model guide objects and modeled objects are declared together.
+
+spec_version = "0.2.22"
+schema_id = "peetsfea.type2.step.v1"
+runtime_compatible = false
+
+[design]
+units = "mm"
+
+[backend]
+authoring_tool = "build123d"
+solver_tool = "hfss"
+interchange_format = "step"
+
+[simulation]
+radiation_margin_mm = 3500.0
+
+[outputs]
+report_name = "Output Variables Table1"
+solution_name = "Setup1 : LastAdaptive"
+primary_sweep = "Freq"
+report_category = "Terminal Solution Data"
+plot_type = "Data Table"
+
+[[outputs.variables]]
+name = "Ltx_uH"
+expression = "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"
+
+[[outputs.variables]]
+name = "Lrx_uH"
+expression = "im(Zt(RX_TML,RX_TML))/2/pi/freq*1e6"
+
+[[outputs.variables]]
+name = "M_uH"
+expression = "abs(im(Zt(TX_TML,RX_TML))/2/pi/freq*1e6)"
+
+[[outputs.variables]]
+name = "k_ratio"
+expression = "M_uH/sqrt(Ltx_uH*Lrx_uH)"
+
+[[outputs.variables]]
+name = "Qtx_ratio"
+expression = "im(Zt(TX_TML,TX_TML))/re(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Qrx_ratio"
+expression = "im(Zt(RX_TML,RX_TML))/re(Zt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "FOM_ratio"
+expression = "k_ratio*sqrt(Qtx_ratio*Qrx_ratio)"
+
+[[outputs.variables]]
+name = "Rtx_ac_ohm"
+expression = "re(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Rrx_ac_ohm"
+expression = "re(Zt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "Xtx_ohm"
+expression = "im(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Xrx_ohm"
+expression = "im(Zt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "M_over_Ltx_ratio"
+expression = "M_uH/Ltx_uH"
+
+[[outputs.variables]]
+name = "M_over_Lrx_ratio"
+expression = "M_uH/Lrx_uH"
+
+[[outputs.variables]]
+name = "Gtx_S"
+expression = "re(Yt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Btx_S"
+expression = "im(Yt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Grx_S"
+expression = "re(Yt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "Brx_S"
+expression = "im(Yt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S11_mag_ratio"
+expression = "mag(S(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "S21_mag_ratio"
+expression = "mag(S(TX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S21_phase_deg"
+expression = "ang_deg_val(S(TX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S22_mag_ratio"
+expression = "mag(S(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "eta_s21_power_ratio"
+expression = "S21_mag_ratio*S21_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_tx_accept_ratio"
+expression = "1-S11_mag_ratio*S11_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_rx_accept_ratio"
+expression = "1-S22_mag_ratio*S22_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_match_product_ratio"
+expression = "eta_tx_accept_ratio*eta_rx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_from_tx_accept_ratio"
+expression = "eta_s21_power_ratio/eta_tx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_from_rx_accept_ratio"
+expression = "eta_s21_power_ratio/eta_rx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_two_sided_norm_ratio"
+expression = "eta_s21_power_ratio/(eta_tx_accept_ratio*eta_rx_accept_ratio)"
+
+[[outputs.variables]]
+name = "eta_fom_max_ratio"
+expression = "(FOM_ratio*FOM_ratio)/((1+sqrt(1+FOM_ratio*FOM_ratio))*(1+sqrt(1+FOM_ratio*FOM_ratio)))"
+
+[coordinate_system]
+origin = [0.0, 0.0, 0.0]
+x_axis = "+right_from_wall"
+y_axis = "+screen_horizontal"
+z_axis = "+up"
+
+# ----------------------------------------------------------------------------
+# Non-model object registry
+# ----------------------------------------------------------------------------
+
+[[non_model_objects]]
+id = "floor"
+kind = "floor"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "XY"
+origin_xyz = [0.0, -2500.0, -761.0]
+size_xyz = [5000.0, 5000.0, 300.0]
+
+[[non_model_objects]]
+id = "shelf"
+kind = "shelf"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "XY"
+origin_xyz = [0.0, -921.0, -461.0]
+size_xyz = [400.0, 1842.0, 461.0]
+
+[[non_model_objects]]
+id = "wall"
+kind = "wall"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [-200.0, -2000.0, -461.0]
+size_xyz = [200.0, 4000.0, 3000.0]
+
+[[non_model_objects]]
+id = "tv"
+kind = "tv"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [0.0, -921.0, 139.0]
+size_xyz = [9.0, 1842.0, 1055.0]
+
+[[non_model_objects]]
+id = "tx_region"
+kind = "tx_region"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "XY"
+origin_xyz = [0.0, -140.0, 0.0]
+size_xyz = [160.0, 280.0, 90.0]
+
+[[non_model_objects]]
+id = "rx_region_max"
+kind = "rx_region_max"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [0.0, -280.0, 139.0]
+size_xyz = [5.0, 560.0, 360.0]
+
+# ----------------------------------------------------------------------------
+# Modeled object registry
+# ----------------------------------------------------------------------------
+
+[[modeled_objects]]
+object_id = "tx_rect_void_coil"
+role = "tx_single_coil"
+material = "composite"
+model_state = true
+pcb_thickness_mm = 1.6
+copper_thickness_mm = 0.035
+
+[modeled_objects.outer_x_mm]
+range = [false, 157.810110508654, 157.810110508654, 1]
+
+[modeled_objects.outer_y_mm]
+range = [false, 259.88256431122, 259.88256431122, 1]
+
+[modeled_objects.turn_count]
+range = [true, 2, 2, 1]
+
+[modeled_objects.layer_count]
+range = [true, 2, 2, 1]
+
+[modeled_objects.underlay_repeat_count]
+range = [true, 0, 8, 5]
+
+[modeled_objects.underlay_gap_mm]
+range = [false, 1.0, 10.0, 4]
+
+[modeled_objects.layer_gap_mm]
+range = [false, 2.0, 2.0, 1]
+
+[modeled_objects.terminal_stub_length_mm]
+range = [false, 5.0, 5.0, 1]
+
+[modeled_objects.void_x_over_outer_x]
+range = [false, 0.20, 0.50, 31]
+
+[modeled_objects.void_y_over_outer_y]
+range = [false, 0.20, 0.50, 31]
+
+[modeled_objects.void_center_x_over_outer_x]
+range = [false, 0.0, 0.0, 1]
+
+[modeled_objects.void_center_y_over_outer_y]
+range = [false, 0.0, 0.0, 1]
+
+[modeled_objects.margin_ratio]
+range = [false, 0.03, 0.10, 15]
+
+[modeled_objects.metal_fill_factor]
+range = [false, 0.35, 0.60, 26]
+
+[modeled_objects.terminal_path]
+value = "D_ccw_to_d"
+
+[[modeled_objects]]
+object_id = "rx_rect_void_coil"
+role = "rx_single_coil"
+material = "composite"
+model_state = true
+pcb_thickness_mm = 1.6
+copper_thickness_mm = 0.1
+
+[modeled_objects.outer_x_mm]
+range = [false, 318.6671250920941, 318.6671250920941, 1]
+
+[modeled_objects.outer_y_mm]
+range = [false, 104.169329765159, 104.169329765159, 1]
+
+[modeled_objects.turn_count]
+range = [true, 3, 3, 1]
+
+[modeled_objects.layer_count]
+range = [true, 1, 1, 1]
+
+[modeled_objects.underlay_repeat_count]
+range = [true, 0, 8, 5]
+
+[modeled_objects.layer_gap_mm]
+range = [false, 2.0, 2.0, 1]
+
+[modeled_objects.terminal_stub_length_mm]
+range = [false, 5.0, 5.0, 1]
+
+[modeled_objects.void_x_over_outer_x]
+range = [false, 0.30, 0.30, 1]
+
+[modeled_objects.void_y_over_outer_y]
+range = [false, 0.30, 0.30, 1]
+
+[modeled_objects.void_center_x_over_outer_x]
+range = [false, 0.0, 0.0, 1]
+
+[modeled_objects.void_center_y_over_outer_y]
+range = [false, 0.0, 0.0, 1]
+
+[modeled_objects.margin_ratio]
+range = [false, 0.05, 0.05, 1]
+
+[modeled_objects.metal_fill_factor]
+range = [false, 0.50, 0.50, 1]
+
+[modeled_objects.terminal_path]
+value = "D_ccw_to_d"

@@ -11,11 +11,19 @@ tags:
 
 ## Active Path
 - The active/default product path is `type2`.
-- The canonical public authoring input is `examples/type2_fixed.toml`.
+- The canonical sampled authoring input is `examples/type2_sweep.toml`.
+- `examples/type2_fixed.toml` remains the fixed single-design reference.
+- Type2 TOML owns both the STEP authoring registry and the EM report/output-variable contract.
 - The active runtime flow is:
-  1. `entry/generate_type2_step.py`
-  2. `entry/import_type2_step.py`
-  3. headless HFSS import/setup-ready validation
+  1. `entry/sample_type2.py`
+  2. `entry/build_type2.py`
+  3. optional artifact inspection via `notebooks/hfss_sampled.ipynb`
+
+## Internal Helpers
+- `entry/generate_type2_step.py` remains the STEP export helper.
+- `entry/import_type2_step.py` remains the import-only helper.
+- `entry/setup_type2_step.py` remains the setup-ready helper.
+- These helpers are lower-level runtime surfaces; the active operator flow is sampled TOML first, build second.
 
 ## Legacy Path
 - `type1` is frozen legacy.

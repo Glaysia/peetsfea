@@ -7,6 +7,7 @@ from typing import TypedDict, cast
 from peetsfea.aedt.failfast import raise_on_false
 from peetsfea.aedt.protocols import DesignSession, HfssSession
 from peetsfea.backend.pyaedt.em_pipeline.contracts import default_em_policy
+from peetsfea.backend.pyaedt.em_pipeline.contracts import EmPipelineResult
 from peetsfea.backend.pyaedt.em_pipeline.series import build_series
 from peetsfea.backend.pyaedt.em_pipeline.steps.analysis import build_analysis, build_post_templates
 from peetsfea.backend.pyaedt.em_pipeline.steps.boundary_port import build_boundary
@@ -30,7 +31,8 @@ from peetsfea.backend.pyaedt.type2_step_runtime_common import (
     create_headless_hfss,
     prepare_attached_import_design,
 )
-from peetsfea.types.manifest import EmPolicy, EmPorts, OutputsSpec
+from peetsfea.type2_sampled import DesignVariableEntry
+from peetsfea.types.manifest import EmPolicy, EmPorts
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_SOURCE_STEP_LEDGER_PATH = REPO_ROOT / "run" / "step" / "type2" / "type2_step_ledger.json"
@@ -62,22 +64,6 @@ def _setup_ready_policy(ledger: ValidatedStepLedger) -> EmPolicy:
     return cast(EmPolicy, policy)
 
 
-def _default_outputs() -> OutputsSpec:
-    return {
-        "report_name": "Output Variables Table1",
-        "solution_name": "Setup1 : LastAdaptive",
-        "primary_sweep": "Freq",
-        "report_category": "Terminal Solution Data",
-        "plot_type": "Data Table",
-        "variables": [
-            {
-                "name": "S21_mag_ratio",
-                "expression": "mag(S(TX_TML,RX_TML))",
-            }
-        ],
-    }
-
-
 def _validate_design(hfss: HfssSession) -> None:
     assert (_ := hfss.odesign)
     assert isinstance(_, DesignSession)
@@ -88,6 +74,15 @@ def _validate_design(hfss: HfssSession) -> None:
     )
 
 
+def _assign_design_variables(
+    hfss: HfssSession,
+    *,
+    design_variables: tuple[DesignVariableEntry, ...],
+) -> None:
+    for variable_name, expression in design_variables:
+        hfss[variable_name] = expression
+
+
 def _setup_ready_from_loaded_ledger(
     *,
     hfss: HfssSession,
@@ -95,7 +90,9 @@ def _setup_ready_from_loaded_ledger(
     output_aedt_path: Path,
     imported_ledger_path: Path,
     ledger: ValidatedStepLedger,
+    design_variables: tuple[DesignVariableEntry, ...],
 ) -> Type2SetupReadyResult:
+    _assign_design_variables(hfss, design_variables=design_variables)
     imported_ledger: Type2ImportedLedger = build_imported_ledger(
         hfss=hfss,
         step_ledger_path=step_ledger_path,
@@ -124,8 +121,8 @@ def _setup_ready_from_loaded_ledger(
     subtract = build_subtract(groups)
     sources = apply_sources_phase(hfss, ports)
     analysis = build_analysis(hfss, em_policy)
-    post_templates = build_post_templates(hfss, _default_outputs(), ports)
-    validation_result = {
+    post_templates = build_post_templates(hfss, ledger["outputs"], ports)
+    validation_result: EmPipelineResult = {
         "groups": groups,
         "series": series,
         "subtract": subtract,
@@ -164,6 +161,7 @@ def setup_type2_step_ledger(
     imported_ledger_path: Path = DEFAULT_IMPORTED_LEDGER_PATH,
     design_name: str = DEFAULT_DESIGN_NAME,
     hfss_factory: HfssFactory = create_headless_hfss,
+    design_variables: tuple[DesignVariableEntry, ...] = (),
 ) -> Type2SetupReadyResult:
     checked_step_ledger_path = step_ledger_path.resolve(strict=False)
     ledger = load_step_ledger(checked_step_ledger_path)
@@ -176,6 +174,7 @@ def setup_type2_step_ledger(
             output_aedt_path=output_aedt_path,
             imported_ledger_path=imported_ledger_path,
             ledger=ledger,
+            design_variables=design_variables,
         )
     finally:
         release_result = hfss.desktop_class.release_desktop(close_projects=True, close_on_exit=True)
@@ -192,6 +191,7 @@ def setup_type2_step_ledger_into_hfss(
     step_ledger_path: Path = DEFAULT_SOURCE_STEP_LEDGER_PATH,
     output_aedt_path: Path = DEFAULT_OUTPUT_AEDT_PATH,
     imported_ledger_path: Path = DEFAULT_IMPORTED_LEDGER_PATH,
+    design_variables: tuple[DesignVariableEntry, ...] = (),
 ) -> Type2SetupReadyResult:
     checked_step_ledger_path = step_ledger_path.resolve(strict=False)
     try:
@@ -204,6 +204,7 @@ def setup_type2_step_ledger_into_hfss(
             output_aedt_path=output_aedt_path,
             imported_ledger_path=imported_ledger_path,
             ledger=ledger,
+            design_variables=design_variables,
         )
     finally:
         release_result = hfss.desktop_class.release_desktop(close_projects=False, close_on_exit=False)
