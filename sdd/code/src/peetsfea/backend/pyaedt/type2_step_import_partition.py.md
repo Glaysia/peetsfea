@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_partition.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-19 @ 00:25
 tags:
   - hfss-import
   - aedt
@@ -15,6 +15,7 @@ tags:
 - Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-tx-wall-parallel-ferrite-stack]]
+- Related feature plan: [[sdd/plans/0.2.23-type2-ferrite-underlay-equivalent-thickness]]
 - Parent note: [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py]]
 
 ## 역할
@@ -36,9 +37,10 @@ tags:
 - modeled ownership source는 `expected_exported_body_names`.
 - non-model ownership source는 `member_objects`.
 - PCB/copper names remain required exact semantic owners.
-- TX underlay exact names (`tx_underlay_ferrite_u{n}`, `tx_underlay_pet_psa_u{n}`, `tx_underlay_air_u{n}`) remain explicit modeled-body owners and must stay distinct from copper ownership.
-- TX wall exact names (`tx_wall_ferrite_u{n}`, `tx_wall_pet_psa_u{n}`, `tx_wall_air_u{n}`) also remain explicit modeled-body owners and share the same ferrite/PET/air role buckets.
-- RX underlay exact names (`under_rx_ferrite_u{n}`, `under_rx_pet_psa_u{n}`, `under_rx_air_u{n}`) also remain explicit modeled-body owners and must stay distinct from copper ownership.
+- TX underlay exact names (`tx_underlay_ferrite_u0`, `tx_underlay_pet_psa_u0`, `tx_underlay_air_u0`) remain explicit modeled-body owners and must stay distinct from copper ownership.
+- TX wall exact names (`tx_wall_ferrite_u0`, `tx_wall_pet_psa_u0`, `tx_wall_air_u0`) also remain explicit modeled-body owners and share the same ferrite/PET/air role buckets.
+- RX underlay exact names (`under_rx_ferrite_u0`, `under_rx_pet_psa_u0`, `under_rx_air_u0`) also remain explicit modeled-body owners and must stay distinct from copper ownership.
+- `underlay_repeat_count` semantic changes do not change this module's responsibility: it validates only emitted exact names, not hidden repeat multiplicity.
 - resolved return shape groups TX/RX underlay bodies into shared ferrite/PET/air buckets because styling/material ownership is identical across roles.
 - new underlay exact object/body names must remain `<= 32` chars.
 - Port-sheet ownership is outside this partition layer and belongs to later reconstruction.

@@ -295,42 +295,33 @@ def _body_bbox(step_path: Path, *, label: str) -> tuple[tuple[float, float, floa
 
 
 def _tx_underlay_expected_body_names(*, repeat_count: int) -> tuple[str, ...]:
-    body_names: list[str] = []
-    for unit_index in range(repeat_count):
-        body_names.extend(
-            (
-                f"tx_underlay_ferrite_u{unit_index}",
-                f"tx_underlay_pet_psa_u{unit_index}",
-                f"tx_underlay_air_u{unit_index}",
-            )
-        )
-    return tuple(body_names)
+    if repeat_count == 0:
+        return ()
+    return (
+        "tx_underlay_ferrite_u0",
+        "tx_underlay_pet_psa_u0",
+        "tx_underlay_air_u0",
+    )
 
 
 def _tx_wall_expected_body_names(*, repeat_count: int) -> tuple[str, ...]:
-    body_names: list[str] = []
-    for unit_index in range(repeat_count):
-        body_names.extend(
-            (
-                f"tx_wall_ferrite_u{unit_index}",
-                f"tx_wall_pet_psa_u{unit_index}",
-                f"tx_wall_air_u{unit_index}",
-            )
-        )
-    return tuple(body_names)
+    if repeat_count == 0:
+        return ()
+    return (
+        "tx_wall_ferrite_u0",
+        "tx_wall_pet_psa_u0",
+        "tx_wall_air_u0",
+    )
 
 
 def _rx_underlay_expected_body_names(*, repeat_count: int) -> tuple[str, ...]:
-    body_names: list[str] = []
-    for unit_index in range(repeat_count):
-        body_names.extend(
-            (
-                f"under_rx_ferrite_u{unit_index}",
-                f"under_rx_pet_psa_u{unit_index}",
-                f"under_rx_air_u{unit_index}",
-            )
-        )
-    return tuple(body_names)
+    if repeat_count == 0:
+        return ()
+    return (
+        "under_rx_ferrite_u0",
+        "under_rx_pet_psa_u0",
+        "under_rx_air_u0",
+    )
 
 
 def _tx_expected_body_names(
@@ -1078,35 +1069,34 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
         assert ferrite_max_xyz[1] == pytest.approx(region_min_y + region_size_y)
         assert ferrite_max_xyz[2] == pytest.approx(modeled_canonical["outer_bounds_min_xyz"][2] - tx_underlay_gap_mm)
         assert ferrite_min_xyz[2] == pytest.approx(
-            modeled_canonical["outer_bounds_min_xyz"][2] - tx_underlay_gap_mm - _TX_UNDERLAY_FERRITE_THICKNESS_MM
+            modeled_canonical["outer_bounds_min_xyz"][2]
+            - tx_underlay_gap_mm
+            - (tx_underlay_repeat_count * _TX_UNDERLAY_FERRITE_THICKNESS_MM)
         )
         assert pet_max_xyz[2] == pytest.approx(ferrite_min_xyz[2])
         assert pet_min_xyz[2] == pytest.approx(
-            ferrite_min_xyz[2] - _TX_UNDERLAY_PET_PSA_THICKNESS_MM
+            ferrite_min_xyz[2] - (tx_underlay_repeat_count * _TX_UNDERLAY_PET_PSA_THICKNESS_MM)
         )
         assert air_max_xyz[2] == pytest.approx(pet_min_xyz[2])
         assert air_min_xyz[2] == pytest.approx(
-            pet_min_xyz[2] - _TX_UNDERLAY_AIR_THICKNESS_MM
+            pet_min_xyz[2] - (tx_underlay_repeat_count * _TX_UNDERLAY_AIR_THICKNESS_MM)
         )
         if tx_wall_parallel_stack_present:
-            floor_bottom_min_xyz, floor_bottom_max_xyz = _body_bbox(
-                scene_step_path,
-                label=f"tx_underlay_air_u{tx_underlay_repeat_count - 1}",
-            )
+            floor_bottom_min_xyz, floor_bottom_max_xyz = _body_bbox(scene_step_path, label="tx_underlay_air_u0")
             wall_ferrite_min_xyz, wall_ferrite_max_xyz = _body_bbox(scene_step_path, label="tx_wall_ferrite_u0")
             wall_pet_min_xyz, wall_pet_max_xyz = _body_bbox(scene_step_path, label="tx_wall_pet_psa_u0")
             wall_air_min_xyz, wall_air_max_xyz = _body_bbox(scene_step_path, label="tx_wall_air_u0")
             assert wall_ferrite_min_xyz[0] == pytest.approx(region_min_x)
             assert wall_ferrite_max_xyz[0] == pytest.approx(
-                wall_ferrite_min_xyz[0] + _TX_UNDERLAY_FERRITE_THICKNESS_MM
+                wall_ferrite_min_xyz[0] + (tx_underlay_repeat_count * _TX_UNDERLAY_FERRITE_THICKNESS_MM)
             )
             assert wall_pet_min_xyz[0] == pytest.approx(wall_ferrite_max_xyz[0])
             assert wall_pet_max_xyz[0] == pytest.approx(
-                wall_pet_min_xyz[0] + _TX_UNDERLAY_PET_PSA_THICKNESS_MM
+                wall_pet_min_xyz[0] + (tx_underlay_repeat_count * _TX_UNDERLAY_PET_PSA_THICKNESS_MM)
             )
             assert wall_air_min_xyz[0] == pytest.approx(wall_pet_max_xyz[0])
             assert wall_air_max_xyz[0] == pytest.approx(
-                wall_air_min_xyz[0] + _TX_UNDERLAY_AIR_THICKNESS_MM
+                wall_air_min_xyz[0] + (tx_underlay_repeat_count * _TX_UNDERLAY_AIR_THICKNESS_MM)
             )
             for min_xyz, max_xyz in (
                 (wall_ferrite_min_xyz, wall_ferrite_max_xyz),
@@ -1118,7 +1108,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
                 assert min_xyz[2] == pytest.approx(region_min_z)
                 assert max_xyz[2] == pytest.approx(floor_bottom_min_xyz[2])
             _assert_zero_intersection_volume(
-                scene_children_by_label[f"tx_underlay_air_u{tx_underlay_repeat_count - 1}"],
+                scene_children_by_label["tx_underlay_air_u0"],
                 scene_children_by_label["tx_wall_ferrite_u0"],
             )
     _assert_zero_intersection_volume(scene_children_by_label[tx_expected_names[0]], scene_children_by_label[tx_copper_label])
@@ -1150,12 +1140,16 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
         pet_min_xyz, pet_max_xyz = _body_bbox(scene_step_path, label="under_rx_pet_psa_u0")
         air_min_xyz, air_max_xyz = _body_bbox(scene_step_path, label="under_rx_air_u0")
         assert air_min_xyz[0] == pytest.approx(rx_region_min_x)
-        assert air_max_xyz[0] == pytest.approx(rx_region_min_x + _TX_UNDERLAY_AIR_THICKNESS_MM)
+        assert air_max_xyz[0] == pytest.approx(
+            rx_region_min_x + (rx_underlay_repeat_count * _TX_UNDERLAY_AIR_THICKNESS_MM)
+        )
         assert pet_min_xyz[0] == pytest.approx(air_max_xyz[0])
-        assert pet_max_xyz[0] == pytest.approx(pet_min_xyz[0] + _TX_UNDERLAY_PET_PSA_THICKNESS_MM)
+        assert pet_max_xyz[0] == pytest.approx(
+            pet_min_xyz[0] + (rx_underlay_repeat_count * _TX_UNDERLAY_PET_PSA_THICKNESS_MM)
+        )
         assert ferrite_min_xyz[0] == pytest.approx(pet_max_xyz[0])
         assert ferrite_max_xyz[0] == pytest.approx(
-            ferrite_min_xyz[0] + _TX_UNDERLAY_FERRITE_THICKNESS_MM
+            ferrite_min_xyz[0] + (rx_underlay_repeat_count * _TX_UNDERLAY_FERRITE_THICKNESS_MM)
         )
         for min_xyz, max_xyz in (
             (ferrite_min_xyz, ferrite_max_xyz),
@@ -1240,9 +1234,7 @@ def test_export_type2_step_artifacts_resolves_tx_underlay_repeat_count_contract(
         assert all(not label.startswith("tx_underlay_") for label in scene_children_by_label)
         return
 
-    assert expected_names[-(expected_repeat_count * 3) :] == _tx_underlay_expected_body_names(
-        repeat_count=expected_repeat_count
-    )
+    assert expected_names[-3:] == _tx_underlay_expected_body_names(repeat_count=expected_repeat_count)
     assert all(len(name) <= 32 for name in expected_names if name.startswith("tx_underlay_"))
     canonical_coordinates = cast(dict[str, object], tx_entry["canonical_coordinates"])
     outer_bounds_min_xyz = cast(list[float], canonical_coordinates["outer_bounds_min_xyz"])
@@ -1262,13 +1254,19 @@ def test_export_type2_step_artifacts_resolves_tx_underlay_repeat_count_contract(
     assert ferrite_max_xyz[0] == pytest.approx(region_min_x + region_size_x)
     assert ferrite_max_xyz[1] == pytest.approx(region_min_y + region_size_y)
     assert ferrite_max_xyz[2] == pytest.approx(modeled_min_z - expected_gap_mm)
-    assert ferrite_min_xyz[2] == pytest.approx(modeled_min_z - expected_gap_mm - _TX_UNDERLAY_FERRITE_THICKNESS_MM)
+    assert ferrite_min_xyz[2] == pytest.approx(
+        modeled_min_z - expected_gap_mm - (expected_repeat_count * _TX_UNDERLAY_FERRITE_THICKNESS_MM)
+    )
     assert pet_max_xyz[2] == pytest.approx(ferrite_min_xyz[2])
-    assert pet_min_xyz[2] == pytest.approx(ferrite_min_xyz[2] - _TX_UNDERLAY_PET_PSA_THICKNESS_MM)
+    assert pet_min_xyz[2] == pytest.approx(
+        ferrite_min_xyz[2] - (expected_repeat_count * _TX_UNDERLAY_PET_PSA_THICKNESS_MM)
+    )
     assert air_max_xyz[2] == pytest.approx(pet_min_xyz[2])
-    assert air_min_xyz[2] == pytest.approx(pet_min_xyz[2] - _TX_UNDERLAY_AIR_THICKNESS_MM)
+    assert air_min_xyz[2] == pytest.approx(
+        pet_min_xyz[2] - (expected_repeat_count * _TX_UNDERLAY_AIR_THICKNESS_MM)
+    )
     if expected_repeat_count == 8:
-        assert expected_names[-1] == "tx_underlay_air_u7"
+        assert expected_names[-1] == "tx_underlay_air_u0"
 
 
 @pytest.mark.parametrize("expected_repeat_count", (0, 2, 8))
@@ -1308,9 +1306,7 @@ def test_export_type2_step_artifacts_resolves_rx_underlay_repeat_count_contract(
         assert all(not label.startswith("under_rx_") for label in scene_children_by_label)
         return
 
-    assert expected_names[-(expected_repeat_count * 3) :] == _rx_underlay_expected_body_names(
-        repeat_count=expected_repeat_count
-    )
+    assert expected_names[-3:] == _rx_underlay_expected_body_names(repeat_count=expected_repeat_count)
     assert all(len(name) <= 32 for name in expected_names if name.startswith("under_rx_"))
     rx_region = next(
         member
@@ -1324,11 +1320,15 @@ def test_export_type2_step_artifacts_resolves_rx_underlay_repeat_count_contract(
     pet_min_xyz, pet_max_xyz = _body_bbox(Path(ledger["scene_step_path"]), label="under_rx_pet_psa_u0")
     air_min_xyz, air_max_xyz = _body_bbox(Path(ledger["scene_step_path"]), label="under_rx_air_u0")
     assert air_min_xyz[0] == pytest.approx(region_min_x)
-    assert air_max_xyz[0] == pytest.approx(region_min_x + _TX_UNDERLAY_AIR_THICKNESS_MM)
+    assert air_max_xyz[0] == pytest.approx(region_min_x + (expected_repeat_count * _TX_UNDERLAY_AIR_THICKNESS_MM))
     assert pet_min_xyz[0] == pytest.approx(air_max_xyz[0])
-    assert pet_max_xyz[0] == pytest.approx(pet_min_xyz[0] + _TX_UNDERLAY_PET_PSA_THICKNESS_MM)
+    assert pet_max_xyz[0] == pytest.approx(
+        pet_min_xyz[0] + (expected_repeat_count * _TX_UNDERLAY_PET_PSA_THICKNESS_MM)
+    )
     assert ferrite_min_xyz[0] == pytest.approx(pet_max_xyz[0])
-    assert ferrite_max_xyz[0] == pytest.approx(ferrite_min_xyz[0] + _TX_UNDERLAY_FERRITE_THICKNESS_MM)
+    assert ferrite_max_xyz[0] == pytest.approx(
+        ferrite_min_xyz[0] + (expected_repeat_count * _TX_UNDERLAY_FERRITE_THICKNESS_MM)
+    )
     for min_xyz, max_xyz in (
         (ferrite_min_xyz, ferrite_max_xyz),
         (pet_min_xyz, pet_max_xyz),
@@ -1339,7 +1339,7 @@ def test_export_type2_step_artifacts_resolves_rx_underlay_repeat_count_contract(
         assert min_xyz[2] == pytest.approx(region_min_z)
         assert max_xyz[2] == pytest.approx(region_min_z + region_size_z)
     if expected_repeat_count == 8:
-        assert expected_names[-1] == "under_rx_air_u7"
+        assert expected_names[-1] == "under_rx_air_u0"
 
 
 def test_export_type2_step_artifacts_translates_terminal_metadata_with_tx_region_offset(tmp_path: Path) -> None:

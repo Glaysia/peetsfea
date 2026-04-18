@@ -151,42 +151,33 @@ def export_type2_tx_single_coil_artifact(
 
 
 def _tx_underlay_expected_body_names(*, repeat_count: int) -> list[str]:
-    body_names: list[str] = []
-    for unit_index in range(repeat_count):
-        body_names.extend(
-            (
-                f"tx_underlay_ferrite_u{unit_index}",
-                f"tx_underlay_pet_psa_u{unit_index}",
-                f"tx_underlay_air_u{unit_index}",
-            )
-        )
-    return body_names
+    if repeat_count == 0:
+        return []
+    return [
+        "tx_underlay_ferrite_u0",
+        "tx_underlay_pet_psa_u0",
+        "tx_underlay_air_u0",
+    ]
 
 
 def _tx_wall_expected_body_names(*, repeat_count: int) -> list[str]:
-    body_names: list[str] = []
-    for unit_index in range(repeat_count):
-        body_names.extend(
-            (
-                f"tx_wall_ferrite_u{unit_index}",
-                f"tx_wall_pet_psa_u{unit_index}",
-                f"tx_wall_air_u{unit_index}",
-            )
-        )
-    return body_names
+    if repeat_count == 0:
+        return []
+    return [
+        "tx_wall_ferrite_u0",
+        "tx_wall_pet_psa_u0",
+        "tx_wall_air_u0",
+    ]
 
 
 def _rx_underlay_expected_body_names(*, repeat_count: int) -> list[str]:
-    body_names: list[str] = []
-    for unit_index in range(repeat_count):
-        body_names.extend(
-            (
-                f"under_rx_ferrite_u{unit_index}",
-                f"under_rx_pet_psa_u{unit_index}",
-                f"under_rx_air_u{unit_index}",
-            )
-        )
-    return body_names
+    if repeat_count == 0:
+        return []
+    return [
+        "under_rx_ferrite_u0",
+        "under_rx_pet_psa_u0",
+        "under_rx_air_u0",
+    ]
 
 
 def _require_single_coil_expected_body_contract(

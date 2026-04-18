@@ -39,6 +39,7 @@ tags:
 - `underlay_repeat_count`는 shared modeled-object field다.
   - canonical encoding은 `[true, 0, 8, 5]`
   - realized candidate set은 `{0, 2, 4, 6, 8}`
+  - active type2 underlay ferrite family에서는 repeated exported slab count가 아니라 effective thickness multiplier로 해석한다
   - TX는 이 집합을 지원한다
   - RX는 current milestone에서 `0`만 허용한다
 - `underlay_gap_mm`는 TX-only modeled-object field다.
@@ -95,23 +96,21 @@ tags:
   2. `PET_PSA` / `0.15 mm`
   3. explicit `vacuum` air body / `0.02 mm`
 - first floor-underlay ferrite top face는 TX modeled object canonical minimum-Z plane보다 `underlay_gap_mm`만큼 아래에 와야 한다.
-- later units는 같은 순서로 아래 방향으로 반복 적층된다.
-- `u0`가 TX에 가장 가까운 첫 unit이다.
+- exported floor-underlay bodies는 repeated `u{n}` stack이 아니라 one effective tri-layer `u0` set이고, 각 material thickness는 `repeat_count` 배다.
+- `u0`가 TX에 가장 가까운 effective unit이다.
 - TX floor-underlay XY footprint canonical source는 `tx_region` full `XY` bounds다.
-- exact body names:
-  - `tx_underlay_ferrite_u{n}`
-  - `tx_underlay_pet_psa_u{n}`
-  - `tx_underlay_air_u{n}`
-- resolved `wall_parallel_stack_present = 1`이고 `underlay_repeat_count > 0`이면 same repeat count의 additional wall-parallel tri-layer stack도 생성된다.
+  - `tx_underlay_ferrite_u0`
+  - `tx_underlay_pet_psa_u0`
+  - `tx_underlay_air_u0`
+- resolved `wall_parallel_stack_present = 1`이고 `underlay_repeat_count > 0`이면 same effective-thickness multiplier의 additional wall-parallel tri-layer stack도 생성된다.
 - TX wall stack은 `tx_region.min_x` wall에 붙고 `+X` 방향으로 자란다.
 - wall unit physical order는 `wall -> coil = ferrite -> PET_PSA -> air`다.
-- wall stack `u0`는 wall-adjacent first unit이다.
+- wall stack `u0`는 wall-adjacent effective unit이다.
 - wall stack Y footprint는 `tx_region` full span이고, Z footprint는 floor underlay를 모두 깐 뒤 남는 공간 `tx_region.min_z .. floor_underlay_min_z`다.
 - wall stack X thickness는 `repeat_count * (0.20 + 0.15 + 0.02)`이며 `tx_region.min_x .. modeled_max_x` wall-side span에 fit해야 한다.
-- wall exact body names:
-  - `tx_wall_ferrite_u{n}`
-  - `tx_wall_pet_psa_u{n}`
-  - `tx_wall_air_u{n}`
+  - `tx_wall_ferrite_u0`
+  - `tx_wall_pet_psa_u0`
+  - `tx_wall_air_u0`
 - `PET_PSA`는 air-like dielectric이며 explicit documented difference는 `permittivity = 2.8`이다.
 
 ## 출력
@@ -133,8 +132,8 @@ tags:
 - expected body contract:
   - single-layer TX without underlay: `["tx_pcb_l0", "tx_copper_l0"]`
   - multilayer TX without underlay: `["tx_pcb_l0", ..., "tx_pcb_l{n}", "tx_copper_stack"]`
-  - TX with floor underlay only: append `tx_underlay_ferrite_u{n}`, `tx_underlay_pet_psa_u{n}`, `tx_underlay_air_u{n}` after the base TX body set
-  - TX with floor underlay + wall stack: append all `tx_underlay_*` first, then append `tx_wall_ferrite_u{n}`, `tx_wall_pet_psa_u{n}`, `tx_wall_air_u{n}`
+  - TX with floor underlay only: append `tx_underlay_ferrite_u0`, `tx_underlay_pet_psa_u0`, `tx_underlay_air_u0` after the base TX body set
+  - TX with floor underlay + wall stack: append all `tx_underlay_*` first, then append `tx_wall_ferrite_u0`, `tx_wall_pet_psa_u0`, `tx_wall_air_u0`
   - `rx_single_coil`은 current milestone에서 `["rx_pcb_l0", "rx_copper_l0"]`
 - `boxes`는 export 전 internal primitive decomposition/debug payload다. STEP
   copper body는 planar trace와 terminal stub를 함께 fuse한 `tx_copper_l0` 또는 multilayer TX의 경우 `tx_copper_stack`이어야 한다.

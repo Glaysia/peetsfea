@@ -1,7 +1,7 @@
 ---
 title: generate_type2_step.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-19 @ 00:25
 tags:
   - step-export
 ---
@@ -14,6 +14,7 @@ tags:
 - Related plan: [[sdd/plans/0.2.22-type2-toml-unification]]
 - Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
+- Related feature plan: [[sdd/plans/0.2.23-type2-ferrite-underlay-equivalent-thickness]]
 - Related architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 - Related test: [[sdd/code/tests/type2/test_generate_type2_step.py]]
 
@@ -59,12 +60,13 @@ tags:
 - modeled object metadata keeps `source_toml_path` as the type2 TOML path even though the internal `tx_rect_void` parser is reused.
 - TX modeled metadata keeps per-layer PCB names plus a single `tx_copper_stack` expected body name when multilayer, terminal points resolve to the two bottom bus faces for the multilayer case, and `port_sheet_vertices_xyz` resolves from TX bus bottom faces for every supported TX layer count.
 - modeled metadata keeps shared `underlay_repeat_count` ownership in the source TOML and reflects the realized underlay only through exact expected body names/count:
-  - `tx_underlay_ferrite_u{n}`
-  - `tx_underlay_pet_psa_u{n}`
-  - `tx_underlay_air_u{n}`
-  - `under_rx_ferrite_u{n}`
-  - `under_rx_pet_psa_u{n}`
-  - `under_rx_air_u{n}`
+  - `tx_underlay_ferrite_u0`
+  - `tx_underlay_pet_psa_u0`
+  - `tx_underlay_air_u0`
+  - `under_rx_ferrite_u0`
+  - `under_rx_pet_psa_u0`
+  - `under_rx_air_u0`
+- `underlay_repeat_count` is interpreted as effective underlay thickness multiplier, so emitted exact names do not expand with higher repeat counts.
 - type2 owns modeled placement: exported modeled metadata is already scene-absolute and matches each role's owner-plane contract using the derived PCB+copper union bbox (`tx_region` min-X-touch + centered-Y + top-aligned XY, `rx_region_max` bottom-Z/right-face-aligned YZ).
 - modeled scene authoring passes the same role profile through realization, box decomposition, placement, and final scene export.
 - port-sheet vertices are modeled metadata, not non-model members, and remain outside the final `type2_scene.step` child set.
@@ -97,8 +99,8 @@ tags:
 - modeled export must record expected exported body names/count for import smoke validation.
 - modeled export must place each single coil at export time according to its owner plane with scene-absolute bounds derived from the actual exported PCB+copper union and plane-aware terminal metadata (`start_point_plane_mm`, `end_point_plane_mm`) already resolved.
 - TX multilayer expected body names are `tx_pcb_l{n}` plus `tx_copper_stack`; single-layer TX/RX keep `*_pcb_l0` + `*_copper_l0`.
-- TX underlay bodies, when present, must append after the TX PCB/copper base set in exact semantic `ferrite -> pet_psa -> air` per-unit order, and `u0` must be the unit nearest the TX modeled body.
-- RX underlay bodies, when present, must append after the RX PCB/copper base set in exact semantic `ferrite -> pet_psa -> air` per-unit order even though physical `-X -> +X` stack order is `air -> PET_PSA -> ferrite`.
+- TX underlay bodies, when present, must append after the TX PCB/copper base set in exact semantic `ferrite -> pet_psa -> air` effective-trio order, and `u0` must be the unit nearest the TX modeled body.
+- RX underlay bodies, when present, must append after the RX PCB/copper base set in exact semantic `ferrite -> pet_psa -> air` effective-trio order even though physical `-X -> +X` stack order is `air -> PET_PSA -> ferrite`.
 - TX/RX underlay footprints follow owner region full bounds, not coil union bounds.
 - new underlay exact object/body names must remain `<= 32` chars.
 - port-sheet validation is geometry-aware at the entry boundary: exported metadata vertices must stay on the shared owner bottom-face plane and their boundary must connect the two widened owner-bottom diagonals selected from the inter-owner centerline.

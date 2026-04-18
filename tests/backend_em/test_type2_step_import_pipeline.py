@@ -507,42 +507,33 @@ def _single_layer_imported_name_batch() -> tuple[str, ...]:
 
 
 def _tx_underlay_expected_names(*, repeat_count: int) -> list[str]:
-    expected_names: list[str] = []
-    for unit_index in range(repeat_count):
-        expected_names.extend(
-            [
-                f"tx_underlay_ferrite_u{unit_index}",
-                f"tx_underlay_pet_psa_u{unit_index}",
-                f"tx_underlay_air_u{unit_index}",
-            ]
-        )
-    return expected_names
+    if repeat_count == 0:
+        return []
+    return [
+        "tx_underlay_ferrite_u0",
+        "tx_underlay_pet_psa_u0",
+        "tx_underlay_air_u0",
+    ]
 
 
 def _tx_wall_expected_names(*, repeat_count: int) -> list[str]:
-    expected_names: list[str] = []
-    for unit_index in range(repeat_count):
-        expected_names.extend(
-            [
-                f"tx_wall_ferrite_u{unit_index}",
-                f"tx_wall_pet_psa_u{unit_index}",
-                f"tx_wall_air_u{unit_index}",
-            ]
-        )
-    return expected_names
+    if repeat_count == 0:
+        return []
+    return [
+        "tx_wall_ferrite_u0",
+        "tx_wall_pet_psa_u0",
+        "tx_wall_air_u0",
+    ]
 
 
 def _rx_underlay_expected_names(*, repeat_count: int) -> list[str]:
-    expected_names: list[str] = []
-    for unit_index in range(repeat_count):
-        expected_names.extend(
-            [
-                f"under_rx_ferrite_u{unit_index}",
-                f"under_rx_pet_psa_u{unit_index}",
-                f"under_rx_air_u{unit_index}",
-            ]
-        )
-    return expected_names
+    if repeat_count == 0:
+        return []
+    return [
+        "under_rx_ferrite_u0",
+        "under_rx_pet_psa_u0",
+        "under_rx_air_u0",
+    ]
 
 
 def _single_layer_modeled_objects_with_role_aware_underlay(
@@ -749,20 +740,15 @@ def test_import_type2_step_ledger_styles_role_aware_underlay_and_keeps_mesh_cond
     assert session.design.import_dataset_calls == [str(Path(__file__).resolve().parents[2] / "notebooks" / "mu_p.tab")]
     assert len(session.oproject.add_dataset_calls) == 2
     assert session.oproject.definition_manager.add_material_calls[0][0] == "NAME:MULL12060ferrite"
+    assert session.materials.material_keys["mull12060ferrite"].permittivity == "6"
     assert session.materials.aedmattolibrary_calls == ["PET_PSA"]
     assert session.materials.material_keys["pet_psa"].permittivity == "2.8"
     assert session.modeler.objects["tx_underlay_ferrite_u0"].material_name == "MULL12060ferrite"
-    assert session.modeler.objects["tx_underlay_ferrite_u1"].material_name == "MULL12060ferrite"
     assert session.modeler.objects["tx_underlay_pet_psa_u0"].material_name == "PET_PSA"
-    assert session.modeler.objects["tx_underlay_pet_psa_u1"].material_name == "PET_PSA"
     assert session.modeler.objects["tx_underlay_air_u0"].material_name == "vacuum"
-    assert session.modeler.objects["tx_underlay_air_u1"].material_name == "vacuum"
     assert session.modeler.objects["tx_wall_ferrite_u0"].material_name == "MULL12060ferrite"
-    assert session.modeler.objects["tx_wall_ferrite_u1"].material_name == "MULL12060ferrite"
     assert session.modeler.objects["tx_wall_pet_psa_u0"].material_name == "PET_PSA"
-    assert session.modeler.objects["tx_wall_pet_psa_u1"].material_name == "PET_PSA"
     assert session.modeler.objects["tx_wall_air_u0"].material_name == "vacuum"
-    assert session.modeler.objects["tx_wall_air_u1"].material_name == "vacuum"
     assert session.modeler.objects["under_rx_ferrite_u0"].material_name == "MULL12060ferrite"
     assert session.modeler.objects["under_rx_pet_psa_u0"].material_name == "PET_PSA"
     assert session.modeler.objects["under_rx_air_u0"].material_name == "vacuum"
@@ -776,15 +762,9 @@ def test_import_type2_step_ledger_styles_role_aware_underlay_and_keeps_mesh_cond
         "tx_underlay_ferrite_u0",
         "tx_underlay_pet_psa_u0",
         "tx_underlay_air_u0",
-        "tx_underlay_ferrite_u1",
-        "tx_underlay_pet_psa_u1",
-        "tx_underlay_air_u1",
         "tx_wall_ferrite_u0",
         "tx_wall_pet_psa_u0",
         "tx_wall_air_u0",
-        "tx_wall_ferrite_u1",
-        "tx_wall_pet_psa_u1",
-        "tx_wall_air_u1",
         "tx_port_sheet",
     ]
     assert modeled_by_id["rx_rect_void_coil"]["imported_object_names"] == [

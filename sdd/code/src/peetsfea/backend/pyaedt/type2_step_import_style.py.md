@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_style.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-19 @ 00:42
 tags:
   - hfss-import
   - aedt
@@ -30,7 +30,7 @@ tags:
 - non-model: gray/transparency + `model=False`.
 - modeled PCB: `FR4_epoxy`/green + `model=True`.
 - modeled coil conductor: exact `copper` + existing copper visual color.
-- modeled TX/RX underlay ferrite body: exact `MULL12060ferrite`.
+- modeled TX/RX underlay ferrite body: exact `MULL12060ferrite`, with project-defined `permittivity = 6`.
 - modeled TX/RX underlay dielectric body: exact `PET_PSA`, with air-like dielectric baseline and documented `permittivity = 2.8`.
 - modeled TX/RX underlay air body: explicit `vacuum`.
 - TX wall-parallel `tx_wall_*` bodies use the same ferrite / PET_PSA / vacuum material contract as `tx_underlay_*`.

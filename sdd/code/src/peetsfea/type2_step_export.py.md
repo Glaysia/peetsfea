@@ -1,7 +1,7 @@
 ---
 title: type2_step_export.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-19 @ 00:25
 tags:
   - step-export
 ---
@@ -15,6 +15,7 @@ tags:
 - Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-tx-wall-parallel-ferrite-stack]]
+- Related feature plan: [[sdd/plans/0.2.23-type2-ferrite-underlay-equivalent-thickness]]
 - Parent note: [[sdd/code/entry/generate_type2_step.py]]
 
 ## 역할
@@ -35,10 +36,11 @@ tags:
 - role-aware expected body contract is underlay-aware:
   - single-layer TX base: `tx_pcb_l0`, `tx_copper_l0`
   - multilayer TX base: `tx_pcb_l{n}` + `tx_copper_stack`
-  - TX underlay extension: append `tx_underlay_ferrite_u{n}`, `tx_underlay_pet_psa_u{n}`, `tx_underlay_air_u{n}` in semantic unit order
-  - TX wall extension: append `tx_wall_ferrite_u{n}`, `tx_wall_pet_psa_u{n}`, `tx_wall_air_u{n}` after every `tx_underlay_*` exact body
+  - TX underlay extension: append collapsed effective trio `tx_underlay_ferrite_u0`, `tx_underlay_pet_psa_u0`, `tx_underlay_air_u0`
+  - TX wall extension: append collapsed effective trio `tx_wall_ferrite_u0`, `tx_wall_pet_psa_u0`, `tx_wall_air_u0` after the floor-underlay trio
   - RX base: `rx_pcb_l0`, `rx_copper_l0`
-  - RX underlay extension: append `under_rx_ferrite_u{n}`, `under_rx_pet_psa_u{n}`, `under_rx_air_u{n}` in semantic unit order
+  - RX underlay extension: append collapsed effective trio `under_rx_ferrite_u0`, `under_rx_pet_psa_u0`, `under_rx_air_u0`
+- `underlay_repeat_count` affects exported underlay thickness, not underlay body multiplicity.
 - underlay exact object/body names must remain `<= 32` chars.
 - direct export와 full-scene export 모두 같은 metadata-owned port-sheet geometry 규칙을 공유해야 한다.
 - 그 bridge 규칙의 diagonal choice는 inter-stub centerline에 대해 더 넓어지는 diagonal, 즉 endpoint들의 perpendicular distance 합이 최대가 되는 diagonal이어야 한다.

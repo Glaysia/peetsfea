@@ -748,6 +748,18 @@ def _underlay_unit_thickness_mm() -> float:
     return _UNDERLAY_FERRITE_THICKNESS_MM + _UNDERLAY_PET_PSA_THICKNESS_MM + _UNDERLAY_AIR_THICKNESS_MM
 
 
+def _effective_underlay_layer_thickness_mm(*, repeat_count: int, layer_thickness_mm: float, context: str) -> float:
+    if repeat_count < 1:
+        raise RuntimeError(f"{context} repeat count must be >= 1 (actual={repeat_count})")
+    effective_thickness_mm = float(repeat_count) * layer_thickness_mm
+    if effective_thickness_mm <= 0.0:
+        raise RuntimeError(
+            f"{context} effective thickness must be > 0 "
+            f"(repeat_count={repeat_count}, layer_thickness_mm={layer_thickness_mm})"
+        )
+    return effective_thickness_mm
+
+
 def _resolve_tx_underlay_placement_descriptor(
     *,
     owner_spec: NonModelBoxSpec,
@@ -815,93 +827,105 @@ def _resolve_tx_underlay_placement_descriptor(
 def _build_tx_underlay_scene_shapes(
     descriptor: _TxUnderlayPlacementDescriptor,
 ) -> tuple[bd.Shape, ...]:
-    shapes: list[bd.Shape] = []
-    current_top_z = descriptor.floor_top_z
-    for unit_index in range(descriptor.repeat_count):
-        ferrite_origin_z = current_top_z - _UNDERLAY_FERRITE_THICKNESS_MM
-        shapes.append(
-            _build_labeled_solid_box(
-                label=f"tx_underlay_ferrite_u{unit_index}",
-                origin_xyz=(descriptor.floor_origin_x, descriptor.floor_origin_y, ferrite_origin_z),
-                size_xyz=(
-                    descriptor.floor_size_x,
-                    descriptor.floor_size_y,
-                    _UNDERLAY_FERRITE_THICKNESS_MM,
-                ),
-            )
-        )
-        pet_origin_z = ferrite_origin_z - _UNDERLAY_PET_PSA_THICKNESS_MM
-        shapes.append(
-            _build_labeled_solid_box(
-                label=f"tx_underlay_pet_psa_u{unit_index}",
-                origin_xyz=(descriptor.floor_origin_x, descriptor.floor_origin_y, pet_origin_z),
-                size_xyz=(
-                    descriptor.floor_size_x,
-                    descriptor.floor_size_y,
-                    _UNDERLAY_PET_PSA_THICKNESS_MM,
-                ),
-            )
-        )
-        air_origin_z = pet_origin_z - _UNDERLAY_AIR_THICKNESS_MM
-        shapes.append(
-            _build_labeled_solid_box(
-                label=f"tx_underlay_air_u{unit_index}",
-                origin_xyz=(descriptor.floor_origin_x, descriptor.floor_origin_y, air_origin_z),
-                size_xyz=(
-                    descriptor.floor_size_x,
-                    descriptor.floor_size_y,
-                    _UNDERLAY_AIR_THICKNESS_MM,
-                ),
-            )
-        )
-        current_top_z = air_origin_z
-    return tuple(shapes)
+    ferrite_thickness_mm = _effective_underlay_layer_thickness_mm(
+        repeat_count=descriptor.repeat_count,
+        layer_thickness_mm=_UNDERLAY_FERRITE_THICKNESS_MM,
+        context="type2 tx underlay ferrite",
+    )
+    pet_thickness_mm = _effective_underlay_layer_thickness_mm(
+        repeat_count=descriptor.repeat_count,
+        layer_thickness_mm=_UNDERLAY_PET_PSA_THICKNESS_MM,
+        context="type2 tx underlay pet_psa",
+    )
+    air_thickness_mm = _effective_underlay_layer_thickness_mm(
+        repeat_count=descriptor.repeat_count,
+        layer_thickness_mm=_UNDERLAY_AIR_THICKNESS_MM,
+        context="type2 tx underlay air",
+    )
+    ferrite_origin_z = descriptor.floor_top_z - ferrite_thickness_mm
+    pet_origin_z = ferrite_origin_z - pet_thickness_mm
+    air_origin_z = pet_origin_z - air_thickness_mm
+    return (
+        _build_labeled_solid_box(
+            label="tx_underlay_ferrite_u0",
+            origin_xyz=(descriptor.floor_origin_x, descriptor.floor_origin_y, ferrite_origin_z),
+            size_xyz=(
+                descriptor.floor_size_x,
+                descriptor.floor_size_y,
+                ferrite_thickness_mm,
+            ),
+        ),
+        _build_labeled_solid_box(
+            label="tx_underlay_pet_psa_u0",
+            origin_xyz=(descriptor.floor_origin_x, descriptor.floor_origin_y, pet_origin_z),
+            size_xyz=(
+                descriptor.floor_size_x,
+                descriptor.floor_size_y,
+                pet_thickness_mm,
+            ),
+        ),
+        _build_labeled_solid_box(
+            label="tx_underlay_air_u0",
+            origin_xyz=(descriptor.floor_origin_x, descriptor.floor_origin_y, air_origin_z),
+            size_xyz=(
+                descriptor.floor_size_x,
+                descriptor.floor_size_y,
+                air_thickness_mm,
+            ),
+        ),
+    )
 
 
 def _build_tx_wall_parallel_scene_shapes(
     descriptor: _TxUnderlayPlacementDescriptor,
 ) -> tuple[bd.Shape, ...]:
-    shapes: list[bd.Shape] = []
-    current_wall_face_x = descriptor.wall_min_x
-    for unit_index in range(descriptor.repeat_count):
-        ferrite_origin_x = current_wall_face_x
-        shapes.append(
-            _build_labeled_solid_box(
-                label=f"tx_wall_ferrite_u{unit_index}",
-                origin_xyz=(ferrite_origin_x, descriptor.wall_origin_y, descriptor.wall_origin_z),
-                size_xyz=(
-                    _UNDERLAY_FERRITE_THICKNESS_MM,
-                    descriptor.wall_size_y,
-                    descriptor.wall_size_z,
-                ),
-            )
-        )
-        pet_origin_x = ferrite_origin_x + _UNDERLAY_FERRITE_THICKNESS_MM
-        shapes.append(
-            _build_labeled_solid_box(
-                label=f"tx_wall_pet_psa_u{unit_index}",
-                origin_xyz=(pet_origin_x, descriptor.wall_origin_y, descriptor.wall_origin_z),
-                size_xyz=(
-                    _UNDERLAY_PET_PSA_THICKNESS_MM,
-                    descriptor.wall_size_y,
-                    descriptor.wall_size_z,
-                ),
-            )
-        )
-        air_origin_x = pet_origin_x + _UNDERLAY_PET_PSA_THICKNESS_MM
-        shapes.append(
-            _build_labeled_solid_box(
-                label=f"tx_wall_air_u{unit_index}",
-                origin_xyz=(air_origin_x, descriptor.wall_origin_y, descriptor.wall_origin_z),
-                size_xyz=(
-                    _UNDERLAY_AIR_THICKNESS_MM,
-                    descriptor.wall_size_y,
-                    descriptor.wall_size_z,
-                ),
-            )
-        )
-        current_wall_face_x = air_origin_x + _UNDERLAY_AIR_THICKNESS_MM
-    return tuple(shapes)
+    ferrite_thickness_mm = _effective_underlay_layer_thickness_mm(
+        repeat_count=descriptor.repeat_count,
+        layer_thickness_mm=_UNDERLAY_FERRITE_THICKNESS_MM,
+        context="type2 tx wall underlay ferrite",
+    )
+    pet_thickness_mm = _effective_underlay_layer_thickness_mm(
+        repeat_count=descriptor.repeat_count,
+        layer_thickness_mm=_UNDERLAY_PET_PSA_THICKNESS_MM,
+        context="type2 tx wall underlay pet_psa",
+    )
+    air_thickness_mm = _effective_underlay_layer_thickness_mm(
+        repeat_count=descriptor.repeat_count,
+        layer_thickness_mm=_UNDERLAY_AIR_THICKNESS_MM,
+        context="type2 tx wall underlay air",
+    )
+    ferrite_origin_x = descriptor.wall_min_x
+    pet_origin_x = ferrite_origin_x + ferrite_thickness_mm
+    air_origin_x = pet_origin_x + pet_thickness_mm
+    return (
+        _build_labeled_solid_box(
+            label="tx_wall_ferrite_u0",
+            origin_xyz=(ferrite_origin_x, descriptor.wall_origin_y, descriptor.wall_origin_z),
+            size_xyz=(
+                ferrite_thickness_mm,
+                descriptor.wall_size_y,
+                descriptor.wall_size_z,
+            ),
+        ),
+        _build_labeled_solid_box(
+            label="tx_wall_pet_psa_u0",
+            origin_xyz=(pet_origin_x, descriptor.wall_origin_y, descriptor.wall_origin_z),
+            size_xyz=(
+                pet_thickness_mm,
+                descriptor.wall_size_y,
+                descriptor.wall_size_z,
+            ),
+        ),
+        _build_labeled_solid_box(
+            label="tx_wall_air_u0",
+            origin_xyz=(air_origin_x, descriptor.wall_origin_y, descriptor.wall_origin_z),
+            size_xyz=(
+                air_thickness_mm,
+                descriptor.wall_size_y,
+                descriptor.wall_size_z,
+            ),
+        ),
+    )
 
 
 def _build_rx_underlay_scene_shapes(
@@ -928,47 +952,53 @@ def _build_rx_underlay_scene_shapes(
             f"(owner={owner_spec.object_id}, owner_size_x={owner_size_x}, total_thickness_mm={total_thickness_mm}, "
             f"repeat_count={repeat_count})"
         )
-    shapes: list[bd.Shape] = []
-    current_min_x = owner_origin_x
-    for unit_index in range(repeat_count):
-        air_origin_x = current_min_x
-        pet_origin_x = air_origin_x + _UNDERLAY_AIR_THICKNESS_MM
-        ferrite_origin_x = pet_origin_x + _UNDERLAY_PET_PSA_THICKNESS_MM
-        shapes.append(
-            _build_labeled_solid_box(
-                label=f"under_rx_ferrite_u{unit_index}",
-                origin_xyz=(ferrite_origin_x, owner_origin_y, owner_origin_z),
-                size_xyz=(
-                    _UNDERLAY_FERRITE_THICKNESS_MM,
-                    owner_size_y,
-                    owner_size_z,
-                ),
-            )
-        )
-        shapes.append(
-            _build_labeled_solid_box(
-                label=f"under_rx_pet_psa_u{unit_index}",
-                origin_xyz=(pet_origin_x, owner_origin_y, owner_origin_z),
-                size_xyz=(
-                    _UNDERLAY_PET_PSA_THICKNESS_MM,
-                    owner_size_y,
-                    owner_size_z,
-                ),
-            )
-        )
-        shapes.append(
-            _build_labeled_solid_box(
-                label=f"under_rx_air_u{unit_index}",
-                origin_xyz=(air_origin_x, owner_origin_y, owner_origin_z),
-                size_xyz=(
-                    _UNDERLAY_AIR_THICKNESS_MM,
-                    owner_size_y,
-                    owner_size_z,
-                ),
-            )
-        )
-        current_min_x += unit_thickness_mm
-    return tuple(shapes)
+    air_thickness_mm = _effective_underlay_layer_thickness_mm(
+        repeat_count=repeat_count,
+        layer_thickness_mm=_UNDERLAY_AIR_THICKNESS_MM,
+        context="type2 rx underlay air",
+    )
+    pet_thickness_mm = _effective_underlay_layer_thickness_mm(
+        repeat_count=repeat_count,
+        layer_thickness_mm=_UNDERLAY_PET_PSA_THICKNESS_MM,
+        context="type2 rx underlay pet_psa",
+    )
+    ferrite_thickness_mm = _effective_underlay_layer_thickness_mm(
+        repeat_count=repeat_count,
+        layer_thickness_mm=_UNDERLAY_FERRITE_THICKNESS_MM,
+        context="type2 rx underlay ferrite",
+    )
+    air_origin_x = owner_origin_x
+    pet_origin_x = air_origin_x + air_thickness_mm
+    ferrite_origin_x = pet_origin_x + pet_thickness_mm
+    return (
+        _build_labeled_solid_box(
+            label="under_rx_ferrite_u0",
+            origin_xyz=(ferrite_origin_x, owner_origin_y, owner_origin_z),
+            size_xyz=(
+                ferrite_thickness_mm,
+                owner_size_y,
+                owner_size_z,
+            ),
+        ),
+        _build_labeled_solid_box(
+            label="under_rx_pet_psa_u0",
+            origin_xyz=(pet_origin_x, owner_origin_y, owner_origin_z),
+            size_xyz=(
+                pet_thickness_mm,
+                owner_size_y,
+                owner_size_z,
+            ),
+        ),
+        _build_labeled_solid_box(
+            label="under_rx_air_u0",
+            origin_xyz=(air_origin_x, owner_origin_y, owner_origin_z),
+            size_xyz=(
+                air_thickness_mm,
+                owner_size_y,
+                owner_size_z,
+            ),
+        ),
+    )
 
 
 def build_modeled_single_coil_scene_data(

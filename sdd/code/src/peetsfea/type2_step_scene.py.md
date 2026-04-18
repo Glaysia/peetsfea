@@ -1,7 +1,7 @@
 ---
 title: type2_step_scene.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 23:40
+updated: 2026-04-19 @ 00:25
 tags:
   - step-export
 ---
@@ -14,6 +14,7 @@ tags:
 - Status: active
 - Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-tx-wall-parallel-ferrite-stack]]
+- Related feature plan: [[sdd/plans/0.2.23-type2-ferrite-underlay-equivalent-thickness]]
 - Parent note: [[sdd/code/entry/generate_type2_step.py]]
 
 ## 역할
@@ -38,12 +39,13 @@ tags:
 - TX underlay footprint canonical source는 `tx_region` full `XY` bounds다.
 - RX underlay footprint canonical source는 `rx_region_max` full `YZ` bounds다.
 - TX underlay unit order는 `MULL12060ferrite` 0.20 mm -> `PET_PSA` 0.15 mm -> explicit `vacuum` air body 0.02 mm이며, `u0`가 TX에 가장 가까운 첫 unit이다.
-- TX underlay exact names는 `tx_underlay_ferrite_u{n}`, `tx_underlay_pet_psa_u{n}`, `tx_underlay_air_u{n}` order로 append된다.
-- TX wall-parallel exact names는 `tx_wall_ferrite_u{n}`, `tx_wall_pet_psa_u{n}`, `tx_wall_air_u{n}` order로 append되며, `u0`는 wall-adjacent first unit이다.
+- `underlay_repeat_count`는 repeated exported unit count가 아니라 ferrite/PET/air effective thickness multiplier다.
+- TX underlay exact names는 repeated `u{n}` expansion이 아니라 collapsed effective trio `tx_underlay_ferrite_u0`, `tx_underlay_pet_psa_u0`, `tx_underlay_air_u0`만 append된다.
+- TX wall-parallel exact names도 collapsed effective trio `tx_wall_ferrite_u0`, `tx_wall_pet_psa_u0`, `tx_wall_air_u0`만 append되며, `u0`는 wall-adjacent effective unit이다.
 - TX wall-parallel stack은 `tx_region.min_x` wall에 붙고 `+X` 방향으로 자란다.
 - TX wall-parallel unit physical order는 `wall -> coil = ferrite -> PET_PSA -> air`다.
 - TX wall-parallel footprint source는 `tx_region.min_x .. modeled_max_x` wall-side span + `tx_region` full Y span + `tx_region.min_z .. floor_underlay_min_z` remaining Z span이다.
-- RX underlay exact names는 `under_rx_ferrite_u{n}`, `under_rx_pet_psa_u{n}`, `under_rx_air_u{n}` order로 append된다.
+- RX underlay exact names는 collapsed effective trio `under_rx_ferrite_u0`, `under_rx_pet_psa_u0`, `under_rx_air_u0` order로 append된다.
 - RX underlay는 `rx_region_max`의 `-X` boundary에 anchor하고, coil-facing material은 ferrite다. 따라서 physical `-X -> +X` order는 `air -> PET_PSA -> ferrite`다.
 - new underlay exact object/body names는 feature-local rule로 `<= 32` chars여야 한다.
 - port-sheet geometry canonical owner는 transformed start/end bottom-face square pair이며 terminal anchor span이나 single-square ownership은 더 이상 sheet shape owner가 아니다.
@@ -57,7 +59,7 @@ tags:
 - TX exported modeled bbox minimum-X는 `tx_region.min_x`에 닿아야 하고 centered-X로 drift하면 안 된다.
 - modeled scene child body names must be unique
 - TX/RX `underlay_repeat_count` resolved value는 `{0, 2, 4, 6, 8}` contract를 따른다.
-- TX underlay first ferrite top face는 modeled object canonical minimum-Z plane보다 `underlay_gap_mm`만큼 아래에 와야 하며, every later slab는 같은 semantic tri-layer order로 stack된다.
+- TX underlay first ferrite top face는 modeled object canonical minimum-Z plane보다 `underlay_gap_mm`만큼 아래에 와야 하며, exported bodies are one effective tri-layer whose per-material thickness is multiplied by `underlay_repeat_count`.
 - TX wall-parallel stack은 XY underlay placement descriptor가 계산한 floor-underlay minimum-Z 위 공간을 침범하면 안 된다.
 - TX wall-parallel stack은 `repeat_count * 0.37 mm` X thickness가 wall-side span `tx_region.min_x .. modeled_max_x` 안에 들어가야 하며, remaining height도 양수여야 한다.
 - RX underlay first exported unit must start on the owner `-X` boundary and consume owner thickness toward `+X` without changing RX coil max-X placement.
@@ -90,6 +92,7 @@ tags:
 - widened diagonal rule은 stub-center centerline 기준으로 계산해야 하며, 좁은 대각선이나 임의의 고정 corner pair를 쓰면 안 된다.
 - port sheet를 non-model member로 재분류하지 않는다. STEP body로는 export하지 않더라도 modeled object terminal metadata ownership 아래 유지해야 한다.
 - underlay bodies도 non-model member가 아니다. exact modeled body names/count 계약 아래에 둔다.
+- underlay exact-name/count contract changed with this feature; import-side exact matching must stay aligned with collapsed single-`u0` families.
 - terminal stub footprint pair가 square가 아니거나 positive area가 아니면 fail-fast해야 한다.
 - canonical owner pair가 exactly two가 아니거나 shared bottom-face plane을 이루지 않으면 fail-fast해야 한다.
 - canonical port-sheet vertices와 exported STEP face geometry가 drift하면 import-side reconstruction과 viewer/debug contracts가 함께 깨지므로 같은 rule source를 유지해야 한다.

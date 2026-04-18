@@ -228,7 +228,7 @@ def _dataset_ferrite_material_payload() -> list[object]:
             ],
         ],
         "permittivity:=",
-        "12",
+        "6",
         "permeability:=",
         f"pwlx({_MU_R_REAL_DATASET_NAME}, Freq)",
         "conductivity:=",

@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 23:40
+updated: 2026-04-19 @ 00:25
 tags:
   - step-export
 ---
@@ -15,6 +15,7 @@ tags:
 - Related plan: [[sdd/plans/0.2.22-type2-toml-unification]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-tx-wall-parallel-ferrite-stack]]
+- Related feature plan: [[sdd/plans/0.2.23-type2-ferrite-underlay-equivalent-thickness]]
 
 ## 역할
 - `generate_type2_step.py`의 type2 parser와 single scene export 계약을 pure-Python pytest로 검증한다.
@@ -55,9 +56,9 @@ tags:
 - single-layer scene regression must assert scene labels do not include `tx_port_sheet` or `rx_port_sheet`; STEP exports only PCB/copper bodies.
 - next underlay contract regression must assert:
   - `underlay_repeat_count = 0`이면 underlay labels가 없다
-  - `underlay_repeat_count = 2`이면 TX/RX expected body names 뒤에 exact underlay labels가 append된다
-  - `underlay_repeat_count = 8`이면 upper-bound body count와 deterministic `u0..u7` ordering이 유지된다
-- TX/RX underlay body semantic order is geometry contract: each unit must emit `ferrite -> pet_psa -> air`, and the explicit `air` body must be modeled as exported `vacuum`, not spacing-only omission.
+  - `underlay_repeat_count = 2`이면 TX/RX expected body names 뒤에 collapsed effective `u0` tri-layer labels만 append된다
+  - `underlay_repeat_count = 8`이면 body count는 늘지 않고 각 ferrite/PET/air thickness만 `8x`로 커진다
+- TX/RX underlay body semantic order is geometry contract: each effective family must emit `ferrite -> pet_psa -> air`, and the explicit `air` body must be modeled as exported `vacuum`, not spacing-only omission.
 - TX underlay placement regression should assert `tx_region` full footprint + TX-only `underlay_gap_mm`.
 - TX wall-stack placement regression should assert `tx_region.min_x` wall contact + `+X` growth + `tx_region` full Y span + remaining-space Z ownership.
 - RX underlay placement regression should assert `rx_region_max` full footprint + `-X` boundary anchor + coil-facing ferrite.
@@ -83,4 +84,4 @@ tags:
 - type2 TOML field 이름을 바꾸면 fixture text와 assertion field path를 함께 갱신한다.
 - ledger shape를 바꾸면 이 테스트와 downstream import tests를 함께 갱신한다.
 - retained `outputs` contract를 바꾸면 example TOML, setup-ready tests, import-ledger tests를 함께 갱신한다.
-- TX underlay exact-name order와 body count를 바꾸면 export/import test notes를 같이 갱신한다.
+- TX/RX underlay exact-name order와 body count를 바꾸면 export/import test notes를 같이 갱신한다. `underlay_repeat_count`가 effective thickness multiplier인지 repeated body count인지 drift시키면 scene/import 계약이 동시에 깨진다.

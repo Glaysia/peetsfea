@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-19 @ 00:25
 tags:
   - step-export
 ---
@@ -15,6 +15,7 @@ tags:
 - Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-tx-wall-parallel-ferrite-stack]]
+- Related feature plan: [[sdd/plans/0.2.23-type2-ferrite-underlay-equivalent-thickness]]
 - Parent note: [[sdd/code/entry/generate_type2_step.py]]
 
 ## 역할
@@ -31,7 +32,7 @@ tags:
 - module-level mutable state는 없다.
 - canonical input state는 parsed type2 object registry다.
 - canonical input state에는 parsed `outputs` contract도 포함된다.
-- `underlay_repeat_count`는 type2 modeled-object registry shared canonical field이며, per-unit underlay geometry decomposition은 parser가 아니라 scene layer에서 소유한다.
+- `underlay_repeat_count`는 type2 modeled-object registry shared canonical field이며, repeated-body decomposition이 아니라 effective underlay thickness interpretation은 parser 밖 scene layer에서 소유한다.
 - TX modeled spec만 `underlay_gap_mm`를 runtime state로 가진다. RX modeled spec는 이 필드를 갖지 않으며 parser가 RX 선언을 fail-fast로 막는다.
 - TX modeled spec만 `wall_parallel_stack_present`를 runtime state로 가진다. resolved value `0/1`은 wall-parallel stack geometry enable bit다.
 - feature-local underlay exact object/body names는 `<= 32` chars contract를 따라야 한다.

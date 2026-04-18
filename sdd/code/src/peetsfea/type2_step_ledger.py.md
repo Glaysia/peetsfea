@@ -1,7 +1,7 @@
 ---
 title: type2_step_ledger.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-19 @ 00:25
 tags:
   - step-export
 ---
@@ -14,6 +14,7 @@ tags:
 - Status: planned split target; source file is not created yet.
 - Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
+- Related feature plan: [[sdd/plans/0.2.23-type2-ferrite-underlay-equivalent-thickness]]
 - Parent note: [[sdd/code/entry/generate_type2_step.py]]
 
 ## 역할
@@ -29,13 +30,13 @@ tags:
 - canonical retained report contract는 top-level `outputs`다.
 - boundary handoff contract는 `type2_step_ledger.em_policy.radiation_margin_mm`를 기준으로 문서화한다.
 - role-aware underlay ownership은 별도 ledger subtree가 아니라 modeled metadata의 exact `expected_exported_body_names` / `expected_exported_body_count` 계약에 포함된다.
-- `underlay_repeat_count` source of truth는 input TOML이고, ledger는 resolved explicit body-name taxonomy만 보존한다.
+- `underlay_repeat_count` source of truth는 input TOML이고, ledger는 resolved explicit body-name taxonomy만 보존한다. effective thickness multiplier meaning is not duplicated into the ledger.
 - TX-only `underlay_gap_mm` source of truth도 input TOML에 두고, ledger는 gap value를 duplicated runtime state로 보존하지 않는다.
 
 ## Invariants / fail-fast
 - modeled object metadata는 expected body names/count, canonical coordinates, terminal metadata를 모두 가져야 한다.
-- TX underlay가 존재하면 modeled metadata expected body names/count는 `tx_underlay_ferrite_u{n}`, `tx_underlay_pet_psa_u{n}`, `tx_underlay_air_u{n}` suffix order를 lossless로 보존해야 한다.
-- RX underlay가 존재하면 modeled metadata expected body names/count는 `under_rx_ferrite_u{n}`, `under_rx_pet_psa_u{n}`, `under_rx_air_u{n}` suffix order를 lossless로 보존해야 한다.
+- TX underlay가 존재하면 modeled metadata expected body names/count는 collapsed effective trio `tx_underlay_ferrite_u0`, `tx_underlay_pet_psa_u0`, `tx_underlay_air_u0` order를 lossless로 보존해야 한다.
+- RX underlay가 존재하면 modeled metadata expected body names/count는 collapsed effective trio `under_rx_ferrite_u0`, `under_rx_pet_psa_u0`, `under_rx_air_u0` order를 lossless로 보존해야 한다.
 - canonical ledger schema docs는 top-level `scene_step_path`, `em_policy`, `outputs`, `non_model_objects`, `modeled_objects`를 함께 유지한다.
 - ledger shape mismatch or missing owner/member metadata is a hard failure.
 - `outputs` missing or malformed retained contract is a hard failure for downstream setup-ready replay.
