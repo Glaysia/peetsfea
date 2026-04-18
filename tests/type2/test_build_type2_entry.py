@@ -128,6 +128,8 @@ range = [true, 1, 1, 1]
 range = [true, 0, 8, 5]
 [modeled_objects.underlay_gap_mm]
 range = [false, 1.0, 10.0, 4]
+[modeled_objects.wall_parallel_stack_present]
+range = [true, 0, 1, 2]
 [modeled_objects.layer_gap_mm]
 range = [false, 2.0, 2.0, 1]
 [modeled_objects.terminal_stub_length_mm]
@@ -207,20 +209,34 @@ def test_build_type2_reads_aedt_builder_n_from_manifest(monkeypatch: pytest.Monk
         seed_n=2,
         sampler_n=1,
         aedt_builder_n=6,
+        make_step_on_sample=True,
         exporter=_exporter,
     )
 
     calls: list[dict[str, object]] = []
 
-    def _fake_build_prepared_type2_designs(prepared_builds: tuple[object, ...], *, jobs: int, runner: object) -> list[dict[str, str]]:
-        calls.append({"jobs": jobs, "build_count": len(prepared_builds), "runner": runner})
+    def _fake_build_prepared_type2_designs(
+        prepared_builds: tuple[object, ...],
+        *,
+        jobs: int,
+        exporter: object,
+        runner: object,
+    ) -> list[dict[str, str]]:
+        calls.append({"jobs": jobs, "build_count": len(prepared_builds), "exporter": exporter, "runner": runner})
         return []
 
     monkeypatch.setattr(build_entry, "build_prepared_type2_designs", _fake_build_prepared_type2_designs)
     results = build_type2(manifest_path=manifest_path)
 
     assert results == []
-    assert calls == [{"jobs": 6, "build_count": 2, "runner": build_entry.setup_type2_step_ledger}]
+    assert calls == [
+        {
+            "jobs": 6,
+            "build_count": 2,
+            "exporter": build_entry.export_type2_step_artifacts,
+            "runner": build_entry.setup_type2_step_ledger,
+        }
+    ]
 
 
 def test_build_type2_creates_aedt_without_step_export(tmp_path: Path) -> None:
@@ -240,9 +256,15 @@ def test_build_type2_creates_aedt_without_step_export(tmp_path: Path) -> None:
         seed_n=1,
         sampler_n=1,
         aedt_builder_n=2,
+        make_step_on_sample=True,
         exporter=_exporter,
     )
+    exporter_calls: list[dict[str, object]] = []
     runner_calls: list[dict[str, object]] = []
+
+    def _build_exporter(**kwargs: object) -> object:
+        exporter_calls.append(dict(kwargs))
+        raise AssertionError("build exporter must not be called when STEP artifacts already exist")
 
     def _runner(**kwargs: object) -> Type2SetupReadyResult:
         runner_calls.append(dict(kwargs))
@@ -257,26 +279,31 @@ def test_build_type2_creates_aedt_without_step_export(tmp_path: Path) -> None:
             seed=8,
         )
 
-    results = build_type2(manifest_path=manifest_path, runner=_runner)
+    results = build_type2(manifest_path=manifest_path, exporter=_build_exporter, runner=_runner)
 
     assert len(results) == 1
+    assert exporter_calls == []
     assert len(runner_calls) == 1
     assert re.fullmatch(r"s\d{6}_[0-9a-f]{4}_[0-9a-f]{4}_0", document["entries"][0]["design_id"]) is not None
     assert Path(document["entries"][0]["aedt_path"]).is_file()
     assert Path(document["entries"][0]["imported_ledger_path"]).is_file()
     assert runner_calls[0]["design_name"] == document["entries"][0]["design_id"]
     assert runner_calls[0]["step_ledger_path"] == Path(document["entries"][0]["step_ledger_path"])
-    assert tuple(cast(tuple[tuple[str, str], ...], runner_calls[0]["design_variables"])) != ()
+    design_variables = tuple(cast(tuple[tuple[str, str], ...], runner_calls[0]["design_variables"]))
+    assert design_variables != ()
+    assert any(
+        name == "modeled_objects_tx_rect_void_coil_wall_parallel_stack_present" and value in {"0", "1"}
+        for name, value in design_variables
+    )
 
 
-def test_build_type2_fails_before_runner_when_step_ledger_is_missing(tmp_path: Path) -> None:
+def test_build_type2_exports_missing_step_then_creates_aedt(tmp_path: Path) -> None:
     source_toml_path = _write_source_type2_toml(tmp_path)
     output_dir = tmp_path / "run" / "sampled" / "type2"
     manifest_path = output_dir / "manifest.json"
 
     def _exporter(**kwargs: object) -> object:
-        _write_step_artifacts(output_dir=cast(Path, kwargs["output_dir"]), ledger_path=cast(Path, kwargs["ledger_path"]))
-        return {"ok": True}
+        raise AssertionError("sample exporter must not be called when make_step_on_sample is False")
 
     document = sample_type2(
         source_toml_path=source_toml_path,
@@ -286,17 +313,134 @@ def test_build_type2_fails_before_runner_when_step_ledger_is_missing(tmp_path: P
         seed_n=1,
         sampler_n=1,
         aedt_builder_n=1,
+        make_step_on_sample=False,
         exporter=_exporter,
     )
-    Path(document["entries"][0]["step_ledger_path"]).unlink()
+    events: list[str] = []
+    exporter_calls: list[dict[str, object]] = []
     runner_calls: list[dict[str, object]] = []
+
+    def _build_exporter(**kwargs: object) -> object:
+        exporter_calls.append(dict(kwargs))
+        events.append("export")
+        _write_step_artifacts(output_dir=cast(Path, kwargs["output_dir"]), ledger_path=cast(Path, kwargs["ledger_path"]))
+        return {"ok": True}
+
+    def _runner(**kwargs: object) -> Type2SetupReadyResult:
+        events.append("runner")
+        runner_calls.append(dict(kwargs))
+        output_aedt_path = cast(Path, kwargs["output_aedt_path"])
+        imported_ledger_path = cast(Path, kwargs["imported_ledger_path"])
+        output_aedt_path.write_text("AEDT", encoding="utf-8")
+        imported_ledger_path.write_text("{}", encoding="utf-8")
+        return _fake_setup_result(
+            step_ledger_path=cast(Path, kwargs["step_ledger_path"]),
+            output_aedt_path=output_aedt_path,
+            imported_ledger_path=imported_ledger_path,
+            seed=11,
+        )
+
+    results = build_type2(manifest_path=manifest_path, exporter=_build_exporter, runner=_runner)
+
+    assert len(results) == 1
+    assert len(exporter_calls) == 1
+    assert len(runner_calls) == 1
+    assert events == ["export", "runner"]
+    assert Path(document["entries"][0]["step_ledger_path"]).is_file()
+    assert Path(document["entries"][0]["scene_step_path"]).is_file()
+
+
+def test_build_type2_reuses_existing_step_and_only_exports_missing_entries(tmp_path: Path) -> None:
+    source_toml_path = _write_source_type2_toml(tmp_path)
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+
+    def _sample_exporter(**kwargs: object) -> object:
+        raise AssertionError("sample exporter must not be called when make_step_on_sample is False")
+
+    document = sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=30,
+        seed_n=2,
+        sampler_n=1,
+        aedt_builder_n=1,
+        make_step_on_sample=False,
+        exporter=_sample_exporter,
+    )
+    first_entry = document["entries"][0]
+    second_entry = document["entries"][1]
+    _write_step_artifacts(
+        output_dir=Path(first_entry["design_dir"]),
+        ledger_path=Path(first_entry["step_ledger_path"]),
+    )
+    exporter_calls: list[str] = []
+    runner_calls: list[str] = []
+
+    def _build_exporter(**kwargs: object) -> object:
+        ledger_path = cast(Path, kwargs["ledger_path"])
+        exporter_calls.append(str(ledger_path))
+        _write_step_artifacts(output_dir=cast(Path, kwargs["output_dir"]), ledger_path=ledger_path)
+        return {"ok": True}
+
+    def _runner(**kwargs: object) -> Type2SetupReadyResult:
+        output_aedt_path = cast(Path, kwargs["output_aedt_path"])
+        imported_ledger_path = cast(Path, kwargs["imported_ledger_path"])
+        runner_calls.append(str(cast(Path, kwargs["step_ledger_path"])))
+        output_aedt_path.write_text("AEDT", encoding="utf-8")
+        imported_ledger_path.write_text("{}", encoding="utf-8")
+        return _fake_setup_result(
+            step_ledger_path=cast(Path, kwargs["step_ledger_path"]),
+            output_aedt_path=output_aedt_path,
+            imported_ledger_path=imported_ledger_path,
+            seed=30,
+        )
+
+    results = build_type2(manifest_path=manifest_path, exporter=_build_exporter, runner=_runner)
+
+    assert len(results) == 2
+    assert exporter_calls == [second_entry["step_ledger_path"]]
+    assert runner_calls == [first_entry["step_ledger_path"], second_entry["step_ledger_path"]]
+    assert Path(second_entry["step_ledger_path"]).is_file()
+
+
+def test_build_type2_fails_before_runner_when_existing_step_scene_is_missing(tmp_path: Path) -> None:
+    source_toml_path = _write_source_type2_toml(tmp_path)
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+
+    def _sample_exporter(**kwargs: object) -> object:
+        _write_step_artifacts(output_dir=cast(Path, kwargs["output_dir"]), ledger_path=cast(Path, kwargs["ledger_path"]))
+        return {"ok": True}
+
+    document = sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=41,
+        seed_n=1,
+        sampler_n=1,
+        aedt_builder_n=1,
+        make_step_on_sample=True,
+        exporter=_sample_exporter,
+    )
+    entry = document["entries"][0]
+    Path(entry["scene_step_path"]).unlink()
+    exporter_calls: list[dict[str, object]] = []
+    runner_calls: list[dict[str, object]] = []
+
+    def _build_exporter(**kwargs: object) -> object:
+        exporter_calls.append(dict(kwargs))
+        raise AssertionError("build exporter must not be called when ledger already exists")
 
     def _runner(**kwargs: object) -> Type2SetupReadyResult:
         runner_calls.append(dict(kwargs))
-        raise AssertionError("runner must not be called when step ledger is missing")
+        raise AssertionError("runner must not be called when existing step scene is missing")
 
-    with pytest.raises(FileNotFoundError, match=r"type2 STEP ledger not found:"):
-        build_type2(manifest_path=manifest_path, runner=_runner)
+    with pytest.raises(FileNotFoundError, match=r"type2 scene STEP not found:"):
+        build_type2(manifest_path=manifest_path, exporter=_build_exporter, runner=_runner)
+    assert exporter_calls == []
     assert runner_calls == []
 
 
@@ -318,6 +462,7 @@ def test_build_type2_rejects_missing_aedt_builder_n_config(tmp_path: Path) -> No
                     "seed_first": 0,
                     "seed_n": 1,
                     "sampler_n": 1,
+                    "make_step_on_sample": True,
                 },
                 "entries": [],
             },
@@ -327,4 +472,27 @@ def test_build_type2_rejects_missing_aedt_builder_n_config(tmp_path: Path) -> No
     )
 
     with pytest.raises(ValueError, match=r"type2 sample manifest config is missing required key 'aedt_builder_n'"):
+        build_type2(manifest_path=manifest_path)
+
+
+def test_build_type2_rejects_missing_make_step_on_sample_config(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "config": {
+                    "source_toml_path": "/tmp/source.toml",
+                    "seed_first": 0,
+                    "seed_n": 1,
+                    "sampler_n": 1,
+                    "aedt_builder_n": 1,
+                },
+                "entries": [],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"type2 sample manifest config is missing required key 'make_step_on_sample'"):
         build_type2(manifest_path=manifest_path)

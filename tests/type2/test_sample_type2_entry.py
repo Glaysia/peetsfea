@@ -127,6 +127,8 @@ range = [true, 1, 1, 1]
 range = [true, 0, 8, 5]
 [modeled_objects.underlay_gap_mm]
 range = [false, 1.0, 10.0, 4]
+[modeled_objects.wall_parallel_stack_present]
+range = [true, 0, 1, 2]
 [modeled_objects.layer_gap_mm]
 range = [false, 2.0, 2.0, 1]
 [modeled_objects.terminal_stub_length_mm]
@@ -190,6 +192,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
         seed_n=3,
         sampler_n=2,
         aedt_builder_n=6,
+        make_step_on_sample=True,
         exporter=_exporter,
     )
     captured = capsys.readouterr()
@@ -200,6 +203,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
         "seed_first": 4,
         "seed_n": 3,
         "sampler_n": 2,
+        "make_step_on_sample": True,
         "aedt_builder_n": 6,
     }
     assert "[sample] stage=sample+step" in captured.out
@@ -217,6 +221,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
         "modeled_objects.tx_rect_void_coil.outer_x_mm",
         "modeled_objects.tx_rect_void_coil.underlay_repeat_count",
         "modeled_objects.tx_rect_void_coil.underlay_gap_mm",
+        "modeled_objects.tx_rect_void_coil.wall_parallel_stack_present",
         "modeled_objects.tx_rect_void_coil.void_x_over_outer_x",
         "modeled_objects.tx_rect_void_coil.margin_ratio",
     ]
@@ -248,6 +253,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert modeled_object["outer_x_mm"]["range"][3] == 1
     assert modeled_object["underlay_repeat_count"]["range"][3] == 1
     assert modeled_object["underlay_gap_mm"]["range"][3] == 1
+    assert modeled_object["wall_parallel_stack_present"]["range"][3] == 1
     assert modeled_object["void_x_over_outer_x"]["range"][3] == 1
     assert modeled_object["margin_ratio"]["range"][3] == 1
     assert modeled_object["layer_gap_mm"]["range"] == [False, 2.0, 2.0, 1]
@@ -283,3 +289,47 @@ def test_manifest_entry_for_sample_index_rejects_out_of_range(tmp_path: Path) ->
 
     with pytest.raises(IndexError, match=r"sample_index is out of range"):
         manifest_entry_for_sample_index(manifest_path, sample_index=2)
+
+
+def test_sample_type2_can_write_manifest_without_step_artifacts(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source_toml_path = _write_source_type2_toml(tmp_path)
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+    exporter_calls: list[dict[str, object]] = []
+
+    def _exporter(**kwargs: object) -> object:
+        exporter_calls.append(dict(kwargs))
+        raise AssertionError("sample exporter must not be called when make_step_on_sample is False")
+
+    document = sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=20,
+        seed_n=2,
+        sampler_n=2,
+        aedt_builder_n=6,
+        make_step_on_sample=False,
+        exporter=_exporter,
+    )
+    captured = capsys.readouterr()
+
+    assert document["config"] == {
+        "source_toml_path": str(source_toml_path.resolve(strict=False)),
+        "seed_first": 20,
+        "seed_n": 2,
+        "sampler_n": 2,
+        "make_step_on_sample": False,
+        "aedt_builder_n": 6,
+    }
+    assert "[sample] stage=sample-only" in captured.out
+    assert "[sample] done" in captured.out
+    assert exporter_calls == []
+    for entry in document["entries"]:
+        assert Path(entry["sampled_toml_path"]).is_file()
+        assert Path(entry["scene_step_path"]).exists() is False
+        assert Path(entry["step_ledger_path"]).exists() is False
+        assert Path(entry["aedt_path"]).exists() is False

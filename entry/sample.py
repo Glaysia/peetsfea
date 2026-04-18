@@ -24,9 +24,10 @@ SOURCE_TOML_PATH = REPO_ROOT / "examples" / "type2_sweep.toml"
 OUTPUT_DIR = REPO_ROOT / "run" / "sampled" / "type2"
 MANIFEST_PATH = OUTPUT_DIR / "manifest.json"
 SEED_FIRST = 0
-SEED_N = 1000
-SAMPLER_N = 10
+SEED_N = 100
+SAMPLER_N = 24
 AEDT_BUILDER_N = 6
+MAKE_STEP_ON_SAMPLE = True
 
 _Exporter = Callable[..., object]
 
@@ -111,16 +112,18 @@ def sample_type2(
     seed_n: int = SEED_N,
     sampler_n: int = SAMPLER_N,
     aedt_builder_n: int = AEDT_BUILDER_N,
+    make_step_on_sample: bool = MAKE_STEP_ON_SAMPLE,
     exporter: _Exporter = export_type2_step_artifacts,
 ) -> Type2SampleManifestDocument:
     started_at = perf_counter()
     status_line = _SampleStatusLine()
+    stage_name = "sample+step" if make_step_on_sample else "sample-only"
     status_line.log(
         f"[sample] start source={source_toml_path} output_dir={output_dir} "
-        f"manifest={manifest_path}"
+        f"manifest={manifest_path} make_step_on_sample={make_step_on_sample}"
     )
     status_line.log(
-        f"[sample] stage=sample+step seeds=[{seed_first},{seed_first + seed_n}) "
+        f"[sample] stage={stage_name} seeds=[{seed_first},{seed_first + seed_n}) "
         f"count={seed_n} workers={sampler_n}"
     )
     status_line.show_waiting(total=seed_n)
@@ -129,6 +132,7 @@ def sample_type2(
         seed_first=seed_first,
         seed_n=seed_n,
         sampler_n=sampler_n,
+        make_step_on_sample=make_step_on_sample,
         aedt_builder_n=aedt_builder_n,
     )
     entries = generate_sample_manifest_entries(
@@ -137,6 +141,7 @@ def sample_type2(
         seed_start=seed_first,
         count=seed_n,
         jobs=sampler_n,
+        make_step_on_sample=make_step_on_sample,
         exporter=exporter,
         report_progress=lambda completed, total, entry: _report_sample_progress(
             status_line,

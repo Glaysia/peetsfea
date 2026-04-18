@@ -9,22 +9,25 @@ if __package__ in {None, ""}:
 
 from entry.sample import MANIFEST_PATH
 from peetsfea.backend.pyaedt.type2_step_setup_ready import Type2SetupReadyResult, setup_type2_step_ledger
-from peetsfea.type2_runtime import Type2BuiltArtifact, build_prepared_type2_designs, validate_prepared_type2_step_ledgers
+from peetsfea.type2_runtime import Type2BuiltArtifact, build_prepared_type2_designs
+from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_sampled import load_type2_sample_manifest, prepared_builds_from_manifest
 
+_Exporter = Callable[..., object]
 _Runner = Callable[..., Type2SetupReadyResult]
 
 def build_type2(
     *,
     manifest_path: Path = MANIFEST_PATH,
+    exporter: _Exporter = export_type2_step_artifacts,
     runner: _Runner = setup_type2_step_ledger,
 ) -> list[Type2BuiltArtifact]:
     document = load_type2_sample_manifest(manifest_path)
     prepared_builds = prepared_builds_from_manifest(manifest_path, selected_design_ids=())
-    validate_prepared_type2_step_ledgers(prepared_builds)
     return build_prepared_type2_designs(
         prepared_builds,
         jobs=document["config"]["aedt_builder_n"],
+        exporter=exporter,
         runner=runner,
     )
 

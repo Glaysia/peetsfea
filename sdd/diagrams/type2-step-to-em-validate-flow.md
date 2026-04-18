@@ -1,7 +1,7 @@
 ---
 title: Type2 STEP to EM Validate Flow
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-19 @ 11:05
 tags:
   - step-export
   - sdd
@@ -35,10 +35,12 @@ flowchart TD
 
     Type2Toml --> SampleEntry
     SampleEntry --> SampledToml
-    SampleEntry --> Export
+    SampleEntry -->|MAKE_STEP_ON_SAMPLE=true| Export
     Export --> StepScene
     Export --> StepLedger
+    SampledToml --> BuildEntry
     StepLedger --> BuildEntry
+    BuildEntry -->|missing-only| Export
     StepScene --> ImportEntry
     StepLedger --> ImportEntry
     ImportEntry --> ImportCore
@@ -61,6 +63,7 @@ flowchart TD
 
 ## Notes
 - import-only와 setup-ready는 서로 다른 owner surface다.
+- `entry/sample.py`의 STEP export는 optional이고, `entry/build.py`가 missing STEP을 same-worker에서 보완할 수 있다.
 - imported ledger는 import handoff artifact다. setup-ready summary를 JSON으로 누적하지 않는다.
 - `tx_port_sheet` / `rx_port_sheet`는 STEP exact-name body가 아니라 metadata-driven reconstructed sheet다.
 - radiation boundary와 explicit lumped port는 setup-ready runtime이 1회만 만든다.

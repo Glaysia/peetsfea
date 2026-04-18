@@ -1,7 +1,7 @@
 ---
 title: type2_runtime.py
 created: 2026-04-18 @ 23:24
-updated: 2026-04-19 @ 00:12
+updated: 2026-04-19 @ 11:05
 tags:
   - runtime
   - type2
@@ -22,7 +22,7 @@ tags:
 ## 역할
 - active type2 operator surface가 공유하는 process-pool orchestration helper다.
 - build-side AEDT replay process-pool helper를 제공한다.
-- entry layer의 fail-fast preflight를 한 곳에 고정한다.
+- entry layer의 fail-fast preflight와 missing-only STEP handoff를 한 곳에 고정한다.
 
 ## 입력 / 출력
 - 입력:
@@ -34,11 +34,12 @@ tags:
 
 ## Canonical state
 - worker input canonical unit은 `PreparedType2Build`다.
-- build-side helper는 existing `step_ledger_path`를 읽어 AEDT output path를 계산하지 않고 그대로 사용한다.
+- build-side helper는 existing `step_ledger_path`를 재사용하거나 missing STEP을 먼저 만든 뒤 AEDT output path를 그대로 사용한다.
 
 ## Invariants / fail-fast
 - worker count는 양수여야 한다.
-- build-side preflight는 모든 `step_ledger_path` 존재를 HFSS 시작 전에 검증해야 한다.
+- existing ledger는 runner 전에 JSON path + referenced scene STEP까지 검증해야 한다.
+- missing ledger는 same-worker export 후 build로 이어져야 한다.
 - custom exporter/runner injection이 들어오면 single-process deterministic path를 사용한다.
 
 ## 직접 의존
@@ -55,5 +56,5 @@ tags:
 - [[sdd/code/tests/type2/test_build_type2_entry.py]]
 
 ## 변경 시 주의점
-- build replay는 pre-generated STEP ledger만 소비해야 한다.
+- missing-only policy가 existing-ledger corruption을 가리지 않게 유지한다.
 - preflight와 actual runner payload가 서로 다른 path contract를 가지지 않게 유지한다.

@@ -1,7 +1,7 @@
 ---
 title: test_build_type2_entry.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-18 @ 23:24
+updated: 2026-04-19 @ 11:05
 tags:
   - build
   - test
@@ -18,7 +18,7 @@ tags:
   - [[sdd/code/src/peetsfea/type2_runtime.py]]
 
 ## 역할
-- active build entry의 manifest config read, STEP-ledger preflight, design variable handoff를 검증한다.
+- active build entry의 manifest config read, missing-only STEP policy, design variable handoff를 검증한다.
 
 ## Canonical state
 - prepared sampled build input과 runner call payload가 canonical assertion surface다.
@@ -26,8 +26,10 @@ tags:
 ## Invariants / fail-fast
 - list manifest는 즉시 실패해야 한다.
 - missing `config.aedt_builder_n`는 즉시 실패해야 한다.
-- missing step ledger는 runner 전에 즉시 실패해야 한다.
+- missing step ledger는 exporter를 거쳐 same-worker build로 이어져야 한다.
+- existing but broken step ledger는 runner 전에 즉시 실패해야 한다.
 - runner에는 sampled metadata-derived design variables만 전달되어야 한다.
+- TX sampled design-variable handoff에는 `wall_parallel_stack_present` sampled owner도 빠짐없이 포함돼야 한다.
 
 ## 변경 시 주의점
 - full AEDT runtime regression을 이 파일에서 다시 구현하지 않는다.

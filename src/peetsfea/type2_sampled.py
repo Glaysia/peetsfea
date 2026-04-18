@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SampledScalar = int | float
 DesignVariableEntry = tuple[str, str]
 _SampleExporter = Callable[..., object]
-_INTEGER_RANGE_FIELD_NAMES = ("turn_count", "layer_count", "underlay_repeat_count")
+_INTEGER_RANGE_FIELD_NAMES = ("turn_count", "layer_count", "underlay_repeat_count", "wall_parallel_stack_present")
 _MODELED_RANGE_FIELD_NAMES = (
     "outer_x_mm",
     "outer_y_mm",
@@ -27,6 +27,7 @@ _MODELED_RANGE_FIELD_NAMES = (
     "layer_count",
     "underlay_repeat_count",
     "underlay_gap_mm",
+    "wall_parallel_stack_present",
     "layer_gap_mm",
     "terminal_stub_length_mm",
     "void_x_over_outer_x",
@@ -71,6 +72,7 @@ class Type2SampleManifestConfig(TypedDict):
     seed_first: int
     seed_n: int
     sampler_n: int
+    make_step_on_sample: bool
     aedt_builder_n: int
 
 
@@ -102,6 +104,15 @@ def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpe
                 if isinstance(modeled_spec, ModeledTxSingleCoilSpec):
                     owner_specs.append(
                         (f"modeled_objects.{modeled_spec.object_id}.{field_name}", modeled_spec.underlay_gap_mm)
+                    )
+                continue
+            if field_name == "wall_parallel_stack_present":
+                if isinstance(modeled_spec, ModeledTxSingleCoilSpec):
+                    owner_specs.append(
+                        (
+                            f"modeled_objects.{modeled_spec.object_id}.{field_name}",
+                            modeled_spec.wall_parallel_stack_present,
+                        )
                     )
                 continue
             assert hasattr(modeled_spec, field_name), f"modeled spec is missing required range field: {field_name}"
@@ -358,12 +369,15 @@ def build_type2_sample_manifest_config(
     seed_first: int,
     seed_n: int,
     sampler_n: int,
+    make_step_on_sample: bool,
     aedt_builder_n: int,
 ) -> Type2SampleManifestConfig:
     if seed_n < 1:
         raise ValueError("seed_n must be >= 1")
     if sampler_n < 1:
         raise ValueError("sampler_n must be >= 1")
+    if not isinstance(make_step_on_sample, bool):
+        raise TypeError("make_step_on_sample must be bool")
     if aedt_builder_n < 1:
         raise ValueError("aedt_builder_n must be >= 1")
     return {
@@ -371,6 +385,7 @@ def build_type2_sample_manifest_config(
         "seed_first": seed_first,
         "seed_n": seed_n,
         "sampler_n": sampler_n,
+        "make_step_on_sample": make_step_on_sample,
         "aedt_builder_n": aedt_builder_n,
     }
 
@@ -385,6 +400,7 @@ def build_type2_sample_manifest_document(
         "seed_first": config["seed_first"],
         "seed_n": config["seed_n"],
         "sampler_n": config["sampler_n"],
+        "make_step_on_sample": config["make_step_on_sample"],
         "aedt_builder_n": config["aedt_builder_n"],
     }
     entry_copies: list[Type2SampleManifestEntry] = []
@@ -469,8 +485,8 @@ def _export_step_for_sample_entry(
     )
 
 
-def _build_sample_manifest_entry_for_seed_task(task: tuple[str, str, int, int, str, int]) -> Type2SampleManifestEntry:
-    source_toml_path_text, output_dir_text, seed, sample_index, head_hash4, retry_number = task
+def _build_sample_manifest_entry_for_seed_task(task: tuple[str, str, int, int, str, int, bool]) -> Type2SampleManifestEntry:
+    source_toml_path_text, output_dir_text, seed, sample_index, head_hash4, retry_number, make_step_on_sample = task
     source_toml_path = Path(source_toml_path_text)
     output_dir = Path(output_dir_text)
     source_spec = load_type2_step_spec(source_toml_path)
@@ -486,7 +502,8 @@ def _build_sample_manifest_entry_for_seed_task(task: tuple[str, str, int, int, s
         head_hash4=head_hash4,
         retry_number=retry_number,
     )
-    _export_step_for_sample_entry(entry, exporter=export_type2_step_artifacts)
+    if make_step_on_sample:
+        _export_step_for_sample_entry(entry, exporter=export_type2_step_artifacts)
     return entry
 
 
@@ -508,6 +525,7 @@ def generate_sample_manifest_entries(
     seed_start: int,
     count: int,
     jobs: int = 1,
+    make_step_on_sample: bool = True,
     exporter: _SampleExporter = export_type2_step_artifacts,
     report_progress: _SampleProgressReporter | None = None,
 ) -> list[Type2SampleManifestEntry]:
@@ -515,11 +533,13 @@ def generate_sample_manifest_entries(
         raise ValueError("count must be >= 1")
     if jobs < 1:
         raise ValueError("jobs must be >= 1")
+    if not isinstance(make_step_on_sample, bool):
+        raise TypeError("make_step_on_sample must be bool")
     output_dir.mkdir(parents=True, exist_ok=True)
     seed_values = tuple(range(seed_start, seed_start + count))
     head_hash4 = _current_head_hash4()
     retry_number = 0
-    if jobs == 1 or count == 1 or exporter is not export_type2_step_artifacts:
+    if jobs == 1 or count == 1 or (make_step_on_sample and exporter is not export_type2_step_artifacts):
         source_spec = load_type2_step_spec(source_toml_path)
         raw_source_spec, _raw_source_bytes = load_toml_bytes(source_toml_path)
         _require_not_sampled_source(raw_source_spec, context=str(source_toml_path))
@@ -535,7 +555,8 @@ def generate_sample_manifest_entries(
                 head_hash4=head_hash4,
                 retry_number=retry_number,
             )
-            _export_step_for_sample_entry(entry, exporter=exporter)
+            if make_step_on_sample:
+                _export_step_for_sample_entry(entry, exporter=exporter)
             entries.append(entry)
             _emit_sample_progress(
                 report_progress=report_progress,
@@ -545,7 +566,7 @@ def generate_sample_manifest_entries(
             )
         return entries
     tasks = [
-        (str(source_toml_path), str(output_dir), seed, sample_index, head_hash4, retry_number)
+        (str(source_toml_path), str(output_dir), seed, sample_index, head_hash4, retry_number, make_step_on_sample)
         for sample_index, seed in enumerate(seed_values)
     ]
     entries_by_index: dict[int, Type2SampleManifestEntry] = {}
@@ -584,6 +605,7 @@ def _load_type2_sample_manifest_config(raw_config: object, *, manifest_path: Pat
         "seed_first",
         "seed_n",
         "sampler_n",
+        "make_step_on_sample",
         "aedt_builder_n",
     )
     for field_name in required_fields:
@@ -592,6 +614,7 @@ def _load_type2_sample_manifest_config(raw_config: object, *, manifest_path: Pat
     seed_first = _require_int(raw_config["seed_first"], context="config.seed_first")
     seed_n = _require_int(raw_config["seed_n"], context="config.seed_n")
     sampler_n = _require_int(raw_config["sampler_n"], context="config.sampler_n")
+    make_step_on_sample = _require_bool(raw_config["make_step_on_sample"], context="config.make_step_on_sample")
     aedt_builder_n = _require_int(raw_config["aedt_builder_n"], context="config.aedt_builder_n")
     if seed_n < 1:
         raise ValueError("config.seed_n must be >= 1")
@@ -604,6 +627,7 @@ def _load_type2_sample_manifest_config(raw_config: object, *, manifest_path: Pat
         "seed_first": seed_first,
         "seed_n": seed_n,
         "sampler_n": sampler_n,
+        "make_step_on_sample": make_step_on_sample,
         "aedt_builder_n": aedt_builder_n,
     }
 
@@ -687,6 +711,12 @@ def _require_non_empty_str(value: object, *, context: str) -> str:
         raise TypeError(f"{context} must be str")
     if value == "":
         raise ValueError(f"{context} must be non-empty")
+    return value
+
+
+def _require_bool(value: object, *, context: str) -> bool:
+    if not isinstance(value, bool):
+        raise TypeError(f"{context} must be bool")
     return value
 
 
