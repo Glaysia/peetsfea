@@ -50,7 +50,7 @@ class _TxUnderlayPlacementDescriptor:
     floor_size_y: float
     floor_top_z: float
     floor_min_z: float
-    wall_max_x: float
+    wall_min_x: float
     wall_origin_y: float
     wall_origin_z: float
     wall_size_y: float
@@ -781,13 +781,13 @@ def _resolve_tx_underlay_placement_descriptor(
             f"(owner={owner_spec.object_id}, owner_min_z={footprint_origin_z}, underlay_min_z={floor_min_z}, "
             f"modeled_min_z={modeled_min_z}, gap_mm={gap_mm}, repeat_count={repeat_count})"
         )
-    wall_max_x = footprint_origin_x + footprint_size_x
-    remaining_wall_thickness_mm = wall_max_x - modeled_max_x
-    if total_thickness_mm > remaining_wall_thickness_mm:
+    wall_min_x = footprint_origin_x
+    available_wall_span_mm = modeled_max_x - wall_min_x
+    if total_thickness_mm > available_wall_span_mm:
         raise RuntimeError(
-            "type2 tx wall underlay stack must fit inside remaining tx_region wall corridor "
-            f"(owner={owner_spec.object_id}, wall_max_x={wall_max_x}, modeled_max_x={modeled_max_x}, "
-            f"required_thickness_mm={total_thickness_mm}, remaining_thickness_mm={remaining_wall_thickness_mm}, "
+            "type2 tx wall underlay stack must fit inside tx_region wall-side span "
+            f"(owner={owner_spec.object_id}, wall_min_x={wall_min_x}, modeled_max_x={modeled_max_x}, "
+            f"required_thickness_mm={total_thickness_mm}, available_thickness_mm={available_wall_span_mm}, "
             f"repeat_count={repeat_count})"
         )
     wall_size_z = floor_min_z - footprint_origin_z
@@ -804,7 +804,7 @@ def _resolve_tx_underlay_placement_descriptor(
         floor_size_y=footprint_size_y,
         floor_top_z=modeled_min_z - gap_mm,
         floor_min_z=floor_min_z,
-        wall_max_x=wall_max_x,
+        wall_min_x=wall_min_x,
         wall_origin_y=footprint_origin_y,
         wall_origin_z=footprint_origin_z,
         wall_size_y=footprint_size_y,
@@ -862,9 +862,9 @@ def _build_tx_wall_parallel_scene_shapes(
     descriptor: _TxUnderlayPlacementDescriptor,
 ) -> tuple[bd.Shape, ...]:
     shapes: list[bd.Shape] = []
-    current_wall_face_x = descriptor.wall_max_x
+    current_wall_face_x = descriptor.wall_min_x
     for unit_index in range(descriptor.repeat_count):
-        ferrite_origin_x = current_wall_face_x - _UNDERLAY_FERRITE_THICKNESS_MM
+        ferrite_origin_x = current_wall_face_x
         shapes.append(
             _build_labeled_solid_box(
                 label=f"tx_wall_ferrite_u{unit_index}",
@@ -876,7 +876,7 @@ def _build_tx_wall_parallel_scene_shapes(
                 ),
             )
         )
-        pet_origin_x = ferrite_origin_x - _UNDERLAY_PET_PSA_THICKNESS_MM
+        pet_origin_x = ferrite_origin_x + _UNDERLAY_FERRITE_THICKNESS_MM
         shapes.append(
             _build_labeled_solid_box(
                 label=f"tx_wall_pet_psa_u{unit_index}",
@@ -888,7 +888,7 @@ def _build_tx_wall_parallel_scene_shapes(
                 ),
             )
         )
-        air_origin_x = pet_origin_x - _UNDERLAY_AIR_THICKNESS_MM
+        air_origin_x = pet_origin_x + _UNDERLAY_PET_PSA_THICKNESS_MM
         shapes.append(
             _build_labeled_solid_box(
                 label=f"tx_wall_air_u{unit_index}",
@@ -900,7 +900,7 @@ def _build_tx_wall_parallel_scene_shapes(
                 ),
             )
         )
-        current_wall_face_x = air_origin_x
+        current_wall_face_x = air_origin_x + _UNDERLAY_AIR_THICKNESS_MM
     return tuple(shapes)
 
 

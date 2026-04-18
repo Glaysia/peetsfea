@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-18 @ 23:40
 tags:
   - step-export
 ---
@@ -59,7 +59,7 @@ tags:
   - `underlay_repeat_count = 8`이면 upper-bound body count와 deterministic `u0..u7` ordering이 유지된다
 - TX/RX underlay body semantic order is geometry contract: each unit must emit `ferrite -> pet_psa -> air`, and the explicit `air` body must be modeled as exported `vacuum`, not spacing-only omission.
 - TX underlay placement regression should assert `tx_region` full footprint + TX-only `underlay_gap_mm`.
-- TX wall-stack placement regression should assert `tx_region.max_x` wall contact + `-X` growth + `tx_region` full Y span + remaining-space Z ownership.
+- TX wall-stack placement regression should assert `tx_region.min_x` wall contact + `+X` growth + `tx_region` full Y span + remaining-space Z ownership.
 - RX underlay placement regression should assert `rx_region_max` full footprint + `-X` boundary anchor + coil-facing ferrite.
 - single-layer scene regression should still confirm the metadata-owned canonical port-sheet polygon stays on the shared terminal-stub bottom-face plane, contains exactly four unique vertices, and bridges the two widened terminal-stub bottom-square diagonals chosen by maximum perpendicular spread away from the inter-stub centerline.
 - terminal metadata must also persist canonical `port_sheet_vertices_xyz` that match the expected sheet geometry so downstream HFSS reconstruction can reuse the exact face polygon without relying on STEP sheet bodies.

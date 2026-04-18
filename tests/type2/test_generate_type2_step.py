@@ -1096,17 +1096,17 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
             wall_ferrite_min_xyz, wall_ferrite_max_xyz = _body_bbox(scene_step_path, label="tx_wall_ferrite_u0")
             wall_pet_min_xyz, wall_pet_max_xyz = _body_bbox(scene_step_path, label="tx_wall_pet_psa_u0")
             wall_air_min_xyz, wall_air_max_xyz = _body_bbox(scene_step_path, label="tx_wall_air_u0")
-            assert wall_ferrite_max_xyz[0] == pytest.approx(region_min_x + region_size_x)
-            assert wall_ferrite_min_xyz[0] == pytest.approx(
-                wall_ferrite_max_xyz[0] - _TX_UNDERLAY_FERRITE_THICKNESS_MM
+            assert wall_ferrite_min_xyz[0] == pytest.approx(region_min_x)
+            assert wall_ferrite_max_xyz[0] == pytest.approx(
+                wall_ferrite_min_xyz[0] + _TX_UNDERLAY_FERRITE_THICKNESS_MM
             )
-            assert wall_pet_max_xyz[0] == pytest.approx(wall_ferrite_min_xyz[0])
-            assert wall_pet_min_xyz[0] == pytest.approx(
-                wall_pet_max_xyz[0] - _TX_UNDERLAY_PET_PSA_THICKNESS_MM
+            assert wall_pet_min_xyz[0] == pytest.approx(wall_ferrite_max_xyz[0])
+            assert wall_pet_max_xyz[0] == pytest.approx(
+                wall_pet_min_xyz[0] + _TX_UNDERLAY_PET_PSA_THICKNESS_MM
             )
-            assert wall_air_max_xyz[0] == pytest.approx(wall_pet_min_xyz[0])
-            assert wall_air_min_xyz[0] == pytest.approx(
-                wall_air_max_xyz[0] - _TX_UNDERLAY_AIR_THICKNESS_MM
+            assert wall_air_min_xyz[0] == pytest.approx(wall_pet_max_xyz[0])
+            assert wall_air_max_xyz[0] == pytest.approx(
+                wall_air_min_xyz[0] + _TX_UNDERLAY_AIR_THICKNESS_MM
             )
             for min_xyz, max_xyz in (
                 (wall_ferrite_min_xyz, wall_ferrite_max_xyz),

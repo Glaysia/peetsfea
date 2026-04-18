@@ -1,7 +1,7 @@
 ---
 title: tx-rect-void-step
 created: 2026-04-17 @ 04:20
-updated: 2026-04-17 @ 19:20
+updated: 2026-04-18 @ 23:40
 tags:
   - type2
   - tx-rect-void
@@ -103,11 +103,11 @@ tags:
   - `tx_underlay_pet_psa_u{n}`
   - `tx_underlay_air_u{n}`
 - resolved `wall_parallel_stack_present = 1`이고 `underlay_repeat_count > 0`이면 same repeat count의 additional wall-parallel tri-layer stack도 생성된다.
-- TX wall stack은 `tx_region.max_x` wall에 붙고 `-X` 방향으로 자란다.
+- TX wall stack은 `tx_region.min_x` wall에 붙고 `+X` 방향으로 자란다.
 - wall unit physical order는 `wall -> coil = ferrite -> PET_PSA -> air`다.
 - wall stack `u0`는 wall-adjacent first unit이다.
 - wall stack Y footprint는 `tx_region` full span이고, Z footprint는 floor underlay를 모두 깐 뒤 남는 공간 `tx_region.min_z .. floor_underlay_min_z`다.
-- wall stack X thickness는 `repeat_count * (0.20 + 0.15 + 0.02)`이며 `modeled_max_x .. tx_region.max_x` corridor에 fit해야 한다.
+- wall stack X thickness는 `repeat_count * (0.20 + 0.15 + 0.02)`이며 `tx_region.min_x .. modeled_max_x` wall-side span에 fit해야 한다.
 - wall exact body names:
   - `tx_wall_ferrite_u{n}`
   - `tx_wall_pet_psa_u{n}`
