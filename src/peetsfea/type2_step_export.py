@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import math
 import shutil
+import tempfile
 from pathlib import Path
+from typing import Literal, cast
 
 import build123d as bd
 
+from peetsfea.tx_rect_void import BoxSpec
+from peetsfea.tx_rect_void import SingleCoilProfile
+from peetsfea.tx_rect_void import build_tx_rect_void_box_specs
+from peetsfea.tx_rect_void import load_tx_rect_void_spec
+from peetsfea.tx_rect_void import modeled_body_bounds_from_boxes
 from peetsfea.tx_rect_void import profile_for_modeled_role
+from peetsfea.tx_rect_void import realize_tx_rect_void_spec
 from peetsfea.type2_step_ledger import Type2DirectModeledArtifact
 from peetsfea.type2_step_ledger import Type2ImportEmPolicy
 from peetsfea.type2_step_ledger import Type2StepLedger
@@ -17,9 +26,12 @@ from peetsfea.type2_step_scene import build_modeled_single_coil_scene_data
 from peetsfea.type2_step_scene import build_non_model_scene_entry
 from peetsfea.type2_step_scene import build_non_model_scene_shapes
 from peetsfea.type2_step_scene import require_non_model_object_spec
+from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
+from peetsfea.type2_step_spec import render_tx_rect_void_toml
+from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_TOML_PATH = REPO_ROOT / "examples" / "type2_fixed.toml"
@@ -137,6 +149,384 @@ def export_type2_tx_single_coil_artifact(
     )
 
 
+def _tx_underlay_expected_body_names(*, repeat_count: int) -> list[str]:
+    body_names: list[str] = []
+    for unit_index in range(repeat_count):
+        body_names.extend(
+            (
+                f"tx_underlay_ferrite_u{unit_index}",
+                f"tx_underlay_pet_psa_u{unit_index}",
+                f"tx_underlay_air_u{unit_index}",
+            )
+        )
+    return body_names
+
+
+def _rx_underlay_expected_body_names(*, repeat_count: int) -> list[str]:
+    body_names: list[str] = []
+    for unit_index in range(repeat_count):
+        body_names.extend(
+            (
+                f"under_rx_ferrite_u{unit_index}",
+                f"under_rx_pet_psa_u{unit_index}",
+                f"under_rx_air_u{unit_index}",
+            )
+        )
+    return body_names
+
+
+def _require_single_coil_expected_body_contract(
+    ledger: Type2StepLedger,
+    *,
+    spec: Type2StepSpec,
+    seed: int,
+) -> None:
+    modeled_spec_by_id = {modeled_spec.object_id: modeled_spec for modeled_spec in spec.modeled_objects}
+    for modeled_entry in ledger["modeled_objects"]:
+        object_id = modeled_entry["object_id"]
+        if object_id not in modeled_spec_by_id:
+            raise ValueError(f"type2 modeled object spec registry is missing exported object {object_id}")
+        modeled_spec = modeled_spec_by_id[object_id]
+        role = modeled_entry["role"]
+        expected_body_names = modeled_entry["expected_exported_body_names"]
+        expected_body_count = modeled_entry["expected_exported_body_count"]
+        if role == "tx_single_coil":
+            pcb_layer_positions = cast(
+                tuple[float, ...],
+                modeled_entry["canonical_coordinates"]["pcb_layer_z_positions_mm"],
+            )
+            expected_names = [f"tx_pcb_l{index}" for index in range(len(pcb_layer_positions))]
+            if len(pcb_layer_positions) == 1:
+                expected_names.append("tx_copper_l0")
+            else:
+                expected_names.append("tx_copper_stack")
+            expected_names.extend(
+                _tx_underlay_expected_body_names(
+                    repeat_count=resolve_modeled_underlay_repeat_count(modeled_spec, seed=seed)
+                )
+            )
+        elif role == "rx_single_coil":
+            expected_names = ["rx_pcb_l0", "rx_copper_l0"]
+            expected_names.extend(
+                _rx_underlay_expected_body_names(
+                    repeat_count=resolve_modeled_underlay_repeat_count(modeled_spec, seed=seed)
+                )
+            )
+        else:
+            raise ValueError(f"unsupported modeled object role in type2 ledger: {role}")
+        if list(expected_body_names) != expected_names:
+            raise ValueError(
+                "type2 single-coil export expected body contract mismatch "
+                f"(role={role}, expected={expected_names}, actual={list(expected_body_names)})"
+            )
+        if expected_body_count != len(expected_names):
+            raise ValueError(
+                "type2 single-coil export expected body count mismatch "
+                f"(role={role}, expected={len(expected_names)}, actual={expected_body_count})"
+            )
+
+
+def _owner_bottom_face_square_plane_vertices(
+    *,
+    box_origin_xyz: tuple[float, float, float],
+    box_size_xyz: tuple[float, float, float],
+    plane: str,
+) -> tuple[tuple[tuple[float, float], ...], float]:
+    if plane == "XY":
+        square_side_a = box_size_xyz[0]
+        square_side_b = box_size_xyz[1]
+        bottom_plane_coordinate = box_origin_xyz[2]
+        plane_vertices = (
+            (box_origin_xyz[0], box_origin_xyz[1]),
+            (box_origin_xyz[0] + box_size_xyz[0], box_origin_xyz[1]),
+            (box_origin_xyz[0] + box_size_xyz[0], box_origin_xyz[1] + box_size_xyz[1]),
+            (box_origin_xyz[0], box_origin_xyz[1] + box_size_xyz[1]),
+        )
+    else:
+        square_side_a = box_size_xyz[1]
+        square_side_b = box_size_xyz[2]
+        bottom_plane_coordinate = box_origin_xyz[0]
+        plane_vertices = (
+            (box_origin_xyz[1], box_origin_xyz[2]),
+            (box_origin_xyz[1] + box_size_xyz[1], box_origin_xyz[2]),
+            (box_origin_xyz[1] + box_size_xyz[1], box_origin_xyz[2] + box_size_xyz[2]),
+            (box_origin_xyz[1], box_origin_xyz[2] + box_size_xyz[2]),
+        )
+    if square_side_a <= 0.0 or square_side_b <= 0.0:
+        raise RuntimeError(
+            "type2 port sheet widened diagonal validation requires positive owner bottom-face dimensions "
+            f"(plane={plane}, origin={box_origin_xyz}, size={box_size_xyz})"
+        )
+    if abs(square_side_a - square_side_b) > 1e-8:
+        raise RuntimeError(
+            "type2 port sheet widened diagonal validation requires square owner bottom faces "
+            f"(plane={plane}, origin={box_origin_xyz}, size={box_size_xyz})"
+        )
+    return (plane_vertices, bottom_plane_coordinate)
+
+
+def _owner_centerline_perpendicular_distance(
+    *,
+    point_xy: tuple[float, float],
+    first_center_xy: tuple[float, float],
+    second_center_xy: tuple[float, float],
+) -> float:
+    delta_x = second_center_xy[0] - first_center_xy[0]
+    delta_y = second_center_xy[1] - first_center_xy[1]
+    denominator = math.hypot(delta_x, delta_y)
+    if denominator <= 1e-12:
+        raise RuntimeError(
+            "type2 port sheet widened diagonal validation requires distinct owner centers "
+            f"(first_center={first_center_xy}, second_center={second_center_xy})"
+        )
+    numerator = abs(
+        delta_x * (first_center_xy[1] - point_xy[1])
+        - (first_center_xy[0] - point_xy[0]) * delta_y
+    )
+    return numerator / denominator
+
+
+def _widest_owner_bottom_face_diagonal_vertices(
+    *,
+    transformed_owner_boxes: tuple[tuple[tuple[float, float, float], tuple[float, float, float]], ...],
+    plane: str,
+) -> tuple[tuple[float, float, float], ...]:
+    if len(transformed_owner_boxes) != 2:
+        raise RuntimeError(
+            "type2 port sheet widened diagonal validation requires exactly two owner boxes "
+            f"(actual={len(transformed_owner_boxes)})"
+        )
+    plane_vertices_by_owner: list[tuple[tuple[float, float], ...]] = []
+    bottom_plane_coordinates: list[float] = []
+    owner_center_points: list[tuple[float, float]] = []
+    for box_origin_xyz, box_size_xyz in transformed_owner_boxes:
+        plane_vertices, bottom_plane_coordinate = _owner_bottom_face_square_plane_vertices(
+            box_origin_xyz=box_origin_xyz,
+            box_size_xyz=box_size_xyz,
+            plane=plane,
+        )
+        plane_vertices_by_owner.append(plane_vertices)
+        bottom_plane_coordinates.append(bottom_plane_coordinate)
+        owner_center_points.append(
+            (
+                sum(point_xy[0] for point_xy in plane_vertices) / 4.0,
+                sum(point_xy[1] for point_xy in plane_vertices) / 4.0,
+            )
+        )
+    if max(bottom_plane_coordinates) - min(bottom_plane_coordinates) > 1e-8:
+        raise RuntimeError(
+            "type2 owner bottom faces must share one plane for widened sheet derivation "
+            f"(plane={plane}, plane_values={bottom_plane_coordinates})"
+        )
+
+    def _selected_diagonal_vertices(
+        *,
+        plane_vertices: tuple[tuple[float, float], ...],
+    ) -> tuple[tuple[float, float], tuple[float, float]]:
+        best_score = -1.0
+        best_diagonal: tuple[tuple[float, float], tuple[float, float]] | None = None
+        best_key: tuple[tuple[float, float], tuple[float, float]] | None = None
+        for first_index, second_index in ((0, 2), (1, 3)):
+            diagonal_vertices = (plane_vertices[first_index], plane_vertices[second_index])
+            score = sum(
+                _owner_centerline_perpendicular_distance(
+                    point_xy=point_xy,
+                    first_center_xy=owner_center_points[0],
+                    second_center_xy=owner_center_points[1],
+                )
+                for point_xy in diagonal_vertices
+            )
+            candidate_key = cast(
+                tuple[tuple[float, float], tuple[float, float]],
+                tuple(sorted(diagonal_vertices)),
+            )
+            if (
+                score > best_score + 1e-9
+                or (abs(score - best_score) <= 1e-9 and (best_key is None or candidate_key < best_key))
+            ):
+                best_score = score
+                best_diagonal = diagonal_vertices
+                best_key = candidate_key
+        if best_diagonal is None:
+            raise RuntimeError("type2 widened terminal-stub diagonal selection produced no candidate")
+        return best_diagonal
+
+    diagonal_vertices: list[tuple[float, float, float]] = []
+    for plane_vertices, bottom_plane_coordinate in zip(plane_vertices_by_owner, bottom_plane_coordinates):
+        selected_diagonal = _selected_diagonal_vertices(plane_vertices=plane_vertices)
+        for point_u, point_v in selected_diagonal:
+            if plane == "XY":
+                diagonal_vertices.append((point_u, point_v, bottom_plane_coordinate))
+            else:
+                diagonal_vertices.append((bottom_plane_coordinate, point_u, point_v))
+    return tuple(diagonal_vertices)
+
+
+def _single_coil_placement_offset_from_local_bounds(
+    *,
+    owner_origin_xyz: tuple[float, float, float],
+    owner_size_xyz: tuple[float, float, float],
+    local_bounds_min_xyz: tuple[float, float, float],
+    local_size_xyz: tuple[float, float, float],
+    profile: SingleCoilProfile,
+) -> tuple[float, float, float]:
+    plane = profile.plane
+    world_size_xyz = profile.world_size(local_size_xyz)
+    world_min_delta = profile.world_delta(local_bounds_min_xyz)
+    if plane == "XY":
+        target_world_min_xyz = (
+            owner_origin_xyz[0],
+            owner_origin_xyz[1] + (owner_size_xyz[1] - world_size_xyz[1]) / 2.0,
+            owner_origin_xyz[2] + owner_size_xyz[2] - world_size_xyz[2],
+        )
+    else:
+        target_world_min_xyz = (
+            owner_origin_xyz[0] + owner_size_xyz[0] - world_size_xyz[0],
+            owner_origin_xyz[1] + (owner_size_xyz[1] - world_size_xyz[1]) / 2.0,
+            owner_origin_xyz[2],
+        )
+    return (
+        target_world_min_xyz[0] - world_min_delta[0],
+        target_world_min_xyz[1] - world_min_delta[1],
+        target_world_min_xyz[2] - world_min_delta[2],
+    )
+
+
+def _synthetic_tx_bus_owner_box(
+    *,
+    local_boxes: tuple[BoxSpec, ...],
+    copper_body_prefix: str,
+    terminal_column: Literal["start", "end"],
+) -> BoxSpec:
+    terminal_stub_boxes = tuple(box for box in local_boxes if box.feature == "terminal_stub")
+    matching_stub_boxes = tuple(
+        box for box in terminal_stub_boxes if box.label.endswith(f"_stub_{terminal_column}")
+    )
+    if len(matching_stub_boxes) == 0:
+        raise RuntimeError(
+            "type2 tx port sheet validation requires at least one terminal stub per terminal column "
+            f"(terminal_column={terminal_column}, actual=0)"
+        )
+    if len(matching_stub_boxes) * 2 != len(terminal_stub_boxes):
+        raise RuntimeError(
+            "type2 tx port sheet validation requires balanced start/end terminal stub boxes "
+            f"(terminal_column={terminal_column}, matching={len(matching_stub_boxes)}, total={len(terminal_stub_boxes)})"
+        )
+    min_x = min(box.origin_xyz[0] for box in matching_stub_boxes)
+    min_y = min(box.origin_xyz[1] for box in matching_stub_boxes)
+    min_z = min(box.origin_xyz[2] for box in matching_stub_boxes)
+    max_x = max(box.origin_xyz[0] + box.size_xyz[0] for box in matching_stub_boxes)
+    max_y = max(box.origin_xyz[1] + box.size_xyz[1] for box in matching_stub_boxes)
+    max_z = max(box.origin_xyz[2] + box.size_xyz[2] for box in matching_stub_boxes)
+    return BoxSpec(
+        label=f"{copper_body_prefix}_bus_{terminal_column}",
+        role="copper",
+        feature="vertical_bus",
+        layer_index=0,
+        origin_xyz=(min_x, min_y, min_z),
+        size_xyz=(max_x - min_x, max_y - min_y, max_z - min_z),
+    )
+
+
+def _local_port_sheet_owner_boxes(
+    *,
+    local_boxes: tuple[BoxSpec, ...],
+    profile: SingleCoilProfile,
+) -> tuple[BoxSpec, BoxSpec]:
+    role = profile.role
+    copper_body_prefix = profile.copper_body_prefix
+    if role == "tx_single_coil":
+        return (
+            _synthetic_tx_bus_owner_box(
+                local_boxes=local_boxes,
+                copper_body_prefix=copper_body_prefix,
+                terminal_column="start",
+            ),
+            _synthetic_tx_bus_owner_box(
+                local_boxes=local_boxes,
+                copper_body_prefix=copper_body_prefix,
+                terminal_column="end",
+            ),
+        )
+    terminal_stub_boxes = tuple(box for box in local_boxes if box.feature == "terminal_stub")
+    start_matches = [box for box in terminal_stub_boxes if box.label == f"{copper_body_prefix}_l0_stub_start"]
+    end_matches = [box for box in terminal_stub_boxes if box.label == f"{copper_body_prefix}_l0_stub_end"]
+    if len(start_matches) != 1 or len(end_matches) != 1 or len(terminal_stub_boxes) != 2:
+        raise RuntimeError(
+            "type2 port sheet validation requires exactly one start/end terminal stub box "
+            f"(role={role}, start_matches={len(start_matches)}, end_matches={len(end_matches)}, actual={len(terminal_stub_boxes)})"
+        )
+    return (start_matches[0], end_matches[0])
+
+
+def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path: Path, seed: int) -> None:
+    spec = load_type2_step_spec(toml_path)
+    for modeled_spec in spec.modeled_objects:
+        profile = profile_for_modeled_role(modeled_spec.role)
+        owner_spec = next(non_model for non_model in spec.non_model_objects if non_model.object_id == profile.placement_owner_id)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tx_rect_void_toml_path = Path(temp_dir) / f"{modeled_spec.object_id}.toml"
+            tx_rect_void_toml_path.write_text(render_tx_rect_void_toml(modeled_spec), encoding="utf-8")
+            tx_rect_void_spec = load_tx_rect_void_spec(tx_rect_void_toml_path)
+            realized = realize_tx_rect_void_spec(tx_rect_void_spec, seed=seed, profile=profile)
+        local_boxes = build_tx_rect_void_box_specs(realized, profile=profile)
+        local_bounds_min_xyz, _local_bounds_max_xyz, local_size_xyz = modeled_body_bounds_from_boxes(local_boxes)
+        frame_origin_xyz = _single_coil_placement_offset_from_local_bounds(
+            owner_origin_xyz=owner_spec.origin_xyz,
+            owner_size_xyz=owner_spec.size_xyz,
+            local_bounds_min_xyz=local_bounds_min_xyz,
+            local_size_xyz=local_size_xyz,
+            profile=profile,
+        )
+        owner_boxes = _local_port_sheet_owner_boxes(local_boxes=local_boxes, profile=profile)
+        transformed_owner_boxes = tuple(
+            (
+                profile.world_point(box.origin_xyz, frame_origin_xyz=frame_origin_xyz),
+                profile.world_size(box.size_xyz),
+            )
+            for box in owner_boxes
+        )
+        sheet_label = "tx_port_sheet" if modeled_spec.role == "tx_single_coil" else "rx_port_sheet"
+        modeled_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == modeled_spec.object_id)
+        raw_sheet_vertices = cast(
+            tuple[tuple[float, float, float], ...],
+            modeled_entry["terminal_metadata"]["port_sheet_vertices_xyz"],
+        )
+        if len(raw_sheet_vertices) != 4:
+            raise RuntimeError(
+                "type2 port sheet metadata must contain exactly four unique vertices "
+                f"(object_id={modeled_spec.object_id}, actual={len(raw_sheet_vertices)})"
+            )
+        sheet_vertices = tuple((float(vertex[0]), float(vertex[1]), float(vertex[2])) for vertex in raw_sheet_vertices)
+        expected_vertices = _widest_owner_bottom_face_diagonal_vertices(
+            transformed_owner_boxes=transformed_owner_boxes,
+            plane=profile.plane,
+        )
+        if profile.plane == "XY":
+            plane_coordinates = tuple(vertex[2] for vertex in sheet_vertices)
+        else:
+            plane_coordinates = tuple(vertex[0] for vertex in sheet_vertices)
+        if max(plane_coordinates) - min(plane_coordinates) > 1e-8:
+            raise RuntimeError(
+                "type2 port sheet vertices must lie on one shared bottom-face plane "
+                f"(object_id={modeled_spec.object_id}, label={sheet_label}, plane_values={plane_coordinates})"
+            )
+        actual_vertex_set = {
+            (round(vertex[0], 8), round(vertex[1], 8), round(vertex[2], 8))
+            for vertex in sheet_vertices
+        }
+        expected_vertex_set = {
+            (round(vertex[0], 8), round(vertex[1], 8), round(vertex[2], 8))
+            for vertex in expected_vertices
+        }
+        if actual_vertex_set != expected_vertex_set:
+            raise RuntimeError(
+                "type2 port sheet must bridge the widened bottom-face diagonals of both owner boxes "
+                f"(object_id={modeled_spec.object_id}, label={sheet_label}, "
+                f"actual_vertices={sorted(actual_vertex_set)}, expected_vertices={sorted(expected_vertex_set)})"
+            )
+
+
 def export_type2_step_artifacts(
     *,
     toml_path: Path = SOURCE_TOML_PATH,
@@ -199,6 +589,8 @@ def export_type2_step_artifacts(
         modeled_objects=modeled_entries,
     )
     write_type2_step_ledger(ledger_path=ledger_path, ledger=ledger)
+    _require_single_coil_expected_body_contract(ledger, spec=spec, seed=seed)
+    _require_port_sheet_geometry_contract(ledger=ledger, toml_path=toml_path, seed=seed)
     return ledger
 
 

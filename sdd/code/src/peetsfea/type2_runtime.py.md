@@ -1,7 +1,7 @@
 ---
 title: type2_runtime.py
 created: 2026-04-18 @ 23:24
-updated: 2026-04-18 @ 23:24
+updated: 2026-04-19 @ 00:12
 tags:
   - runtime
   - type2
@@ -21,7 +21,7 @@ tags:
 
 ## 역할
 - active type2 operator surface가 공유하는 process-pool orchestration helper다.
-- sample-side STEP export와 build-side AEDT replay를 분리된 함수로 제공한다.
+- build-side AEDT replay process-pool helper를 제공한다.
 - entry layer의 fail-fast preflight를 한 곳에 고정한다.
 
 ## 입력 / 출력
@@ -34,7 +34,6 @@ tags:
 
 ## Canonical state
 - worker input canonical unit은 `PreparedType2Build`다.
-- sample-side helper는 sampled TOML path에서 STEP export target path를 읽는다.
 - build-side helper는 existing `step_ledger_path`를 읽어 AEDT output path를 계산하지 않고 그대로 사용한다.
 
 ## Invariants / fail-fast
@@ -43,7 +42,7 @@ tags:
 - custom exporter/runner injection이 들어오면 single-process deterministic path를 사용한다.
 
 ## 직접 의존
-- `entry.generate_type2_step`
+- `peetsfea.type2_step_export`
 - `peetsfea.type2_sampled`
 - `peetsfea.backend.pyaedt.type2_step_setup_ready`
 
@@ -56,5 +55,5 @@ tags:
 - [[sdd/code/tests/type2/test_build_type2_entry.py]]
 
 ## 변경 시 주의점
-- STEP worker와 AEDT worker를 다시 한 함수에 묶어 per-design mixed stage로 되돌리지 않는다.
+- build replay는 pre-generated STEP ledger만 소비해야 한다.
 - preflight와 actual runner payload가 서로 다른 path contract를 가지지 않게 유지한다.

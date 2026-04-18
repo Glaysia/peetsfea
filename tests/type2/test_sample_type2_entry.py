@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
+import subprocess
 import tomllib
 from typing import cast
 
+import pytest
+
 from entry.sample import sample_type2
+from peetsfea.type2_sampled import manifest_entry_for_sample_index
 
 
 def _source_type2_toml_text() -> str:
@@ -149,7 +154,20 @@ def _write_source_type2_toml(tmp_path: Path) -> Path:
     return path
 
 
-def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(tmp_path: Path) -> None:
+def _current_head_hash4() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()[:4]
+
+
+def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     source_toml_path = _write_source_type2_toml(tmp_path)
     output_dir = tmp_path / "run" / "sampled" / "type2"
     manifest_path = output_dir / "manifest.json"
@@ -171,10 +189,10 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(tm
         seed_first=4,
         seed_n=3,
         sampler_n=2,
-        step_builder_n=2,
         aedt_builder_n=6,
         exporter=_exporter,
     )
+    captured = capsys.readouterr()
 
     assert json.loads(manifest_path.read_text(encoding="utf-8")) == document
     assert document["config"] == {
@@ -182,10 +200,17 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(tm
         "seed_first": 4,
         "seed_n": 3,
         "sampler_n": 2,
-        "step_builder_n": 2,
         "aedt_builder_n": 6,
     }
+    assert "[sample] stage=sample+step" in captured.out
+    assert "[sample] progress 1/3" in captured.out
+    assert "[sample] progress 3/3" in captured.out
+    assert "[sample] stage=manifest write" in captured.out
+    assert "[sample] done" in captured.out
+    assert "elapsed_s=" in captured.out
     assert [entry["seed"] for entry in document["entries"]] == [4, 5, 6]
+    assert [entry["sample_index"] for entry in document["entries"]] == [0, 1, 2]
+    assert [entry["retry_number"] for entry in document["entries"]] == [0, 0, 0]
     assert len(exporter_calls) == 3
 
     sampled_owner_paths = [
@@ -196,6 +221,13 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(tm
         "modeled_objects.tx_rect_void_coil.margin_ratio",
     ]
     first_entry = document["entries"][0]
+    head_hash4 = _current_head_hash4()
+    generated_hash4 = hashlib.blake2b(
+        Path(first_entry["sampled_toml_path"]).read_bytes(),
+        digest_size=2,
+    ).hexdigest()
+    assert first_entry["design_id"] == f"s000000_{generated_hash4}_{head_hash4}_0"
+    assert Path(first_entry["design_dir"]).name == first_entry["design_id"]
     assert first_entry["sampled_owner_paths"] == sampled_owner_paths
     assert Path(first_entry["sampled_toml_path"]).is_file()
     assert Path(first_entry["scene_step_path"]).is_file()
@@ -206,8 +238,11 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(tm
     sampled_metadata = sampled_payload["sampled"]
     assert sampled_metadata["source_toml_path"] == str(source_toml_path.resolve(strict=False))
     assert sampled_metadata["seed"] == 4
-    assert sampled_metadata["design_id"] == first_entry["design_id"]
+    assert sampled_metadata["sample_index"] == 0
+    assert sampled_metadata["head_hash4"] == head_hash4
+    assert sampled_metadata["retry_number"] == 0
     assert sampled_metadata["sampled_owner_paths"] == sampled_owner_paths
+    assert "design_id" not in sampled_metadata
 
     modeled_object = sampled_payload["modeled_objects"][0]
     assert modeled_object["outer_x_mm"]["range"][3] == 1
@@ -217,3 +252,34 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(tm
     assert modeled_object["margin_ratio"]["range"][3] == 1
     assert modeled_object["layer_gap_mm"]["range"] == [False, 2.0, 2.0, 1]
     assert "modeled_objects.tx_rect_void_coil.layer_gap_mm" not in sampled_metadata["sampled_owner_paths"]
+
+    resolved_entry = manifest_entry_for_sample_index(manifest_path, sample_index=0)
+    assert resolved_entry["design_id"] == first_entry["design_id"]
+
+
+def test_manifest_entry_for_sample_index_rejects_out_of_range(tmp_path: Path) -> None:
+    source_toml_path = _write_source_type2_toml(tmp_path)
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+
+    def _exporter(**kwargs: object) -> object:
+        output_dir_arg = cast(Path, kwargs["output_dir"])
+        ledger_path = cast(Path, kwargs["ledger_path"])
+        scene_step_path = output_dir_arg / "type2_scene.step"
+        scene_step_path.write_text("STEP", encoding="utf-8")
+        ledger_path.write_text(json.dumps({"scene_step_path": str(scene_step_path)}, indent=2), encoding="utf-8")
+        return {"scene_step_path": str(scene_step_path)}
+
+    sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=10,
+        seed_n=2,
+        sampler_n=1,
+        aedt_builder_n=6,
+        exporter=_exporter,
+    )
+
+    with pytest.raises(IndexError, match=r"sample_index is out of range"):
+        manifest_entry_for_sample_index(manifest_path, sample_index=2)

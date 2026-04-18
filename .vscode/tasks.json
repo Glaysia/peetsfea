@@ -2,53 +2,21 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "install-dev-editable",
+      "label": "clean-run",
       "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/python -m uv pip install -e \".[dev]\"",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
+      "command": "mkdir -p ${workspaceFolder}/run && find ${workspaceFolder}/run -mindepth 1 -maxdepth 1 -exec rm -rf {} +",
       "problemMatcher": []
     },
     {
-      "label": "clean-run-aedt",
+      "label": "run-type2-sample",
       "type": "shell",
-      "command": "mkdir -p ${workspaceFolder}/run/aedt && find ${workspaceFolder}/run/aedt -mindepth 1 -maxdepth 1 -exec rm -rf {} +",
-      "problemMatcher": []
-    },
-    {
-      "label": "prepare-build-debug",
-      "dependsOrder": "sequence",
-      "dependsOn": [
-        "install-dev-editable",
-        "clean-run-aedt"
-      ],
-      "problemMatcher": []
-    },
-    {
-      "label": "run-type2-import-debug",
-      "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/python ../entry/import_type2_step.py",
+      "command": "${workspaceFolder}/.venv/bin/python ../entry/sample.py",
       "options": {
         "cwd": "${workspaceFolder}/run"
       },
       "dependsOrder": "sequence",
       "dependsOn": [
-        "install-dev-editable",
-        "clean-run-aedt"
-      ],
-      "problemMatcher": []
-    },
-    {
-      "label": "legacy-type1-run-sample-debug",
-      "type": "shell",
-      "command": "mkdir -p ${workspaceFolder}/run/toml && find ${workspaceFolder}/run/toml -mindepth 1 -maxdepth 1 -exec rm -rf {} + && ${workspaceFolder}/.venv/bin/python ../entry/legacy/type1/sample.py",
-      "options": {
-        "cwd": "${workspaceFolder}/run"
-      },
-      "dependsOrder": "sequence",
-      "dependsOn": [
-        "install-dev-editable"
+        "clean-run"
       ],
       "problemMatcher": []
     }

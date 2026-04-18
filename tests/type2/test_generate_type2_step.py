@@ -9,8 +9,6 @@ from typing import cast
 import build123d as bd
 import pytest
 
-from entry.generate_type2_step import export_type2_step_artifacts
-from entry.generate_type2_step import load_type2_step_spec
 from peetsfea.tx_rect_void import BoxSpec
 from peetsfea.tx_rect_void import SingleCoilProfile
 from peetsfea.tx_rect_void import build_tx_rect_void_box_specs
@@ -19,6 +17,8 @@ from peetsfea.tx_rect_void import load_tx_rect_void_spec
 from peetsfea.tx_rect_void import modeled_body_bounds_from_boxes
 from peetsfea.tx_rect_void import profile_for_modeled_role
 from peetsfea.tx_rect_void import realize_tx_rect_void_spec
+from peetsfea.type2_step_export import export_type2_step_artifacts
+from peetsfea.type2_step_spec import load_type2_step_spec
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
 from peetsfea.type2_step_spec import resolve_modeled_underlay_gap_mm
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count

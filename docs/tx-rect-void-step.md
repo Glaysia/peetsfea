@@ -103,10 +103,8 @@ tags:
   `run/sampled/type2/<design_id>/sampled.toml`, `type2_scene.step`,
   `type2_step_ledger.json`을 만들고,
   `entry/build.py`가 같은 design directory 아래에 imported ledger와 `.aedt`를 기록한다.
-- `entry/generate_type2_step.py`는 build helper로서 sampled TOML을 받아
+- `peetsfea.type2_step_export`는 build helper로서 sampled TOML을 받아
   per-design directory 아래에 scene STEP과 metadata ledger를 기록한다.
-- `entry/export_tx_rect_void_step.py`는 같은 type2 TOML에서 modeled
-  `tx_single_coil`만 직접 export하는 얇은 CLI다.
 - metadata JSON은 realized parameters, bounds, debug `boxes`, single-entry
   `modeled_objects`, 그리고 expected exported body 정보를 담는다.
 - type2 경로는 role별 placement owner를 가진다.

@@ -5,8 +5,8 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import TypedDict
 
-from entry.generate_type2_step import export_type2_step_artifacts
 from peetsfea.backend.pyaedt.type2_step_setup_ready import Type2SetupReadyResult, setup_type2_step_ledger
+from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_sampled import PreparedType2Build, prepare_type2_build
 
 _Exporter = Callable[..., object]

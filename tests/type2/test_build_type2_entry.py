@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 from typing import cast
 
 import pytest
@@ -205,7 +206,6 @@ def test_build_type2_reads_aedt_builder_n_from_manifest(monkeypatch: pytest.Monk
         seed_first=4,
         seed_n=2,
         sampler_n=1,
-        step_builder_n=1,
         aedt_builder_n=6,
         exporter=_exporter,
     )
@@ -239,7 +239,6 @@ def test_build_type2_creates_aedt_without_step_export(tmp_path: Path) -> None:
         seed_first=8,
         seed_n=1,
         sampler_n=1,
-        step_builder_n=1,
         aedt_builder_n=2,
         exporter=_exporter,
     )
@@ -262,6 +261,7 @@ def test_build_type2_creates_aedt_without_step_export(tmp_path: Path) -> None:
 
     assert len(results) == 1
     assert len(runner_calls) == 1
+    assert re.fullmatch(r"s\d{6}_[0-9a-f]{4}_[0-9a-f]{4}_0", document["entries"][0]["design_id"]) is not None
     assert Path(document["entries"][0]["aedt_path"]).is_file()
     assert Path(document["entries"][0]["imported_ledger_path"]).is_file()
     assert runner_calls[0]["design_name"] == document["entries"][0]["design_id"]
@@ -285,7 +285,6 @@ def test_build_type2_fails_before_runner_when_step_ledger_is_missing(tmp_path: P
         seed_first=11,
         seed_n=1,
         sampler_n=1,
-        step_builder_n=1,
         aedt_builder_n=1,
         exporter=_exporter,
     )
@@ -319,7 +318,6 @@ def test_build_type2_rejects_missing_aedt_builder_n_config(tmp_path: Path) -> No
                     "seed_first": 0,
                     "seed_n": 1,
                     "sampler_n": 1,
-                    "step_builder_n": 1,
                 },
                 "entries": [],
             },

@@ -1,7 +1,7 @@
 ---
 title: Type2 STEP to EM Validate Pipeline
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-19 @ 01:05
 tags:
   - step-export
   - sdd
@@ -23,6 +23,7 @@ tags:
   - entry: [[sdd/code/entry/setup_type2_step.py]]
   - runtime: [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
 - notebook `hfss_sampled.ipynb`는 sampled/build output artifact를 읽는 thin manual consumer다.
+- notebook `view_step_files.ipynb`는 `VIEW_INDEX = -1`일 때 fixed example refresh path, `VIEW_INDEX >= 0`일 때 manifest `entries` order 기반 sampled STEP selection을 사용한다.
 
 ## Handoff
 - source authoring SSOT는 `examples/type2_sweep.toml`이다.
@@ -43,8 +44,9 @@ tags:
   - new underlay exact object/body names는 feature-local rule로 `<= 32` chars여야 한다.
 
 ## Runtime Flow
-1. sample 단계가 source TOML에서 frozen sampled TOML과 per-design manifest entry를 만든다.
-2. sample 단계가 같은 manifest entries를 다시 읽어 single scene STEP와 retained step ledger를 만든다.
+1. sample 단계가 source TOML에서 frozen sampled TOML과 single scene STEP/retained step ledger를 같은 worker path에서 만든다.
+2. sample 단계는 모든 sampled design이 끝난 뒤 manifest object를 기록한다.
+   - manifest `entries` order is the notebook sampled-index SSOT
 3. export-side underlay contract는 scene/export/import 계층이 소유한다.
    - TX는 `tx_region` full footprint + TX-only `underlay_gap_mm`
    - RX는 `rx_region_max` `-X` boundary anchor + full region footprint

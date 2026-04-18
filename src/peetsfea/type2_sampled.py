@@ -1,19 +1,24 @@
 from __future__ import annotations
 
 import copy
-from concurrent.futures import ProcessPoolExecutor
+from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import hashlib
 import json
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict, cast
 
 from peetsfea.spec.loader import TOMLTable, TOMLValue, load_toml_bytes
 from peetsfea.spec.toml_render import toml_dumps
+from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec, ModeledTxSingleCoilSpec, RangeSpec, Type2StepSpec, load_type2_step_spec
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
 SampledScalar = int | float
 DesignVariableEntry = tuple[str, str]
+_SampleExporter = Callable[..., object]
 _INTEGER_RANGE_FIELD_NAMES = ("turn_count", "layer_count", "underlay_repeat_count")
 _MODELED_RANGE_FIELD_NAMES = (
     "outer_x_mm",
@@ -37,13 +42,17 @@ _SAMPLED_METADATA_TABLE = "sampled"
 class Type2SampleMetadata(TypedDict):
     source_toml_path: str
     seed: int
-    design_id: str
+    sample_index: int
+    head_hash4: str
+    retry_number: int
     sampled_owner_paths: list[str]
 
 
 class Type2SampleManifestEntry(TypedDict):
     design_id: str
     seed: int
+    sample_index: int
+    retry_number: int
     source_toml_path: str
     sampled_toml_path: str
     design_dir: str
@@ -54,12 +63,14 @@ class Type2SampleManifestEntry(TypedDict):
     sampled_owner_paths: list[str]
 
 
+_SampleProgressReporter = Callable[[int, int, "Type2SampleManifestEntry"], None]
+
+
 class Type2SampleManifestConfig(TypedDict):
     source_toml_path: str
     seed_first: int
     seed_n: int
     sampler_n: int
-    step_builder_n: int
     aedt_builder_n: int
 
 
@@ -165,34 +176,56 @@ def sampled_owner_values(spec: Type2StepSpec, *, seed: int) -> tuple[tuple[str, 
     return tuple(sampled_values)
 
 
-def _normalize_design_id_digest(source_toml_bytes: bytes, *, seed: int, sampled_values: tuple[tuple[str, SampledScalar], ...]) -> str:
-    payload = json.dumps(
-        {
-            "seed": seed,
-            "source_toml_hash": hashlib.blake2b(source_toml_bytes, digest_size=8).hexdigest(),
-            "sampled_values": list(sampled_values),
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
+def _hash4_from_bytes(payload: bytes) -> str:
+    return hashlib.blake2b(payload, digest_size=2).hexdigest()
+
+
+def _current_head_hash4(*, repo_root: Path = REPO_ROOT) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
     )
-    return hashlib.blake2b(payload.encode("utf-8"), digest_size=5).hexdigest()
+    head_hash = result.stdout.strip()
+    if len(head_hash) < 4:
+        raise RuntimeError(f"git rev-parse HEAD returned too-short hash: {head_hash!r}")
+    return head_hash[:4]
 
 
-def build_type2_design_id(source_toml_bytes: bytes, *, seed: int, sampled_values: tuple[tuple[str, SampledScalar], ...]) -> str:
-    return f"s{seed}_{_normalize_design_id_digest(source_toml_bytes, seed=seed, sampled_values=sampled_values)}"
+def build_type2_design_id(
+    *,
+    sample_index: int,
+    generated_hash4: str,
+    head_hash4: str,
+    retry_number: int,
+) -> str:
+    if sample_index < 0:
+        raise ValueError("sample_index must be >= 0")
+    if retry_number < 0:
+        raise ValueError("retry_number must be >= 0")
+    if len(generated_hash4) != 4:
+        raise ValueError(f"generated_hash4 must be 4 characters: {generated_hash4}")
+    if len(head_hash4) != 4:
+        raise ValueError(f"head_hash4 must be 4 characters: {head_hash4}")
+    return f"s{sample_index:06d}_{generated_hash4}_{head_hash4}_{retry_number}"
 
 
 def _sampled_metadata(
     source_toml_path: Path,
     *,
     seed: int,
-    design_id: str,
+    sample_index: int,
+    head_hash4: str,
+    retry_number: int,
     sampled_owner_paths: tuple[str, ...],
 ) -> Type2SampleMetadata:
     return {
         "source_toml_path": str(source_toml_path.resolve(strict=False)),
         "seed": seed,
-        "design_id": design_id,
+        "sample_index": sample_index,
+        "head_hash4": head_hash4,
+        "retry_number": retry_number,
         "sampled_owner_paths": list(sampled_owner_paths),
     }
 
@@ -247,7 +280,9 @@ def _sampled_toml_table(
     *,
     source_toml_path: Path,
     seed: int,
-    design_id: str,
+    sample_index: int,
+    head_hash4: str,
+    retry_number: int,
     sampled_values: tuple[tuple[str, SampledScalar], ...],
 ) -> TOMLTable:
     sampled_spec = copy.deepcopy(raw_source_spec)
@@ -258,7 +293,9 @@ def _sampled_toml_table(
     sampled_metadata = _sampled_metadata(
         source_toml_path,
         seed=seed,
-        design_id=design_id,
+        sample_index=sample_index,
+        head_hash4=head_hash4,
+        retry_number=retry_number,
         sampled_owner_paths=sampled_owner_paths,
     )
     sampled_spec[_SAMPLED_METADATA_TABLE] = cast(TOMLValue, sampled_metadata)
@@ -293,6 +330,8 @@ def build_sample_manifest_entry(
     *,
     design_id: str,
     seed: int,
+    sample_index: int,
+    retry_number: int,
     source_toml_path: Path,
     design_dir: Path,
     sampled_owner_paths: tuple[str, ...],
@@ -300,6 +339,8 @@ def build_sample_manifest_entry(
     return {
         "design_id": design_id,
         "seed": seed,
+        "sample_index": sample_index,
+        "retry_number": retry_number,
         "source_toml_path": str(source_toml_path.resolve(strict=False)),
         "sampled_toml_path": str(_sampled_toml_path(design_dir)),
         "design_dir": str(design_dir),
@@ -317,15 +358,12 @@ def build_type2_sample_manifest_config(
     seed_first: int,
     seed_n: int,
     sampler_n: int,
-    step_builder_n: int,
     aedt_builder_n: int,
 ) -> Type2SampleManifestConfig:
     if seed_n < 1:
         raise ValueError("seed_n must be >= 1")
     if sampler_n < 1:
         raise ValueError("sampler_n must be >= 1")
-    if step_builder_n < 1:
-        raise ValueError("step_builder_n must be >= 1")
     if aedt_builder_n < 1:
         raise ValueError("aedt_builder_n must be >= 1")
     return {
@@ -333,7 +371,6 @@ def build_type2_sample_manifest_config(
         "seed_first": seed_first,
         "seed_n": seed_n,
         "sampler_n": sampler_n,
-        "step_builder_n": step_builder_n,
         "aedt_builder_n": aedt_builder_n,
     }
 
@@ -348,7 +385,6 @@ def build_type2_sample_manifest_document(
         "seed_first": config["seed_first"],
         "seed_n": config["seed_n"],
         "sampler_n": config["sampler_n"],
-        "step_builder_n": config["step_builder_n"],
         "aedt_builder_n": config["aedt_builder_n"],
     }
     entry_copies: list[Type2SampleManifestEntry] = []
@@ -357,6 +393,8 @@ def build_type2_sample_manifest_document(
             {
                 "design_id": entry["design_id"],
                 "seed": entry["seed"],
+                "sample_index": entry["sample_index"],
+                "retry_number": entry["retry_number"],
                 "source_toml_path": entry["source_toml_path"],
                 "sampled_toml_path": entry["sampled_toml_path"],
                 "design_dir": entry["design_dir"],
@@ -379,47 +417,88 @@ def _build_sample_manifest_entry_for_seed(
     output_dir: Path,
     source_spec: Type2StepSpec,
     raw_source_spec: TOMLTable,
-    raw_source_bytes: bytes,
     seed: int,
+    sample_index: int,
+    head_hash4: str,
+    retry_number: int,
 ) -> Type2SampleManifestEntry:
     sampled_values = sampled_owner_values(source_spec, seed=seed)
-    design_id = build_type2_design_id(raw_source_bytes, seed=seed, sampled_values=sampled_values)
-    design_dir = _design_dir(output_dir, design_id=design_id)
-    design_dir.mkdir(parents=True, exist_ok=True)
     sampled_table = _sampled_toml_table(
         raw_source_spec,
         source_spec,
         source_toml_path=source_toml_path,
         seed=seed,
-        design_id=design_id,
+        sample_index=sample_index,
+        head_hash4=head_hash4,
+        retry_number=retry_number,
         sampled_values=sampled_values,
     )
+    sampled_toml_text = toml_dumps(sampled_table)
+    generated_hash4 = _hash4_from_bytes(sampled_toml_text.encode("utf-8"))
+    design_id = build_type2_design_id(
+        sample_index=sample_index,
+        generated_hash4=generated_hash4,
+        head_hash4=head_hash4,
+        retry_number=retry_number,
+    )
+    design_dir = _design_dir(output_dir, design_id=design_id)
+    design_dir.mkdir(parents=True, exist_ok=True)
     sampled_toml_path = _sampled_toml_path(design_dir)
-    sampled_toml_path.write_text(toml_dumps(sampled_table), encoding="utf-8")
+    sampled_toml_path.write_text(sampled_toml_text, encoding="utf-8")
     return build_sample_manifest_entry(
         design_id=design_id,
         seed=seed,
+        sample_index=sample_index,
+        retry_number=retry_number,
         source_toml_path=source_toml_path,
         design_dir=design_dir,
         sampled_owner_paths=tuple(owner_path for owner_path, _ in sampled_values),
     )
 
 
-def _build_sample_manifest_entry_for_seed_task(task: tuple[str, str, int]) -> Type2SampleManifestEntry:
-    source_toml_path_text, output_dir_text, seed = task
+def _export_step_for_sample_entry(
+    entry: Type2SampleManifestEntry,
+    *,
+    exporter: _SampleExporter,
+) -> None:
+    exporter(
+        toml_path=Path(entry["sampled_toml_path"]),
+        output_dir=Path(entry["design_dir"]),
+        ledger_path=Path(entry["step_ledger_path"]),
+        seed=entry["seed"],
+    )
+
+
+def _build_sample_manifest_entry_for_seed_task(task: tuple[str, str, int, int, str, int]) -> Type2SampleManifestEntry:
+    source_toml_path_text, output_dir_text, seed, sample_index, head_hash4, retry_number = task
     source_toml_path = Path(source_toml_path_text)
     output_dir = Path(output_dir_text)
     source_spec = load_type2_step_spec(source_toml_path)
-    raw_source_spec, raw_source_bytes = load_toml_bytes(source_toml_path)
+    raw_source_spec, _raw_source_bytes = load_toml_bytes(source_toml_path)
     _require_not_sampled_source(raw_source_spec, context=str(source_toml_path))
-    return _build_sample_manifest_entry_for_seed(
+    entry = _build_sample_manifest_entry_for_seed(
         source_toml_path=source_toml_path,
         output_dir=output_dir,
         source_spec=source_spec,
         raw_source_spec=raw_source_spec,
-        raw_source_bytes=raw_source_bytes,
         seed=seed,
+        sample_index=sample_index,
+        head_hash4=head_hash4,
+        retry_number=retry_number,
     )
+    _export_step_for_sample_entry(entry, exporter=export_type2_step_artifacts)
+    return entry
+
+
+def _emit_sample_progress(
+    *,
+    report_progress: _SampleProgressReporter | None,
+    completed: int,
+    total: int,
+    entry: Type2SampleManifestEntry,
+) -> None:
+    if report_progress is not None:
+        report_progress(completed, total, entry)
 
 
 def generate_sample_manifest_entries(
@@ -429,6 +508,8 @@ def generate_sample_manifest_entries(
     seed_start: int,
     count: int,
     jobs: int = 1,
+    exporter: _SampleExporter = export_type2_step_artifacts,
+    report_progress: _SampleProgressReporter | None = None,
 ) -> list[Type2SampleManifestEntry]:
     if count < 1:
         raise ValueError("count must be >= 1")
@@ -436,24 +517,52 @@ def generate_sample_manifest_entries(
         raise ValueError("jobs must be >= 1")
     output_dir.mkdir(parents=True, exist_ok=True)
     seed_values = tuple(range(seed_start, seed_start + count))
-    if jobs == 1 or count == 1:
+    head_hash4 = _current_head_hash4()
+    retry_number = 0
+    if jobs == 1 or count == 1 or exporter is not export_type2_step_artifacts:
         source_spec = load_type2_step_spec(source_toml_path)
-        raw_source_spec, raw_source_bytes = load_toml_bytes(source_toml_path)
+        raw_source_spec, _raw_source_bytes = load_toml_bytes(source_toml_path)
         _require_not_sampled_source(raw_source_spec, context=str(source_toml_path))
-        return [
-            _build_sample_manifest_entry_for_seed(
+        entries: list[Type2SampleManifestEntry] = []
+        for sample_index, seed in enumerate(seed_values):
+            entry = _build_sample_manifest_entry_for_seed(
                 source_toml_path=source_toml_path,
                 output_dir=output_dir,
                 source_spec=source_spec,
                 raw_source_spec=raw_source_spec,
-                raw_source_bytes=raw_source_bytes,
                 seed=seed,
+                sample_index=sample_index,
+                head_hash4=head_hash4,
+                retry_number=retry_number,
             )
-            for seed in seed_values
-        ]
-    tasks = [(str(source_toml_path), str(output_dir), seed) for seed in seed_values]
+            _export_step_for_sample_entry(entry, exporter=exporter)
+            entries.append(entry)
+            _emit_sample_progress(
+                report_progress=report_progress,
+                completed=sample_index + 1,
+                total=count,
+                entry=entry,
+            )
+        return entries
+    tasks = [
+        (str(source_toml_path), str(output_dir), seed, sample_index, head_hash4, retry_number)
+        for sample_index, seed in enumerate(seed_values)
+    ]
+    entries_by_index: dict[int, Type2SampleManifestEntry] = {}
     with ProcessPoolExecutor(max_workers=jobs) as executor:
-        return list(executor.map(_build_sample_manifest_entry_for_seed_task, tasks))
+        future_by_index = {executor.submit(_build_sample_manifest_entry_for_seed_task, task): task[3] for task in tasks}
+        completed = 0
+        for future in as_completed(future_by_index):
+            entry = future.result()
+            completed += 1
+            entries_by_index[entry["sample_index"]] = entry
+            _emit_sample_progress(
+                report_progress=report_progress,
+                completed=completed,
+                total=count,
+                entry=entry,
+            )
+    return [entries_by_index[sample_index] for sample_index in range(count)]
 
 
 def write_type2_sample_manifest(*, document: Type2SampleManifestDocument, manifest_path: Path) -> None:
@@ -475,7 +584,6 @@ def _load_type2_sample_manifest_config(raw_config: object, *, manifest_path: Pat
         "seed_first",
         "seed_n",
         "sampler_n",
-        "step_builder_n",
         "aedt_builder_n",
     )
     for field_name in required_fields:
@@ -484,14 +592,11 @@ def _load_type2_sample_manifest_config(raw_config: object, *, manifest_path: Pat
     seed_first = _require_int(raw_config["seed_first"], context="config.seed_first")
     seed_n = _require_int(raw_config["seed_n"], context="config.seed_n")
     sampler_n = _require_int(raw_config["sampler_n"], context="config.sampler_n")
-    step_builder_n = _require_int(raw_config["step_builder_n"], context="config.step_builder_n")
     aedt_builder_n = _require_int(raw_config["aedt_builder_n"], context="config.aedt_builder_n")
     if seed_n < 1:
         raise ValueError("config.seed_n must be >= 1")
     if sampler_n < 1:
         raise ValueError("config.sampler_n must be >= 1")
-    if step_builder_n < 1:
-        raise ValueError("config.step_builder_n must be >= 1")
     if aedt_builder_n < 1:
         raise ValueError("config.aedt_builder_n must be >= 1")
     return {
@@ -499,7 +604,6 @@ def _load_type2_sample_manifest_config(raw_config: object, *, manifest_path: Pat
         "seed_first": seed_first,
         "seed_n": seed_n,
         "sampler_n": sampler_n,
-        "step_builder_n": step_builder_n,
         "aedt_builder_n": aedt_builder_n,
     }
 
@@ -514,6 +618,8 @@ def _load_type2_sample_manifest_entries(raw_entries: object) -> list[Type2Sample
         required_fields = (
             "design_id",
             "seed",
+            "sample_index",
+            "retry_number",
             "source_toml_path",
             "sampled_toml_path",
             "design_dir",
@@ -533,6 +639,8 @@ def _load_type2_sample_manifest_entries(raw_entries: object) -> list[Type2Sample
             {
                 "design_id": _require_non_empty_str(raw_entry["design_id"], context=f"entries[{index}].design_id"),
                 "seed": _require_int(raw_entry["seed"], context=f"entries[{index}].seed"),
+                "sample_index": _require_int(raw_entry["sample_index"], context=f"entries[{index}].sample_index"),
+                "retry_number": _require_int(raw_entry["retry_number"], context=f"entries[{index}].retry_number"),
                 "source_toml_path": _require_non_empty_str(
                     raw_entry["source_toml_path"], context=f"entries[{index}].source_toml_path"
                 ),
@@ -589,13 +697,25 @@ def load_type2_sample_metadata(sampled_toml_path: Path) -> Type2SampleMetadata:
     raw_metadata = raw_spec[_SAMPLED_METADATA_TABLE]
     if not isinstance(raw_metadata, dict):
         raise TypeError(f"{sampled_toml_path}:{_SAMPLED_METADATA_TABLE} must be a table/object")
-    required_fields = ("source_toml_path", "seed", "design_id", "sampled_owner_paths")
+    required_fields = ("source_toml_path", "seed", "sample_index", "head_hash4", "retry_number", "sampled_owner_paths")
     for field_name in required_fields:
         if field_name not in raw_metadata:
             raise ValueError(f"{sampled_toml_path}:{_SAMPLED_METADATA_TABLE} is missing required key {field_name!r}")
     raw_seed = raw_metadata["seed"]
     if isinstance(raw_seed, bool) or not isinstance(raw_seed, int):
         raise TypeError(f"{sampled_toml_path}:{_SAMPLED_METADATA_TABLE}.seed must be int")
+    raw_sample_index = raw_metadata["sample_index"]
+    if isinstance(raw_sample_index, bool) or not isinstance(raw_sample_index, int):
+        raise TypeError(f"{sampled_toml_path}:{_SAMPLED_METADATA_TABLE}.sample_index must be int")
+    raw_retry_number = raw_metadata["retry_number"]
+    if isinstance(raw_retry_number, bool) or not isinstance(raw_retry_number, int):
+        raise TypeError(f"{sampled_toml_path}:{_SAMPLED_METADATA_TABLE}.retry_number must be int")
+    head_hash4 = _require_non_empty_str(
+        raw_metadata["head_hash4"],
+        context=f"{sampled_toml_path}:{_SAMPLED_METADATA_TABLE}.head_hash4",
+    )
+    if len(head_hash4) != 4:
+        raise ValueError(f"{sampled_toml_path}:{_SAMPLED_METADATA_TABLE}.head_hash4 must be 4 chars")
     raw_sampled_owner_paths = raw_metadata["sampled_owner_paths"]
     if not isinstance(raw_sampled_owner_paths, list):
         raise TypeError(f"{sampled_toml_path}:{_SAMPLED_METADATA_TABLE}.sampled_owner_paths must be a list")
@@ -615,11 +735,46 @@ def load_type2_sample_metadata(sampled_toml_path: Path) -> Type2SampleMetadata:
             raw_metadata["source_toml_path"], context=f"{sampled_toml_path}:{_SAMPLED_METADATA_TABLE}.source_toml_path"
         ),
         "seed": raw_seed,
-        "design_id": _require_non_empty_str(
-            raw_metadata["design_id"], context=f"{sampled_toml_path}:{_SAMPLED_METADATA_TABLE}.design_id"
-        ),
+        "sample_index": raw_sample_index,
+        "head_hash4": head_hash4,
+        "retry_number": raw_retry_number,
         "sampled_owner_paths": sampled_owner_paths,
     }
+
+
+def _design_id_from_sampled_toml_bytes(
+    metadata: Type2SampleMetadata,
+    *,
+    sampled_toml_bytes: bytes,
+) -> str:
+    return build_type2_design_id(
+        sample_index=metadata["sample_index"],
+        generated_hash4=_hash4_from_bytes(sampled_toml_bytes),
+        head_hash4=metadata["head_hash4"],
+        retry_number=metadata["retry_number"],
+    )
+
+
+def manifest_entry_for_sample_index(
+    manifest_path: Path,
+    *,
+    sample_index: int,
+) -> Type2SampleManifestEntry:
+    if sample_index < 0:
+        raise ValueError(f"sample_index must be >= 0 (actual={sample_index})")
+    document = load_type2_sample_manifest(manifest_path)
+    entries = document["entries"]
+    if sample_index >= len(entries):
+        raise IndexError(
+            f"type2 sample manifest sample_index is out of range (index={sample_index}, count={len(entries)})"
+        )
+    entry = entries[sample_index]
+    if entry["sample_index"] != sample_index:
+        raise ValueError(
+            "type2 sample manifest entry order must match sample_index "
+            f"(index={sample_index}, entry_sample_index={entry['sample_index']})"
+        )
+    return entry
 
 
 def _range_scalar_from_sampled_toml(spec: Type2StepSpec, owner_path: str) -> SampledScalar:
@@ -659,10 +814,13 @@ def _design_variable_expression(owner_path: str, value: SampledScalar) -> str:
 
 def _manifest_entry_from_sampled_toml(metadata: Type2SampleMetadata, sampled_toml_path: Path) -> Type2SampleManifestEntry:
     design_dir = sampled_toml_path.parent.resolve(strict=False)
-    design_id = metadata["design_id"]
+    sampled_toml_bytes = sampled_toml_path.read_bytes()
+    design_id = _design_id_from_sampled_toml_bytes(metadata, sampled_toml_bytes=sampled_toml_bytes)
     return {
         "design_id": design_id,
         "seed": metadata["seed"],
+        "sample_index": metadata["sample_index"],
+        "retry_number": metadata["retry_number"],
         "source_toml_path": metadata["source_toml_path"],
         "sampled_toml_path": str(sampled_toml_path.resolve(strict=False)),
         "design_dir": str(design_dir),
@@ -744,14 +902,15 @@ __all__ = [
     "Type2SampleManifestDocument",
     "Type2SampleManifestEntry",
     "Type2SampleMetadata",
+    "build_type2_design_id",
     "build_type2_sample_manifest_config",
     "build_type2_sample_manifest_document",
     "build_sample_manifest_entry",
-    "build_type2_design_id",
     "exportable_sampled_owner_paths",
     "generate_sample_manifest_entries",
     "load_type2_sample_manifest",
     "load_type2_sample_metadata",
+    "manifest_entry_for_sample_index",
     "prepare_type2_build",
     "prepared_builds_from_manifest",
     "sampled_owner_values",

@@ -18,12 +18,13 @@ tags:
   1. `entry/sample.py`
   2. `entry/build.py`
   3. optional artifact inspection via `notebooks/hfss_sampled.ipynb`
+  4. optional STEP inspection via `notebooks/view_step_files.ipynb` using `VIEW_INDEX = -1` for the fixed example or manifest entry order for sampled outputs
 
 ## Internal Helpers
-- `entry/generate_type2_step.py` remains the STEP export helper.
-- `entry/import_type2_step.py` remains the import-only helper.
-- `entry/setup_type2_step.py` remains the setup-ready helper.
-- These helpers are lower-level runtime surfaces; the active operator flow is sampled TOML first, build second.
+- `peetsfea.type2_step_export` remains the STEP export helper.
+- `peetsfea.backend.pyaedt.type2_step_import_pipeline` remains the import-only helper.
+- `peetsfea.backend.pyaedt.type2_step_setup_ready` remains the setup-ready helper.
+- These helpers are lower-level runtime surfaces; the active operator flow is sampled TOML first, STEP export second, AEDT build last.
 
 ## Legacy Path
 - `type1` is frozen legacy.
