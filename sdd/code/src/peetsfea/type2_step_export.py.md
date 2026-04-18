@@ -21,7 +21,7 @@ tags:
 ## 역할
 - type2 scene export orchestration public API를 제공하고 entry CLI가 호출하는 thin library surface를 담당한다.
 - full-scene export에서는 modeled single-coil scene children의 explicit body taxonomy를 그대로 내보내되, port sheet는 STEP child로 내보내지 않고 metadata-only ownership으로 유지한다.
-- 0.2.23 document contract에서는 scene-layer가 추가한 explicit underlay tri-layer bodies를 TX/RX expected body set 뒤에 deterministic order로 내보낸다.
+- 0.2.23 document contract에서는 scene-layer가 추가한 explicit RX underlay tri-layer bodies와 optional TX wall stack bodies를 deterministic order로 내보낸다. TX floor-parallel underlay bodies는 expected body set에 포함하지 않는다.
 - export 시점 parsed `outputs`를 top-level step ledger retained handoff로 직렬화한다.
 
 ## 입력 / 출력
@@ -36,8 +36,7 @@ tags:
 - role-aware expected body contract is underlay-aware:
   - single-layer TX base: `tx_pcb_l0`, `tx_copper_l0`
   - multilayer TX base: `tx_pcb_l{n}` + `tx_copper_stack`
-  - TX underlay extension: append collapsed effective trio `tx_underlay_ferrite_u0`, `tx_underlay_pet_psa_u0`, `tx_underlay_air_u0`
-  - TX wall extension: append collapsed effective trio `tx_wall_ferrite_u0`, `tx_wall_pet_psa_u0`, `tx_wall_air_u0` after the floor-underlay trio
+  - TX wall extension: append collapsed effective trio `tx_wall_ferrite_u0`, `tx_wall_pet_psa_u0`, `tx_wall_air_u0`
   - RX base: `rx_pcb_l0`, `rx_copper_l0`
   - RX underlay extension: append collapsed effective trio `under_rx_ferrite_u0`, `under_rx_pet_psa_u0`, `under_rx_air_u0`
 - `underlay_repeat_count` affects exported underlay thickness, not underlay body multiplicity.
@@ -50,7 +49,7 @@ tags:
 - `--ledger` replay를 위해 top-level `outputs` 직렬화는 export 시점 TOML contract를 lossless로 유지해야 한다.
 - entry CLI는 내부 helper에 직접 접근하지 않고 이 facade를 통해서만 export한다.
 - exact-name body sets must not resurrect `tx_port_sheet` / `rx_port_sheet` as STEP children.
-- TX/RX underlay bodies are explicit solids, not spacing-only gaps and not non-model members.
+- RX underlay bodies와 TX wall bodies are explicit solids, not spacing-only gaps and not non-model members.
 - top-level scene children validation must stay body-taxonomy aware: each modeled child is one deterministic solid body with no mixed/multi-geometry fallback.
 - direct modeled export must not leak single-square-owned or terminal-anchor-span port-sheet geometry from lower layers.
 - direct modeled export must keep the same metadata-owned two-stub bridge geometry as full-scene export.

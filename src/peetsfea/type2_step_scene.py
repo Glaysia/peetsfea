@@ -824,58 +824,6 @@ def _resolve_tx_underlay_placement_descriptor(
     )
 
 
-def _build_tx_underlay_scene_shapes(
-    descriptor: _TxUnderlayPlacementDescriptor,
-) -> tuple[bd.Shape, ...]:
-    ferrite_thickness_mm = _effective_underlay_layer_thickness_mm(
-        repeat_count=descriptor.repeat_count,
-        layer_thickness_mm=_UNDERLAY_FERRITE_THICKNESS_MM,
-        context="type2 tx underlay ferrite",
-    )
-    pet_thickness_mm = _effective_underlay_layer_thickness_mm(
-        repeat_count=descriptor.repeat_count,
-        layer_thickness_mm=_UNDERLAY_PET_PSA_THICKNESS_MM,
-        context="type2 tx underlay pet_psa",
-    )
-    air_thickness_mm = _effective_underlay_layer_thickness_mm(
-        repeat_count=descriptor.repeat_count,
-        layer_thickness_mm=_UNDERLAY_AIR_THICKNESS_MM,
-        context="type2 tx underlay air",
-    )
-    ferrite_origin_z = descriptor.floor_top_z - ferrite_thickness_mm
-    pet_origin_z = ferrite_origin_z - pet_thickness_mm
-    air_origin_z = pet_origin_z - air_thickness_mm
-    return (
-        _build_labeled_solid_box(
-            label="tx_underlay_ferrite_u0",
-            origin_xyz=(descriptor.floor_origin_x, descriptor.floor_origin_y, ferrite_origin_z),
-            size_xyz=(
-                descriptor.floor_size_x,
-                descriptor.floor_size_y,
-                ferrite_thickness_mm,
-            ),
-        ),
-        _build_labeled_solid_box(
-            label="tx_underlay_pet_psa_u0",
-            origin_xyz=(descriptor.floor_origin_x, descriptor.floor_origin_y, pet_origin_z),
-            size_xyz=(
-                descriptor.floor_size_x,
-                descriptor.floor_size_y,
-                pet_thickness_mm,
-            ),
-        ),
-        _build_labeled_solid_box(
-            label="tx_underlay_air_u0",
-            origin_xyz=(descriptor.floor_origin_x, descriptor.floor_origin_y, air_origin_z),
-            size_xyz=(
-                descriptor.floor_size_x,
-                descriptor.floor_size_y,
-                air_thickness_mm,
-            ),
-        ),
-    )
-
-
 def _build_tx_wall_parallel_scene_shapes(
     descriptor: _TxUnderlayPlacementDescriptor,
 ) -> tuple[bd.Shape, ...]:
@@ -1061,18 +1009,15 @@ def build_modeled_single_coil_scene_data(
                 if underlay_repeat_count > 0
                 else None
             )
-            floor_underlay_scene_children = (
-                _build_tx_underlay_scene_shapes(tx_underlay_descriptor)
-                if tx_underlay_descriptor is not None
-                else ()
-            )
+            # TX floor-parallel underlay is intentionally omitted from exported scene bodies.
+            # The placement descriptor still owns the wall-stack envelope below the coil.
             wall_underlay_scene_children = (
                 _build_tx_wall_parallel_scene_shapes(tx_underlay_descriptor)
                 if tx_underlay_descriptor is not None
                 and resolve_modeled_wall_parallel_stack_present(spec, seed=seed)
                 else ()
             )
-            underlay_scene_children = floor_underlay_scene_children + wall_underlay_scene_children
+            underlay_scene_children = wall_underlay_scene_children
         else:
             underlay_scene_children = (
                 _build_rx_underlay_scene_shapes(

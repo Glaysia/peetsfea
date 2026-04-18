@@ -20,9 +20,9 @@ tags:
 ## 역할
 - non-model build123d shapes, single-coil placement offsets, final scene body assembly를 담당한다.
 - modeled canonical coordinates/terminal metadata를 geometry에서 직접 계산해 export layer로 전달한다.
-- single-coil scene assembly가 PCB/copper STEP child set과 optional TX/RX underlay tri-layer STEP child set을 소유하고, port sheet는 STEP body로 내보내지 않고 metadata vertices로만 export한다.
+- single-coil scene assembly가 PCB/copper STEP child set과 optional RX underlay tri-layer STEP child set, optional TX wall-parallel stack STEP child set을 소유하고, TX floor-parallel underlay는 더 이상 STEP body로 내보내지 않는다. port sheet는 STEP body로 내보내지 않고 metadata vertices로만 export한다.
 - upstream single-coil scene이 port sheet child를 제공하더라도, 이 모듈은 그것을 final STEP child set에서 제외하고 stub-to-stub bridging rule의 canonical vertices만 metadata로 남긴다.
-- 0.2.23 document contract에서는 `underlay_repeat_count`가 non-zero인 TX/RX modeled object에 대해 explicit ferrite / PET_PSA / air slabs를 scene layer에서만 추가한다. 이 underlay는 `tx_rect_void` core geometry decomposition이 아니라 type2 scene placement/body taxonomy의 책임이다.
+- 0.2.23 document contract에서는 `underlay_repeat_count`가 non-zero인 RX modeled object에 대해 explicit ferrite / PET_PSA / air slabs를 scene layer에서 추가한다. TX는 floor-parallel underlay slab를 scene body로 내보내지 않고, optional wall-parallel stack만 scene layer에서 추가한다. 이 underlay/wall stack taxonomy는 `tx_rect_void` core geometry decomposition이 아니라 type2 scene placement/body taxonomy의 책임이다.
 
 ## 입력 / 출력
 - 입력: parsed type2 specs + owner region specs + seed
@@ -32,19 +32,17 @@ tags:
 - canonical scene geometry는 single `type2_scene.step` body set이다.
 - modeled placement truth는 owner region canonical coordinates에서 derive된 export-time absolute placement다.
 - `tx_single_coil` canonical placement는 `tx_region.min_x` touch + centered Y + owner max-Z touch다.
-- modeled body set에는 PCB/copper와 optional TX/RX underlay slabs만 포함된다.
+- modeled body set에는 PCB/copper, optional RX underlay slabs, optional TX wall-parallel stack만 포함된다.
 - terminal metadata는 start/end plane points뿐 아니라 canonical `port_sheet_vertices_xyz`도 포함해 downstream HFSS sheet reconstruction source가 된다.
 - current type2 single-coil scene does not export port-sheet bodies into `type2_scene.step`; TX/RX sheets exist only as metadata-driven reconstruction targets.
 - underlay body owner는 one-site stack이며, per-layer PCB/copper body set 아래에 layer-by-layer로 복제되지 않는다.
-- TX underlay footprint canonical source는 `tx_region` full `XY` bounds다.
+- TX floor-underlay footprint는 placement descriptor 계산에만 남고 exported scene body source로는 쓰지 않는다.
 - RX underlay footprint canonical source는 `rx_region_max` full `YZ` bounds다.
-- TX underlay unit order는 `MULL12060ferrite` 0.20 mm -> `PET_PSA` 0.15 mm -> explicit `vacuum` air body 0.02 mm이며, `u0`가 TX에 가장 가까운 첫 unit이다.
-- `underlay_repeat_count`는 repeated exported unit count가 아니라 ferrite/PET/air effective thickness multiplier다.
-- TX underlay exact names는 repeated `u{n}` expansion이 아니라 collapsed effective trio `tx_underlay_ferrite_u0`, `tx_underlay_pet_psa_u0`, `tx_underlay_air_u0`만 append된다.
+- `underlay_repeat_count`는 repeated exported unit count가 아니라 RX underlay / TX wall stack effective thickness multiplier다.
 - TX wall-parallel exact names도 collapsed effective trio `tx_wall_ferrite_u0`, `tx_wall_pet_psa_u0`, `tx_wall_air_u0`만 append되며, `u0`는 wall-adjacent effective unit이다.
 - TX wall-parallel stack은 `tx_region.min_x` wall에 붙고 `+X` 방향으로 자란다.
 - TX wall-parallel unit physical order는 `wall -> coil = ferrite -> PET_PSA -> air`다.
-- TX wall-parallel footprint source는 `tx_region.min_x .. modeled_max_x` wall-side span + `tx_region` full Y span + `tx_region.min_z .. floor_underlay_min_z` remaining Z span이다.
+- TX wall-parallel footprint source는 `tx_region.min_x .. modeled_max_x` wall-side span + `tx_region` full Y span + `tx_region.min_z .. virtual_floor_underlay_min_z` remaining Z span이다.
 - RX underlay exact names는 collapsed effective trio `under_rx_ferrite_u0`, `under_rx_pet_psa_u0`, `under_rx_air_u0` order로 append된다.
 - RX underlay는 `rx_region_max`의 `-X` boundary에 anchor하고, coil-facing material은 ferrite다. 따라서 physical `-X -> +X` order는 `air -> PET_PSA -> ferrite`다.
 - new underlay exact object/body names는 feature-local rule로 `<= 32` chars여야 한다.
@@ -59,7 +57,7 @@ tags:
 - TX exported modeled bbox minimum-X는 `tx_region.min_x`에 닿아야 하고 centered-X로 drift하면 안 된다.
 - modeled scene child body names must be unique
 - TX/RX `underlay_repeat_count` resolved value는 `{0, 2, 4, 6, 8}` contract를 따른다.
-- TX underlay first ferrite top face는 modeled object canonical minimum-Z plane보다 `underlay_gap_mm`만큼 아래에 와야 하며, exported bodies are one effective tri-layer whose per-material thickness is multiplied by `underlay_repeat_count`.
+- TX floor-parallel underlay exact names는 더 이상 exported scene labels에 나타나면 안 된다.
 - TX wall-parallel stack은 XY underlay placement descriptor가 계산한 floor-underlay minimum-Z 위 공간을 침범하면 안 된다.
 - TX wall-parallel stack은 `repeat_count * 0.37 mm` X thickness가 wall-side span `tx_region.min_x .. modeled_max_x` 안에 들어가야 하며, remaining height도 양수여야 한다.
 - RX underlay first exported unit must start on the owner `-X` boundary and consume owner thickness toward `+X` without changing RX coil max-X placement.

@@ -42,7 +42,7 @@ tags:
 - TX-only `wall_parallel_stack_present` example contract도 fixed/sweep companion pair에서 각각 fixed `1` / canonical `[true, 0, 1, 2]`를 유지해야 한다.
 - both example paths must also parse the full retained legacy-type1 `outputs` contract.
 - active example baseline regression은 global Z rebase 결과를 직접 검증해야 한다. `tx_region.bottom == 0`, environment/rx region은 같은 relative spacing을 유지한 채 같이 내려가야 한다.
-- export runtime regression은 active example 그대로를 사용하고, copper body label expectation은 realized layer count에 맞춰 결정한다. TX underlay label expectation은 resolved `underlay_repeat_count`에 맞춰 결정한다.
+- export runtime regression은 active example 그대로를 사용하고, copper body label expectation은 realized layer count에 맞춰 결정한다. TX floor-underlay labels는 resolved `underlay_repeat_count`와 무관하게 scene body expectation에 포함되지 않는다.
 - duplicate object id는 즉시 실패해야 한다.
 - missing `outputs`, unsupported `outputs` key, empty output-variable list, duplicate output-variable name, invalid output-variable name은 즉시 실패해야 한다.
 - unsupported modeled role은 즉시 실패해야 한다.
@@ -55,11 +55,11 @@ tags:
 - generated `type2_scene.step`의 modeled PCB/copper body pair는 final exported solids 기준으로 shared volume이 없어야 한다.
 - single-layer scene regression must assert scene labels do not include `tx_port_sheet` or `rx_port_sheet`; STEP exports only PCB/copper bodies.
 - next underlay contract regression must assert:
-  - `underlay_repeat_count = 0`이면 underlay labels가 없다
-  - `underlay_repeat_count = 2`이면 TX/RX expected body names 뒤에 collapsed effective `u0` tri-layer labels만 append된다
-  - `underlay_repeat_count = 8`이면 body count는 늘지 않고 각 ferrite/PET/air thickness만 `8x`로 커진다
-- TX/RX underlay body semantic order is geometry contract: each effective family must emit `ferrite -> pet_psa -> air`, and the explicit `air` body must be modeled as exported `vacuum`, not spacing-only omission.
-- TX underlay placement regression should assert `tx_region` full footprint + TX-only `underlay_gap_mm`.
+  - TX `underlay_repeat_count`는 floor-parallel `tx_underlay_*` labels를 다시 만들지 않는다
+  - RX `underlay_repeat_count = 0`이면 underlay labels가 없다
+  - RX `underlay_repeat_count = 2`이면 expected body names 뒤에 collapsed effective `u0` tri-layer labels만 append된다
+  - RX `underlay_repeat_count = 8`이면 body count는 늘지 않고 각 ferrite/PET/air thickness만 `8x`로 커진다
+- RX underlay body semantic order is geometry contract: each effective family must emit `ferrite -> pet_psa -> air`, and the explicit `air` body must be modeled as exported `vacuum`, not spacing-only omission.
 - TX wall-stack placement regression should assert `tx_region.min_x` wall contact + `+X` growth + `tx_region` full Y span + remaining-space Z ownership.
 - RX underlay placement regression should assert `rx_region_max` full footprint + `-X` boundary anchor + coil-facing ferrite.
 - single-layer scene regression should still confirm the metadata-owned canonical port-sheet polygon stays on the shared terminal-stub bottom-face plane, contains exactly four unique vertices, and bridges the two widened terminal-stub bottom-square diagonals chosen by maximum perpendicular spread away from the inter-stub centerline.
@@ -84,4 +84,4 @@ tags:
 - type2 TOML field 이름을 바꾸면 fixture text와 assertion field path를 함께 갱신한다.
 - ledger shape를 바꾸면 이 테스트와 downstream import tests를 함께 갱신한다.
 - retained `outputs` contract를 바꾸면 example TOML, setup-ready tests, import-ledger tests를 함께 갱신한다.
-- TX/RX underlay exact-name order와 body count를 바꾸면 export/import test notes를 같이 갱신한다. `underlay_repeat_count`가 effective thickness multiplier인지 repeated body count인지 drift시키면 scene/import 계약이 동시에 깨진다.
+- RX underlay exact-name order와 body count, TX wall exact-name order를 바꾸면 export/import test notes를 같이 갱신한다. `underlay_repeat_count`가 effective thickness multiplier인지 repeated body count인지 drift시키면 scene/import 계약이 동시에 깨진다.

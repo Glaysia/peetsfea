@@ -150,16 +150,6 @@ def export_type2_tx_single_coil_artifact(
     )
 
 
-def _tx_underlay_expected_body_names(*, repeat_count: int) -> list[str]:
-    if repeat_count == 0:
-        return []
-    return [
-        "tx_underlay_ferrite_u0",
-        "tx_underlay_pet_psa_u0",
-        "tx_underlay_air_u0",
-    ]
-
-
 def _tx_wall_expected_body_names(*, repeat_count: int) -> list[str]:
     if repeat_count == 0:
         return []
@@ -206,11 +196,6 @@ def _require_single_coil_expected_body_contract(
             else:
                 expected_names.append("tx_copper_stack")
             repeat_count = resolve_modeled_underlay_repeat_count(modeled_spec, seed=seed)
-            expected_names.extend(
-                _tx_underlay_expected_body_names(
-                    repeat_count=repeat_count
-                )
-            )
             if repeat_count > 0 and resolve_modeled_wall_parallel_stack_present(cast(ModeledTxSingleCoilSpec, modeled_spec), seed=seed):
                 expected_names.extend(_tx_wall_expected_body_names(repeat_count=repeat_count))
         elif role == "rx_single_coil":

@@ -506,16 +506,6 @@ def _single_layer_imported_name_batch() -> tuple[str, ...]:
     )
 
 
-def _tx_underlay_expected_names(*, repeat_count: int) -> list[str]:
-    if repeat_count == 0:
-        return []
-    return [
-        "tx_underlay_ferrite_u0",
-        "tx_underlay_pet_psa_u0",
-        "tx_underlay_air_u0",
-    ]
-
-
 def _tx_wall_expected_names(*, repeat_count: int) -> list[str]:
     if repeat_count == 0:
         return []
@@ -539,7 +529,6 @@ def _rx_underlay_expected_names(*, repeat_count: int) -> list[str]:
 def _single_layer_modeled_objects_with_role_aware_underlay(
     tmp_path: Path,
     *,
-    tx_repeat_count: int,
     tx_wall_repeat_count: int = 0,
     rx_repeat_count: int,
 ) -> list[dict[str, object]]:
@@ -549,7 +538,6 @@ def _single_layer_modeled_objects_with_role_aware_underlay(
             expected_names=[
                 "tx_pcb_l0",
                 "tx_copper_l0",
-                *_tx_underlay_expected_names(repeat_count=tx_repeat_count),
                 *_tx_wall_expected_names(repeat_count=tx_wall_repeat_count),
             ],
         ),
@@ -568,7 +556,6 @@ def _single_layer_modeled_objects_with_role_aware_underlay(
 
 def _single_layer_imported_name_batch_with_role_aware_underlay(
     *,
-    tx_repeat_count: int,
     tx_wall_repeat_count: int = 0,
     rx_repeat_count: int,
 ) -> tuple[str, ...]:
@@ -578,7 +565,6 @@ def _single_layer_imported_name_batch_with_role_aware_underlay(
         "rx_region_max",
         "tx_pcb_l0",
         "tx_copper_l0",
-        *_tx_underlay_expected_names(repeat_count=tx_repeat_count),
         *_tx_wall_expected_names(repeat_count=tx_wall_repeat_count),
         "rx_pcb_l0",
         "rx_copper_l0",
@@ -709,7 +695,6 @@ def test_import_type2_step_ledger_styles_role_aware_underlay_and_keeps_mesh_cond
         non_model_objects=[_non_model_entry()],
         modeled_objects=_single_layer_modeled_objects_with_role_aware_underlay(
             tmp_path,
-            tx_repeat_count=2,
             tx_wall_repeat_count=2,
             rx_repeat_count=1,
         ),
@@ -720,7 +705,6 @@ def test_import_type2_step_ledger_styles_role_aware_underlay_and_keeps_mesh_cond
         modeler=_FakeModeler(
             imported_name_batches=[
                 _single_layer_imported_name_batch_with_role_aware_underlay(
-                    tx_repeat_count=2,
                     tx_wall_repeat_count=2,
                     rx_repeat_count=1,
                 )
@@ -743,9 +727,6 @@ def test_import_type2_step_ledger_styles_role_aware_underlay_and_keeps_mesh_cond
     assert session.materials.material_keys["mull12060ferrite"].permittivity == "6"
     assert session.materials.aedmattolibrary_calls == ["PET_PSA"]
     assert session.materials.material_keys["pet_psa"].permittivity == "2.8"
-    assert session.modeler.objects["tx_underlay_ferrite_u0"].material_name == "MULL12060ferrite"
-    assert session.modeler.objects["tx_underlay_pet_psa_u0"].material_name == "PET_PSA"
-    assert session.modeler.objects["tx_underlay_air_u0"].material_name == "vacuum"
     assert session.modeler.objects["tx_wall_ferrite_u0"].material_name == "MULL12060ferrite"
     assert session.modeler.objects["tx_wall_pet_psa_u0"].material_name == "PET_PSA"
     assert session.modeler.objects["tx_wall_air_u0"].material_name == "vacuum"
@@ -759,9 +740,6 @@ def test_import_type2_step_ledger_styles_role_aware_underlay_and_keeps_mesh_cond
     assert modeled_by_id["tx_rect_void_coil"]["imported_object_names"] == [
         "tx_pcb_l0",
         "tx_copper_l0",
-        "tx_underlay_ferrite_u0",
-        "tx_underlay_pet_psa_u0",
-        "tx_underlay_air_u0",
         "tx_wall_ferrite_u0",
         "tx_wall_pet_psa_u0",
         "tx_wall_air_u0",
