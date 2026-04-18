@@ -8,19 +8,21 @@ from typing import cast
 import pytest
 
 import entry.build as build_entry
-import peetsfea.type2_runtime as type2_runtime
 import peetsfea.type2_sampled as type2_sampled
-from entry.build import build_type2
-from peetsfea.backend.pyaedt.type2_step_import_core import Type2ImportedLedger
+from entry.build import _Type2BuildRunnerResult, build_type2
 from entry.sample import sample_type2
-from peetsfea.backend.pyaedt.type2_step_setup_ready import Type2SetupReadyResult
 from peetsfea.type2_sampled import PreparedType2Build
+from peetsfea.type2_step_spec import RangeSpec
+
+_PLATE_STACK_PCB_TOTAL_THICKNESS_MM = 0.4
 
 
 @dataclass(frozen=True)
 class _FakePlateStackModeledSpec:
     object_id: str
     role: str
+    turn_count: RangeSpec
+    metal_fill_factor: RangeSpec
 
 
 @dataclass(frozen=True)
@@ -29,19 +31,31 @@ class _FakePlateStackType2Spec:
 
 
 def _patch_plate_stack_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
+    fixed_turn_count = RangeSpec(is_integer=True, start=3.0, end=3.0, count=1)
+    fixed_fill_factor = RangeSpec(is_integer=False, start=0.4, end=0.4, count=1)
     fake_spec = _FakePlateStackType2Spec(
         modeled_objects=(
-            _FakePlateStackModeledSpec(object_id="tx_plate_stack", role="tx_plate_stack"),
-            _FakePlateStackModeledSpec(object_id="rx_plate_stack", role="rx_plate_stack"),
+            _FakePlateStackModeledSpec(
+                object_id="tx_plate_stack",
+                role="tx_plate_stack",
+                turn_count=fixed_turn_count,
+                metal_fill_factor=fixed_fill_factor,
+            ),
+            _FakePlateStackModeledSpec(
+                object_id="rx_plate_stack",
+                role="rx_plate_stack",
+                turn_count=fixed_turn_count,
+                metal_fill_factor=fixed_fill_factor,
+            ),
         )
     )
     monkeypatch.setattr(type2_sampled, "load_type2_step_spec", lambda _path: fake_spec)
 
 
 def _source_type2_toml_text() -> str:
-    return """
+    return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v1"
+schema_id = "peetsfea.type2.step.v2"
 runtime_compatible = false
 
 [design]
@@ -137,18 +151,26 @@ object_id = "tx_plate_stack"
 role = "tx_plate_stack"
 material = "composite"
 model_state = true
-pcb_total_thickness_mm = 1.6
+pcb_total_thickness_mm = {_PLATE_STACK_PCB_TOTAL_THICKNESS_MM}
 copper_thickness_mm = 0.035
 ferrite_set_count = 10
+[modeled_objects.turn_count]
+range = [true, 3, 3, 1]
+[modeled_objects.metal_fill_factor]
+range = [false, 0.4, 0.4, 1]
 
 [[modeled_objects]]
 object_id = "rx_plate_stack"
 role = "rx_plate_stack"
 material = "composite"
 model_state = true
-pcb_total_thickness_mm = 0.4
+pcb_total_thickness_mm = {_PLATE_STACK_PCB_TOTAL_THICKNESS_MM}
 copper_thickness_mm = 0.1
 ferrite_set_count = 10
+[modeled_objects.turn_count]
+range = [true, 3, 3, 1]
+[modeled_objects.metal_fill_factor]
+range = [false, 0.4, 0.4, 1]
 """.strip()
 
 
@@ -215,7 +237,7 @@ def test_build_type2_reads_aedt_builder_n_from_manifest(
     ]
 
 
-def test_build_type2_uses_import_only_runner_for_plate_stack_manifest(
+def test_build_type2_builds_plate_stack_manifest_with_setup_ready_runner(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -235,7 +257,7 @@ def test_build_type2_uses_import_only_runner_for_plate_stack_manifest(
         make_step_on_sample=False,
     )
     exporter_calls: list[dict[str, object]] = []
-    import_runner_calls: list[dict[str, object]] = []
+    setup_ready_calls: list[dict[str, object]] = []
 
     def _build_exporter(**kwargs: object) -> object:
         exporter_calls.append(dict(kwargs))
@@ -246,34 +268,41 @@ def test_build_type2_uses_import_only_runner_for_plate_stack_manifest(
         ledger_path.write_text(json.dumps({"scene_step_path": str(scene_step_path)}, indent=2), encoding="utf-8")
         return {"ok": True}
 
-    def _import_runner(**kwargs: object) -> Type2ImportedLedger:
-        import_runner_calls.append(dict(kwargs))
+    def _setup_ready_runner(**kwargs: object) -> _Type2BuildRunnerResult:
+        setup_ready_calls.append(dict(kwargs))
         step_ledger_path = cast(Path, kwargs["step_ledger_path"])
         output_aedt_path = cast(Path, kwargs["output_aedt_path"])
         imported_ledger_path = cast(Path, kwargs["imported_ledger_path"])
         return {
-            "source_toml_path": str(step_ledger_path.with_name("sampled.toml")),
             "source_step_ledger_path": str(step_ledger_path),
-            "scene_step_path": str(step_ledger_path.with_name("type2_scene.step")),
-            "seed": 8,
             "aedt_path": str(output_aedt_path),
             "imported_ledger_path": str(imported_ledger_path),
-            "non_model_objects": [],
-            "modeled_objects": [],
         }
 
-    monkeypatch.setattr(type2_runtime, "import_type2_step_ledger", _import_runner)
-    results = build_type2(manifest_path=manifest_path, exporter=_build_exporter)
+    results = build_type2(
+        manifest_path=manifest_path,
+        exporter=_build_exporter,
+        runner=_setup_ready_runner,
+    )
 
     assert len(results) == 1
     assert exporter_calls != []
-    assert len(import_runner_calls) == 1
-    assert results[0]["aedt_path"] == str(cast(Path, import_runner_calls[0]["output_aedt_path"]))
-    assert results[0]["imported_ledger_path"] == str(cast(Path, import_runner_calls[0]["imported_ledger_path"]))
-    assert results[0]["source_step_ledger_path"] == str(cast(Path, import_runner_calls[0]["step_ledger_path"]))
+    assert len(setup_ready_calls) == 1
+    assert set(setup_ready_calls[0].keys()) == {
+        "step_ledger_path",
+        "output_aedt_path",
+        "imported_ledger_path",
+        "design_name",
+        "design_variables",
+    }
+    assert cast(str, setup_ready_calls[0]["design_name"]) == results[0]["design_id"]
+    assert cast(tuple[tuple[str, str], ...], setup_ready_calls[0]["design_variables"]) == ()
+    assert results[0]["aedt_path"] == str(cast(Path, setup_ready_calls[0]["output_aedt_path"]))
+    assert results[0]["imported_ledger_path"] == str(cast(Path, setup_ready_calls[0]["imported_ledger_path"]))
+    assert results[0]["source_step_ledger_path"] == str(cast(Path, setup_ready_calls[0]["step_ledger_path"]))
 
 
-def test_build_type2_rejects_plate_stack_manifest_when_forced_to_setup_ready_runner(
+def test_build_type2_accepts_plate_stack_manifest_when_forced_to_setup_ready_runner(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -301,14 +330,30 @@ def test_build_type2_rejects_plate_stack_manifest_when_forced_to_setup_ready_run
         ledger_path.write_text(json.dumps({"scene_step_path": str(scene_step_path)}, indent=2), encoding="utf-8")
         return {"ok": True}
 
-    def _runner(**kwargs: object) -> Type2SetupReadyResult:
-        raise AssertionError("forced setup-ready runner must not be called for plate-stack manifests")
+    calls: list[dict[str, object]] = []
 
-    with pytest.raises(
-        ValueError,
-        match=r"type2 build/setup-ready is unsupported for modeled roles \['tx_plate_stack', 'rx_plate_stack'\]",
-    ):
-        build_type2(manifest_path=manifest_path, exporter=_build_exporter, runner=_runner)
+    def _runner(**kwargs: object) -> _Type2BuildRunnerResult:
+        calls.append(dict(kwargs))
+        step_ledger_path = cast(Path, kwargs["step_ledger_path"])
+        output_aedt_path = cast(Path, kwargs["output_aedt_path"])
+        imported_ledger_path = cast(Path, kwargs["imported_ledger_path"])
+        return {
+            "source_step_ledger_path": str(step_ledger_path),
+            "aedt_path": str(output_aedt_path),
+            "imported_ledger_path": str(imported_ledger_path),
+        }
+
+    results = build_type2(manifest_path=manifest_path, exporter=_build_exporter, runner=_runner)
+    assert len(results) == 1
+    assert len(calls) == 1
+    assert set(calls[0].keys()) == {
+        "step_ledger_path",
+        "output_aedt_path",
+        "imported_ledger_path",
+        "design_name",
+        "design_variables",
+    }
+    assert cast(tuple[tuple[str, str], ...], calls[0]["design_variables"]) == ()
 
 
 def test_build_type2_rejects_list_manifest_payload(tmp_path: Path) -> None:

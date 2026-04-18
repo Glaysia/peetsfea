@@ -11,7 +11,7 @@ tags:
 
 - Source path: `entry/sample.py`
 - Code note path: `sdd/code/entry/sample.py.md`
-- Related plan: [[sdd/plans/0.2.23-type2-sampled-build-split]]
+- Related plan: [[sdd/plans/0.2.22-type2-sampled-build-split]]
 - Collaborators:
   - [[sdd/code/src/peetsfea/type2_sampled.py]]
   - [[sdd/code/src/peetsfea/type2_step_export.py]]

@@ -19,7 +19,7 @@ flowchart TD
     StepScene["run/sampled/type2/<design_id>/type2_scene.step"]
     StepLedger["run/sampled/type2/<design_id>/type2_step_ledger.json\n+ em_policy"]
     ImportEntry["entry/import_type2_step.py"]
-    ImportCore["type2_step_import_core\nimport + partition + styling\n+ port-sheet reconstruction"]
+    ImportCore["type2_step_import_core\nimport + partition + styling\n+ ferrite-group reconstruction\n+ port-sheet reconstruction"]
     ImportLedger["run/sampled/type2/<design_id>/type2_imported_ledger.json"]
     ImportAedt["run/sampled/type2/<design_id>/<design_id>.aedt"]
     SetupEntry["entry/setup_type2_step.py"]
@@ -66,8 +66,10 @@ flowchart TD
 - `entry/sample.py`의 STEP export는 optional이고, `entry/build.py`가 missing STEP을 same-worker에서 보완할 수 있다.
 - imported ledger는 import handoff artifact다. setup-ready summary를 JSON으로 누적하지 않는다.
 - `tx_port_sheet` / `rx_port_sheet`는 STEP exact-name body가 아니라 metadata-driven reconstructed sheet다.
+- ferrite-family group contract는 per-set sandwich가 아니라 role별 단일 group이다:
+  `g_ferrite_tx` / `g_ferrite_rx` with ferrite/PET_PSA/vacuum members in current creation order.
 - radiation boundary와 explicit lumped port는 setup-ready runtime이 1회만 만든다.
-- 0.2.23 document contract에서 underlay footprint source는 coil bounds가 아니라 owner region full bounds다.
+- 0.2.22 document contract에서 underlay footprint source는 coil bounds가 아니라 owner region full bounds다.
 - TX underlay는 `tx_region` full `XY` footprint + TX-only `underlay_gap_mm`, RX underlay는 `rx_region_max` full `YZ` footprint + `-X` boundary anchor를 쓴다.
 - underlay exact names는 TX `tx_underlay_*`, RX `under_rx_*`이며, underlay exact object/body names는 feature-local rule로 `<= 32` chars다.
 - mesh owner는 계속 conductor-only다. underlay bodies는 imported participant지만 mesh target set에는 들어가지 않는다.

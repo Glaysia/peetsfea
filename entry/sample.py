@@ -26,7 +26,7 @@ MANIFEST_PATH = OUTPUT_DIR / "manifest.json"
 SEED_FIRST = 0
 SEED_N = 1
 SAMPLER_N = 1
-AEDT_BUILDER_N = 6
+AEDT_BUILDER_N = 1
 MAKE_STEP_ON_SAMPLE = True
 
 _Exporter = Callable[..., object]

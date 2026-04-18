@@ -6,16 +6,22 @@ import json
 from pathlib import Path
 from typing import TypedDict
 
-from peetsfea.backend.pyaedt.type2_step_import_core import Type2ImportedLedger
-from peetsfea.backend.pyaedt.type2_step_import_pipeline import import_type2_step_ledger
-from peetsfea.backend.pyaedt.type2_step_setup_ready import Type2SetupReadyResult, setup_type2_step_ledger
+from peetsfea.backend.pyaedt.type2_step_setup_ready import setup_type2_step_ledger
 from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_sampled import PreparedType2Build, prepare_type2_build
 
 _Exporter = Callable[..., object]
-_Runner = Callable[..., Type2SetupReadyResult]
-_SETUP_READY_SUPPORTED_MODELED_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
-_SETUP_READY_EXPECTED_MODELED_ROLES = ("rx_single_coil", "tx_single_coil")
+
+
+class _Type2BuildRunnerResult(TypedDict):
+    aedt_path: str
+    source_step_ledger_path: str
+    imported_ledger_path: str
+
+
+_Runner = Callable[..., _Type2BuildRunnerResult]
+_COIL_EXACT_MODELED_ROLES: tuple[str, str] = ("rx_single_coil", "tx_single_coil")
+_PLATE_STACK_EXACT_MODELED_ROLES: tuple[str, str] = ("rx_plate_stack", "tx_plate_stack")
 
 
 class Type2SteppedArtifact(TypedDict):
@@ -34,33 +40,16 @@ class Type2BuiltArtifact(TypedDict):
 
 
 def _assert_setup_ready_supported(prepared_build: PreparedType2Build) -> None:
-    unsupported_roles: list[str] = []
-    seen_roles: set[str] = set()
-    for role in prepared_build.modeled_roles:
-        if role in _SETUP_READY_SUPPORTED_MODELED_ROLES:
-            continue
-        if role in seen_roles:
-            continue
-        seen_roles.add(role)
-        unsupported_roles.append(role)
-    if len(unsupported_roles) != 0:
-        raise ValueError(
-            "type2 build/setup-ready is unsupported for modeled roles "
-            f"{unsupported_roles}; build path remains setup-ready-only and does not auto-switch to import-only"
-        )
     actual_roles = tuple(sorted(prepared_build.modeled_roles))
-    if actual_roles != _SETUP_READY_EXPECTED_MODELED_ROLES:
-        raise ValueError(
-            "type2 build/setup-ready requires exactly one tx_single_coil and one rx_single_coil modeled role "
-            f"(actual={list(prepared_build.modeled_roles)})"
-        )
-
-
-def _use_import_only_build(prepared_build: PreparedType2Build, *, runner: _Runner) -> bool:
-    if runner is not setup_type2_step_ledger:
-        return False
-    unsupported_roles = [role for role in prepared_build.modeled_roles if role not in _SETUP_READY_SUPPORTED_MODELED_ROLES]
-    return len(unsupported_roles) != 0
+    if actual_roles == _COIL_EXACT_MODELED_ROLES:
+        return
+    if actual_roles == _PLATE_STACK_EXACT_MODELED_ROLES:
+        return
+    raise ValueError(
+        "type2 build/setup-ready supports only exact modeled role pairs "
+        f"{list(_COIL_EXACT_MODELED_ROLES)} or {list(_PLATE_STACK_EXACT_MODELED_ROLES)} "
+        f"(actual={list(prepared_build.modeled_roles)})"
+    )
 
 
 def export_prepared_type2_design(
@@ -149,23 +138,14 @@ def build_prepared_type2_design(
     runner: _Runner = setup_type2_step_ledger,
 ) -> Type2BuiltArtifact:
     ensure_prepared_type2_step_ledger(prepared_build, exporter=exporter)
-    result: Type2SetupReadyResult | Type2ImportedLedger
-    if _use_import_only_build(prepared_build, runner=runner):
-        result = import_type2_step_ledger(
-            step_ledger_path=prepared_build.step_ledger_path,
-            output_aedt_path=prepared_build.aedt_path,
-            imported_ledger_path=prepared_build.imported_ledger_path,
-            design_name=prepared_build.design_id,
-        )
-    else:
-        _assert_setup_ready_supported(prepared_build)
-        result = runner(
-            step_ledger_path=prepared_build.step_ledger_path,
-            output_aedt_path=prepared_build.aedt_path,
-            imported_ledger_path=prepared_build.imported_ledger_path,
-            design_name=prepared_build.design_id,
-            design_variables=prepared_build.design_variables,
-        )
+    _assert_setup_ready_supported(prepared_build)
+    result = runner(
+        step_ledger_path=prepared_build.step_ledger_path,
+        output_aedt_path=prepared_build.aedt_path,
+        imported_ledger_path=prepared_build.imported_ledger_path,
+        design_name=prepared_build.design_id,
+        design_variables=prepared_build.design_variables,
+    )
     return {
         "design_id": prepared_build.design_id,
         "sampled_toml_path": str(prepared_build.sampled_toml_path),

@@ -35,6 +35,7 @@ flowchart TD
 - loader 단계는 fallback 없이 parse/shape 오류를 raise한다.
 - sample 단계는 batch profile, seed selection, manifest write를 묶는다.
 - 테스트 노트는 sampling registry와 preflight fail-fast 계약을 대표 예시로 가리킨다.
+- type2 관련 참조는 `0.2.22` 문서 계약을 기준으로 유지한다.
 
 ## Type2 STEP Import Smoke Flow
 
@@ -67,3 +68,4 @@ flowchart TD
 ## Related notes
 - [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
 - [[sdd/code/entry/import_non_model_step_to_hfss.py]]
+- plate-stack ferrite-family group contract: `g_ferrite_tx`, `g_ferrite_rx` (ferrite/PET_PSA/vacuum in creation order)
