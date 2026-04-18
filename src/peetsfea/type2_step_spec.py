@@ -7,8 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
+from peetsfea.spec.outputs import parse_outputs_table
+from peetsfea.types.manifest import OutputsSpec
+
 Point3 = tuple[float, float, float]
 ModeledObjectRole = Literal["tx_single_coil", "rx_single_coil"]
+_UNDERLAY_REPEAT_COUNT_CANDIDATES = (0, 2, 4, 6, 8)
+_TX_UNDERLAY_GAP_MM_CANDIDATES = (1.0, 4.0, 7.0, 10.0)
 
 
 @dataclass(frozen=True)
@@ -38,7 +43,7 @@ class Type2SimulationPolicy:
 
 
 @dataclass(frozen=True)
-class ModeledTxSingleCoilSpec:
+class ModeledSingleCoilCommonSpec:
     object_id: str
     role: ModeledObjectRole
     material: str
@@ -62,11 +67,26 @@ class ModeledTxSingleCoilSpec:
 
 
 @dataclass(frozen=True)
+class ModeledTxSingleCoilSpec(ModeledSingleCoilCommonSpec):
+    role: Literal["tx_single_coil"]
+    underlay_gap_mm: RangeSpec
+
+
+@dataclass(frozen=True)
+class ModeledRxSingleCoilSpec(ModeledSingleCoilCommonSpec):
+    role: Literal["rx_single_coil"]
+
+
+ModeledSingleCoilSpec = ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec
+
+
+@dataclass(frozen=True)
 class Type2StepSpec:
     source_toml_path: str
     simulation: Type2SimulationPolicy
+    outputs: OutputsSpec
     non_model_objects: tuple[NonModelBoxSpec, ...]
-    modeled_objects: tuple[ModeledTxSingleCoilSpec, ...]
+    modeled_objects: tuple[ModeledSingleCoilSpec, ...]
 
 
 def _require_key(table: dict[str, object], key: str, context: str) -> object:
@@ -219,7 +239,7 @@ def _parse_modeled_single_coil(
     *,
     index: int,
     seen_object_ids: set[str],
-) -> ModeledTxSingleCoilSpec:
+) -> ModeledSingleCoilSpec:
     from peetsfea.tx_rect_void import profile_for_modeled_role
 
     context = f"modeled_objects[{index}]"
@@ -261,30 +281,69 @@ def _parse_modeled_single_coil(
         raise ValueError(f"{context}.terminal_path must contain only ['value']")
     terminal_path = _require_non_empty_str(terminal_node, "value", f"{context}.terminal_path")
 
-    return ModeledTxSingleCoilSpec(
-        object_id=object_id,
+    outer_x_mm = _require_range(table, "outer_x_mm", context, expect_integer=False)
+    outer_y_mm = _require_range(table, "outer_y_mm", context, expect_integer=False)
+    turn_count = _require_range(table, "turn_count", context, expect_integer=True)
+    layer_count = _require_range(table, "layer_count", context, expect_integer=True)
+    underlay_repeat_count = _require_underlay_repeat_count_range(
+        table,
+        context=context,
         role=modeled_role,
+    )
+    layer_gap_mm = _require_range(table, "layer_gap_mm", context, expect_integer=False)
+    terminal_stub_length_mm = _require_range(table, "terminal_stub_length_mm", context, expect_integer=False)
+    void_x_over_outer_x = _require_range(table, "void_x_over_outer_x", context, expect_integer=False)
+    void_y_over_outer_y = _require_range(table, "void_y_over_outer_y", context, expect_integer=False)
+    void_center_x_over_outer_x = _require_range(table, "void_center_x_over_outer_x", context, expect_integer=False)
+    void_center_y_over_outer_y = _require_range(table, "void_center_y_over_outer_y", context, expect_integer=False)
+    margin_ratio = _require_range(table, "margin_ratio", context, expect_integer=False)
+    metal_fill_factor = _require_range(table, "metal_fill_factor", context, expect_integer=False)
+    if modeled_role == "tx_single_coil":
+        return ModeledTxSingleCoilSpec(
+            object_id=object_id,
+            role="tx_single_coil",
+            material=material,
+            model_state=True,
+            pcb_thickness_mm=pcb_thickness_mm,
+            copper_thickness_mm=copper_thickness_mm,
+            outer_x_mm=outer_x_mm,
+            outer_y_mm=outer_y_mm,
+            turn_count=turn_count,
+            layer_count=layer_count,
+            underlay_repeat_count=underlay_repeat_count,
+            layer_gap_mm=layer_gap_mm,
+            terminal_stub_length_mm=terminal_stub_length_mm,
+            void_x_over_outer_x=void_x_over_outer_x,
+            void_y_over_outer_y=void_y_over_outer_y,
+            void_center_x_over_outer_x=void_center_x_over_outer_x,
+            void_center_y_over_outer_y=void_center_y_over_outer_y,
+            margin_ratio=margin_ratio,
+            metal_fill_factor=metal_fill_factor,
+            terminal_path=terminal_path,
+            underlay_gap_mm=_require_underlay_gap_range(table, context=context),
+        )
+    if "underlay_gap_mm" in table:
+        raise ValueError(f"{context}.underlay_gap_mm is unsupported for rx_single_coil")
+    return ModeledRxSingleCoilSpec(
+        object_id=object_id,
+        role="rx_single_coil",
         material=material,
         model_state=True,
         pcb_thickness_mm=pcb_thickness_mm,
         copper_thickness_mm=copper_thickness_mm,
-        outer_x_mm=_require_range(table, "outer_x_mm", context, expect_integer=False),
-        outer_y_mm=_require_range(table, "outer_y_mm", context, expect_integer=False),
-        turn_count=_require_range(table, "turn_count", context, expect_integer=True),
-        layer_count=_require_range(table, "layer_count", context, expect_integer=True),
-        underlay_repeat_count=_require_underlay_repeat_count_range(
-            table,
-            context=context,
-            role=modeled_role,
-        ),
-        layer_gap_mm=_require_range(table, "layer_gap_mm", context, expect_integer=False),
-        terminal_stub_length_mm=_require_range(table, "terminal_stub_length_mm", context, expect_integer=False),
-        void_x_over_outer_x=_require_range(table, "void_x_over_outer_x", context, expect_integer=False),
-        void_y_over_outer_y=_require_range(table, "void_y_over_outer_y", context, expect_integer=False),
-        void_center_x_over_outer_x=_require_range(table, "void_center_x_over_outer_x", context, expect_integer=False),
-        void_center_y_over_outer_y=_require_range(table, "void_center_y_over_outer_y", context, expect_integer=False),
-        margin_ratio=_require_range(table, "margin_ratio", context, expect_integer=False),
-        metal_fill_factor=_require_range(table, "metal_fill_factor", context, expect_integer=False),
+        outer_x_mm=outer_x_mm,
+        outer_y_mm=outer_y_mm,
+        turn_count=turn_count,
+        layer_count=layer_count,
+        underlay_repeat_count=underlay_repeat_count,
+        layer_gap_mm=layer_gap_mm,
+        terminal_stub_length_mm=terminal_stub_length_mm,
+        void_x_over_outer_x=void_x_over_outer_x,
+        void_y_over_outer_y=void_y_over_outer_y,
+        void_center_x_over_outer_x=void_center_x_over_outer_x,
+        void_center_y_over_outer_y=void_center_y_over_outer_y,
+        margin_ratio=margin_ratio,
+        metal_fill_factor=metal_fill_factor,
         terminal_path=terminal_path,
     )
 
@@ -296,29 +355,48 @@ def _require_underlay_repeat_count_range(
     role: ModeledObjectRole,
 ) -> RangeSpec:
     range_spec = _require_range(table, "underlay_repeat_count", context, expect_integer=True)
-    if role == "tx_single_coil":
-        if (
-            range_spec.start != 0.0
-            or range_spec.end != 8.0
-            or range_spec.count != 5
-        ):
-            raise ValueError(
-                f"{context}.underlay_repeat_count.range must be [true, 0, 8, 5] for tx_single_coil "
-                f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
-            )
+    if role not in ("tx_single_coil", "rx_single_coil"):
+        raise RuntimeError(f"unsupported modeled object role for underlay_repeat_count validation: {role}")
+    candidates = _integer_range_candidates(range_spec)
+    if candidates == _UNDERLAY_REPEAT_COUNT_CANDIDATES:
         return range_spec
-    if role == "rx_single_coil":
-        if (
-            range_spec.start != 0.0
-            or range_spec.end != 0.0
-            or range_spec.count != 1
-        ):
-            raise ValueError(
-                f"{context}.underlay_repeat_count.range must be [true, 0, 0, 1] for rx_single_coil "
-                "until RX underlay support exists"
-            )
+    if (
+        range_spec.count == 1
+        and range_spec.start == range_spec.end
+        and len(candidates) == 1
+        and candidates[0] in _UNDERLAY_REPEAT_COUNT_CANDIDATES
+    ):
         return range_spec
-    raise RuntimeError(f"unsupported modeled object role for underlay_repeat_count validation: {role}")
+    raise ValueError(
+        f"{context}.underlay_repeat_count.range must be canonical [true, 0, 8, 5] "
+        f"or fixed [true, n, n, 1] for n in {_UNDERLAY_REPEAT_COUNT_CANDIDATES} for {role} "
+        f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
+    )
+    return range_spec
+
+
+def _require_underlay_gap_range(
+    table: dict[str, object],
+    *,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, "underlay_gap_mm", context, expect_integer=False)
+    candidates = _float_range_candidates(range_spec)
+    if candidates == _TX_UNDERLAY_GAP_MM_CANDIDATES:
+        return range_spec
+    if (
+        range_spec.count == 1
+        and range_spec.start == range_spec.end
+        and len(candidates) == 1
+        and candidates[0] in _TX_UNDERLAY_GAP_MM_CANDIDATES
+    ):
+        return range_spec
+    raise ValueError(
+        f"{context}.underlay_gap_mm.range must be canonical [false, 1.0, 10.0, 4] "
+        f"or fixed [false, g, g, 1] for g in {_TX_UNDERLAY_GAP_MM_CANDIDATES} for tx_single_coil "
+        f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
+    )
+    return range_spec
 
 
 def _integer_range_candidates(range_spec: RangeSpec) -> tuple[int, ...]:
@@ -340,35 +418,56 @@ def _integer_range_candidates(range_spec: RangeSpec) -> tuple[int, ...]:
     return tuple(deduped_values)
 
 
-def resolve_modeled_underlay_repeat_count(spec: ModeledTxSingleCoilSpec, *, seed: int) -> int:
+def _float_range_candidates(range_spec: RangeSpec) -> tuple[float, ...]:
+    if range_spec.is_integer is not False:
+        raise ValueError("float range candidates require non-integer range spec")
+    if range_spec.count == 1:
+        return (range_spec.start,)
+    step = (range_spec.end - range_spec.start) / float(range_spec.count - 1)
+    return tuple(range_spec.start + (step * index) for index in range(range_spec.count))
+
+
+def _resolve_seeded_candidate_index(*, seed: int, range_path: str, candidate_count: int) -> int:
+    digest = hashlib.blake2b(f"{seed}:{range_path}".encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest, byteorder="big", signed=False) % candidate_count
+
+
+def resolve_modeled_underlay_repeat_count(spec: ModeledSingleCoilSpec, *, seed: int) -> int:
     candidates = _integer_range_candidates(spec.underlay_repeat_count)
-    if spec.role == "tx_single_coil":
-        if candidates != (0, 2, 4, 6, 8):
-            raise ValueError(
-                "tx_single_coil.underlay_repeat_count must realize to candidates (0, 2, 4, 6, 8) "
-                f"(actual={candidates})"
-            )
-    elif spec.role == "rx_single_coil":
-        if candidates != (0,):
-            raise ValueError(
-                "rx_single_coil.underlay_repeat_count must realize only to 0 until RX underlay support exists "
-                f"(actual={candidates})"
-            )
-    else:
+    if spec.role not in ("tx_single_coil", "rx_single_coil"):
         raise RuntimeError(f"unsupported modeled object role for underlay repeat resolution: {spec.role}")
+    if candidates != _UNDERLAY_REPEAT_COUNT_CANDIDATES and not (
+        len(candidates) == 1 and candidates[0] in _UNDERLAY_REPEAT_COUNT_CANDIDATES
+    ):
+        raise ValueError(
+            f"{spec.role}.underlay_repeat_count must realize to canonical candidates "
+            f"{_UNDERLAY_REPEAT_COUNT_CANDIDATES} or a fixed single candidate from that set "
+            f"(actual={candidates})"
+        )
     if len(candidates) == 1:
         repeat_count = candidates[0]
     else:
         range_path = f"modeled_objects.{spec.object_id}.underlay_repeat_count"
-        digest = hashlib.blake2b(f"{seed}:{range_path}".encode("utf-8"), digest_size=8).digest()
-        index = int.from_bytes(digest, byteorder="big", signed=False) % len(candidates)
+        index = _resolve_seeded_candidate_index(seed=seed, range_path=range_path, candidate_count=len(candidates))
         repeat_count = candidates[index]
-    if spec.role == "rx_single_coil" and repeat_count != 0:
-        raise ValueError(
-            "rx_single_coil.underlay_repeat_count must resolve to 0 until RX underlay support exists "
-            f"(actual={repeat_count})"
-        )
     return repeat_count
+
+
+def resolve_modeled_underlay_gap_mm(spec: ModeledTxSingleCoilSpec, *, seed: int) -> float:
+    candidates = _float_range_candidates(spec.underlay_gap_mm)
+    if candidates != _TX_UNDERLAY_GAP_MM_CANDIDATES and not (
+        len(candidates) == 1 and candidates[0] in _TX_UNDERLAY_GAP_MM_CANDIDATES
+    ):
+        raise ValueError(
+            "tx_single_coil.underlay_gap_mm must realize to canonical candidates "
+            f"{_TX_UNDERLAY_GAP_MM_CANDIDATES} or a fixed single candidate from that set "
+            f"(actual={candidates})"
+        )
+    if len(candidates) == 1:
+        return candidates[0]
+    range_path = f"modeled_objects.{spec.object_id}.underlay_gap_mm"
+    index = _resolve_seeded_candidate_index(seed=seed, range_path=range_path, candidate_count=len(candidates))
+    return candidates[index]
 
 
 def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
@@ -405,6 +504,7 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
     return Type2StepSpec(
         source_toml_path=str(toml_path),
         simulation=_parse_simulation_policy(root, context=toml_path.name),
+        outputs=parse_outputs_table(_require_key(root, "outputs", toml_path.name), context=f"{toml_path.name}.outputs"),
         non_model_objects=non_model_objects,
         modeled_objects=modeled_objects,
     )
@@ -415,7 +515,7 @@ def _format_range(range_spec: RangeSpec) -> str:
     return f"[{is_integer}, {range_spec.start}, {range_spec.end}, {range_spec.count}]"
 
 
-def render_tx_rect_void_toml(spec: ModeledTxSingleCoilSpec) -> str:
+def render_tx_rect_void_toml(spec: ModeledSingleCoilCommonSpec) -> str:
     return "\n".join(
         (
             'spec_version = "0.2.22"',
@@ -462,6 +562,9 @@ def render_tx_rect_void_toml(spec: ModeledTxSingleCoilSpec) -> str:
 
 __all__ = [
     "ModeledObjectRole",
+    "ModeledRxSingleCoilSpec",
+    "ModeledSingleCoilCommonSpec",
+    "ModeledSingleCoilSpec",
     "ModeledTxSingleCoilSpec",
     "NonModelBoxSpec",
     "Point3",
@@ -469,6 +572,7 @@ __all__ = [
     "Type2SimulationPolicy",
     "Type2StepSpec",
     "load_type2_step_spec",
+    "resolve_modeled_underlay_gap_mm",
     "resolve_modeled_underlay_repeat_count",
     "render_tx_rect_void_toml",
 ]

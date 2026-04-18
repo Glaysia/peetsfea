@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Literal, TypedDict
 
+from peetsfea.types.manifest import OutputsSpec
+
 Point3 = tuple[float, float, float]
 
 
@@ -63,6 +65,7 @@ class Type2StepLedger(TypedDict):
     scene_step_path: str
     seed: int
     em_policy: Type2ImportEmPolicy
+    outputs: OutputsSpec
     non_model_objects: list[NonModelObjectLedgerEntry]
     modeled_objects: list[ModeledObjectLedgerEntry]
 
@@ -120,6 +123,7 @@ def build_type2_step_ledger(
     scene_step_path: Path,
     seed: int,
     em_policy: Type2ImportEmPolicy,
+    outputs: OutputsSpec,
     non_model_objects: list[NonModelObjectLedgerEntry],
     modeled_objects: list[ModeledObjectLedgerEntry],
 ) -> Type2StepLedger:
@@ -129,6 +133,7 @@ def build_type2_step_ledger(
         "scene_step_path": str(scene_step_path),
         "seed": seed,
         "em_policy": em_policy,
+        "outputs": outputs,
         "non_model_objects": non_model_objects,
         "modeled_objects": modeled_objects,
     }

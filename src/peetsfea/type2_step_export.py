@@ -194,6 +194,7 @@ def export_type2_step_artifacts(
         scene_step_path=scene_step_path,
         seed=seed,
         em_policy=em_policy,
+        outputs=spec.outputs,
         non_model_objects=non_model_entries,
         modeled_objects=modeled_entries,
     )

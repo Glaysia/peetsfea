@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import TypedDict, cast
 
 from peetsfea.aedt.failfast import validate_aedt_name
+from peetsfea.spec.outputs import parse_outputs_table
+from peetsfea.types.manifest import OutputsSpec
 
 _SUPPORTED_MODELED_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
 _SUPPORTED_MODELED_PLANES: frozenset[str] = frozenset({"XY", "YZ"})
@@ -44,6 +46,7 @@ class ValidatedStepLedger(TypedDict):
     scene_step_path: Path
     seed: int
     em_policy: "Type2ImportEmPolicy"
+    outputs: OutputsSpec
     non_model_objects: list[ValidatedStepEntry]
     modeled_objects: list[ValidatedStepEntry]
 
@@ -295,6 +298,10 @@ def load_step_ledger(step_ledger_path: Path) -> ValidatedStepLedger:
         require_key(payload, key="em_policy", context="type2_step_ledger"),
         context="type2_step_ledger.em_policy",
     )
+    outputs = parse_outputs_table(
+        require_key(payload, key="outputs", context="type2_step_ledger"),
+        context="type2_step_ledger.outputs",
+    )
     raw_non_model_entries = _require_entry_list(
         require_key(payload, key="non_model_objects", context="type2_step_ledger"),
         context="type2_step_ledger.non_model_objects",
@@ -350,6 +357,7 @@ def load_step_ledger(step_ledger_path: Path) -> ValidatedStepLedger:
         "scene_step_path": scene_step_path,
         "seed": seed,
         "em_policy": em_policy,
+        "outputs": outputs,
         "non_model_objects": non_model_entries,
         "modeled_objects": modeled_entries,
     }

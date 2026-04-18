@@ -12,6 +12,7 @@ from entry.setup_type2_step import (
 )
 from peetsfea.aedt.protocols import HfssSession
 from peetsfea.backend.pyaedt.type2_step_setup_ready import Type2SetupReadyResult
+from tests.fixtures.legacy.type1_spec import type1_outputs_spec
 
 
 def _result(*, step_ledger_path: Path, output_aedt_path: Path, imported_ledger_path: Path) -> Type2SetupReadyResult:
@@ -71,6 +72,7 @@ def _write_canonical_step_ledger(path: Path, *, seed: int) -> None:
                 "scene_step_path": str(path.with_name("type2_scene.step")),
                 "seed": seed,
                 "em_policy": {"radiation_margin_mm": 3500.0},
+                "outputs": type1_outputs_spec(),
                 "non_model_objects": [{"object_id": "nm"}],
                 "modeled_objects": [{"object_id": "tx"}, {"object_id": "rx"}],
             }
@@ -95,6 +97,8 @@ def test_setup_type2_step_entry_generates_fresh_ledger_before_runtime(tmp_path: 
 
     def _runner(**kwargs: object) -> Type2SetupReadyResult:
         runner_calls.append(dict(kwargs))
+        step_ledger_payload = json.loads(cast(Path, kwargs["step_ledger_path"]).read_text(encoding="utf-8"))
+        assert step_ledger_payload["outputs"] == type1_outputs_spec()
         return _result(
             step_ledger_path=cast(Path, kwargs["step_ledger_path"]),
             output_aedt_path=cast(Path, kwargs["output_aedt_path"]),
@@ -155,6 +159,8 @@ def test_setup_type2_step_entry_uses_existing_ledger_without_export(tmp_path: Pa
 
     def _runner(**kwargs: object) -> Type2SetupReadyResult:
         runner_calls.append(dict(kwargs))
+        step_ledger_payload = json.loads(cast(Path, kwargs["step_ledger_path"]).read_text(encoding="utf-8"))
+        assert step_ledger_payload["outputs"] == type1_outputs_spec()
         return _result(
             step_ledger_path=cast(Path, kwargs["step_ledger_path"]),
             output_aedt_path=cast(Path, kwargs["output_aedt_path"]),
