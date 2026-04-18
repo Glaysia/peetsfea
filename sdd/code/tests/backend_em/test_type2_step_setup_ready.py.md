@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_setup_ready.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-19 @ 18:05
 tags:
   - hfss-import
   - em
@@ -47,6 +47,7 @@ tags:
 - future RX role-aware import contract에서도 RX underlay exact-name bodies와 TX wall exact-name bodies는 setup-ready mesh target과 port ownership 바깥에 남아야 한다.
 - missing copper names, missing/malformed port sheet vertices, edge mismatch, `AssignLumpedPort` false, boundary false, `ValidateDesign` false는 즉시 raise다.
 - caller-provided design variables는 import/save 이전에 HFSS session에 그대로 반영되어야 한다.
+- geometry-only `rx_plate_stack` ledger는 HFSS factory 실행 전 load-step-ledger 단계에서 즉시 실패해야 한다.
 
 ## 직접 의존
 - `pytest`

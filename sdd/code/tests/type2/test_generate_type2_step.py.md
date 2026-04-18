@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 00:25
+updated: 2026-04-19 @ 18:05
 tags:
   - step-export
 ---
@@ -16,12 +16,13 @@ tags:
 - Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-tx-wall-parallel-ferrite-stack]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-ferrite-underlay-equivalent-thickness]]
+- Related feature plan: [[sdd/plans/0.2.24-type2-rx-plate-stack]]
 
 ## 역할
 - `generate_type2_step.py`의 type2 parser와 single scene export 계약을 pure-Python pytest로 검증한다.
 - fixed example parse path, sweep example parse path, active fixed example export path를 함께 확인한다.
 - active/shared `[outputs]` parser와 retained step ledger `outputs` serialization도 함께 검증한다.
-- modeled TX/RX single-coil export가 derived modeled bbox 기준으로 owner region 안에 배치되고 canonical scene STEP/ledger에 absolute metadata를 남기는지 확인한다. TX는 `tx_region.min_x` touch를, RX는 owner max-X touch를 본다.
+- modeled TX single-coil export와 active RX plate-stack export가 owner region 기준 절대 배치와 canonical scene STEP/ledger metadata를 남기는지 확인한다. TX는 `tx_region.min_x` touch를, active RX는 `rx_region_max.min_x` anchor를 본다.
 
 ## 입력 / 출력
 - 입력:
@@ -39,14 +40,14 @@ tags:
 ## Invariants / fail-fast
 - example `type2_fixed.toml`은 6 non-model + 2 modeled objects로 파싱되어야 하며 underlay/gap/sample fields가 single-candidate로 고정돼야 한다.
 - companion example `type2_sweep.toml`은 같은 registry shape를 유지하면서 underlay/sample fields가 canonical sweep ranges를 유지해야 한다.
-- TX-only `wall_parallel_stack_present` example contract도 fixed/sweep companion pair에서 각각 fixed `1` / canonical `[true, 0, 1, 2]`를 유지해야 한다.
+- TX-only `wall_parallel_stack_present` example contract는 public fixed/sweep companion pair 모두 fixed `1`을 유지해야 한다. parser-level canonical `[true, 0, 1, 2]` 지원은 별도 unit coverage로만 남긴다.
 - both example paths must also parse the full retained legacy-type1 `outputs` contract.
 - active example baseline regression은 global Z rebase 결과를 직접 검증해야 한다. `tx_region.bottom == 0`, environment/rx region은 같은 relative spacing을 유지한 채 같이 내려가야 한다.
 - export runtime regression은 active example 그대로를 사용하고, copper body label expectation은 realized layer count에 맞춰 결정한다. TX floor-underlay labels는 resolved `underlay_repeat_count`와 무관하게 scene body expectation에 포함되지 않는다.
 - duplicate object id는 즉시 실패해야 한다.
 - missing `outputs`, unsupported `outputs` key, empty output-variable list, duplicate output-variable name, invalid output-variable name은 즉시 실패해야 한다.
 - unsupported modeled role은 즉시 실패해야 한다.
-- modeled required field 누락(`terminal_path`)은 즉시 실패해야 한다.
+- modeled required field 누락(`terminal_path`)은 single-coil parser에서 즉시 실패해야 한다.
 - invalid terminal path는 modeled export 단계에서 즉시 실패해야 한다.
 - scene `build123d.export_step()`가 `False`면 즉시 실패해야 한다.
 - 성공 케이스에서는 `type2_scene.step` 1개, metadata JSON, ledger JSON이 생성되고 ledger top-level `scene_step_path`, `em_policy`, `outputs`, non-model `member_objects`, modeled expected body names/count, scene-absolute placement/terminal metadata가 기록되어야 한다.
@@ -54,14 +55,14 @@ tags:
 - TX placement regression should assert `tx_region.min_x` touch + centered Y + owner max-Z touch.
 - generated `type2_scene.step`의 modeled PCB/copper body pair는 final exported solids 기준으로 shared volume이 없어야 한다.
 - single-layer scene regression must assert scene labels do not include `tx_port_sheet` or `rx_port_sheet`; STEP exports only PCB/copper bodies.
-- next underlay contract regression must assert:
+- next underlay/plate contract regression must assert:
   - TX `underlay_repeat_count`는 floor-parallel `tx_underlay_*` labels를 다시 만들지 않는다
-  - RX `underlay_repeat_count = 0`이면 underlay labels가 없다
-  - RX `underlay_repeat_count = 2`이면 expected body names 뒤에 collapsed effective `u0` tri-layer labels만 append된다
-  - RX `underlay_repeat_count = 8`이면 body count는 늘지 않고 각 ferrite/PET/air thickness만 `8x`로 커진다
-- RX underlay body semantic order is geometry contract: each effective family must emit `ferrite -> pet_psa -> air`, and the explicit `air` body must be modeled as exported `vacuum`, not spacing-only omission.
+  - active RX는 `rx_plate_stack` 34-body literal contract를 유지한다
+  - active RX exact body order는 `rx_copper_wall`, `rx_pcb_wall`, `rx_stack_ferrite_u*`, `rx_stack_pet_psa_u*`, `rx_stack_air_u*`, `rx_pcb_coil`, `rx_copper_coil`이다
+  - active RX terminal metadata는 `{"kind": "none"}` sentinel이다
+- legacy RX underlay body semantic order is geometry contract: each effective family must emit `ferrite -> pet_psa -> air`, and the explicit `air` body must be modeled as exported `vacuum`, not spacing-only omission.
 - TX wall-stack placement regression should assert `tx_region.min_x` wall contact + `+X` growth + `tx_region` full Y span + remaining-space Z ownership.
-- RX underlay placement regression should assert `rx_region_max` full footprint + `-X` boundary anchor + coil-facing ferrite.
+- active RX plate-stack placement regression should assert `rx_region_max` full footprint + `min_x` boundary anchor + literal 10-set thickness.
 - single-layer scene regression should still confirm the metadata-owned canonical port-sheet polygon stays on the shared terminal-stub bottom-face plane, contains exactly four unique vertices, and bridges the two widened terminal-stub bottom-square diagonals chosen by maximum perpendicular spread away from the inter-stub centerline.
 - terminal metadata must also persist canonical `port_sheet_vertices_xyz` that match the expected sheet geometry so downstream HFSS reconstruction can reuse the exact face polygon without relying on STEP sheet bodies.
 - TX port-sheet metadata path is supported across single-layer and multilayer TX: regression should assert that the canonical four vertices are derived from the two bottom bus faces rather than expecting a fail-fast gap.

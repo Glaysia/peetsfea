@@ -11,10 +11,11 @@ from peetsfea.spec.outputs import parse_outputs_table
 from peetsfea.types.manifest import OutputsSpec
 
 Point3 = tuple[float, float, float]
-ModeledObjectRole = Literal["tx_single_coil", "rx_single_coil"]
+ModeledObjectRole = Literal["tx_single_coil", "rx_single_coil", "rx_plate_stack"]
 _UNDERLAY_REPEAT_COUNT_CANDIDATES = (0, 2, 4, 6, 8)
 _TX_UNDERLAY_GAP_MM_CANDIDATES = (1.0, 4.0, 7.0, 10.0)
 _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES = (0, 1)
+_RX_PLATE_STACK_FERRITE_SET_COUNT = 10
 
 
 @dataclass(frozen=True)
@@ -79,7 +80,19 @@ class ModeledRxSingleCoilSpec(ModeledSingleCoilCommonSpec):
     role: Literal["rx_single_coil"]
 
 
+@dataclass(frozen=True)
+class ModeledRxPlateStackSpec:
+    object_id: str
+    role: Literal["rx_plate_stack"]
+    material: str
+    model_state: Literal[True]
+    pcb_total_thickness_mm: float
+    copper_thickness_mm: float
+    ferrite_set_count: int
+
+
 ModeledSingleCoilSpec = ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec
+ModeledObjectSpec = ModeledSingleCoilSpec | ModeledRxPlateStackSpec
 
 
 @dataclass(frozen=True)
@@ -88,7 +101,33 @@ class Type2StepSpec:
     simulation: Type2SimulationPolicy
     outputs: OutputsSpec
     non_model_objects: tuple[NonModelBoxSpec, ...]
-    modeled_objects: tuple[ModeledSingleCoilSpec, ...]
+    modeled_objects: tuple[ModeledObjectSpec, ...]
+
+
+def modeled_object_id_for_role(role: ModeledObjectRole) -> str:
+    if role == "tx_single_coil":
+        return "tx_rect_void_coil"
+    if role == "rx_single_coil":
+        return "rx_rect_void_coil"
+    if role == "rx_plate_stack":
+        return "rx_plate_stack"
+    raise RuntimeError(f"unsupported modeled object role for object_id resolution: {role}")
+
+
+def placement_owner_id_for_role(role: ModeledObjectRole) -> str:
+    if role == "tx_single_coil":
+        return "tx_region"
+    if role in ("rx_single_coil", "rx_plate_stack"):
+        return "rx_region_max"
+    raise RuntimeError(f"unsupported modeled object role for placement owner resolution: {role}")
+
+
+def modeled_plane_for_role(role: ModeledObjectRole) -> Literal["XY", "YZ"]:
+    if role == "tx_single_coil":
+        return "XY"
+    if role in ("rx_single_coil", "rx_plate_stack"):
+        return "YZ"
+    raise RuntimeError(f"unsupported modeled object role for plane resolution: {role}")
 
 
 def _require_key(table: dict[str, object], key: str, context: str) -> object:
@@ -254,7 +293,7 @@ def _parse_modeled_single_coil(
     role = _require_non_empty_str(table, "role", context)
     if role not in ("tx_single_coil", "rx_single_coil"):
         raise ValueError(f"unsupported modeled object role: {role}")
-    modeled_role = cast(ModeledObjectRole, role)
+    modeled_role = cast(Literal["tx_single_coil", "rx_single_coil"], role)
     profile = profile_for_modeled_role(modeled_role)
     if object_id != profile.object_id:
         raise ValueError(
@@ -350,6 +389,81 @@ def _parse_modeled_single_coil(
         margin_ratio=margin_ratio,
         metal_fill_factor=metal_fill_factor,
         terminal_path=terminal_path,
+    )
+
+
+def _parse_modeled_rx_plate_stack(
+    raw_object: object,
+    *,
+    index: int,
+    seen_object_ids: set[str],
+) -> ModeledRxPlateStackSpec:
+    context = f"modeled_objects[{index}]"
+    table = _require_table(raw_object, context)
+    object_id = _require_non_empty_str(table, "object_id", context)
+    if object_id in seen_object_ids:
+        raise ValueError(f"duplicate object id: {object_id}")
+    seen_object_ids.add(object_id)
+    role = _require_non_empty_str(table, "role", context)
+    if role != "rx_plate_stack":
+        raise ValueError(f"unsupported modeled object role: {role}")
+    expected_object_id = modeled_object_id_for_role("rx_plate_stack")
+    if object_id != expected_object_id:
+        raise ValueError(
+            f"prototype modeled object_id must be '{expected_object_id}' for role {role} "
+            f"(actual={object_id})"
+        )
+    raw_model_state = _require_key(table, "model_state", context)
+    if not isinstance(raw_model_state, bool):
+        raise TypeError(f"{context}.model_state must be bool")
+    if raw_model_state is not True:
+        raise ValueError(f"{context}.model_state must be true")
+    material = _require_non_empty_str(table, "material", context)
+    if material != "composite":
+        raise ValueError(f"{context}.material must be 'composite' (actual={material})")
+    pcb_total_thickness_mm = _require_float_value(table, "pcb_total_thickness_mm", context)
+    if pcb_total_thickness_mm <= 0.0:
+        raise ValueError(f"{context}.pcb_total_thickness_mm must be > 0")
+    copper_thickness_mm = _require_float_value(table, "copper_thickness_mm", context)
+    if copper_thickness_mm <= 0.0:
+        raise ValueError(f"{context}.copper_thickness_mm must be > 0")
+    if pcb_total_thickness_mm <= copper_thickness_mm:
+        raise ValueError(
+            f"{context}.pcb_total_thickness_mm must be > copper_thickness_mm "
+            f"(pcb_total_thickness_mm={pcb_total_thickness_mm}, copper_thickness_mm={copper_thickness_mm})"
+        )
+    raw_ferrite_set_count = _require_key(table, "ferrite_set_count", context)
+    if isinstance(raw_ferrite_set_count, bool) or not isinstance(raw_ferrite_set_count, int):
+        raise TypeError(f"{context}.ferrite_set_count must be int")
+    ferrite_set_count = raw_ferrite_set_count
+    if ferrite_set_count != _RX_PLATE_STACK_FERRITE_SET_COUNT:
+        raise ValueError(
+            f"{context}.ferrite_set_count must be {_RX_PLATE_STACK_FERRITE_SET_COUNT} "
+            f"(actual={ferrite_set_count})"
+        )
+    allowed_keys = {
+        "object_id",
+        "role",
+        "material",
+        "model_state",
+        "pcb_total_thickness_mm",
+        "copper_thickness_mm",
+        "ferrite_set_count",
+    }
+    extra_keys = sorted(set(table.keys()) - allowed_keys)
+    if extra_keys:
+        raise ValueError(
+            f"{context} contains unsupported keys for rx_plate_stack "
+            f"(actual={extra_keys})"
+        )
+    return ModeledRxPlateStackSpec(
+        object_id=object_id,
+        role="rx_plate_stack",
+        material=material,
+        model_state=True,
+        pcb_total_thickness_mm=pcb_total_thickness_mm,
+        copper_thickness_mm=copper_thickness_mm,
+        ferrite_set_count=ferrite_set_count,
     )
 
 
@@ -542,10 +656,20 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
         _parse_non_model_box(raw_object, index=index, seen_object_ids=seen_object_ids)
         for index, raw_object in enumerate(raw_non_model_objects)
     )
-    modeled_objects = tuple(
-        _parse_modeled_single_coil(raw_object, index=index, seen_object_ids=seen_object_ids)
-        for index, raw_object in enumerate(raw_modeled_objects)
-    )
+    modeled_objects_list: list[ModeledObjectSpec] = []
+    for index, raw_object in enumerate(raw_modeled_objects):
+        context = f"{toml_path.name}.modeled_objects[{index}]"
+        table = _require_table(raw_object, context)
+        role = _require_non_empty_str(table, "role", context)
+        if role == "rx_plate_stack":
+            modeled_objects_list.append(
+                _parse_modeled_rx_plate_stack(raw_object, index=index, seen_object_ids=seen_object_ids)
+            )
+            continue
+        modeled_objects_list.append(
+            _parse_modeled_single_coil(raw_object, index=index, seen_object_ids=seen_object_ids)
+        )
+    modeled_objects = tuple(modeled_objects_list)
     return Type2StepSpec(
         source_toml_path=str(toml_path),
         simulation=_parse_simulation_policy(root, context=toml_path.name),
@@ -606,7 +730,9 @@ def render_tx_rect_void_toml(spec: ModeledSingleCoilCommonSpec) -> str:
 
 
 __all__ = [
+    "ModeledObjectSpec",
     "ModeledObjectRole",
+    "ModeledRxPlateStackSpec",
     "ModeledRxSingleCoilSpec",
     "ModeledSingleCoilCommonSpec",
     "ModeledSingleCoilSpec",
@@ -617,6 +743,9 @@ __all__ = [
     "Type2SimulationPolicy",
     "Type2StepSpec",
     "load_type2_step_spec",
+    "modeled_object_id_for_role",
+    "modeled_plane_for_role",
+    "placement_owner_id_for_role",
     "resolve_modeled_underlay_gap_mm",
     "resolve_modeled_underlay_repeat_count",
     "resolve_modeled_wall_parallel_stack_present",

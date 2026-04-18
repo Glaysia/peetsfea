@@ -1,7 +1,7 @@
 ---
 title: type2_modeled_import_adapter.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-19 @ 18:05
 tags:
   - hfss-import
   - aedt
@@ -19,6 +19,7 @@ tags:
 ## 역할
 - type2 STEP ledger의 modeled entry와 single scene STEP import 결과 `imported_object_names`를 합쳐 single imported modeled-object ledger entry를 만든다.
 - 현재 single-coil prototype(`role=tx_single_coil | rx_single_coil`)을 허용하는 fail-fast adapter 계약을 제공한다.
+- geometry-only `rx_plate_stack`는 terminal metadata parsing 전에 즉시 reject한다.
 
 ## 입력 / 출력
 - 입력:
@@ -37,6 +38,7 @@ tags:
 
 ## Invariants / fail-fast
 - `modeled_object.role` must be `tx_single_coil` 또는 `rx_single_coil`.
+- `modeled_object.role = "rx_plate_stack"`는 geometry-export-only role로 즉시 실패해야 한다.
 - `modeled_object.plane` must be `XY` 또는 `YZ`.
 - `modeled_object.placement_owner_id`는 non-empty string이어야 한다.
 - `modeled_object.model_state` must be `True`.

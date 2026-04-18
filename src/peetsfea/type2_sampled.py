@@ -13,30 +13,18 @@ from typing import TypedDict, cast
 from peetsfea.spec.loader import TOMLTable, TOMLValue, load_toml_bytes
 from peetsfea.spec.toml_render import toml_dumps
 from peetsfea.type2_step_export import export_type2_step_artifacts
-from peetsfea.type2_step_spec import ModeledSingleCoilSpec, ModeledTxSingleCoilSpec, RangeSpec, Type2StepSpec, load_type2_step_spec
+from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
+from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
+from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
+from peetsfea.type2_step_spec import RangeSpec
+from peetsfea.type2_step_spec import Type2StepSpec
+from peetsfea.type2_step_spec import load_type2_step_spec
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SampledScalar = int | float
 DesignVariableEntry = tuple[str, str]
 _SampleExporter = Callable[..., object]
 _INTEGER_RANGE_FIELD_NAMES = ("turn_count", "layer_count", "underlay_repeat_count", "wall_parallel_stack_present")
-_MODELED_RANGE_FIELD_NAMES = (
-    "outer_x_mm",
-    "outer_y_mm",
-    "turn_count",
-    "layer_count",
-    "underlay_repeat_count",
-    "underlay_gap_mm",
-    "wall_parallel_stack_present",
-    "layer_gap_mm",
-    "terminal_stub_length_mm",
-    "void_x_over_outer_x",
-    "void_y_over_outer_y",
-    "void_center_x_over_outer_x",
-    "void_center_y_over_outer_y",
-    "margin_ratio",
-    "metal_fill_factor",
-)
 _SAMPLED_METADATA_TABLE = "sampled"
 
 
@@ -99,26 +87,58 @@ class PreparedType2Build:
 def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpec], ...]:
     owner_specs: list[tuple[str, RangeSpec]] = []
     for modeled_spec in spec.modeled_objects:
-        for field_name in _MODELED_RANGE_FIELD_NAMES:
-            if field_name == "underlay_gap_mm":
-                if isinstance(modeled_spec, ModeledTxSingleCoilSpec):
-                    owner_specs.append(
-                        (f"modeled_objects.{modeled_spec.object_id}.{field_name}", modeled_spec.underlay_gap_mm)
-                    )
-                continue
-            if field_name == "wall_parallel_stack_present":
-                if isinstance(modeled_spec, ModeledTxSingleCoilSpec):
-                    owner_specs.append(
-                        (
-                            f"modeled_objects.{modeled_spec.object_id}.{field_name}",
-                            modeled_spec.wall_parallel_stack_present,
-                        )
-                    )
-                continue
-            assert hasattr(modeled_spec, field_name), f"modeled spec is missing required range field: {field_name}"
-            range_spec = getattr(modeled_spec, field_name)
-            assert isinstance(range_spec, RangeSpec), f"{field_name} must be RangeSpec"
-            owner_specs.append((f"modeled_objects.{modeled_spec.object_id}.{field_name}", range_spec))
+        if isinstance(modeled_spec, ModeledRxPlateStackSpec):
+            continue
+        owner_specs.extend(_single_coil_range_owner_specs(modeled_spec))
+    return tuple(owner_specs)
+
+
+def _single_coil_range_owner_specs(
+    modeled_spec: ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec,
+) -> tuple[tuple[str, RangeSpec], ...]:
+    owner_specs: list[tuple[str, RangeSpec]] = [
+        (f"modeled_objects.{modeled_spec.object_id}.outer_x_mm", modeled_spec.outer_x_mm),
+        (f"modeled_objects.{modeled_spec.object_id}.outer_y_mm", modeled_spec.outer_y_mm),
+        (f"modeled_objects.{modeled_spec.object_id}.turn_count", modeled_spec.turn_count),
+        (f"modeled_objects.{modeled_spec.object_id}.layer_count", modeled_spec.layer_count),
+        (
+            f"modeled_objects.{modeled_spec.object_id}.underlay_repeat_count",
+            modeled_spec.underlay_repeat_count,
+        ),
+        (f"modeled_objects.{modeled_spec.object_id}.layer_gap_mm", modeled_spec.layer_gap_mm),
+        (
+            f"modeled_objects.{modeled_spec.object_id}.terminal_stub_length_mm",
+            modeled_spec.terminal_stub_length_mm,
+        ),
+        (
+            f"modeled_objects.{modeled_spec.object_id}.void_x_over_outer_x",
+            modeled_spec.void_x_over_outer_x,
+        ),
+        (
+            f"modeled_objects.{modeled_spec.object_id}.void_y_over_outer_y",
+            modeled_spec.void_y_over_outer_y,
+        ),
+        (
+            f"modeled_objects.{modeled_spec.object_id}.void_center_x_over_outer_x",
+            modeled_spec.void_center_x_over_outer_x,
+        ),
+        (
+            f"modeled_objects.{modeled_spec.object_id}.void_center_y_over_outer_y",
+            modeled_spec.void_center_y_over_outer_y,
+        ),
+        (f"modeled_objects.{modeled_spec.object_id}.margin_ratio", modeled_spec.margin_ratio),
+        (f"modeled_objects.{modeled_spec.object_id}.metal_fill_factor", modeled_spec.metal_fill_factor),
+    ]
+    if isinstance(modeled_spec, ModeledTxSingleCoilSpec):
+        owner_specs.extend(
+            (
+                (f"modeled_objects.{modeled_spec.object_id}.underlay_gap_mm", modeled_spec.underlay_gap_mm),
+                (
+                    f"modeled_objects.{modeled_spec.object_id}.wall_parallel_stack_present",
+                    modeled_spec.wall_parallel_stack_present,
+                ),
+            )
+        )
     return tuple(owner_specs)
 
 

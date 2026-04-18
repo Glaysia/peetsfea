@@ -1,7 +1,7 @@
 ---
 title: type2_step_ledger.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 00:25
+updated: 2026-04-19 @ 18:05
 tags:
   - step-export
 ---
@@ -11,10 +11,11 @@ tags:
 ## Source
 - Path: `src/peetsfea/type2_step_ledger.py`
 - Code note path: `sdd/code/src/peetsfea/type2_step_ledger.py.md`
-- Status: planned split target; source file is not created yet.
+- Status: active
 - Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-ferrite-underlay-equivalent-thickness]]
+- Related feature plan: [[sdd/plans/0.2.24-type2-rx-plate-stack]]
 - Parent note: [[sdd/code/entry/generate_type2_step.py]]
 
 ## 역할
@@ -32,11 +33,14 @@ tags:
 - role-aware underlay ownership은 별도 ledger subtree가 아니라 modeled metadata의 exact `expected_exported_body_names` / `expected_exported_body_count` 계약에 포함된다.
 - `underlay_repeat_count` source of truth는 input TOML이고, ledger는 resolved explicit body-name taxonomy만 보존한다. effective thickness multiplier meaning is not duplicated into the ledger.
 - TX-only `underlay_gap_mm` source of truth도 input TOML에 두고, ledger는 gap value를 duplicated runtime state로 보존하지 않는다.
+- active `rx_plate_stack`도 source field ownership을 input TOML에 두고, ledger는 34-body exact-name taxonomy와 sentinel terminal metadata만 보존한다.
 
 ## Invariants / fail-fast
 - modeled object metadata는 expected body names/count, canonical coordinates, terminal metadata를 모두 가져야 한다.
 - TX underlay가 존재하면 modeled metadata expected body names/count는 collapsed effective trio `tx_underlay_ferrite_u0`, `tx_underlay_pet_psa_u0`, `tx_underlay_air_u0` order를 lossless로 보존해야 한다.
 - RX underlay가 존재하면 modeled metadata expected body names/count는 collapsed effective trio `under_rx_ferrite_u0`, `under_rx_pet_psa_u0`, `under_rx_air_u0` order를 lossless로 보존해야 한다.
+- active `rx_plate_stack` modeled metadata expected body names/count는 wall-side copper/PCB + literal `rx_stack_ferrite_u0..u9`, `rx_stack_pet_psa_u0..u9`, `rx_stack_air_u0..u9` + coil-side PCB/copper order를 lossless로 보존해야 한다.
+- geometry-only modeled role의 terminal metadata는 `{"kind": "none"}` sentinel을 유지해야 한다.
 - canonical ledger schema docs는 top-level `scene_step_path`, `em_policy`, `outputs`, `non_model_objects`, `modeled_objects`를 함께 유지한다.
 - ledger shape mismatch or missing owner/member metadata is a hard failure.
 - `outputs` missing or malformed retained contract is a hard failure for downstream setup-ready replay.

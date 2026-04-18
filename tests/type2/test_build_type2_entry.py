@@ -129,7 +129,7 @@ range = [true, 0, 8, 5]
 [modeled_objects.underlay_gap_mm]
 range = [false, 1.0, 10.0, 4]
 [modeled_objects.wall_parallel_stack_present]
-range = [true, 0, 1, 2]
+range = [true, 1, 1, 1]
 [modeled_objects.layer_gap_mm]
 range = [false, 2.0, 2.0, 1]
 [modeled_objects.terminal_stub_length_mm]
@@ -148,6 +148,15 @@ range = [false, 0.05, 0.15, 3]
 range = [false, 0.5, 0.5, 1]
 [modeled_objects.terminal_path]
 value = "A_cw_to_a"
+
+[[modeled_objects]]
+object_id = "rx_plate_stack"
+role = "rx_plate_stack"
+material = "composite"
+model_state = true
+pcb_total_thickness_mm = 0.4
+copper_thickness_mm = 0.1
+ferrite_set_count = 10
 """.strip()
 
 
@@ -291,10 +300,7 @@ def test_build_type2_creates_aedt_without_step_export(tmp_path: Path) -> None:
     assert runner_calls[0]["step_ledger_path"] == Path(document["entries"][0]["step_ledger_path"])
     design_variables = tuple(cast(tuple[tuple[str, str], ...], runner_calls[0]["design_variables"]))
     assert design_variables != ()
-    assert any(
-        name == "modeled_objects_tx_rect_void_coil_wall_parallel_stack_present" and value in {"0", "1"}
-        for name, value in design_variables
-    )
+    assert all(name != "modeled_objects_tx_rect_void_coil_wall_parallel_stack_present" for name, _value in design_variables)
 
 
 def test_build_type2_exports_missing_step_then_creates_aedt(tmp_path: Path) -> None:

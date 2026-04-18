@@ -1,7 +1,7 @@
 ---
 title: test_build_type2_entry.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-19 @ 11:05
+updated: 2026-04-19 @ 18:05
 tags:
   - build
   - test
@@ -29,7 +29,8 @@ tags:
 - missing step ledger는 exporter를 거쳐 same-worker build로 이어져야 한다.
 - existing but broken step ledger는 runner 전에 즉시 실패해야 한다.
 - runner에는 sampled metadata-derived design variables만 전달되어야 한다.
-- TX sampled design-variable handoff에는 `wall_parallel_stack_present` sampled owner도 빠짐없이 포함돼야 한다.
+- runner에는 sampled metadata-derived design variables만 전달되어야 하므로, fixed `wall_parallel_stack_present`는 design-variable handoff에 들어가면 안 된다.
+- active source fixture에 포함된 fixed `rx_plate_stack` scalar도 design-variable handoff에 들어가면 안 된다.
 
 ## 변경 시 주의점
 - full AEDT runtime regression을 이 파일에서 다시 구현하지 않는다.

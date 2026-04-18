@@ -11,6 +11,7 @@ from peetsfea.types.manifest import OutputsSpec
 
 _SUPPORTED_MODELED_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
 _SUPPORTED_MODELED_PLANES: frozenset[str] = frozenset({"XY", "YZ"})
+_GEOMETRY_ONLY_UNSUPPORTED_MODELED_ROLES: frozenset[str] = frozenset({"rx_plate_stack"})
 
 _NON_MODEL_REQUIRED_FIELDS = (
     "object_id",
@@ -190,6 +191,10 @@ def _validated_modeled_entry(
     _require_required_fields(entry, fields=_MODELED_REQUIRED_FIELDS, context=context)
     object_id = require_non_empty_str(require_key(entry, key="object_id", context=context), context=f"{context}.object_id")
     role = require_non_empty_str(require_key(entry, key="role", context=context), context=f"{context}.role")
+    if role in _GEOMETRY_ONLY_UNSUPPORTED_MODELED_ROLES:
+        raise ValueError(
+            f"{context}.role {role!r} is a geometry-export-only role and is unsupported in type2 import/setup-ready/EM runtime"
+        )
     if role not in _SUPPORTED_MODELED_ROLES:
         raise ValueError(
             f"{context}.role must be one of ['tx_single_coil', 'rx_single_coil'] "

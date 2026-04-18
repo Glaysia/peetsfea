@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_ledger.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-19 @ 18:05
 tags:
   - hfss-import
   - aedt
@@ -39,6 +39,7 @@ tags:
 - `scene_step_path` must exist.
 - canonical required-key contract는 `scene_step_path`, top-level `em_policy`, top-level `outputs`, non-empty modeled/non-model sections를 포함한다.
 - modeled/non-model sections must be non-empty and satisfy required-key contract.
+- geometry-export-only modeled role(`rx_plate_stack`)는 import/setup-ready/EM runtime 전에 이 layer에서 즉시 거절해야 한다.
 - modeled `placement_owner_id`는 non-model member object에서 exact-one로 resolve되어야 한다.
 - duplicate object id와 duplicate member id는 hard failure다.
 

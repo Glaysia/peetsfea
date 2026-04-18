@@ -1,7 +1,7 @@
 ---
 title: type2_step_export.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 00:25
+updated: 2026-04-19 @ 18:05
 tags:
   - step-export
 ---
@@ -16,6 +16,7 @@ tags:
 - Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-tx-wall-parallel-ferrite-stack]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-ferrite-underlay-equivalent-thickness]]
+- Related feature plan: [[sdd/plans/0.2.24-type2-rx-plate-stack]]
 - Parent note: [[sdd/code/entry/generate_type2_step.py]]
 
 ## 역할
@@ -37,12 +38,14 @@ tags:
   - single-layer TX base: `tx_pcb_l0`, `tx_copper_l0`
   - multilayer TX base: `tx_pcb_l{n}` + `tx_copper_stack`
   - TX wall extension: append collapsed effective trio `tx_wall_ferrite_u0`, `tx_wall_pet_psa_u0`, `tx_wall_air_u0`
-  - RX base: `rx_pcb_l0`, `rx_copper_l0`
-  - RX underlay extension: append collapsed effective trio `under_rx_ferrite_u0`, `under_rx_pet_psa_u0`, `under_rx_air_u0`
+  - legacy RX single-coil base: `rx_pcb_l0`, `rx_copper_l0`
+  - legacy RX underlay extension: append collapsed effective trio `under_rx_ferrite_u0`, `under_rx_pet_psa_u0`, `under_rx_air_u0`
+  - active RX plate stack: `rx_copper_wall`, `rx_pcb_wall`, `rx_stack_*`, `rx_pcb_coil`, `rx_copper_coil`
 - `underlay_repeat_count` affects exported underlay thickness, not underlay body multiplicity.
 - underlay exact object/body names must remain `<= 32` chars.
 - direct export와 full-scene export 모두 같은 metadata-owned port-sheet geometry 규칙을 공유해야 한다.
 - 그 bridge 규칙의 diagonal choice는 inter-stub centerline에 대해 더 넓어지는 diagonal, 즉 endpoint들의 perpendicular distance 합이 최대가 되는 diagonal이어야 한다.
+- geometry-only `rx_plate_stack`는 port-sheet self-check 대상이 아니며 sentinel `terminal_metadata.kind == "none"`으로 skip된다.
 
 ## Invariants / fail-fast
 - cleanup, spec parse, scene build, ledger write 순서가 deterministic해야 한다.
@@ -55,6 +58,7 @@ tags:
 - direct modeled export must keep the same metadata-owned two-stub bridge geometry as full-scene export.
 - underlay body naming/order drift changes import partition/material styling contracts and is therefore export-contract drift.
 - widened diagonal selection rule drift is export contract drift이므로 scene-layer rule 변경 없이 lower-level propagated sheet를 그대로 통과시키면 안 된다.
+- active RX `rx_plate_stack` exact-name drift is export contract drift이고 import/runtime guardrail message와도 lockstep으로 움직여야 한다.
 
 ## 직접 의존
 - [[sdd/code/src/peetsfea/type2_step_spec.py]]

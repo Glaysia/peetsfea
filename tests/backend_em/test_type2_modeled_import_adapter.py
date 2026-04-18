@@ -70,6 +70,21 @@ def test_build_single_imported_modeled_object_entry_accepts_rx_single_coil_role(
     assert result["placement_owner_id"] == "rx_region_actual"
 
 
+def test_build_single_imported_modeled_object_entry_rejects_geometry_only_rx_plate_stack_role(
+    tmp_path: Path,
+) -> None:
+    modeled_object = _modeled_object()
+    modeled_object["object_id"] = "rx_plate_stack"
+    modeled_object["role"] = "rx_plate_stack"
+    modeled_object["placement_owner_id"] = "rx_region_max"
+
+    with pytest.raises(ValueError, match=r"geometry-export-only role"):
+        build_single_imported_modeled_object_entry(
+            modeled_object=modeled_object,
+            imported_object_names=("body_1",),
+        )
+
+
 def test_build_single_imported_modeled_object_entry_rejects_model_state_false(tmp_path: Path) -> None:
     modeled_object = _modeled_object()
     modeled_object["model_state"] = False

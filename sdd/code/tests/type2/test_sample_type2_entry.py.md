@@ -1,7 +1,7 @@
 ---
 title: test_sample_type2_entry.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-19 @ 11:05
+updated: 2026-04-19 @ 18:05
 tags:
   - sampling
   - test
@@ -29,7 +29,8 @@ tags:
 - fixed owner는 sampled metadata에 들어가지 않아야 한다.
 - `make_step_on_sample`이 `false`면 exporter가 호출되지 않아야 한다.
 - sample 단계는 `.aedt`를 만들지 않아야 한다.
-- TX-only sampled `wall_parallel_stack_present`가 source sweep field면 sampled metadata owner list와 frozen sampled TOML 양쪽에 정확히 반영돼야 한다.
+- fixed `wall_parallel_stack_present`는 sampled metadata owner list에 들어가면 안 된다. frozen sampled TOML은 source fixed contract `[true, 1, 1, 1]`를 그대로 유지해야 한다.
+- fixed `rx_plate_stack` scalar fields도 sampled metadata owner list에 들어가면 안 되며, frozen sampled TOML에 값 그대로 남아야 한다.
 
 ## 관련 테스트
 - This file is the direct test coverage for the active sample entry split.

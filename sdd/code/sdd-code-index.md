@@ -72,10 +72,11 @@ Test note inventory:
   - `sdd/code/src/peetsfea/tx_rect_void_spec.py.md`
   - `sdd/code/src/peetsfea/tx_rect_void_centerline.py.md`
   - `sdd/code/src/peetsfea/tx_rect_void_export.py.md`
-  - `sdd/code/src/peetsfea/type2_step_spec.py.md`
-  - `sdd/code/src/peetsfea/type2_step_scene.py.md`
-  - `sdd/code/src/peetsfea/type2_step_ledger.py.md`
-  - `sdd/code/src/peetsfea/type2_step_export.py.md`
+- `sdd/code/src/peetsfea/type2_step_spec.py.md`
+- `sdd/code/src/peetsfea/type2_step_scene.py.md`
+- `sdd/code/src/peetsfea/type2_step_ledger.py.md`
+- `sdd/code/src/peetsfea/type2_step_export.py.md`
+- `sdd/code/src/peetsfea/type2_rx_plate_stack.py.md`
   - `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py.md`
   - `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_partition.py.md`
   - `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_style.py.md`

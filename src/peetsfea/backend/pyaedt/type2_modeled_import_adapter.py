@@ -5,6 +5,7 @@ from typing import Literal, TypedDict, cast
 
 _SUPPORTED_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
 _SUPPORTED_PLANES: frozenset[str] = frozenset({"XY", "YZ"})
+_GEOMETRY_ONLY_UNSUPPORTED_ROLES: frozenset[str] = frozenset({"rx_plate_stack"})
 _OUTER_CORNERS: frozenset[str] = frozenset({"A", "B", "C", "D"})
 _INNER_CORNERS: frozenset[str] = frozenset({"a", "b", "c", "d"})
 _PATH_DIRECTIONS: frozenset[str] = frozenset({"cw", "ccw"})
@@ -234,6 +235,10 @@ def build_single_imported_modeled_object_entry(
         _require_key(modeled_object, key="role", context="modeled_object"),
         context="modeled_object.role",
     )
+    if role in _GEOMETRY_ONLY_UNSUPPORTED_ROLES:
+        raise ValueError(
+            f"modeled_object.role {role!r} is a geometry-export-only role and is unsupported in type2 import/setup-ready/EM runtime"
+        )
     if role not in _SUPPORTED_ROLES:
         raise ValueError(
             "modeled_object.role must be one of ['tx_single_coil', 'rx_single_coil'] for single-coil import "

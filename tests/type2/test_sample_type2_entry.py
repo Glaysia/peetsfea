@@ -128,7 +128,7 @@ range = [true, 0, 8, 5]
 [modeled_objects.underlay_gap_mm]
 range = [false, 1.0, 10.0, 4]
 [modeled_objects.wall_parallel_stack_present]
-range = [true, 0, 1, 2]
+range = [true, 1, 1, 1]
 [modeled_objects.layer_gap_mm]
 range = [false, 2.0, 2.0, 1]
 [modeled_objects.terminal_stub_length_mm]
@@ -147,6 +147,15 @@ range = [false, 0.05, 0.15, 3]
 range = [false, 0.5, 0.5, 1]
 [modeled_objects.terminal_path]
 value = "A_cw_to_a"
+
+[[modeled_objects]]
+object_id = "rx_plate_stack"
+role = "rx_plate_stack"
+material = "composite"
+model_state = true
+pcb_total_thickness_mm = 0.4
+copper_thickness_mm = 0.1
+ferrite_set_count = 10
 """.strip()
 
 
@@ -220,10 +229,9 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     sampled_owner_paths = [
         "modeled_objects.tx_rect_void_coil.outer_x_mm",
         "modeled_objects.tx_rect_void_coil.underlay_repeat_count",
-        "modeled_objects.tx_rect_void_coil.underlay_gap_mm",
-        "modeled_objects.tx_rect_void_coil.wall_parallel_stack_present",
         "modeled_objects.tx_rect_void_coil.void_x_over_outer_x",
         "modeled_objects.tx_rect_void_coil.margin_ratio",
+        "modeled_objects.tx_rect_void_coil.underlay_gap_mm",
     ]
     first_entry = document["entries"][0]
     head_hash4 = _current_head_hash4()
@@ -253,11 +261,18 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert modeled_object["outer_x_mm"]["range"][3] == 1
     assert modeled_object["underlay_repeat_count"]["range"][3] == 1
     assert modeled_object["underlay_gap_mm"]["range"][3] == 1
-    assert modeled_object["wall_parallel_stack_present"]["range"][3] == 1
+    assert modeled_object["wall_parallel_stack_present"]["range"] == [True, 1.0, 1.0, 1]
     assert modeled_object["void_x_over_outer_x"]["range"][3] == 1
     assert modeled_object["margin_ratio"]["range"][3] == 1
     assert modeled_object["layer_gap_mm"]["range"] == [False, 2.0, 2.0, 1]
+    assert "modeled_objects.tx_rect_void_coil.wall_parallel_stack_present" not in sampled_metadata["sampled_owner_paths"]
     assert "modeled_objects.tx_rect_void_coil.layer_gap_mm" not in sampled_metadata["sampled_owner_paths"]
+    rx_modeled_object = sampled_payload["modeled_objects"][1]
+    assert rx_modeled_object["object_id"] == "rx_plate_stack"
+    assert rx_modeled_object["role"] == "rx_plate_stack"
+    assert rx_modeled_object["pcb_total_thickness_mm"] == 0.4
+    assert rx_modeled_object["copper_thickness_mm"] == 0.1
+    assert rx_modeled_object["ferrite_set_count"] == 10
 
     resolved_entry = manifest_entry_for_sample_index(manifest_path, sample_index=0)
     assert resolved_entry["design_id"] == first_entry["design_id"]

@@ -15,6 +15,7 @@ from peetsfea.tx_rect_void import load_tx_rect_void_spec
 from peetsfea.tx_rect_void import modeled_body_bounds_from_boxes
 from peetsfea.tx_rect_void import profile_for_modeled_role
 from peetsfea.tx_rect_void import realize_tx_rect_void_spec
+from peetsfea.type2_rx_plate_stack import expected_rx_plate_stack_body_names
 from peetsfea.type2_step_ledger import Type2DirectModeledArtifact
 from peetsfea.type2_step_ledger import Type2ImportEmPolicy
 from peetsfea.type2_step_ledger import Type2StepLedger
@@ -22,14 +23,19 @@ from peetsfea.type2_step_ledger import build_modeled_object_ledger_entry
 from peetsfea.type2_step_ledger import build_type2_step_ledger
 from peetsfea.type2_step_ledger import write_modeled_source_metadata
 from peetsfea.type2_step_ledger import write_type2_step_ledger
+from peetsfea.type2_step_scene import build_modeled_scene_data
 from peetsfea.type2_step_scene import build_modeled_single_coil_scene_data
 from peetsfea.type2_step_scene import build_non_model_scene_entry
 from peetsfea.type2_step_scene import build_non_model_scene_shapes
 from peetsfea.type2_step_scene import require_non_model_object_spec
+from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
+from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
+from peetsfea.type2_step_spec import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
+from peetsfea.type2_step_spec import placement_owner_id_for_role
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
 from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
@@ -186,6 +192,11 @@ def _require_single_coil_expected_body_contract(
         expected_body_names = modeled_entry["expected_exported_body_names"]
         expected_body_count = modeled_entry["expected_exported_body_count"]
         if role == "tx_single_coil":
+            if not isinstance(modeled_spec, ModeledTxSingleCoilSpec):
+                raise ValueError(
+                    f"type2 modeled object spec registry must retain ModeledTxSingleCoilSpec for {object_id} "
+                    f"(actual={type(modeled_spec).__name__})"
+                )
             pcb_layer_positions = cast(
                 tuple[float, ...],
                 modeled_entry["canonical_coordinates"]["pcb_layer_z_positions_mm"],
@@ -196,25 +207,41 @@ def _require_single_coil_expected_body_contract(
             else:
                 expected_names.append("tx_copper_stack")
             repeat_count = resolve_modeled_underlay_repeat_count(modeled_spec, seed=seed)
-            if repeat_count > 0 and resolve_modeled_wall_parallel_stack_present(cast(ModeledTxSingleCoilSpec, modeled_spec), seed=seed):
+            if repeat_count > 0 and resolve_modeled_wall_parallel_stack_present(modeled_spec, seed=seed):
                 expected_names.extend(_tx_wall_expected_body_names(repeat_count=repeat_count))
         elif role == "rx_single_coil":
+            if not isinstance(modeled_spec, ModeledRxSingleCoilSpec):
+                raise ValueError(
+                    f"type2 modeled object spec registry must retain ModeledRxSingleCoilSpec for {object_id} "
+                    f"(actual={type(modeled_spec).__name__})"
+                )
             expected_names = ["rx_pcb_l0", "rx_copper_l0"]
             expected_names.extend(
                 _rx_underlay_expected_body_names(
                     repeat_count=resolve_modeled_underlay_repeat_count(modeled_spec, seed=seed)
                 )
             )
+        elif role == "rx_plate_stack":
+            if not isinstance(modeled_spec, ModeledRxPlateStackSpec):
+                raise ValueError(
+                    f"type2 modeled object spec registry must retain ModeledRxPlateStackSpec for {object_id} "
+                    f"(actual={type(modeled_spec).__name__})"
+                )
+            expected_names = list(
+                expected_rx_plate_stack_body_names(
+                    ferrite_set_count=modeled_spec.ferrite_set_count
+                )
+            )
         else:
             raise ValueError(f"unsupported modeled object role in type2 ledger: {role}")
         if list(expected_body_names) != expected_names:
             raise ValueError(
-                "type2 single-coil export expected body contract mismatch "
+                "type2 modeled export expected body contract mismatch "
                 f"(role={role}, expected={expected_names}, actual={list(expected_body_names)})"
             )
         if expected_body_count != len(expected_names):
             raise ValueError(
-                "type2 single-coil export expected body count mismatch "
+                "type2 modeled export expected body count mismatch "
                 f"(role={role}, expected={len(expected_names)}, actual={expected_body_count})"
             )
 
@@ -455,11 +482,27 @@ def _local_port_sheet_owner_boxes(
 def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path: Path, seed: int) -> None:
     spec = load_type2_step_spec(toml_path)
     for modeled_spec in spec.modeled_objects:
-        profile = profile_for_modeled_role(modeled_spec.role)
+        modeled_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == modeled_spec.object_id)
+        terminal_metadata = cast(dict[str, object], modeled_entry["terminal_metadata"])
+        if "kind" in terminal_metadata:
+            raw_kind = terminal_metadata["kind"]
+            if not isinstance(raw_kind, str):
+                raise RuntimeError(
+                    "type2 terminal metadata kind sentinel must be str "
+                    f"(object_id={modeled_spec.object_id}, actual={raw_kind!r})"
+                )
+            if raw_kind == "none":
+                continue
+            raise RuntimeError(
+                "type2 terminal metadata kind sentinel is unsupported "
+                f"(object_id={modeled_spec.object_id}, kind={raw_kind!r})"
+            )
+        single_coil_spec = cast(ModeledSingleCoilSpec, modeled_spec)
+        profile = profile_for_modeled_role(single_coil_spec.role)
         owner_spec = next(non_model for non_model in spec.non_model_objects if non_model.object_id == profile.placement_owner_id)
         with tempfile.TemporaryDirectory() as temp_dir:
-            tx_rect_void_toml_path = Path(temp_dir) / f"{modeled_spec.object_id}.toml"
-            tx_rect_void_toml_path.write_text(render_tx_rect_void_toml(modeled_spec), encoding="utf-8")
+            tx_rect_void_toml_path = Path(temp_dir) / f"{single_coil_spec.object_id}.toml"
+            tx_rect_void_toml_path.write_text(render_tx_rect_void_toml(single_coil_spec), encoding="utf-8")
             tx_rect_void_spec = load_tx_rect_void_spec(tx_rect_void_toml_path)
             realized = realize_tx_rect_void_spec(tx_rect_void_spec, seed=seed, profile=profile)
         local_boxes = build_tx_rect_void_box_specs(realized, profile=profile)
@@ -479,11 +522,10 @@ def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path:
             )
             for box in owner_boxes
         )
-        sheet_label = "tx_port_sheet" if modeled_spec.role == "tx_single_coil" else "rx_port_sheet"
-        modeled_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == modeled_spec.object_id)
+        sheet_label = "tx_port_sheet" if single_coil_spec.role == "tx_single_coil" else "rx_port_sheet"
         raw_sheet_vertices = cast(
             tuple[tuple[float, float, float], ...],
-            modeled_entry["terminal_metadata"]["port_sheet_vertices_xyz"],
+            terminal_metadata["port_sheet_vertices_xyz"],
         )
         if len(raw_sheet_vertices) != 4:
             raise RuntimeError(
@@ -540,10 +582,12 @@ def export_type2_step_artifacts(
     scene_shapes: list[bd.Shape] = list(build_non_model_scene_shapes(spec.non_model_objects))
     modeled_entries = []
     for modeled_spec in spec.modeled_objects:
-        profile = profile_for_modeled_role(modeled_spec.role)
-        owner_spec = require_non_model_object_spec(spec.non_model_objects, object_id=profile.placement_owner_id)
+        owner_spec = require_non_model_object_spec(
+            spec.non_model_objects,
+            object_id=placement_owner_id_for_role(modeled_spec.role),
+        )
         metadata_path = object_metadata_dir / f"{modeled_spec.object_id}.metadata.json"
-        modeled_scene_shapes, scene_data = build_modeled_single_coil_scene_data(
+        modeled_scene_shapes, scene_data = build_modeled_scene_data(
             modeled_spec,
             owner_spec=owner_spec,
             seed=seed,

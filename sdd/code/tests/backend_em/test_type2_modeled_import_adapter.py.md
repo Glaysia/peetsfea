@@ -1,7 +1,7 @@
 ---
 title: test_type2_modeled_import_adapter.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-19 @ 18:05
 tags:
   - hfss-import
 ---
@@ -29,6 +29,7 @@ tags:
 ## Invariants / fail-fast
 - success case는 normalized typed contract(`ImportedModeledObjectEntry`)를 반환해야 한다.
 - success case는 `tx_single_coil`, `rx_single_coil` 둘 다 수용해야 한다.
+- geometry-only `rx_plate_stack`는 terminal parsing 전에 즉시 실패해야 한다.
 - unsupported plane은 즉시 실패해야 한다.
 - `model_state != True`이면 즉시 실패해야 한다.
 - `imported_object_names` empty/duplicate는 즉시 실패해야 한다.

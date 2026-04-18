@@ -723,3 +723,32 @@ def test_setup_type2_step_ledger_raises_when_validate_design_returns_false(tmp_p
             imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
             hfss_factory=lambda _: cast(HfssSession, session),
         )
+
+
+def test_setup_type2_step_ledger_rejects_geometry_only_rx_plate_stack_role(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    rx_plate_stack_entry = _modeled_entry(
+        object_id="rx_plate_stack",
+        role="rx_plate_stack",
+        plane="YZ",
+        placement_owner_id="rx_region_max",
+        source_metadata_path=str(tmp_path / "rx_plate_stack.metadata.json"),
+    )
+    rx_plate_stack_entry["terminal_metadata"] = {"kind": "none"}
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=[
+            _modeled_entry(source_metadata_path=str(tmp_path / "tx.metadata.json")),
+            rx_plate_stack_entry,
+        ],
+    )
+
+    with pytest.raises(ValueError, match=r"geometry-export-only role"):
+        setup_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_setup_ready.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            hfss_factory=lambda _design_name: (_ for _ in ()).throw(AssertionError("hfss_factory must not run")),
+        )

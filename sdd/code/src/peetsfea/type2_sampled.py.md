@@ -1,7 +1,7 @@
 ---
 title: type2_sampled.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-19 @ 11:05
+updated: 2026-04-19 @ 18:05
 tags:
   - sampling
   - build
@@ -36,6 +36,7 @@ tags:
 - sampled metadata table 이름은 `[sampled]`다.
 - sampled owner canonical path는 `modeled_objects.<object_id>.<field>`다.
 - TX-only `wall_parallel_stack_present`도 sampled owner set의 canonical field가 될 수 있다.
+- geometry-only `rx_plate_stack`는 sampled range owner를 갖지 않는다. sampled TOML은 이 object를 source fixed scalar 그대로 복제한다.
 - build path planning canonical root는 `run/sampled/type2/<design_id>/` layout이다.
 - `design_id`와 folder basename format은 `s{sample_index:06d}_{generated_hash4}_{head_hash4}_{retry_number}`다.
 - sample manifest top-level shape는 `config` + `entries` object다.
@@ -53,6 +54,7 @@ tags:
 - sampled metadata owner list는 source exportable owner set과 exact match여야 한다.
 - build input sampled TOML은 modeled range owner 전부가 frozen `count=1`이어야 한다.
 - TX `wall_parallel_stack_present`가 sampled source이면 frozen sampled TOML에도 `count=1`로 남아야 하며 sampled metadata owner list에도 포함돼야 한다.
+- fixed `rx_plate_stack` scalar fields는 sampled metadata owner list에 나타나면 안 된다.
 - design variable unit contract는 int/count, unitless ratio/factor, `_mm` length로만 허용한다.
 
 ## 직접 의존

@@ -1,7 +1,7 @@
 ---
 title: type2_step_scene.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 00:25
+updated: 2026-04-19 @ 18:05
 tags:
   - step-export
 ---
@@ -15,14 +15,16 @@ tags:
 - Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-tx-wall-parallel-ferrite-stack]]
 - Related feature plan: [[sdd/plans/0.2.23-type2-ferrite-underlay-equivalent-thickness]]
+- Related feature plan: [[sdd/plans/0.2.24-type2-rx-plate-stack]]
 - Parent note: [[sdd/code/entry/generate_type2_step.py]]
 
 ## 역할
-- non-model build123d shapes, single-coil placement offsets, final scene body assembly를 담당한다.
+- non-model build123d shapes, single-coil placement offsets, role-aware modeled scene assembly를 담당한다.
 - modeled canonical coordinates/terminal metadata를 geometry에서 직접 계산해 export layer로 전달한다.
 - single-coil scene assembly가 PCB/copper STEP child set과 optional RX underlay tri-layer STEP child set, optional TX wall-parallel stack STEP child set을 소유하고, TX floor-parallel underlay는 더 이상 STEP body로 내보내지 않는다. port sheet는 STEP body로 내보내지 않고 metadata vertices로만 export한다.
 - upstream single-coil scene이 port sheet child를 제공하더라도, 이 모듈은 그것을 final STEP child set에서 제외하고 stub-to-stub bridging rule의 canonical vertices만 metadata로 남긴다.
 - 0.2.23 document contract에서는 `underlay_repeat_count`가 non-zero인 RX modeled object에 대해 explicit ferrite / PET_PSA / air slabs를 scene layer에서 추가한다. TX는 floor-parallel underlay slab를 scene body로 내보내지 않고, optional wall-parallel stack만 scene layer에서 추가한다. 이 underlay/wall stack taxonomy는 `tx_rect_void` core geometry decomposition이 아니라 type2 scene placement/body taxonomy의 책임이다.
+- 0.2.24 active RX path는 `rx_plate_stack` dedicated module로 dispatch되고, 이 role은 `tx_rect_void` core를 호출하지 않는다.
 
 ## 입력 / 출력
 - 입력: parsed type2 specs + owner region specs + seed
@@ -35,6 +37,8 @@ tags:
 - modeled body set에는 PCB/copper, optional RX underlay slabs, optional TX wall-parallel stack만 포함된다.
 - terminal metadata는 start/end plane points뿐 아니라 canonical `port_sheet_vertices_xyz`도 포함해 downstream HFSS sheet reconstruction source가 된다.
 - current type2 single-coil scene does not export port-sheet bodies into `type2_scene.step`; TX/RX sheets exist only as metadata-driven reconstruction targets.
+- active `rx_plate_stack` modeled body set은 wall-side copper/PCB + literal ferrite/PET/air 10-set + coil-side PCB/copper 34 bodies다.
+- active `rx_plate_stack` terminal metadata는 geometry-only sentinel `{"kind": "none"}`다.
 - underlay body owner는 one-site stack이며, per-layer PCB/copper body set 아래에 layer-by-layer로 복제되지 않는다.
 - TX floor-underlay footprint는 placement descriptor 계산에만 남고 exported scene body source로는 쓰지 않는다.
 - RX underlay footprint canonical source는 `rx_region_max` full `YZ` bounds다.
@@ -61,6 +65,8 @@ tags:
 - TX wall-parallel stack은 XY underlay placement descriptor가 계산한 floor-underlay minimum-Z 위 공간을 침범하면 안 된다.
 - TX wall-parallel stack은 `repeat_count * 0.37 mm` X thickness가 wall-side span `tx_region.min_x .. modeled_max_x` 안에 들어가야 하며, remaining height도 양수여야 한다.
 - RX underlay first exported unit must start on the owner `-X` boundary and consume owner thickness toward `+X` without changing RX coil max-X placement.
+- `rx_plate_stack`는 `rx_region_max.min_x` anchor를 유지하고 centered/rebased placement를 하면 안 된다.
+- `rx_plate_stack` total thickness는 `rx_region_max.size_x` 안에 들어가야 한다.
 - TX underlay air 20 um와 RX underlay air 20 um는 spacing-only gap이 아니라 explicit exported `vacuum` body여야 한다.
 - TX/RX underlay footprint는 coil bounds가 아니라 owner region full bounds를 canonical source로 삼는다.
 - RX underlay semantic exported body order는 `ferrite -> pet_psa -> air`를 유지한다.
@@ -74,6 +80,7 @@ tags:
 ## 직접 의존
 - [[sdd/code/src/peetsfea/type2_step_spec.py]]
 - [[sdd/code/src/peetsfea/tx_rect_void.py]]
+- [[sdd/code/src/peetsfea/type2_rx_plate_stack.py]]
 - [[sdd/code/src/peetsfea/type2_step_ledger.py]]
 
 ## 이 파일을 쓰는 곳
