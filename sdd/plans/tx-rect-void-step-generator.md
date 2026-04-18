@@ -1,9 +1,8 @@
 ---
 title: Type2 TX Rect/Void Modeled Object
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 09:09
+updated: 2026-04-18 @ 18:46
 tags:
-  - type2
   - tx-rect-void
   - step-export
 ---

@@ -255,12 +255,13 @@ def _sampled_toml_table(
     for owner_path, value in sampled_values:
         range_spec = _range_spec_for_owner_path(source_spec, owner_path)
         _freeze_owner_range_in_raw_spec(sampled_spec, owner_path=owner_path, value=value, range_spec=range_spec)
-    sampled_spec[_SAMPLED_METADATA_TABLE] = _sampled_metadata(
+    sampled_metadata = _sampled_metadata(
         source_toml_path,
         seed=seed,
         design_id=design_id,
         sampled_owner_paths=sampled_owner_paths,
     )
+    sampled_spec[_SAMPLED_METADATA_TABLE] = cast(TOMLValue, sampled_metadata)
     return sampled_spec
 
 
@@ -342,9 +343,33 @@ def build_type2_sample_manifest_document(
     config: Type2SampleManifestConfig,
     entries: list[Type2SampleManifestEntry],
 ) -> Type2SampleManifestDocument:
+    config_copy: Type2SampleManifestConfig = {
+        "source_toml_path": config["source_toml_path"],
+        "seed_first": config["seed_first"],
+        "seed_n": config["seed_n"],
+        "sampler_n": config["sampler_n"],
+        "step_builder_n": config["step_builder_n"],
+        "aedt_builder_n": config["aedt_builder_n"],
+    }
+    entry_copies: list[Type2SampleManifestEntry] = []
+    for entry in entries:
+        entry_copies.append(
+            {
+                "design_id": entry["design_id"],
+                "seed": entry["seed"],
+                "source_toml_path": entry["source_toml_path"],
+                "sampled_toml_path": entry["sampled_toml_path"],
+                "design_dir": entry["design_dir"],
+                "scene_step_path": entry["scene_step_path"],
+                "step_ledger_path": entry["step_ledger_path"],
+                "imported_ledger_path": entry["imported_ledger_path"],
+                "aedt_path": entry["aedt_path"],
+                "sampled_owner_paths": list(entry["sampled_owner_paths"]),
+            }
+        )
     return {
-        "config": dict(config),
-        "entries": [dict(entry) for entry in entries],
+        "config": config_copy,
+        "entries": entry_copies,
     }
 
 

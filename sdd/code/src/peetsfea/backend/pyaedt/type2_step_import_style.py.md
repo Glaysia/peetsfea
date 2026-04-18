@@ -1,9 +1,8 @@
 ---
 title: type2_step_import_style.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 23:58
+updated: 2026-04-18 @ 18:46
 tags:
-  - type2
   - hfss-import
   - aedt
 ---
@@ -14,7 +13,7 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_import_style.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_style.py.md`
 - Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
-- Related feature plan: [[sdd/plans/0.2.22-type2-tx-underlay-mull12060ferrite]]
+- Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
 - Parent note: [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py]]
 
 ## 역할
@@ -30,22 +29,25 @@ tags:
 - non-model: gray/transparency + `model=False`.
 - modeled PCB: `FR4_epoxy`/green + `model=True`.
 - modeled coil conductor: exact `copper` + existing copper visual color.
-- modeled TX underlay ferrite body: exact `MULL12060ferrite`.
-- modeled TX underlay dielectric body: exact `PET_PSA`, with air-like dielectric baseline and documented `permittivity = 2.8`.
-- modeled TX underlay air body: explicit `vacuum`.
+- modeled TX/RX underlay ferrite body: exact `MULL12060ferrite`.
+- modeled TX/RX underlay dielectric body: exact `PET_PSA`, with air-like dielectric baseline and documented `permittivity = 2.8`.
+- modeled TX/RX underlay air body: explicit `vacuum`.
 - modeled port sheet: STEP import object set에 존재하지 않는 것이 기본이며, terminal metadata의 canonical `port_sheet_vertices_xyz`로 HFSS에서 재생성한 sheet다. live AEDT object가 volume `Material` 속성을 노출할 때만 vacuum volume material mutation을 시도하고, 일반 sheet처럼 그 속성이 없으면 volume-material mutation은 건너뛴다.
 - ferrite dataset canonical source는 `notebooks/mu_p.tab`, `$mu_r_real`, `$mu_tand_m` payload다.
 - ferrite material canonical writer는 project `DefinitionManager.AddMaterial/EditMaterial`이며, geometry styling 전에 PyAEDT material lookup과 동기화돼야 한다.
 - PET dielectric material canonical writer는 `materials.add_material("PET_PSA")`지만, geometry styling 전에 `material_keys` visibility까지 강제 동기화돼야 한다.
 - underlay bodies are modeled solids but are neither conductor-mesh owners nor port-sheet reconstruction owners.
+- role-aware TX/RX underlay material preparation is scene-global and runs once before modeled-body styling when any imported ferrite/PET/air underlay trio is present.
 
 ## Invariants / fail-fast
 - PyAEDT `set_object_model_state` `False` return은 즉시 raise.
 - ferrite dataset tab file 누락, raw design/project dataset API 누락, `ImportDataset` / `AddDataset` / raw `DefinitionManager` API 부재, material lookup sync 실패는 즉시 raise한다.
 - required terminal metadata `port_sheet_vertices_xyz`, HFSS `create_polyline`, `cover_lines`, reconstructed sheet model-state mutation 실패도 즉시 raise한다. Volume `Material` 속성이 실제로 없는 sheet에 대해서는 그 mutation을 시도하지 않는다.
 - TX/RX owner-fit mismatch는 move() repair 없이 즉시 raise.
+- TX owner-fit validation은 `tx_region.min_x` touch + centered Y + max-Z touch를 그대로 요구한다.
 - TX multilayer exact-name body set도 conductor-vs-underlay styling contract를 그대로 적용한다.
-- TX underlay exact-name bodies must not be restyled as copper or FR4, and explicit air bodies must remain `vacuum`.
+- TX/RX underlay exact-name bodies must not be restyled as copper or FR4, and explicit air bodies must remain `vacuum`.
+- RX `under_rx_*` exact names use the same ferrite/PET/air styling contract as TX `tx_underlay_*`.
 
 ## 직접 의존
 - `peetsfea.aedt.failfast`
@@ -67,4 +69,4 @@ tags:
 - real AEDT에서 `materials.add_material("PET_PSA")` 성공 뒤에도 `material_keys`가 늦게 채워질 수 있으므로 PET 경로도 explicit cache sync를 거친 뒤에만 property setter를 호출한다.
 - free-surface imported FACE names를 신뢰하지 않는다. canonical port-sheet name은 runtime reconstruction 결과여야 하며, STEP export가 그 시트를 이미 포함한다고 가정하지 않는다.
 - real AEDT covered-polyline port sheets can lack the volume `Material` property even though solids expose it; port-sheet styling must read `valid_properties` before issuing volume material mutation.
-- underlay material ownership과 conductor material ownership을 섞지 않는다. `MULL12060ferrite`는 underlay ferrite slabs에만 쓰고, coil conductors는 `copper`를 유지한다.
+- underlay material ownership과 conductor material ownership을 섞지 않는다. `MULL12060ferrite`는 TX/RX underlay ferrite slabs에만 쓰고, coil conductors는 `copper`를 유지한다.

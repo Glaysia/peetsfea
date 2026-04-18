@@ -1,7 +1,7 @@
 ---
 title: Architecture Note Index
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 09:09
+updated: 2026-04-18 @ 18:46
 tags:
   - sdd
 ---

@@ -1,9 +1,9 @@
 ---
 title: Sample Build Flow
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 09:09
+updated: 2026-04-18 @ 18:46
 tags:
-  - type1
+  - legacy_type1
   - sdd
 ---
 
@@ -15,7 +15,7 @@ tags:
 flowchart TD
     Source["run/legacy/type1.toml"]
     Loader["[[sdd/code/src/peetsfea/spec/loader.py]]"]
-    Sample["legacy [[sdd/code/entry/sample.py]]"]
+    Sample["legacy [[sdd/code/entry/legacy/type1/sample.py]]"]
     Manifest["run/toml/.../manifest.json"]
     Build["entry/legacy/type1/build.py"]
     Geometry["src/peetsfea/backend/pyaedt/geometry/build.py"]

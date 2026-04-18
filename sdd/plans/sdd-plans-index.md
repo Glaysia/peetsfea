@@ -1,7 +1,7 @@
 ---
 title: Plan Note Index
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 20:25
+updated: 2026-04-18 @ 18:46
 tags:
   - sdd
 ---
@@ -28,6 +28,8 @@ tags:
 - `sdd/plans/0.2.22-type2-rx-single-coil.md`
 - `sdd/plans/0.2.22-type2-multilayer-tx-generic-single-coil.md`
 - `sdd/plans/0.2.22-type2-tx-underlay-mull12060ferrite.md`
+- `sdd/plans/0.2.23-type2-sampled-build-split.md`
+- `sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support.md`
 - `sdd/plans/0.2.22-type2-single-coil-corner-relief.md`
 - `sdd/plans/0.2.22-type2-tx-coil-geometry-repair.md`
 - `sdd/plans/tx-rect-void-step-generator.md`
@@ -41,7 +43,9 @@ tags:
 - 구현된 import+ledger path: `sdd/plans/0.2.22-type2-import-ledger-pipeline.md`
 - RX single-coil role 확장: `sdd/plans/0.2.22-type2-rx-single-coil.md`
 - generalized engine + TX multilayer direction: `sdd/plans/0.2.22-type2-multilayer-tx-generic-single-coil.md`
-- TX underlay tri-layer contract: `sdd/plans/0.2.22-type2-tx-underlay-mull12060ferrite.md`
+- TX-only historical underlay note: `sdd/plans/0.2.22-type2-tx-underlay-mull12060ferrite.md`
+- active sampled/build split: `sdd/plans/0.2.23-type2-sampled-build-split.md`
+- current region-footprint underlay contract: `sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support.md`
 - single-coil corner relief gap: `sdd/plans/0.2.22-type2-single-coil-corner-relief.md`
 - TX coil geometry repair: `sdd/plans/0.2.22-type2-tx-coil-geometry-repair.md`
 - 첫 modeled object role: `sdd/plans/tx-rect-void-step-generator.md`

@@ -1,9 +1,8 @@
 ---
 title: test_setup_type2_step_entry.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 23:30
+updated: 2026-04-18 @ 18:46
 tags:
-  - type2
   - hfss-import
   - em
 ---
@@ -33,6 +32,7 @@ tags:
 ## Invariants / fail-fast
 - default mode는 exporter 후 runtime 호출이다.
 - `--ledger` mode는 exporter를 건너뛴다.
+- `--ledger` mode에서도 report/output-variable source는 retained ledger `outputs` contract다.
 - notebook은 this entry/runtime helper의 thin consumer다.
 
 ## 직접 의존

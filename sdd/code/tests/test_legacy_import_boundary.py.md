@@ -1,7 +1,7 @@
 ---
 title: test_legacy_import_boundary.py
 created: 2026-04-17 @ 16:02
-updated: 2026-04-17 @ 16:02
+updated: 2026-04-18 @ 18:46
 tags:
   - legacy
   - governance

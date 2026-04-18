@@ -1,9 +1,8 @@
 ---
 title: import_type2_step.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 00:20
+updated: 2026-04-18 @ 18:46
 tags:
-  - type2
   - hfss-import
 ---
 

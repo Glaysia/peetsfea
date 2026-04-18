@@ -1,9 +1,9 @@
 ---
 title: tx_dd_neo_path.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 09:09
+updated: 2026-04-18 @ 18:46
 tags:
-  - type1
+  - legacy_type1
   - aedt
 ---
 

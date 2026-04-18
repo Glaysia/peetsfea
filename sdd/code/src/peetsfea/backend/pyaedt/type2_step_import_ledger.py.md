@@ -1,9 +1,8 @@
 ---
 title: type2_step_import_ledger.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 10:41
+updated: 2026-04-18 @ 18:46
 tags:
-  - type2
   - hfss-import
   - aedt
 ---
@@ -33,11 +32,12 @@ tags:
 - canonical import metadata source는 export ledger다.
 - `scene_step_path`는 파일 존재 검증을 통과한 절대 경로로 canonicalized 된다.
 - canonical docs 기준 retained boundary-policy field는 top-level `em_policy`다.
+- canonical docs 기준 retained report contract는 top-level `outputs`다.
 - 현재 importer가 `import_time_policy`를 기대하는 구현은 known drift이며, 문서 계약은 그 이름으로 옮기지 않는다.
 
 ## Invariants / fail-fast
 - `scene_step_path` must exist.
-- canonical required-key contract는 `scene_step_path`, top-level `em_policy`, non-empty modeled/non-model sections를 포함한다.
+- canonical required-key contract는 `scene_step_path`, top-level `em_policy`, top-level `outputs`, non-empty modeled/non-model sections를 포함한다.
 - modeled/non-model sections must be non-empty and satisfy required-key contract.
 - modeled `placement_owner_id`는 non-model member object에서 exact-one로 resolve되어야 한다.
 - duplicate object id와 duplicate member id는 hard failure다.

@@ -1,9 +1,9 @@
 ---
 title: Current Pipeline SDD View
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 09:09
+updated: 2026-04-18 @ 18:46
 tags:
-  - type1
+  - legacy_type1
   - sdd
 ---
 
@@ -13,7 +13,7 @@ tags:
 
 ## Boundary
 - 입력 SSOT는 TOML spec이다.
-- legacy 샘플링 entry는 [[sdd/code/entry/sample.py]]가 대표 예시다.
+- legacy 샘플링 entry는 [[sdd/code/entry/legacy/type1/sample.py]]가 대표 예시다.
 - TOML 로딩과 최소 shape 검증은 [[sdd/code/src/peetsfea/spec/loader.py]]가 담당한다.
 - 샘플링 registry 계약은 [[sdd/code/tests/spec_resolver/test_sampling_registry.py]] 같은 테스트가 방어한다.
 
@@ -32,6 +32,6 @@ tags:
 ## Related notes
 - 구조도: [[sdd/diagrams/sample-build-flow]]
 - 예시 코드 노트:
-  - [[sdd/code/entry/sample.py]]
+  - [[sdd/code/entry/legacy/type1/sample.py]]
   - [[sdd/code/src/peetsfea/spec/loader.py]]
   - [[sdd/code/tests/spec_resolver/test_sampling_registry.py]]

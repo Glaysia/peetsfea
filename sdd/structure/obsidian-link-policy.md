@@ -1,7 +1,7 @@
 ---
 title: Obsidian Link Policy
 created: 2026-04-17 @ 20:25
-updated: 2026-04-17 @ 20:25
+updated: 2026-04-18 @ 18:46
 tags:
   - sdd
   - obsidian

@@ -1,7 +1,7 @@
 ---
 title: import_non_model_step_to_hfss.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 09:09
+updated: 2026-04-18 @ 18:46
 tags:
   - hfss-import
   - aedt

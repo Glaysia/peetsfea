@@ -1,59 +1,60 @@
 ---
-title: entry/sample.py
+title: sample.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 09:09
+updated: 2026-04-18 @ 23:10
 tags:
   - sampling
+  - step
 ---
 
 # entry/sample.py
 
 - Source path: `entry/sample.py`
 - Code note path: `sdd/code/entry/sample.py.md`
-- Related plan: [[sdd/plans/0.2.22-sdd-adoption]]
-- Related architecture: [[sdd/architecture/current-pipeline-sdd-view]]
-- Related diagram: [[sdd/diagrams/sample-build-flow]]
+- Related plan: [[sdd/plans/0.2.23-type2-sampled-build-split]]
+- Collaborators:
+  - [[sdd/code/src/peetsfea/type2_runtime.py]]
+  - [[sdd/code/src/peetsfea/type2_sampled.py]]
+  - [[sdd/code/entry/generate_type2_step.py]]
 
 ## 역할
-- batch profile 계산, feasible seed selection 호출, sample artifact generation, `manifest.json` 기록까지 샘플링 entry 흐름을 묶는다.
-- `run/type1.toml` 기반의 대량 TOML 생성 작업에서 기본 실행 파라미터와 batch 단위를 정의한다.
+- active type2 sample + STEP owner entrypoint다.
+- source TOML에서 frozen sampled TOML을 만들고 `manifest.json`을 기록한다.
+- manifest 전체 entries에 대해 scene STEP과 STEP ledger를 생성한다.
 
 ## 입력 / 출력
-- `iter_sample_batch_profiles(...) -> tuple[SampleBatchProfile, ...]`
-- `generate_sample_manifest(...) -> list[SampleManifestEntry]`
-- `generate_all_sample_manifests(...) -> list[list[SampleManifestEntry]]`
-- `main() -> list[list[SampleManifestEntry]]`
+- 입력:
+  - `examples/type2_sweep.toml`
+- 출력:
+  - `run/sampled/type2/manifest.json`
+  - `run/sampled/type2/<design_id>/sampled.toml`
+  - `run/sampled/type2/<design_id>/type2_scene.step`
+  - `run/sampled/type2/<design_id>/type2_step_ledger.json`
 
 ## Canonical state
-- module constants가 기본 sampling contract를 이룬다.
-- canonical batch identity는 `seed_start`, `seed_end`, `target_count`를 가진 `SampleBatchProfile`이다.
-- output canonical path는 `run/toml/toml_<version>_<seed_start>/manifest.json` 규칙을 따른다.
+- module constants가 기본 sample/runtime contract를 이룬다.
+- canonical sampled design set은 `range(SEED_FIRST, SEED_FIRST + SEED_N)`다.
+- manifest top-level `config`는 downstream build runtime contract를 보존한다.
 
 ## Invariants / fail-fast
-- batch count, seed span, total count는 양수여야 한다.
-- sample entry 생성은 `generate_sample_artifact_for_seed()`의 fail-fast 계약을 그대로 따른다.
-- manifest write는 생성된 entry들을 기준으로 단일 경로에 기록한다.
-- default 동작은 headless sampling 흐름이며 fallback batch path를 두지 않는다.
+- `SEED_N`, `SAMPLER_N`, `STEP_BUILDER_N`, `AEDT_BUILDER_N`는 모두 양수여야 한다.
+- sampled TOML generation과 STEP export는 모두 deterministic해야 한다.
+- manifest write 뒤 STEP export를 시작하며, `.aedt`는 만들지 않는다.
+- manifest object shape는 list fallback 없이 고정한다.
 
 ## 직접 의존
-- `peetsfea.pipeline.run_batch`
-- `peetsfea.pipeline.selection.uniform_seedset`
-- `peetsfea.console_log`
-- `peetsfea.version`
-- `concurrent.futures.ProcessPoolExecutor`
+- `peetsfea.type2_runtime`
+- `peetsfea.type2_sampled`
+- `entry.generate_type2_step`
 
 ## 이 파일을 직접 쓰는 곳
 - `entry/build.py`
-- `tests/pipeline_runs/_run_script_artifacts_support.py`
-- VS Code debug/task flow from `run/`
+- human/agent active sample entrypoint
 
 ## 관련 테스트
-- `tests/pipeline_runs/test_run_script_sample_artifacts.py`
-- `tests/pipeline_runs/test_entrypoint_configs.py`
-- `tests/pipeline_runs/test_manifest_determinism.py`
-- [[sdd/code/tests/spec_resolver/test_sampling_registry.py]]
+- [[sdd/code/tests/type2/test_sample_type2_entry.py]]
 
 ## 변경 시 주의점
-- batch profile 규칙이 바뀌면 build replay와 manifest path 계산도 같이 확인해야 한다.
-- sampling contract를 바꾸면 [[docs/current-pipeline]]와 [[sdd/diagrams/sample-build-flow]]를 같이 갱신한다.
-- parallel/default worker semantics를 바꾸면 headless debug flow와 테스트 harness가 같이 영향받는다.
+- manifest config ownership을 `entry/build.py`로 이동시키지 않는다.
+- sample stage에 AEDT build를 다시 섞지 않는다.
+- design directory layout을 바꾸면 build replay와 docs를 함께 갱신한다.

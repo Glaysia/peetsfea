@@ -7,7 +7,7 @@ from pathlib import Path
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from entry.generate_type2_step import Type2StepLedger, export_type2_step_artifacts
+from entry.generate_type2_step import export_type2_step_artifacts
 from peetsfea.type2_runtime import export_prepared_type2_designs
 from peetsfea.type2_sampled import (
     Type2SampleManifestDocument,
@@ -28,7 +28,7 @@ SAMPLER_N = 10
 STEP_BUILDER_N = 10
 AEDT_BUILDER_N = 6
 
-_Exporter = Callable[..., Type2StepLedger]
+_Exporter = Callable[..., object]
 
 
 def sample_type2(

@@ -1,9 +1,8 @@
 ---
 title: generate_type2_step.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 19:20
+updated: 2026-04-18 @ 18:46
 tags:
-  - type2
   - step-export
 ---
 
@@ -14,12 +13,13 @@ tags:
 - Code note path: `sdd/code/entry/generate_type2_step.py.md`
 - Related plan: [[sdd/plans/0.2.22-type2-toml-unification]]
 - Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
-- Related feature plan: [[sdd/plans/0.2.22-type2-tx-underlay-mull12060ferrite]]
+- Related feature plan: [[sdd/plans/0.2.23-type2-underlay-region-footprint-tx-gap-rx-support]]
 - Related architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 - Related test: [[sdd/code/tests/type2/test_generate_type2_step.py]]
 
 ## 역할
 - `examples/type2_fixed.toml`을 단일 type2 authoring input으로 읽는다.
+- sampled/build split 이후에는 frozen sampled TOML도 같은 surface로 읽는다.
 - `[[non_model_objects]]`와 `[[modeled_objects]]`를 모두 하나의 canonical scene STEP(`type2_scene.step`) 안에 넣어 export한다.
 - generated scene STEP 결과와 retained metadata handoff를 ledger(`type2_step_ledger.json`)로 기록한다.
 - direct single-coil CLI consumers can export the modeled `tx_single_coil` object from the same type2 TOML without using a standalone TOML input, while the full ledger path supports both TX/RX single-coil entries together.
@@ -27,7 +27,7 @@ tags:
 - placement는 routing envelope가 아니라 derived modeled bbox를 기준으로 계산한다.
 - current implementation delegates to the generalized single-coil core and consumes TX multilayer parallel-bus outputs directly.
 - entry-facing modeled export contract keeps port-sheet ownership in `terminal_metadata.port_sheet_vertices_xyz` only and never reintroduces port-sheet STEP bodies.
-- TX underlay milestone adds scene-layer explicit tri-layer solids below the TX modeled stack while keeping underlay responsibility outside the `tx_rect_void` core.
+- 0.2.23 document contract adds role-aware scene-layer explicit tri-layer solids while keeping underlay responsibility outside the `tx_rect_void` core.
 - the entry surface fail-fast validates expected body names/count for single-layer TX/RX and TX multilayer before returning the ledger to callers.
 - the entry surface fail-fast validates the metadata-owned port-sheet geometry rule:
   - the sheet lies in the shared plane of the two canonical owner bottom faces
@@ -38,7 +38,7 @@ tags:
   - single-square-owned geometry, unwidened diagonal selection, and terminal-pair span geometry are not accepted anymore
 
 ## 입력 / 출력
-- 입력: `examples/type2_fixed.toml`
+- 입력: fixed 또는 sampled type2 TOML
 - 출력 디렉터리 기본값: `run/step/type2`
 - 출력 artifact:
   - `run/step/type2/type2_scene.step`
@@ -58,14 +58,19 @@ tags:
 - modeled object ledger entries are metadata-only; per-entry `step_path`는 없다.
 - modeled object metadata keeps `source_toml_path` as the type2 TOML path even though the internal `tx_rect_void` parser is reused.
 - TX modeled metadata keeps per-layer PCB names plus a single `tx_copper_stack` expected body name when multilayer, terminal points resolve to the two bottom bus faces for the multilayer case, and `port_sheet_vertices_xyz` resolves from TX bus bottom faces for every supported TX layer count.
-- TX modeled metadata keeps `underlay_repeat_count` ownership in the source TOML and reflects the realized underlay only through exact expected body names/count:
+- modeled metadata keeps shared `underlay_repeat_count` ownership in the source TOML and reflects the realized underlay only through exact expected body names/count:
   - `tx_underlay_ferrite_u{n}`
   - `tx_underlay_pet_psa_u{n}`
   - `tx_underlay_air_u{n}`
-- type2 owns modeled placement: exported modeled metadata is already scene-absolute and matches each role's owner-plane contract using the derived PCB+copper union bbox (`tx_region` centered/top-aligned XY, `rx_region_actual` bottom-Z/right-face-aligned YZ).
+  - `under_rx_ferrite_u{n}`
+  - `under_rx_pet_psa_u{n}`
+  - `under_rx_air_u{n}`
+- type2 owns modeled placement: exported modeled metadata is already scene-absolute and matches each role's owner-plane contract using the derived PCB+copper union bbox (`tx_region` min-X-touch + centered-Y + top-aligned XY, `rx_region_max` bottom-Z/right-face-aligned YZ).
 - modeled scene authoring passes the same role profile through realization, box decomposition, placement, and final scene export.
 - port-sheet vertices are modeled metadata, not non-model members, and remain outside the final `type2_scene.step` child set.
-- TX underlay placement is scene-layer owned: the first ferrite top face touches the modeled canonical minimum-Z plane and every later unit stacks downward in deterministic tri-layer order.
+- TX underlay placement is scene-layer owned: `tx_region` full footprint를 쓰고, first ferrite top face는 TX modeled canonical minimum-Z plane보다 `underlay_gap_mm`만큼 아래에 온다.
+- RX underlay placement is scene-layer owned: `rx_region_max` full footprint를 쓰고, first unit는 owner `-X` boundary에 anchor한다.
+- entry-level expected-body validation includes RX underlay exact-name ordering as well as TX underlay exact-name ordering.
 - port-sheet geometry is defined from the canonical start/end owner pair bottom-face squares: the exported metadata must bridge the two widened diagonals in their shared plane, chosen by maximum perpendicular spread away from the inter-owner centerline.
 
 ## Invariants / fail-fast
@@ -76,7 +81,7 @@ tags:
 - active type2 export는 object-level multi-STEP가 아니라 하나의 `type2_scene.step`만 만들어야 한다.
 - legacy `type2_non_model_scene.step`, `type2_combined_preview.step`, `objects/` 출력은 generator가 정리해야 한다.
 - combined non-model scene ledger must preserve member-level canonical coordinates for downstream import placement/styling.
-- type2 export must contain exactly one placement owner member per modeled role (`tx_region`, `rx_region_actual`) and use it as the sole absolute-placement source for that role.
+- type2 export must contain exactly one placement owner member per modeled role (`tx_region`, `rx_region_max`) and use it as the sole absolute-placement source for that role.
 - active example rebase is owned by TOML data, not by generator logic. export/runtime must not apply an extra implicit Z normalization pass.
 - modeled object role은 현재 `tx_single_coil`, `rx_single_coil`만 허용한다.
 - prototype modeled object ids는 role별 canonical id (`tx_rect_void_coil`, `rx_rect_void_coil`)와 일치해야 하며 `material = composite`를 강제한다.
@@ -85,14 +90,17 @@ tags:
 - modeled object uses `outer_y_mm`; ratio-based outer-y input is no longer accepted.
 - `outer_x_mm` / `outer_y_mm` are routing-envelope inputs, not exported PCB size guarantees.
 - current modeled object surface still carries `terminal_stub_length_mm`, but geometry ownership is derived from `layer_gap_mm * 0.8`.
-- `underlay_repeat_count` is a shared modeled-object field with canonical encoding `[true, 0, 8, 5]`. TX supports the realized set `{0, 2, 4, 6, 8}` and RX currently fail-fast rejects non-zero values.
+- `underlay_repeat_count` is a TX/RX shared modeled-object field with canonical encoding `[true, 0, 8, 5]` and realized set `{0, 2, 4, 6, 8}`.
+- `underlay_gap_mm` is a TX-only modeled-object field with canonical encoding `[false, 1.0, 10.0, 4]` and realized set `{1.0, 4.0, 7.0, 10.0}`.
 - `tx_single_coil` may export multilayer parallel-bus geometry; `rx_single_coil` still fail-fast rejects `layer_count != 1`.
 - RX/TX modeled realization must never fall back to TX default profile inside the type2 scene export path.
 - modeled export must record expected exported body names/count for import smoke validation.
 - modeled export must place each single coil at export time according to its owner plane with scene-absolute bounds derived from the actual exported PCB+copper union and plane-aware terminal metadata (`start_point_plane_mm`, `end_point_plane_mm`) already resolved.
 - TX multilayer expected body names are `tx_pcb_l{n}` plus `tx_copper_stack`; single-layer TX/RX keep `*_pcb_l0` + `*_copper_l0`.
-- TX underlay bodies, when present, must append after the TX PCB/copper base set in exact `ferrite -> pet_psa -> air` per-unit order, and `u0` must be the unit nearest the TX modeled body.
-- TX underlay footprint must follow the actual exported TX planar bounds, not `tx_region` full bounds and not a separate margin heuristic.
+- TX underlay bodies, when present, must append after the TX PCB/copper base set in exact semantic `ferrite -> pet_psa -> air` per-unit order, and `u0` must be the unit nearest the TX modeled body.
+- RX underlay bodies, when present, must append after the RX PCB/copper base set in exact semantic `ferrite -> pet_psa -> air` per-unit order even though physical `-X -> +X` stack order is `air -> PET_PSA -> ferrite`.
+- TX/RX underlay footprints follow owner region full bounds, not coil union bounds.
+- new underlay exact object/body names must remain `<= 32` chars.
 - port-sheet validation is geometry-aware at the entry boundary: exported metadata vertices must stay on the shared owner bottom-face plane and their boundary must connect the two widened owner-bottom diagonals selected from the inter-owner centerline.
 - final scene STEP body names must be unique across non-model + modeled bodies.
 - `build123d.export_step()`가 `False`를 반환하면 즉시 예외로 중단한다.
@@ -119,5 +127,5 @@ tags:
 - modeled object schema field를 바꾸면 `type2_fixed.toml`과 테스트 fixture를 함께 갱신한다.
 - ledger 필드 shape를 바꾸면 downstream import smoke contract를 함께 갱신한다.
 - owner region 크기를 바꿀 때는 stub 포함 coil thickness가 owner normal-axis 안에 계속 들어가는지 테스트와 example 값을 함께 확인한다.
-- TX underlay는 `tx_rect_void` core output이 아니라 type2 scene-layer responsibility다. core geometry note와 scene/import notes를 분리해 갱신한다.
+- TX/RX underlay는 `tx_rect_void` core output이 아니라 type2 scene-layer responsibility다. core geometry note와 scene/import notes를 분리해 갱신한다.
 - 새 modeled role을 추가할 때는 명시적으로 parser/dispatcher를 확장하고 unsupported role fail-fast를 유지한다.

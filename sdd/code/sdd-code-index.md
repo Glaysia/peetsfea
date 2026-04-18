@@ -1,7 +1,7 @@
 ---
 title: Code Note Index
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 20:25
+updated: 2026-04-18 @ 18:46
 tags:
   - sdd
 ---
@@ -14,7 +14,7 @@ tags:
 - 정규 규칙: `sdd/code/<repo-relative-code-path>.md`
 - 예시:
   - `src/peetsfea/spec/loader.py` -> `sdd/code/src/peetsfea/spec/loader.py.md`
-  - `entry/legacy/type1/sample.py` -> `sdd/code/entry/sample.py.md`
+  - `entry/legacy/type1/sample.py` -> `sdd/code/entry/legacy/type1/sample.py.md`
   - `tests/legacy/type1/spec_resolver/test_sampling_registry.py` -> `sdd/code/tests/spec_resolver/test_sampling_registry.py.md`
   - `src/peetsfea/spec/__init__.py` -> `sdd/code/src/peetsfea/spec/__init__.py.md`
 
@@ -35,6 +35,7 @@ tags:
 Entry note inventory:
 - `sdd/code/entry/export_tx_rect_void_step.py.md`
 - `sdd/code/entry/import_type2_step.py.md`
+- `sdd/code/entry/build.py.md`
 - `sdd/code/entry/sample.py.md`
 - `sdd/code/entry/generate_non_model_step.py.md`
 - `sdd/code/entry/generate_type2_step.py.md`
@@ -47,14 +48,20 @@ Src note inventory:
 - `sdd/code/src/peetsfea/backend/pyaedt/type2_modeled_import_adapter.py.md`
 - `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py.md`
 - `sdd/code/src/peetsfea/spec/loader.py.md`
+- `sdd/code/src/peetsfea/spec/toml_render.py.md`
+- `sdd/code/src/peetsfea/type2_runtime.py.md`
+- `sdd/code/src/peetsfea/type2_sampled.py.md`
 - `sdd/code/src/peetsfea/tx_rect_void.py.md`
 
 Test note inventory:
 - `sdd/code/tests/backend_em/test_type2_step_import_smoke.py.md`
 - `sdd/code/tests/backend_em/test_tx_rect_void_step_import_smoke.py.md`
 - `sdd/code/tests/backend_em/test_type2_step_import_pipeline.py.md`
+- `sdd/code/tests/backend_em/test_type2_step_setup_ready.py.md`
+- `sdd/code/tests/type2/test_build_type2_entry.py.md`
 - `sdd/code/tests/type2/test_generate_type2_step.py.md`
 - `sdd/code/tests/type2/test_import_type2_step_entry.py.md`
+- `sdd/code/tests/type2/test_sample_type2_entry.py.md`
 - `sdd/code/tests/spec_resolver/test_sampling_registry.py.md`
 - `sdd/code/tests/tx_rect_void/test_tx_rect_void.py.md`
 

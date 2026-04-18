@@ -15,13 +15,6 @@
       }
     },
     {
-      "query": "tag:type2",
-      "color": {
-        "a": 1,
-        "rgb": 2278750
-      }
-    },
-    {
       "query": "tag:tx-rect-void",
       "color": {
         "a": 1,
@@ -95,6 +88,6 @@
   "repelStrength": 8.85416666666667,
   "linkStrength": 0.729166666666667,
   "linkDistance": 282,
-  "scale": 0.30798762744739305,
+  "scale": 0.1368833899766191,
   "close": false
 }

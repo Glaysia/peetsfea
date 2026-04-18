@@ -8,7 +8,7 @@ tags:
 
 # {{title}}
 
-> Replace `sdd` with 1-3 semantic tags such as `type2`, `hfss-import`, `step-export`, `tx-rect-void`, or `governance`.
+> Replace `sdd` with 1-3 semantic tags such as `hfss-import`, `step-export`, `tx-rect-void`, `governance`, or `legacy_type1` for legacy-only notes.
 
 ## Summary
 - 

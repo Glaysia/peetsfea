@@ -1,9 +1,8 @@
 ---
 title: test_refresh_type2_step_viewer_artifacts.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 09:09
+updated: 2026-04-18 @ 18:46
 tags:
-  - type2
   - step-export
 ---
 
@@ -36,8 +35,10 @@ tags:
 - stale `type2_combined_preview.step`와 `objects/` 디렉터리는 refresh 후 남아 있으면 안 된다.
 - refreshed active example baseline must keep `tx_region.bottom == 0` after the scene Z rebase.
 - refreshed active example TX multilayer path must still emit exactly four canonical `port_sheet_vertices_xyz` entries.
-- TX는 centered/top-aligned contract를 유지해야 한다.
+- refreshed active `examples/type2_fixed.toml` may now express underlay contracts as fixed single-candidate ranges, and refresh must still resolve the same underlay geometry without depending on sweep-form input.
+- TX는 `tx_region.min_x` touch + centered Y + top-aligned contract를 유지해야 한다.
 - RX는 centered Y + bottom Z + owner max-X contract를 유지해야 하며, rebased active example에서는 `rx_region_max.min_z == 139`를 그대로 써야 한다.
+- refreshed active example also preserves RX underlay exact-name ordering and owner `-X` anchor without changing the RX coil max-X contact contract.
 
 ## 직접 의존
 - [[sdd/code/entry/refresh_type2_step_viewer_artifacts.py]]

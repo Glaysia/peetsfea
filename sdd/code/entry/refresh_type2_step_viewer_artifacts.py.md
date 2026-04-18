@@ -1,9 +1,8 @@
 ---
 title: refresh_type2_step_viewer_artifacts.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 09:09
+updated: 2026-04-18 @ 18:46
 tags:
-  - type2
   - step-export
 ---
 
@@ -42,8 +41,8 @@ tags:
 - export 후 ledger file이 반드시 다시 존재해야 한다.
 - export 후 ledger top-level `scene_step_path`가 반드시 존재해야 한다.
 - stale `type2_combined_preview.step`와 `objects/` 산출물은 refresh 후 남아 있으면 안 된다.
-- TX는 `tx_region` 내부 centered X/Y + owner max-Z 접촉이어야 한다.
-- RX는 `rx_region_actual` 내부 centered Y + owner min-Z 접촉 + owner max-X 접촉이어야 한다.
+- TX는 `tx_region.min_x` touch + centered Y + owner max-Z 접촉이어야 한다.
+- RX는 `rx_region_max` 내부 centered Y + owner min-Z 접촉 + owner max-X 접촉이어야 한다.
 - placement contract mismatch, missing artifact, `build123d.export_step()` false는 즉시 raise한다.
 
 ## 직접 의존

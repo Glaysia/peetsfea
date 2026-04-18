@@ -1,9 +1,8 @@
 ---
 title: type2_step_em_input.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-17 @ 23:30
+updated: 2026-04-18 @ 18:46
 tags:
-  - type2
   - em
   - adapter
 ---

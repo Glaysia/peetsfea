@@ -10,6 +10,7 @@ import entry.build as build_entry
 from entry.build import build_type2
 from entry.sample import sample_type2
 from peetsfea.backend.pyaedt.type2_step_setup_ready import Type2SetupReadyResult
+from peetsfea.backend.pyaedt.type2_step_post_import_mesh import Type2ImportedMeshSummary
 
 
 def _source_type2_toml_text() -> str:
@@ -160,6 +161,18 @@ def _write_step_artifacts(*, output_dir: Path, ledger_path: Path) -> None:
 
 
 def _fake_setup_result(*, step_ledger_path: Path, output_aedt_path: Path, imported_ledger_path: Path, seed: int) -> Type2SetupReadyResult:
+    mesh: Type2ImportedMeshSummary = {
+        "module_name": "MeshSetup",
+        "operation": "AssignLengthOp",
+        "operation_name": "Length1",
+        "objects": ["tx_copper_l0"],
+        "refine_inside": False,
+        "enabled": True,
+        "restrict_elem": False,
+        "num_max_elem": "1000",
+        "restrict_length": True,
+        "max_length": "1mm",
+    }
     return {
         "source_toml_path": str(step_ledger_path.with_name("sampled.toml")),
         "source_step_ledger_path": str(step_ledger_path),
@@ -167,7 +180,7 @@ def _fake_setup_result(*, step_ledger_path: Path, output_aedt_path: Path, import
         "seed": seed,
         "aedt_path": str(output_aedt_path),
         "imported_ledger_path": str(imported_ledger_path),
-        "mesh": {"operation_name": "length_mesh", "objects": ["tx_copper_l0"], "max_length": "1mm"},
+        "mesh": mesh,
         "boundary": {"type": "radiation", "region_name": "Region", "face_count": "6", "offset_value": "3500mm"},
         "ports": {"tx": ["1_T1"], "rx": ["2_T1"]},
         "sources": {"tx_source_name": "1_T1", "rx_source_name": "2_T1"},
