@@ -13,7 +13,7 @@ tags:
 ## Source
 - Path: `tests/type2/test_sample_type2_entry.py`
 - Code note path: `sdd/code/tests/type2/test_sample_type2_entry.py.md`
-- Direct owner: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]]
+- Direct owner: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
 - Direct verification target: [[sdd/code/entry/sample.py]]
 - Discovery bridge: [[sdd/code/tests/type2/test_build_type2_entry.py]]
 
@@ -24,11 +24,11 @@ tags:
 ## Canonical coverage
 - active example uses `tx_plate_stack` + `rx_plate_stack`
 - active example plate-stack PCB total uses a shared TX/RX baseline of `0.4 mm`
-- sampled owner paths는 source order canonical 8-owner surface(`tx.turn_count`, `tx.metal_fill_factor`, `tx.z_usage_ratio`, `tx.y_usage_ratio`, `rx.turn_count`, `rx.metal_fill_factor`, `rx.z_usage_ratio`, `rx.y_usage_ratio`)를 따른다
+- sampled owner paths는 source order canonical surface(`tx.turn_count`, `tx.metal_fill_factor`, `tx.z_usage_ratio`, `tx.y_usage_ratio`, `tx.tx_coil_count`, `tx.tx_array_x_usage_ratio`, `rx.turn_count`, `rx.metal_fill_factor`, `rx.z_usage_ratio`, `rx.y_usage_ratio`)를 따른다
 - sampled TOML keeps plate scalar fields fixed
-- sampled TOML keeps sampled `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio` owners를 `count=1` scalar range로 freeze한다
+- sampled TOML keeps sampled `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio`, `tx_coil_count`, `tx_array_x_usage_ratio` owners를 `count=1` scalar range로 freeze한다
 - sampled TOML excludes removed `shoe_depth_mm` from both modeled payload and sampled metadata
-- sampled TOML excludes removed `ferrite_set_count` from plate-stack payload while preserving the 6-owner sampled surface
+- sampled TOML excludes removed `ferrite_set_count` from plate-stack payload while preserving the active sampled surface
 - manifest identity and hash contract remain unchanged
 - `MAKE_STEP_ON_SAMPLE=True` single-worker path emits coarse STEP stage lines around export.
 - `MAKE_STEP_ON_SAMPLE=False` does not emit STEP stage lines and does not call the exporter.

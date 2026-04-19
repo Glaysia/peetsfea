@@ -4,7 +4,7 @@
 # Non-model guide objects and modeled objects are declared together.
 
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v2"
+schema_id = "peetsfea.type2.step.v4"
 runtime_compatible = false
 
 [design]
@@ -236,6 +236,10 @@ range = [false, 0.2, 0.6, 15]
 range = [false, 0.03, 0.6, 17]
 [modeled_objects.y_usage_ratio]
 range = [false, 0.03, 0.6, 17]
+[modeled_objects.tx_coil_count]
+range = [true, 1, 4, 4]
+[modeled_objects.tx_array_x_usage_ratio]
+range = [false, 0.1, 0.6, 14]
 
 [[modeled_objects]]
 object_id = "rx_plate_stack"

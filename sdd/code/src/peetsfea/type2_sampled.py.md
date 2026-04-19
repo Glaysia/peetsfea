@@ -13,7 +13,7 @@ tags:
 - Path: `src/peetsfea/type2_sampled.py`
 - Code note path: `sdd/code/src/peetsfea/type2_sampled.py.md`
 - Status: active
-- Related feature plans: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]]
+- Related feature plans: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
 
 ## 역할
 - type2 sampled owner-path selection, frozen sampled TOML rendering, manifest/build planning을 담당한다.
@@ -31,6 +31,8 @@ tags:
   - `modeled_objects.tx_plate_stack.metal_fill_factor`
   - `modeled_objects.tx_plate_stack.z_usage_ratio`
   - `modeled_objects.tx_plate_stack.y_usage_ratio`
+  - `modeled_objects.tx_plate_stack.tx_coil_count`
+  - `modeled_objects.tx_plate_stack.tx_array_x_usage_ratio`
   - `modeled_objects.rx_plate_stack.turn_count`
   - `modeled_objects.rx_plate_stack.metal_fill_factor`
   - `modeled_objects.rx_plate_stack.z_usage_ratio`
@@ -43,6 +45,8 @@ tags:
 - sampled metadata owner list는 source exportable sampled owner set과 exact match여야 한다.
 - plate roles에서 terminal-path driven coil-only sampled field assert를 요구하면 안 된다.
 - plate-stack free range owners는 deterministic seed selection으로 scalar로 freeze되고 sampled metadata에 그대로 기록되어야 한다.
+- `tx_coil_count` is an integer owner and design variable expression is unitless.
+- `tx_array_x_usage_ratio` is a floating owner and design variable expression is unitless.
 - stage reporting이 실패/지원 여부를 바꾸면 안 되며, exporter failure는 기존처럼 즉시 raise되어야 한다.
 
 ## Collaborators
@@ -58,5 +62,5 @@ tags:
 ## 변경 시 주의점
 - sampled path ownership을 role-blind single-coil field enumeration으로 되돌리지 않는다.
 - active example role 교체와 sampled owner list expectations를 같이 갱신해야 한다.
-- plate-stack sampled owner surface는 `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio`만 소유한다. replay metadata exact-match guard도 이 집합과 같이 갱신해야 한다.
+- plate-stack sampled owner surface adds TX-only `tx_coil_count` and `tx_array_x_usage_ratio`; replay metadata exact-match guard must stay synchronized with this owner set.
 - multi-worker sample path는 completion progress ordering을 깨지 않도록 별도 process-event channel 없이 기존 completion-only progress를 유지한다.

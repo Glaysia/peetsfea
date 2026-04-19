@@ -17,7 +17,11 @@ ModeledObjectRole = Literal["tx_single_coil", "rx_single_coil", "tx_plate_stack"
 _UNDERLAY_REPEAT_COUNT_CANDIDATES = (0, 2, 4, 6, 8)
 _TX_UNDERLAY_GAP_MM_CANDIDATES = (1.0, 4.0, 7.0, 10.0)
 _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES = (0, 1)
-_TYPE2_SCHEMA_ID = "peetsfea.type2.step.v2"
+_TX_PLATE_STACK_COIL_COUNT_CANDIDATES = (1, 2, 3, 4)
+_TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_START = 0.1
+_TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_END = 0.6
+_TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_COUNT = 14
+_TYPE2_SCHEMA_ID = "peetsfea.type2.step.v4"
 
 
 @dataclass(frozen=True)
@@ -99,6 +103,8 @@ class ModeledPlateStackCommonSpec:
 @dataclass(frozen=True)
 class ModeledTxPlateStackSpec(ModeledPlateStackCommonSpec):
     role: Literal["tx_plate_stack"]
+    tx_coil_count: RangeSpec
+    tx_array_x_usage_ratio: RangeSpec
 
 
 @dataclass(frozen=True)
@@ -481,7 +487,21 @@ def _parse_modeled_plate_stack(
             f"{context}.y_usage_ratio must realize to values > 0 and <= 1 "
             f"(actual={y_usage_ratio_candidates})"
         )
-    allowed_keys = {
+    tx_allowed_keys = {
+        "object_id",
+        "role",
+        "material",
+        "model_state",
+        "pcb_total_thickness_mm",
+        "copper_thickness_mm",
+        "turn_count",
+        "metal_fill_factor",
+        "z_usage_ratio",
+        "y_usage_ratio",
+        "tx_coil_count",
+        "tx_array_x_usage_ratio",
+    }
+    rx_allowed_keys = {
         "object_id",
         "role",
         "material",
@@ -493,13 +513,15 @@ def _parse_modeled_plate_stack(
         "z_usage_ratio",
         "y_usage_ratio",
     }
-    extra_keys = sorted(set(table.keys()) - allowed_keys)
-    if extra_keys:
-        raise ValueError(
-            f"{context} contains unsupported keys for {plate_role} "
-            f"(actual={extra_keys})"
-        )
     if plate_role == "tx_plate_stack":
+        extra_keys = sorted(set(table.keys()) - tx_allowed_keys)
+        if extra_keys:
+            raise ValueError(
+                f"{context} contains unsupported keys for {plate_role} "
+                f"(actual={extra_keys})"
+            )
+        tx_coil_count = _require_tx_plate_stack_coil_count_range(table, context=context)
+        tx_array_x_usage_ratio = _require_tx_plate_stack_array_x_usage_ratio_range(table, context=context)
         return ModeledTxPlateStackSpec(
             object_id=object_id,
             role="tx_plate_stack",
@@ -511,6 +533,18 @@ def _parse_modeled_plate_stack(
             metal_fill_factor=metal_fill_factor,
             z_usage_ratio=z_usage_ratio,
             y_usage_ratio=y_usage_ratio,
+            tx_coil_count=tx_coil_count,
+            tx_array_x_usage_ratio=tx_array_x_usage_ratio,
+        )
+    if "tx_coil_count" in table:
+        raise ValueError(f"{context}.tx_coil_count is unsupported for rx_plate_stack")
+    if "tx_array_x_usage_ratio" in table:
+        raise ValueError(f"{context}.tx_array_x_usage_ratio is unsupported for rx_plate_stack")
+    extra_keys = sorted(set(table.keys()) - rx_allowed_keys)
+    if extra_keys:
+        raise ValueError(
+            f"{context} contains unsupported keys for {plate_role} "
+            f"(actual={extra_keys})"
         )
     return ModeledRxPlateStackSpec(
         object_id=object_id,
@@ -594,6 +628,55 @@ def _require_wall_parallel_stack_present_range(
     raise ValueError(
         f"{context}.wall_parallel_stack_present.range must be canonical [true, 0, 1, 2] "
         f"or fixed [true, b, b, 1] for b in {_TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES} for tx_single_coil "
+        f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
+    )
+
+
+def _require_tx_plate_stack_coil_count_range(
+    table: dict[str, object],
+    *,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, "tx_coil_count", context, expect_integer=True)
+    candidates = _integer_range_candidates(range_spec)
+    if candidates == _TX_PLATE_STACK_COIL_COUNT_CANDIDATES:
+        return range_spec
+    if (
+        range_spec.count == 1
+        and range_spec.start == range_spec.end
+        and len(candidates) == 1
+        and candidates[0] in _TX_PLATE_STACK_COIL_COUNT_CANDIDATES
+    ):
+        return range_spec
+    raise ValueError(
+        f"{context}.tx_coil_count.range must be canonical [true, 1, 4, 4] "
+        f"or fixed [true, n, n, 1] for n in {_TX_PLATE_STACK_COIL_COUNT_CANDIDATES} for tx_plate_stack "
+        f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
+    )
+
+
+def _is_canonical_tx_plate_stack_array_x_usage_ratio_range(range_spec: RangeSpec) -> bool:
+    return (
+        range_spec.is_integer is False
+        and range_spec.start == _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_START
+        and range_spec.end == _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_END
+        and range_spec.count == _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_COUNT
+    )
+
+
+def _require_tx_plate_stack_array_x_usage_ratio_range(
+    table: dict[str, object],
+    *,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, "tx_array_x_usage_ratio", context, expect_integer=False)
+    if _is_canonical_tx_plate_stack_array_x_usage_ratio_range(range_spec):
+        return range_spec
+    if range_spec.count == 1 and range_spec.start == range_spec.end and 0.0 < range_spec.start <= 1.0:
+        return range_spec
+    raise ValueError(
+        f"{context}.tx_array_x_usage_ratio.range must be canonical [false, 0.1, 0.6, 14] "
+        "or fixed [false, r, r, 1] for 0 < r <= 1 for tx_plate_stack "
         f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
     )
 
@@ -742,6 +825,45 @@ def resolve_modeled_plate_stack_y_usage_ratio(spec: ModeledPlateStackSpec, *, se
     return candidates[index]
 
 
+def resolve_modeled_tx_coil_count(spec: ModeledTxPlateStackSpec, *, seed: int) -> int:
+    candidates = _integer_range_candidates(spec.tx_coil_count)
+    if candidates != _TX_PLATE_STACK_COIL_COUNT_CANDIDATES and not (
+        len(candidates) == 1 and candidates[0] in _TX_PLATE_STACK_COIL_COUNT_CANDIDATES
+    ):
+        raise ValueError(
+            "tx_plate_stack.tx_coil_count must realize to canonical candidates "
+            f"{_TX_PLATE_STACK_COIL_COUNT_CANDIDATES} or a fixed single candidate from that set "
+            f"(actual={candidates})"
+        )
+    if len(candidates) == 1:
+        return candidates[0]
+    range_path = f"modeled_objects.{spec.object_id}.tx_coil_count"
+    index = _resolve_seeded_candidate_index(seed=seed, range_path=range_path, candidate_count=len(candidates))
+    return candidates[index]
+
+
+def resolve_modeled_tx_array_x_usage_ratio(spec: ModeledTxPlateStackSpec, *, seed: int) -> float:
+    candidates = _float_range_candidates(spec.tx_array_x_usage_ratio)
+    if any(candidate <= 0.0 or candidate > 1.0 for candidate in candidates):
+        raise ValueError(
+            "tx_plate_stack.tx_array_x_usage_ratio must realize to values > 0 and <= 1 "
+            f"(actual={candidates})"
+        )
+    if spec.tx_array_x_usage_ratio.count != 1 and not _is_canonical_tx_plate_stack_array_x_usage_ratio_range(
+        spec.tx_array_x_usage_ratio
+    ):
+        raise ValueError(
+            "tx_plate_stack.tx_array_x_usage_ratio must use canonical sampled range [false, 0.1, 0.6, 14] "
+            "or a fixed single candidate with 0 < r <= 1 "
+            f"(actual={_format_range(spec.tx_array_x_usage_ratio)})"
+        )
+    if len(candidates) == 1:
+        return candidates[0]
+    range_path = f"modeled_objects.{spec.object_id}.tx_array_x_usage_ratio"
+    index = _resolve_seeded_candidate_index(seed=seed, range_path=range_path, candidate_count=len(candidates))
+    return candidates[index]
+
+
 def _require_type2_schema_id(root: dict[str, object], *, context: str) -> str:
     schema_id = _require_non_empty_str(root, "schema_id", context)
     if schema_id != _TYPE2_SCHEMA_ID:
@@ -878,6 +1000,8 @@ __all__ = [
     "resolve_modeled_plate_stack_turn_count",
     "resolve_modeled_plate_stack_z_usage_ratio",
     "resolve_modeled_plate_stack_y_usage_ratio",
+    "resolve_modeled_tx_array_x_usage_ratio",
+    "resolve_modeled_tx_coil_count",
     "resolve_modeled_underlay_gap_mm",
     "resolve_modeled_underlay_repeat_count",
     "resolve_modeled_wall_parallel_stack_present",

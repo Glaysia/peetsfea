@@ -14,6 +14,8 @@ import pytest
 import peetsfea.type2_sampled as type2_sampled
 from entry.sample import sample_type2
 from peetsfea.type2_sampled import manifest_entry_for_sample_index
+from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
+from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import RangeSpec
 
 _PLATE_STACK_PCB_TOTAL_THICKNESS_MM = 0.4
@@ -22,6 +24,8 @@ _EXPECTED_SAMPLED_OWNER_PATHS = [
     "modeled_objects.tx_plate_stack.metal_fill_factor",
     "modeled_objects.tx_plate_stack.z_usage_ratio",
     "modeled_objects.tx_plate_stack.y_usage_ratio",
+    "modeled_objects.tx_plate_stack.tx_coil_count",
+    "modeled_objects.tx_plate_stack.tx_array_x_usage_ratio",
     "modeled_objects.rx_plate_stack.turn_count",
     "modeled_objects.rx_plate_stack.metal_fill_factor",
     "modeled_objects.rx_plate_stack.z_usage_ratio",
@@ -30,18 +34,8 @@ _EXPECTED_SAMPLED_OWNER_PATHS = [
 
 
 @dataclass(frozen=True)
-class _FakePlateStackModeledSpec:
-    object_id: str
-    role: str
-    turn_count: RangeSpec
-    metal_fill_factor: RangeSpec
-    z_usage_ratio: RangeSpec
-    y_usage_ratio: RangeSpec
-
-
-@dataclass(frozen=True)
 class _FakePlateStackType2Spec:
-    modeled_objects: tuple[_FakePlateStackModeledSpec, ...]
+    modeled_objects: tuple[ModeledTxPlateStackSpec | ModeledRxPlateStackSpec, ...]
 
 
 def _patch_plate_stack_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -50,23 +44,35 @@ def _patch_plate_stack_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     tx_fill_factor = RangeSpec(is_integer=False, start=0.3, end=0.5, count=3)
     tx_z_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.3, count=3)
     tx_y_usage_ratio = RangeSpec(is_integer=False, start=0.12, end=0.22, count=3)
+    tx_coil_count = RangeSpec(is_integer=True, start=1.0, end=4.0, count=4)
+    tx_array_x_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.6, count=14)
     rx_turn_count = RangeSpec(is_integer=True, start=6.0, end=8.0, count=3)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.4, end=0.6, count=3)
     rx_z_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=0.4, count=3)
     rx_y_usage_ratio = RangeSpec(is_integer=False, start=0.18, end=0.28, count=3)
     fake_spec = _FakePlateStackType2Spec(
         modeled_objects=(
-            _FakePlateStackModeledSpec(
+            ModeledTxPlateStackSpec(
                 object_id="tx_plate_stack",
                 role="tx_plate_stack",
+                material="composite",
+                model_state=True,
+                pcb_total_thickness_mm=_PLATE_STACK_PCB_TOTAL_THICKNESS_MM,
+                copper_thickness_mm=0.035,
                 turn_count=tx_turn_count,
                 metal_fill_factor=tx_fill_factor,
                 z_usage_ratio=tx_z_usage_ratio,
                 y_usage_ratio=tx_y_usage_ratio,
+                tx_coil_count=tx_coil_count,
+                tx_array_x_usage_ratio=tx_array_x_usage_ratio,
             ),
-            _FakePlateStackModeledSpec(
+            ModeledRxPlateStackSpec(
                 object_id="rx_plate_stack",
                 role="rx_plate_stack",
+                material="composite",
+                model_state=True,
+                pcb_total_thickness_mm=_PLATE_STACK_PCB_TOTAL_THICKNESS_MM,
+                copper_thickness_mm=0.1,
                 turn_count=rx_turn_count,
                 metal_fill_factor=rx_fill_factor,
                 z_usage_ratio=rx_z_usage_ratio,
@@ -86,7 +92,7 @@ def _patch_plate_stack_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
 def _source_type2_toml_text() -> str:
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v2"
+schema_id = "peetsfea.type2.step.v4"
 runtime_compatible = false
 
 [design]
@@ -192,6 +198,10 @@ size_xyz = [10.0, 200.0, 200.0]
     range = [false, 0.1, 0.3, 3]
     [modeled_objects.y_usage_ratio]
     range = [false, 0.12, 0.22, 3]
+[modeled_objects.tx_coil_count]
+range = [true, 1, 4, 4]
+[modeled_objects.tx_array_x_usage_ratio]
+range = [false, 0.1, 0.6, 14]
 
 [[modeled_objects]]
     object_id = "rx_plate_stack"
@@ -355,6 +365,16 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert tx_y_usage_ratio_range[3] == 1
     assert tx_y_usage_ratio_range[1] == tx_y_usage_ratio_range[2]
     assert round(float(tx_y_usage_ratio_range[1]), 2) in {0.12, 0.17, 0.22}
+    tx_coil_count_range = tx_modeled_object["tx_coil_count"]["range"]
+    assert tx_coil_count_range[0] is True
+    assert tx_coil_count_range[3] == 1
+    assert tx_coil_count_range[1] == tx_coil_count_range[2]
+    assert tx_coil_count_range[1] in {1, 2, 3, 4}
+    tx_array_x_usage_ratio_range = tx_modeled_object["tx_array_x_usage_ratio"]["range"]
+    assert tx_array_x_usage_ratio_range[0] is False
+    assert tx_array_x_usage_ratio_range[3] == 1
+    assert tx_array_x_usage_ratio_range[1] == tx_array_x_usage_ratio_range[2]
+    assert 0.1 <= float(tx_array_x_usage_ratio_range[1]) <= 0.6
     assert "shoe_depth_mm" not in tx_modeled_object
     assert "outer_x_mm" not in tx_modeled_object
     assert "underlay_gap_mm" not in tx_modeled_object
@@ -386,6 +406,8 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert rx_y_usage_ratio_range[3] == 1
     assert rx_y_usage_ratio_range[1] == rx_y_usage_ratio_range[2]
     assert round(float(rx_y_usage_ratio_range[1]), 2) in {0.18, 0.23, 0.28}
+    assert "tx_coil_count" not in rx_modeled_object
+    assert "tx_array_x_usage_ratio" not in rx_modeled_object
     assert "shoe_depth_mm" not in rx_modeled_object
     assert "outer_x_mm" not in rx_modeled_object
     assert "underlay_gap_mm" not in rx_modeled_object

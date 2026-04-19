@@ -24,13 +24,19 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
 - plate-stack entries는 coil terminal reconstruction owner가 아니라 geometry/export owner다.
 - active geometry/export contract가 읽는 plate-stack field set은 `pcb_total_thickness_mm`,
   `copper_thickness_mm`, `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio`다.
+- TX additionally owns `tx_coil_count`, an integer total branch count including the original TX plate stack,
+  and `tx_array_x_usage_ratio`, the X span usage ratio for multi-branch TX array spacing.
+  Canonical sweep encoding is `[true, 1, 4, 4]`; fixed replay encoding is `[true, n, n, 1]` for `n in 1..4`.
+  `tx_array_x_usage_ratio` canonical sweep encoding is `[false, 0.1, 0.6, 14]`; fixed replay encoding is
+  `[false, r, r, 1]` for `0 < r <= 1`. `r = 1.0` preserves the previous full available X span behavior.
+  RX does not accept these TX-only fields.
 - active example PCB total thickness baseline은 TX/RX 모두 `pcb_total_thickness_mm = 0.4`다.
   legacy `1.6/0.4` split guidance는 active plate-stack contract가 아니다.
 - `shoe_depth_mm`는 active type2 plate-stack public field가 아니다. plate-stack modeled object에
   남아 있으면 loader가 removed field로 즉시 실패한다.
 - `turn_count`는 wall-side와 coil-side copper stripe count를 함께 소유한다. 두 side는 항상 같은
   stripe count `N = turn_count`를 가진다.
-- active plate-stack final exact order는 united copper conductor, wall PCB, merged ferrite-family
+- active single-branch plate-stack final exact order는 united copper conductor, wall PCB, merged ferrite-family
   3 bodies, coil PCB 순서다.
   - `<tx|rx>_plate_copper`
   - `<tx|rx>_pcb_wall`
@@ -41,10 +47,14 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
 - wall-side striped copper `*_copper_wall_t*`, coil-side striped copper `*_copper_coil_t*`,
   side bridge `*_bridge_s*`, terminal stub `*_stub_in/out` labels는 copper unite 전 source/provenance
   labels다. final STEP body, imported object, mesh target으로 남기지 않는다.
-- plate-stack copper STEP export contract는 role당 하나의 united conductor body다.
+- single-branch plate-stack copper STEP export contract는 role당 하나의 united conductor body다.
   - TX exact body name: `tx_plate_copper`
   - RX exact body name: `rx_plate_copper`
-- import-only reconstruction과 mesh 대상도 동일한 두 body만 사용한다.
+- When `tx_coil_count > 1`, TX uses branch-local copper bodies `tx_b{i}_plate_copper` and
+  per-adjacent-branch connector sheet faces `tx_array_input_sheet_s{i}` / `tx_array_output_sheet_s{i}`.
+  These sheets are 2D sheet faces, not thickened cuboid buses.
+- import-only reconstruction and mesh target selection use the concrete exported TX array copper members when
+  `tx_coil_count > 1`; RX still uses `rx_plate_copper`.
 - plate-stack ferrite-family STEP export contract는 per-set `*_uN` exact body가 아니라
   per-material merged exact body다.
   - TX exact body names: `tx_stack_pet_psa`, `tx_stack_ferrite`, `tx_stack_air`
@@ -53,6 +63,8 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
 - `expected_exported_body_groups`는 copper group과 ferrite group을 모두 reference한다.
   - TX: `g_copper_tx -> [tx_plate_copper]`, `g_ferrite_tx -> [tx_stack_pet_psa, tx_stack_ferrite, tx_stack_air]`
   - RX: `g_copper_rx -> [rx_plate_copper]`, `g_ferrite_rx -> [rx_stack_pet_psa, rx_stack_ferrite, rx_stack_air]`
+- In TX array mode, `g_copper_tx` expands to every `tx_b{i}_plate_copper` plus every input/output connector
+  sheet face; `g_ferrite_tx` expands to branch-local ferrite-family bodies.
 - `g_ferrite_tx`, `g_ferrite_rx`는 flattened per-set member가 아니라 위 merged 3-body exact names를 reference한다.
 - per-set `*_stack_sandwich_uN` group과 old `*_u0..u9` plate-stack exact-name contract는 active path가 아니다.
 - `ferrite_set_count`는 active type2 public field가 아니다. plate-stack modeled object에 남아 있으면 loader가 unsupported key로 즉시 실패한다.
@@ -101,16 +113,18 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
   - `ValidateDesign()`
   - final save
 - import-only AEDT path는 STEP hierarchy preservation을 직접 신뢰하지 않고, styled flat bodies와
-  ledger metadata를 사용해 united copper conductor (`tx_plate_copper`, `rx_plate_copper`)를
-  role별 copper group (`g_copper_tx`, `g_copper_rx`)으로 연결하고, merged ferrite-family exact
-  bodies (`*_stack_pet_psa`, `*_stack_ferrite`, `*_stack_air`)를 role별 ferrite group
+  ledger metadata를 사용해 concrete copper members (`tx_plate_copper` or TX array branch/sheet names,
+  and `rx_plate_copper`)를 role별 copper group (`g_copper_tx`, `g_copper_rx`)으로 연결하고,
+  merged ferrite-family exact bodies (`*_stack_pet_psa`, `*_stack_ferrite`, `*_stack_air`)를 role별 ferrite group
   (`g_ferrite_tx`, `g_ferrite_rx`)으로 연결하고
   `tx_plate_port_sheet` / `rx_plate_port_sheet`
   metadata-only sheet를 추가로 reconstruct한다.
 - plate-stack port contract는 reconstructed `tx_plate_port_sheet` / `rx_plate_port_sheet`를 사용하고,
   numeric naming은 TX `1/1_T1`, RX `2/2_T1`다.
-- plate-stack mesh owner는 conductor-only exact set이며 plate-stack pair에서는
-  `tx_plate_copper`, `rx_plate_copper`만 mesh target이다.
+- TX arrays remain electrically parallel from the setup-ready perspective: one shared TX port, one RX port, one TX source term, and one RX source term.
+- plate-stack mesh owner는 conductor-only exact set이다. Single TX plate-stack pairs use
+  `tx_plate_copper` and `rx_plate_copper`; TX array pairs use every branch copper body plus every connector
+  sheet face together with `rx_plate_copper`.
 - underlay solids, `*_pcb_wall`/`*_pcb_coil`, reconstructed `tx_plate_port_sheet`/`rx_plate_port_sheet`는 mesh 대상이 아니다.
 - `build_type2_em_input()`는 plate-stack exact pair를 reject하지 않고 `EmPipelineInput`을 조립한다.
 
@@ -118,6 +132,16 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
 - `tx_plate_stack`: active TX plate-stack는 `tx_region` top `z_usage_ratio` Z window와
   global `Y=0` centered `y_usage_ratio` Y window를 쓴다. `tx_region.min_x`에 붙어 `+X` 방향으로 쌓이고,
   input terminal stub는 wall-side `t0`, output terminal stub는 coil-side `t{N-1}`에서 각각 active `min_y` 기준 `-Y`로 `5.0 mm` 돌출한다.
+- `tx_plate_stack` array mode: `tx_coil_count = 1` keeps the existing exact-name behavior. `tx_coil_count > 1`
+  places TX branch origins evenly in `+X`, anchored at `tx_region.min_x`.
+  `tx_array_x_usage_ratio` multiplies the full branch-origin span `(tx_region.size_x - branch_total_thickness)`;
+  `1.0` uses the full span, while smaller ratios pack branches closer to `tx_region.min_x`.
+  Branch `b0` stays in the original vertical orientation. Copied branches `b1..` rotate with negative slope about their top
+  far-side long edge so the free end tilts toward the `rx_region_max` bottom-face center to improve coupling. Rotated copied
+  branches may extend outside `tx_region` in X, but Z bounds must stay inside `tx_region` and the hinge
+  edge remains on `tx_region.max_z`.
+  Per-adjacent-branch input/output connector sheets (`N-1` per side) connect TX branches in parallel before export.
+  These connectors remain sheet faces in the exported contract instead of being thickened or united into a cuboid bus.
 - `rx_plate_stack`: active RX plate-stack는 `rx_region_max` bottom `z_usage_ratio` Z window와
   global `Y=0` centered `y_usage_ratio` Y window를 쓴다. `rx_region_max.min_x`에 붙어 `+X` 방향으로 쌓이고,
   terminal stub는 같은 규칙으로 wall-side `t0` input과 coil-side `t{N-1}` output에서 active `min_y` 기준 `-Y`로 돌출한다.

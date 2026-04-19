@@ -15,6 +15,7 @@ from peetsfea.spec.toml_render import toml_dumps
 from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
+from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import Type2StepSpec
@@ -24,7 +25,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SampledScalar = int | float
 DesignVariableEntry = tuple[str, str]
 _SampleExporter = Callable[..., object]
-_INTEGER_RANGE_FIELD_NAMES = ("turn_count", "layer_count", "underlay_repeat_count", "wall_parallel_stack_present")
+_INTEGER_RANGE_FIELD_NAMES = (
+    "turn_count",
+    "layer_count",
+    "underlay_repeat_count",
+    "wall_parallel_stack_present",
+    "tx_coil_count",
+)
 _SAMPLED_METADATA_TABLE = "sampled"
 _SAMPLED_SINGLE_COIL_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
 _PLATE_STACK_ROLE_SUFFIX = "_plate_stack"
@@ -168,12 +175,23 @@ def _single_coil_range_owner_specs(
 def _plate_stack_range_owner_specs(
     modeled_spec: ModeledPlateStackSpec,
 ) -> tuple[tuple[str, RangeSpec], ...]:
-    return (
+    owner_specs: list[tuple[str, RangeSpec]] = [
         (f"modeled_objects.{modeled_spec.object_id}.turn_count", modeled_spec.turn_count),
         (f"modeled_objects.{modeled_spec.object_id}.metal_fill_factor", modeled_spec.metal_fill_factor),
         (f"modeled_objects.{modeled_spec.object_id}.z_usage_ratio", modeled_spec.z_usage_ratio),
         (f"modeled_objects.{modeled_spec.object_id}.y_usage_ratio", modeled_spec.y_usage_ratio),
-    )
+    ]
+    if isinstance(modeled_spec, ModeledTxPlateStackSpec):
+        owner_specs.extend(
+            (
+                (f"modeled_objects.{modeled_spec.object_id}.tx_coil_count", modeled_spec.tx_coil_count),
+                (
+                    f"modeled_objects.{modeled_spec.object_id}.tx_array_x_usage_ratio",
+                    modeled_spec.tx_array_x_usage_ratio,
+                ),
+            )
+        )
+    return tuple(owner_specs)
 
 
 def exportable_sampled_owner_paths(spec: Type2StepSpec) -> tuple[str, ...]:

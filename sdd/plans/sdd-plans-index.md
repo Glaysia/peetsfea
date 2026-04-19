@@ -41,6 +41,7 @@ tags:
 - `sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab.md`
 - `sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio.md`
 - `sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio.md`
+- `sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array.md`
 
 ## Type2 milestone order
 - single STEP + setup-ready notebook 방향: `sdd/plans/0.2.22-type2-single-step-setup-ready-pipeline.md`
@@ -62,6 +63,7 @@ tags:
 - plate-stack ferrite-family equivalent 3-slab contract: `sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab.md`
 - plate-stack role-aware Z usage window: `sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio.md`
 - plate-stack global Y=0 centered usage window: `sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio.md`
+- TX plate-stack parallel count/array: `sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array.md`
 - single-coil corner relief gap: `sdd/plans/0.2.22-type2-single-coil-corner-relief.md`
 - TX coil geometry repair: `sdd/plans/0.2.22-type2-tx-coil-geometry-repair.md`
 - 첫 modeled object role: `sdd/plans/tx-rect-void-step-generator.md`
