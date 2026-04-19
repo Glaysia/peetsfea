@@ -116,8 +116,8 @@ def _expected_plate_stack_pre_unite_body_names(
         )
     )
     body_names.append(f"{prefix}_pcb_coil")
-    body_names.extend(f"{prefix}_copper_coil_t{index}" for index in range(turn_count - 1))
-    body_names.extend(f"{prefix}_bridge_s{index}" for index in range((2 * turn_count) - 2))
+    body_names.extend(f"{prefix}_copper_coil_t{index}" for index in range(turn_count))
+    body_names.extend(f"{prefix}_bridge_s{index}" for index in range((2 * turn_count) - 1))
     body_names.extend((f"{prefix}_stub_in", f"{prefix}_stub_out"))
     return tuple(body_names)
 
@@ -217,7 +217,6 @@ def build_plate_stack_scene_data(
 
     realized_turn_count = resolve_modeled_plate_stack_turn_count(spec, seed=seed)
     realized_metal_fill_factor = resolve_modeled_plate_stack_metal_fill_factor(spec, seed=seed)
-    realized_coil_turn_count = realized_turn_count - 1
 
     owner_origin_x, owner_origin_y, owner_origin_z = owner_spec.origin_xyz
     owner_size_x, owner_size_y, owner_size_z = owner_spec.size_xyz
@@ -247,7 +246,13 @@ def build_plate_stack_scene_data(
 
     conductor_origin_z = owner_origin_z
     conductor_max_z = owner_origin_z + owner_size_z
-    pitch_z = active_conductor_size_z / float(realized_turn_count)
+    pitch_denominator = float(realized_turn_count) + 0.5
+    if pitch_denominator <= 0.0:
+        raise RuntimeError(
+            f"type2 {spec.role} pitch denominator must be > 0 "
+            f"(realized_turn_count={realized_turn_count}, pitch_denominator={pitch_denominator})"
+        )
+    pitch_z = active_conductor_size_z / pitch_denominator
     trace_height_z = pitch_z * realized_metal_fill_factor
     stripe_centering_offset_z = (pitch_z - trace_height_z) / 2.0
     if stripe_centering_offset_z < 0.0:
@@ -277,7 +282,7 @@ def build_plate_stack_scene_data(
     )
     coil_stripe_z_origins = tuple(
         conductor_origin_z + (pitch_z / 2.0) + (pitch_z * float(index)) + stripe_centering_offset_z
-        for index in range(realized_coil_turn_count)
+        for index in range(realized_turn_count)
     )
 
     for index, stripe_origin_z in enumerate(wall_stripe_z_origins):
@@ -393,12 +398,11 @@ def build_plate_stack_scene_data(
         "min": conductor_origin_z,
         "max": conductor_origin_z,
     }
-    for index in range((2 * realized_turn_count) - 2):
-        stripe_origin_z = (
-            wall_stripe_z_origins[index // 2]
-            if index % 2 == 0
-            else coil_stripe_z_origins[index // 2]
-        )
+    for index in range((2 * realized_turn_count) - 1):
+        if index % 2 == 0:
+            stripe_origin_z = wall_stripe_z_origins[index // 2]
+        else:
+            stripe_origin_z = coil_stripe_z_origins[index // 2]
         bridge_y_edge: Literal["min", "max"] = "max" if index % 2 == 0 else "min"
         bridge_origin_y_mm = (
             owner_origin_y + owner_size_y - spec.copper_thickness_mm if bridge_y_edge == "max" else owner_origin_y
@@ -434,10 +438,10 @@ def build_plate_stack_scene_data(
             )
         )
         ordered_body_names.append(f"{role_config.prefix}_bridge_s{index}")
-    if len(bridge_windows) != (2 * realized_turn_count) - 2:
+    if len(bridge_windows) != (2 * realized_turn_count) - 1:
         raise RuntimeError(
             "type2 plate stack bridge window contract drifted "
-            f"(role={spec.role}, expected={(2 * realized_turn_count) - 2}, actual={len(bridge_windows)})"
+            f"(role={spec.role}, expected={(2 * realized_turn_count) - 1}, actual={len(bridge_windows)})"
         )
 
     input_stub_spec = _stub_body_spec(
@@ -451,9 +455,9 @@ def build_plate_stack_scene_data(
     output_stub_spec = _stub_body_spec(
         label=f"{role_config.prefix}_stub_out",
         owner_spec=owner_spec,
-        layer_origin_x_mm=wall_copper_origin_mm,
+        layer_origin_x_mm=coil_copper_origin_mm,
         layer_thickness_x_mm=spec.copper_thickness_mm,
-        stub_origin_z_mm=wall_stripe_z_origins[-1],
+        stub_origin_z_mm=coil_stripe_z_origins[-1],
         stub_size_z_mm=trace_height_z,
     )
     body_specs.extend((input_stub_spec, output_stub_spec))
@@ -542,8 +546,8 @@ def build_plate_stack_scene_data(
         raise RuntimeError(f"type2 plate stack shape labels must be unique (role={spec.role})")
     copper_source_member_names = (
         *(f"{role_config.prefix}_copper_wall_t{index}" for index in range(realized_turn_count)),
-        *(f"{role_config.prefix}_copper_coil_t{index}" for index in range(realized_turn_count - 1)),
-        *(f"{role_config.prefix}_bridge_s{index}" for index in range((2 * realized_turn_count) - 2)),
+        *(f"{role_config.prefix}_copper_coil_t{index}" for index in range(realized_turn_count)),
+        *(f"{role_config.prefix}_bridge_s{index}" for index in range((2 * realized_turn_count) - 1)),
         f"{role_config.prefix}_stub_in",
         f"{role_config.prefix}_stub_out",
     )
@@ -629,20 +633,17 @@ def _plate_stack_terminal_metadata(
             "type2 plate stack stub tips must share one Y plane "
             f"(input_tip_y={input_tip_y}, output_tip_y={output_tip_y})"
         )
-    input_max_x = input_origin_x + input_size_x
-    output_max_x = output_origin_x + output_size_x
-    if abs(input_origin_x - output_origin_x) > 1e-9 or abs(input_max_x - output_max_x) > 1e-9:
-        raise RuntimeError(
-            "type2 plate stack stub tips must share one X span "
-            f"(input_x={(input_origin_x, input_max_x)}, output_x={(output_origin_x, output_max_x)})"
-        )
-    z_min = min(input_origin_z, output_origin_z)
-    z_max = max(input_origin_z + input_size_z, output_origin_z + output_size_z)
+    input_tip_edge_x = input_origin_x
+    output_tip_edge_x = output_origin_x
+    input_z_min = input_origin_z
+    input_z_max = input_origin_z + input_size_z
+    output_z_min = output_origin_z
+    output_z_max = output_origin_z + output_size_z
     port_sheet_vertices_xyz = (
-        (input_origin_x, input_tip_y, z_min),
-        (input_max_x, input_tip_y, z_min),
-        (input_max_x, input_tip_y, z_max),
-        (input_origin_x, input_tip_y, z_max),
+        (input_tip_edge_x, input_tip_y, input_z_min),
+        (output_tip_edge_x, input_tip_y, output_z_min),
+        (output_tip_edge_x, input_tip_y, output_z_max),
+        (input_tip_edge_x, input_tip_y, input_z_max),
     )
     return {
         "kind": _PLATE_STACK_TERMINAL_METADATA_KIND,

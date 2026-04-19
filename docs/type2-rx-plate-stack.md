@@ -1,7 +1,7 @@
 ---
 title: type2-rx-plate-stack
 created: 2026-04-19 @ 18:05
-updated: 2026-04-19 @ 23:40
+updated: 2026-04-19 @ 15:55
 tags:
   - type2
   - rx
@@ -76,17 +76,18 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
   - PET/PSA `0.15 mm`
   - vacuum `0.02 mm`
 - `N = realized turn_count`
-- `pitch_z = rx_region_max.size_z / N`
+- `pitch_z = rx_region_max.size_z / (N + 0.5)`
 - `trace_height_z = pitch_z * metal_fill_factor`
 - `stripe_center_offset_z = (pitch_z - trace_height_z) / 2`
 - wall-side stripe `t{i}`는 `z_min + i * pitch_z + stripe_center_offset_z`에서 시작한다.
 - coil-side stripe `t{i}`는 `z_min + pitch_z / 2 + i * pitch_z + stripe_center_offset_z`에서 시작한다.
-- coil-side stripe count는 `N - 1`개다.
+- wall-side와 coil-side stripe count는 모두 `N`개다.
 - side bridge `rx_bridge_s*`는 `Y=max/min`을 번갈아 쓰며
-  `wall_t0 -> coil_t0 -> wall_t1 -> ... -> coil_t{N-2} -> wall_t{N-1}`를 잇는다.
+  `wall_t0 -> coil_t0 -> wall_t1 -> ... -> wall_t{N-1} -> coil_t{N-1}`를 잇는다.
 - bridge `z` window는 owner `Z` bounds를 먼저 clip하고, 같은 edge(`Y=max` or `Y=min`)의
   이전 bridge upper bound를 하한으로 써서 same-edge neighboring bridge positive-volume overlap을 금지한다.
-- terminal stub `rx_stub_in`, `rx_stub_out`는 wall-side `t0`, `t{N-1}`에 붙고 `+Y` 방향으로 `5.0 mm` 돌출한다.
+- terminal stub `rx_stub_in`은 wall-side `t0`, `rx_stub_out`은 coil-side `t{N-1}`에 붙고
+  둘 다 `+Y` 방향으로 `5.0 mm` 돌출한다.
 - wall/coil stripes, bridges, terminal stubs는 final export 전에 `rx_plate_copper`로 unite된다.
   `rx_copper_wall_t*`, `rx_copper_coil_t*`, `rx_bridge_s*`, `rx_stub_in/out` labels는
   pre-unite source/provenance labels이며 final STEP/import/mesh body names가 아니다.
@@ -106,8 +107,8 @@ Pre-unite segment and per-set labels are provenance-only and do not belong here.
 
 ## Pre-Unite Copper Segment Order
 1. `rx_copper_wall_t0..t{N-1}`
-2. `rx_copper_coil_t0..t{N-2}`
-3. `rx_bridge_s0..s{2N-3}`
+2. `rx_copper_coil_t0..t{N-1}`
+3. `rx_bridge_s0..s{2N-2}`
 4. `rx_stub_in`
 5. `rx_stub_out`
 

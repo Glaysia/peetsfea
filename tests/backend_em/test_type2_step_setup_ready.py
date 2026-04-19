@@ -18,6 +18,8 @@ from peetsfea.backend.pyaedt.type2_step_setup_ready import (
 )
 from peetsfea.types.manifest import EmPorts
 from tests.backend_em.test_type2_step_import_pipeline import (
+    _PLATE_STACK_STUB_LENGTH_MM,
+    _PLATE_STACK_TURN_COUNT,
     _FakeDesign as _ImportFakeDesign,
     _FakeHfss as _ImportFakeHfss,
     _FakeMeshModule,
@@ -338,6 +340,44 @@ def _seed_port_sheet_edges_from_terminal_metadata(
     assert cover_result is not False
 
 
+def _rewrite_plate_stack_terminal_metadata_to_equal_stripe_pitch(
+    entry: dict[str, object],
+    *,
+    turn_count: int = _PLATE_STACK_TURN_COUNT,
+    metal_fill_factor: float = 0.4,
+) -> None:
+    role = cast(str, entry["role"])
+    canonical = cast(dict[str, object], entry["canonical_coordinates"])
+    outer_min_xyz = cast(list[float], canonical["outer_bounds_min_xyz"])
+    outer_size_xyz = cast(list[float], canonical["outer_bounds_size_xyz"])
+    copper_layer_positions_mm = cast(list[float], canonical["copper_layer_z_positions_mm"])
+    origin_x, origin_y, origin_z = (float(component) for component in outer_min_xyz)
+    _size_x, size_y, size_z = (float(component) for component in outer_size_xyz)
+    wall_copper_x = float(copper_layer_positions_mm[0])
+    coil_copper_x = float(copper_layer_positions_mm[1])
+    sheet_y = origin_y + size_y
+    pitch_z = size_z / float(turn_count + 0.5)
+    trace_height_z = pitch_z * metal_fill_factor
+    stripe_centering_offset_z = (pitch_z - trace_height_z) / 2.0
+    wall_first_origin_z = origin_z + stripe_centering_offset_z
+    coil_last_origin_z = origin_z + (pitch_z / 2.0) + (pitch_z * float(turn_count - 1)) + stripe_centering_offset_z
+    prefix = "tx" if role == "tx_plate_stack" else "rx"
+    terminal_metadata = cast(dict[str, object], entry["terminal_metadata"])
+    terminal_metadata["kind"] = "stub_port"
+    terminal_metadata["input_stub_body_name"] = f"{prefix}_stub_in"
+    terminal_metadata["output_stub_body_name"] = f"{prefix}_stub_out"
+    terminal_metadata["start_point_plane_mm"] = [sheet_y, wall_first_origin_z + (trace_height_z / 2.0)]
+    terminal_metadata["end_point_plane_mm"] = [sheet_y, coil_last_origin_z + (trace_height_z / 2.0)]
+    terminal_metadata["port_sheet_vertices_xyz"] = [
+        [wall_copper_x, sheet_y, wall_first_origin_z],
+        [coil_copper_x, sheet_y, coil_last_origin_z],
+        [coil_copper_x, sheet_y, coil_last_origin_z + trace_height_z],
+        [wall_copper_x, sheet_y, wall_first_origin_z + trace_height_z],
+    ]
+    # The modeled outer bounds include stub protrusion in +Y.
+    assert sheet_y == pytest.approx(origin_y + (size_y - _PLATE_STACK_STUB_LENGTH_MM) + _PLATE_STACK_STUB_LENGTH_MM)
+
+
 def _minimal_em_input_ledger(*, modeled_objects: list[dict[str, object]]) -> dict[str, object]:
     non_model_object = _non_model_entry()
     non_model_object["imported_object_names"] = ["environment", "tx_region", "rx_region_max"]
@@ -654,6 +694,8 @@ def test_assign_post_import_mesh_rejects_mixed_role_families(role: str) -> None:
 def test_assign_type2_lumped_ports_accepts_plate_stack_exact_pair(tmp_path: Path) -> None:
     session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
     modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
+    _rewrite_plate_stack_terminal_metadata_to_equal_stripe_pitch(modeled_objects[0])
+    _rewrite_plate_stack_terminal_metadata_to_equal_stripe_pitch(modeled_objects[1])
     tx_sheet_name = cast(str, cast(list[object], modeled_objects[0]["imported_object_names"])[-1])
     rx_sheet_name = cast(str, cast(list[object], modeled_objects[1]["imported_object_names"])[-1])
     _seed_port_sheet_edges_from_terminal_metadata(
@@ -674,6 +716,33 @@ def test_assign_type2_lumped_ports_accepts_plate_stack_exact_pair(tmp_path: Path
     )
 
     assert len(session.oboundary.assign_lumped_port_calls) == 2
+    for payload in session.oboundary.assign_lumped_port_calls:
+        edges_index = payload.index("Edges:=")
+        edge_ids = cast(list[int], payload[edges_index + 1])
+        assert len(edge_ids) == 2
+        signal_vertex_ids = cast(_SetupReadyModeler, session.modeler).get_edge_vertices(edge_ids[0])
+        reference_vertex_ids = cast(_SetupReadyModeler, session.modeler).get_edge_vertices(edge_ids[1])
+        signal_vertices = [
+            cast(tuple[float, float, float], tuple(cast(_SetupReadyModeler, session.modeler).get_vertex_position(vertex_id)))
+            for vertex_id in signal_vertex_ids
+        ]
+        reference_vertices = [
+            cast(tuple[float, float, float], tuple(cast(_SetupReadyModeler, session.modeler).get_vertex_position(vertex_id)))
+            for vertex_id in reference_vertex_ids
+        ]
+        signal_x_values = {vertex[0] for vertex in signal_vertices}
+        reference_x_values = {vertex[0] for vertex in reference_vertices}
+        signal_y_values = {vertex[1] for vertex in signal_vertices}
+        reference_y_values = {vertex[1] for vertex in reference_vertices}
+        signal_z_values = {vertex[2] for vertex in signal_vertices}
+        reference_z_values = {vertex[2] for vertex in reference_vertices}
+        assert len(signal_x_values) == 1
+        assert len(reference_x_values) == 1
+        assert signal_x_values != reference_x_values
+        assert len(signal_y_values) == 1
+        assert len(reference_y_values) == 1
+        assert len(signal_z_values) == 2
+        assert len(reference_z_values) == 2
     assert session._excitation_names == ["1_T1", "2_T1"]
     assert result == {"tx": ["1_T1"], "rx": ["2_T1"]}
 
@@ -709,6 +778,8 @@ def test_assign_type2_lumped_ports_rejects_incomplete_plate_stack_pair(tmp_path:
 
 def test_build_type2_em_input_accepts_plate_stack_exact_pair(tmp_path: Path) -> None:
     modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
+    _rewrite_plate_stack_terminal_metadata_to_equal_stripe_pitch(modeled_objects[0])
+    _rewrite_plate_stack_terminal_metadata_to_equal_stripe_pitch(modeled_objects[1])
 
     result = build_type2_em_input(
         imported_ledger=cast(Type2ImportedLedger, _minimal_em_input_ledger(modeled_objects=modeled_objects)),
@@ -735,9 +806,15 @@ def test_build_type2_em_input_accepts_plate_stack_exact_pair(tmp_path: Path) -> 
     assert result["endpoints"]["tx"][0]["group_kind"] == "tx_plate_stack"
     assert result["endpoints"]["tx"][0]["start_label"] == "input_stub"
     assert result["endpoints"]["tx"][0]["end_label"] == "output_stub"
+    assert cast(tuple[float, float, float], result["endpoints"]["tx"][0]["end_xyz"])[2] > cast(
+        tuple[float, float, float], result["endpoints"]["tx"][0]["start_xyz"]
+    )[2]
     assert result["endpoints"]["rx"][0]["group_kind"] == "rx_plate_stack"
     assert result["endpoints"]["rx"][0]["start_label"] == "input_stub"
     assert result["endpoints"]["rx"][0]["end_label"] == "output_stub"
+    assert cast(tuple[float, float, float], result["endpoints"]["rx"][0]["end_xyz"])[2] > cast(
+        tuple[float, float, float], result["endpoints"]["rx"][0]["start_xyz"]
+    )[2]
     assert result["context"]["tx_vertical_plane"] == "YZ"
     assert result["context"]["rx_plane"] == "YZ"
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
