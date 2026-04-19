@@ -727,6 +727,15 @@ def _assert_plate_stack_bridge_non_overlap(
             _assert_zero_intersection_volume(bridge_shape, scene_shapes_by_label[adjacent_copper_label])
         for notched_slab_label in slab_labels:
             _assert_zero_intersection_volume(bridge_shape, scene_shapes_by_label[notched_slab_label])
+    max_edge_bridge_labels = tuple(f"{prefix}_bridge_s{index}" for index in range(0, (2 * turn_count) - 2, 2))
+    min_edge_bridge_labels = tuple(f"{prefix}_bridge_s{index}" for index in range(1, (2 * turn_count) - 2, 2))
+    for labels_for_one_edge in (max_edge_bridge_labels, min_edge_bridge_labels):
+        for first_index in range(len(labels_for_one_edge)):
+            for second_index in range(first_index + 1, len(labels_for_one_edge)):
+                _assert_zero_intersection_volume(
+                    scene_shapes_by_label[labels_for_one_edge[first_index]],
+                    scene_shapes_by_label[labels_for_one_edge[second_index]],
+                )
 
 
 def _assert_plate_stack_united_ferrite_family_contract(
@@ -1074,14 +1083,22 @@ def test_load_sweep_example_type2_toml_parses_expected_sampling_contract() -> No
     assert tx_entry.pcb_total_thickness_mm == pytest.approx(_PLATE_STACK_EXAMPLE_PCB_TOTAL_THICKNESS_MM)
     assert tx_entry.copper_thickness_mm == pytest.approx(0.035)
     assert tx_entry.ferrite_set_count == 10
-    assert tx_entry.turn_count.start == pytest.approx(4.0)
-    assert tx_entry.metal_fill_factor.start == pytest.approx(0.4)
+    assert tx_entry.turn_count.start == pytest.approx(2.0)
+    assert tx_entry.turn_count.end == pytest.approx(25.0)
+    assert tx_entry.turn_count.count == 24
+    assert tx_entry.metal_fill_factor.start == pytest.approx(0.2)
+    assert tx_entry.metal_fill_factor.end == pytest.approx(0.6)
+    assert tx_entry.metal_fill_factor.count == 15
     assert rx_entry.role == "rx_plate_stack"
     assert rx_entry.pcb_total_thickness_mm == pytest.approx(_PLATE_STACK_EXAMPLE_PCB_TOTAL_THICKNESS_MM)
     assert rx_entry.copper_thickness_mm == pytest.approx(0.1)
     assert rx_entry.ferrite_set_count == 10
-    assert rx_entry.turn_count.start == pytest.approx(4.0)
-    assert rx_entry.metal_fill_factor.start == pytest.approx(0.4)
+    assert rx_entry.turn_count.start == pytest.approx(2.0)
+    assert rx_entry.turn_count.end == pytest.approx(25.0)
+    assert rx_entry.turn_count.count == 24
+    assert rx_entry.metal_fill_factor.start == pytest.approx(0.2)
+    assert rx_entry.metal_fill_factor.end == pytest.approx(0.6)
+    assert rx_entry.metal_fill_factor.count == 15
 
 
 def test_load_type2_step_spec_rejects_duplicate_object_id(tmp_path: Path) -> None:
@@ -1212,13 +1229,13 @@ def test_load_type2_step_spec_rejects_plate_stack_turn_count_less_than_two(tmp_p
         load_type2_step_spec(toml_path)
 
 
-def test_load_type2_step_spec_rejects_plate_stack_metal_fill_factor_above_half_pitch(tmp_path: Path) -> None:
+def test_load_type2_step_spec_rejects_plate_stack_metal_fill_factor_above_supported_range(tmp_path: Path) -> None:
     toml_path = _write_spec(
         tmp_path,
-        _type2_rx_plate_stack_spec_text(metal_fill_factor_range=_range(False, 0.6, 0.6, 1)),
+        _type2_rx_plate_stack_spec_text(metal_fill_factor_range=_range(False, 0.7, 0.7, 1)),
     )
 
-    with pytest.raises(ValueError, match=r"metal_fill_factor must realize to values > 0 and <= 0.5"):
+    with pytest.raises(ValueError, match=r"metal_fill_factor must realize to values > 0 and <= 0.6"):
         load_type2_step_spec(toml_path)
 
 
@@ -1549,13 +1566,14 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert tx_size_z == pytest.approx(region_size_z)
     tx_pitch_z = region_size_z / float(tx_turn_count)
     tx_trace_height_z = tx_pitch_z * tx_fill
+    tx_centering_offset_z = (tx_pitch_z - tx_trace_height_z) / 2.0
     tx_step_min_xyz, tx_step_max_xyz = _body_bbox(scene_step_path, label="tx_copper_coil_t0")
     assert tx_step_min_xyz[0] == pytest.approx(region_min_x + expected_tx_total_thickness_mm - tx_modeled_spec.copper_thickness_mm)
     assert tx_step_max_xyz[0] == pytest.approx(region_min_x + expected_tx_total_thickness_mm)
     assert tx_step_min_xyz[1] == pytest.approx(region_min_y)
     assert tx_step_max_xyz[1] == pytest.approx(region_min_y + region_size_y)
-    assert tx_step_min_xyz[2] == pytest.approx(region_min_z + (tx_pitch_z / 2.0))
-    assert tx_step_max_xyz[2] == pytest.approx(region_min_z + (tx_pitch_z / 2.0) + tx_trace_height_z)
+    assert tx_step_min_xyz[2] == pytest.approx(region_min_z + (tx_pitch_z / 2.0) + tx_centering_offset_z)
+    assert tx_step_max_xyz[2] == pytest.approx(region_min_z + (tx_pitch_z / 2.0) + tx_centering_offset_z + tx_trace_height_z)
     scene_shapes_by_label = _step_shapes_by_label(scene_step_path)
     rx_entry = modeled_by_id["rx_plate_stack"]
     assert _normalized_body_groups(rx_entry["expected_exported_body_groups"]) == _normalized_body_groups(
@@ -1631,13 +1649,16 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert rx_size_z == pytest.approx(rx_region_size_z)
     rx_pitch_z = rx_region_size_z / float(rx_turn_count)
     rx_trace_height_z = rx_pitch_z * rx_fill
+    rx_centering_offset_z = (rx_pitch_z - rx_trace_height_z) / 2.0
     rx_step_min_xyz, rx_step_max_xyz = _body_bbox(scene_step_path, label="rx_copper_coil_t0")
     assert rx_step_min_xyz[0] == pytest.approx(rx_region_min_x + expected_rx_total_thickness_mm - rx_modeled_spec.copper_thickness_mm)
     assert rx_step_max_xyz[0] == pytest.approx(rx_region_min_x + expected_rx_total_thickness_mm)
     assert rx_step_min_xyz[1] == pytest.approx(rx_region_min_y)
     assert rx_step_max_xyz[1] == pytest.approx(rx_region_min_y + rx_region_size_y)
-    assert rx_step_min_xyz[2] == pytest.approx(rx_region_min_z + (rx_pitch_z / 2.0))
-    assert rx_step_max_xyz[2] == pytest.approx(rx_region_min_z + (rx_pitch_z / 2.0) + rx_trace_height_z)
+    assert rx_step_min_xyz[2] == pytest.approx(rx_region_min_z + (rx_pitch_z / 2.0) + rx_centering_offset_z)
+    assert rx_step_max_xyz[2] == pytest.approx(
+        rx_region_min_z + (rx_pitch_z / 2.0) + rx_centering_offset_z + rx_trace_height_z
+    )
     ferrite_first_min_xyz, ferrite_first_max_xyz = _body_bbox(scene_step_path, label="rx_stack_ferrite")
     pet_first_min_xyz, pet_first_max_xyz = _body_bbox(scene_step_path, label="rx_stack_pet_psa")
     air_first_min_xyz, air_first_max_xyz = _body_bbox(scene_step_path, label="rx_stack_air")
@@ -1662,13 +1683,13 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert tx_bridge_max_xyz[0] == pytest.approx(region_min_x + expected_tx_total_thickness_mm - tx_modeled_spec.copper_thickness_mm)
     assert tx_bridge_min_xyz[1] == pytest.approx(region_min_y + region_size_y - tx_modeled_spec.copper_thickness_mm)
     assert tx_bridge_max_xyz[1] == pytest.approx(region_min_y + region_size_y)
-    assert tx_bridge_min_xyz[2] == pytest.approx(region_min_z)
+    assert tx_bridge_min_xyz[2] == pytest.approx(region_min_z + tx_centering_offset_z)
     bridge_min_xyz, bridge_max_xyz = _body_bbox(scene_step_path, label="rx_bridge_s0")
     assert bridge_min_xyz[0] == pytest.approx(rx_region_min_x + rx_modeled_spec.copper_thickness_mm)
     assert bridge_max_xyz[0] == pytest.approx(rx_region_min_x + expected_rx_total_thickness_mm - rx_modeled_spec.copper_thickness_mm)
     assert bridge_min_xyz[1] == pytest.approx(rx_region_min_y + rx_region_size_y - rx_modeled_spec.copper_thickness_mm)
     assert bridge_max_xyz[1] == pytest.approx(rx_region_min_y + rx_region_size_y)
-    assert bridge_min_xyz[2] == pytest.approx(rx_region_min_z)
+    assert bridge_min_xyz[2] == pytest.approx(rx_region_min_z + rx_centering_offset_z)
 
 
 @pytest.mark.parametrize("layer_count", (2, 3))
@@ -2073,13 +2094,14 @@ def test_export_type2_step_artifacts_places_tx_plate_stack_on_tx_region_min_x_an
     assert tx_size_z == pytest.approx(region_size_z)
     tx_pitch_z = region_size_z / 3.0
     tx_trace_height_z = tx_pitch_z * 0.4
+    tx_centering_offset_z = (tx_pitch_z - tx_trace_height_z) / 2.0
     tx_step_min_xyz, tx_step_max_xyz = _body_bbox(Path(ledger["scene_step_path"]), label="tx_copper_wall_t0")
     assert tx_step_min_xyz[0] == pytest.approx(region_min_x)
     assert tx_step_max_xyz[0] == pytest.approx(region_min_x + tx_modeled_spec.copper_thickness_mm)
     assert tx_step_min_xyz[1] == pytest.approx(region_min_y)
     assert tx_step_max_xyz[1] == pytest.approx(region_min_y + region_size_y)
-    assert tx_step_min_xyz[2] == pytest.approx(region_min_z)
-    assert tx_step_max_xyz[2] == pytest.approx(region_min_z + tx_trace_height_z)
+    assert tx_step_min_xyz[2] == pytest.approx(region_min_z + tx_centering_offset_z)
+    assert tx_step_max_xyz[2] == pytest.approx(region_min_z + tx_centering_offset_z + tx_trace_height_z)
 
 
 def test_export_type2_step_artifacts_places_rx_plate_stack_on_rx_region_max_min_x_anchor(tmp_path: Path) -> None:
@@ -2126,13 +2148,14 @@ def test_export_type2_step_artifacts_places_rx_plate_stack_on_rx_region_max_min_
     assert rx_size_z == pytest.approx(region_size_z)
     rx_pitch_z = region_size_z / 3.0
     rx_trace_height_z = rx_pitch_z * 0.4
+    rx_centering_offset_z = (rx_pitch_z - rx_trace_height_z) / 2.0
     rx_step_min_xyz, rx_step_max_xyz = _body_bbox(Path(ledger["scene_step_path"]), label="rx_copper_wall_t0")
     assert rx_step_min_xyz[0] == pytest.approx(region_min_x)
     assert rx_step_max_xyz[0] == pytest.approx(region_min_x + rx_modeled_spec.copper_thickness_mm)
     assert rx_step_min_xyz[1] == pytest.approx(region_min_y)
     assert rx_step_max_xyz[1] == pytest.approx(region_min_y + region_size_y)
-    assert rx_step_min_xyz[2] == pytest.approx(region_min_z)
-    assert rx_step_max_xyz[2] == pytest.approx(region_min_z + rx_trace_height_z)
+    assert rx_step_min_xyz[2] == pytest.approx(region_min_z + rx_centering_offset_z)
+    assert rx_step_max_xyz[2] == pytest.approx(region_min_z + rx_centering_offset_z + rx_trace_height_z)
 
 
 def test_export_type2_step_artifacts_propagates_custom_radiation_margin_into_step_ledger(tmp_path: Path) -> None:

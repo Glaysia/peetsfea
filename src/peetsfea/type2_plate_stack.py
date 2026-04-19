@@ -207,8 +207,15 @@ def build_plate_stack_scene_data(
         )
 
     conductor_origin_z = owner_origin_z
+    conductor_max_z = owner_origin_z + owner_size_z
     pitch_z = active_conductor_size_z / float(realized_turn_count)
     trace_height_z = pitch_z * realized_metal_fill_factor
+    stripe_centering_offset_z = (pitch_z - trace_height_z) / 2.0
+    if stripe_centering_offset_z < 0.0:
+        raise RuntimeError(
+            f"type2 {spec.role} stripe centering offset must be >= 0 "
+            f"(pitch_z={pitch_z}, trace_height_z={trace_height_z}, stripe_centering_offset_z={stripe_centering_offset_z})"
+        )
     bridge_span_z = (pitch_z / 2.0) + trace_height_z
 
     pcb_epoxy_thickness_mm = spec.pcb_total_thickness_mm - spec.copper_thickness_mm
@@ -226,11 +233,11 @@ def build_plate_stack_scene_data(
     bridge_clearance_labels: set[str] = set()
 
     wall_stripe_z_origins = tuple(
-        conductor_origin_z + (pitch_z * float(index))
+        conductor_origin_z + (pitch_z * float(index)) + stripe_centering_offset_z
         for index in range(realized_turn_count)
     )
     coil_stripe_z_origins = tuple(
-        conductor_origin_z + (pitch_z / 2.0) + (pitch_z * float(index))
+        conductor_origin_z + (pitch_z / 2.0) + (pitch_z * float(index)) + stripe_centering_offset_z
         for index in range(realized_coil_turn_count)
     )
 
@@ -343,6 +350,10 @@ def build_plate_stack_scene_data(
             f"(bridge_size_x_mm={bridge_size_x_mm})"
         )
     bridge_windows: list[_BridgeEdgeWindow] = []
+    bridge_last_z_max_by_edge: dict[Literal["min", "max"], float] = {
+        "min": conductor_origin_z,
+        "max": conductor_origin_z,
+    }
     for index in range((2 * realized_turn_count) - 2):
         stripe_origin_z = (
             wall_stripe_z_origins[index // 2]
@@ -353,19 +364,34 @@ def build_plate_stack_scene_data(
         bridge_origin_y_mm = (
             owner_origin_y + owner_size_y - spec.copper_thickness_mm if bridge_y_edge == "max" else owner_origin_y
         )
-        bridge_z_max_mm = stripe_origin_z + bridge_span_z
+        bridge_z_min_mm = max(conductor_origin_z, stripe_origin_z)
+        bridge_z_max_mm = min(conductor_max_z, stripe_origin_z + bridge_span_z)
+        if bridge_z_max_mm <= bridge_z_min_mm + _GEOMETRY_EPSILON_MM:
+            raise RuntimeError(
+                f"type2 {spec.role} bridge Z interval must stay positive after owner clipping "
+                f"(index={index}, edge={bridge_y_edge}, stripe_origin_z={stripe_origin_z}, bridge_span_z={bridge_span_z}, "
+                f"bridge_z_min_mm={bridge_z_min_mm}, bridge_z_max_mm={bridge_z_max_mm}, owner_z=({conductor_origin_z}, {conductor_max_z}))"
+            )
+        bridge_z_min_mm = max(bridge_z_min_mm, bridge_last_z_max_by_edge[bridge_y_edge])
+        if bridge_z_max_mm <= bridge_z_min_mm + _GEOMETRY_EPSILON_MM:
+            raise RuntimeError(
+                f"type2 {spec.role} bridge Z interval collapsed after same-edge clipping "
+                f"(index={index}, edge={bridge_y_edge}, bridge_z_min_mm={bridge_z_min_mm}, bridge_z_max_mm={bridge_z_max_mm})"
+            )
+        bridge_last_z_max_by_edge[bridge_y_edge] = bridge_z_max_mm
+        bridge_size_z_mm = bridge_z_max_mm - bridge_z_min_mm
         bridge_windows.append(
             _BridgeEdgeWindow(
                 y_edge=bridge_y_edge,
-                z_min_mm=stripe_origin_z,
+                z_min_mm=bridge_z_min_mm,
                 z_max_mm=bridge_z_max_mm,
             )
         )
         body_specs.append(
             (
                 f"{role_config.prefix}_bridge_s{index}",
-                (bridge_origin_x_mm, bridge_origin_y_mm, stripe_origin_z),
-                (bridge_size_x_mm, spec.copper_thickness_mm, bridge_span_z),
+                (bridge_origin_x_mm, bridge_origin_y_mm, bridge_z_min_mm),
+                (bridge_size_x_mm, spec.copper_thickness_mm, bridge_size_z_mm),
             )
         )
         ordered_body_names.append(f"{role_config.prefix}_bridge_s{index}")

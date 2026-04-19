@@ -1,7 +1,7 @@
 ---
 title: type2_sampled.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-19 @ 23:40
+updated: 2026-04-20 @ 12:18
 tags:
   - sampling
   - build
@@ -25,13 +25,18 @@ tags:
 ## Canonical state
 - sampled owner canonical path는 `modeled_objects.<object_id>.<field>`다.
 - active `tx_plate_stack`와 `rx_plate_stack`도 sampled owner를 가질 수 있다.
-- current active example에서는 plate-stack `turn_count`와 `metal_fill_factor`가 fixed `count=1`이라 sampled owner list에 나타나지 않는다.
+- active sweep contract에서 plate-stack sampled owners는 source order 기준으로
+  - `modeled_objects.tx_plate_stack.turn_count`
+  - `modeled_objects.tx_plate_stack.metal_fill_factor`
+  - `modeled_objects.rx_plate_stack.turn_count`
+  - `modeled_objects.rx_plate_stack.metal_fill_factor`
+  이다.
 - build path planning은 여전히 `run/sampled/type2/<design_id>/` layout을 쓴다.
 
 ## Invariants / fail-fast
 - sampled metadata owner list는 source exportable sampled owner set과 exact match여야 한다.
 - plate roles에서 terminal-path driven coil-only sampled field assert를 요구하면 안 된다.
-- active plate role fixed scalar fields는 sampled owner list에 나타나면 안 되지만, free range면 deterministic seed selection을 통과해야 한다.
+- plate-stack free range owners는 deterministic seed selection으로 scalar로 freeze되고 sampled metadata에 그대로 기록되어야 한다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_step_spec.py]]

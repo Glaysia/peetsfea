@@ -41,8 +41,12 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
   위 merged 3-body exact names를 reference한다.
 - per-set `*_stack_sandwich_uN` group과 old `*_u0..u9` plate-stack exact-name contract는 active path가 아니다.
 - striped copper는 full owner `Z` height를 `turn_count`로 나눈 `pitch_z`를 기준으로 하고,
-  `trace_height_z = pitch_z * metal_fill_factor`를 사용한다.
-- current half-pitch offset contract 때문에 `metal_fill_factor`는 `0 < fill <= 0.5`만 허용한다.
+  `trace_height_z = pitch_z * metal_fill_factor`, `stripe_center_offset_z = (pitch_z - trace_height_z) / 2`를 사용한다.
+- wall/coil stripe는 각 pitch slot lower-bound에 바로 붙지 않고 slot 중심으로 정렬된다.
+- active contract에서 `metal_fill_factor`는 `0 < fill <= 0.6`을 허용한다.
+- bridge `*_bridge_s*`는 serpentine `Y=max/min` alternation을 유지하면서,
+  owner `Z` bounds clip + same-edge non-overlap clip을 함께 적용해 high fill에서도
+  bridge/slab positive-volume overlap과 same-edge neighboring bridge overlap을 만들지 않는다.
 - terminal metadata는 sentinel `{"kind": "none"}`가 아니라 아래 `stub_port` contract다.
   - `kind = "stub_port"`
   - `input_stub_body_name`

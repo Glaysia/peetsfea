@@ -230,9 +230,9 @@ pcb_total_thickness_mm = 0.4
 copper_thickness_mm = 0.035
 ferrite_set_count = 10
 [modeled_objects.turn_count]
-range = [true, 4, 4, 1]
+range = [true, 2, 25, 24]
 [modeled_objects.metal_fill_factor]
-range = [false, 0.4, 0.4, 1]
+range = [false, 0.2, 0.6, 15]
 
 [[modeled_objects]]
 object_id = "rx_plate_stack"
@@ -243,6 +243,6 @@ pcb_total_thickness_mm = 0.4
 copper_thickness_mm = 0.1
 ferrite_set_count = 10
 [modeled_objects.turn_count]
-range = [true, 4, 4, 1]
+range = [true, 2, 25, 24]
 [modeled_objects.metal_fill_factor]
-range = [false, 0.4, 0.4, 1]
+range = [false, 0.2, 0.6, 15]

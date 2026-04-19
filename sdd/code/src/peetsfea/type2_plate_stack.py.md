@@ -37,7 +37,14 @@ tags:
   merged `*_stack_ferrite`, merged `*_stack_air`, `*_pcb_coil`,
   `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`다.
 - bridge body의 X span은 wall copper와 coil copper 사이 interior-only 구간이다.
+- wall/coil striped copper는 각 pitch slot의 lower-bound 정렬이 아니라 centered 정렬이다.
+  - `trace_height_z = pitch_z * metal_fill_factor`
+  - `stripe_center_offset_z = (pitch_z - trace_height_z) / 2`
+  - wall start: `z_min + i * pitch_z + stripe_center_offset_z`
+  - coil start: `z_min + pitch_z/2 + i * pitch_z + stripe_center_offset_z`
 - `*_pcb_wall`, merged `*_stack_*`, `*_pcb_coil`은 bridge가 지나는 edge strip + Z window를 notch로 비워 bridge와 positive-volume overlap이 없다.
+- bridge `z` window는 owner `Z` bounds clip 이후 same-edge 누적 max clip을 적용해
+  같은 edge의 neighboring bridge끼리 positive-volume overlap을 만들지 않는다.
 - merged `*_stack_*` body는 ferrite-family set member를 deterministic connector lane으로 export-side에서 단일 연속 solid로 묶는다.
 - connector lane은 bridge clearance/notch 규칙을 깨지 않도록 bridge가 없는 deterministic Z band를 사용한다.
 - ferrite family는 role당 정확히 1개 explicit group만 export한다:
@@ -52,7 +59,7 @@ tags:
 ## Invariants / fail-fast
 - `pcb_total_thickness_mm > copper_thickness_mm > 0`
 - `turn_count >= 2`
-- `0 < metal_fill_factor <= 0.5`
+- `0 < metal_fill_factor <= 0.6`
 - total thickness는 owner thickness budget 안에 들어가야 한다.
 - body labels는 unique하고 exact-name order contract를 유지해야 한다.
 - bridge body는 alternating `Y=max/min` serpentine sequence를 유지한다.

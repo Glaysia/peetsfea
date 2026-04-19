@@ -58,7 +58,7 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
 - `pcb_total_thickness_mm > copper_thickness_mm > 0`
 - `ferrite_set_count = 10`
 - `turn_count`는 정수 range고 realized 값은 `>= 2`여야 한다.
-- `metal_fill_factor`는 float range고 realized 값은 `> 0`, `<= 0.5`여야 한다.
+- `metal_fill_factor`는 float range고 realized 값은 `> 0`, `<= 0.6`여야 한다.
 - `shoe_depth_mm`는 active RX plate-stack public field가 아니다. plate-stack modeled object에
   남아 있으면 loader가 removed field로 즉시 실패한다.
 - coil-only field `outer_*`, `layer_count`, `terminal_path`, `void_*`, `margin_ratio`,
@@ -80,11 +80,15 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
   - vacuum `0.02 mm`
 - `N = realized turn_count`
 - `pitch_z = rx_region_max.size_z / N`
-- wall-side stripe `t{i}`는 `z_min + i * pitch_z`에서 시작한다.
-- coil-side stripe `t{i}`는 `z_min + pitch_z / 2 + i * pitch_z`에서 시작한다.
+- `trace_height_z = pitch_z * metal_fill_factor`
+- `stripe_center_offset_z = (pitch_z - trace_height_z) / 2`
+- wall-side stripe `t{i}`는 `z_min + i * pitch_z + stripe_center_offset_z`에서 시작한다.
+- coil-side stripe `t{i}`는 `z_min + pitch_z / 2 + i * pitch_z + stripe_center_offset_z`에서 시작한다.
 - coil-side stripe count는 `N - 1`개다.
 - side bridge `rx_bridge_s*`는 `Y=max/min`을 번갈아 쓰며
   `wall_t0 -> coil_t0 -> wall_t1 -> ... -> coil_t{N-2} -> wall_t{N-1}`를 잇는다.
+- bridge `z` window는 owner `Z` bounds를 먼저 clip하고, 같은 edge(`Y=max` or `Y=min`)의
+  이전 bridge upper bound를 하한으로 써서 same-edge neighboring bridge positive-volume overlap을 금지한다.
 - terminal stub `rx_stub_in`, `rx_stub_out`는 wall-side `t0`, `t{N-1}`에 붙고 `+Y` 방향으로 `5.0 mm` 돌출한다.
 - total thickness guard:
   - `2 * pcb_total_thickness_mm + 10 * (0.20 + 0.15 + 0.02) <= rx_region_max.size_x`

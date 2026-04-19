@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import tomllib
 from typing import cast
 
 import pytest
@@ -15,6 +16,35 @@ from peetsfea.type2_sampled import PreparedType2Build
 from peetsfea.type2_step_spec import RangeSpec
 
 _PLATE_STACK_PCB_TOTAL_THICKNESS_MM = 0.4
+_EXPECTED_SAMPLED_OWNER_PATHS = (
+    "modeled_objects.tx_plate_stack.turn_count",
+    "modeled_objects.tx_plate_stack.metal_fill_factor",
+    "modeled_objects.rx_plate_stack.turn_count",
+    "modeled_objects.rx_plate_stack.metal_fill_factor",
+)
+_EXPECTED_DESIGN_VARIABLE_NAMES = tuple(owner_path.replace(".", "_") for owner_path in _EXPECTED_SAMPLED_OWNER_PATHS)
+
+
+def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tuple[tuple[str, str], ...]:
+    payload = tomllib.loads(sampled_toml_path.read_text(encoding="utf-8"))
+    modeled_objects = cast(list[dict[str, object]], payload["modeled_objects"])
+    modeled_by_id: dict[str, dict[str, object]] = {
+        cast(str, modeled_object["object_id"]): modeled_object for modeled_object in modeled_objects
+    }
+    tx_turn_range = cast(list[object], cast(dict[str, object], modeled_by_id["tx_plate_stack"]["turn_count"])["range"])
+    tx_fill_range = cast(
+        list[object], cast(dict[str, object], modeled_by_id["tx_plate_stack"]["metal_fill_factor"])["range"]
+    )
+    rx_turn_range = cast(list[object], cast(dict[str, object], modeled_by_id["rx_plate_stack"]["turn_count"])["range"])
+    rx_fill_range = cast(
+        list[object], cast(dict[str, object], modeled_by_id["rx_plate_stack"]["metal_fill_factor"])["range"]
+    )
+    return (
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[0], str(int(cast(int | float, tx_turn_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, tx_fill_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(int(cast(int | float, rx_turn_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(float(cast(int | float, rx_fill_range[1])))),
+    )
 
 
 @dataclass(frozen=True)
@@ -31,25 +61,34 @@ class _FakePlateStackType2Spec:
 
 
 def _patch_plate_stack_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
-    fixed_turn_count = RangeSpec(is_integer=True, start=3.0, end=3.0, count=1)
-    fixed_fill_factor = RangeSpec(is_integer=False, start=0.4, end=0.4, count=1)
+    original_loader = type2_sampled.load_type2_step_spec
+    tx_turn_count = RangeSpec(is_integer=True, start=3.0, end=5.0, count=3)
+    tx_fill_factor = RangeSpec(is_integer=False, start=0.3, end=0.5, count=3)
+    rx_turn_count = RangeSpec(is_integer=True, start=6.0, end=8.0, count=3)
+    rx_fill_factor = RangeSpec(is_integer=False, start=0.4, end=0.6, count=3)
     fake_spec = _FakePlateStackType2Spec(
         modeled_objects=(
             _FakePlateStackModeledSpec(
                 object_id="tx_plate_stack",
                 role="tx_plate_stack",
-                turn_count=fixed_turn_count,
-                metal_fill_factor=fixed_fill_factor,
+                turn_count=tx_turn_count,
+                metal_fill_factor=tx_fill_factor,
             ),
             _FakePlateStackModeledSpec(
                 object_id="rx_plate_stack",
                 role="rx_plate_stack",
-                turn_count=fixed_turn_count,
-                metal_fill_factor=fixed_fill_factor,
+                turn_count=rx_turn_count,
+                metal_fill_factor=rx_fill_factor,
             ),
         )
     )
-    monkeypatch.setattr(type2_sampled, "load_type2_step_spec", lambda _path: fake_spec)
+
+    def _patched_loader(toml_path: Path) -> object:
+        if toml_path.name == "type2_sweep.toml":
+            return fake_spec
+        return original_loader(toml_path)
+
+    monkeypatch.setattr(type2_sampled, "load_type2_step_spec", _patched_loader)
 
 
 def _source_type2_toml_text() -> str:
@@ -155,9 +194,9 @@ pcb_total_thickness_mm = {_PLATE_STACK_PCB_TOTAL_THICKNESS_MM}
 copper_thickness_mm = 0.035
 ferrite_set_count = 10
 [modeled_objects.turn_count]
-range = [true, 3, 3, 1]
+range = [true, 3, 5, 3]
 [modeled_objects.metal_fill_factor]
-range = [false, 0.4, 0.4, 1]
+range = [false, 0.3, 0.5, 3]
 
 [[modeled_objects]]
 object_id = "rx_plate_stack"
@@ -168,9 +207,9 @@ pcb_total_thickness_mm = {_PLATE_STACK_PCB_TOTAL_THICKNESS_MM}
 copper_thickness_mm = 0.1
 ferrite_set_count = 10
 [modeled_objects.turn_count]
-range = [true, 3, 3, 1]
+range = [true, 6, 8, 3]
 [modeled_objects.metal_fill_factor]
-range = [false, 0.4, 0.4, 1]
+range = [false, 0.4, 0.6, 3]
 """.strip()
 
 
@@ -215,6 +254,7 @@ def test_build_type2_reads_aedt_builder_n_from_manifest(
                 "build_count": len(prepared_builds),
                 "modeled_roles": [tuple(prepared_build.modeled_roles) for prepared_build in prepared_builds],
                 "design_variables": [tuple(prepared_build.design_variables) for prepared_build in prepared_builds],
+                "sampled_toml_paths": [prepared_build.sampled_toml_path for prepared_build in prepared_builds],
                 "exporter": exporter,
                 "runner": runner,
             }
@@ -225,16 +265,18 @@ def test_build_type2_reads_aedt_builder_n_from_manifest(
     results = build_type2(manifest_path=manifest_path)
 
     assert results == []
-    assert calls == [
-        {
-            "jobs": 6,
-            "build_count": 2,
-            "modeled_roles": [("tx_plate_stack", "rx_plate_stack"), ("tx_plate_stack", "rx_plate_stack")],
-            "design_variables": [(), ()],
-            "exporter": build_entry.export_type2_step_artifacts,
-            "runner": build_entry.setup_type2_step_ledger,
-        }
-    ]
+    assert len(calls) == 1
+    assert calls[0]["jobs"] == 6
+    assert calls[0]["build_count"] == 2
+    assert calls[0]["modeled_roles"] == [("tx_plate_stack", "rx_plate_stack"), ("tx_plate_stack", "rx_plate_stack")]
+    assert calls[0]["exporter"] is build_entry.export_type2_step_artifacts
+    assert calls[0]["runner"] is build_entry.setup_type2_step_ledger
+    design_variables_by_design = cast(list[tuple[tuple[str, str], ...]], calls[0]["design_variables"])
+    sampled_toml_paths = cast(list[Path], calls[0]["sampled_toml_paths"])
+    assert len(design_variables_by_design) == 2
+    for index, design_variables in enumerate(design_variables_by_design):
+        assert tuple(name for name, _ in design_variables) == _EXPECTED_DESIGN_VARIABLE_NAMES
+        assert design_variables == _expected_design_variables_for_sampled_toml(sampled_toml_paths[index])
 
 
 def test_build_type2_builds_plate_stack_manifest_with_setup_ready_runner(
@@ -296,7 +338,10 @@ def test_build_type2_builds_plate_stack_manifest_with_setup_ready_runner(
         "design_variables",
     }
     assert cast(str, setup_ready_calls[0]["design_name"]) == results[0]["design_id"]
-    assert cast(tuple[tuple[str, str], ...], setup_ready_calls[0]["design_variables"]) == ()
+    design_variables = cast(tuple[tuple[str, str], ...], setup_ready_calls[0]["design_variables"])
+    assert tuple(name for name, _ in design_variables) == _EXPECTED_DESIGN_VARIABLE_NAMES
+    assert len(design_variables) == 4
+    assert all(expression != "" for _, expression in design_variables)
     assert results[0]["aedt_path"] == str(cast(Path, setup_ready_calls[0]["output_aedt_path"]))
     assert results[0]["imported_ledger_path"] == str(cast(Path, setup_ready_calls[0]["imported_ledger_path"]))
     assert results[0]["source_step_ledger_path"] == str(cast(Path, setup_ready_calls[0]["step_ledger_path"]))
@@ -353,7 +398,10 @@ def test_build_type2_accepts_plate_stack_manifest_when_forced_to_setup_ready_run
         "design_name",
         "design_variables",
     }
-    assert cast(tuple[tuple[str, str], ...], calls[0]["design_variables"]) == ()
+    design_variables = cast(tuple[tuple[str, str], ...], calls[0]["design_variables"])
+    assert tuple(name for name, _ in design_variables) == _EXPECTED_DESIGN_VARIABLE_NAMES
+    assert len(design_variables) == 4
+    assert all(expression != "" for _, expression in design_variables)
 
 
 def test_build_type2_rejects_list_manifest_payload(tmp_path: Path) -> None:

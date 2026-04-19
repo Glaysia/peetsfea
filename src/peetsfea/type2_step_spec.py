@@ -471,9 +471,9 @@ def _parse_modeled_plate_stack(
         )
     metal_fill_factor = _require_range(table, "metal_fill_factor", context, expect_integer=False)
     metal_fill_factor_candidates = _float_range_candidates(metal_fill_factor)
-    if any(candidate <= 0.0 or candidate > 0.5 for candidate in metal_fill_factor_candidates):
+    if any(candidate <= 0.0 or candidate > 0.6 for candidate in metal_fill_factor_candidates):
         raise ValueError(
-            f"{context}.metal_fill_factor must realize to values > 0 and <= 0.5 "
+            f"{context}.metal_fill_factor must realize to values > 0 and <= 0.6 "
             f"(actual={metal_fill_factor_candidates})"
         )
     allowed_keys = {
@@ -694,9 +694,9 @@ def resolve_modeled_plate_stack_turn_count(spec: ModeledPlateStackSpec, *, seed:
 
 def resolve_modeled_plate_stack_metal_fill_factor(spec: ModeledPlateStackSpec, *, seed: int) -> float:
     candidates = _float_range_candidates(spec.metal_fill_factor)
-    if any(candidate <= 0.0 or candidate > 0.5 for candidate in candidates):
+    if any(candidate <= 0.0 or candidate > 0.6 for candidate in candidates):
         raise ValueError(
-            f"{spec.role}.metal_fill_factor must realize to values > 0 and <= 0.5 "
+            f"{spec.role}.metal_fill_factor must realize to values > 0 and <= 0.6 "
             f"(actual={candidates})"
         )
     if len(candidates) == 1:

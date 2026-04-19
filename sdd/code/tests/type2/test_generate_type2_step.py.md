@@ -28,6 +28,7 @@ tags:
 - TX full `tx_region` YZ + `min_x` anchor
 - RX full `rx_region_max` YZ + `min_x` anchor
 - full-height plate-stack conductor/PCB placement without shoe cutout bands
+- plate-stack striped copper Z 배치는 pitch-slot centered placement를 검증한다.
 - wall-side `N`, coil-side `N-1`, bridge `2N-2`, stub 2개 contract
 - role별 단일 ferrite group contract:
   TX `g_ferrite_tx`, RX `g_ferrite_rx`
@@ -43,6 +44,7 @@ tags:
 - bridge contract regression:
   - bridge bbox X span은 full thickness가 아니라 interior span(`wall copper inner face -> coil copper inner face`)이어야 한다.
   - `tx_bridge_s*` / `rx_bridge_s*`는 wall/coil copper turns 및 notched slab bodies(`pcb_wall`, `pcb_coil`, `stack_pet_psa`, `stack_ferrite`, `stack_air`)와 positive-volume intersection이 없어야 한다.
+  - same-edge neighboring bridges (`Y=max`끼리, `Y=min`끼리)도 positive-volume intersection이 없어야 한다.
 
 ## 변경 시 주의점
 - active example role drift와 exact-name order drift를 같은 테스트 층에서 잡아야 한다.

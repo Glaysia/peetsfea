@@ -16,6 +16,12 @@ from peetsfea.type2_sampled import manifest_entry_for_sample_index
 from peetsfea.type2_step_spec import RangeSpec
 
 _PLATE_STACK_PCB_TOTAL_THICKNESS_MM = 0.4
+_EXPECTED_SAMPLED_OWNER_PATHS = [
+    "modeled_objects.tx_plate_stack.turn_count",
+    "modeled_objects.tx_plate_stack.metal_fill_factor",
+    "modeled_objects.rx_plate_stack.turn_count",
+    "modeled_objects.rx_plate_stack.metal_fill_factor",
+]
 
 
 @dataclass(frozen=True)
@@ -32,25 +38,34 @@ class _FakePlateStackType2Spec:
 
 
 def _patch_plate_stack_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
-    fixed_turn_count = RangeSpec(is_integer=True, start=3.0, end=3.0, count=1)
-    fixed_fill_factor = RangeSpec(is_integer=False, start=0.4, end=0.4, count=1)
+    original_loader = type2_sampled.load_type2_step_spec
+    tx_turn_count = RangeSpec(is_integer=True, start=3.0, end=5.0, count=3)
+    tx_fill_factor = RangeSpec(is_integer=False, start=0.3, end=0.5, count=3)
+    rx_turn_count = RangeSpec(is_integer=True, start=6.0, end=8.0, count=3)
+    rx_fill_factor = RangeSpec(is_integer=False, start=0.4, end=0.6, count=3)
     fake_spec = _FakePlateStackType2Spec(
         modeled_objects=(
             _FakePlateStackModeledSpec(
                 object_id="tx_plate_stack",
                 role="tx_plate_stack",
-                turn_count=fixed_turn_count,
-                metal_fill_factor=fixed_fill_factor,
+                turn_count=tx_turn_count,
+                metal_fill_factor=tx_fill_factor,
             ),
             _FakePlateStackModeledSpec(
                 object_id="rx_plate_stack",
                 role="rx_plate_stack",
-                turn_count=fixed_turn_count,
-                metal_fill_factor=fixed_fill_factor,
+                turn_count=rx_turn_count,
+                metal_fill_factor=rx_fill_factor,
             ),
         )
     )
-    monkeypatch.setattr(type2_sampled, "load_type2_step_spec", lambda _path: fake_spec)
+
+    def _patched_loader(toml_path: Path) -> object:
+        if toml_path.name == "type2_sweep.toml":
+            return fake_spec
+        return original_loader(toml_path)
+
+    monkeypatch.setattr(type2_sampled, "load_type2_step_spec", _patched_loader)
 
 
 def _source_type2_toml_text() -> str:
@@ -156,9 +171,9 @@ pcb_total_thickness_mm = {_PLATE_STACK_PCB_TOTAL_THICKNESS_MM}
 copper_thickness_mm = 0.035
 ferrite_set_count = 10
 [modeled_objects.turn_count]
-range = [true, 3, 3, 1]
+range = [true, 3, 5, 3]
 [modeled_objects.metal_fill_factor]
-range = [false, 0.4, 0.4, 1]
+range = [false, 0.3, 0.5, 3]
 
 [[modeled_objects]]
 object_id = "rx_plate_stack"
@@ -169,9 +184,9 @@ pcb_total_thickness_mm = {_PLATE_STACK_PCB_TOTAL_THICKNESS_MM}
 copper_thickness_mm = 0.1
 ferrite_set_count = 10
 [modeled_objects.turn_count]
-range = [true, 3, 3, 1]
+range = [true, 6, 8, 3]
 [modeled_objects.metal_fill_factor]
-range = [false, 0.4, 0.4, 1]
+range = [false, 0.4, 0.6, 3]
 """.strip()
 
 
@@ -252,7 +267,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     ).hexdigest()
     assert first_entry["design_id"] == f"s000000_{generated_hash4}_{head_hash4}_0"
     assert Path(first_entry["design_dir"]).name == first_entry["design_id"]
-    assert first_entry["sampled_owner_paths"] == []
+    assert first_entry["sampled_owner_paths"] == _EXPECTED_SAMPLED_OWNER_PATHS
     assert Path(first_entry["sampled_toml_path"]).is_file()
     assert Path(first_entry["scene_step_path"]).is_file()
     assert Path(first_entry["step_ledger_path"]).is_file()
@@ -265,7 +280,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert sampled_metadata["sample_index"] == 0
     assert sampled_metadata["head_hash4"] == head_hash4
     assert sampled_metadata["retry_number"] == 0
-    assert sampled_metadata["sampled_owner_paths"] == []
+    assert sampled_metadata["sampled_owner_paths"] == _EXPECTED_SAMPLED_OWNER_PATHS
     assert "design_id" not in sampled_metadata
 
     tx_modeled_object = sampled_payload["modeled_objects"][0]
@@ -274,8 +289,16 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert tx_modeled_object["pcb_total_thickness_mm"] == _PLATE_STACK_PCB_TOTAL_THICKNESS_MM
     assert tx_modeled_object["copper_thickness_mm"] == 0.035
     assert tx_modeled_object["ferrite_set_count"] == 10
-    assert tx_modeled_object["turn_count"]["range"] == [True, 3, 3, 1]
-    assert tx_modeled_object["metal_fill_factor"]["range"] == [False, 0.4, 0.4, 1]
+    tx_turn_range = tx_modeled_object["turn_count"]["range"]
+    assert tx_turn_range[0] is True
+    assert tx_turn_range[3] == 1
+    assert tx_turn_range[1] == tx_turn_range[2]
+    assert tx_turn_range[1] in {3, 4, 5}
+    tx_fill_range = tx_modeled_object["metal_fill_factor"]["range"]
+    assert tx_fill_range[0] is False
+    assert tx_fill_range[3] == 1
+    assert tx_fill_range[1] == tx_fill_range[2]
+    assert round(float(tx_fill_range[1]), 1) in {0.3, 0.4, 0.5}
     assert "shoe_depth_mm" not in tx_modeled_object
     assert "outer_x_mm" not in tx_modeled_object
     assert "underlay_gap_mm" not in tx_modeled_object
@@ -287,8 +310,16 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert rx_modeled_object["pcb_total_thickness_mm"] == _PLATE_STACK_PCB_TOTAL_THICKNESS_MM
     assert rx_modeled_object["copper_thickness_mm"] == 0.1
     assert rx_modeled_object["ferrite_set_count"] == 10
-    assert rx_modeled_object["turn_count"]["range"] == [True, 3, 3, 1]
-    assert rx_modeled_object["metal_fill_factor"]["range"] == [False, 0.4, 0.4, 1]
+    rx_turn_range = rx_modeled_object["turn_count"]["range"]
+    assert rx_turn_range[0] is True
+    assert rx_turn_range[3] == 1
+    assert rx_turn_range[1] == rx_turn_range[2]
+    assert rx_turn_range[1] in {6, 7, 8}
+    rx_fill_range = rx_modeled_object["metal_fill_factor"]["range"]
+    assert rx_fill_range[0] is False
+    assert rx_fill_range[3] == 1
+    assert rx_fill_range[1] == rx_fill_range[2]
+    assert round(float(rx_fill_range[1]), 1) in {0.4, 0.5, 0.6}
     assert "shoe_depth_mm" not in rx_modeled_object
     assert "outer_x_mm" not in rx_modeled_object
     assert "underlay_gap_mm" not in rx_modeled_object
@@ -370,7 +401,7 @@ def test_sample_type2_can_write_manifest_without_step_artifacts(
     assert "[sample] done" in captured.out
     assert exporter_calls == []
     for entry in document["entries"]:
-        assert entry["sampled_owner_paths"] == []
+        assert entry["sampled_owner_paths"] == _EXPECTED_SAMPLED_OWNER_PATHS
         assert Path(entry["sampled_toml_path"]).is_file()
         assert Path(entry["scene_step_path"]).exists() is False
         assert Path(entry["step_ledger_path"]).exists() is False

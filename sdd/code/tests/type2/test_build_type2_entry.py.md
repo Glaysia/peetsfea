@@ -1,7 +1,7 @@
 ---
 title: test_build_type2_entry.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 00:42
+updated: 2026-04-20 @ 12:18
 tags:
   - tests
   - type2
@@ -22,12 +22,13 @@ tags:
 
 ## Canonical coverage
 - active plate-stack manifest can still export missing STEP
-- default build path keeps setup-ready facade routing for exact plate-stack pair
-- explicit setup-ready runner override is accepted for exact plate-stack pair
-- plate-stack build call shape remains port-ready oriented (`step_ledger_path`, `output_aedt_path`, `imported_ledger_path`, `design_name`, `design_variables`)
-- fixed plate-stack sampled ranges keep design-variable passing empty in current baseline
+- default build path keeps setup-ready facade routing for exact plate-stack pair, delegating full-EM-ready setup ownership to that runtime
+- explicit runner override is accepted for the exact plate-stack pair without mutating build-entry call wiring
+- plate-stack build call shape remains setup-ready oriented (`step_ledger_path`, `output_aedt_path`, `imported_ledger_path`, `design_name`, `design_variables`)
+- this suite keeps scope at build-entry wiring and runner handoff contracts, not setup-ready runtime internals
+- free plate-stack sampled owners drive non-empty `design_variables` with canonical owner-name order
 - active example keeps a shared TX/RX plate-stack PCB total baseline at `0.4 mm`
-- active manifest/schema surface no longer carries `shoe_depth_mm`, while fixed `turn_count` / `metal_fill_factor` ranges still replay losslessly
+- active manifest/schema surface no longer carries `shoe_depth_mm`, while sampled `turn_count` / `metal_fill_factor` ranges replay through design variables
 - manifest parallelism contracts remain intact
 
 ## 변경 시 주의점

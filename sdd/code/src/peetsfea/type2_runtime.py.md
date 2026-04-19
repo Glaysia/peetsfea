@@ -1,7 +1,7 @@
 ---
 title: type2_runtime.py
 created: 2026-04-18 @ 23:10
-updated: 2026-04-20 @ 11:18
+updated: 2026-04-20 @ 12:18
 tags:
   - build
   - runtime
@@ -26,6 +26,7 @@ tags:
 - default build runner는 `setup_type2_step_ledger` facade다.
 - coil pair exact roles는 setup-ready full path를 쓴다.
 - plate-stack exact roles(`tx_plate_stack` + `rx_plate_stack`)도 setup-ready facade 내부의 full setup-ready branch를 쓴다.
+- plate-stack free sampled owners가 있으면 prepared build design variables가 비어 있지 않은 채 runner로 전달된다.
 
 ## Invariants / fail-fast
 - existing broken ledger는 rebuild fallback 없이 실패한다.

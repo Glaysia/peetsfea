@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 23:58
+updated: 2026-04-20 @ 00:15
 tags:
   - step-export
   - spec
@@ -36,7 +36,7 @@ tags:
 - plate roles는 `pcb_total_thickness_mm > copper_thickness_mm > 0`
 - active plate roles는 literal `ferrite_set_count = 10` contract를 유지한다.
 - plate `turn_count` realized value는 `>= 2`여야 한다.
-- plate `metal_fill_factor` realized value는 `> 0`, `<= 0.5`여야 한다.
+- plate `metal_fill_factor` realized value는 `> 0`, `<= 0.6`여야 한다.
 - old type2 schema id와 removed plate field `shoe_depth_mm`는 즉시 실패한다.
 - plate roles에 coil-only keys가 나타나면 즉시 실패한다.
 - active example drift는 role/object_id/owner/plane mismatch를 허용하지 않는다.
