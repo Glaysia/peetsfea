@@ -31,12 +31,17 @@ tags:
 - legacy underlay/wall prefixes는 single-coil import path에서만 same-material styling path를 유지한다.
 - port-sheet reconstruction은 coil roles와 plate-stack roles 모두 수행할 수 있다.
 - plate-stack roles는 `tx_plate_port_sheet`, `rx_plate_port_sheet` 이름의 metadata-only reconstructed sheet를 추가한다.
+- plate-stack Y placement validation follows the exported active window contract:
+  `outer_bounds_size_y - 5.0 mm` is the active Y span, active bounds are centered on global `Y=0`,
+  and the `-Y` stub overhang starts from active `min_y`, not owner `min_y`.
 
 ## Invariants / fail-fast
 - active plate role placement validation은 TX `min_x` anchor와 RX `min_x` anchor를 role-aware로 검사해야 한다.
-- plate roles는 `owner.min_y - 5.0 mm` overhang만 허용하고 나머지 owner-fit anchor는 유지해야 한다.
+- plate roles는 active centered Y window 내부 배치와 active `min_y - 5.0 mm` overhang만 허용하고,
+  full owner-Y footprint 강제나 owner `min_y - 5.0 mm` anchor로 되돌아가면 안 된다.
 - imported object styling은 exact-name partition 결과만 사용한다.
 - plate-stack ferrite-family material preflight(`ensure_underlay_materials`)는 merged exact-name contract만 인식하고 legacy `*_stack_*_uN` fallback을 두지 않는다.
+- plate-stack Z validation은 `z_usage_ratio`로 줄어든 active window를 허용하되 TX는 owner max-Z에, RX는 owner min-Z에 role-aware anchor를 유지해야 한다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_plate_stack.py]]

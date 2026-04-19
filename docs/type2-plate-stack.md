@@ -1,7 +1,7 @@
 ---
 title: type2-plate-stack
 created: 2026-04-19 @ 21:20
-updated: 2026-04-19 @ 22:30
+updated: 2026-04-19 @ 23:10
 tags:
   - type2
   - tx
@@ -23,7 +23,7 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
   RX-specific 문서는 role-local detail reference이며 canonical owner가 아니다.
 - plate-stack entries는 coil terminal reconstruction owner가 아니라 geometry/export owner다.
 - active geometry/export contract가 읽는 plate-stack field set은 `pcb_total_thickness_mm`,
-  `copper_thickness_mm`, `turn_count`, `metal_fill_factor`, `z_usage_ratio`다.
+  `copper_thickness_mm`, `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio`다.
 - active example PCB total thickness baseline은 TX/RX 모두 `pcb_total_thickness_mm = 0.4`다.
   legacy `1.6/0.4` split guidance는 active plate-stack contract가 아니다.
 - `shoe_depth_mm`는 active type2 plate-stack public field가 아니다. plate-stack modeled object에
@@ -62,7 +62,12 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
   active examples use fixed `[false, 0.3, 0.3, 1]` and sweep `[false, 0.03, 0.6, 17]`.
 - TX active Z window는 `tx_region` top `z_usage_ratio` span이고, RX active Z window는 `rx_region_max`
   bottom `z_usage_ratio` span이다.
-- PCB, PET/PSA, ferrite, air, copper stripe, bridge, stub, terminal metadata, ledger bounds는 모두 같은 active Z window를 쓴다.
+- `y_usage_ratio`는 role owner의 Y span 중 active stack이 사용할 비율이다. realized 값은 `0 < ratio <= 1`이다.
+  active examples use fixed `[false, 0.3, 0.3, 1]` and sweep `[false, 0.03, 0.6, 17]`.
+- active Y window는 TX/RX 모두 global `Y=0` 중심이며
+  `[-owner_size_y * y_usage_ratio / 2, owner_size_y * y_usage_ratio / 2]`다.
+  이 centered window가 placement owner Y bounds 밖이면 generation은 즉시 실패한다.
+- PCB, PET/PSA, ferrite, air, copper stripe, bridge, stub, terminal metadata, ledger bounds는 모두 같은 active Z/Y window를 쓴다.
 - striped copper는 active `Z` height를 `turn_count + 0.5` pitch slot으로 나눈 `pitch_z`를 기준으로 하고,
   `trace_height_z = pitch_z * metal_fill_factor`, `stripe_center_offset_z = (pitch_z - trace_height_z) / 2`를 사용한다.
 - wall/coil stripe는 각 pitch slot lower-bound에 바로 붙지 않고 slot 중심으로 정렬된다.
@@ -110,12 +115,12 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
 - `build_type2_em_input()`는 plate-stack exact pair를 reject하지 않고 `EmPipelineInput`을 조립한다.
 
 ## Role Notes
-- `tx_plate_stack`: active TX plate-stack는 `tx_region` full Y와 top `z_usage_ratio` Z window를 쓰고
-  `tx_region.min_x`에 붙어 `+X` 방향으로 쌓인다. input terminal stub는 wall-side `t0`, output terminal stub는 coil-side
-  `t{N-1}`에서 각각 `-Y`로 `5.0 mm` 돌출한다.
-- `rx_plate_stack`: active RX plate-stack는 `rx_region_max` full Y와 bottom `z_usage_ratio` Z window를 쓰고
-  `rx_region_max.min_x`에 붙어 `+X` 방향으로 쌓인다. terminal stub는 같은 규칙으로 wall-side `t0` input과 coil-side `t{N-1}`
-  output에서 `-Y`로 돌출한다.
+- `tx_plate_stack`: active TX plate-stack는 `tx_region` top `z_usage_ratio` Z window와
+  global `Y=0` centered `y_usage_ratio` Y window를 쓴다. `tx_region.min_x`에 붙어 `+X` 방향으로 쌓이고,
+  input terminal stub는 wall-side `t0`, output terminal stub는 coil-side `t{N-1}`에서 각각 active `min_y` 기준 `-Y`로 `5.0 mm` 돌출한다.
+- `rx_plate_stack`: active RX plate-stack는 `rx_region_max` bottom `z_usage_ratio` Z window와
+  global `Y=0` centered `y_usage_ratio` Y window를 쓴다. `rx_region_max.min_x`에 붙어 `+X` 방향으로 쌓이고,
+  terminal stub는 같은 규칙으로 wall-side `t0` input과 coil-side `t{N-1}` output에서 active `min_y` 기준 `-Y`로 돌출한다.
 
 ## Legacy Coil Reference
 - `tx_single_coil` / legacy `rx_single_coil` coil geometry reference는

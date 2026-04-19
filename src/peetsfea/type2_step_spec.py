@@ -93,6 +93,7 @@ class ModeledPlateStackCommonSpec:
     turn_count: RangeSpec
     metal_fill_factor: RangeSpec
     z_usage_ratio: RangeSpec
+    y_usage_ratio: RangeSpec
 
 
 @dataclass(frozen=True)
@@ -473,6 +474,13 @@ def _parse_modeled_plate_stack(
             f"{context}.z_usage_ratio must realize to values > 0 and <= 1 "
             f"(actual={z_usage_ratio_candidates})"
         )
+    y_usage_ratio = _require_range(table, "y_usage_ratio", context, expect_integer=False)
+    y_usage_ratio_candidates = _float_range_candidates(y_usage_ratio)
+    if any(candidate <= 0.0 or candidate > 1.0 for candidate in y_usage_ratio_candidates):
+        raise ValueError(
+            f"{context}.y_usage_ratio must realize to values > 0 and <= 1 "
+            f"(actual={y_usage_ratio_candidates})"
+        )
     allowed_keys = {
         "object_id",
         "role",
@@ -483,6 +491,7 @@ def _parse_modeled_plate_stack(
         "turn_count",
         "metal_fill_factor",
         "z_usage_ratio",
+        "y_usage_ratio",
     }
     extra_keys = sorted(set(table.keys()) - allowed_keys)
     if extra_keys:
@@ -501,6 +510,7 @@ def _parse_modeled_plate_stack(
             turn_count=turn_count,
             metal_fill_factor=metal_fill_factor,
             z_usage_ratio=z_usage_ratio,
+            y_usage_ratio=y_usage_ratio,
         )
     return ModeledRxPlateStackSpec(
         object_id=object_id,
@@ -512,6 +522,7 @@ def _parse_modeled_plate_stack(
         turn_count=turn_count,
         metal_fill_factor=metal_fill_factor,
         z_usage_ratio=z_usage_ratio,
+        y_usage_ratio=y_usage_ratio,
     )
 
 
@@ -717,6 +728,20 @@ def resolve_modeled_plate_stack_z_usage_ratio(spec: ModeledPlateStackSpec, *, se
     return candidates[index]
 
 
+def resolve_modeled_plate_stack_y_usage_ratio(spec: ModeledPlateStackSpec, *, seed: int) -> float:
+    candidates = _float_range_candidates(spec.y_usage_ratio)
+    if any(candidate <= 0.0 or candidate > 1.0 for candidate in candidates):
+        raise ValueError(
+            f"{spec.role}.y_usage_ratio must realize to values > 0 and <= 1 "
+            f"(actual={candidates})"
+        )
+    if len(candidates) == 1:
+        return candidates[0]
+    range_path = f"modeled_objects.{spec.object_id}.y_usage_ratio"
+    index = _resolve_seeded_candidate_index(seed=seed, range_path=range_path, candidate_count=len(candidates))
+    return candidates[index]
+
+
 def _require_type2_schema_id(root: dict[str, object], *, context: str) -> str:
     schema_id = _require_non_empty_str(root, "schema_id", context)
     if schema_id != _TYPE2_SCHEMA_ID:
@@ -852,6 +877,7 @@ __all__ = [
     "resolve_modeled_plate_stack_metal_fill_factor",
     "resolve_modeled_plate_stack_turn_count",
     "resolve_modeled_plate_stack_z_usage_ratio",
+    "resolve_modeled_plate_stack_y_usage_ratio",
     "resolve_modeled_underlay_gap_mm",
     "resolve_modeled_underlay_repeat_count",
     "resolve_modeled_wall_parallel_stack_present",

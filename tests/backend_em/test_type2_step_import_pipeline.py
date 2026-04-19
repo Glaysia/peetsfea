@@ -1185,6 +1185,146 @@ def test_import_type2_step_ledger_accepts_tx_and_rx_plate_stack_geometry_only_ro
     assert written == result
 
 
+def test_import_type2_step_ledger_accepts_plate_stack_partial_z_usage_windows(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    tx_entry = _tx_plate_stack_entry(tmp_path)
+    tx_coordinates = cast(dict[str, object], tx_entry["canonical_coordinates"])
+    tx_coordinates["outer_bounds_min_xyz"] = [0.0, -145.0, 39.20625]
+    tx_coordinates["outer_bounds_max_xyz"] = [6.9, 140.0, 90.0]
+    tx_coordinates["outer_bounds_size_xyz"] = [6.9, 285.0, 50.79375]
+    tx_entry["terminal_metadata"] = _plate_stack_terminal_metadata(
+        owner_origin_y=-140.0,
+        owner_size_y=280.0,
+        owner_origin_z=39.20625,
+        owner_size_z=50.79375,
+        copper_thickness_mm=0.035,
+        prefix="tx",
+    )
+    rx_entry = _rx_plate_stack_entry(tmp_path)
+    rx_coordinates = cast(dict[str, object], rx_entry["canonical_coordinates"])
+    rx_coordinates["outer_bounds_min_xyz"] = [0.0, -285.0, 139.0]
+    rx_coordinates["outer_bounds_max_xyz"] = [4.5, 280.0, 342.175]
+    rx_coordinates["outer_bounds_size_xyz"] = [4.5, 565.0, 203.175]
+    rx_entry["terminal_metadata"] = _plate_stack_terminal_metadata(
+        owner_origin_y=-280.0,
+        owner_size_y=560.0,
+        owner_origin_z=139.0,
+        owner_size_z=203.175,
+        copper_thickness_mm=0.1,
+        prefix="rx",
+    )
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_plate_stack_non_model_entry()],
+        modeled_objects=[tx_entry, rx_entry],
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[_plate_stack_imported_name_batch()]))
+    session.materials.delayed_lookup_material_names.add("PET_PSA")
+
+    result = import_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        design_name="fake_type2_import",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    assert modeled_by_id["tx_plate_stack"]["canonical_coordinates"] == tx_coordinates
+    assert modeled_by_id["rx_plate_stack"]["canonical_coordinates"] == rx_coordinates
+
+
+def test_import_type2_step_ledger_accepts_plate_stack_partial_y_usage_windows(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    tx_entry = _tx_plate_stack_entry(tmp_path)
+    tx_coordinates = cast(dict[str, object], tx_entry["canonical_coordinates"])
+    tx_coordinates["outer_bounds_min_xyz"] = [0.0, -65.0, 0.0]
+    tx_coordinates["outer_bounds_max_xyz"] = [6.9, 60.0, 90.0]
+    tx_coordinates["outer_bounds_size_xyz"] = [6.9, 125.0, 90.0]
+    tx_entry["terminal_metadata"] = _plate_stack_terminal_metadata(
+        owner_origin_y=-60.0,
+        owner_size_y=120.0,
+        owner_origin_z=0.0,
+        owner_size_z=90.0,
+        copper_thickness_mm=0.035,
+        prefix="tx",
+    )
+
+    rx_entry = _rx_plate_stack_entry(tmp_path)
+    rx_coordinates = cast(dict[str, object], rx_entry["canonical_coordinates"])
+    rx_coordinates["outer_bounds_min_xyz"] = [0.0, -205.0, 139.0]
+    rx_coordinates["outer_bounds_max_xyz"] = [4.5, 200.0, 499.0]
+    rx_coordinates["outer_bounds_size_xyz"] = [4.5, 405.0, 360.0]
+    rx_entry["terminal_metadata"] = _plate_stack_terminal_metadata(
+        owner_origin_y=-200.0,
+        owner_size_y=400.0,
+        owner_origin_z=139.0,
+        owner_size_z=360.0,
+        copper_thickness_mm=0.1,
+        prefix="rx",
+    )
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_plate_stack_non_model_entry()],
+        modeled_objects=[tx_entry, rx_entry],
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[_plate_stack_imported_name_batch()]))
+    session.materials.delayed_lookup_material_names.add("PET_PSA")
+
+    result = import_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        design_name="fake_type2_import",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    assert modeled_by_id["tx_plate_stack"]["canonical_coordinates"] == tx_coordinates
+    assert modeled_by_id["rx_plate_stack"]["canonical_coordinates"] == rx_coordinates
+
+
+def test_import_type2_step_ledger_rejects_plate_stack_tx_off_center_active_y_window(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    tx_entry = _tx_plate_stack_entry(tmp_path)
+    tx_coordinates = cast(dict[str, object], tx_entry["canonical_coordinates"])
+    tx_coordinates["outer_bounds_min_xyz"] = [0.0, -140.0, 0.0]
+    tx_coordinates["outer_bounds_max_xyz"] = [6.9, 145.0, 90.0]
+    tx_coordinates["outer_bounds_size_xyz"] = [6.9, 285.0, 90.0]
+    tx_entry["terminal_metadata"] = _plate_stack_terminal_metadata(
+        owner_origin_y=-180.0,
+        owner_size_y=360.0,
+        owner_origin_z=0.0,
+        owner_size_z=90.0,
+        copper_thickness_mm=0.035,
+        prefix="tx",
+    )
+
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_plate_stack_non_model_entry()],
+        modeled_objects=[tx_entry, _rx_plate_stack_entry(tmp_path)],
+    )
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[_plate_stack_imported_name_batch()]))
+    session.materials.delayed_lookup_material_names.add("PET_PSA")
+
+    with pytest.raises(ValueError, match=r"tx_plate_stack active Y footprint must be centered on global Y=0"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            design_name="fake_type2_import",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
+
+
 def test_import_type2_step_ledger_rejects_legacy_plate_stack_u_names(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
     tx_entry = _tx_plate_stack_entry(tmp_path)

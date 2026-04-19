@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-19 @ 22:30
+updated: 2026-04-19 @ 23:10
 tags:
   - tests
   - type2
@@ -13,7 +13,7 @@ tags:
 ## Source
 - Path: `tests/type2/test_generate_type2_step.py`
 - Code note path: `sdd/code/tests/type2/test_generate_type2_step.py.md`
-- Direct owner: [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]]
+- Direct owner: [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]]
 - Direct verification target: [[sdd/code/entry/generate_type2_step.py]]
 
 ## 역할
@@ -23,11 +23,11 @@ tags:
 - `tx_plate_stack` / `rx_plate_stack` parser acceptance
 - active example loader expects shared TX/RX `pcb_total_thickness_mm = 0.4`
 - object id mismatch / coil-only field rejection
-- plate-stack `turn_count`, `metal_fill_factor`, `z_usage_ratio` validation plus explicit rejection of removed `shoe_depth_mm`
+- plate-stack `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio` validation plus explicit rejection of removed `shoe_depth_mm`
 - TX/RX pre-unite baseline contract keeps per-turn/bridge/stub segment bodies; final handoff contract은
   role-level copper/ferrite role bodies로 정규화되며 6-body exact-name 순서를 유지한다.
-- TX top-anchored `z_usage_ratio` Z window over full `tx_region` Y + `min_x` anchor
-- RX bottom-anchored `z_usage_ratio` Z window over full `rx_region_max` Y + `min_x` anchor
+- TX top-anchored `z_usage_ratio` Z window over global `Y=0` centered `y_usage_ratio` Y window + `min_x` anchor
+- RX bottom-anchored `z_usage_ratio` Z window over global `Y=0` centered `y_usage_ratio` Y window + `min_x` anchor
 - reduced-height plate-stack conductor/PCB/ferrite placement without shoe cutout bands
 - plate-stack striped copper Z 배치는 pitch-slot centered placement를 검증한다.
 - wall-side `N`, coil-side `N-1`, bridge `2N-2`, stub 2개 contract
@@ -47,7 +47,7 @@ tags:
   남아 있으면 즉시 실패로 본다.
 - single-coil ferrite families(`tx_wall_*`, `under_rx_*`) export 시 동일 ferrite-group contract
 - plate-stack `stub_port` terminal metadata + metadata-only reconstructed sheet geometry
-- plate-stack terminal stubs and sheet metadata use the owner `min_y - 5.0 mm` plane for the left-side `-Y` endpoint.
+- plate-stack terminal stubs and sheet metadata use `active_y_min - 5.0 mm` for the left-side `-Y` endpoint.
 - `terminal_metadata.input_stub_body_name`/`output_stub_body_name`은 pre-unite 라벨(`*_stub_in/out`)을 참조해야 하며
   imported final copper body명을 가리키면 안 된다.
 - bridge contract regression:

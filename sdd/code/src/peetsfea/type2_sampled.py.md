@@ -1,7 +1,7 @@
 ---
 title: type2_sampled.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-19 @ 22:30
+updated: 2026-04-19 @ 23:10
 tags:
   - sampling
   - build
@@ -13,7 +13,7 @@ tags:
 - Path: `src/peetsfea/type2_sampled.py`
 - Code note path: `sdd/code/src/peetsfea/type2_sampled.py.md`
 - Status: active
-- Related feature plans: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]]
+- Related feature plans: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]]
 
 ## 역할
 - type2 sampled owner-path selection, frozen sampled TOML rendering, manifest/build planning을 담당한다.
@@ -30,9 +30,11 @@ tags:
   - `modeled_objects.tx_plate_stack.turn_count`
   - `modeled_objects.tx_plate_stack.metal_fill_factor`
   - `modeled_objects.tx_plate_stack.z_usage_ratio`
+  - `modeled_objects.tx_plate_stack.y_usage_ratio`
   - `modeled_objects.rx_plate_stack.turn_count`
   - `modeled_objects.rx_plate_stack.metal_fill_factor`
   - `modeled_objects.rx_plate_stack.z_usage_ratio`
+  - `modeled_objects.rx_plate_stack.y_usage_ratio`
   이다.
 - build path planning은 여전히 `run/sampled/type2/<design_id>/` layout을 쓴다.
 - STEP stage reporter는 manifest entry나 sampled TOML에 기록되는 canonical state가 아니라 runtime notification surface다.
@@ -56,5 +58,5 @@ tags:
 ## 변경 시 주의점
 - sampled path ownership을 role-blind single-coil field enumeration으로 되돌리지 않는다.
 - active example role 교체와 sampled owner list expectations를 같이 갱신해야 한다.
-- plate-stack sampled owner surface는 `turn_count`, `metal_fill_factor`, `z_usage_ratio`만 소유한다. replay metadata exact-match guard도 이 집합과 같이 갱신해야 한다.
+- plate-stack sampled owner surface는 `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio`만 소유한다. replay metadata exact-match guard도 이 집합과 같이 갱신해야 한다.
 - multi-worker sample path는 completion progress ordering을 깨지 않도록 별도 process-event channel 없이 기존 completion-only progress를 유지한다.

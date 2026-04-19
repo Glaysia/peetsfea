@@ -651,11 +651,15 @@ def validate_modeled_bounds_against_owner(
     plane = require_non_empty_str(require_key(modeled_entry, key="plane", context=context), context=f"{context}.plane")
     modeled_min_x, modeled_min_y, modeled_min_z = outer_bounds_min_xyz(modeled_entry, context=context)
     modeled_size_x, modeled_size_y, modeled_size_z = outer_bounds_size_xyz(modeled_entry, context=context)
+    modeled_max_z = modeled_min_z + modeled_size_z
     owner_context = f"non_model_objects[*].member_objects[{owner_id}]"
     owner_min_x, owner_min_y, owner_min_z = outer_bounds_min_xyz(owner_member, context=owner_context)
     owner_size_x, owner_size_y, owner_size_z = outer_bounds_size_xyz(owner_member, context=owner_context)
-    allowed_modeled_size_y = owner_size_y + _PLATE_STACK_STUB_LENGTH_MM if role in ("tx_plate_stack", "rx_plate_stack") else owner_size_y
-    plate_stack_expected_min_y = owner_min_y - _PLATE_STACK_STUB_LENGTH_MM
+    owner_max_z = owner_min_z + owner_size_z
+    owner_max_y = owner_min_y + owner_size_y
+    allowed_modeled_size_y = (
+        owner_size_y + _PLATE_STACK_STUB_LENGTH_MM if role in ("tx_plate_stack", "rx_plate_stack") else owner_size_y
+    )
     if modeled_size_x > owner_size_x or modeled_size_y > allowed_modeled_size_y or modeled_size_z > owner_size_z:
         raise ValueError(
             f"{context} outer bounds must fit inside {owner_id} "
@@ -670,28 +674,43 @@ def validate_modeled_bounds_against_owner(
             )
         if plane != "YZ":
             raise ValueError(f"{context}.plane must be 'YZ' for tx_plate_stack import-only geometry (actual={plane!r})")
-        if (
-            abs(modeled_size_y - (owner_size_y + _PLATE_STACK_STUB_LENGTH_MM)) > _PLACEMENT_TOLERANCE
-            or abs(modeled_size_z - owner_size_z) > _PLACEMENT_TOLERANCE
-        ):
+        active_size_y = modeled_size_y - _PLATE_STACK_STUB_LENGTH_MM
+        active_min_y = modeled_min_y + _PLATE_STACK_STUB_LENGTH_MM
+        active_max_y = modeled_min_y + modeled_size_y
+        if active_size_y <= 0:
             raise ValueError(
-                "tx_plate_stack must already occupy the full tx_region YZ footprint plus -Y stub overhang "
-                f"(modeled_size={(modeled_size_y, modeled_size_z)}, owner_size={(owner_size_y + _PLATE_STACK_STUB_LENGTH_MM, owner_size_z)})"
+                "tx_plate_stack active Y footprint must be strictly positive after removing the -Y stub overhang "
+                f"(modeled_size_y={modeled_size_y}, stub_length={_PLATE_STACK_STUB_LENGTH_MM})"
+            )
+        expected_active_min_y = -active_size_y / 2.0
+        expected_active_max_y = active_size_y / 2.0
+        if abs(active_min_y - expected_active_min_y) > _PLACEMENT_TOLERANCE:
+            raise ValueError(
+                "tx_plate_stack active Y footprint must be centered on global Y=0 after removing -Y stub overhang "
+                f"(active_min_y={active_min_y}, expected_active_min_y={expected_active_min_y}, "
+                f"stub_length={_PLATE_STACK_STUB_LENGTH_MM})"
+            )
+        if abs(active_max_y - expected_active_max_y) > _PLACEMENT_TOLERANCE:
+            raise ValueError(
+                "tx_plate_stack active Y footprint must be centered on global Y=0 after removing -Y stub overhang "
+                f"(active_max_y={active_max_y}, expected_active_max_y={expected_active_max_y}, "
+                f"stub_length={_PLATE_STACK_STUB_LENGTH_MM})"
+            )
+        if active_min_y < owner_min_y - _PLACEMENT_TOLERANCE or active_max_y > owner_max_y + _PLACEMENT_TOLERANCE:
+            raise ValueError(
+                "tx_plate_stack centered active Y footprint must stay within tx_region Y bounds "
+                f"(active_min_y={active_min_y}, active_max_y={active_max_y}, "
+                f"owner_min_y={owner_min_y}, owner_max_y={owner_max_y})"
             )
         if abs(modeled_min_x - owner_min_x) > _PLACEMENT_TOLERANCE:
             raise ValueError(
                 "tx_plate_stack outer bounds min_x must already touch tx_region min_x "
                 f"(actual={modeled_min_x}, expected={owner_min_x})"
             )
-        if abs(modeled_min_y - plate_stack_expected_min_y) > _PLACEMENT_TOLERANCE:
+        if abs(modeled_max_z - owner_max_z) > _PLACEMENT_TOLERANCE:
             raise ValueError(
-                "tx_plate_stack outer bounds min_y must already include tx_region -Y stub overhang "
-                f"(actual={modeled_min_y}, expected={plate_stack_expected_min_y})"
-            )
-        if abs(modeled_min_z - owner_min_z) > _PLACEMENT_TOLERANCE:
-            raise ValueError(
-                "tx_plate_stack outer bounds min_z must already touch tx_region min_z "
-                f"(actual={modeled_min_z}, expected={owner_min_z})"
+                "tx_plate_stack outer bounds max_z must already touch tx_region max_z "
+                f"(actual={modeled_max_z}, expected={owner_max_z})"
             )
         return
     if role == "rx_plate_stack":
@@ -702,23 +721,38 @@ def validate_modeled_bounds_against_owner(
             )
         if plane != "YZ":
             raise ValueError(f"{context}.plane must be 'YZ' for rx_plate_stack import-only geometry (actual={plane!r})")
-        if (
-            abs(modeled_size_y - (owner_size_y + _PLATE_STACK_STUB_LENGTH_MM)) > _PLACEMENT_TOLERANCE
-            or abs(modeled_size_z - owner_size_z) > _PLACEMENT_TOLERANCE
-        ):
+        active_size_y = modeled_size_y - _PLATE_STACK_STUB_LENGTH_MM
+        active_min_y = modeled_min_y + _PLATE_STACK_STUB_LENGTH_MM
+        active_max_y = modeled_min_y + modeled_size_y
+        if active_size_y <= 0:
             raise ValueError(
-                "rx_plate_stack must already occupy the full rx_region_max YZ footprint plus -Y stub overhang "
-                f"(modeled_size={(modeled_size_y, modeled_size_z)}, owner_size={(owner_size_y + _PLATE_STACK_STUB_LENGTH_MM, owner_size_z)})"
+                "rx_plate_stack active Y footprint must be strictly positive after removing the -Y stub overhang "
+                f"(modeled_size_y={modeled_size_y}, stub_length={_PLATE_STACK_STUB_LENGTH_MM})"
+            )
+        expected_active_min_y = -active_size_y / 2.0
+        expected_active_max_y = active_size_y / 2.0
+        if abs(active_min_y - expected_active_min_y) > _PLACEMENT_TOLERANCE:
+            raise ValueError(
+                "rx_plate_stack active Y footprint must be centered on global Y=0 after removing -Y stub overhang "
+                f"(active_min_y={active_min_y}, expected_active_min_y={expected_active_min_y}, "
+                f"stub_length={_PLATE_STACK_STUB_LENGTH_MM})"
+            )
+        if abs(active_max_y - expected_active_max_y) > _PLACEMENT_TOLERANCE:
+            raise ValueError(
+                "rx_plate_stack active Y footprint must be centered on global Y=0 after removing -Y stub overhang "
+                f"(active_max_y={active_max_y}, expected_active_max_y={expected_active_max_y}, "
+                f"stub_length={_PLATE_STACK_STUB_LENGTH_MM})"
+            )
+        if active_min_y < owner_min_y - _PLACEMENT_TOLERANCE or active_max_y > owner_max_y + _PLACEMENT_TOLERANCE:
+            raise ValueError(
+                "rx_plate_stack centered active Y footprint must stay within rx_region_max Y bounds "
+                f"(active_min_y={active_min_y}, active_max_y={active_max_y}, "
+                f"owner_min_y={owner_min_y}, owner_max_y={owner_max_y})"
             )
         if abs(modeled_min_x - owner_min_x) > _PLACEMENT_TOLERANCE:
             raise ValueError(
                 "rx_plate_stack outer bounds min_x must already touch rx_region_max min_x "
                 f"(actual={modeled_min_x}, expected={owner_min_x})"
-            )
-        if abs(modeled_min_y - plate_stack_expected_min_y) > _PLACEMENT_TOLERANCE:
-            raise ValueError(
-                "rx_plate_stack outer bounds min_y must already include rx_region_max -Y stub overhang "
-                f"(actual={modeled_min_y}, expected={plate_stack_expected_min_y})"
             )
         if abs(modeled_min_z - owner_min_z) > _PLACEMENT_TOLERANCE:
             raise ValueError(

@@ -40,6 +40,10 @@ tags:
 - active plate-stack import은 legacy final segment names(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)를 final copper body로 인정하지 않고 즉시 실패한다.
 - active plate-stack import은 legacy segment-export 케이스(`*_stack_*_uN`)와
   `tx_plate_copper`/`rx_plate_copper` 미생성 케이스를 future regression으로 추가 추적한다.
+- active plate-stack import accepts partial-Z active windows from `z_usage_ratio` only when TX remains max-Z anchored and RX remains min-Z anchored.
+- active plate-stack import accepts partial-Y active windows from `y_usage_ratio` when the modeled bounds encode a global `Y=0`
+  centered active span plus the fixed `-Y` stub overhang.
+- active plate-stack import rejects Y bounds that fit inside the owner but are off the global centered active-window contract.
 
 ## 변경 시 주의점
 - import-only success와 setup-ready failure를 같은 assertion으로 묶지 않는다.

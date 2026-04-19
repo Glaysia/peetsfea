@@ -29,6 +29,7 @@ from peetsfea.type2_step_spec import load_type2_step_spec
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
 from peetsfea.type2_step_spec import resolve_modeled_plate_stack_metal_fill_factor
 from peetsfea.type2_step_spec import resolve_modeled_plate_stack_turn_count
+from peetsfea.type2_step_spec import resolve_modeled_plate_stack_y_usage_ratio
 from peetsfea.type2_step_spec import resolve_modeled_plate_stack_z_usage_ratio
 from peetsfea.type2_step_spec import resolve_modeled_underlay_gap_mm
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
@@ -249,6 +250,7 @@ def _type2_rx_plate_stack_spec_text(
     turn_count_range: str = "[true, 3.0, 3.0, 1]",
     metal_fill_factor_range: str = "[false, 0.4, 0.4, 1]",
     z_usage_ratio_range: str = "[false, 0.3, 0.3, 1]",
+    y_usage_ratio_range: str = "[false, 1.0, 1.0, 1]",
     radiation_margin_mm: float = 3500.0,
     extra_modeled_lines: tuple[str, ...] = (),
 ) -> str:
@@ -343,10 +345,12 @@ size_xyz = [10.0, 200.0, 200.0]
     copper_thickness_mm = {copper_thickness_mm}
     [modeled_objects.turn_count]
     range = {turn_count_range}
-    [modeled_objects.metal_fill_factor]
-    range = {metal_fill_factor_range}
+[modeled_objects.metal_fill_factor]
+range = {metal_fill_factor_range}
     [modeled_objects.z_usage_ratio]
-    range = {z_usage_ratio_range}{extra_body}
+    range = {z_usage_ratio_range}
+    [modeled_objects.y_usage_ratio]
+    range = {y_usage_ratio_range}{extra_body}
 """.strip()
 
 
@@ -359,6 +363,7 @@ def _type2_tx_plate_stack_spec_text(
     turn_count_range: str = "[true, 3.0, 3.0, 1]",
     metal_fill_factor_range: str = "[false, 0.4, 0.4, 1]",
     z_usage_ratio_range: str = "[false, 0.3, 0.3, 1]",
+    y_usage_ratio_range: str = "[false, 1.0, 1.0, 1]",
     radiation_margin_mm: float = 3500.0,
     extra_modeled_lines: tuple[str, ...] = (),
 ) -> str:
@@ -370,6 +375,7 @@ def _type2_tx_plate_stack_spec_text(
         turn_count_range=turn_count_range,
         metal_fill_factor_range=metal_fill_factor_range,
         z_usage_ratio_range=z_usage_ratio_range,
+        y_usage_ratio_range=y_usage_ratio_range,
         radiation_margin_mm=radiation_margin_mm,
         extra_modeled_lines=extra_modeled_lines,
     ).replace(
@@ -762,6 +768,18 @@ def _plate_stack_active_z_bounds(
     else:
         active_min_z = owner_origin_z
     return active_min_z, active_min_z + active_size_z, active_size_z
+
+
+def _plate_stack_active_y_bounds(
+    *,
+    owner_size_y: float,
+    y_usage_ratio: float,
+) -> tuple[float, float, float]:
+    assert owner_size_y > 0.0
+    active_size_y = owner_size_y * y_usage_ratio
+    assert active_size_y > 0.0
+    active_min_y = -active_size_y / 2.0
+    return active_min_y, active_min_y + active_size_y, active_size_y
 
 
 def _assert_plate_stack_united_ferrite_family_contract(
@@ -1353,6 +1371,19 @@ def test_load_type2_step_spec_rejects_plate_stack_missing_z_usage_ratio(tmp_path
         load_type2_step_spec(toml_path)
 
 
+def test_load_type2_step_spec_rejects_plate_stack_missing_y_usage_ratio(tmp_path: Path) -> None:
+    toml_text = _type2_rx_plate_stack_spec_text().replace(
+        "    [modeled_objects.y_usage_ratio]\n"
+        "    range = [false, 1.0, 1.0, 1]",
+        "",
+        1,
+    )
+    toml_path = _write_spec(tmp_path, toml_text)
+
+    with pytest.raises(ValueError, match=r"modeled_objects\[0\] is missing required key 'y_usage_ratio'"):
+        load_type2_step_spec(toml_path)
+
+
 def test_load_type2_step_spec_rejects_plate_stack_integer_z_usage_ratio(tmp_path: Path) -> None:
     toml_path = _write_spec(
         tmp_path,
@@ -1360,6 +1391,16 @@ def test_load_type2_step_spec_rejects_plate_stack_integer_z_usage_ratio(tmp_path
     )
 
     with pytest.raises(ValueError, match=r"z_usage_ratio\.range\[0\] must be false"):
+        load_type2_step_spec(toml_path)
+
+
+def test_load_type2_step_spec_rejects_plate_stack_integer_y_usage_ratio(tmp_path: Path) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_rx_plate_stack_spec_text(y_usage_ratio_range=_range(True, 1.0, 1.0, 1)),
+    )
+
+    with pytest.raises(ValueError, match=r"y_usage_ratio\.range\[0\] must be false"):
         load_type2_step_spec(toml_path)
 
 
@@ -1374,6 +1415,20 @@ def test_load_type2_step_spec_rejects_plate_stack_z_usage_ratio_outside_supporte
     )
 
     with pytest.raises(ValueError, match=r"z_usage_ratio must realize to values > 0 and <= 1"):
+        load_type2_step_spec(toml_path)
+
+
+@pytest.mark.parametrize("y_usage_ratio_range", (_range(False, 0.0, 0.0, 1), _range(False, 1.1, 1.1, 1)))
+def test_load_type2_step_spec_rejects_plate_stack_y_usage_ratio_outside_supported_range(
+    tmp_path: Path,
+    y_usage_ratio_range: str,
+) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_rx_plate_stack_spec_text(y_usage_ratio_range=y_usage_ratio_range),
+    )
+
+    with pytest.raises(ValueError, match=r"y_usage_ratio must realize to values > 0 and <= 1"):
         load_type2_step_spec(toml_path)
 
 
@@ -1700,6 +1755,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert cast(dict[str, object], tx_entry["terminal_metadata"])["kind"] == "stub_port"
     tx_turn_count = resolve_modeled_plate_stack_turn_count(tx_modeled_spec, seed=0)
     tx_fill = resolve_modeled_plate_stack_metal_fill_factor(tx_modeled_spec, seed=0)
+    tx_y_usage_ratio = resolve_modeled_plate_stack_y_usage_ratio(tx_modeled_spec, seed=0)
     tx_z_usage_ratio = resolve_modeled_plate_stack_z_usage_ratio(tx_modeled_spec, seed=0)
     tx_expected_names = list(
         _tx_plate_stack_expected_body_names(
@@ -1710,6 +1766,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert rx_modeled_spec.role == "rx_plate_stack"
     rx_turn_count = resolve_modeled_plate_stack_turn_count(rx_modeled_spec, seed=0)
     rx_fill = resolve_modeled_plate_stack_metal_fill_factor(rx_modeled_spec, seed=0)
+    rx_y_usage_ratio = resolve_modeled_plate_stack_y_usage_ratio(rx_modeled_spec, seed=0)
     rx_z_usage_ratio = resolve_modeled_plate_stack_z_usage_ratio(rx_modeled_spec, seed=0)
     rx_expected_names = list(
         _rx_plate_stack_expected_body_names(
@@ -1734,12 +1791,16 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
         owner_size_z=region_size_z,
         z_usage_ratio=tx_z_usage_ratio,
     )
+    tx_active_min_y, tx_active_max_y, tx_active_size_y = _plate_stack_active_y_bounds(
+        owner_size_y=region_size_y,
+        y_usage_ratio=tx_y_usage_ratio,
+    )
     assert tx_min_x == pytest.approx(region_min_x)
-    assert tx_min_y == pytest.approx(region_min_y - 5.0)
+    assert tx_min_y == pytest.approx(tx_active_min_y - 5.0)
     assert tx_min_z == pytest.approx(tx_active_min_z)
     expected_tx_total_thickness_mm = total_plate_stack_thickness_mm(spec=cast(ModeledPlateStackSpec, tx_modeled_spec))
     assert tx_size_x == pytest.approx(expected_tx_total_thickness_mm)
-    assert tx_size_y == pytest.approx(region_size_y + 5.0)
+    assert tx_size_y == pytest.approx(tx_active_size_y + 5.0)
     assert tx_size_z == pytest.approx(tx_active_size_z)
     tx_pitch_z = _plate_stack_pitch_z(owner_size_z=tx_active_size_z, turn_count=tx_turn_count)
     tx_trace_height_z = tx_pitch_z * tx_fill
@@ -1747,8 +1808,8 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     tx_step_min_xyz, tx_step_max_xyz = _body_bbox(scene_step_path, label="tx_plate_copper")
     assert tx_step_min_xyz[0] == pytest.approx(region_min_x)
     assert tx_step_max_xyz[0] == pytest.approx(region_min_x + expected_tx_total_thickness_mm)
-    assert tx_step_min_xyz[1] == pytest.approx(region_min_y - 5.0)
-    assert tx_step_max_xyz[1] == pytest.approx(region_min_y + region_size_y)
+    assert tx_step_min_xyz[1] == pytest.approx(tx_active_min_y - 5.0)
+    assert tx_step_max_xyz[1] == pytest.approx(tx_active_max_y)
     assert tx_step_min_xyz[2] >= tx_active_min_z + tx_centering_offset_z - 1e-8
     assert tx_step_max_xyz[2] <= tx_active_max_z - tx_centering_offset_z + 1e-8
     tx_terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
@@ -1756,8 +1817,8 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     tx_end_point_plane = cast(list[float], tx_terminal_metadata["end_point_plane_mm"])
     assert tx_terminal_metadata["input_stub_body_name"] == "tx_stub_in"
     assert tx_terminal_metadata["output_stub_body_name"] == "tx_stub_out"
-    assert tx_start_point_plane[0] == pytest.approx(region_min_y - 5.0)
-    assert tx_end_point_plane[0] == pytest.approx(region_min_y - 5.0)
+    assert tx_start_point_plane[0] == pytest.approx(tx_active_min_y - 5.0)
+    assert tx_end_point_plane[0] == pytest.approx(tx_active_min_y - 5.0)
     tx_wall_first_center_z = tx_active_min_z + tx_centering_offset_z + (tx_trace_height_z / 2.0)
     tx_coil_last_center_z = (
         tx_active_min_z
@@ -1774,20 +1835,20 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
         tx_active_min_z + (tx_pitch_z / 2.0) + (tx_pitch_z * float(tx_turn_count - 1)) + tx_centering_offset_z
     )
     assert {(round(x, 8), round(y, 8), round(z, 8)) for x, y, z in tx_port_sheet_vertices} == {
-        (round(region_min_x, 8), round(region_min_y - 5.0, 8), round(tx_wall_first_origin_z, 8)),
+        (round(region_min_x, 8), round(tx_active_min_y - 5.0, 8), round(tx_wall_first_origin_z, 8)),
         (
             round(region_min_x + expected_tx_total_thickness_mm - tx_modeled_spec.copper_thickness_mm, 8),
-            round(region_min_y - 5.0, 8),
+            round(tx_active_min_y - 5.0, 8),
             round(tx_coil_last_origin_z, 8),
         ),
         (
             round(region_min_x + expected_tx_total_thickness_mm - tx_modeled_spec.copper_thickness_mm, 8),
-            round(region_min_y - 5.0, 8),
+            round(tx_active_min_y - 5.0, 8),
             round(tx_coil_last_origin_z + tx_trace_height_z, 8),
         ),
         (
             round(region_min_x, 8),
-            round(region_min_y - 5.0, 8),
+            round(tx_active_min_y - 5.0, 8),
             round(tx_wall_first_origin_z + tx_trace_height_z, 8),
         ),
     }
@@ -1843,6 +1904,10 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
         owner_size_z=rx_region_size_z,
         z_usage_ratio=rx_z_usage_ratio,
     )
+    rx_active_min_y, rx_active_max_y, rx_active_size_y = _plate_stack_active_y_bounds(
+        owner_size_y=rx_region_size_y,
+        y_usage_ratio=rx_y_usage_ratio,
+    )
     assert rx_entry["role"] == "rx_plate_stack"
     assert rx_entry["plane"] == "YZ"
     assert rx_entry["placement_owner_id"] == "rx_region_max"
@@ -1854,11 +1919,11 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert all(len(name) <= 32 for name in rx_expected_names)
     assert cast(dict[str, object], rx_entry["terminal_metadata"])["kind"] == "stub_port"
     assert rx_min_x == pytest.approx(rx_region_min_x)
-    assert rx_min_y == pytest.approx(rx_region_min_y - 5.0)
+    assert rx_min_y == pytest.approx(rx_active_min_y - 5.0)
     assert rx_min_z == pytest.approx(rx_active_min_z)
     expected_rx_total_thickness_mm = total_plate_stack_thickness_mm(spec=cast(ModeledPlateStackSpec, rx_modeled_spec))
     assert rx_size_x == pytest.approx(expected_rx_total_thickness_mm)
-    assert rx_size_y == pytest.approx(rx_region_size_y + 5.0)
+    assert rx_size_y == pytest.approx(rx_active_size_y + 5.0)
     assert rx_size_z == pytest.approx(rx_active_size_z)
     rx_pitch_z = _plate_stack_pitch_z(owner_size_z=rx_active_size_z, turn_count=rx_turn_count)
     rx_trace_height_z = rx_pitch_z * rx_fill
@@ -1866,8 +1931,8 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     rx_step_min_xyz, rx_step_max_xyz = _body_bbox(scene_step_path, label="rx_plate_copper")
     assert rx_step_min_xyz[0] == pytest.approx(rx_region_min_x)
     assert rx_step_max_xyz[0] == pytest.approx(rx_region_min_x + expected_rx_total_thickness_mm)
-    assert rx_step_min_xyz[1] == pytest.approx(rx_region_min_y - 5.0)
-    assert rx_step_max_xyz[1] == pytest.approx(rx_region_min_y + rx_region_size_y)
+    assert rx_step_min_xyz[1] == pytest.approx(rx_active_min_y - 5.0)
+    assert rx_step_max_xyz[1] == pytest.approx(rx_active_max_y)
     assert rx_step_min_xyz[2] >= rx_active_min_z + rx_centering_offset_z - 1e-8
     assert rx_step_max_xyz[2] <= rx_active_max_z - rx_centering_offset_z + 1e-8
     rx_terminal_metadata = cast(dict[str, object], rx_entry["terminal_metadata"])
@@ -1875,8 +1940,8 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     rx_end_point_plane = cast(list[float], rx_terminal_metadata["end_point_plane_mm"])
     assert rx_terminal_metadata["input_stub_body_name"] == "rx_stub_in"
     assert rx_terminal_metadata["output_stub_body_name"] == "rx_stub_out"
-    assert rx_start_point_plane[0] == pytest.approx(rx_region_min_y - 5.0)
-    assert rx_end_point_plane[0] == pytest.approx(rx_region_min_y - 5.0)
+    assert rx_start_point_plane[0] == pytest.approx(rx_active_min_y - 5.0)
+    assert rx_end_point_plane[0] == pytest.approx(rx_active_min_y - 5.0)
     rx_wall_first_center_z = rx_active_min_z + rx_centering_offset_z + (rx_trace_height_z / 2.0)
     rx_coil_last_center_z = (
         rx_active_min_z
@@ -1893,20 +1958,20 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
         rx_active_min_z + (rx_pitch_z / 2.0) + (rx_pitch_z * float(rx_turn_count - 1)) + rx_centering_offset_z
     )
     assert {(round(x, 8), round(y, 8), round(z, 8)) for x, y, z in rx_port_sheet_vertices} == {
-        (round(rx_region_min_x, 8), round(rx_region_min_y - 5.0, 8), round(rx_wall_first_origin_z, 8)),
+        (round(rx_region_min_x, 8), round(rx_active_min_y - 5.0, 8), round(rx_wall_first_origin_z, 8)),
         (
             round(rx_region_min_x + expected_rx_total_thickness_mm - rx_modeled_spec.copper_thickness_mm, 8),
-            round(rx_region_min_y - 5.0, 8),
+            round(rx_active_min_y - 5.0, 8),
             round(rx_coil_last_origin_z, 8),
         ),
         (
             round(rx_region_min_x + expected_rx_total_thickness_mm - rx_modeled_spec.copper_thickness_mm, 8),
-            round(rx_region_min_y - 5.0, 8),
+            round(rx_active_min_y - 5.0, 8),
             round(rx_coil_last_origin_z + rx_trace_height_z, 8),
         ),
         (
             round(rx_region_min_x, 8),
-            round(rx_region_min_y - 5.0, 8),
+            round(rx_active_min_y - 5.0, 8),
             round(rx_wall_first_origin_z + rx_trace_height_z, 8),
         ),
     }
@@ -2318,7 +2383,12 @@ def test_export_type2_step_artifacts_places_tx_plate_stack_on_tx_region_min_x_an
     tx_size_x, tx_size_y, tx_size_z = cast(tuple[float, float, float], tx_size_xyz)
     region_min_x, region_min_y, region_min_z = tx_region_member["canonical_coordinates"]["outer_bounds_min_xyz"]
     region_size_x, region_size_y, region_size_z = tx_region_member["canonical_coordinates"]["outer_bounds_size_xyz"]
+    y_usage_ratio = resolve_modeled_plate_stack_y_usage_ratio(tx_modeled_spec, seed=0)
     z_usage_ratio = resolve_modeled_plate_stack_z_usage_ratio(tx_modeled_spec, seed=0)
+    active_min_y, active_max_y, active_size_y = _plate_stack_active_y_bounds(
+        owner_size_y=region_size_y,
+        y_usage_ratio=y_usage_ratio,
+    )
     active_min_z, active_max_z, active_size_z = _plate_stack_active_z_bounds(
         role="tx_plate_stack",
         owner_origin_z=region_min_z,
@@ -2337,10 +2407,10 @@ def test_export_type2_step_artifacts_places_tx_plate_stack_on_tx_region_min_x_an
     )
     assert tx_entry["expected_exported_body_count"] == len(tx_entry["expected_exported_body_names"])
     assert tx_min_x == pytest.approx(region_min_x)
-    assert tx_min_y == pytest.approx(region_min_y - 5.0)
+    assert tx_min_y == pytest.approx(active_min_y - 5.0)
     assert tx_min_z == pytest.approx(active_min_z)
     assert tx_size_x == pytest.approx(total_plate_stack_thickness_mm(spec=cast(ModeledPlateStackSpec, tx_modeled_spec)))
-    assert tx_size_y == pytest.approx(region_size_y + 5.0)
+    assert tx_size_y == pytest.approx(active_size_y + 5.0)
     assert tx_size_z == pytest.approx(active_size_z)
     tx_pitch_z = _plate_stack_pitch_z(owner_size_z=active_size_z, turn_count=3)
     tx_trace_height_z = tx_pitch_z * 0.4
@@ -2348,8 +2418,8 @@ def test_export_type2_step_artifacts_places_tx_plate_stack_on_tx_region_min_x_an
     tx_step_min_xyz, tx_step_max_xyz = _body_bbox(Path(ledger["scene_step_path"]), label="tx_plate_copper")
     assert tx_step_min_xyz[0] == pytest.approx(region_min_x)
     assert tx_step_max_xyz[0] == pytest.approx(region_min_x + tx_size_x)
-    assert tx_step_min_xyz[1] == pytest.approx(region_min_y - 5.0)
-    assert tx_step_max_xyz[1] == pytest.approx(region_min_y + region_size_y)
+    assert tx_step_min_xyz[1] == pytest.approx(active_min_y - 5.0)
+    assert tx_step_max_xyz[1] == pytest.approx(active_max_y)
     assert tx_step_min_xyz[2] >= active_min_z + tx_centering_offset_z - 1e-8
     assert tx_step_max_xyz[2] <= active_max_z - tx_centering_offset_z + 1e-8
 
@@ -2379,7 +2449,12 @@ def test_export_type2_step_artifacts_places_rx_plate_stack_on_rx_region_max_min_
     rx_size_x, rx_size_y, rx_size_z = cast(tuple[float, float, float], rx_size_xyz)
     region_min_x, region_min_y, region_min_z = rx_region_member["canonical_coordinates"]["outer_bounds_min_xyz"]
     region_size_x, region_size_y, region_size_z = rx_region_member["canonical_coordinates"]["outer_bounds_size_xyz"]
+    y_usage_ratio = resolve_modeled_plate_stack_y_usage_ratio(rx_modeled_spec, seed=0)
     z_usage_ratio = resolve_modeled_plate_stack_z_usage_ratio(rx_modeled_spec, seed=0)
+    active_min_y, active_max_y, active_size_y = _plate_stack_active_y_bounds(
+        owner_size_y=region_size_y,
+        y_usage_ratio=y_usage_ratio,
+    )
     active_min_z, active_max_z, active_size_z = _plate_stack_active_z_bounds(
         role="rx_plate_stack",
         owner_origin_z=region_min_z,
@@ -2397,10 +2472,10 @@ def test_export_type2_step_artifacts_places_rx_plate_stack_on_rx_region_max_min_
     )
     assert rx_entry["expected_exported_body_count"] == len(rx_entry["expected_exported_body_names"])
     assert rx_min_x == pytest.approx(region_min_x)
-    assert rx_min_y == pytest.approx(region_min_y - 5.0)
+    assert rx_min_y == pytest.approx(active_min_y - 5.0)
     assert rx_min_z == pytest.approx(active_min_z)
     assert rx_size_x == pytest.approx(total_plate_stack_thickness_mm(spec=cast(ModeledPlateStackSpec, rx_modeled_spec)))
-    assert rx_size_y == pytest.approx(region_size_y + 5.0)
+    assert rx_size_y == pytest.approx(active_size_y + 5.0)
     assert rx_size_z == pytest.approx(active_size_z)
     rx_pitch_z = _plate_stack_pitch_z(owner_size_z=active_size_z, turn_count=3)
     rx_trace_height_z = rx_pitch_z * 0.4
@@ -2408,10 +2483,107 @@ def test_export_type2_step_artifacts_places_rx_plate_stack_on_rx_region_max_min_
     rx_step_min_xyz, rx_step_max_xyz = _body_bbox(Path(ledger["scene_step_path"]), label="rx_plate_copper")
     assert rx_step_min_xyz[0] == pytest.approx(region_min_x)
     assert rx_step_max_xyz[0] == pytest.approx(region_min_x + rx_size_x)
-    assert rx_step_min_xyz[1] == pytest.approx(region_min_y - 5.0)
-    assert rx_step_max_xyz[1] == pytest.approx(region_min_y + region_size_y)
+    assert rx_step_min_xyz[1] == pytest.approx(active_min_y - 5.0)
+    assert rx_step_max_xyz[1] == pytest.approx(active_max_y)
     assert rx_step_min_xyz[2] >= active_min_z + rx_centering_offset_z - 1e-8
     assert rx_step_max_xyz[2] <= active_max_z - rx_centering_offset_z + 1e-8
+
+
+@pytest.mark.parametrize(
+    ("modeled_role", "region_id", "object_id", "prefix"),
+    (("tx_plate_stack", "tx_region", "tx_plate_stack", "tx"), ("rx_plate_stack", "rx_region_max", "rx_plate_stack", "rx")),
+)
+def test_export_type2_step_artifacts_uses_global_centered_y_window_for_plate_stack(
+    tmp_path: Path,
+    modeled_role: Literal["tx_plate_stack", "rx_plate_stack"],
+    region_id: Literal["tx_region", "rx_region_max"],
+    object_id: Literal["tx_plate_stack", "rx_plate_stack"],
+    prefix: Literal["tx", "rx"],
+) -> None:
+    y_usage_ratio_range = _range(False, 0.5, 0.5, 1)
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_tx_plate_stack_spec_text(
+            y_usage_ratio_range=y_usage_ratio_range,
+        )
+        if modeled_role == "tx_plate_stack"
+        else _type2_rx_plate_stack_spec_text(y_usage_ratio_range=y_usage_ratio_range),
+    )
+
+    type2_spec = load_type2_step_spec(toml_path)
+    modeled_spec = next(entry for entry in type2_spec.modeled_objects if entry.object_id == object_id)
+    assert modeled_spec.role == modeled_role
+    plate_stack_spec = cast(ModeledPlateStackSpec, modeled_spec)
+    ledger = export_type2_step_artifacts(
+        toml_path=toml_path,
+        output_dir=tmp_path / "out",
+        ledger_path=tmp_path / "out" / "ledger.json",
+        seed=0,
+    )
+
+    modeled_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == object_id)
+    region_member = next(
+        member
+        for member in ledger["non_model_objects"][0]["member_objects"]
+        if member["object_id"] == region_id
+    )
+    region_min_x, _region_min_y, region_min_z = region_member["canonical_coordinates"]["outer_bounds_min_xyz"]
+    _region_size_x, region_size_y, region_size_z = region_member["canonical_coordinates"]["outer_bounds_size_xyz"]
+    y_usage_ratio = resolve_modeled_plate_stack_y_usage_ratio(plate_stack_spec, seed=0)
+    z_usage_ratio = resolve_modeled_plate_stack_z_usage_ratio(plate_stack_spec, seed=0)
+    fill_factor = resolve_modeled_plate_stack_metal_fill_factor(plate_stack_spec, seed=0)
+    active_min_y, active_max_y, active_size_y = _plate_stack_active_y_bounds(
+        owner_size_y=region_size_y,
+        y_usage_ratio=y_usage_ratio,
+    )
+    _, active_max_z, active_size_z = _plate_stack_active_z_bounds(
+        role=modeled_role,
+        owner_origin_z=region_min_z,
+        owner_size_z=region_size_z,
+        z_usage_ratio=z_usage_ratio,
+    )
+    active_min_z = active_max_z - active_size_z
+    turn_count = resolve_modeled_plate_stack_turn_count(plate_stack_spec, seed=0)
+    expected_total_thickness_mm = total_plate_stack_thickness_mm(spec=plate_stack_spec)
+    pitch_z = _plate_stack_pitch_z(owner_size_z=active_size_z, turn_count=turn_count)
+    trace_height_z = pitch_z * fill_factor
+    centering_offset_z = (pitch_z - trace_height_z) / 2.0
+
+    canonical_min_xyz = cast(tuple[float, float, float], modeled_entry["canonical_coordinates"]["outer_bounds_min_xyz"])
+    canonical_size_xyz = cast(
+        tuple[float, float, float],
+        modeled_entry["canonical_coordinates"]["outer_bounds_size_xyz"],
+    )
+    assert canonical_min_xyz[0] == pytest.approx(region_min_x)
+    assert canonical_min_xyz[1] == pytest.approx(active_min_y - 5.0)
+    assert canonical_min_xyz[2] == pytest.approx(active_min_z)
+    assert canonical_size_xyz[0] == pytest.approx(expected_total_thickness_mm)
+    assert canonical_size_xyz[1] == pytest.approx(active_size_y + 5.0)
+    assert canonical_size_xyz[2] == pytest.approx(active_size_z)
+    assert canonical_min_xyz[1] + canonical_size_xyz[1] == pytest.approx(active_max_y)
+    assert canonical_min_xyz[0] + canonical_size_xyz[0] == pytest.approx(region_min_x + expected_total_thickness_mm)
+
+    step_min_xyz, step_max_xyz = _body_bbox(Path(ledger["scene_step_path"]), label=f"{prefix}_plate_copper")
+    assert step_min_xyz[0] == pytest.approx(region_min_x)
+    assert step_max_xyz[0] == pytest.approx(region_min_x + expected_total_thickness_mm)
+    assert step_min_xyz[1] == pytest.approx(active_min_y - 5.0)
+    assert step_max_xyz[1] == pytest.approx(active_max_y)
+    assert step_min_xyz[2] >= active_min_z + centering_offset_z - 1e-8
+    assert step_max_xyz[2] <= active_max_z - centering_offset_z + 1e-8
+
+    terminal_metadata = cast(dict[str, object], modeled_entry["terminal_metadata"])
+    start_point_plane = cast(list[float], terminal_metadata["start_point_plane_mm"])
+    end_point_plane = cast(list[float], terminal_metadata["end_point_plane_mm"])
+    assert start_point_plane[0] == pytest.approx(active_min_y - 5.0)
+    assert end_point_plane[0] == pytest.approx(active_min_y - 5.0)
+
+    assert start_point_plane[0] == end_point_plane[0]
+
+    port_sheet_vertices = cast(
+        list[list[float]],
+        terminal_metadata["port_sheet_vertices_xyz"],
+    )
+    assert all(round(vertex[1], 8) == round(active_min_y - 5.0, 8) for vertex in port_sheet_vertices)
 
 
 def test_export_type2_step_artifacts_propagates_custom_radiation_margin_into_step_ledger(tmp_path: Path) -> None:

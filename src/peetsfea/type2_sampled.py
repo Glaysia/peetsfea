@@ -172,6 +172,7 @@ def _plate_stack_range_owner_specs(
         (f"modeled_objects.{modeled_spec.object_id}.turn_count", modeled_spec.turn_count),
         (f"modeled_objects.{modeled_spec.object_id}.metal_fill_factor", modeled_spec.metal_fill_factor),
         (f"modeled_objects.{modeled_spec.object_id}.z_usage_ratio", modeled_spec.z_usage_ratio),
+        (f"modeled_objects.{modeled_spec.object_id}.y_usage_ratio", modeled_spec.y_usage_ratio),
     )
 
 

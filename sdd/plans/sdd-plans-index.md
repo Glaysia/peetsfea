@@ -1,7 +1,7 @@
 ---
 title: Plan Note Index
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 15:55
+updated: 2026-04-19 @ 23:10
 tags:
   - sdd
 ---
@@ -39,6 +39,8 @@ tags:
 - `sdd/plans/0.2.22-type2-plate-stack-copper-unite-grouping.md`
 - `sdd/plans/0.2.22-type2-plate-stack-equal-stripes.md`
 - `sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab.md`
+- `sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio.md`
+- `sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio.md`
 
 ## Type2 milestone order
 - single STEP + setup-ready notebook 방향: `sdd/plans/0.2.22-type2-single-step-setup-ready-pipeline.md`
@@ -58,6 +60,8 @@ tags:
 - plate-stack copper unite/grouping contract: `sdd/plans/0.2.22-type2-plate-stack-copper-unite-grouping.md`
 - plate-stack equal wall/coil stripe topology: `sdd/plans/0.2.22-type2-plate-stack-equal-stripes.md`
 - plate-stack ferrite-family equivalent 3-slab contract: `sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab.md`
+- plate-stack role-aware Z usage window: `sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio.md`
+- plate-stack global Y=0 centered usage window: `sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio.md`
 - single-coil corner relief gap: `sdd/plans/0.2.22-type2-single-coil-corner-relief.md`
 - TX coil geometry repair: `sdd/plans/0.2.22-type2-tx-coil-geometry-repair.md`
 - 첫 modeled object role: `sdd/plans/tx-rect-void-step-generator.md`

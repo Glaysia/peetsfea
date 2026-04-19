@@ -27,9 +27,11 @@ _EXPECTED_SAMPLED_OWNER_PATHS = (
     "modeled_objects.tx_plate_stack.turn_count",
     "modeled_objects.tx_plate_stack.metal_fill_factor",
     "modeled_objects.tx_plate_stack.z_usage_ratio",
+    "modeled_objects.tx_plate_stack.y_usage_ratio",
     "modeled_objects.rx_plate_stack.turn_count",
     "modeled_objects.rx_plate_stack.metal_fill_factor",
     "modeled_objects.rx_plate_stack.z_usage_ratio",
+    "modeled_objects.rx_plate_stack.y_usage_ratio",
 )
 _EXPECTED_DESIGN_VARIABLE_NAMES = tuple(owner_path.replace(".", "_") for owner_path in _EXPECTED_SAMPLED_OWNER_PATHS)
 
@@ -47,6 +49,9 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
     tx_z_usage_ratio_range = cast(
         list[object], cast(dict[str, object], modeled_by_id["tx_plate_stack"]["z_usage_ratio"])["range"]
     )
+    tx_y_usage_ratio_range = cast(
+        list[object], cast(dict[str, object], modeled_by_id["tx_plate_stack"]["y_usage_ratio"])["range"]
+    )
     rx_turn_range = cast(list[object], cast(dict[str, object], modeled_by_id["rx_plate_stack"]["turn_count"])["range"])
     rx_fill_range = cast(
         list[object], cast(dict[str, object], modeled_by_id["rx_plate_stack"]["metal_fill_factor"])["range"]
@@ -54,13 +59,18 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
     rx_z_usage_ratio_range = cast(
         list[object], cast(dict[str, object], modeled_by_id["rx_plate_stack"]["z_usage_ratio"])["range"]
     )
+    rx_y_usage_ratio_range = cast(
+        list[object], cast(dict[str, object], modeled_by_id["rx_plate_stack"]["y_usage_ratio"])["range"]
+    )
     return (
         (_EXPECTED_DESIGN_VARIABLE_NAMES[0], str(int(cast(int | float, tx_turn_range[1])))),
         (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, tx_fill_range[1])))),
         (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(float(cast(int | float, tx_z_usage_ratio_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(int(cast(int | float, rx_turn_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, rx_fill_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, rx_z_usage_ratio_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(float(cast(int | float, tx_y_usage_ratio_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(int(cast(int | float, rx_turn_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, rx_fill_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(float(cast(int | float, rx_z_usage_ratio_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[7], str(float(cast(int | float, rx_y_usage_ratio_range[1])))),
     )
 
 
@@ -71,6 +81,7 @@ class _FakePlateStackModeledSpec:
     turn_count: RangeSpec
     metal_fill_factor: RangeSpec
     z_usage_ratio: RangeSpec
+    y_usage_ratio: RangeSpec
 
 
 @dataclass(frozen=True)
@@ -83,9 +94,11 @@ def _patch_plate_stack_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     tx_turn_count = RangeSpec(is_integer=True, start=3.0, end=5.0, count=3)
     tx_fill_factor = RangeSpec(is_integer=False, start=0.3, end=0.5, count=3)
     tx_z_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.3, count=3)
+    tx_y_usage_ratio = RangeSpec(is_integer=False, start=0.12, end=0.22, count=3)
     rx_turn_count = RangeSpec(is_integer=True, start=6.0, end=8.0, count=3)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.4, end=0.6, count=3)
     rx_z_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=0.4, count=3)
+    rx_y_usage_ratio = RangeSpec(is_integer=False, start=0.18, end=0.28, count=3)
     fake_spec = _FakePlateStackType2Spec(
         modeled_objects=(
             _FakePlateStackModeledSpec(
@@ -94,6 +107,7 @@ def _patch_plate_stack_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 turn_count=tx_turn_count,
                 metal_fill_factor=tx_fill_factor,
                 z_usage_ratio=tx_z_usage_ratio,
+                y_usage_ratio=tx_y_usage_ratio,
             ),
             _FakePlateStackModeledSpec(
                 object_id="rx_plate_stack",
@@ -101,6 +115,7 @@ def _patch_plate_stack_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 turn_count=rx_turn_count,
                 metal_fill_factor=rx_fill_factor,
                 z_usage_ratio=rx_z_usage_ratio,
+                y_usage_ratio=rx_y_usage_ratio,
             ),
         )
     )
@@ -220,6 +235,8 @@ size_xyz = [10.0, 200.0, 200.0]
     range = [false, 0.3, 0.5, 3]
     [modeled_objects.z_usage_ratio]
     range = [false, 0.1, 0.3, 3]
+    [modeled_objects.y_usage_ratio]
+    range = [false, 0.12, 0.22, 3]
 
 [[modeled_objects]]
     object_id = "rx_plate_stack"
@@ -234,6 +251,8 @@ size_xyz = [10.0, 200.0, 200.0]
     range = [false, 0.4, 0.6, 3]
     [modeled_objects.z_usage_ratio]
     range = [false, 0.2, 0.4, 3]
+    [modeled_objects.y_usage_ratio]
+    range = [false, 0.18, 0.28, 3]
 """.strip()
 
 
@@ -364,7 +383,7 @@ def test_build_type2_builds_plate_stack_manifest_with_setup_ready_runner(
     assert cast(str, setup_ready_calls[0]["design_name"]) == results[0]["design_id"]
     design_variables = cast(tuple[tuple[str, str], ...], setup_ready_calls[0]["design_variables"])
     assert tuple(name for name, _ in design_variables) == _EXPECTED_DESIGN_VARIABLE_NAMES
-    assert len(design_variables) == 6
+    assert len(design_variables) == 8
     assert all(expression != "" for _, expression in design_variables)
     assert results[0]["aedt_path"] == str(cast(Path, setup_ready_calls[0]["output_aedt_path"]))
     assert results[0]["imported_ledger_path"] == str(cast(Path, setup_ready_calls[0]["imported_ledger_path"]))
@@ -424,7 +443,7 @@ def test_build_type2_accepts_plate_stack_manifest_when_forced_to_setup_ready_run
     }
     design_variables = cast(tuple[tuple[str, str], ...], calls[0]["design_variables"])
     assert tuple(name for name, _ in design_variables) == _EXPECTED_DESIGN_VARIABLE_NAMES
-    assert len(design_variables) == 6
+    assert len(design_variables) == 8
     assert all(expression != "" for _, expression in design_variables)
 
 

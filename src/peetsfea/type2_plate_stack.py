@@ -11,6 +11,7 @@ from peetsfea.type2_step_spec import ModeledPlateStackRole
 from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import resolve_modeled_plate_stack_metal_fill_factor
+from peetsfea.type2_step_spec import resolve_modeled_plate_stack_y_usage_ratio
 from peetsfea.type2_step_spec import resolve_modeled_plate_stack_turn_count
 from peetsfea.type2_step_spec import resolve_modeled_plate_stack_z_usage_ratio
 
@@ -200,6 +201,7 @@ def build_plate_stack_scene_data(
     realized_turn_count = resolve_modeled_plate_stack_turn_count(spec, seed=seed)
     realized_metal_fill_factor = resolve_modeled_plate_stack_metal_fill_factor(spec, seed=seed)
     realized_z_usage_ratio = resolve_modeled_plate_stack_z_usage_ratio(spec, seed=seed)
+    realized_y_usage_ratio = resolve_modeled_plate_stack_y_usage_ratio(spec, seed=seed)
 
     owner_origin_x, owner_origin_y, owner_origin_z = owner_spec.origin_xyz
     owner_size_x, owner_size_y, owner_size_z = owner_spec.size_xyz
@@ -207,6 +209,26 @@ def build_plate_stack_scene_data(
         raise RuntimeError(
             "type2 plate stack owner footprint must be positive "
             f"(role={spec.role}, owner={owner_spec.object_id}, size={owner_spec.size_xyz})"
+        )
+
+    active_size_y = owner_size_y * realized_y_usage_ratio
+    if active_size_y <= 0.0:
+        raise RuntimeError(
+            f"type2 {spec.role} active conductor width must be > 0 "
+            f"(owner_size_y={owner_size_y}, y_usage_ratio={realized_y_usage_ratio})"
+        )
+    active_min_y = -active_size_y / 2.0
+    active_max_y = active_size_y / 2.0
+    if active_min_y < owner_origin_y:
+        raise RuntimeError(
+            "type2 plate stack active Y window must stay inside owner bounds "
+            f"(role={spec.role}, owner_min_y={owner_origin_y}, active_min_y={active_min_y})"
+        )
+    owner_max_y = owner_origin_y + owner_size_y
+    if active_max_y > owner_max_y:
+        raise RuntimeError(
+            "type2 plate stack active Y window must stay inside owner bounds "
+            f"(role={spec.role}, owner_max_y={owner_max_y}, active_max_y={active_max_y})"
         )
 
     total_thickness_mm = total_plate_stack_thickness_mm(spec=spec)
@@ -275,6 +297,8 @@ def build_plate_stack_scene_data(
                 owner_spec=owner_spec,
                 layer_origin_x_mm=current_position_mm,
                 layer_thickness_x_mm=spec.copper_thickness_mm,
+                body_origin_y_mm=active_min_y,
+                body_size_y_mm=active_size_y,
                 body_origin_z_mm=stripe_origin_z,
                 body_size_z_mm=trace_height_z,
             )
@@ -290,6 +314,8 @@ def build_plate_stack_scene_data(
             owner_spec=owner_spec,
             layer_origin_x_mm=current_position_mm,
             layer_thickness_x_mm=pcb_epoxy_thickness_mm,
+            body_origin_y_mm=active_min_y,
+            body_size_y_mm=active_size_y,
             body_origin_z_mm=conductor_origin_z,
             body_size_z_mm=active_conductor_size_z,
         )
@@ -304,6 +330,8 @@ def build_plate_stack_scene_data(
         owner_spec=owner_spec,
         layer_origin_x_mm=current_position_mm,
         layer_thickness_x_mm=_STACK_PET_PSA_THICKNESS_MM,
+        body_origin_y_mm=active_min_y,
+        body_size_y_mm=active_size_y,
         body_origin_z_mm=conductor_origin_z,
         body_size_z_mm=active_conductor_size_z,
     )
@@ -317,6 +345,8 @@ def build_plate_stack_scene_data(
         owner_spec=owner_spec,
         layer_origin_x_mm=current_position_mm,
         layer_thickness_x_mm=_FERRITE_STACK_THICKNESS_MM,
+        body_origin_y_mm=active_min_y,
+        body_size_y_mm=active_size_y,
         body_origin_z_mm=conductor_origin_z,
         body_size_z_mm=active_conductor_size_z,
     )
@@ -330,6 +360,8 @@ def build_plate_stack_scene_data(
         owner_spec=owner_spec,
         layer_origin_x_mm=current_position_mm,
         layer_thickness_x_mm=_AIR_STACK_THICKNESS_MM,
+        body_origin_y_mm=active_min_y,
+        body_size_y_mm=active_size_y,
         body_origin_z_mm=conductor_origin_z,
         body_size_z_mm=active_conductor_size_z,
     )
@@ -345,6 +377,8 @@ def build_plate_stack_scene_data(
             owner_spec=owner_spec,
             layer_origin_x_mm=current_position_mm,
             layer_thickness_x_mm=pcb_epoxy_thickness_mm,
+            body_origin_y_mm=active_min_y,
+            body_size_y_mm=active_size_y,
             body_origin_z_mm=conductor_origin_z,
             body_size_z_mm=active_conductor_size_z,
         )
@@ -361,6 +395,8 @@ def build_plate_stack_scene_data(
                 owner_spec=owner_spec,
                 layer_origin_x_mm=current_position_mm,
                 layer_thickness_x_mm=spec.copper_thickness_mm,
+                body_origin_y_mm=active_min_y,
+                body_size_y_mm=active_size_y,
                 body_origin_z_mm=stripe_origin_z,
                 body_size_z_mm=trace_height_z,
             )
@@ -388,7 +424,7 @@ def build_plate_stack_scene_data(
             stripe_origin_z = coil_stripe_z_origins[index // 2]
         bridge_y_edge: Literal["min", "max"] = "max" if index % 2 == 0 else "min"
         bridge_origin_y_mm = (
-            owner_origin_y + owner_size_y - spec.copper_thickness_mm if bridge_y_edge == "max" else owner_origin_y
+            active_max_y - spec.copper_thickness_mm if bridge_y_edge == "max" else active_min_y
         )
         bridge_z_min_mm = max(conductor_origin_z, stripe_origin_z)
         bridge_z_max_mm = min(conductor_max_z, stripe_origin_z + bridge_span_z)
@@ -430,6 +466,7 @@ def build_plate_stack_scene_data(
     input_stub_spec = _stub_body_spec(
         label=f"{role_config.prefix}_stub_in",
         owner_spec=owner_spec,
+        active_min_y_mm=active_min_y,
         layer_origin_x_mm=wall_copper_origin_mm,
         layer_thickness_x_mm=spec.copper_thickness_mm,
         stub_origin_z_mm=wall_stripe_z_origins[0],
@@ -438,6 +475,7 @@ def build_plate_stack_scene_data(
     output_stub_spec = _stub_body_spec(
         label=f"{role_config.prefix}_stub_out",
         owner_spec=owner_spec,
+        active_min_y_mm=active_min_y,
         layer_origin_x_mm=coil_copper_origin_mm,
         layer_thickness_x_mm=spec.copper_thickness_mm,
         stub_origin_z_mm=coil_stripe_z_origins[-1],
@@ -466,14 +504,10 @@ def build_plate_stack_scene_data(
         role=spec.role,
     )
 
-    outer_bounds_max_xyz = (
-        owner_origin_x + total_thickness_mm,
-        owner_origin_y + owner_size_y,
-        conductor_max_z,
-    )
+    outer_bounds_max_xyz = (owner_origin_x + total_thickness_mm, active_max_y, conductor_max_z)
     outer_bounds_size_xyz = (
         total_thickness_mm,
-        owner_size_y + _PLATE_STACK_STUB_LENGTH_MM,
+        active_size_y + _PLATE_STACK_STUB_LENGTH_MM,
         active_conductor_size_z,
     )
 
@@ -482,8 +516,8 @@ def build_plate_stack_scene_data(
             label=label,
             origin_xyz=origin_xyz,
             size_xyz=size_xyz,
-            owner_origin_y_mm=owner_origin_y,
-            owner_size_y_mm=owner_size_y,
+            owner_origin_y_mm=active_min_y,
+            owner_size_y_mm=active_size_y,
             edge_strip_width_y_mm=spec.copper_thickness_mm,
             edge_windows=tuple(bridge_windows),
         )
@@ -554,7 +588,7 @@ def build_plate_stack_scene_data(
                 "frame_origin_xyz": owner_spec.origin_xyz,
                 "outer_bounds_min_xyz": (
                     owner_origin_x,
-                    owner_origin_y - _PLATE_STACK_STUB_LENGTH_MM,
+                    active_min_y - _PLATE_STACK_STUB_LENGTH_MM,
                     conductor_origin_z,
                 ),
                 "outer_bounds_max_xyz": outer_bounds_max_xyz,
@@ -616,11 +650,13 @@ def _yz_body_spec(
     owner_spec: NonModelBoxSpec,
     layer_origin_x_mm: float,
     layer_thickness_x_mm: float,
+    body_origin_y_mm: float,
+    body_size_y_mm: float,
     body_origin_z_mm: float,
     body_size_z_mm: float,
 ) -> tuple[str, tuple[float, float, float], tuple[float, float, float]]:
-    owner_origin_x, owner_origin_y, owner_origin_z = owner_spec.origin_xyz
-    owner_size_x, owner_size_y, owner_size_z = owner_spec.size_xyz
+    owner_origin_x, _, owner_origin_z = owner_spec.origin_xyz
+    owner_size_x, _, owner_size_z = owner_spec.size_xyz
     if owner_spec.plane != "YZ":
         raise RuntimeError(f"type2 striped plate stack requires YZ owner plane (actual={owner_spec.plane})")
     if body_origin_z_mm < owner_origin_z - 1e-9:
@@ -645,8 +681,8 @@ def _yz_body_spec(
         )
     return (
         label,
-        (layer_origin_x_mm, owner_origin_y, body_origin_z_mm),
-        (layer_thickness_x_mm, owner_size_y, body_size_z_mm),
+        (layer_origin_x_mm, body_origin_y_mm, body_origin_z_mm),
+        (layer_thickness_x_mm, body_size_y_mm, body_size_z_mm),
     )
 
 
@@ -654,13 +690,14 @@ def _stub_body_spec(
     *,
     label: str,
     owner_spec: NonModelBoxSpec,
+    active_min_y_mm: float,
     layer_origin_x_mm: float,
     layer_thickness_x_mm: float,
     stub_origin_z_mm: float,
     stub_size_z_mm: float,
 ) -> tuple[str, tuple[float, float, float], tuple[float, float, float]]:
-    owner_origin_x, owner_origin_y, owner_origin_z = owner_spec.origin_xyz
-    owner_size_x, owner_size_y, owner_size_z = owner_spec.size_xyz
+    owner_origin_x, _, owner_origin_z = owner_spec.origin_xyz
+    owner_size_x, _, owner_size_z = owner_spec.size_xyz
     if layer_origin_x_mm < owner_origin_x - 1e-9:
         raise RuntimeError(
             "type2 plate stack stub X origin must stay inside owner bounds "
@@ -683,7 +720,7 @@ def _stub_body_spec(
         )
     return (
         label,
-        (layer_origin_x_mm, owner_origin_y - _PLATE_STACK_STUB_LENGTH_MM, stub_origin_z_mm),
+        (layer_origin_x_mm, active_min_y_mm - _PLATE_STACK_STUB_LENGTH_MM, stub_origin_z_mm),
         (layer_thickness_x_mm, _PLATE_STACK_STUB_LENGTH_MM, stub_size_z_mm),
     )
 def _build_labeled_solid_box(

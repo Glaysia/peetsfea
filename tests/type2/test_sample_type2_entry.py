@@ -21,9 +21,11 @@ _EXPECTED_SAMPLED_OWNER_PATHS = [
     "modeled_objects.tx_plate_stack.turn_count",
     "modeled_objects.tx_plate_stack.metal_fill_factor",
     "modeled_objects.tx_plate_stack.z_usage_ratio",
+    "modeled_objects.tx_plate_stack.y_usage_ratio",
     "modeled_objects.rx_plate_stack.turn_count",
     "modeled_objects.rx_plate_stack.metal_fill_factor",
     "modeled_objects.rx_plate_stack.z_usage_ratio",
+    "modeled_objects.rx_plate_stack.y_usage_ratio",
 ]
 
 
@@ -34,6 +36,7 @@ class _FakePlateStackModeledSpec:
     turn_count: RangeSpec
     metal_fill_factor: RangeSpec
     z_usage_ratio: RangeSpec
+    y_usage_ratio: RangeSpec
 
 
 @dataclass(frozen=True)
@@ -46,9 +49,11 @@ def _patch_plate_stack_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     tx_turn_count = RangeSpec(is_integer=True, start=3.0, end=5.0, count=3)
     tx_fill_factor = RangeSpec(is_integer=False, start=0.3, end=0.5, count=3)
     tx_z_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.3, count=3)
+    tx_y_usage_ratio = RangeSpec(is_integer=False, start=0.12, end=0.22, count=3)
     rx_turn_count = RangeSpec(is_integer=True, start=6.0, end=8.0, count=3)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.4, end=0.6, count=3)
     rx_z_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=0.4, count=3)
+    rx_y_usage_ratio = RangeSpec(is_integer=False, start=0.18, end=0.28, count=3)
     fake_spec = _FakePlateStackType2Spec(
         modeled_objects=(
             _FakePlateStackModeledSpec(
@@ -57,6 +62,7 @@ def _patch_plate_stack_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 turn_count=tx_turn_count,
                 metal_fill_factor=tx_fill_factor,
                 z_usage_ratio=tx_z_usage_ratio,
+                y_usage_ratio=tx_y_usage_ratio,
             ),
             _FakePlateStackModeledSpec(
                 object_id="rx_plate_stack",
@@ -64,6 +70,7 @@ def _patch_plate_stack_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 turn_count=rx_turn_count,
                 metal_fill_factor=rx_fill_factor,
                 z_usage_ratio=rx_z_usage_ratio,
+                y_usage_ratio=rx_y_usage_ratio,
             ),
         )
     )
@@ -179,10 +186,12 @@ size_xyz = [10.0, 200.0, 200.0]
     copper_thickness_mm = 0.035
     [modeled_objects.turn_count]
     range = [true, 3, 5, 3]
-[modeled_objects.metal_fill_factor]
-range = [false, 0.3, 0.5, 3]
-[modeled_objects.z_usage_ratio]
-range = [false, 0.1, 0.3, 3]
+    [modeled_objects.metal_fill_factor]
+    range = [false, 0.3, 0.5, 3]
+    [modeled_objects.z_usage_ratio]
+    range = [false, 0.1, 0.3, 3]
+    [modeled_objects.y_usage_ratio]
+    range = [false, 0.12, 0.22, 3]
 
 [[modeled_objects]]
     object_id = "rx_plate_stack"
@@ -193,10 +202,12 @@ range = [false, 0.1, 0.3, 3]
     copper_thickness_mm = 0.1
     [modeled_objects.turn_count]
     range = [true, 6, 8, 3]
-[modeled_objects.metal_fill_factor]
-range = [false, 0.4, 0.6, 3]
-[modeled_objects.z_usage_ratio]
-range = [false, 0.2, 0.4, 3]
+    [modeled_objects.metal_fill_factor]
+    range = [false, 0.4, 0.6, 3]
+    [modeled_objects.z_usage_ratio]
+    range = [false, 0.2, 0.4, 3]
+    [modeled_objects.y_usage_ratio]
+    range = [false, 0.18, 0.28, 3]
 """.strip()
 
 
@@ -339,6 +350,11 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert tx_z_usage_ratio_range[3] == 1
     assert tx_z_usage_ratio_range[1] == tx_z_usage_ratio_range[2]
     assert round(float(tx_z_usage_ratio_range[1]), 1) in {0.1, 0.2, 0.3}
+    tx_y_usage_ratio_range = tx_modeled_object["y_usage_ratio"]["range"]
+    assert tx_y_usage_ratio_range[0] is False
+    assert tx_y_usage_ratio_range[3] == 1
+    assert tx_y_usage_ratio_range[1] == tx_y_usage_ratio_range[2]
+    assert round(float(tx_y_usage_ratio_range[1]), 2) in {0.12, 0.17, 0.22}
     assert "shoe_depth_mm" not in tx_modeled_object
     assert "outer_x_mm" not in tx_modeled_object
     assert "underlay_gap_mm" not in tx_modeled_object
@@ -365,6 +381,11 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert rx_z_usage_ratio_range[3] == 1
     assert rx_z_usage_ratio_range[1] == rx_z_usage_ratio_range[2]
     assert round(float(rx_z_usage_ratio_range[1]), 1) in {0.2, 0.3, 0.4}
+    rx_y_usage_ratio_range = rx_modeled_object["y_usage_ratio"]["range"]
+    assert rx_y_usage_ratio_range[0] is False
+    assert rx_y_usage_ratio_range[3] == 1
+    assert rx_y_usage_ratio_range[1] == rx_y_usage_ratio_range[2]
+    assert round(float(rx_y_usage_ratio_range[1]), 2) in {0.18, 0.23, 0.28}
     assert "shoe_depth_mm" not in rx_modeled_object
     assert "outer_x_mm" not in rx_modeled_object
     assert "underlay_gap_mm" not in rx_modeled_object

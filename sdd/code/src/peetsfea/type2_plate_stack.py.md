@@ -1,7 +1,7 @@
 ---
 title: type2_plate_stack.py
 created: 2026-04-19 @ 21:42
-updated: 2026-04-19 @ 22:30
+updated: 2026-04-19 @ 23:10
 tags:
   - step-export
   - tx
@@ -20,6 +20,7 @@ tags:
 - Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]]
 - Current topology plan: [[sdd/plans/0.2.22-type2-plate-stack-equal-stripes]]
 - Active Z-window plan: [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]]
+- Active Y-window plan: [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]]
 - Primary architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 역할
@@ -31,10 +32,11 @@ tags:
 - 출력: pre-unite copper segment bodies(내부 라벨), direct equivalent 3-slab ferrite-family bodies, explicit copper/ferrite groups, canonical coordinates, `stub_port` terminal metadata를 포함한 modeled scene data
 
 ## Canonical state
-- TX는 `tx_region`의 top `z_usage_ratio` Z window, full Y, `min_x` anchor, `+X` stack를 사용한다.
-- RX는 `rx_region_max`의 bottom `z_usage_ratio` Z window, full Y, `min_x` anchor, `+X` stack를 사용한다.
+- TX는 `tx_region`의 top `z_usage_ratio` Z window, global `Y=0` centered `y_usage_ratio` Y window, `min_x` anchor, `+X` stack를 사용한다.
+- RX는 `rx_region_max`의 bottom `z_usage_ratio` Z window, global `Y=0` centered `y_usage_ratio` Y window, `min_x` anchor, `+X` stack를 사용한다.
 - wall-side copper stripe count와 coil-side copper stripe count는 모두 `N = turn_count`이다.
 - active stack 높이는 `owner_size_z * z_usage_ratio`이며 copper/PCB/ferrite-family 모두 같은 active Z window를 쓴다.
+- active stack Y 폭은 `owner_size_y * y_usage_ratio`이며 active Y bounds는 global `Y=0` 기준 `[-active_size_y/2, active_size_y/2]`다.
 - pre-unite exact flat body order는 다음이며 최종 handoff의 exported body가 아니다:
   `*_copper_wall_t*`, `*_pcb_wall`, merged `*_stack_pet_psa`,
   merged `*_stack_ferrite`, merged `*_stack_air`, `*_pcb_coil`,
@@ -67,7 +69,7 @@ tags:
 - 각 merged stack body는 STEP handoff 전에 unite가 끝난 exact named export body여야 한다.
 - ferrite-family child가 ungrouped 상태로 scene root에 노출되면 안 된다.
 - terminal stub는 `*_stub_in`, `*_stub_out` 두 개만 존재한다. input stub는 wall-side `t0`,
-  output stub는 coil-side `t{N-1}`에서 각각 `-Y` 방향으로 `5.0 mm` owner 바깥으로 돌출한다.
+  output stub는 coil-side `t{N-1}`에서 각각 `-Y` 방향으로 `5.0 mm` active Y window 바깥으로 돌출한다.
 - terminal metadata는 `kind = "stub_port"`와 stub body name, `(y, z)` endpoints, metadata-only port-sheet vertices를
   pre-unite source segment 라벨(`*_stub_in/out`) 기반 canonical source로 가진다.
 
@@ -76,6 +78,8 @@ tags:
 - `turn_count >= 2`
 - `0 < metal_fill_factor <= 0.6`
 - `0 < z_usage_ratio <= 1`
+- `0 < y_usage_ratio <= 1`
+- global `Y=0` centered active Y window must fit inside the placement owner Y bounds.
 - total thickness는 owner thickness budget 안에 들어가야 한다.
 - pre-unite body labels는 unique하고 exact-name order contract를 유지해야 한다.
 - bridge body는 alternating `Y=max/min` serpentine sequence를 유지한다.
@@ -87,7 +91,7 @@ tags:
 - copper group member 목록은 role-local united copper body 하나와 exact match해야 한다.
 - final handoff/임포트/메시 payload에서도 pre-unite 라벨(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`)이 body list에 노출되지 않는다.
 - import 후 generic `SOLID*`로 분해되는 handoff는 export contract violation이다.
-- outer bounds는 active Z window와 full owner Y footprint를 유지하되 `min_y`만 `-5.0 mm` overhang를 허용한다.
+- outer bounds는 active Z/Y window를 유지하되 `min_y`만 `-5.0 mm` terminal overhang를 허용한다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_step_scene.py]]

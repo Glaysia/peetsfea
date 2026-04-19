@@ -1,7 +1,7 @@
 ---
 title: type2-rx-plate-stack
 created: 2026-04-19 @ 18:05
-updated: 2026-04-19 @ 22:30
+updated: 2026-04-19 @ 23:10
 tags:
   - type2
   - rx
@@ -42,7 +42,7 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
   legacy `1.6/0.4` split guidance는 active plate-stack contract가 아니다.
 
 ## 목적
-- `rx_region_max` full Y와 bottom `z_usage_ratio` Z window를 쓰는 RX copper/PCB/ferrite stack을 만든다.
+- `rx_region_max` bottom `z_usage_ratio` Z window와 global `Y=0` centered `y_usage_ratio` Y window를 쓰는 RX copper/PCB/ferrite stack을 만든다.
 - RX는 더 이상 `tx_rect_void` coil bridge를 통과하지 않는다.
 - RX ferrite family는 literal 10-set solid taxonomy가 아니라 historical 10-set baseline의 등가 두께 slab 3개를 직접 쓴다.
 
@@ -57,6 +57,9 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
 - `metal_fill_factor`는 float range고 realized 값은 `> 0`, `<= 0.6`여야 한다.
 - `z_usage_ratio`는 float range고 realized 값은 `> 0`, `<= 1`이어야 한다.
   RX는 `rx_region_max` 아래쪽부터 `z_usage_ratio`만큼의 Z span을 사용한다.
+- `y_usage_ratio`는 float range고 realized 값은 `> 0`, `<= 1`이어야 한다.
+  RX active Y window는 global `Y=0` 중심 `[-rx_region_max.size_y * y_usage_ratio / 2, rx_region_max.size_y * y_usage_ratio / 2]`다.
+  이 centered window가 `rx_region_max` Y bounds 밖이면 generation은 즉시 실패한다.
 - `shoe_depth_mm`는 active RX plate-stack public field가 아니다. plate-stack modeled object에
   남아 있으면 loader가 removed field로 즉시 실패한다.
 - coil-only field `outer_*`, `layer_count`, `terminal_path`, `void_*`, `margin_ratio`,
@@ -64,9 +67,9 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
 
 ## Geometry Contract
 - placement owner는 `rx_region_max`다.
-- footprint source of truth는 `rx_region_max` full Y와 bottom active Z window다.
+- footprint source of truth는 global `Y=0` centered active Y window와 bottom active Z window다.
 - stack는 `rx_region_max.min_x`에 붙고 `+X` 방향으로 자란다.
-- wall/coil-side PCB, ferrite-family slab, copper stripe는 같은 active Z window를 사용한다.
+- wall/coil-side PCB, ferrite-family slab, copper stripe는 같은 active Y/Z window를 사용한다.
 - `pcb_total_thickness_mm`은 copper 1 layer를 포함한 board total thickness다.
   - wall-side board: `rx_copper_wall_t*`, `rx_pcb_wall`
   - coil-side board: `rx_pcb_coil`, `rx_copper_coil_t*`
@@ -76,6 +79,9 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
   - ferrite `2.0 mm`
   - vacuum `0.2 mm`
 - `N = realized turn_count`
+- `active_size_y = rx_region_max.size_y * y_usage_ratio`
+- `active_y_min = -active_size_y / 2`
+- `active_y_max = active_size_y / 2`
 - `active_size_z = rx_region_max.size_z * z_usage_ratio`
 - `pitch_z = active_size_z / (N + 0.5)`
 - `trace_height_z = pitch_z * metal_fill_factor`
@@ -85,10 +91,11 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
 - wall-side와 coil-side stripe count는 모두 `N`개다.
 - side bridge `rx_bridge_s*`는 `Y=max/min`을 번갈아 쓰며
   `wall_t0 -> coil_t0 -> wall_t1 -> ... -> wall_t{N-1} -> coil_t{N-1}`를 잇는다.
+- bridge `Y=max/min` edge는 owner full Y가 아니라 active Y window의 max/min edge다.
 - bridge `z` window는 owner `Z` bounds를 먼저 clip하고, 같은 edge(`Y=max` or `Y=min`)의
   이전 bridge upper bound를 하한으로 써서 same-edge neighboring bridge positive-volume overlap을 금지한다.
 - terminal stub `rx_stub_in`은 wall-side `t0`, `rx_stub_out`은 coil-side `t{N-1}`에 붙고
-  둘 다 `-Y` 방향으로 `5.0 mm` 돌출한다.
+  둘 다 active `min_y`에서 `-Y` 방향으로 `5.0 mm` 돌출한다.
 - wall/coil stripes, bridges, terminal stubs는 final export 전에 `rx_plate_copper`로 unite된다.
   `rx_copper_wall_t*`, `rx_copper_coil_t*`, `rx_bridge_s*`, `rx_stub_in/out` labels는
   pre-unite source/provenance labels이며 final STEP/import/mesh body names가 아니다.
@@ -137,6 +144,6 @@ legacy `rx_*_uN` 분할 라벨은 final body list에 남아 있으면 안 된다
 - `canonical_coordinates.copper_layer_z_positions_mm`는 wall/coil-side copper 시작 X 두 개를 가진다.
 - `terminal_metadata.kind = "stub_port"`를 쓰고, `port_sheet_vertices_xyz`는 `rx_plate_port_sheet`
   reconstruct용 metadata-only rectangle이다. stub rectangle의 `z` span은 bottom active Z window에서
-  계산된 `rx_stub_in/out` bounds를 그대로 따르며 sheet plane은 owner `min_y - 5.0 mm`다.
+  계산된 `rx_stub_in/out` bounds를 그대로 따르며 sheet plane은 `active_y_min - 5.0 mm`다.
 - `terminal_metadata.input_stub_body_name` / `output_stub_body_name`은 final imported body names가 아니라
   pre-unite source stub labels다.

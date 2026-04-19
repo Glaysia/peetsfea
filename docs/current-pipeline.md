@@ -53,6 +53,8 @@ tags:
   - RX: `rx_stack_pet_psa`, `rx_stack_ferrite`, `rx_stack_air`
 - plate-stack ferrite-family geometry is authored as three direct equivalent slabs. `ferrite_set_count` is not a public type2 field;
   the historical 10-set baseline remains only as fixed internal thickness: PET/PSA `1.5 mm`, ferrite `2.0 mm`, air `0.2 mm`.
+- plate-stack active footprint is controlled by `z_usage_ratio` and `y_usage_ratio`; Z stays role-aware
+  (TX top, RX bottom), while Y is centered on global `Y=0` and fails if that centered window does not fit the owner.
 - active plate-stack copper STEP exact-name contract is role-united, one conductor body per role:
   - TX: `tx_plate_copper`
   - RX: `rx_plate_copper`
