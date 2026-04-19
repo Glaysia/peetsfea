@@ -56,6 +56,8 @@ tags:
   - active plate-stack copper final body contract는 role별 단일 united conductor다.
     - TX: `tx_plate_copper`
     - RX: `rx_plate_copper`
+  - TX plate-stack arrays still use one `tx_plate_stack` modeled entry and one final conductor `tx_plate_copper`.
+    Branch-local PCB/ferrite-family names may expand the TX exact body list, but mesh/source/report contracts remain single TX port and single RX port.
   - plate-stack import-side 검증은 `g_copper_tx`, `g_copper_rx`와
     `g_ferrite_tx`, `g_ferrite_rx` 모두를 요구한다.
   - copper segment labels(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`)는
@@ -109,6 +111,7 @@ tags:
 - attached-session path는 dirty design을 재사용하지 않고 fresh design으로 rehome해야 한다.
 - setup-ready mesh contract는 conductor-only exact set이며 plate-stack pair에서는
   `tx_plate_copper`, `rx_plate_copper`만 mesh target이다.
+- TX plate-stack array branch bodies are imported/styled as part of the TX modeled entry but do not add mesh targets or extra TX ports.
 - TX/RX underlay exact-name bodies와 reconstructed port sheets는 mesh 대상에 들어가지 않는다.
 - `*_pcb_wall` / `*_pcb_coil` bodies도 mesh 대상이 아니다.
 - current import/runtime contract에서 `tx_port_sheet` / `rx_port_sheet`는 metadata-driven reconstructed sheet다. PCB/copper exact-name contract와 별도 ownership이다.

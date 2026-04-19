@@ -14,6 +14,7 @@ tags:
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_port_assignment.py.md`
 - Status: active
 - Related feature plan: [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]]
+- Related TX array plan: [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
 
 ## 역할
 - setup/runtime imported objects에 explicit lumped port를 할당한다.
@@ -26,6 +27,7 @@ tags:
 - helper는 reconstructed port-sheet ownership을 사용한다.
   - coil: `tx_port_sheet` / `rx_port_sheet`
   - plate-stack: `tx_plate_port_sheet` / `rx_plate_port_sheet`
+- TX array still reconstructs one `tx_plate_port_sheet` and assigns one TX terminal port.
 - active plate roles도 direct port assignment를 허용하지만, 이것이 EM input ownership까지 열어 주지는 않는다.
 
 ## Invariants / fail-fast
@@ -33,6 +35,7 @@ tags:
 - `terminal_metadata.kind == "stub_port"` roles는 metadata vertices와 reconstructed sheet가 모두 있어야 한다.
 - numeric boundary/excitation naming은 계속 `1` / `2`, `1_T1` / `2_T1` 고정이다.
 - plate roles를 coil endpoint fallback으로 취급하면 안 된다.
+- Parallel TX branches do not create per-branch port assignments in this plan.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]

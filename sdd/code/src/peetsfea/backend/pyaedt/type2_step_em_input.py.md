@@ -16,6 +16,7 @@ tags:
 
 ## Ownership
 - Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-full-em]]
+- TX array plan: [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
 - Primary architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 단일 책임
@@ -29,23 +30,27 @@ tags:
 - direct EM input은 exact tx/rx role pair만 허용한다.
   - coil pair: `tx_single_coil` + `rx_single_coil`
   - plate-stack pair: `tx_plate_stack` + `rx_plate_stack`
+- TX array still appears as the same exact pair: one `tx_plate_stack` entry and one `rx_plate_stack` entry.
 - plate-stack endpoint는 `stub_port` metadata(`start_point_plane_mm`, `end_point_plane_mm`)와 modeled plane(`YZ`) 기반 world 좌표로 생성한다.
 - plate-stack endpoint label은 semantic stub label(`input_stub`, `output_stub`)을 사용한다.
 - ready object 구성은 role-local body 분류를 사용한다.
-  - conductor: `tx_plate_copper` 또는 `rx_plate_copper`(정확히 1개)
+  - conductor: single TX/RX plate-stack은 `tx_plate_copper` 또는 `rx_plate_copper`; TX array는 branch
+    copper bodies와 connector sheet faces 전체
   - fr4: role-local PCB bodies
   - ferrite: empty list
+- TX array conductor names are the exported branch copper bodies plus connector sheet faces; branch-local PCB/ferrite
+  bodies must not add TX conductors or ports.
 - pre-unite segment 이름(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)은 ready conductor에서 제외된다.
 
 ## Invariants / fail-fast
 - modeled object는 정확히 2개여야 하며, 지원 role exact pair가 아니면 즉시 실패한다.
 - duplicated role, unsupported role, mixed pair는 즉시 실패한다.
 - coil role의 imported names는 `>=1 PCB + exactly 1 copper` contract를 강제한다.
-- plate-stack role은 PCB 2개와 ready conductor(`tx_plate_copper`/`rx_plate_copper`)를 1개씩 사용한다.
-- plate-stack role의 ready conductor가 `tx_plate_copper`/`rx_plate_copper`가 아니거나 legacy segment(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)가 남아 있으면 즉시 실패한다.
-- plate-stack EM target은 role-level copper 단일 body만 허용하며
-  개별 copper family segment(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)가 남아 있으면
-  즉시 실패한다.
+- plate-stack role은 PCB 2개와 ready conductor set을 사용한다. TX array conductor set은 여러 branch/sheet
+  members를 허용하지만, RX는 계속 `rx_plate_copper` 정확히 1개를 사용한다.
+- plate-stack role의 ready conductor가 concrete exported copper member가 아니거나 legacy segment(`*_copper_wall_t*`,
+  `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)가 남아 있으면 즉시 실패한다.
+- plate-stack EM target은 concrete exported copper members만 허용하며 개별 pre-unite copper family segment가 남아 있으면 즉시 실패한다.
 - generic `SOLID*` pre/post-unite 이름 drift는 즉시 실패한다.
 - plate-stack endpoint는 `terminal_metadata.kind == "stub_port"` 및 `plane == "YZ"`를 강제한다.
 
@@ -60,6 +65,6 @@ tags:
 
 ## 변경 시 주의점
 - coil endpoint semantics(`outer_corner`/`inner_corner`, group_kind mapping)는 유지해야 한다.
-- plate-stack conductor set은 role-local united copper body 하나만 포함해야 하며 PCB/underlay를 섞으면 안 된다.
+- plate-stack conductor set은 concrete copper members만 포함해야 하며 PCB/underlay를 섞으면 안 된다.
 - plate-stack endpoint world 변환은 plane contract(YZ)을 우회하거나 fallback으로 대체하면 안 된다.
 - setup-ready facade ownership(경계/포트/해석/저장)은 그대로 유지해야 한다.

@@ -14,6 +14,30 @@ _TX_PLATE_COPPER_NAME = "tx_plate_copper"
 _RX_PLATE_COPPER_NAME = "rx_plate_copper"
 
 
+def _is_tx_branch_pcb_name(name: str, *, suffix: str) -> bool:
+    if not name.startswith("tx_b") or not name.endswith(suffix):
+        return False
+    middle = name[len("tx_b") : -len(suffix)]
+    return middle.isdigit()
+
+
+def _is_tx_array_connector_sheet_name(name: str) -> bool:
+    for prefix in ("tx_array_input_sheet_s", "tx_array_output_sheet_s"):
+        if not name.startswith(prefix):
+            continue
+        suffix = name[len(prefix):]
+        return suffix.isdigit()
+    return False
+
+
+def _is_tx_plate_stack_copper_name(name: str) -> bool:
+    return (
+        name == _TX_PLATE_COPPER_NAME
+        or _is_tx_branch_pcb_name(name, suffix="_plate_copper")
+        or _is_tx_array_connector_sheet_name(name)
+    )
+
+
 def _resolve_exact_pair_for_direct_em_input(
     modeled_objects: list[dict[str, object]],
 ) -> tuple[dict[str, object], dict[str, object], str, str]:
@@ -71,7 +95,13 @@ def _pcb_names(imported_object_names: list[str], *, role: str) -> list[str]:
     if role == "rx_single_coil":
         return [name for name in imported_object_names if name.startswith("rx_pcb_l")]
     if role == "tx_plate_stack":
-        return [name for name in imported_object_names if name in ("tx_pcb_wall", "tx_pcb_coil")]
+        return [
+            name
+            for name in imported_object_names
+            if name in ("tx_pcb_wall", "tx_pcb_coil")
+            or _is_tx_branch_pcb_name(name, suffix="_pcb_wall")
+            or _is_tx_branch_pcb_name(name, suffix="_pcb_coil")
+        ]
     assert role == "rx_plate_stack", f"unsupported role for pcb name resolution (actual={role!r})"
     return [name for name in imported_object_names if name in ("rx_pcb_wall", "rx_pcb_coil")]
 
@@ -82,7 +112,7 @@ def _copper_names(imported_object_names: list[str], *, role: str) -> list[str]:
     if role == "rx_single_coil":
         return [name for name in imported_object_names if name.startswith("rx_copper_l") or name == "rx_copper_stack"]
     if role == "tx_plate_stack":
-        return [name for name in imported_object_names if name == _TX_PLATE_COPPER_NAME]
+        return [name for name in imported_object_names if _is_tx_plate_stack_copper_name(name)]
     assert role == "rx_plate_stack", f"unsupported role for copper name resolution (actual={role!r})"
     return [name for name in imported_object_names if name == _RX_PLATE_COPPER_NAME]
 
@@ -258,9 +288,9 @@ def build_type2_em_input(
         if len(tx_pcb_names) < 1 or len(tx_copper_names) != 1:
             raise ValueError(f"{tx_context}.imported_object_names must contain one or more PCB names and exactly one copper name")
     else:
-        if len(tx_pcb_names) != 2 or len(tx_copper_names) != 1:
+        if len(tx_pcb_names) < 2 or len(tx_copper_names) < 1:
             raise ValueError(
-                f"{tx_context}.imported_object_names must contain exactly two PCB names and exactly one plate copper name"
+                f"{tx_context}.imported_object_names must contain two or more PCB names and one or more plate copper names"
             )
     if rx_role in _COIL_ROLE_PAIR:
         if len(rx_pcb_names) < 1 or len(rx_copper_names) != 1:

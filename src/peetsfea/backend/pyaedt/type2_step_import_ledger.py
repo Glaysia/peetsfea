@@ -68,6 +68,12 @@ def _is_legacy_plate_stack_copper_segment_name(name: str) -> bool:
 def _is_tx_ferrite_family_name(name: str) -> bool:
     if name in _TX_MERGED_STACK_MEMBER_NAMES:
         return True
+    if _is_tx_branch_stack_member(name, suffix="_stack_ferrite"):
+        return True
+    if _is_tx_branch_stack_member(name, suffix="_stack_pet_psa"):
+        return True
+    if _is_tx_branch_stack_member(name, suffix="_stack_air"):
+        return True
     return name.startswith(_TX_FERRITE_GROUP_MEMBER_PREFIXES)
 
 
@@ -75,6 +81,26 @@ def _is_rx_ferrite_family_name(name: str) -> bool:
     if name in _RX_MERGED_STACK_MEMBER_NAMES:
         return True
     return name.startswith(_RX_FERRITE_GROUP_MEMBER_PREFIXES)
+
+
+def _is_tx_branch_stack_member(name: str, *, suffix: str) -> bool:
+    if not name.startswith("tx_b") or not name.endswith(suffix):
+        return False
+    middle = name[len("tx_b") : -len(suffix)]
+    return middle.isdigit()
+
+
+def _is_tx_array_connector_sheet_name(name: str) -> bool:
+    for prefix in ("tx_array_input_sheet_s", "tx_array_output_sheet_s"):
+        if not name.startswith(prefix):
+            continue
+        suffix = name[len(prefix):]
+        return suffix.isdigit()
+    return False
+
+
+def _is_tx_array_copper_name(name: str) -> bool:
+    return _is_tx_branch_stack_member(name, suffix="_plate_copper") or _is_tx_array_connector_sheet_name(name)
 
 _NON_MODEL_REQUIRED_FIELDS = (
     "object_id",
@@ -346,12 +372,25 @@ def _ferrite_group_contract_for_role(
     mismatched_role_members: list[str]
     if role == "tx_plate_stack":
         expected_group_name = _TX_FERRITE_GROUP_NAME
-        ferrite_group_members = [name for name in expected_exported_body_names if name in _TX_MERGED_STACK_MEMBER_NAMES]
+        ferrite_group_members = [
+            name
+            for name in expected_exported_body_names
+            if name in _TX_MERGED_STACK_MEMBER_NAMES
+            or _is_tx_branch_stack_member(name, suffix="_stack_ferrite")
+            or _is_tx_branch_stack_member(name, suffix="_stack_pet_psa")
+            or _is_tx_branch_stack_member(name, suffix="_stack_air")
+        ]
         mismatched_role_members = [
             name
             for name in expected_exported_body_names
             if _is_rx_ferrite_family_name(name)
-            or (_is_tx_ferrite_family_name(name) and name not in _TX_MERGED_STACK_MEMBER_NAMES)
+            or (
+                _is_tx_ferrite_family_name(name)
+                and name not in _TX_MERGED_STACK_MEMBER_NAMES
+                and not _is_tx_branch_stack_member(name, suffix="_stack_ferrite")
+                and not _is_tx_branch_stack_member(name, suffix="_stack_pet_psa")
+                and not _is_tx_branch_stack_member(name, suffix="_stack_air")
+            )
         ]
     elif role == "rx_plate_stack":
         expected_group_name = _RX_FERRITE_GROUP_NAME
@@ -373,13 +412,18 @@ def _ferrite_group_contract_for_role(
     else:
         raise ValueError(f"{context}.role is unsupported for ferrite group validation (actual={role!r})")
     if role == "tx_plate_stack":
-        missing_tx_merged_member_names = [
-            name for name in _TX_MERGED_STACK_MEMBER_NAMES if name not in expected_exported_body_names
-        ]
-        if missing_tx_merged_member_names:
+        ferrite_count = len([name for name in ferrite_group_members if _is_tx_ferrite_family_name(name) and (name.endswith("_stack_ferrite"))])
+        pet_psa_count = len([name for name in ferrite_group_members if _is_tx_ferrite_family_name(name) and (name.endswith("_stack_pet_psa"))])
+        air_count = len([name for name in ferrite_group_members if _is_tx_ferrite_family_name(name) and (name.endswith("_stack_air"))])
+        if ferrite_count < 1 or pet_psa_count < 1 or air_count < 1:
             raise ValueError(
-                f"{context}.expected_exported_body_names must include all merged tx plate-stack ferrite members "
-                f"(missing={missing_tx_merged_member_names})"
+                f"{context}.expected_exported_body_names must include tx plate-stack ferrite-family members "
+                f"(ferrite={ferrite_count}, pet_psa={pet_psa_count}, air={air_count})"
+            )
+        if ferrite_count != pet_psa_count or ferrite_count != air_count:
+            raise ValueError(
+                f"{context}.expected_exported_body_names must include balanced tx branch ferrite-family members "
+                f"(ferrite={ferrite_count}, pet_psa={pet_psa_count}, air={air_count})"
             )
     if role == "rx_plate_stack":
         missing_rx_merged_member_names = [
@@ -410,9 +454,12 @@ def _group_contract_for_role(
         context=context,
     )
     if role == "tx_plate_stack":
-        if _TX_PLATE_COPPER_NAME not in expected_exported_body_names:
+        copper_group_members = [
+            name for name in expected_exported_body_names if name == _TX_PLATE_COPPER_NAME or _is_tx_array_copper_name(name)
+        ]
+        if not copper_group_members:
             raise ValueError(
-                f"{context}.expected_exported_body_names must include {_TX_PLATE_COPPER_NAME!r} for tx_plate_stack"
+                f"{context}.expected_exported_body_names must include tx plate-stack copper members"
             )
         legacy_segment_names = [
             name for name in expected_exported_body_names if _is_legacy_plate_stack_copper_segment_name(name)
@@ -423,7 +470,7 @@ def _group_contract_for_role(
                 f"(legacy_names={legacy_segment_names})"
             )
         return [
-            (_TX_COPPER_GROUP_NAME, [_TX_PLATE_COPPER_NAME]),
+            (_TX_COPPER_GROUP_NAME, copper_group_members),
             (ferrite_group_name, ferrite_group_members),
         ]
     if role == "rx_plate_stack":

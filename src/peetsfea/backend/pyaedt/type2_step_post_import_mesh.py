@@ -28,6 +28,26 @@ MESH_LENGTH_MAX_ELEMENTS = "1000"
 MESH_LENGTH_MAX_LENGTH = "5mm"
 
 
+def _is_tx_branch_plate_copper_name(name: str) -> bool:
+    if not name.startswith("tx_b") or not name.endswith("_plate_copper"):
+        return False
+    middle = name[len("tx_b") : -len("_plate_copper")]
+    return middle.isdigit()
+
+
+def _is_tx_array_connector_sheet_name(name: str) -> bool:
+    for prefix in ("tx_array_input_sheet_s", "tx_array_output_sheet_s"):
+        if not name.startswith(prefix):
+            continue
+        suffix = name[len(prefix):]
+        return suffix.isdigit()
+    return False
+
+
+def _is_tx_plate_stack_mesh_object_name(name: str) -> bool:
+    return name == _TX_PLATE_MESH_OBJECT_NAME or _is_tx_branch_plate_copper_name(name) or _is_tx_array_connector_sheet_name(name)
+
+
 class Type2ImportedMeshSummary(TypedDict):
     module_name: str
     operation: str
@@ -159,14 +179,24 @@ def _role_name_prefix_for_plate_stack(*, role: str, context: str) -> str:
 
 def _required_plate_stack_mesh_object_names(entry: dict[str, object], *, role: str, context: str) -> list[str]:
     imported_object_names = _imported_object_names(entry, context=context)
-    required_mesh_object_name = _TX_PLATE_MESH_OBJECT_NAME if role == _TX_PLATE_STACK_ROLE else _RX_PLATE_MESH_OBJECT_NAME
-    plate_stack_matches = [name for name in imported_object_names if name == required_mesh_object_name]
-    if len(plate_stack_matches) != 1:
-        raise ValueError(
-            f"{context}.imported_object_names must contain exactly one united plate copper body "
-            f"{required_mesh_object_name!r} for plate-stack mesh "
-            f"(actual={plate_stack_matches}, available={imported_object_names})"
-        )
+    if role == _TX_PLATE_STACK_ROLE:
+        plate_stack_matches = [name for name in imported_object_names if _is_tx_plate_stack_mesh_object_name(name)]
+        required_mesh_object_name = "tx plate-stack copper members"
+        if len(plate_stack_matches) < 1:
+            raise ValueError(
+                f"{context}.imported_object_names must contain one or more plate copper bodies "
+                f"{required_mesh_object_name!r} for plate-stack mesh "
+                f"(actual={plate_stack_matches}, available={imported_object_names})"
+            )
+    else:
+        required_mesh_object_name = _RX_PLATE_MESH_OBJECT_NAME
+        plate_stack_matches = [name for name in imported_object_names if name == required_mesh_object_name]
+        if len(plate_stack_matches) != 1:
+            raise ValueError(
+                f"{context}.imported_object_names must contain exactly one united plate copper body "
+                f"{required_mesh_object_name!r} for plate-stack mesh "
+                f"(actual={plate_stack_matches}, available={imported_object_names})"
+            )
     role_prefix = _role_name_prefix_for_plate_stack(role=role, context=context)
     legacy_segment_names = [
         name

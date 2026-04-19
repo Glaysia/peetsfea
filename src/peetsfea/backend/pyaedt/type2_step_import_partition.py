@@ -117,25 +117,51 @@ def _is_ferrite_family_name(name: str) -> bool:
     return name.startswith(_UNDERLAY_FERRITE_NAME_PREFIXES) or name in (
         _TX_STACK_FERRITE_NAME,
         _RX_STACK_FERRITE_NAME,
-    )
+    ) or _is_tx_branch_stack_member(name, suffix="_stack_ferrite")
 
 
 def _is_pet_psa_family_name(name: str) -> bool:
     return name.startswith(_UNDERLAY_PET_PSA_NAME_PREFIXES) or name in (
         _TX_STACK_PET_PSA_NAME,
         _RX_STACK_PET_PSA_NAME,
-    )
+    ) or _is_tx_branch_stack_member(name, suffix="_stack_pet_psa")
 
 
 def _is_air_family_name(name: str) -> bool:
     return name.startswith(_UNDERLAY_AIR_NAME_PREFIXES) or name in (
         _TX_STACK_AIR_NAME,
         _RX_STACK_AIR_NAME,
-    )
+    ) or _is_tx_branch_stack_member(name, suffix="_stack_air")
 
 
 def _is_any_ferrite_group_name(name: str) -> bool:
-    return name.startswith(_ALL_FERRITE_GROUP_MEMBER_PREFIXES) or name in _ALL_FERRITE_GROUP_MEMBER_NAMES
+    return (
+        name.startswith(_ALL_FERRITE_GROUP_MEMBER_PREFIXES)
+        or name in _ALL_FERRITE_GROUP_MEMBER_NAMES
+        or _is_tx_branch_stack_member(name, suffix="_stack_ferrite")
+        or _is_tx_branch_stack_member(name, suffix="_stack_pet_psa")
+        or _is_tx_branch_stack_member(name, suffix="_stack_air")
+    )
+
+
+def _is_tx_branch_stack_member(name: str, *, suffix: str) -> bool:
+    if not name.startswith("tx_b") or not name.endswith(suffix):
+        return False
+    middle = name[len("tx_b") : -len(suffix)]
+    return middle.isdigit()
+
+
+def _is_tx_array_connector_sheet_name(name: str) -> bool:
+    for prefix in ("tx_array_input_sheet_s", "tx_array_output_sheet_s"):
+        if not name.startswith(prefix):
+            continue
+        suffix = name[len(prefix):]
+        return suffix.isdigit()
+    return False
+
+
+def _is_tx_array_copper_name(name: str) -> bool:
+    return _is_tx_branch_stack_member(name, suffix="_plate_copper") or _is_tx_array_connector_sheet_name(name)
 
 
 def _is_legacy_plate_stack_copper_segment_name(name: str) -> bool:
@@ -291,21 +317,28 @@ def _group_contract_for_role(
         )
 
     if role == "tx_plate_stack":
-        ferrite_member_names = _TX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES
+        ferrite_member_names = tuple(
+            name
+            for name in expected_names
+            if name in _TX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES
+            or _is_tx_branch_stack_member(name, suffix="_stack_pet_psa")
+            or _is_tx_branch_stack_member(name, suffix="_stack_ferrite")
+            or _is_tx_branch_stack_member(name, suffix="_stack_air")
+        )
         ferrite_group_name = _TX_FERRITE_GROUP_NAME
         copper_group_name = _TX_COPPER_GROUP_NAME
-        required_plate_copper_name = _TX_PLATE_COPPER_NAME
+        copper_member_names = tuple(name for name in expected_names if name == _TX_PLATE_COPPER_NAME or _is_tx_array_copper_name(name))
     elif role == "rx_plate_stack":
         ferrite_member_names = _RX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES
         ferrite_group_name = _RX_FERRITE_GROUP_NAME
         copper_group_name = _RX_COPPER_GROUP_NAME
-        required_plate_copper_name = _RX_PLATE_COPPER_NAME
+        copper_member_names = (_RX_PLATE_COPPER_NAME,) if _RX_PLATE_COPPER_NAME in expected_names else ()
     else:
         raise ValueError(f"{context}.role is unsupported for ferrite group validation (actual={role!r})")
 
-    if required_plate_copper_name not in expected_names:
+    if len(copper_member_names) == 0:
         raise ValueError(
-            f"{context}.expected_exported_body_names must include {required_plate_copper_name!r} for {role}"
+            f"{context}.expected_exported_body_names must include copper members for {role}"
         )
     legacy_segment_names = [name for name in expected_names if _is_legacy_plate_stack_copper_segment_name(name)]
     if legacy_segment_names:
@@ -316,7 +349,7 @@ def _group_contract_for_role(
     mismatched_plate_copper_names = [
         name
         for name in expected_names
-        if name in (_TX_PLATE_COPPER_NAME, _RX_PLATE_COPPER_NAME) and name != required_plate_copper_name
+        if name in (_TX_PLATE_COPPER_NAME, _RX_PLATE_COPPER_NAME) and name not in copper_member_names
     ]
     if mismatched_plate_copper_names:
         raise ValueError(
@@ -339,8 +372,17 @@ def _group_contract_for_role(
         for name in expected_names
         if name in ferrite_member_names
     ]
+    if role == "tx_plate_stack":
+        ferrite_count = len([name for name in ferrite_group_members if _is_ferrite_family_name(name)])
+        pet_psa_count = len([name for name in ferrite_group_members if _is_pet_psa_family_name(name)])
+        air_count = len([name for name in ferrite_group_members if _is_air_family_name(name)])
+        if ferrite_count < 1 or pet_psa_count < 1 or air_count < 1:
+            raise ValueError(
+                f"{context}.expected_exported_body_names must include tx plate-stack ferrite-family members "
+                f"(ferrite={ferrite_count}, pet_psa={pet_psa_count}, air={air_count})"
+            )
     return [
-        (copper_group_name, [required_plate_copper_name]),
+        (copper_group_name, list(copper_member_names)),
         (ferrite_group_name, ferrite_group_members),
     ]
 
@@ -351,9 +393,9 @@ def _body_role_from_expected_name(expected_name: str, *, context: str) -> str:
         _TX_PCB_COIL_NAME,
         _RX_PCB_WALL_NAME,
         _RX_PCB_COIL_NAME,
-    ):
+    ) or _is_tx_branch_stack_member(expected_name, suffix="_pcb_wall") or _is_tx_branch_stack_member(expected_name, suffix="_pcb_coil"):
         return _BODY_ROLE_PCB
-    if expected_name.startswith(("tx_copper_l", "rx_copper_l")) or expected_name in (
+    if expected_name.startswith(("tx_copper_l", "rx_copper_l")) or _is_tx_array_copper_name(expected_name) or expected_name in (
             "tx_copper_stack",
             "rx_copper_stack",
             _TX_PLATE_COPPER_NAME,
@@ -373,7 +415,7 @@ def _body_role_from_expected_name(expected_name: str, *, context: str) -> str:
     raise ValueError(
         "unsupported exported body name; expected tx_pcb_l*/tx_copper_l*/tx_copper_stack/"
         "tx_copper_wall/tx_pcb_wall/tx_plate_copper/tx_stack_ferrite/tx_stack_pet_psa/"
-        "tx_stack_air/tx_pcb_coil/tx_copper_coil "
+        "tx_stack_air/tx_b*_plate_copper/tx_array_*_sheet_s*/tx_b*_stack_ferrite/tx_b*_stack_pet_psa/tx_b*_stack_air/tx_pcb_coil/tx_copper_coil "
         "tx_underlay_ferrite_u*/tx_underlay_pet_psa_u*/tx_underlay_air_u* "
         "tx_wall_ferrite_u*/tx_wall_pet_psa_u*/tx_wall_air_u* "
         "or rx_pcb_l*/rx_copper_l*/rx_copper_stack/"
@@ -390,6 +432,8 @@ def _resolved_pcb_names(imported_object_names: list[str]) -> list[str]:
         for name in imported_object_names
         if name.startswith(("tx_pcb_l", "rx_pcb_l"))
         or name in (_TX_PCB_WALL_NAME, _TX_PCB_COIL_NAME, _RX_PCB_WALL_NAME, _RX_PCB_COIL_NAME)
+        or _is_tx_branch_stack_member(name, suffix="_pcb_wall")
+        or _is_tx_branch_stack_member(name, suffix="_pcb_coil")
     ]
 
 
@@ -398,6 +442,7 @@ def _resolved_copper_names(imported_object_names: list[str]) -> list[str]:
         name
         for name in imported_object_names
         if name.startswith(("tx_copper_l", "rx_copper_l"))
+        or _is_tx_array_copper_name(name)
         or name in (
             "tx_copper_stack",
             "rx_copper_stack",
@@ -449,12 +494,37 @@ def _require_exact_name_contract(
 def _require_plate_stack_merged_ferrite_name_contract(*, role: str, expected_names: list[str], context: str) -> None:
     required_merged_names: tuple[str, str, str]
     if role == "tx_plate_stack":
-        required_merged_names = (
-            _TX_STACK_PET_PSA_NAME,
-            _TX_STACK_FERRITE_NAME,
-            _TX_STACK_AIR_NAME,
-        )
-    elif role == "rx_plate_stack":
+        ferrite_names = [name for name in expected_names if _is_ferrite_family_name(name)]
+        pet_psa_names = [name for name in expected_names if _is_pet_psa_family_name(name)]
+        air_names = [name for name in expected_names if _is_air_family_name(name)]
+        if len(ferrite_names) < 1 or len(pet_psa_names) < 1 or len(air_names) < 1:
+            raise ValueError(
+                f"{context}.expected_exported_body_names must include tx plate-stack ferrite-family exact names "
+                f"(ferrite={ferrite_names}, pet_psa={pet_psa_names}, air={air_names})"
+            )
+        if len(ferrite_names) != len(pet_psa_names) or len(ferrite_names) != len(air_names):
+            raise ValueError(
+                f"{context}.expected_exported_body_names must include balanced tx branch ferrite-family names "
+                f"(ferrite={len(ferrite_names)}, pet_psa={len(pet_psa_names)}, air={len(air_names)})"
+            )
+        disallowed_ferrite_family_names = [
+            name
+            for name in expected_names
+            if (_is_ferrite_family_name(name) or _is_pet_psa_family_name(name) or _is_air_family_name(name))
+            and not (
+                name in _TX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES
+                or _is_tx_branch_stack_member(name, suffix="_stack_ferrite")
+                or _is_tx_branch_stack_member(name, suffix="_stack_pet_psa")
+                or _is_tx_branch_stack_member(name, suffix="_stack_air")
+            )
+        ]
+        if disallowed_ferrite_family_names:
+            raise ValueError(
+                f"{context}.expected_exported_body_names contains non-supported tx ferrite-family names "
+                f"(disallowed={disallowed_ferrite_family_names})"
+            )
+        return
+    if role == "rx_plate_stack":
         required_merged_names = (
             _RX_STACK_PET_PSA_NAME,
             _RX_STACK_FERRITE_NAME,
@@ -500,15 +570,43 @@ def resolve_modeled_body_names(
             )
     elif role in _PLATE_STACK_ROLES:
         _require_plate_stack_merged_ferrite_name_contract(role=role, expected_names=expected_names, context=context)
-        if expected_roles.count(_BODY_ROLE_COPPER) != 1:
+        expected_copper_count = expected_roles.count(_BODY_ROLE_COPPER)
+        if role == "tx_plate_stack":
+            expected_tx_array_copper_names = [name for name in expected_names if _is_tx_array_copper_name(name)]
+            if expected_tx_array_copper_names:
+                if expected_copper_count != len(expected_tx_array_copper_names):
+                    raise ValueError(
+                        "tx array plate-stack type2 import requires every array copper member to resolve as copper "
+                        f"(expected_copper={expected_tx_array_copper_names}, roles={expected_roles})"
+                    )
+            elif expected_copper_count != 1:
+                raise ValueError(
+                    "tx plate-stack type2 import requires exactly one merged plate copper body or array copper members "
+                    f"(actual={expected_names})"
+                )
+        elif expected_copper_count != 1:
             raise ValueError(
                 "plate-stack type2 import requires exactly one merged plate copper body "
                 f"(actual={expected_names})"
             )
-        if (
-            expected_roles.count(_BODY_ROLE_UNDERLAY_FERRITE) != 1
-            or expected_roles.count(_BODY_ROLE_UNDERLAY_PET_PSA) != 1
-            or expected_roles.count(_BODY_ROLE_UNDERLAY_AIR) != 1
+        ferrite_role_count = expected_roles.count(_BODY_ROLE_UNDERLAY_FERRITE)
+        pet_psa_role_count = expected_roles.count(_BODY_ROLE_UNDERLAY_PET_PSA)
+        air_role_count = expected_roles.count(_BODY_ROLE_UNDERLAY_AIR)
+        if role == "tx_plate_stack":
+            if ferrite_role_count < 1 or pet_psa_role_count < 1 or air_role_count < 1:
+                raise ValueError(
+                    "tx plate-stack type2 import requires one or more ferrite-family exact names "
+                    f"(actual={expected_names})"
+                )
+            if ferrite_role_count != pet_psa_role_count or ferrite_role_count != air_role_count:
+                raise ValueError(
+                    "tx plate-stack type2 import requires balanced ferrite/PET_PSA/air expected role counts "
+                    f"(ferrite={ferrite_role_count}, pet_psa={pet_psa_role_count}, air={air_role_count})"
+                )
+        elif (
+            ferrite_role_count != 1
+            or pet_psa_role_count != 1
+            or air_role_count != 1
         ):
             raise ValueError(
                 "plate-stack type2 import requires merged ferrite-family exact names "
@@ -541,25 +639,51 @@ def resolve_modeled_body_names(
                 "plate-stack type2 import rejects legacy copper segment labels as final imported conductors "
                 f"(legacy_names={legacy_segment_names})"
             )
+        expected_tx_array_copper_names = [
+            name
+            for name in expected_names
+            if _is_tx_array_copper_name(name)
+        ]
         if role == "tx_plate_stack":
-            required_copper_name = _TX_PLATE_COPPER_NAME
+            if expected_tx_array_copper_names:
+                if len(copper_names) != len(expected_tx_array_copper_names) or set(copper_names) != set(
+                    expected_tx_array_copper_names
+                ):
+                    raise ValueError(
+                        "tx plate-stack type2 import requires concrete array copper members after exact-name matching "
+                        f"(expected={expected_tx_array_copper_names}, actual={copper_names})"
+                    )
+            elif copper_names != [_TX_PLATE_COPPER_NAME]:
+                raise ValueError(
+                    "tx plate-stack type2 import requires merged plate copper name after exact-name matching "
+                    f"(expected={[_TX_PLATE_COPPER_NAME]}, actual={copper_names})"
+                )
         else:
-            required_copper_name = _RX_PLATE_COPPER_NAME
-        if required_copper_name not in copper_names:
-            raise ValueError(
-                "plate-stack type2 import requires merged plate copper name after exact-name matching "
-                f"(required={required_copper_name!r}, actual={copper_names})"
-            )
-        if len(copper_names) != 1:
-            raise ValueError(
-                "plate-stack type2 import requires exactly one merged plate copper body after exact-name matching "
-                f"(actual={copper_names})"
-            )
-        if len(underlay_ferrite_names) != 1 or len(underlay_pet_psa_names) != 1 or len(underlay_air_names) != 1:
-            raise ValueError(
-                "plate-stack type2 import requires merged ferrite-family exact names after exact-name matching "
-                f"(actual={imported_object_names})"
-            )
+            if copper_names != [_RX_PLATE_COPPER_NAME]:
+                raise ValueError(
+                    "rx plate-stack type2 import requires merged plate copper name after exact-name matching "
+                    f"(expected={[_RX_PLATE_COPPER_NAME]}, actual={copper_names})"
+                )
+        if role == "tx_plate_stack":
+            ferrite_count = len(underlay_ferrite_names)
+            pet_psa_count = len(underlay_pet_psa_names)
+            air_count = len(underlay_air_names)
+            if ferrite_count < 1 or pet_psa_count < 1 or air_count < 1:
+                raise ValueError(
+                    "tx plate-stack type2 import requires one or more branch ferrite-family exact names after exact-name matching "
+                    f"(actual={imported_object_names})"
+                )
+            if ferrite_count != pet_psa_count or ferrite_count != air_count:
+                raise ValueError(
+                    "tx plate-stack type2 import requires balanced ferrite/PET_PSA/air member counts "
+                    f"(ferrite={ferrite_count}, pet_psa={pet_psa_count}, air={air_count})"
+                )
+        else:
+            if len(underlay_ferrite_names) != 1 or len(underlay_pet_psa_names) != 1 or len(underlay_air_names) != 1:
+                raise ValueError(
+                    "plate-stack type2 import requires merged ferrite-family exact names after exact-name matching "
+                    f"(actual={imported_object_names})"
+                )
     return {
         "pcb_names": pcb_names,
         "copper_names": copper_names,

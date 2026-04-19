@@ -116,25 +116,54 @@ _PLACEMENT_TOLERANCE = 1e-9
 _PLATE_STACK_STUB_LENGTH_MM = 5.0
 
 
+def _is_tx_branch_stack_member(name: str, *, suffix: str) -> bool:
+    if not name.startswith("tx_b") or not name.endswith(suffix):
+        return False
+    middle = name[len("tx_b") : -len(suffix)]
+    return middle.isdigit()
+
+
+def _is_tx_array_connector_sheet_name(name: str) -> bool:
+    for prefix in ("tx_array_input_sheet_s", "tx_array_output_sheet_s"):
+        if not name.startswith(prefix):
+            continue
+        suffix = name[len(prefix):]
+        return suffix.isdigit()
+    return False
+
+
+def _is_tx_plate_stack_array_expected_name(name: str) -> bool:
+    return any(
+        _is_tx_branch_stack_member(name, suffix=suffix)
+        for suffix in (
+            "_pcb_wall",
+            "_pcb_coil",
+            "_stack_pet_psa",
+            "_stack_ferrite",
+            "_stack_air",
+        )
+    )
+
+
 def _is_ferrite_family_name(name: str) -> bool:
     return name.startswith(_UNDERLAY_FERRITE_NAME_PREFIXES) or name in (
         _TX_STACK_FERRITE_NAME,
         _RX_STACK_FERRITE_NAME,
-    )
+    ) or _is_tx_branch_stack_member(name, suffix="_stack_ferrite")
 
 
 def _is_pet_psa_family_name(name: str) -> bool:
     return name.startswith(_UNDERLAY_PET_PSA_NAME_PREFIXES) or name in (
         _TX_STACK_PET_PSA_NAME,
         _RX_STACK_PET_PSA_NAME,
-    )
+    ) or _is_tx_branch_stack_member(name, suffix="_stack_pet_psa")
 
 
 def _is_air_family_name(name: str) -> bool:
     return name.startswith(_UNDERLAY_AIR_NAME_PREFIXES) or name in (
         _TX_STACK_AIR_NAME,
         _RX_STACK_AIR_NAME,
-    )
+    ) or _is_tx_branch_stack_member(name, suffix="_stack_air")
 
 
 def _unwrap_raw(value: object, *, context: str) -> object:
@@ -468,6 +497,21 @@ def _set_object_material(object_ref: object, *, material_name: str, context: str
     setattr(object_ref, "material_name", material_name)
 
 
+def _set_object_surface_material(object_ref: object, *, material_name: str, context: str) -> None:
+    if material_name == "":
+        raise ValueError(f"{context}.material_name must be non-empty")
+    valid_properties = _object_valid_properties(object_ref, context=context)
+    if "Surface Material" not in valid_properties:
+        raise RuntimeError(
+            f"{context} does not expose sheet Surface Material property "
+            f"(valid_properties={valid_properties})"
+        )
+    assert hasattr(object_ref, "surface_material_name"), (
+        f"{context} is missing required surface_material_name attribute"
+    )
+    setattr(object_ref, "surface_material_name", material_name)
+
+
 def _require_float(value: object, *, context: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{context} must be number")
@@ -609,6 +653,33 @@ def _apply_object_material_and_visual_state(
     set_object_transparency(object_ref, transparency=transparency)
 
 
+def _apply_copper_material_and_visual_state(
+    *,
+    modeler: ModelerSession,
+    object_name: str,
+    context: str,
+) -> None:
+    object_ref = _object_ref(modeler, name=object_name, context=context)
+    valid_properties = _object_valid_properties(object_ref, context=context)
+    if "Material" in valid_properties:
+        _set_object_material(object_ref, material_name=_TX_COPPER_MATERIAL, context=context)
+    elif "Surface Material" in valid_properties:
+        _set_object_surface_material(object_ref, material_name=_TX_COPPER_MATERIAL, context=context)
+    elif _is_tx_array_connector_sheet_name(object_name):
+        if "Model" not in valid_properties:
+            raise RuntimeError(
+                f"{context} TX array connector sheet must expose Model property "
+                f"(valid_properties={valid_properties})"
+            )
+    else:
+        raise RuntimeError(
+            f"{context} does not expose a supported copper material property "
+            f"(valid_properties={valid_properties})"
+        )
+    set_object_color(object_ref, color=_TX_COPPER_COLOR)
+    set_object_transparency(object_ref, transparency=_TX_COPPER_TRANSPARENCY)
+
+
 def set_imported_object_model_state(
     *,
     modeler: ModelerSession,
@@ -652,6 +723,19 @@ def validate_modeled_bounds_against_owner(
     modeled_min_x, modeled_min_y, modeled_min_z = outer_bounds_min_xyz(modeled_entry, context=context)
     modeled_size_x, modeled_size_y, modeled_size_z = outer_bounds_size_xyz(modeled_entry, context=context)
     modeled_max_z = modeled_min_z + modeled_size_z
+    raw_expected_names = require_key(modeled_entry, key="expected_exported_body_names", context=context)
+    if not isinstance(raw_expected_names, list):
+        raise TypeError(
+            f"{context}.expected_exported_body_names must be list[str] "
+            f"(actual={type(raw_expected_names).__name__})"
+        )
+    expected_names = [
+        require_non_empty_str(raw_name, context=f"{context}.expected_exported_body_names[{index}]")
+        for index, raw_name in enumerate(raw_expected_names)
+    ]
+    is_tx_array_mode = role == "tx_plate_stack" and any(
+        _is_tx_plate_stack_array_expected_name(name) for name in expected_names
+    )
     owner_context = f"non_model_objects[*].member_objects[{owner_id}]"
     owner_min_x, owner_min_y, owner_min_z = outer_bounds_min_xyz(owner_member, context=owner_context)
     owner_size_x, owner_size_y, owner_size_z = outer_bounds_size_xyz(owner_member, context=owner_context)
@@ -660,7 +744,9 @@ def validate_modeled_bounds_against_owner(
     allowed_modeled_size_y = (
         owner_size_y + _PLATE_STACK_STUB_LENGTH_MM if role in ("tx_plate_stack", "rx_plate_stack") else owner_size_y
     )
-    if modeled_size_x > owner_size_x or modeled_size_y > allowed_modeled_size_y or modeled_size_z > owner_size_z:
+    if modeled_size_y > allowed_modeled_size_y or modeled_size_z > owner_size_z or (
+        not is_tx_array_mode and modeled_size_x > owner_size_x
+    ):
         raise ValueError(
             f"{context} outer bounds must fit inside {owner_id} "
             f"(modeled_size={(modeled_size_x, modeled_size_y, modeled_size_z)}, "
@@ -702,7 +788,7 @@ def validate_modeled_bounds_against_owner(
                 f"(active_min_y={active_min_y}, active_max_y={active_max_y}, "
                 f"owner_min_y={owner_min_y}, owner_max_y={owner_max_y})"
             )
-        if abs(modeled_min_x - owner_min_x) > _PLACEMENT_TOLERANCE:
+        if not is_tx_array_mode and abs(modeled_min_x - owner_min_x) > _PLACEMENT_TOLERANCE:
             raise ValueError(
                 "tx_plate_stack outer bounds min_x must already touch tx_region min_x "
                 f"(actual={modeled_min_x}, expected={owner_min_x})"
@@ -837,12 +923,9 @@ def style_imported_modeled_objects(
             context=f"{context}.pcb[{pcb_name}]",
         )
     for copper_name in resolved_body_names["copper_names"]:
-        _apply_object_material_and_visual_state(
+        _apply_copper_material_and_visual_state(
             modeler=modeler,
             object_name=copper_name,
-            material_name=_TX_COPPER_MATERIAL,
-            color=_TX_COPPER_COLOR,
-            transparency=_TX_COPPER_TRANSPARENCY,
             context=f"{context}.copper[{copper_name}]",
         )
     for ferrite_name in resolved_body_names["underlay_ferrite_names"]:

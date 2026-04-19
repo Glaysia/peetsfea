@@ -26,15 +26,22 @@ from tests.backend_em.test_type2_step_import_pipeline import (
     _FakeModeler as _ImportFakeModeler,
     _expected_mesh_length_payload,
     _modeled_entry,
+    _plate_stack_modeled_entry,
+    _plate_stack_terminal_metadata,
     _non_model_entry,
     _plate_stack_imported_name_batch,
     _plate_stack_modeled_objects,
+    _plate_stack_non_model_entry,
     _rx_single_coil_entry,
+    _rx_plate_stack_entry,
+    _rx_plate_stack_expected_names,
     _single_layer_imported_name_batch,
     _single_layer_imported_name_batch_with_role_aware_underlay,
     _single_layer_modeled_objects,
     _single_layer_modeled_objects_with_role_aware_underlay,
-    _plate_stack_non_model_entry,
+    _tx_plate_stack_array_connector_vertices_by_name,
+    _tx_plate_stack_array_expected_groups,
+    _tx_plate_stack_array_expected_names,
     _source_paths,
     _write_ledger,
 )
@@ -43,6 +50,15 @@ from tests.fixtures.legacy.type1_spec import TYPE1_OUTPUT_VARIABLES, type1_outpu
 
 def _plate_stack_copper_family_imported_names(*, imported_object_names: list[str], role_prefix: str) -> list[str]:
     target_name = "tx_plate_copper" if role_prefix == "tx" else "rx_plate_copper"
+    if role_prefix == "tx":
+        return [
+            name
+            for name in imported_object_names
+            if name == target_name
+            or (name.startswith("tx_b") and name.endswith("_plate_copper"))
+            or name.startswith("tx_array_input_sheet_s")
+            or name.startswith("tx_array_output_sheet_s")
+        ]
     return [name for name in imported_object_names if name == target_name]
 
 
@@ -326,6 +342,59 @@ def _plate_stack_modeled_objects_with_imported_names(tmp_path: Path) -> list[dic
     tx_entry["imported_object_names"] = [*tx_expected_names, "tx_plate_port_sheet"]
     rx_entry["imported_object_names"] = [*rx_expected_names, "rx_plate_port_sheet"]
     return modeled_objects
+
+
+def _tx_array_port_sheet_metadata(*, branch_count: int) -> dict[str, object]:
+    terminal = _plate_stack_terminal_metadata(
+        owner_origin_y=-140.0,
+        owner_size_y=280.0,
+        owner_origin_z=0.0,
+        owner_size_z=90.0,
+        copper_thickness_mm=0.035,
+        prefix="tx",
+    )
+    terminal["input_stub_body_name"] = "tx_array_input_sheet_s0"
+    terminal["output_stub_body_name"] = "tx_array_output_sheet_s0"
+    raw_vertices = cast(list[list[float]], terminal["port_sheet_vertices_xyz"])
+    raw_vertices[1][0] = 80.0 + float(branch_count)
+    raw_vertices[2][0] = 80.0 + float(branch_count)
+    return terminal
+
+
+def _tx_array_modeled_entry(tmp_path: Path, *, branch_count: int) -> dict[str, object]:
+    entry = _plate_stack_modeled_entry(
+        object_id="tx_plate_stack",
+        role="tx_plate_stack",
+        plane="YZ",
+        placement_owner_id="tx_region",
+        origin_xyz=(0.0, -145.0, 0.0),
+        size_xyz=(85.0, 285.0, 90.0),
+        source_metadata_path=str(tmp_path / "tx_plate_stack.metadata.json"),
+        expected_names=_tx_plate_stack_array_expected_names(branch_count=branch_count),
+        expected_groups=_tx_plate_stack_array_expected_groups(branch_count=branch_count),
+        pcb_layer_positions_mm=[0.035, 5.3],
+        copper_layer_positions_mm=[0.0, 6.865],
+        terminal_metadata=_tx_array_port_sheet_metadata(branch_count=branch_count),
+    )
+    canonical_coordinates = cast(dict[str, object], entry["canonical_coordinates"])
+    canonical_coordinates["connector_sheet_vertices_xyz_by_name"] = _tx_plate_stack_array_connector_vertices_by_name(
+        branch_count=branch_count
+    )
+    return entry
+
+
+def _tx_array_imported_name_batch(*, branch_count: int) -> tuple[str, ...]:
+    return (
+        "environment",
+        "tx_region",
+        "rx_region_max",
+        *[
+            name
+            for name in _tx_plate_stack_array_expected_names(branch_count=branch_count)
+            if not name.startswith("tx_array_")
+        ],
+        *_rx_plate_stack_expected_names(),
+    )
 
 
 def _seed_port_sheet_edges_from_terminal_metadata(
@@ -821,6 +890,53 @@ def test_build_type2_em_input_accepts_plate_stack_exact_pair(tmp_path: Path) -> 
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
 
 
+def test_build_type2_em_input_accepts_tx_plate_stack_array_branch_pcb_names(tmp_path: Path) -> None:
+    modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
+    _rewrite_plate_stack_terminal_metadata_to_equal_stripe_pitch(modeled_objects[0])
+    _rewrite_plate_stack_terminal_metadata_to_equal_stripe_pitch(modeled_objects[1])
+    tx_imported_names = cast(list[str], modeled_objects[0]["imported_object_names"])
+    tx_imported_names[:] = [
+        "tx_b0_plate_copper",
+        "tx_b0_pcb_wall",
+        "tx_b0_pcb_coil",
+        "tx_b1_plate_copper",
+        "tx_b1_pcb_wall",
+        "tx_b1_pcb_coil",
+        "tx_array_input_sheet_s0",
+        "tx_array_output_sheet_s0",
+        "tx_b0_stack_pet_psa",
+        "tx_b0_stack_ferrite",
+        "tx_b0_stack_air",
+        "tx_b1_stack_pet_psa",
+        "tx_b1_stack_ferrite",
+        "tx_b1_stack_air",
+        "tx_plate_port_sheet",
+    ]
+
+    result = build_type2_em_input(
+        imported_ledger=cast(Type2ImportedLedger, _minimal_em_input_ledger(modeled_objects=modeled_objects)),
+        ports=cast(EmPorts, {"tx": ["1_T1"], "rx": ["2_T1"]}),
+    )
+
+    assert result["ready_objects"]["tx_conductors"] == [
+        "tx_array_input_sheet_s0",
+        "tx_array_output_sheet_s0",
+        "tx_b0_plate_copper",
+        "tx_b1_plate_copper",
+    ]
+    assert result["ready_objects"]["rx_conductors"] == ["rx_plate_copper"]
+    assert result["ready_objects"]["fr4_objects"] == sorted(
+        [
+            "tx_b0_pcb_wall",
+            "tx_b0_pcb_coil",
+            "tx_b1_pcb_wall",
+            "tx_b1_pcb_coil",
+            "rx_pcb_wall",
+            "rx_pcb_coil",
+        ]
+    )
+
+
 def test_build_type2_em_input_rejects_plate_stack_legacy_segment_leakage(tmp_path: Path) -> None:
     modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
     tx_imported_names = cast(list[str], modeled_objects[0]["imported_object_names"])
@@ -1138,6 +1254,60 @@ def test_setup_type2_step_ledger_accepts_plate_stack_exact_pair_and_runs_full_se
     assert "mesh" not in imported_payload
     assert "boundary" not in imported_payload
     assert imported_payload["aedt_path"] == str(output_aedt_path)
+
+
+def test_setup_type2_step_ledger_reconstructs_rotated_tx_plate_stack_array_port_sheet(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    branch_count = 3
+    tx_entry = _tx_array_modeled_entry(tmp_path, branch_count=branch_count)
+    modeled_objects = [tx_entry, _rx_plate_stack_entry(tmp_path)]
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_plate_stack_non_model_entry()],
+        modeled_objects=modeled_objects,
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_setup_ready.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _SetupReadyHfss(
+        modeler=_SetupReadyModeler(imported_name_batches=[_tx_array_imported_name_batch(branch_count=branch_count)])
+    )
+
+    result = cast(
+        Type2SetupReadyResult,
+        setup_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=output_aedt_path,
+            imported_ledger_path=imported_ledger_path,
+            hfss_factory=lambda _: cast(HfssSession, session),
+        ),
+    )
+
+    imported_payload = _imported_ledger_payload(imported_ledger_path)
+    tx_modeled = cast(
+        list[dict[str, object]],
+        [entry for entry in cast(list[dict[str, object]], imported_payload["modeled_objects"]) if entry["object_id"] == "tx_plate_stack"],
+    )
+    rx_modeled = cast(
+        list[dict[str, object]],
+        [entry for entry in cast(list[dict[str, object]], imported_payload["modeled_objects"]) if entry["object_id"] == "rx_plate_stack"],
+    )
+    assert len(tx_modeled) == 1
+    assert len(rx_modeled) == 1
+
+    tx_imported_names = cast(list[str], tx_modeled[0]["imported_object_names"])
+    rx_imported_names = cast(list[str], rx_modeled[0]["imported_object_names"])
+    assert "tx_b0_plate_copper" in tx_imported_names
+    assert "tx_array_input_sheet_s0" in tx_imported_names
+    assert tx_imported_names.count("tx_plate_port_sheet") == 1
+    assert rx_imported_names.count("rx_plate_copper") == 1
+
+    expected_sheet_vertices = cast(list[list[float]], cast(dict[str, object], tx_entry["terminal_metadata"])["port_sheet_vertices_xyz"])
+    setup_modeler = cast(_SetupReadyModeler, session.modeler)
+    assert setup_modeler._polyline_points_by_name["tx_plate_port_sheet"] == [
+        (float(vertex[0]), float(vertex[1]), float(vertex[2])) for vertex in expected_sheet_vertices
+    ]
+    assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
 
 
 @pytest.mark.parametrize("role", ["tx_plate_stack", "rx_plate_stack"])

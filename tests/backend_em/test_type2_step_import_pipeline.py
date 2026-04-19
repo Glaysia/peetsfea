@@ -231,6 +231,7 @@ class _FakeObject:
         self.transparency = 0.0
         self.valid_properties = list(valid_properties)
         self._material_name = "vacuum"
+        self._surface_material_name = "vacuum"
 
     @property
     def material_name(self) -> str:
@@ -244,9 +245,21 @@ class _FakeObject:
             raise AttributeError("Property 'Material' does not exist.")
         self._material_name = material_name
 
+    @property
+    def surface_material_name(self) -> str:
+        if "Surface Material" not in self.valid_properties:
+            return ""
+        return self._surface_material_name
+
+    @surface_material_name.setter
+    def surface_material_name(self, material_name: str) -> None:
+        if "Surface Material" not in self.valid_properties:
+            raise AttributeError("Property 'Surface Material' does not exist.")
+        self._surface_material_name = material_name
+
 
 def _new_fake_sheet_object(name: str) -> _FakeObject:
-    return _FakeObject(name, valid_properties=("Color", "Transparent", "Surface Material"))
+    return _FakeObject(name, valid_properties=("Color", "Transparent", "Model", "Group"))
 
 
 class _FakeMaterial:
@@ -878,6 +891,65 @@ def _plate_stack_imported_name_batch_with_rx_solid_drift() -> tuple[str, ...]:
     return tuple(imported_names)
 
 
+def _tx_plate_stack_array_expected_names(*, branch_count: int) -> list[str]:
+    names: list[str] = []
+    for index in range(branch_count):
+        names.extend(
+            (
+                f"tx_b{index}_plate_copper",
+                f"tx_b{index}_pcb_wall",
+                f"tx_b{index}_stack_pet_psa",
+                f"tx_b{index}_stack_ferrite",
+                f"tx_b{index}_stack_air",
+                f"tx_b{index}_pcb_coil",
+            )
+        )
+    for index in range(branch_count - 1):
+        names.extend((f"tx_array_input_sheet_s{index}", f"tx_array_output_sheet_s{index}"))
+    return names
+
+
+def _tx_plate_stack_array_connector_vertices_by_name(*, branch_count: int) -> dict[str, list[list[float]]]:
+    vertices_by_name: dict[str, list[list[float]]] = {}
+    for index in range(branch_count - 1):
+        x0 = float(index)
+        x1 = float(index + 1)
+        vertices_by_name[f"tx_array_input_sheet_s{index}"] = [
+            [x0, -145.0, 10.0],
+            [x1, -145.0, 10.0],
+            [x1, -145.0, 20.0],
+            [x0, -145.0, 20.0],
+        ]
+        vertices_by_name[f"tx_array_output_sheet_s{index}"] = [
+            [x0, -145.0, 40.0],
+            [x1, -145.0, 40.0],
+            [x1, -145.0, 50.0],
+            [x0, -145.0, 50.0],
+        ]
+    return vertices_by_name
+
+
+def _tx_plate_stack_array_expected_groups(*, branch_count: int) -> list[ExportedBodyGroup]:
+    ferrite_members = tuple(
+        name
+        for name in _tx_plate_stack_array_expected_names(branch_count=branch_count)
+        if name.endswith("_stack_pet_psa")
+        or name.endswith("_stack_ferrite")
+        or name.endswith("_stack_air")
+    )
+    return [
+        {
+            "group_name": _TX_COPPER_GROUP_NAME,
+            "member_body_names": tuple(
+                name
+                for name in _tx_plate_stack_array_expected_names(branch_count=branch_count)
+                if name.endswith("_plate_copper") or name.startswith("tx_array_")
+            ),
+        },
+        {"group_name": _TX_FERRITE_GROUP_NAME, "member_body_names": ferrite_members},
+    ]
+
+
 def _expected_mesh_length_payload(*, tx_object_name: str = "tx_copper_l0") -> list[object]:
     return [
         "NAME:Length1",
@@ -920,7 +992,7 @@ def test_import_type2_step_ledger_imports_single_scene_and_writes_partitioned_le
     )
 
     assert session.modeler.import_calls == [scene_step]
-    assert session.modeler.import_kwargs_calls == [{"import_free_surfaces": True}]
+    assert session.modeler.import_kwargs_calls == [{"import_free_surfaces": False, "create_group": False}]
     assert session.modeler.model_state_calls == [
         ("environment", False),
         ("tx_region", False),
@@ -1117,7 +1189,7 @@ def test_import_type2_step_ledger_accepts_tx_and_rx_plate_stack_geometry_only_ro
     )
 
     assert session.modeler.import_calls == [scene_step]
-    assert session.modeler.import_kwargs_calls == [{"import_free_surfaces": True}]
+    assert session.modeler.import_kwargs_calls == [{"import_free_surfaces": False, "create_group": False}]
     assert [call["name"] for call in session.modeler.create_polyline_calls] == [
         "tx_plate_port_sheet",
         "rx_plate_port_sheet",
@@ -1341,7 +1413,7 @@ def test_import_type2_step_ledger_rejects_legacy_plate_stack_u_names(tmp_path: P
         modeler=_FakeModeler(imported_name_batches=[_legacy_tx_plate_stack_imported_name_batch()])
     )
 
-    with pytest.raises(ValueError, match=r"must include all merged tx plate-stack ferrite members"):
+    with pytest.raises(ValueError, match=r"must include tx plate-stack ferrite-family members"):
         import_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
@@ -1445,6 +1517,71 @@ def test_import_type2_step_ledger_rejects_plate_stack_solid_name_drift(
             design_name="fake_type2_import",
             hfss_factory=lambda _: cast(HfssSession, session),
         )
+
+
+def test_import_type2_step_ledger_accepts_tx_plate_stack_array_exact_names(tmp_path: Path) -> None:
+    branch_count = 3
+    scene_step, ledger_path = _source_paths(tmp_path)
+    modeled_objects = _plate_stack_modeled_objects(tmp_path)
+    tx_entry = cast(dict[str, object], modeled_objects[0])
+    tx_entry["expected_exported_body_names"] = _tx_plate_stack_array_expected_names(branch_count=branch_count)
+    tx_entry["expected_exported_body_count"] = len(cast(list[str], tx_entry["expected_exported_body_names"]))
+    tx_entry["expected_exported_body_groups"] = _tx_plate_stack_array_expected_groups(branch_count=branch_count)
+    tx_coordinates = cast(dict[str, object], tx_entry["canonical_coordinates"])
+    tx_coordinates["connector_sheet_vertices_xyz_by_name"] = _tx_plate_stack_array_connector_vertices_by_name(
+        branch_count=branch_count
+    )
+    tx_terminal = cast(dict[str, object], tx_entry["terminal_metadata"])
+    tx_terminal["input_stub_body_name"] = "tx_array_input_sheet_s0"
+    tx_terminal["output_stub_body_name"] = "tx_array_output_sheet_s0"
+    tx_vertices = cast(list[list[float]], tx_terminal["port_sheet_vertices_xyz"])
+    tx_vertices[1][0] = 80.0
+    tx_vertices[2][0] = 80.0
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_plate_stack_non_model_entry()],
+        modeled_objects=modeled_objects,
+    )
+    tx_expected_names = cast(list[str], tx_entry["expected_exported_body_names"])
+    reversed_branch_copper_names = [
+        name
+        for name in reversed(tx_expected_names)
+        if name.startswith("tx_b") and name.endswith("_plate_copper")
+    ]
+    non_copper_tx_names = [
+        name
+        for name in tx_expected_names
+        if not name.startswith("tx_array_") and name not in reversed_branch_copper_names
+    ]
+    imported_names = (
+        "environment",
+        "tx_region",
+        "rx_region_max",
+        *reversed_branch_copper_names,
+        *non_copper_tx_names,
+        *_rx_plate_stack_expected_names(),
+    )
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[tuple(imported_names)]))
+
+    result = import_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+        imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+        design_name="fake_type2_import",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    imported_tx_entry = next(entry for entry in result["modeled_objects"] if entry["object_id"] == "tx_plate_stack")
+    imported_tx_names = cast(list[str], imported_tx_entry["imported_object_names"])
+    assert "tx_b0_plate_copper" in imported_tx_names
+    assert "tx_array_input_sheet_s0" in imported_tx_names
+    assert "tx_b0_pcb_wall" in imported_tx_names
+    assert "tx_b2_stack_ferrite" in imported_tx_names
+    assert "tx_pcb_wall" not in imported_tx_names
+    assert session.modeler.create_polyline_calls[0]["name"] == "tx_array_input_sheet_s0"
+    assert session.modeler.create_polyline_calls[1]["name"] == "tx_array_output_sheet_s0"
+    assert session.modeler.objects["tx_array_input_sheet_s0"].color == (184, 115, 51)
 
 
 def test_import_type2_step_ledger_fails_unclaimed_solid_name_as_export_contract_violation(tmp_path: Path) -> None:

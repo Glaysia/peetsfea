@@ -16,6 +16,7 @@ tags:
 
 ## Ownership
 - Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-full-em]]
+- TX array plan: [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
 - Primary architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 역할
@@ -28,19 +29,22 @@ tags:
 
 ## Canonical state
 - helper는 exact pair `['tx_single_coil', 'rx_single_coil']` 또는 `['tx_plate_stack', 'rx_plate_stack']`만 지원한다.
+- TX array remains the same `['tx_plate_stack', 'rx_plate_stack']` exact pair.
 - coil pair의 mesh target 해석은 기존과 동일하다.
   - TX: `tx_copper_l0` 또는 `tx_copper_stack` 중 정확히 하나
   - RX: `rx_copper_l0` 정확히 하나
 - plate-stack pair는 conductor-only exact-name set을 imported exact-name order로 mesh target에 넣는다.
-- plate-stack pair는 정확히 `tx_plate_copper`와 `rx_plate_copper`를 conductor mesh target으로 사용한다.
+- single TX plate-stack pair는 `tx_plate_copper`와 `rx_plate_copper`를 conductor mesh target으로 사용한다.
+  TX array pair는 branch copper bodies와 connector sheet faces plus `rx_plate_copper`를 사용한다.
   개별 `*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`는 도체 mesh 대상이 아니다.
+- Branch-local TX array copper bodies and connector sheet faces are mesh targets; branch PCB/ferrite bodies are not.
 - plate-stack mesh target에는 PCB, ferrite, underlay, reconstructed port sheet가 포함되지 않는다.
 - legacy pre-unite segment(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)는 final mesh 타겟으로 허용되지 않는다.
 
 ## Invariants / fail-fast
 - modeled_objects는 정확히 2개여야 하며 중복 없는 exact tx/rx pair여야 한다.
 - mixed role family(coil+plate), unsupported role, duplicate role은 즉시 실패한다.
-- plate-stack entry에서 `tx_plate_copper`/`rx_plate_copper`가 정확히 1개씩 존재해야 한다.
+- plate-stack entry에서 required concrete conductor members가 존재해야 한다. RX는 `rx_plate_copper` 정확히 1개다.
 - plate-stack entry에서 pre-unite segment 라벨이 final conductor 목록에 남아 있으면 즉시 실패한다.
 - `generic SOLID*` 이름은 즉시 실패한다.
 - mesh target은 conductor-only이며 ferrite/pcb/air/port sheet를 제외한다.
