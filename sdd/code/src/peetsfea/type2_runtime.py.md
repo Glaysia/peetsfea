@@ -1,7 +1,7 @@
 ---
 title: type2_runtime.py
 created: 2026-04-18 @ 23:10
-updated: 2026-04-20 @ 12:18
+updated: 2026-04-20 @ 23:59
 tags:
   - build
   - runtime
@@ -24,14 +24,16 @@ tags:
 
 ## Canonical state
 - default build runner는 `setup_type2_step_ledger` facade다.
-- coil pair exact roles는 setup-ready full path를 쓴다.
+- active RX-only role set(`rx_single_coil`)은 setup-ready facade 내부의 full setup-ready branch를 쓴다.
+- coil pair exact roles는 retained setup-ready full path를 쓴다.
 - plate-stack exact roles(`tx_plate_stack` + `rx_plate_stack`)도 setup-ready facade 내부의 full setup-ready branch를 쓴다.
+- mixed retained role set(`tx_plate_stack` + `rx_single_coil`)은 setup-ready facade가 명시적으로 지원하는 경우에만 build preflight를 통과한다.
 - plate-stack free sampled owners가 있으면 prepared build design variables가 비어 있지 않은 채 runner로 전달된다.
 
 ## Invariants / fail-fast
 - existing broken ledger는 rebuild fallback 없이 실패한다.
 - sampled metadata-derived design variables는 setup facade 호출 인자로 전달한다.
-- exact pair가 아니면 build는 fail-fast 하며 다른 경로로 fallback하지 않는다.
+- 지원되는 setup-ready role set이 아니면 build는 fail-fast 하며 다른 경로로 fallback하지 않는다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_sampled.py]]

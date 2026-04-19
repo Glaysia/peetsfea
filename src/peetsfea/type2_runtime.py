@@ -22,6 +22,14 @@ class _Type2BuildRunnerResult(TypedDict):
 _Runner = Callable[..., _Type2BuildRunnerResult]
 _COIL_EXACT_MODELED_ROLES: tuple[str, str] = ("rx_single_coil", "tx_single_coil")
 _PLATE_STACK_EXACT_MODELED_ROLES: tuple[str, str] = ("rx_plate_stack", "tx_plate_stack")
+_RX_ONLY_MODELED_ROLES: tuple[str] = ("rx_single_coil",)
+_MIXED_MODELED_ROLES: tuple[str, str] = ("rx_single_coil", "tx_plate_stack")
+_SUPPORTED_MODELED_ROLE_SETS: tuple[tuple[str, ...], ...] = (
+    _RX_ONLY_MODELED_ROLES,
+    _COIL_EXACT_MODELED_ROLES,
+    _PLATE_STACK_EXACT_MODELED_ROLES,
+    _MIXED_MODELED_ROLES,
+)
 
 
 class Type2SteppedArtifact(TypedDict):
@@ -41,13 +49,12 @@ class Type2BuiltArtifact(TypedDict):
 
 def _assert_setup_ready_supported(prepared_build: PreparedType2Build) -> None:
     actual_roles = tuple(sorted(prepared_build.modeled_roles))
-    if actual_roles == _COIL_EXACT_MODELED_ROLES:
+    if actual_roles in _SUPPORTED_MODELED_ROLE_SETS:
         return
-    if actual_roles == _PLATE_STACK_EXACT_MODELED_ROLES:
-        return
+    formatted_supported_sets = ", ".join(str(list(role_set)) for role_set in _SUPPORTED_MODELED_ROLE_SETS)
     raise ValueError(
-        "type2 build/setup-ready supports only exact modeled role pairs "
-        f"{list(_COIL_EXACT_MODELED_ROLES)} or {list(_PLATE_STACK_EXACT_MODELED_ROLES)} "
+        "type2 build/setup-ready supports only exact modeled role sets "
+        f"{formatted_supported_sets} "
         f"(actual={list(prepared_build.modeled_roles)})"
     )
 

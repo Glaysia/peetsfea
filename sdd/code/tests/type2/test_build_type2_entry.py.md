@@ -1,7 +1,7 @@
 ---
 title: test_build_type2_entry.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 21:35
+updated: 2026-04-20 @ 23:59
 tags:
   - tests
   - type2
@@ -24,6 +24,7 @@ tags:
 - active RX single-coil manifest uses build-entry/runner handoff without TX assumptions.
 - default build path keeps setup-ready facade routing for `rx_single_coil` entries, delegating full-EM-ready setup ownership to that runtime.
 - explicit runner override is accepted for the active RX-only path without mutating build-entry call wiring.
+- type2 runtime build preflight accepts active RX-only prepared builds and rejects unsupported role sets before runner execution.
 - debug build mode selects exactly one requested design id, forces sequential `jobs=1`, and keeps setup-ready routing
 - debug GUI runner constructs a GUI-visible HFSS session with `close_on_exit=False` and delegates release behavior to attached-session setup-ready runtime
 - debug CLI rejects missing target design id instead of choosing a manifest entry implicitly

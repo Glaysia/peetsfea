@@ -11,6 +11,7 @@ import pytest
 
 import entry.build as build_entry
 import peetsfea.type2_sampled as type2_sampled
+import peetsfea.type2_runtime as type2_runtime
 from entry.build import (
     _Type2BuildRunnerResult,
     _setup_type2_step_ledger_gui_debug,
@@ -509,6 +510,115 @@ def test_build_type2_accepts_plate_stack_manifest_when_forced_to_setup_ready_run
     assert len(design_variables) == len(_EXPECTED_DESIGN_VARIABLE_NAMES)
     assert all(name not in tuple(name for name, _ in design_variables) for name in _RX_NON_SAMPLED_VARIABLE_NAMES)
     assert all(expression != "" for _, expression in design_variables)
+
+
+def test_build_prepared_type2_design_accepts_existing_rx_only_step_ledger(tmp_path: Path) -> None:
+    design_id = "design-rx"
+    design_dir = tmp_path / design_id
+    design_dir.mkdir()
+    sampled_toml_path = design_dir / "sampled.toml"
+    sampled_toml_path.write_text("[sampled]\n", encoding="utf-8")
+    source_toml_path = tmp_path / "source.toml"
+    source_toml_path.write_text("[design]\n", encoding="utf-8")
+    scene_step_path = design_dir / "type2_scene.step"
+    scene_step_path.write_text("STEP", encoding="utf-8")
+    step_ledger_path = design_dir / "type2_step_ledger.json"
+    step_ledger_path.write_text(json.dumps({"scene_step_path": str(scene_step_path)}, indent=2), encoding="utf-8")
+    output_aedt_path = design_dir / f"{design_id}.aedt"
+    imported_ledger_path = design_dir / "type2_imported_ledger.json"
+    design_variables = (("rx_outer_x_usage_ratio", "0.5"), ("rx_outer_y_usage_ratio", "0.6"))
+    prepared_build = PreparedType2Build(
+        design_id=design_id,
+        seed=1,
+        source_toml_path=source_toml_path,
+        sampled_toml_path=sampled_toml_path,
+        design_dir=design_dir,
+        scene_step_path=scene_step_path,
+        step_ledger_path=step_ledger_path,
+        imported_ledger_path=imported_ledger_path,
+        aedt_path=output_aedt_path,
+        sampled_owner_paths=("modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",),
+        modeled_roles=("rx_single_coil",),
+        design_variables=design_variables,
+    )
+
+    exporter_calls: list[dict[str, object]] = []
+    runner_calls: list[dict[str, object]] = []
+
+    def _fake_exporter(**kwargs: object) -> object:
+        exporter_calls.append(dict(kwargs))
+        return {"ok": True}
+
+    def _fake_runner(**kwargs: object) -> _Type2BuildRunnerResult:
+        runner_calls.append(dict(kwargs))
+        return {
+            "aedt_path": str(cast(Path, kwargs["output_aedt_path"])),
+            "source_step_ledger_path": str(cast(Path, kwargs["step_ledger_path"])),
+            "imported_ledger_path": str(cast(Path, kwargs["imported_ledger_path"])),
+        }
+
+    results = type2_runtime.build_prepared_type2_design(
+        prepared_build,
+        exporter=_fake_exporter,
+        runner=_fake_runner,
+    )
+
+    assert results["design_id"] == design_id
+    assert results["sampled_toml_path"] == str(sampled_toml_path)
+    assert results["aedt_path"] == str(output_aedt_path)
+    assert results["source_step_ledger_path"] == str(step_ledger_path)
+    assert results["imported_ledger_path"] == str(imported_ledger_path)
+    assert exporter_calls == []
+    assert len(runner_calls) == 1
+    assert cast(tuple[tuple[str, str], ...], runner_calls[0]["design_variables"]) == design_variables
+    assert runner_calls[0]["step_ledger_path"] == step_ledger_path
+    assert runner_calls[0]["output_aedt_path"] == output_aedt_path
+    assert runner_calls[0]["imported_ledger_path"] == imported_ledger_path
+
+
+def test_build_prepared_type2_design_rejects_tx_only_modeled_role_before_runner(tmp_path: Path) -> None:
+    design_id = "design-tx"
+    design_dir = tmp_path / design_id
+    design_dir.mkdir()
+    sampled_toml_path = design_dir / "sampled.toml"
+    sampled_toml_path.write_text("[sampled]\n", encoding="utf-8")
+    source_toml_path = tmp_path / "source.toml"
+    source_toml_path.write_text("[design]\n", encoding="utf-8")
+    scene_step_path = design_dir / "type2_scene.step"
+    scene_step_path.write_text("STEP", encoding="utf-8")
+    step_ledger_path = design_dir / "type2_step_ledger.json"
+    step_ledger_path.write_text(json.dumps({"scene_step_path": str(scene_step_path)}, indent=2), encoding="utf-8")
+    output_aedt_path = design_dir / f"{design_id}.aedt"
+    imported_ledger_path = design_dir / "type2_imported_ledger.json"
+    prepared_build = PreparedType2Build(
+        design_id=design_id,
+        seed=1,
+        source_toml_path=source_toml_path,
+        sampled_toml_path=sampled_toml_path,
+        design_dir=design_dir,
+        scene_step_path=scene_step_path,
+        step_ledger_path=step_ledger_path,
+        imported_ledger_path=imported_ledger_path,
+        aedt_path=output_aedt_path,
+        sampled_owner_paths=("modeled_objects.tx_single_coil.outer_x_usage_ratio",),
+        modeled_roles=("tx_single_coil",),
+        design_variables=(("tx_outer_x_usage_ratio", "0.5"), ("tx_outer_y_usage_ratio", "0.6")),
+    )
+
+    runner_calls: list[dict[str, object]] = []
+
+    def _fake_runner(**kwargs: object) -> _Type2BuildRunnerResult:
+        runner_calls.append(dict(kwargs))
+        return {
+            "aedt_path": str(cast(Path, kwargs["output_aedt_path"])),
+            "source_step_ledger_path": str(cast(Path, kwargs["step_ledger_path"])),
+            "imported_ledger_path": str(cast(Path, kwargs["imported_ledger_path"])),
+        }
+
+    with pytest.raises(ValueError, match=r"type2 build/setup-ready supports only exact modeled role sets"):
+        type2_runtime.build_prepared_type2_design(prepared_build, runner=_fake_runner)
+
+    assert runner_calls == []
 
 
 def test_build_type2_rejects_list_manifest_payload(tmp_path: Path) -> None:
