@@ -21,9 +21,10 @@ tags:
 ## 역할
 - type2 export facade다.
 - active TX/RX plate-stack exact body-name contract와 `stub_port` metadata export contract를 step ledger에 고정한다.
+- sample entrypoint가 긴 STEP 생성 중 coarse phase를 표시할 수 있도록 optional stage reporter를 호출한다.
 
 ## 입력 / 출력
-- 입력: TOML path, output dir, ledger path, seed
+- 입력: TOML path, output dir, ledger path, seed, optional stage reporter
 - 출력: `type2_scene.step`, per-modeled metadata, `type2_step_ledger.json`
 
 ## Canonical state
@@ -39,6 +40,7 @@ tags:
   TX `g_ferrite_tx`, RX `g_ferrite_rx`.
 - ferrite group members는 merged material names 3개 순서와 exact match해야 한다.
 - active plate roles도 metadata-only port-sheet self-check를 수행한다.
+- reporter phase surface는 `build_scene`, `export_scene_step`, `finalize_step_artifacts`로 제한한다.
 
 ## Invariants / fail-fast
 - export body names/count는 role contract와 exact match여야 한다.
@@ -48,11 +50,13 @@ tags:
 - exported solid pair positive-volume overlap은 fail-fast failure다.
 - plate role body-order drift는 import-side exact-name contract drift다.
 - plate role `terminal_metadata.kind`는 `stub_port` 외 값을 허용하지 않는다.
+- reporter callback은 progress visibility only이며 exporter의 fail-fast contract를 완화하지 않는다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_plate_stack.py]]
 - [[sdd/code/src/peetsfea/type2_step_scene.py]]
 - [[sdd/code/src/peetsfea/type2_step_ledger.py]]
+- [[sdd/code/src/peetsfea/type2_sampled.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py]]
 
 ## 관련 테스트

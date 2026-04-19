@@ -8,7 +8,7 @@ import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import Literal, TypedDict, cast
 
 from peetsfea.spec.loader import TOMLTable, TOMLValue, load_toml_bytes
 from peetsfea.spec.toml_render import toml_dumps
@@ -55,6 +55,8 @@ class Type2SampleManifestEntry(TypedDict):
 
 
 _SampleProgressReporter = Callable[[int, int, "Type2SampleManifestEntry"], None]
+_SampleStepStage = Literal["start", "build_scene", "export_scene_step", "finalize_step_artifacts", "done"]
+_SampleStepStageReporter = Callable[[_SampleStepStage, Type2SampleManifestEntry], None]
 
 
 class Type2SampleManifestConfig(TypedDict):
@@ -522,17 +524,28 @@ def _build_sample_manifest_entry_for_seed(
     )
 
 
+def _no_op_sample_step_stage_reporter(
+    phase: _SampleStepStage,
+    entry: Type2SampleManifestEntry,
+) -> None:
+    pass
+
+
 def _export_step_for_sample_entry(
     entry: Type2SampleManifestEntry,
     *,
     exporter: _SampleExporter,
+    report_step_stage: _SampleStepStageReporter = _no_op_sample_step_stage_reporter,
 ) -> None:
+    report_step_stage("start", entry)
     exporter(
         toml_path=Path(entry["sampled_toml_path"]),
         output_dir=Path(entry["design_dir"]),
         ledger_path=Path(entry["step_ledger_path"]),
         seed=entry["seed"],
+        stage_reporter=lambda phase: report_step_stage(phase, entry),
     )
+    report_step_stage("done", entry)
 
 
 def _build_sample_manifest_entry_for_seed_task(task: tuple[str, str, int, int, str, int, bool]) -> Type2SampleManifestEntry:
@@ -578,6 +591,7 @@ def generate_sample_manifest_entries(
     make_step_on_sample: bool = True,
     exporter: _SampleExporter = export_type2_step_artifacts,
     report_progress: _SampleProgressReporter | None = None,
+    report_step_stage: _SampleStepStageReporter = _no_op_sample_step_stage_reporter,
 ) -> list[Type2SampleManifestEntry]:
     if count < 1:
         raise ValueError("count must be >= 1")
@@ -606,7 +620,11 @@ def generate_sample_manifest_entries(
                 retry_number=retry_number,
             )
             if make_step_on_sample:
-                _export_step_for_sample_entry(entry, exporter=exporter)
+                _export_step_for_sample_entry(
+                    entry,
+                    exporter=exporter,
+                    report_step_stage=report_step_stage,
+                )
             entries.append(entry)
             _emit_sample_progress(
                 report_progress=report_progress,

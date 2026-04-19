@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 import hashlib
 import json
@@ -219,6 +220,10 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
 
     def _exporter(**kwargs: object) -> object:
         exporter_calls.append(dict(kwargs))
+        report_stage = cast(Callable[[str], None], kwargs["stage_reporter"])
+        report_stage("build_scene")
+        report_stage("export_scene_step")
+        report_stage("finalize_step_artifacts")
         output_dir_arg = cast(Path, kwargs["output_dir"])
         ledger_path = cast(Path, kwargs["ledger_path"])
         scene_step_path = output_dir_arg / "type2_scene.step"
@@ -232,7 +237,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
         manifest_path=manifest_path,
         seed_first=4,
         seed_n=3,
-        sampler_n=2,
+        sampler_n=1,
         aedt_builder_n=6,
         make_step_on_sample=True,
         exporter=_exporter,
@@ -244,11 +249,32 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
         "source_toml_path": str(source_toml_path.resolve(strict=False)),
         "seed_first": 4,
         "seed_n": 3,
-        "sampler_n": 2,
+        "sampler_n": 1,
         "make_step_on_sample": True,
         "aedt_builder_n": 6,
     }
     assert "[sample] stage=sample+step" in captured.out
+    for entry in document["entries"]:
+        assert (
+            f"[sample] step start idx={entry['sample_index']} seed={entry['seed']} "
+            f"design_id={entry['design_id']}"
+        ) in captured.out
+        assert (
+            f"[sample] step phase=build_scene idx={entry['sample_index']} "
+            f"seed={entry['seed']} design_id={entry['design_id']}"
+        ) in captured.out
+        assert (
+            f"[sample] step phase=export_scene_step idx={entry['sample_index']} "
+            f"seed={entry['seed']} design_id={entry['design_id']}"
+        ) in captured.out
+        assert (
+            f"[sample] step phase=finalize_step_artifacts idx={entry['sample_index']} "
+            f"seed={entry['seed']} design_id={entry['design_id']}"
+        ) in captured.out
+        assert (
+            f"[sample] step done idx={entry['sample_index']} seed={entry['seed']} "
+            f"design_id={entry['design_id']}"
+        ) in captured.out
     assert "[sample] progress 1/3" in captured.out
     assert "[sample] progress 3/3" in captured.out
     assert "[sample] stage=manifest write" in captured.out
@@ -399,6 +425,9 @@ def test_sample_type2_can_write_manifest_without_step_artifacts(
     }
     assert "[sample] stage=sample-only" in captured.out
     assert "[sample] done" in captured.out
+    assert "[sample] step start" not in captured.out
+    assert "[sample] step phase=" not in captured.out
+    assert "[sample] step done" not in captured.out
     assert exporter_calls == []
     for entry in document["entries"]:
         assert entry["sampled_owner_paths"] == _EXPECTED_SAMPLED_OWNER_PATHS

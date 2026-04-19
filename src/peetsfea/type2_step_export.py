@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import shutil
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal, cast
 
@@ -58,6 +59,11 @@ _PLATE_STACK_MERGED_BODY_NAMES: tuple[str, ...] = (
     "rx_stack_ferrite",
     "rx_stack_air",
 )
+_Type2StepExportStage = Literal["build_scene", "export_scene_step", "finalize_step_artifacts"]
+
+
+def _no_op_type2_step_export_stage_reporter(stage: _Type2StepExportStage) -> None:
+    pass
 
 
 def _validate_top_level_scene_child(shape: bd.Shape) -> None:
@@ -699,6 +705,7 @@ def export_type2_step_artifacts(
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     ledger_path: Path = DEFAULT_LEDGER_PATH,
     seed: int = 0,
+    stage_reporter: Callable[[_Type2StepExportStage], None] = _no_op_type2_step_export_stage_reporter,
 ) -> Type2StepLedger:
     spec = load_type2_step_spec(toml_path)
     em_policy: Type2ImportEmPolicy = {
@@ -709,6 +716,7 @@ def export_type2_step_artifacts(
     scene_step_path = output_dir / DEFAULT_SCENE_STEP_PATH.name
     object_metadata_dir = output_dir / "metadata"
 
+    stage_reporter("build_scene")
     non_model_entries = [build_non_model_scene_entry(spec.non_model_objects)]
     scene_shapes: list[bd.Shape] = list(build_non_model_scene_shapes(spec.non_model_objects))
     modeled_entries = []
@@ -743,10 +751,12 @@ def export_type2_step_artifacts(
     for shape in scene_shapes:
         _validate_top_level_scene_child(shape)
     scene = bd.Compound(children=scene_shapes, label="type2_scene")
+    stage_reporter("export_scene_step")
     export_ok = bd.export_step(scene, scene_step_path)
     if export_ok is not True:
         raise RuntimeError(f"build123d export_step returned False for type2 scene STEP: {scene_step_path}")
 
+    stage_reporter("finalize_step_artifacts")
     ledger = build_type2_step_ledger(
         source_toml_path=spec.source_toml_path,
         output_dir=output_dir,

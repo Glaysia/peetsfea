@@ -103,6 +103,29 @@ def _report_sample_progress(
     status_line.update(completed=completed, total=total, entry=entry)
 
 
+def _report_sample_step_stage(
+    status_line: _SampleStatusLine,
+    phase: str,
+    entry: Type2SampleManifestEntry,
+) -> None:
+    if phase == "start":
+        status_line.log(
+            f"[sample] step start idx={entry['sample_index']} "
+            f"seed={entry['seed']} design_id={entry['design_id']}"
+        )
+        return
+    if phase == "done":
+        status_line.log(
+            f"[sample] step done idx={entry['sample_index']} "
+            f"seed={entry['seed']} design_id={entry['design_id']}"
+        )
+        return
+    status_line.log(
+        f"[sample] step phase={phase} idx={entry['sample_index']} "
+        f"seed={entry['seed']} design_id={entry['design_id']}"
+    )
+
+
 def sample_type2(
     *,
     source_toml_path: Path = SOURCE_TOML_PATH,
@@ -147,6 +170,11 @@ def sample_type2(
             status_line,
             completed,
             total,
+            entry,
+        ),
+        report_step_stage=lambda phase, entry: _report_sample_step_stage(
+            status_line,
+            phase,
             entry,
         ),
     )

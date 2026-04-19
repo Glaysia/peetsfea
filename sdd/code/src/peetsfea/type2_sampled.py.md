@@ -17,6 +17,7 @@ tags:
 
 ## 역할
 - type2 sampled owner-path selection, frozen sampled TOML rendering, manifest/build planning을 담당한다.
+- in-process STEP export path에서 entrypoint가 coarse stage 로그를 받을 수 있도록 optional reporter callback을 중계한다.
 
 ## 입력 / 출력
 - 입력: source type2 TOML, seed range, manifest/sampled path
@@ -32,16 +33,19 @@ tags:
   - `modeled_objects.rx_plate_stack.metal_fill_factor`
   이다.
 - build path planning은 여전히 `run/sampled/type2/<design_id>/` layout을 쓴다.
+- STEP stage reporter는 manifest entry나 sampled TOML에 기록되는 canonical state가 아니라 runtime notification surface다.
 
 ## Invariants / fail-fast
 - sampled metadata owner list는 source exportable sampled owner set과 exact match여야 한다.
 - plate roles에서 terminal-path driven coil-only sampled field assert를 요구하면 안 된다.
 - plate-stack free range owners는 deterministic seed selection으로 scalar로 freeze되고 sampled metadata에 그대로 기록되어야 한다.
+- stage reporting이 실패/지원 여부를 바꾸면 안 되며, exporter failure는 기존처럼 즉시 raise되어야 한다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_step_spec.py]]
 - [[sdd/code/src/peetsfea/type2_runtime.py]]
 - [[sdd/code/entry/build.py]]
+- [[sdd/code/src/peetsfea/type2_step_export.py]]
 
 ## 관련 테스트
 - [[sdd/code/tests/type2/test_sample_type2_entry.py]]
@@ -51,3 +55,4 @@ tags:
 - sampled path ownership을 role-blind single-coil field enumeration으로 되돌리지 않는다.
 - active example role 교체와 sampled owner list expectations를 같이 갱신해야 한다.
 - plate-stack sampled owner surface는 `turn_count`, `metal_fill_factor`만 소유한다. replay metadata exact-match guard도 이 집합과 같이 갱신해야 한다.
+- multi-worker sample path는 completion progress ordering을 깨지 않도록 별도 process-event channel 없이 기존 completion-only progress를 유지한다.
