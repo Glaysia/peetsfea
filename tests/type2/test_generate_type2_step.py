@@ -633,34 +633,28 @@ def _tx_plate_stack_expected_body_names(
 
 
 def _tx_plate_stack_expected_body_groups(*, ferrite_set_count: int = 10) -> tuple[ExportedBodyGroup, ...]:
-    member_body_names: list[str] = []
-    for index in range(ferrite_set_count):
-        member_body_names.extend(
-            (
-                f"tx_stack_pet_psa_u{index}",
-                f"tx_stack_ferrite_u{index}",
-                f"tx_stack_air_u{index}",
-            )
-        )
+    assert ferrite_set_count >= 1
+    member_body_names = (
+        "tx_stack_pet_psa",
+        "tx_stack_ferrite",
+        "tx_stack_air",
+    )
     return _expected_ferrite_body_groups(
         role="tx_plate_stack",
-        member_body_names=tuple(member_body_names),
+        member_body_names=member_body_names,
     )
 
 
 def _rx_plate_stack_expected_body_groups(*, ferrite_set_count: int = 10) -> tuple[ExportedBodyGroup, ...]:
-    member_body_names: list[str] = []
-    for index in range(ferrite_set_count):
-        member_body_names.extend(
-            (
-                f"rx_stack_pet_psa_u{index}",
-                f"rx_stack_ferrite_u{index}",
-                f"rx_stack_air_u{index}",
-            )
-        )
+    assert ferrite_set_count >= 1
+    member_body_names = (
+        "rx_stack_pet_psa",
+        "rx_stack_ferrite",
+        "rx_stack_air",
+    )
     return _expected_ferrite_body_groups(
         role="rx_plate_stack",
-        member_body_names=tuple(member_body_names),
+        member_body_names=member_body_names,
     )
 
 
@@ -714,6 +708,7 @@ def _assert_plate_stack_bridge_non_overlap(
     turn_count: int,
     ferrite_set_count: int,
 ) -> None:
+    assert ferrite_set_count >= 1
     bridge_labels = tuple(f"{prefix}_bridge_s{index}" for index in range((2 * turn_count) - 2))
     copper_labels = (
         *(f"{prefix}_copper_wall_t{index}" for index in range(turn_count)),
@@ -722,9 +717,9 @@ def _assert_plate_stack_bridge_non_overlap(
     slab_labels = (
         f"{prefix}_pcb_wall",
         f"{prefix}_pcb_coil",
-        *(f"{prefix}_stack_pet_psa_u{index}" for index in range(ferrite_set_count)),
-        *(f"{prefix}_stack_ferrite_u{index}" for index in range(ferrite_set_count)),
-        *(f"{prefix}_stack_air_u{index}" for index in range(ferrite_set_count)),
+        f"{prefix}_stack_pet_psa",
+        f"{prefix}_stack_ferrite",
+        f"{prefix}_stack_air",
     )
     for bridge_label in bridge_labels:
         bridge_shape = scene_shapes_by_label[bridge_label]
@@ -732,6 +727,29 @@ def _assert_plate_stack_bridge_non_overlap(
             _assert_zero_intersection_volume(bridge_shape, scene_shapes_by_label[adjacent_copper_label])
         for notched_slab_label in slab_labels:
             _assert_zero_intersection_volume(bridge_shape, scene_shapes_by_label[notched_slab_label])
+
+
+def _assert_plate_stack_united_ferrite_family_contract(
+    *,
+    scene_shapes_by_label: dict[str, bd.Shape],
+    prefix: Literal["tx", "rx"],
+) -> None:
+    group_label = _TX_FERRITE_GROUP_NAME if prefix == "tx" else _RX_FERRITE_GROUP_NAME
+    expected_member_labels = (
+        f"{prefix}_stack_pet_psa",
+        f"{prefix}_stack_ferrite",
+        f"{prefix}_stack_air",
+    )
+    group_shape = scene_shapes_by_label[group_label]
+    assert type(group_shape).__name__ == "Compound"
+    assert tuple(child.label for child in group_shape.children) == expected_member_labels
+    for member_label in expected_member_labels:
+        member_shape = scene_shapes_by_label[member_label]
+        assert type(member_shape).__name__ == "Solid"
+        assert len(tuple(member_shape.solids())) == 1
+    assert all(not label.startswith(f"{prefix}_stack_pet_psa_u") for label in scene_shapes_by_label)
+    assert all(not label.startswith(f"{prefix}_stack_ferrite_u") for label in scene_shapes_by_label)
+    assert all(not label.startswith(f"{prefix}_stack_air_u") for label in scene_shapes_by_label)
 
 
 def _single_coil_placement_offset_from_local_bounds(
@@ -1556,10 +1574,24 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     }
     assert set(scene_shapes_by_label) == expected_scene_labels
     assert "tx_port_sheet" not in scene_shapes_by_label
-    for label in {"environment", "tx_region", "rx_region_max", *tx_expected_names, *rx_expected_names}:
+    merged_stack_labels = {
+        "tx_stack_pet_psa",
+        "tx_stack_ferrite",
+        "tx_stack_air",
+        "rx_stack_pet_psa",
+        "rx_stack_ferrite",
+        "rx_stack_air",
+    }
+    for label in {"environment", "tx_region", "rx_region_max", *tx_expected_names, *rx_expected_names} - merged_stack_labels:
         assert type(scene_shapes_by_label[label]).__name__ == "Solid"
+    for label in merged_stack_labels:
+        assert type(scene_shapes_by_label[label]).__name__ == "Solid"
+        assert len(tuple(scene_shapes_by_label[label].solids())) == 1
     for label in [*tx_group_names, *rx_group_names]:
         assert type(scene_shapes_by_label[label]).__name__ == "Compound"
+    _assert_plate_stack_united_ferrite_family_contract(scene_shapes_by_label=scene_shapes_by_label, prefix="tx")
+    _assert_plate_stack_united_ferrite_family_contract(scene_shapes_by_label=scene_shapes_by_label, prefix="rx")
+    assert all(not label.startswith("SOLID") for label in scene_shapes_by_label)
     _assert_zero_intersection_volume(scene_shapes_by_label["tx_pcb_wall"], scene_shapes_by_label["tx_copper_wall_t0"])
     _assert_zero_intersection_volume(scene_shapes_by_label["tx_pcb_coil"], scene_shapes_by_label["tx_copper_coil_t0"])
     _assert_zero_intersection_volume(scene_shapes_by_label["rx_pcb_wall"], scene_shapes_by_label["rx_copper_wall_t0"])
@@ -1606,12 +1638,9 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert rx_step_max_xyz[1] == pytest.approx(rx_region_min_y + rx_region_size_y)
     assert rx_step_min_xyz[2] == pytest.approx(rx_region_min_z + (rx_pitch_z / 2.0))
     assert rx_step_max_xyz[2] == pytest.approx(rx_region_min_z + (rx_pitch_z / 2.0) + rx_trace_height_z)
-    ferrite_first_min_xyz, ferrite_first_max_xyz = _body_bbox(scene_step_path, label="rx_stack_ferrite_u0")
-    pet_first_min_xyz, pet_first_max_xyz = _body_bbox(scene_step_path, label="rx_stack_pet_psa_u0")
-    air_first_min_xyz, air_first_max_xyz = _body_bbox(scene_step_path, label="rx_stack_air_u0")
-    ferrite_last_min_xyz, ferrite_last_max_xyz = _body_bbox(scene_step_path, label="rx_stack_ferrite_u9")
-    pet_last_min_xyz, pet_last_max_xyz = _body_bbox(scene_step_path, label="rx_stack_pet_psa_u9")
-    air_last_min_xyz, air_last_max_xyz = _body_bbox(scene_step_path, label="rx_stack_air_u9")
+    ferrite_first_min_xyz, ferrite_first_max_xyz = _body_bbox(scene_step_path, label="rx_stack_ferrite")
+    pet_first_min_xyz, pet_first_max_xyz = _body_bbox(scene_step_path, label="rx_stack_pet_psa")
+    air_first_min_xyz, air_first_max_xyz = _body_bbox(scene_step_path, label="rx_stack_air")
     wall_pcb_min_xyz, wall_pcb_max_xyz = _body_bbox(scene_step_path, label="rx_pcb_wall")
     coil_pcb_min_xyz, coil_pcb_max_xyz = _body_bbox(scene_step_path, label="rx_pcb_coil")
     assert wall_pcb_min_xyz[0] == pytest.approx(rx_region_min_x + rx_modeled_spec.copper_thickness_mm)
@@ -1619,20 +1648,12 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert wall_pcb_min_xyz[2] == pytest.approx(rx_region_min_z)
     assert wall_pcb_max_xyz[2] == pytest.approx(rx_region_min_z + rx_region_size_z)
     assert pet_first_min_xyz[0] == pytest.approx(wall_pcb_max_xyz[0])
-    assert pet_first_max_xyz[0] == pytest.approx(pet_first_min_xyz[0] + _TX_UNDERLAY_PET_PSA_THICKNESS_MM)
-    assert ferrite_first_min_xyz[0] == pytest.approx(pet_first_max_xyz[0])
-    assert ferrite_first_max_xyz[0] == pytest.approx(ferrite_first_min_xyz[0] + _TX_UNDERLAY_FERRITE_THICKNESS_MM)
-    assert air_first_min_xyz[0] == pytest.approx(ferrite_first_max_xyz[0])
-    assert air_first_max_xyz[0] == pytest.approx(air_first_min_xyz[0] + _TX_UNDERLAY_AIR_THICKNESS_MM)
-    per_set_thickness_mm = (
-        _TX_UNDERLAY_PET_PSA_THICKNESS_MM
-        + _TX_UNDERLAY_FERRITE_THICKNESS_MM
-        + _TX_UNDERLAY_AIR_THICKNESS_MM
-    )
-    assert pet_last_max_xyz[0] == pytest.approx(pet_first_max_xyz[0] + (9 * per_set_thickness_mm))
-    assert ferrite_last_max_xyz[0] == pytest.approx(ferrite_first_max_xyz[0] + (9 * per_set_thickness_mm))
-    assert air_last_max_xyz[0] == pytest.approx(air_first_max_xyz[0] + (9 * per_set_thickness_mm))
-    assert coil_pcb_min_xyz[0] == pytest.approx(air_last_max_xyz[0])
+    assert ferrite_first_min_xyz[0] == pytest.approx(wall_pcb_max_xyz[0])
+    assert air_first_min_xyz[0] == pytest.approx(wall_pcb_max_xyz[0])
+    assert pet_first_max_xyz[0] == pytest.approx(coil_pcb_min_xyz[0])
+    assert ferrite_first_max_xyz[0] == pytest.approx(coil_pcb_min_xyz[0])
+    assert air_first_max_xyz[0] == pytest.approx(coil_pcb_min_xyz[0])
+    assert coil_pcb_min_xyz[0] == pytest.approx(air_first_max_xyz[0])
     assert coil_pcb_max_xyz[0] == pytest.approx(rx_region_min_x + expected_rx_total_thickness_mm - rx_modeled_spec.copper_thickness_mm)
     assert coil_pcb_min_xyz[2] == pytest.approx(rx_region_min_z)
     assert coil_pcb_max_xyz[2] == pytest.approx(rx_region_min_z + rx_region_size_z)
@@ -1819,7 +1840,7 @@ def test_export_type2_step_artifacts_builds_literal_tx_plate_stack_body_contract
     )
     assert tx_entry["expected_exported_body_names"] == expected_names
     assert tx_entry["expected_exported_body_count"] == len(expected_names)
-    assert tx_entry["expected_exported_body_count"] == 43
+    assert tx_entry["expected_exported_body_count"] == 16
     assert _normalized_body_groups(tx_entry["expected_exported_body_groups"]) == _normalized_body_groups(
         _tx_plate_stack_expected_body_groups()
     )
@@ -1834,9 +1855,9 @@ def test_export_type2_step_artifacts_builds_literal_tx_plate_stack_body_contract
     assert expected_names[1] == "tx_copper_wall_t1"
     assert expected_names[2] == "tx_copper_wall_t2"
     assert expected_names[3] == "tx_pcb_wall"
-    assert expected_names[4] == "tx_stack_pet_psa_u0"
-    assert expected_names[5] == "tx_stack_ferrite_u0"
-    assert expected_names[6] == "tx_stack_air_u0"
+    assert expected_names[4] == "tx_stack_pet_psa"
+    assert expected_names[5] == "tx_stack_ferrite"
+    assert expected_names[6] == "tx_stack_air"
     assert expected_names[-9] == "tx_pcb_coil"
     assert expected_names[-8] == "tx_copper_coil_t0"
     assert expected_names[-7] == "tx_copper_coil_t1"
@@ -1847,9 +1868,8 @@ def test_export_type2_step_artifacts_builds_literal_tx_plate_stack_body_contract
     assert "tx_port_sheet" not in scene_children_by_label
     assert all("_shoe_" not in label for label in expected_names)
     assert all("_shoe_" not in label for label in scene_children_by_label)
-    assert "tx_stack_ferrite_u9" in scene_children_by_label
-    assert "tx_stack_pet_psa_u9" in scene_children_by_label
-    assert "tx_stack_air_u9" in scene_children_by_label
+    _assert_plate_stack_united_ferrite_family_contract(scene_shapes_by_label=scene_children_by_label, prefix="tx")
+    assert all(not label.startswith("SOLID") for label in scene_children_by_label)
 
 
 def test_export_type2_step_artifacts_builds_literal_rx_plate_stack_body_contract(tmp_path: Path) -> None:
@@ -1870,7 +1890,7 @@ def test_export_type2_step_artifacts_builds_literal_rx_plate_stack_body_contract
     )
     assert rx_entry["expected_exported_body_names"] == expected_names
     assert rx_entry["expected_exported_body_count"] == len(expected_names)
-    assert rx_entry["expected_exported_body_count"] == 43
+    assert rx_entry["expected_exported_body_count"] == 16
     assert _normalized_body_groups(rx_entry["expected_exported_body_groups"]) == _normalized_body_groups(
         _rx_plate_stack_expected_body_groups()
     )
@@ -1885,9 +1905,9 @@ def test_export_type2_step_artifacts_builds_literal_rx_plate_stack_body_contract
     assert expected_names[1] == "rx_copper_wall_t1"
     assert expected_names[2] == "rx_copper_wall_t2"
     assert expected_names[3] == "rx_pcb_wall"
-    assert expected_names[4] == "rx_stack_pet_psa_u0"
-    assert expected_names[5] == "rx_stack_ferrite_u0"
-    assert expected_names[6] == "rx_stack_air_u0"
+    assert expected_names[4] == "rx_stack_pet_psa"
+    assert expected_names[5] == "rx_stack_ferrite"
+    assert expected_names[6] == "rx_stack_air"
     assert expected_names[-9] == "rx_pcb_coil"
     assert expected_names[-8] == "rx_copper_coil_t0"
     assert expected_names[-7] == "rx_copper_coil_t1"
@@ -1897,9 +1917,8 @@ def test_export_type2_step_artifacts_builds_literal_rx_plate_stack_body_contract
     assert expected_names[-1] == "rx_stub_out"
     assert all("_shoe_" not in label for label in expected_names)
     assert all("_shoe_" not in label for label in scene_children_by_label)
-    assert "rx_stack_ferrite_u9" in scene_children_by_label
-    assert "rx_stack_pet_psa_u9" in scene_children_by_label
-    assert "rx_stack_air_u9" in scene_children_by_label
+    _assert_plate_stack_united_ferrite_family_contract(scene_shapes_by_label=scene_children_by_label, prefix="rx")
+    assert all(not label.startswith("SOLID") for label in scene_children_by_label)
 
 
 def test_export_type2_step_artifacts_fails_when_tx_plate_stack_exceeds_tx_region_thickness(

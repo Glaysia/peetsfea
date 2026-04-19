@@ -15,8 +15,8 @@ from peetsfea.tx_rect_void import load_tx_rect_void_spec
 from peetsfea.tx_rect_void import modeled_body_bounds_from_boxes
 from peetsfea.tx_rect_void import profile_for_modeled_role
 from peetsfea.tx_rect_void import realize_tx_rect_void_spec
-from peetsfea.type2_plate_stack import expected_plate_stack_body_names
 from peetsfea.type2_plate_stack import expected_plate_stack_body_groups
+from peetsfea.type2_plate_stack import expected_plate_stack_body_names
 from peetsfea.type2_step_ledger import Type2DirectModeledArtifact
 from peetsfea.type2_step_ledger import Type2ImportEmPolicy
 from peetsfea.type2_step_ledger import Type2StepLedger
@@ -29,7 +29,6 @@ from peetsfea.type2_step_scene import build_modeled_single_coil_scene_data
 from peetsfea.type2_step_scene import build_non_model_scene_entry
 from peetsfea.type2_step_scene import build_non_model_scene_shapes
 from peetsfea.type2_step_scene import require_non_model_object_spec
-from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
@@ -51,6 +50,14 @@ DEFAULT_LEDGER_PATH = DEFAULT_OUTPUT_DIR / "type2_step_ledger.json"
 DEFAULT_SCENE_STEP_PATH = DEFAULT_OUTPUT_DIR / "type2_scene.step"
 _TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
 _RX_FERRITE_GROUP_NAME = "g_ferrite_rx"
+_PLATE_STACK_MERGED_BODY_NAMES: tuple[str, ...] = (
+    "tx_stack_pet_psa",
+    "tx_stack_ferrite",
+    "tx_stack_air",
+    "rx_stack_pet_psa",
+    "rx_stack_ferrite",
+    "rx_stack_air",
+)
 
 
 def _validate_top_level_scene_child(shape: bd.Shape) -> None:
@@ -94,6 +101,26 @@ def _remove_generated_type2_artifacts(output_dir: Path) -> None:
             if not stale_dir_path.is_dir():
                 raise RuntimeError(f"type2 generated artifact path must be a directory: {stale_dir_path}")
             shutil.rmtree(stale_dir_path)
+
+
+def _require_plate_stack_merged_scene_shape_contract(*, scene_shapes: tuple[bd.Shape, ...]) -> None:
+    scene_shape_by_label = {shape.label: shape for shape in scene_shapes}
+    for body_name in _PLATE_STACK_MERGED_BODY_NAMES:
+        if body_name not in scene_shape_by_label:
+            continue
+        shape = scene_shape_by_label[body_name]
+        child_count = len(tuple(shape.children))
+        if child_count != 0:
+            raise RuntimeError(
+                "type2 plate-stack merged body must be an exact solid without child expansion at STEP handoff "
+                f"(body_name={body_name}, child_count={child_count})"
+            )
+        solid_count = len(tuple(shape.solids()))
+        if solid_count != 1:
+            raise RuntimeError(
+                "type2 plate-stack merged body must be exactly one solid at STEP handoff "
+                f"(body_name={body_name}, solid_count={solid_count})"
+            )
 
 
 def _export_modeled_single_coil(
@@ -188,6 +215,38 @@ def _rx_underlay_expected_body_names(*, repeat_count: int) -> list[str]:
     ]
 
 
+def _plate_stack_expected_body_names(
+    *,
+    spec: ModeledTxPlateStackSpec | ModeledRxPlateStackSpec,
+    seed: int,
+) -> list[str]:
+    realized_turn_count = resolve_modeled_plate_stack_turn_count(spec, seed=seed)
+    return list(
+        expected_plate_stack_body_names(
+            role=spec.role,
+            ferrite_set_count=spec.ferrite_set_count,
+            turn_count=realized_turn_count,
+            pcb_total_thickness_mm=spec.pcb_total_thickness_mm,
+        )
+    )
+
+
+def _plate_stack_expected_body_groups(
+    *,
+    spec: ModeledTxPlateStackSpec | ModeledRxPlateStackSpec,
+) -> list[dict[str, object]]:
+    return [
+        {
+            "group_name": group_entry["group_name"],
+            "member_body_names": group_entry["member_body_names"],
+        }
+        for group_entry in expected_plate_stack_body_groups(
+            role=spec.role,
+            ferrite_set_count=spec.ferrite_set_count,
+        )
+    ]
+
+
 def _ferrite_group_name_for_modeled_role(
     *,
     role: Literal["tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack"],
@@ -279,19 +338,12 @@ def _require_modeled_expected_body_contract(
                     f"type2 modeled object spec registry must retain ModeledRxPlateStackSpec for {object_id} "
                     f"(actual={type(modeled_spec).__name__})"
                 )
-            expected_names = list(
-                expected_plate_stack_body_names(
-                    role=cast(ModeledPlateStackSpec, modeled_spec).role,
-                    ferrite_set_count=cast(ModeledPlateStackSpec, modeled_spec).ferrite_set_count,
-                    turn_count=resolve_modeled_plate_stack_turn_count(cast(ModeledPlateStackSpec, modeled_spec), seed=seed),
-                    pcb_total_thickness_mm=cast(ModeledPlateStackSpec, modeled_spec).pcb_total_thickness_mm,
-                )
+            expected_names = _plate_stack_expected_body_names(
+                spec=cast(ModeledTxPlateStackSpec | ModeledRxPlateStackSpec, modeled_spec),
+                seed=seed,
             )
-            expected_groups = list(
-                expected_plate_stack_body_groups(
-                    role=cast(ModeledPlateStackSpec, modeled_spec).role,
-                    ferrite_set_count=cast(ModeledPlateStackSpec, modeled_spec).ferrite_set_count,
-                )
+            expected_groups = _plate_stack_expected_body_groups(
+                spec=cast(ModeledTxPlateStackSpec | ModeledRxPlateStackSpec, modeled_spec),
             )
         else:
             raise ValueError(f"unsupported modeled object role in type2 ledger: {role}")
@@ -687,6 +739,7 @@ def export_type2_step_artifacts(
     scene_body_names = tuple(shape.label for shape in scene_shapes)
     if len(scene_body_names) != len(set(scene_body_names)):
         raise RuntimeError(f"type2 scene STEP body names must be unique (actual={scene_body_names})")
+    _require_plate_stack_merged_scene_shape_contract(scene_shapes=tuple(scene_shapes))
     for shape in scene_shapes:
         _validate_top_level_scene_child(shape)
     scene = bd.Compound(children=scene_shapes, label="type2_scene")

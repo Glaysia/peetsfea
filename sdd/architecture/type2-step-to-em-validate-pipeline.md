@@ -1,7 +1,7 @@
 ---
 title: Type2 STEP to EM Validate Pipeline
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 11:05
+updated: 2026-04-19 @ 05:36
 tags:
   - step-export
   - sdd
@@ -23,7 +23,7 @@ tags:
   - entry: [[sdd/code/entry/setup_type2_step.py]]
   - runtime: [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
 - active plate-stack build owner는 import-only helper direct call이 아니라 role-aware setup-ready
-  facade다. same facade가 exact plate-stack pair를 port-ready branch로 처리한다.
+  facade다. same facade가 exact plate-stack pair를 full-EM-ready branch로 처리한다.
 - import-only helper는 geometry inspection / import-only surface다. active default build owner가 아니다.
 - notebook `hfss_sampled.ipynb`는 sampled/build output artifact를 읽는 thin manual consumer다.
 - notebook `view_step_files.ipynb`는 `VIEW_INDEX = -1`일 때 fixed example refresh path, `VIEW_INDEX >= 0`일 때 manifest `entries` order 기반 sampled STEP selection을 사용한다.
@@ -45,8 +45,14 @@ tags:
   - RX underlay footprint는 `rx_region_max` full `YZ` bounds다.
   - TX exact names는 `tx_underlay_*`, RX exact names는 `under_rx_*`다.
   - new underlay exact object/body names는 feature-local rule로 `<= 32` chars여야 한다.
-  - ferrite-family group contract는 role별 단일 group이다:
-    `g_ferrite_tx`, `g_ferrite_rx`가 ferrite/PET_PSA/vacuum members를 current creation order로 가진다.
+  - active plate-stack ferrite-family exact-name contract는 per-set `*_uN`이 아니라
+    per-material merged 3-body/role이다.
+    - TX: `tx_stack_pet_psa`, `tx_stack_ferrite`, `tx_stack_air`
+    - RX: `rx_stack_pet_psa`, `rx_stack_ferrite`, `rx_stack_air`
+  - active plate-stack ferrite-family는 STEP export 전에 unite가 끝난 exact named body여야 한다.
+  - ferrite-family child가 ungrouped 상태로 STEP handoff에 남는 export는 unsupported다.
+  - ferrite-family group contract는 role별 단일 group이며 `g_ferrite_tx`, `g_ferrite_rx` member는
+    flattened per-set stack가 아니라 merged 3-body exact names다.
 
 ## Runtime Flow
 1. sample 단계가 source TOML에서 frozen sampled TOML을 만들고, `make_step_on_sample=true`일 때만 same-worker scene STEP/retained step ledger까지 만든다.
@@ -58,22 +64,16 @@ tags:
 4. build 단계가 retained step ledger를 재사용하거나 missing STEP을 same-worker에서 만든 뒤
    role-aware setup-ready runtime으로 `.aedt`와 imported ledger를 만든다.
 5. import-only runtime이 STEP import, ownership partition, style/material application, metadata-driven port-sheet reconstruction을 수행한다.
-6. setup-ready runtime은 같은 import core를 재사용한 뒤 modeled role family에 따라 분기한다:
-   - coil exact pair:
-     - `AssignLengthOp`
-     - radiation boundary
-     - explicit lumped ports
-     - source phase
-     - analysis/report templates
-     - `validate_pipeline()`
-     - `ValidateDesign()`
-     - final `.aedt` save
-   - plate-stack exact pair:
-     - radiation boundary
-     - explicit lumped ports
-     - final `.aedt` save
-     - mesh/direct EM input/source/analysis/report/`ValidateDesign` ownership은 없다
-     - mesh/direct EM helpers는 호출하지 않는다
+6. setup-ready runtime은 같은 import core를 재사용한 뒤 exact modeled pair(coil/plate-stack) 모두에 대해
+   동일한 full setup-ready 후반부를 실행한다:
+   - post-import mesh
+   - radiation boundary
+   - explicit lumped ports
+   - source phase
+   - analysis/report templates
+   - `validate_pipeline()`
+   - `ValidateDesign()`
+   - final `.aedt` save
 7. notebook은 finished artifact만 읽고 sample/build/runtime을 다시 호출하지 않는다.
 
 ## Ownership
@@ -83,7 +83,7 @@ tags:
 - current explicit port contract는 reconstructed sheet를 사용한다.
   - coil: `tx_port_sheet` / `rx_port_sheet`
   - plate-stack: `tx_plate_port_sheet` / `rx_plate_port_sheet`
-- current numeric port naming rule은 plate-stack port-ready branch에도 동일 적용된다.
+- current numeric port naming rule은 plate-stack full-EM-ready branch에도 동일 적용된다.
   - TX boundary/excitation = `1` / `1_T1`
   - RX boundary/excitation = `2` / `2_T1`
 - underlay geometry/footprint/gap contract의 canonical owner는 type2 scene/export/import 계층이다.
@@ -96,14 +96,17 @@ tags:
 ## Invariants / Fail-fast
 - `import_3d_cad`, `save_project`, `release_desktop`, `create_region`,
   `assign_radiation_boundary_to_faces`, `AssignLumpedPort` false는 모두 즉시 raise다.
-- coil branch에서는 `AssignLengthOp`, source/analysis calls, `ValidateDesign()` false도 즉시 raise다.
+- setup-ready full EM chain에서는 post-import mesh, source/analysis calls, `ValidateDesign()` false도 즉시 raise다.
 - attached-session path는 dirty design을 재사용하지 않고 fresh design으로 rehome해야 한다.
-- setup-ready mesh contract는 conductor-only exact set이다: `tx_copper_l0 | tx_copper_stack` + `rx_copper_l0`.
-- plate-stack setup-ready branch는 mesh contract owner가 아니다. direct mesh helper는 계속 unsupported다.
+- setup-ready mesh contract는 conductor-only exact set이며 imported exact-name order의 copper family 전체다:
+  `*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in`, `*_stub_out`.
 - TX/RX underlay exact-name bodies와 reconstructed port sheets는 mesh 대상에 들어가지 않는다.
+- `*_pcb_wall` / `*_pcb_coil` bodies도 mesh 대상이 아니다.
 - current import/runtime contract에서 `tx_port_sheet` / `rx_port_sheet`는 metadata-driven reconstructed sheet다. PCB/copper exact-name contract와 별도 ownership이다.
 - ferrite-family import/runtime contract에서 per-set sandwich group은 canonical owner가 아니다.
-  canonical group contract는 `g_ferrite_tx` / `g_ferrite_rx` 단일 role group이다.
+  canonical group contract는 `g_ferrite_tx` / `g_ferrite_rx` 단일 role group이고,
+  member는 merged exact names (`*_stack_pet_psa`, `*_stack_ferrite`, `*_stack_air`)다.
+- generic `SOLID*` ferrite-family drift는 import-side rename 대상이 아니라 export-side contract failure다.
 
 ## Supporting Modules
 - import body assembly: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py.md`

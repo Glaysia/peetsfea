@@ -19,24 +19,28 @@ _PLATE_STACK_STUB_LENGTH_MM = 5.0
 _PLATE_STACK_PCB_TOTAL_THICKNESS_MM = 0.4
 _TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
 _RX_FERRITE_GROUP_NAME = "g_ferrite_rx"
-_TX_FERRITE_GROUP_MEMBER_PREFIXES: tuple[str, ...] = (
+_TX_SINGLE_COIL_FERRITE_GROUP_MEMBER_PREFIXES: tuple[str, ...] = (
     "tx_underlay_ferrite_u",
     "tx_underlay_pet_psa_u",
     "tx_underlay_air_u",
     "tx_wall_ferrite_u",
     "tx_wall_pet_psa_u",
     "tx_wall_air_u",
-    "tx_stack_ferrite_u",
-    "tx_stack_pet_psa_u",
-    "tx_stack_air_u",
 )
-_RX_FERRITE_GROUP_MEMBER_PREFIXES: tuple[str, ...] = (
+_RX_SINGLE_COIL_FERRITE_GROUP_MEMBER_PREFIXES: tuple[str, ...] = (
     "under_rx_ferrite_u",
     "under_rx_pet_psa_u",
     "under_rx_air_u",
-    "rx_stack_ferrite_u",
-    "rx_stack_pet_psa_u",
-    "rx_stack_air_u",
+)
+_TX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES: tuple[str, ...] = (
+    "tx_stack_pet_psa",
+    "tx_stack_ferrite",
+    "tx_stack_air",
+)
+_RX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES: tuple[str, ...] = (
+    "rx_stack_pet_psa",
+    "rx_stack_ferrite",
+    "rx_stack_air",
 )
 
 
@@ -646,14 +650,43 @@ def _rx_plate_stack_expected_names(
 
 
 def _ferrite_group_members_for_role(*, role: str, expected_names: list[str]) -> tuple[str, ...]:
-    member_prefixes: tuple[str, ...]
+    if role == "tx_plate_stack":
+        return tuple(name for name in expected_names if name in _TX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES)
+    if role == "rx_plate_stack":
+        return tuple(name for name in expected_names if name in _RX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES)
     if role.startswith("tx_"):
-        member_prefixes = _TX_FERRITE_GROUP_MEMBER_PREFIXES
-    elif role.startswith("rx_"):
-        member_prefixes = _RX_FERRITE_GROUP_MEMBER_PREFIXES
-    else:
-        raise ValueError(f"unsupported ferrite group role in test helper: {role!r}")
-    return tuple(name for name in expected_names if name.startswith(member_prefixes))
+        member_prefixes = _TX_SINGLE_COIL_FERRITE_GROUP_MEMBER_PREFIXES
+        return tuple(name for name in expected_names if name.startswith(member_prefixes))
+    if role.startswith("rx_"):
+        member_prefixes = _RX_SINGLE_COIL_FERRITE_GROUP_MEMBER_PREFIXES
+        return tuple(name for name in expected_names if name.startswith(member_prefixes))
+    raise ValueError(f"unsupported ferrite group role in test helper: {role!r}")
+
+
+def _legacy_tx_plate_stack_expected_names() -> list[str]:
+    expected_names = _tx_plate_stack_expected_names()
+    renamed: list[str] = []
+    for name in expected_names:
+        if name == "tx_stack_pet_psa":
+            renamed.append("tx_stack_pet_psa_u0")
+            continue
+        if name == "tx_stack_ferrite":
+            renamed.append("tx_stack_ferrite_u0")
+            continue
+        if name == "tx_stack_air":
+            renamed.append("tx_stack_air_u0")
+            continue
+        renamed.append(name)
+    return renamed
+
+
+def _legacy_tx_plate_stack_imported_name_batch() -> tuple[str, ...]:
+    return (
+        "environment",
+        "tx_region",
+        "rx_region_max",
+        *_legacy_tx_plate_stack_expected_names(),
+    )
 
 
 def _expected_ferrite_group_for_role(*, role: str, expected_names: list[str]) -> list[ExportedBodyGroup]:
@@ -822,6 +855,18 @@ def _plate_stack_imported_name_batch() -> tuple[str, ...]:
         *_tx_plate_stack_expected_names(),
         *_rx_plate_stack_expected_names(),
     )
+
+
+def _plate_stack_imported_name_batch_with_tx_solid_drift() -> tuple[str, ...]:
+    imported_names = [name for name in _plate_stack_imported_name_batch() if name != "tx_stack_pet_psa"]
+    imported_names.append("SOLID_317")
+    return tuple(imported_names)
+
+
+def _plate_stack_imported_name_batch_with_rx_solid_drift() -> tuple[str, ...]:
+    imported_names = [name for name in _plate_stack_imported_name_batch() if name != "rx_stack_ferrite"]
+    imported_names.append("SOLID_911")
+    return tuple(imported_names)
 
 
 def _expected_mesh_length_payload(*, tx_object_name: str = "tx_copper_l0") -> list[object]:
@@ -1072,32 +1117,33 @@ def test_import_type2_step_ledger_accepts_tx_and_rx_plate_stack_geometry_only_ro
     assert session.design.import_dataset_calls == [str(Path(__file__).resolve().parents[2] / "notebooks" / "mu_p.tab")]
     assert len(session.oproject.add_dataset_calls) == 2
     assert session.materials.aedmattolibrary_calls == ["PET_PSA"]
-    assert session.modeler.objects["tx_copper_wall_t0"].material_name == "copper"
-    assert session.modeler.objects["tx_pcb_wall"].material_name == "FR4_epoxy"
-    assert session.modeler.objects["tx_stack_ferrite_u0"].material_name == "MULL12060ferrite"
-    assert session.modeler.objects["tx_stack_pet_psa_u0"].material_name == "PET_PSA"
-    assert session.modeler.objects["tx_stack_air_u0"].material_name == "vacuum"
-    assert session.modeler.objects["tx_copper_coil_t0"].material_name == "copper"
-    assert session.modeler.objects["tx_bridge_s0"].material_name == "copper"
-    assert session.modeler.objects["tx_stub_in"].material_name == "copper"
-    assert session.modeler.objects["tx_stub_out"].material_name == "copper"
-    assert session.modeler.objects["rx_copper_wall_t0"].material_name == "copper"
-    assert session.modeler.objects["rx_pcb_wall"].material_name == "FR4_epoxy"
-    assert session.modeler.objects["rx_stack_ferrite_u0"].material_name == "MULL12060ferrite"
-    assert session.modeler.objects["rx_stack_pet_psa_u0"].material_name == "PET_PSA"
-    assert session.modeler.objects["rx_stack_air_u0"].material_name == "vacuum"
-    assert session.modeler.objects["rx_copper_coil_t0"].material_name == "copper"
-    assert session.modeler.objects["rx_bridge_s0"].material_name == "copper"
-    assert session.modeler.objects["rx_stub_in"].material_name == "copper"
-    assert session.modeler.objects["rx_stub_out"].material_name == "copper"
+    assert session.modeler.objects["tx_stack_ferrite"].material_name == "MULL12060ferrite"
+    assert session.modeler.objects["tx_stack_pet_psa"].material_name == "PET_PSA"
+    assert session.modeler.objects["tx_stack_air"].material_name == "vacuum"
+    assert session.modeler.objects["rx_stack_ferrite"].material_name == "MULL12060ferrite"
+    assert session.modeler.objects["rx_stack_pet_psa"].material_name == "PET_PSA"
+    assert session.modeler.objects["rx_stack_air"].material_name == "vacuum"
     assert session.mesh_module.assign_length_op_calls == []
     assert session.radiation_boundary_calls == []
     assert "mesh" not in result
     assert "boundary" not in result
     modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    tx_imported_object_names = cast(list[str], modeled_by_id["tx_plate_stack"]["imported_object_names"])
+    rx_imported_object_names = cast(list[str], modeled_by_id["rx_plate_stack"]["imported_object_names"])
+    tx_ferrite_family_imported_names = [name for name in tx_imported_object_names if name.startswith("tx_stack_")]
+    rx_ferrite_family_imported_names = [name for name in rx_imported_object_names if name.startswith("rx_stack_")]
+    assert tx_ferrite_family_imported_names == list(_TX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES)
+    assert rx_ferrite_family_imported_names == list(_RX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES)
+    assert all(not name.startswith("SOLID") for name in [*tx_imported_object_names, *rx_imported_object_names])
     assert modeled_by_id["tx_plate_stack"]["imported_object_names"] == [
         *_tx_plate_stack_expected_names(),
         "tx_plate_port_sheet",
+    ]
+    assert modeled_by_id["tx_plate_stack"]["imported_body_groups"] == [
+        {
+            "group_name": _TX_FERRITE_GROUP_NAME,
+            "member_object_names": list(_TX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES),
+        }
     ]
     assert modeled_by_id["tx_plate_stack"]["imported_body_groups"] == [
         {
@@ -1110,6 +1156,12 @@ def test_import_type2_step_ledger_accepts_tx_and_rx_plate_stack_geometry_only_ro
     assert modeled_by_id["rx_plate_stack"]["imported_object_names"] == [
         *_rx_plate_stack_expected_names(),
         "rx_plate_port_sheet",
+    ]
+    assert modeled_by_id["rx_plate_stack"]["imported_body_groups"] == [
+        {
+            "group_name": _RX_FERRITE_GROUP_NAME,
+            "member_object_names": list(_RX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES),
+        }
     ]
     assert modeled_by_id["rx_plate_stack"]["imported_body_groups"] == [
         {
@@ -1134,6 +1186,104 @@ def test_import_type2_step_ledger_accepts_tx_and_rx_plate_stack_geometry_only_ro
     ]
     written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
     assert written == result
+
+
+def test_import_type2_step_ledger_rejects_legacy_plate_stack_u_names(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    tx_entry = _tx_plate_stack_entry(tmp_path)
+    tx_entry["expected_exported_body_names"] = _legacy_tx_plate_stack_expected_names()
+    tx_entry["expected_exported_body_count"] = len(_legacy_tx_plate_stack_expected_names())
+    tx_entry["expected_exported_body_groups"] = []
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=[tx_entry],
+    )
+    session = _FakeHfss(
+        modeler=_FakeModeler(imported_name_batches=[_legacy_tx_plate_stack_imported_name_batch()])
+    )
+
+    with pytest.raises(ValueError, match=r"must include all merged tx plate-stack ferrite members"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            design_name="fake_type2_import",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
+
+
+@pytest.mark.parametrize(
+    ("imported_batch", "match"),
+    [
+        (
+            _plate_stack_imported_name_batch_with_tx_solid_drift(),
+            (
+                r"missing required modeled body name \(object_id=tx_plate_stack, body_name=tx_stack_pet_psa\); "
+                r"detected generic SOLID\* modeled names, which is an export-contract violation"
+            ),
+        ),
+        (
+            _plate_stack_imported_name_batch_with_rx_solid_drift(),
+            (
+                r"missing required modeled body name \(object_id=rx_plate_stack, body_name=rx_stack_ferrite\); "
+                r"detected generic SOLID\* modeled names, which is an export-contract violation"
+            ),
+        ),
+    ],
+)
+def test_import_type2_step_ledger_rejects_plate_stack_solid_name_drift(
+    tmp_path: Path,
+    imported_batch: tuple[str, ...],
+    match: str,
+) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=_plate_stack_modeled_objects(tmp_path),
+    )
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[imported_batch]))
+
+    with pytest.raises(ValueError, match=match):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            design_name="fake_type2_import",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
+
+
+def test_import_type2_step_ledger_fails_unclaimed_solid_name_as_export_contract_violation(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=[_modeled_entry()],
+    )
+    session = _FakeHfss(
+        modeler=_FakeModeler(
+            imported_name_batches=[
+                ("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet", "SOLID_404")
+            ]
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"generic SOLID\* names that do not map to ledger ownership; this is an export-contract violation",
+    ):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            design_name="fake_type2_import",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
 
 
 def test_import_type2_step_ledger_styles_multilayer_tx_parallel_stack_before_mesh_validation_fails(tmp_path: Path) -> None:

@@ -31,6 +31,35 @@ from peetsfea.backend.pyaedt.type2_step_import_style import (
 )
 from peetsfea.backend.pyaedt.type2_step_runtime_common import current_object_names
 
+_TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
+_RX_FERRITE_GROUP_NAME = "g_ferrite_rx"
+_TX_MERGED_STACK_MEMBER_NAMES: tuple[str, str, str] = (
+    "tx_stack_pet_psa",
+    "tx_stack_ferrite",
+    "tx_stack_air",
+)
+_RX_MERGED_STACK_MEMBER_NAMES: tuple[str, str, str] = (
+    "rx_stack_pet_psa",
+    "rx_stack_ferrite",
+    "rx_stack_air",
+)
+
+
+def _is_legacy_ferrite_family_name_for_plate_stack(name: str) -> bool:
+    return name.startswith(
+        (
+            "tx_underlay_ferrite_u",
+            "tx_underlay_pet_psa_u",
+            "tx_underlay_air_u",
+            "tx_wall_ferrite_u",
+            "tx_wall_pet_psa_u",
+            "tx_wall_air_u",
+            "under_rx_ferrite_u",
+            "under_rx_pet_psa_u",
+            "under_rx_air_u",
+        )
+    )
+
 
 class Type2ImportedLedger(TypedDict):
     source_toml_path: str
@@ -41,6 +70,105 @@ class Type2ImportedLedger(TypedDict):
     imported_ledger_path: str
     non_model_objects: list[dict[str, object]]
     modeled_objects: list[dict[str, object]]
+
+
+def _require_plate_stack_merged_material_contract(*, modeled_entry: dict[str, object], context: str) -> None:
+    role = require_non_empty_str(require_key(modeled_entry, key="role", context=context), context=f"{context}.role")
+    if role not in ("tx_plate_stack", "rx_plate_stack"):
+        return
+    expected_member_names: tuple[str, str, str]
+    expected_group_name: str
+    role_prefix: str
+    if role == "tx_plate_stack":
+        expected_member_names = _TX_MERGED_STACK_MEMBER_NAMES
+        expected_group_name = _TX_FERRITE_GROUP_NAME
+        role_prefix = "tx"
+    else:
+        expected_member_names = _RX_MERGED_STACK_MEMBER_NAMES
+        expected_group_name = _RX_FERRITE_GROUP_NAME
+        role_prefix = "rx"
+    expected_exported_body_names = validated_object_names(
+        cast(
+            Sequence[object],
+            require_key(modeled_entry, key="expected_exported_body_names", context=context),
+        ),
+        context=f"{context}.expected_exported_body_names",
+    )
+    expected_name_set = set(expected_exported_body_names)
+    missing_merged_member_names = [name for name in expected_member_names if name not in expected_name_set]
+    if missing_merged_member_names:
+        raise ValueError(
+            f"{context}.expected_exported_body_names must include merged plate-stack material members for {role} "
+            f"(missing={missing_merged_member_names}, actual={expected_exported_body_names})"
+        )
+    legacy_ferrite_member_names = [
+        name for name in expected_exported_body_names if _is_legacy_ferrite_family_name_for_plate_stack(name)
+    ]
+    if legacy_ferrite_member_names:
+        raise ValueError(
+            f"{context}.expected_exported_body_names contains legacy/import-expanded ferrite-family names for {role}; "
+            "this import path only accepts merged exact ferrite-family names "
+            f"(legacy_names={legacy_ferrite_member_names}, required={list(expected_member_names)})"
+        )
+    required_exact_names = (
+        f"{role_prefix}_pcb_wall",
+        f"{role_prefix}_pcb_coil",
+        f"{role_prefix}_stub_in",
+        f"{role_prefix}_stub_out",
+    )
+    missing_exact_names = [name for name in required_exact_names if name not in expected_name_set]
+    if missing_exact_names:
+        raise ValueError(
+            f"{context}.expected_exported_body_names must retain full explicit plate-stack bodies for {role} "
+            f"(missing={missing_exact_names}, actual={expected_exported_body_names})"
+        )
+    required_family_prefixes = (
+        f"{role_prefix}_copper_wall_t",
+        f"{role_prefix}_copper_coil_t",
+        f"{role_prefix}_bridge_s",
+    )
+    missing_family_prefixes = [
+        family_prefix
+        for family_prefix in required_family_prefixes
+        if not any(name.startswith(family_prefix) for name in expected_exported_body_names)
+    ]
+    if missing_family_prefixes:
+        raise ValueError(
+            f"{context}.expected_exported_body_names must retain full explicit plate-stack body families for {role} "
+            f"(missing_prefixes={missing_family_prefixes}, actual={expected_exported_body_names})"
+        )
+    raw_groups = require_key(modeled_entry, key="expected_exported_body_groups", context=context)
+    if not isinstance(raw_groups, list):
+        raise TypeError(f"{context}.expected_exported_body_groups must be a list")
+    if len(raw_groups) != 1:
+        raise ValueError(
+            f"{context}.expected_exported_body_groups must contain exactly one ferrite group for {role} "
+            f"(actual={len(raw_groups)})"
+        )
+    raw_group = raw_groups[0]
+    if not isinstance(raw_group, dict):
+        raise TypeError(f"{context}.expected_exported_body_groups[0] must be a table/object")
+    group_name = require_non_empty_str(
+        require_key(raw_group, key="group_name", context=f"{context}.expected_exported_body_groups[0]"),
+        context=f"{context}.expected_exported_body_groups[0].group_name",
+    )
+    if group_name != expected_group_name:
+        raise ValueError(
+            f"{context}.expected_exported_body_groups[0].group_name must be {expected_group_name!r} "
+            f"(actual={group_name!r})"
+        )
+    group_member_names = validated_object_names(
+        cast(
+            Sequence[object],
+            require_key(raw_group, key="member_body_names", context=f"{context}.expected_exported_body_groups[0]"),
+        ),
+        context=f"{context}.expected_exported_body_groups[0].member_body_names",
+    )
+    if group_member_names != list(expected_member_names):
+        raise ValueError(
+            f"{context}.expected_exported_body_groups[0].member_body_names must match merged plate-stack material contract "
+            f"(expected={list(expected_member_names)}, actual={group_member_names})"
+        )
 
 
 def _import_scene_step(
@@ -181,6 +309,7 @@ def build_imported_ledger(
     imported_modeled_objects: list[dict[str, object]] = []
     for index, validated_entry in enumerate(ledger["modeled_objects"]):
         context = f"modeled_objects[{index}]"
+        _require_plate_stack_merged_material_contract(modeled_entry=validated_entry["entry"], context=context)
         owner_id = require_non_empty_str(
             require_key(validated_entry["entry"], key="placement_owner_id", context=context),
             context=f"{context}.placement_owner_id",

@@ -16,6 +16,22 @@ _SUPPORTED_MODELED_PLANES: frozenset[str] = frozenset({"XY", "YZ"})
 _PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
 _TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
 _RX_FERRITE_GROUP_NAME = "g_ferrite_rx"
+_TX_MERGED_STACK_PET_PSA_NAME = "tx_stack_pet_psa"
+_TX_MERGED_STACK_FERRITE_NAME = "tx_stack_ferrite"
+_TX_MERGED_STACK_AIR_NAME = "tx_stack_air"
+_RX_MERGED_STACK_PET_PSA_NAME = "rx_stack_pet_psa"
+_RX_MERGED_STACK_FERRITE_NAME = "rx_stack_ferrite"
+_RX_MERGED_STACK_AIR_NAME = "rx_stack_air"
+_TX_MERGED_STACK_MEMBER_NAMES: tuple[str, ...] = (
+    _TX_MERGED_STACK_PET_PSA_NAME,
+    _TX_MERGED_STACK_FERRITE_NAME,
+    _TX_MERGED_STACK_AIR_NAME,
+)
+_RX_MERGED_STACK_MEMBER_NAMES: tuple[str, ...] = (
+    _RX_MERGED_STACK_PET_PSA_NAME,
+    _RX_MERGED_STACK_FERRITE_NAME,
+    _RX_MERGED_STACK_AIR_NAME,
+)
 _TX_FERRITE_GROUP_MEMBER_PREFIXES: tuple[str, ...] = (
     "tx_underlay_ferrite_u",
     "tx_underlay_pet_psa_u",
@@ -23,22 +39,22 @@ _TX_FERRITE_GROUP_MEMBER_PREFIXES: tuple[str, ...] = (
     "tx_wall_ferrite_u",
     "tx_wall_pet_psa_u",
     "tx_wall_air_u",
-    "tx_stack_ferrite_u",
-    "tx_stack_pet_psa_u",
-    "tx_stack_air_u",
 )
 _RX_FERRITE_GROUP_MEMBER_PREFIXES: tuple[str, ...] = (
     "under_rx_ferrite_u",
     "under_rx_pet_psa_u",
     "under_rx_air_u",
-    "rx_stack_ferrite_u",
-    "rx_stack_pet_psa_u",
-    "rx_stack_air_u",
 )
-_ALL_FERRITE_GROUP_MEMBER_PREFIXES: tuple[str, ...] = (
-    *_TX_FERRITE_GROUP_MEMBER_PREFIXES,
-    *_RX_FERRITE_GROUP_MEMBER_PREFIXES,
-)
+def _is_tx_ferrite_family_name(name: str) -> bool:
+    if name in _TX_MERGED_STACK_MEMBER_NAMES:
+        return True
+    return name.startswith(_TX_FERRITE_GROUP_MEMBER_PREFIXES)
+
+
+def _is_rx_ferrite_family_name(name: str) -> bool:
+    if name in _RX_MERGED_STACK_MEMBER_NAMES:
+        return True
+    return name.startswith(_RX_FERRITE_GROUP_MEMBER_PREFIXES)
 
 _NON_MODEL_REQUIRED_FIELDS = (
     "object_id",
@@ -305,27 +321,60 @@ def _ferrite_group_contract_for_role(
     expected_exported_body_names: list[str],
     context: str,
 ) -> tuple[str, list[str]]:
-    member_prefixes: tuple[str, ...]
     expected_group_name: str
-    if role.startswith("tx_"):
-        member_prefixes = _TX_FERRITE_GROUP_MEMBER_PREFIXES
+    ferrite_group_members: list[str]
+    mismatched_role_members: list[str]
+    if role == "tx_plate_stack":
         expected_group_name = _TX_FERRITE_GROUP_NAME
-    elif role.startswith("rx_"):
-        member_prefixes = _RX_FERRITE_GROUP_MEMBER_PREFIXES
+        ferrite_group_members = [name for name in expected_exported_body_names if name in _TX_MERGED_STACK_MEMBER_NAMES]
+        mismatched_role_members = [
+            name
+            for name in expected_exported_body_names
+            if _is_rx_ferrite_family_name(name)
+            or (_is_tx_ferrite_family_name(name) and name not in _TX_MERGED_STACK_MEMBER_NAMES)
+        ]
+    elif role == "rx_plate_stack":
         expected_group_name = _RX_FERRITE_GROUP_NAME
+        ferrite_group_members = [name for name in expected_exported_body_names if name in _RX_MERGED_STACK_MEMBER_NAMES]
+        mismatched_role_members = [
+            name
+            for name in expected_exported_body_names
+            if _is_tx_ferrite_family_name(name)
+            or (_is_rx_ferrite_family_name(name) and name not in _RX_MERGED_STACK_MEMBER_NAMES)
+        ]
+    elif role.startswith("tx_"):
+        expected_group_name = _TX_FERRITE_GROUP_NAME
+        ferrite_group_members = [name for name in expected_exported_body_names if name.startswith(_TX_FERRITE_GROUP_MEMBER_PREFIXES)]
+        mismatched_role_members = [name for name in expected_exported_body_names if _is_rx_ferrite_family_name(name)]
+    elif role.startswith("rx_"):
+        expected_group_name = _RX_FERRITE_GROUP_NAME
+        ferrite_group_members = [name for name in expected_exported_body_names if name.startswith(_RX_FERRITE_GROUP_MEMBER_PREFIXES)]
+        mismatched_role_members = [name for name in expected_exported_body_names if _is_tx_ferrite_family_name(name)]
     else:
         raise ValueError(f"{context}.role is unsupported for ferrite group validation (actual={role!r})")
-    mismatched_role_members = [
-        name
-        for name in expected_exported_body_names
-        if name.startswith(_ALL_FERRITE_GROUP_MEMBER_PREFIXES) and not name.startswith(member_prefixes)
-    ]
+    if role == "tx_plate_stack":
+        missing_tx_merged_member_names = [
+            name for name in _TX_MERGED_STACK_MEMBER_NAMES if name not in expected_exported_body_names
+        ]
+        if missing_tx_merged_member_names:
+            raise ValueError(
+                f"{context}.expected_exported_body_names must include all merged tx plate-stack ferrite members "
+                f"(missing={missing_tx_merged_member_names})"
+            )
+    if role == "rx_plate_stack":
+        missing_rx_merged_member_names = [
+            name for name in _RX_MERGED_STACK_MEMBER_NAMES if name not in expected_exported_body_names
+        ]
+        if missing_rx_merged_member_names:
+            raise ValueError(
+                f"{context}.expected_exported_body_names must include all merged rx plate-stack ferrite members "
+                f"(missing={missing_rx_merged_member_names})"
+            )
     if mismatched_role_members:
         raise ValueError(
             f"{context}.expected_exported_body_names contains ferrite family bodies that do not match {role} "
             f"(mismatched={mismatched_role_members})"
         )
-    ferrite_group_members = [name for name in expected_exported_body_names if name.startswith(member_prefixes)]
     return (expected_group_name, ferrite_group_members)
 
 

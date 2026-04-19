@@ -1,7 +1,7 @@
 ---
 title: Type2 STEP to EM Validate Flow
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 11:05
+updated: 2026-04-19 @ 05:36
 tags:
   - step-export
   - sdd
@@ -19,11 +19,11 @@ flowchart TD
     StepScene["run/sampled/type2/<design_id>/type2_scene.step"]
     StepLedger["run/sampled/type2/<design_id>/type2_step_ledger.json\n+ em_policy"]
     ImportEntry["entry/import_type2_step.py"]
-    ImportCore["type2_step_import_core\nimport + partition + styling\n+ ferrite-group reconstruction\n+ port-sheet reconstruction"]
+    ImportCore["type2_step_import_core\nimport + partition + styling\n+ merged ferrite-group reconstruction\n+ port-sheet reconstruction"]
     ImportLedger["run/sampled/type2/<design_id>/type2_imported_ledger.json"]
     ImportAedt["run/sampled/type2/<design_id>/<design_id>.aedt"]
     SetupEntry["entry/setup_type2_step.py"]
-    Mesh["type2_step_post_import_mesh\nLength1 on tx_copper_l0|tx_copper_stack + rx_copper_l0"]
+    Mesh["type2_step_post_import_mesh\nLength1 on conductor-only copper family\n*_copper_wall_t*|*_copper_coil_t*|*_bridge_s*|*_stub_in|*_stub_out"]
     Boundary["build_boundary()\nabsolute-offset region\nexact 6 faces"]
     Ports["type2_step_port_assignment\n1/1_T1, 2/2_T1"]
     Adapter["type2_step_em_input\n-> EmPipelineInput"]
@@ -66,10 +66,23 @@ flowchart TD
 - `entry/sample.py`의 STEP export는 optional이고, `entry/build.py`가 missing STEP을 same-worker에서 보완할 수 있다.
 - imported ledger는 import handoff artifact다. setup-ready summary를 JSON으로 누적하지 않는다.
 - `tx_port_sheet` / `rx_port_sheet`는 STEP exact-name body가 아니라 metadata-driven reconstructed sheet다.
+- active plate-stack ferrite-family STEP exact names는 merged-per-material contract다:
+  TX `tx_stack_pet_psa`/`tx_stack_ferrite`/`tx_stack_air`,
+  RX `rx_stack_pet_psa`/`rx_stack_ferrite`/`rx_stack_air` (role당 exact 3 bodies).
+- active plate-stack ferrite-family는 STEP export 전에 unite가 끝난 exact named body여야 한다.
+- active plate-stack ferrite-family child는 ungrouped 상태로 STEP handoff에 남기지 않는다.
 - ferrite-family group contract는 per-set sandwich가 아니라 role별 단일 group이다:
-  `g_ferrite_tx` / `g_ferrite_rx` with ferrite/PET_PSA/vacuum members in current creation order.
+  `g_ferrite_tx` / `g_ferrite_rx` members는 flattened per-set stack가 아니라 merged 3 exact bodies다.
+- import에서 ferrite-family가 generic `SOLID*`로 보이면 export contract failure로 본다.
 - radiation boundary와 explicit lumped port는 setup-ready runtime이 1회만 만든다.
+- plate-stack exact pair도 setup-ready에서 source phase, analysis/report, `validate_pipeline()`,
+  `ValidateDesign()`, final save까지 full EM chain을 같은 순서로 수행한다.
 - 0.2.22 document contract에서 underlay footprint source는 coil bounds가 아니라 owner region full bounds다.
 - TX underlay는 `tx_region` full `XY` footprint + TX-only `underlay_gap_mm`, RX underlay는 `rx_region_max` full `YZ` footprint + `-X` boundary anchor를 쓴다.
 - underlay exact names는 TX `tx_underlay_*`, RX `under_rx_*`이며, underlay exact object/body names는 feature-local rule로 `<= 32` chars다.
-- mesh owner는 계속 conductor-only다. underlay bodies는 imported participant지만 mesh target set에는 들어가지 않는다.
+- mesh owner는 계속 conductor-only다. underlay/`*_pcb_wall`/`*_pcb_coil`/reconstructed port-sheet는
+  mesh target set에 들어가지 않는다.
+
+## Handoff
+- Owning architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
+- Primary plan: [[sdd/plans/0.2.22-type2-import-ledger-pipeline]]
