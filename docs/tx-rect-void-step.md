@@ -33,8 +33,11 @@ legacy `rx_single_coil` reference로만 유지된다.
 
 ## TOML 계약
 - `design.units`는 `"mm"`여야 한다.
-- `modeled_objects.outer_x_mm`와 `modeled_objects.outer_y_mm`는 각각 mm
-  단위 coil routing envelope 치수다. 외곽 Y는 ratio가 아니라 canonical mm 값이다.
+- `modeled_objects.outer_x_usage_ratio`와 `modeled_objects.outer_y_usage_ratio`는
+  placement owner span 대비 unitless usage ratio다.
+  - `rx_single_coil` current contract: `outer_x_mm = rx_region_max.size_y * outer_x_usage_ratio`,
+    `outer_y_mm = rx_region_max.size_z * outer_y_usage_ratio`.
+  - shared contract: local `X/Y`는 modeled role이 소유한 placement plane span에 매핑한다.
 - exported PCB body는 이 routing envelope를 그대로 쓰지 않고, generated copper
   layer의 최외곽 planar rectangle에서 파생된다.
 - `pcb_thickness_mm = 1.6`, `copper_thickness_mm = 0.1`이 type2 baseline이다.
@@ -56,10 +59,8 @@ legacy `rx_single_coil` reference로만 유지된다.
   - canonical encoding은 `[true, 0, 1, 2]`
   - realized candidate set은 `{0, 1}`
   - public example TOML(`examples/type2_fixed.toml`, `examples/type2_sweep.toml`)은 둘 다 `[true, 1, 1, 1]`로 고정해 wall stack을 항상 켠다
-- `void_*_over_*` 필드는 realized outer dimensions 대비 비율로 void 크기와
-  중심을 정의한다.
-- type2 v1은 type1 TX DD처럼 centered rectangular spiral만 지원하므로
-  `void_center_x_over_outer_x`와 `void_center_y_over_outer_y`는 0으로 고정한다.
+- type2 public schema에서는 `void_*` 필드를 지원하지 않는다.
+  legacy `void_*` 키가 type2 modeled object에 존재하면 즉시 실패한다.
 - `margin_ratio`는 대응하는 outer axis 대비 비율로 void-to-outer 최소
   clearance를 정의한다.
 - `metal_fill_factor`는 각 side-local pitch cell에서 copper trace가 차지하는

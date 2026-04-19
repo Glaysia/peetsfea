@@ -26,6 +26,7 @@ tags:
 - `sdd/plans/0.2.22-type2-pyaedt-step-import.md`
 - `sdd/plans/0.2.22-type2-import-ledger-pipeline.md`
 - `sdd/plans/0.2.22-type2-rx-single-coil.md`
+- `sdd/plans/0.2.22-type2-rx-single-coil-full-backing.md`
 - `sdd/plans/0.2.22-type2-multilayer-tx-generic-single-coil.md`
 - `sdd/plans/0.2.22-type2-tx-underlay-mull12060ferrite.md`
 - `sdd/plans/0.2.22-type2-sampled-build-split.md`
@@ -42,6 +43,7 @@ tags:
 - `sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio.md`
 - `sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio.md`
 - `sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array.md`
+- `sdd/plans/0.2.22-type2-rx-only-baseline.md`
 
 ## Type2 milestone order
 - single STEP + setup-ready notebook 방향: `sdd/plans/0.2.22-type2-single-step-setup-ready-pipeline.md`
@@ -51,6 +53,7 @@ tags:
 - historical import smoke: `sdd/plans/0.2.22-type2-pyaedt-step-import.md`
 - 구현된 import+ledger path: `sdd/plans/0.2.22-type2-import-ledger-pipeline.md`
 - RX single-coil role 확장: `sdd/plans/0.2.22-type2-rx-single-coil.md`
+- RX single-coil full backing: `sdd/plans/0.2.22-type2-rx-single-coil-full-backing.md`
 - generalized engine + TX multilayer direction: `sdd/plans/0.2.22-type2-multilayer-tx-generic-single-coil.md`
 - TX-only historical underlay note: `sdd/plans/0.2.22-type2-tx-underlay-mull12060ferrite.md`
 - active sampled/build split: `sdd/plans/0.2.22-type2-sampled-build-split.md`
@@ -64,6 +67,7 @@ tags:
 - plate-stack role-aware Z usage window: `sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio.md`
 - plate-stack global Y=0 centered usage window: `sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio.md`
 - TX plate-stack parallel count/array: `sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array.md`
+- RX-only active baseline and TX removal: `sdd/plans/0.2.22-type2-rx-only-baseline.md`
 - single-coil corner relief gap: `sdd/plans/0.2.22-type2-single-coil-corner-relief.md`
 - TX coil geometry repair: `sdd/plans/0.2.22-type2-tx-coil-geometry-repair.md`
 - 첫 modeled object role: `sdd/plans/tx-rect-void-step-generator.md`

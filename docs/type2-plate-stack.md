@@ -1,7 +1,7 @@
 ---
 title: type2-plate-stack
 created: 2026-04-19 @ 21:20
-updated: 2026-04-19 @ 23:10
+updated: 2026-04-20 @ 23:59
 tags:
   - type2
   - tx
@@ -12,13 +12,15 @@ tags:
 
 # Type2 Plate Stack
 
-이 문서는 active type2 plate-stack family의 shared runtime boundary를 설명한다.
+이 문서는 type2 plate-stack family의 shared runtime boundary를 설명한다.
 `tx_plate_stack`, `rx_plate_stack`는 scene/STEP ledger 단계의 modeled object role이며,
-current flow는 setup-ready full-EM-ready build path를 포함한다. import-only helper는 geometry inspection /
-import-only surface다. active example baseline에서 TX/RX PCB total thickness는 둘 다 `0.4 mm`다.
+current flow keeps this family as historical/component coverage. import-only helper는 geometry inspection /
+import-only surface다. active default example path is RX-only `rx_single_coil`; TX plate-stack is not the active
+TX baseline for future work.
 
 ## Shared Contract
 - plate-stack roles: `tx_plate_stack`, `rx_plate_stack`
+- active default does not use plate-stack roles; it uses RX `rx_single_coil` only.
 - TX/RX plate-stack generation ownership은 shared contract/runtime path 하나가 가진다.
   RX-specific 문서는 role-local detail reference이며 canonical owner가 아니다.
 - plate-stack entries는 coil terminal reconstruction owner가 아니라 geometry/export owner다.
@@ -101,8 +103,8 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
 - plate-stack roles는 port-sheet STEP body를 export하지 않는다. port sheet는 metadata-only helper다.
 
 ## HFSS Runtime Boundary
-- `peetsfea.backend.pyaedt.type2_step_setup_ready`의 active default build path는 plate-stack exact pair를
-  setup-ready full-EM-ready branch로 처리한다.
+- `peetsfea.backend.pyaedt.type2_step_setup_ready`의 active default build path는 RX-only `rx_single_coil`을
+  setup-ready full-EM-ready branch로 처리한다. Plate-stack exact-pair behavior is component regression coverage.
 - setup-ready facade는 plate-stack exact pair에서도 아래 후반부를 동일 실행한다.
   - post-import mesh
   - radiation boundary
@@ -127,9 +129,11 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
   sheet face together with `rx_plate_copper`.
 - underlay solids, `*_pcb_wall`/`*_pcb_coil`, reconstructed `tx_plate_port_sheet`/`rx_plate_port_sheet`는 mesh 대상이 아니다.
 - `build_type2_em_input()`는 plate-stack exact pair를 reject하지 않고 `EmPipelineInput`을 조립한다.
+- setup-ready RX-only work must not synthesize a TX plate-stack placeholder. Future TX support requires a new explicit
+  TX role/schema rather than fallback to this component surface.
 
 ## Role Notes
-- `tx_plate_stack`: active TX plate-stack는 `tx_region` top `z_usage_ratio` Z window와
+- `tx_plate_stack`: historical TX plate-stack는 `tx_region` top `z_usage_ratio` Z window와
   global `Y=0` centered `y_usage_ratio` Y window를 쓴다. `tx_region.min_x`에 붙어 `+X` 방향으로 쌓이고,
   input terminal stub는 wall-side `t0`, output terminal stub는 coil-side `t{N-1}`에서 각각 active `min_y` 기준 `-Y`로 `5.0 mm` 돌출한다.
 - `tx_plate_stack` array mode: `tx_coil_count = 1` keeps the existing exact-name behavior. `tx_coil_count > 1`
@@ -147,6 +151,6 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
   terminal stub는 같은 규칙으로 wall-side `t0` input과 coil-side `t{N-1}` output에서 active `min_y` 기준 `-Y`로 돌출한다.
 
 ## Legacy Coil Reference
-- `tx_single_coil` / legacy `rx_single_coil` coil geometry reference는
+- `tx_single_coil` / `rx_single_coil` coil geometry reference는
   [`docs/tx-rect-void-step.md`](tx-rect-void-step.md)에 남아 있다.
-- 그 문서는 legacy coil contract용이며, active TX/RX plate-stack contract 문서가 아니다.
+- 그 문서는 active RX single-coil geometry reference이며, plate-stack contract 문서가 아니다.

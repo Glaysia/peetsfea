@@ -1,7 +1,7 @@
 ---
 title: current pipeline
 created: 2026-04-17 @ 15:55
-updated: 2026-04-20 @ 00:45
+updated: 2026-04-20 @ 23:59
 tags:
   - type2
   - pipeline
@@ -14,8 +14,10 @@ tags:
 - The canonical sampled authoring input is `examples/type2_sweep.toml`.
 - `examples/type2_fixed.toml` remains the fixed single-design reference.
 - Type2 TOML owns both the STEP authoring registry and the EM report/output-variable contract.
-- The active TX/RX plate-stack runtime boundary is documented in
-  [`docs/type2-plate-stack.md`](type2-plate-stack.md).
+- The active default modeled set is RX-only: `rx_single_coil`.
+- This is a reset point for future TX work, not a TX disable mode. Active type2 does not emit TX geometry,
+  TX ports, TX sources, TX output expressions, or TX sampled owners.
+- RX single-coil geometry uses the rect/void coil contract in [`docs/tx-rect-void-step.md`](tx-rect-void-step.md).
 - The active runtime flow is:
   1. `entry/sample.py`
   2. `entry/build.py`
@@ -23,7 +25,7 @@ tags:
   4. optional STEP inspection via `notebooks/view_step_files.ipynb` using `VIEW_INDEX = -1` for the fixed example or manifest entry order for sampled outputs
 - `entry/sample.py` always writes `sampled.toml` and may also write STEP artifacts depending on `MAKE_STEP_ON_SAMPLE`.
 - `entry/build.py` always owns `.aedt` generation and will reuse existing STEP artifacts or generate missing STEP per entry before AEDT build.
-- For active plate-stack manifests, `entry/build.py` routes AEDT generation through the role-aware setup-ready facade (full-EM-ready branch), not the import-only helper.
+- For active type2 manifests, `entry/build.py` routes AEDT generation through the role-aware setup-ready facade (full-EM-ready branch), not the import-only helper.
 - If `MAKE_STEP_ON_SAMPLE = False`, sampled STEP inspection can fail until `entry/build.py` has processed that entry.
 
 ## Internal Helpers
@@ -31,7 +33,7 @@ tags:
 - `peetsfea.backend.pyaedt.type2_step_import_pipeline` remains the import-only helper.
 - `peetsfea.backend.pyaedt.type2_step_setup_ready` remains the setup-ready helper.
 - `entry/build.py` always calls the setup-ready facade for active type2 build; import-only remains a geometry inspection/import-only surface.
-- The setup-ready facade now handles both exact modeled pairs through the full EM helper chain:
+- The setup-ready facade now handles the active RX-only modeled set through the full EM helper chain:
   - post-import mesh
   - radiation boundary
   - explicit lumped ports
@@ -40,31 +42,26 @@ tags:
   - `validate_pipeline()`
   - `ValidateDesign()`
   - final `.aedt` save
-- plate-stack mesh contract is conductor-only united copper bodies:
-  - `tx_plate_copper`
-  - `rx_plate_copper`
+- active default mesh contract is conductor-only:
+  - RX: `rx_copper_l0`
 - underlay/PCB/reconstructed port-sheet bodies are not mesh targets.
-- plate-stack import-only styling now reconstructs metadata-only `tx_plate_port_sheet` / `rx_plate_port_sheet`
-  from ledger `stub_port` metadata; these sheets are not STEP scene bodies.
-- setup-ready plate-stack branch uses the same reconstructed `tx_plate_port_sheet` / `rx_plate_port_sheet`
-  with numeric boundary/excitation names `1/1_T1` and `2/2_T1`.
-- active plate-stack ferrite-family STEP exact-name contract is merged-per-material, role당 3-body only:
+- setup-ready active default uses reconstructed `rx_port_sheet`
+  with numeric boundary/excitation name `1/1_T1`.
+- historical plate-stack ferrite-family STEP exact-name contract is merged-per-material, role당 3-body only:
   - TX: `tx_stack_pet_psa`, `tx_stack_ferrite`, `tx_stack_air`
   - RX: `rx_stack_pet_psa`, `rx_stack_ferrite`, `rx_stack_air`
 - plate-stack ferrite-family geometry is authored as three direct equivalent slabs. `ferrite_set_count` is not a public type2 field;
   the historical 10-set baseline remains only as fixed internal thickness: PET/PSA `1.5 mm`, ferrite `2.0 mm`, air `0.2 mm`.
-- plate-stack active footprint is controlled by `z_usage_ratio` and `y_usage_ratio`; Z stays role-aware
+- historical plate-stack footprint is controlled by `z_usage_ratio` and `y_usage_ratio`; Z stays role-aware
   (TX top, RX bottom), while Y is centered on global `Y=0` and fails if that centered window does not fit the owner.
-- active plate-stack copper STEP exact-name contract is role-united, one conductor body per role:
-  - TX: `tx_plate_copper`
-  - RX: `rx_plate_copper`
+- RX single-coil conductor exact body remains `rx_copper_l0`.
 - plate-stack import-only styling reconstructs copper and ferrite-family groups as role groups:
   `g_copper_tx -> [tx_plate_copper]`, `g_copper_rx -> [rx_plate_copper]`.
   `g_ferrite_tx -> [tx_stack_pet_psa, tx_stack_ferrite, tx_stack_air]`,
   `g_ferrite_rx -> [rx_stack_pet_psa, rx_stack_ferrite, rx_stack_air]`.
   `g_ferrite_tx` / `g_ferrite_rx` members는 flattened per-set stack가 아니라 위 merged 3 exact bodies다.
-- import-side validation requires both role copper group and role ferrite group per role to exist in
-  `expected_exported_body_groups`; any missing group or member mismatch is immediate failure before setup-ready.
+- TX/RX plate-stack and TX array contracts remain historical/component surfaces, not the active default example or
+  operator path.
 - `docs/tx-rect-void-step.md` is now the legacy coil-only geometry reference.
 - These helpers are lower-level runtime surfaces; the active operator flow is sampled TOML first, then optional sample-side STEP export or build-side missing STEP export, then AEDT build.
 
