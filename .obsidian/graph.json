@@ -8,73 +8,73 @@
   "collapse-color-groups": false,
   "colorGroups": [
     {
-      "query": "tag:type1",
+      "query": "path:sdd/architecture",
       "color": {
         "a": 1,
-        "rgb": 959977
+        "rgb": 6193580
       }
     },
     {
-      "query": "tag:tx-rect-void",
+      "query": "path:sdd/code",
       "color": {
         "a": 1,
-        "rgb": 16096779
+        "rgb": 10731148
       }
     },
     {
-      "query": "tag:step-export",
+      "query": "path:sdd/plans",
       "color": {
         "a": 1,
-        "rgb": 15381256
+        "rgb": 13666160
       }
     },
     {
-      "query": "tag:hfss-import",
+      "query": "path:sdd/diagrams",
       "color": {
         "a": 1,
-        "rgb": 15485081
+        "rgb": 8962256
       }
     },
     {
-      "query": "tag:aedt",
+      "query": "path:release-notes",
       "color": {
         "a": 1,
-        "rgb": 9133302
+        "rgb": 14212841
       }
     },
     {
-      "query": "tag:build123d",
+      "query": "tag:type2",
       "color": {
         "a": 1,
-        "rgb": 1357990
+        "rgb": 9419963
       }
     },
     {
-      "query": "tag:sampling",
+      "query": "tag:plate-stack",
       "color": {
         "a": 1,
-        "rgb": 440020
+        "rgb": 12542314
       }
     },
     {
-      "query": "tag:sdd",
+      "query": "tag:setup-ready",
       "color": {
         "a": 1,
-        "rgb": 6583435
+        "rgb": 15453067
       }
     },
     {
       "query": "tag:governance",
       "color": {
         "a": 1,
-        "rgb": 14427686
+        "rgb": 8495553
       }
     },
     {
-      "query": "tag:release",
+      "query": "tag:legacy",
       "color": {
         "a": 1,
-        "rgb": 16347926
+        "rgb": 11833005
       }
     }
   ],
@@ -88,6 +88,6 @@
   "repelStrength": 8.85416666666667,
   "linkStrength": 0.729166666666667,
   "linkDistance": 282,
-  "scale": 0.1368833899766191,
+  "scale": 0.20532508496492868,
   "close": false
 }

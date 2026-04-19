@@ -149,4 +149,4 @@ class ResolvedPcbInstance(TypedDict):
     mounts: list[ResolvedPcbMount]
 
 
-TerminalLabel = Literal["A", "B", "C", "D", "a", "b", "c", "d"]
+TerminalLabel = Literal["A", "B", "C", "D", "a", "b", "c", "d", "input_stub", "output_stub"]

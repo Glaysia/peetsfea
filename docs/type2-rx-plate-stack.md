@@ -14,21 +14,34 @@ tags:
 이 문서는 active `examples/type2_fixed.toml`, `examples/type2_sweep.toml`의 RX modeled object
 `role = "rx_plate_stack"` 계약을 설명한다. shared TX/RX plate-stack runtime boundary는
 [`docs/type2-plate-stack.md`](type2-plate-stack.md)에 정리되어 있다. 이 역할은
-geometry/export와 setup-ready port-ready build를 지원한다. import-only helper는 geometry inspection /
-import-only surface다. plate-stack는 mesh/direct EM input/source/analysis/report/`ValidateDesign`
-ownership을 가지지 않는다.
+geometry/export와 setup-ready full-EM-ready build를 지원한다. import-only helper는 geometry inspection /
+import-only surface다.
 TX/RX shared generation ownership과 thickness baseline canonical source는 shared 문서이며,
 이 문서는 RX role-local geometry/export detail만 다룬다.
 
 ## Runtime Boundary
 - `type2_step_setup_ready`의 active default build path는 exact plate-stack pair를
-  setup-ready port-ready branch로 처리한다.
+  setup-ready full-EM-ready branch로 처리한다.
+- setup-ready facade는 plate-stack exact pair에서도 아래 후반부를 coil branch와 동일 실행한다.
+  - post-import mesh
+  - radiation boundary
+  - explicit lumped ports
+  - source phase
+  - analysis/report
+  - `validate_pipeline()`
+  - `ValidateDesign()`
+  - final save
 - RX plate-stack port는 reconstructed `rx_plate_port_sheet`를 사용하고 numeric naming은 `2/2_T1`다.
-- direct helper `assign_post_import_mesh`, `assign_type2_lumped_ports`, `build_type2_em_input`는
-  `rx_plate_stack`를 계속 명시적으로 reject한다.
 - `terminal_metadata.kind = "stub_port"`는 import-only reconstructed sheet를 위한 metadata고,
-  setup-ready port-ready branch도 동일 reconstructed sheet contract를 사용한다.
-- `rx_plate_stack`는 mesh/direct EM input/source/analysis/report/`ValidateDesign` owner가 아니다.
+  setup-ready full-EM-ready branch도 동일 reconstructed sheet contract를 사용한다.
+- plate-stack mesh owner는 conductor-only exact set이며 imported exact-name order의 copper family 전체다.
+  - `*_copper_wall_t*`
+  - `*_copper_coil_t*`
+  - `*_bridge_s*`
+  - `*_stub_in`
+  - `*_stub_out`
+- underlay solids, `*_pcb_wall`/`*_pcb_coil`, reconstructed port sheet는 mesh 대상이 아니다.
+- `build_type2_em_input()`는 plate-stack exact pair를 reject하지 않고 `EmPipelineInput`을 조립한다.
 - active example baseline에서 `pcb_total_thickness_mm`는 RX/TX 모두 `0.4 mm`다.
   legacy `1.6/0.4` split guidance는 active plate-stack contract가 아니다.
 

@@ -1,7 +1,7 @@
 ---
 title: type2-plate-stack
 created: 2026-04-19 @ 21:20
-updated: 2026-04-19 @ 23:40
+updated: 2026-04-20 @ 00:45
 tags:
   - type2
   - tx
@@ -14,9 +14,8 @@ tags:
 
 이 문서는 active type2 plate-stack family의 shared runtime boundary를 설명한다.
 `tx_plate_stack`, `rx_plate_stack`는 scene/STEP ledger 단계의 modeled object role이며,
-current flow는 setup-ready port-ready build path를 포함한다. import-only helper는 geometry inspection /
-import-only surface다. plate-stack는 mesh/direct EM input/source/analysis/report/`ValidateDesign`
-ownership을 가지지 않는다. active example baseline에서 TX/RX PCB total thickness는 둘 다 `0.4 mm`다.
+current flow는 setup-ready full-EM-ready build path를 포함한다. import-only helper는 geometry inspection /
+import-only surface다. active example baseline에서 TX/RX PCB total thickness는 둘 다 `0.4 mm`다.
 
 ## Shared Contract
 - plate-stack roles: `tx_plate_stack`, `rx_plate_stack`
@@ -31,12 +30,16 @@ ownership을 가지지 않는다. active example baseline에서 TX/RX PCB total 
   남아 있으면 loader가 removed field로 즉시 실패한다.
 - `turn_count`는 wall-side copper turn owner다. coil-side copper는 항상 `turn_count - 1`이다.
 - active plate-stack exact order는 wall-side striped copper `*_copper_wall_t*`, `*_pcb_wall`,
-  interleaved `PET/PSA -> ferrite -> vacuum` stack sets, `*_pcb_coil`, coil-side striped copper
+  interleaved `PET/PSA -> ferrite -> air` stack sets, `*_pcb_coil`, coil-side striped copper
   `*_copper_coil_t*`, side bridge `*_bridge_s*`, terminal stub `*_stub_in/out` 순서다.
-- flat `expected_exported_body_names` contract는 유지되고, 각 `uN` stack triple은
-  `expected_exported_body_groups` metadata를 통해 role별 단일 ferrite-family group
-  (`g_ferrite_tx`, `g_ferrite_rx`)에 current creation order대로 묶인다.
-  per-set `*_stack_sandwich_uN` group은 active contract가 아니다.
+- plate-stack ferrite-family STEP export contract는 per-set `*_uN` exact body가 아니라
+  per-material merged exact body다.
+  - TX exact body names: `tx_stack_pet_psa`, `tx_stack_ferrite`, `tx_stack_air`
+  - RX exact body names: `rx_stack_pet_psa`, `rx_stack_ferrite`, `rx_stack_air`
+  - role당 ferrite-family STEP exact bodies는 정확히 3개다.
+- `expected_exported_body_groups`의 `g_ferrite_tx`, `g_ferrite_rx`는 flattened per-set member가 아니라
+  위 merged 3-body exact names를 reference한다.
+- per-set `*_stack_sandwich_uN` group과 old `*_u0..u9` plate-stack exact-name contract는 active path가 아니다.
 - striped copper는 full owner `Z` height를 `turn_count`로 나눈 `pitch_z`를 기준으로 하고,
   `trace_height_z = pitch_z * metal_fill_factor`를 사용한다.
 - current half-pitch offset contract 때문에 `metal_fill_factor`는 `0 < fill <= 0.5`만 허용한다.
@@ -51,17 +54,31 @@ ownership을 가지지 않는다. active example baseline에서 TX/RX PCB total 
 
 ## HFSS Runtime Boundary
 - `peetsfea.backend.pyaedt.type2_step_setup_ready`의 active default build path는 plate-stack exact pair를
-  setup-ready port-ready branch로 처리한다.
-- plate-stack port-ready branch는 radiation boundary + explicit lumped port + final save를 수행한다.
+  setup-ready full-EM-ready branch로 처리한다.
+- setup-ready facade는 plate-stack exact pair에서도 아래 후반부를 동일 실행한다.
+  - post-import mesh
+  - radiation boundary
+  - explicit lumped ports
+  - source phase
+  - analysis/report
+  - `validate_pipeline()`
+  - `ValidateDesign()`
+  - final save
 - import-only AEDT path는 STEP hierarchy preservation을 직접 신뢰하지 않고, styled flat bodies와
-  ledger metadata를 사용해 ferrite/PET_PSA/vacuum family를 role별 단일 group
-  (`g_ferrite_tx`, `g_ferrite_rx`)으로 재생성하고 `tx_plate_port_sheet` / `rx_plate_port_sheet`
+  ledger metadata를 사용해 merged ferrite-family exact bodies (`*_stack_pet_psa`, `*_stack_ferrite`,
+  `*_stack_air`)를 role별 단일 group (`g_ferrite_tx`, `g_ferrite_rx`)으로 연결하고
+  `tx_plate_port_sheet` / `rx_plate_port_sheet`
   metadata-only sheet를 추가로 reconstruct한다.
 - plate-stack port contract는 reconstructed `tx_plate_port_sheet` / `rx_plate_port_sheet`를 사용하고,
   numeric naming은 TX `1/1_T1`, RX `2/2_T1`다.
-- `assign_post_import_mesh`, `assign_type2_lumped_ports`, `build_type2_em_input` 같은 direct mesh/EM helper는
-  plate-stack roles를 계속 명시적으로 reject한다.
-- plate-stack는 mesh/direct EM input/source/analysis/report/`ValidateDesign` ownership이 없다.
+- plate-stack mesh owner는 conductor-only exact set이며 imported exact-name order의 copper family 전체다.
+  - `*_copper_wall_t*`
+  - `*_copper_coil_t*`
+  - `*_bridge_s*`
+  - `*_stub_in`
+  - `*_stub_out`
+- underlay solids, `*_pcb_wall`/`*_pcb_coil`, reconstructed `tx_plate_port_sheet`/`rx_plate_port_sheet`는 mesh 대상이 아니다.
+- `build_type2_em_input()`는 plate-stack exact pair를 reject하지 않고 `EmPipelineInput`을 조립한다.
 
 ## Role Notes
 - `tx_plate_stack`: active TX plate-stack는 `tx_region` full `YZ` footprint를 쓰고

@@ -12,7 +12,6 @@ from peetsfea.backend.pyaedt.type2_step_import_core import Type2ImportedLedger
 from peetsfea.backend.pyaedt.type2_step_post_import_mesh import assign_post_import_mesh
 from peetsfea.backend.pyaedt.type2_step_port_assignment import assign_type2_lumped_ports
 from peetsfea.backend.pyaedt.type2_step_setup_ready import (
-    Type2PlateStackPortReadyResult,
     Type2SetupReadyResult,
     setup_type2_step_ledger,
     setup_type2_step_ledger_into_hfss,
@@ -37,6 +36,22 @@ from tests.backend_em.test_type2_step_import_pipeline import (
     _write_ledger,
 )
 from tests.fixtures.legacy.type1_spec import TYPE1_OUTPUT_VARIABLES, type1_outputs_spec
+
+
+def _plate_stack_copper_family_imported_names(*, imported_object_names: list[str], role_prefix: str) -> list[str]:
+    return [
+        name
+        for name in imported_object_names
+        if name.startswith(
+            (
+                f"{role_prefix}_copper_wall_t",
+                f"{role_prefix}_copper_coil_t",
+                f"{role_prefix}_bridge_s",
+                f"{role_prefix}_stub_",
+            )
+        )
+        or name in (f"{role_prefix}_copper_wall", f"{role_prefix}_copper_coil", f"{role_prefix}_copper_stack")
+    ]
 
 
 class _FakeBoundaryModule:
@@ -592,15 +607,40 @@ def test_assign_post_import_mesh_rejects_rx_underlay_names_without_rx_copper() -
         )
 
 
+def test_assign_post_import_mesh_accepts_plate_stack_exact_pair(tmp_path: Path) -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+    imported_modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
+
+    result = assign_post_import_mesh(
+        hfss=cast(HfssSession, session),
+        imported_modeled_objects=imported_modeled_objects,
+    )
+
+    tx_expected = _plate_stack_copper_family_imported_names(
+        imported_object_names=cast(list[str], imported_modeled_objects[0]["imported_object_names"]),
+        role_prefix="tx",
+    )
+    rx_expected = _plate_stack_copper_family_imported_names(
+        imported_object_names=cast(list[str], imported_modeled_objects[1]["imported_object_names"]),
+        role_prefix="rx",
+    )
+    expected_objects = [*tx_expected, *rx_expected]
+    payload = session.mesh_module.assign_length_op_calls[0]
+    objects_index = payload.index("Objects:=")
+
+    assert result["objects"] == expected_objects
+    assert payload[objects_index + 1] == expected_objects
+
+
 @pytest.mark.parametrize("role", ["tx_plate_stack", "rx_plate_stack"])
-def test_assign_post_import_mesh_rejects_plate_stack_roles_explicitly(role: str) -> None:
+def test_assign_post_import_mesh_rejects_mixed_role_families(role: str) -> None:
     session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
     imported_modeled_objects = _role_aware_mesh_entries()
     target_index = 0 if role == "tx_plate_stack" else 1
     imported_modeled_objects[target_index]["role"] = role
     imported_modeled_objects[target_index]["object_id"] = "tx_plate_stack" if role == "tx_plate_stack" else "rx_plate_stack"
 
-    with pytest.raises(ValueError, match=rf"{role}.*assign_post_import_mesh"):
+    with pytest.raises(ValueError, match=r"requires one exact supported tx/rx role pair"):
         assign_post_import_mesh(
             hfss=cast(HfssSession, session),
             imported_modeled_objects=imported_modeled_objects,
@@ -663,15 +703,51 @@ def test_assign_type2_lumped_ports_rejects_incomplete_plate_stack_pair(tmp_path:
         )
 
 
+def test_build_type2_em_input_accepts_plate_stack_exact_pair(tmp_path: Path) -> None:
+    modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
+
+    result = build_type2_em_input(
+        imported_ledger=cast(Type2ImportedLedger, _minimal_em_input_ledger(modeled_objects=modeled_objects)),
+        ports=cast(EmPorts, {"tx": ["1_T1"], "rx": ["2_T1"]}),
+    )
+
+    tx_imported_names = cast(list[str], modeled_objects[0]["imported_object_names"])
+    rx_imported_names = cast(list[str], modeled_objects[1]["imported_object_names"])
+    tx_expected_copper = _plate_stack_copper_family_imported_names(
+        imported_object_names=tx_imported_names,
+        role_prefix="tx",
+    )
+    rx_expected_copper = _plate_stack_copper_family_imported_names(
+        imported_object_names=rx_imported_names,
+        role_prefix="rx",
+    )
+
+    assert result["ready_objects"]["tx_conductors"] == sorted(tx_expected_copper)
+    assert result["ready_objects"]["rx_conductors"] == sorted(rx_expected_copper)
+    assert result["ready_objects"]["ferrite_objects"] == []
+    assert result["ready_objects"]["fr4_objects"] == sorted(
+        ["tx_pcb_wall", "tx_pcb_coil", "rx_pcb_wall", "rx_pcb_coil"]
+    )
+    assert result["endpoints"]["tx"][0]["group_kind"] == "tx_plate_stack"
+    assert result["endpoints"]["tx"][0]["start_label"] == "input_stub"
+    assert result["endpoints"]["tx"][0]["end_label"] == "output_stub"
+    assert result["endpoints"]["rx"][0]["group_kind"] == "rx_plate_stack"
+    assert result["endpoints"]["rx"][0]["start_label"] == "input_stub"
+    assert result["endpoints"]["rx"][0]["end_label"] == "output_stub"
+    assert result["context"]["tx_vertical_plane"] == "YZ"
+    assert result["context"]["rx_plane"] == "YZ"
+    assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
+
+
 @pytest.mark.parametrize("role", ["tx_plate_stack", "rx_plate_stack"])
-def test_build_type2_em_input_rejects_plate_stack_roles_explicitly(tmp_path: Path, role: str) -> None:
+def test_build_type2_em_input_rejects_mixed_role_families(tmp_path: Path, role: str) -> None:
     modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
     if role == "tx_plate_stack":
         modeled_objects[1] = _coil_modeled_objects_with_imported_names(tmp_path)[1]
     else:
         modeled_objects[0] = _coil_modeled_objects_with_imported_names(tmp_path)[0]
 
-    with pytest.raises(ValueError, match=rf"{role}.*build_type2_em_input"):
+    with pytest.raises(ValueError, match=r"requires one exact supported tx/rx role pair"):
         build_type2_em_input(
             imported_ledger=cast(Type2ImportedLedger, _minimal_em_input_ledger(modeled_objects=modeled_objects)),
             ports=cast(EmPorts, {"tx": ["1_T1"], "rx": ["2_T1"]}),
@@ -871,7 +947,7 @@ def test_setup_type2_step_ledger_raises_when_validate_design_returns_false(tmp_p
         )
 
 
-def test_setup_type2_step_ledger_accepts_plate_stack_exact_pair_and_stops_after_port_ready(tmp_path: Path) -> None:
+def test_setup_type2_step_ledger_accepts_plate_stack_exact_pair_and_runs_full_setup_ready(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
     modeled_objects = _plate_stack_modeled_objects(tmp_path)
     _write_ledger(
@@ -884,7 +960,7 @@ def test_setup_type2_step_ledger_accepts_plate_stack_exact_pair_and_stops_after_
     session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[_plate_stack_imported_name_batch()]))
 
     result = cast(
-        Type2PlateStackPortReadyResult,
+        Type2SetupReadyResult,
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=output_aedt_path,
@@ -893,13 +969,30 @@ def test_setup_type2_step_ledger_accepts_plate_stack_exact_pair_and_stops_after_
         ),
     )
 
+    expected_modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
+    tx_expected = _plate_stack_copper_family_imported_names(
+        imported_object_names=cast(list[str], expected_modeled_objects[0]["imported_object_names"]),
+        role_prefix="tx",
+    )
+    rx_expected = _plate_stack_copper_family_imported_names(
+        imported_object_names=cast(list[str], expected_modeled_objects[1]["imported_object_names"]),
+        role_prefix="rx",
+    )
+    expected_mesh_objects = [*tx_expected, *rx_expected]
+    payload = session.mesh_module.assign_length_op_calls[0]
+    objects_index = payload.index("Objects:=")
+
+    assert result["mesh"]["objects"] == expected_mesh_objects
+    assert payload[objects_index + 1] == expected_mesh_objects
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
-    assert "mesh" not in result
-    assert session.mesh_module.assign_length_op_calls == []
-    assert session.edited_sources_payloads == []
-    assert session.inserted_setup_types == []
-    assert session.created_output_variables == []
-    assert session.created_reports == []
+    assert result["sources"]["tx_source_name"] == "1_T1"
+    assert result["sources"]["rx_source_name"] == "2_T1"
+    assert result["analysis"]["setup_name"] == "Setup1"
+    assert result["validation_report"] == {"ok": True, "gate": "hard_fail", "message": "ok"}
+    assert session.edited_sources_payloads
+    assert session.inserted_setup_types == ["HfssDriven"]
+    assert session.created_output_variables == _expected_output_variables()
+    assert session.created_reports[0]["plot_name"] == "Output Variables Table1"
     assert session.save_project_calls == [str(output_aedt_path)]
     assert session.desktop_class.release_calls == [(True, True)]
 

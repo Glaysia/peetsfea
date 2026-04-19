@@ -43,7 +43,7 @@ _COIL_ROLE_PAIR: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"}
 _PLATE_STACK_ROLE_PAIR: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
 _ALL_SUPPORTED_ROLE_PAIRS: frozenset[str] = frozenset({*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR})
 _SETUP_BRANCH_COIL_FULL_READY = "coil_full_setup_ready"
-_SETUP_BRANCH_PLATE_STACK_PORT_READY = "plate_stack_port_ready"
+_SETUP_BRANCH_PLATE_STACK_FULL_READY = "plate_stack_full_setup_ready"
 
 HfssFactory = Callable[[str], HfssSession]
 
@@ -63,18 +63,8 @@ class Type2SetupReadyResult(TypedDict):
     validation_report: dict[str, str | bool]
 
 
-class Type2PlateStackPortReadyResult(TypedDict):
-    source_toml_path: str
-    source_step_ledger_path: str
-    scene_step_path: str
-    seed: int
-    aedt_path: str
-    imported_ledger_path: str
-    boundary: dict[str, str]
-    ports: EmPorts
-
-
-Type2StepSetupFacadeResult = Type2SetupReadyResult | Type2PlateStackPortReadyResult
+Type2PlateStackPortReadyResult = Type2SetupReadyResult
+Type2StepSetupFacadeResult = Type2SetupReadyResult
 
 
 def _setup_ready_policy(ledger: ValidatedStepLedger) -> EmPolicy:
@@ -143,7 +133,7 @@ def _resolve_setup_branch(ledger: ValidatedStepLedger) -> str:
     if role_set == _COIL_ROLE_PAIR:
         return _SETUP_BRANCH_COIL_FULL_READY
     if role_set == _PLATE_STACK_ROLE_PAIR:
-        return _SETUP_BRANCH_PLATE_STACK_PORT_READY
+        return _SETUP_BRANCH_PLATE_STACK_FULL_READY
     raise ValueError(
         "type2 setup facade rejects mixed modeled role families; expected exact pair "
         "['tx_single_coil', 'rx_single_coil'] or ['tx_plate_stack', 'rx_plate_stack'] "
@@ -151,7 +141,7 @@ def _resolve_setup_branch(ledger: ValidatedStepLedger) -> str:
     )
 
 
-def _setup_ready_from_loaded_ledger_coil(
+def _setup_ready_from_loaded_ledger_full(
     *,
     hfss: HfssSession,
     step_ledger_path: Path,
@@ -220,51 +210,6 @@ def _setup_ready_from_loaded_ledger_coil(
         "analysis": analysis,
         "validation_report": validation_report,
     }
-
-
-def _setup_ready_from_loaded_ledger_plate_stack(
-    *,
-    hfss: HfssSession,
-    step_ledger_path: Path,
-    output_aedt_path: Path,
-    imported_ledger_path: Path,
-    ledger: ValidatedStepLedger,
-    design_variables: tuple[DesignVariableEntry, ...],
-) -> Type2PlateStackPortReadyResult:
-    _assign_design_variables(hfss, design_variables=design_variables)
-    imported_ledger: Type2ImportedLedger = build_imported_ledger(
-        hfss=hfss,
-        step_ledger_path=step_ledger_path,
-        output_aedt_path=output_aedt_path,
-        imported_ledger_path=imported_ledger_path,
-        ledger=ledger,
-    )
-    em_policy = _setup_ready_policy(ledger)
-    boundary = build_boundary(
-        hfss=hfss,
-        modeler=hfss.modeler,
-        policy=em_policy,
-    )
-    ports = assign_type2_lumped_ports(
-        hfss=hfss,
-        modeler=hfss.modeler,
-        imported_ledger=imported_ledger,
-    )
-    save_result = hfss.save_project(str(output_aedt_path))
-    raise_on_false(save_result, operation="save_project", context={"path": str(output_aedt_path)})
-    write_imported_ledger(imported_ledger_path=imported_ledger_path, imported_ledger=imported_ledger)
-    return {
-        "source_toml_path": imported_ledger["source_toml_path"],
-        "source_step_ledger_path": imported_ledger["source_step_ledger_path"],
-        "scene_step_path": imported_ledger["scene_step_path"],
-        "seed": imported_ledger["seed"],
-        "aedt_path": str(output_aedt_path),
-        "imported_ledger_path": str(imported_ledger_path),
-        "boundary": boundary,
-        "ports": ports,
-    }
-
-
 def _setup_ready_from_loaded_ledger_by_branch(
     *,
     hfss: HfssSession,
@@ -276,7 +221,7 @@ def _setup_ready_from_loaded_ledger_by_branch(
     setup_branch: str,
 ) -> Type2StepSetupFacadeResult:
     if setup_branch == _SETUP_BRANCH_COIL_FULL_READY:
-        return _setup_ready_from_loaded_ledger_coil(
+        return _setup_ready_from_loaded_ledger_full(
             hfss=hfss,
             step_ledger_path=step_ledger_path,
             output_aedt_path=output_aedt_path,
@@ -284,8 +229,8 @@ def _setup_ready_from_loaded_ledger_by_branch(
             ledger=ledger,
             design_variables=design_variables,
         )
-    if setup_branch == _SETUP_BRANCH_PLATE_STACK_PORT_READY:
-        return _setup_ready_from_loaded_ledger_plate_stack(
+    if setup_branch == _SETUP_BRANCH_PLATE_STACK_FULL_READY:
+        return _setup_ready_from_loaded_ledger_full(
             hfss=hfss,
             step_ledger_path=step_ledger_path,
             output_aedt_path=output_aedt_path,

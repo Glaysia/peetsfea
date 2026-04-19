@@ -29,35 +29,29 @@ _TX_UNDERLAY_AIR_NAME_PREFIX = "tx_underlay_air_u"
 _TX_WALL_FERRITE_NAME_PREFIX = "tx_wall_ferrite_u"
 _TX_WALL_PET_PSA_NAME_PREFIX = "tx_wall_pet_psa_u"
 _TX_WALL_AIR_NAME_PREFIX = "tx_wall_air_u"
-_TX_STACK_FERRITE_NAME_PREFIX = "tx_stack_ferrite_u"
-_TX_STACK_PET_PSA_NAME_PREFIX = "tx_stack_pet_psa_u"
-_TX_STACK_AIR_NAME_PREFIX = "tx_stack_air_u"
+_TX_STACK_FERRITE_NAME = "tx_stack_ferrite"
+_TX_STACK_PET_PSA_NAME = "tx_stack_pet_psa"
+_TX_STACK_AIR_NAME = "tx_stack_air"
 _RX_UNDERLAY_FERRITE_NAME_PREFIX = "under_rx_ferrite_u"
 _RX_UNDERLAY_PET_PSA_NAME_PREFIX = "under_rx_pet_psa_u"
 _RX_UNDERLAY_AIR_NAME_PREFIX = "under_rx_air_u"
-_RX_STACK_FERRITE_NAME_PREFIX = "rx_stack_ferrite_u"
-_RX_STACK_PET_PSA_NAME_PREFIX = "rx_stack_pet_psa_u"
-_RX_STACK_AIR_NAME_PREFIX = "rx_stack_air_u"
+_RX_STACK_FERRITE_NAME = "rx_stack_ferrite"
+_RX_STACK_PET_PSA_NAME = "rx_stack_pet_psa"
+_RX_STACK_AIR_NAME = "rx_stack_air"
 _UNDERLAY_FERRITE_NAME_PREFIXES = (
     _TX_UNDERLAY_FERRITE_NAME_PREFIX,
     _TX_WALL_FERRITE_NAME_PREFIX,
     _RX_UNDERLAY_FERRITE_NAME_PREFIX,
-    _TX_STACK_FERRITE_NAME_PREFIX,
-    _RX_STACK_FERRITE_NAME_PREFIX,
 )
 _UNDERLAY_PET_PSA_NAME_PREFIXES = (
     _TX_UNDERLAY_PET_PSA_NAME_PREFIX,
     _TX_WALL_PET_PSA_NAME_PREFIX,
     _RX_UNDERLAY_PET_PSA_NAME_PREFIX,
-    _TX_STACK_PET_PSA_NAME_PREFIX,
-    _RX_STACK_PET_PSA_NAME_PREFIX,
 )
 _UNDERLAY_AIR_NAME_PREFIXES = (
     _TX_UNDERLAY_AIR_NAME_PREFIX,
     _TX_WALL_AIR_NAME_PREFIX,
     _RX_UNDERLAY_AIR_NAME_PREFIX,
-    _TX_STACK_AIR_NAME_PREFIX,
-    _RX_STACK_AIR_NAME_PREFIX,
 )
 _TX_UNDERLAY_FERRITE_COLOR = (89, 94, 107)
 _TX_UNDERLAY_FERRITE_TRANSPARENCY = 0.0
@@ -120,6 +114,27 @@ _MU_TAND_M_DATASET_POINTS = (
 )
 _PLACEMENT_TOLERANCE = 1e-9
 _PLATE_STACK_STUB_LENGTH_MM = 5.0
+
+
+def _is_ferrite_family_name(name: str) -> bool:
+    return name.startswith(_UNDERLAY_FERRITE_NAME_PREFIXES) or name in (
+        _TX_STACK_FERRITE_NAME,
+        _RX_STACK_FERRITE_NAME,
+    )
+
+
+def _is_pet_psa_family_name(name: str) -> bool:
+    return name.startswith(_UNDERLAY_PET_PSA_NAME_PREFIXES) or name in (
+        _TX_STACK_PET_PSA_NAME,
+        _RX_STACK_PET_PSA_NAME,
+    )
+
+
+def _is_air_family_name(name: str) -> bool:
+    return name.startswith(_UNDERLAY_AIR_NAME_PREFIXES) or name in (
+        _TX_STACK_AIR_NAME,
+        _RX_STACK_AIR_NAME,
+    )
 
 
 def _unwrap_raw(value: object, *, context: str) -> object:
@@ -398,13 +413,13 @@ def ensure_pet_psa_material(hfss: HfssSession) -> str:
 
 def ensure_underlay_materials(hfss: HfssSession, *, imported_modeled_object_names: Sequence[str]) -> None:
     underlay_ferrite_names = [
-        name for name in imported_modeled_object_names if name.startswith(_UNDERLAY_FERRITE_NAME_PREFIXES)
+        name for name in imported_modeled_object_names if _is_ferrite_family_name(name)
     ]
     underlay_pet_psa_names = [
-        name for name in imported_modeled_object_names if name.startswith(_UNDERLAY_PET_PSA_NAME_PREFIXES)
+        name for name in imported_modeled_object_names if _is_pet_psa_family_name(name)
     ]
     underlay_air_names = [
-        name for name in imported_modeled_object_names if name.startswith(_UNDERLAY_AIR_NAME_PREFIXES)
+        name for name in imported_modeled_object_names if _is_air_family_name(name)
     ]
     if not underlay_ferrite_names and not underlay_pet_psa_names and not underlay_air_names:
         return

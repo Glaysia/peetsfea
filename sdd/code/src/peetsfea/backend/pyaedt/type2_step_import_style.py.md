@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_style.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-19 @ 23:40
+updated: 2026-04-20 @ 01:35
 tags:
   - hfss-import
   - styling
@@ -13,7 +13,10 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_import_style.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_style.py.md`
 - Status: active
-- Related feature plans: [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]]
+
+## Ownership
+- Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-material-merge]]
+- Primary architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 역할
 - imported modeled/non-model objects의 material, color, transparency, model-state를 적용한다.
@@ -24,7 +27,8 @@ tags:
 
 ## Canonical state
 - plate roles도 ferrite/PET_PSA/vacuum styling과 PCB/copper styling을 받는다.
-- `stack_*`, legacy underlay family는 모두 같은 ferrite/PET_PSA/vacuum styling path를 쓴다.
+- active plate-stack ferrite-family는 merged exact names(`tx_stack_pet_psa|tx_stack_ferrite|tx_stack_air`, `rx_stack_pet_psa|rx_stack_ferrite|rx_stack_air`)로만 ferrite/PET_PSA/vacuum styling path를 탄다.
+- legacy underlay/wall prefixes는 single-coil import path에서만 same-material styling path를 유지한다.
 - port-sheet reconstruction은 coil roles와 plate-stack roles 모두 수행할 수 있다.
 - plate-stack roles는 `tx_plate_port_sheet`, `rx_plate_port_sheet` 이름의 metadata-only reconstructed sheet를 추가한다.
 
@@ -32,10 +36,13 @@ tags:
 - active plate role placement validation은 TX `min_x` anchor와 RX `min_x` anchor를 role-aware로 검사해야 한다.
 - plate roles는 `owner.max_y + 5.0 mm` overhang만 허용하고 나머지 owner-fit anchor는 유지해야 한다.
 - imported object styling은 exact-name partition 결과만 사용한다.
+- plate-stack ferrite-family material preflight(`ensure_underlay_materials`)는 merged exact-name contract만 인식하고 legacy `*_stack_*_uN` fallback을 두지 않는다.
 
 ## Collaborators
+- [[sdd/code/src/peetsfea/type2_plate_stack.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_partition.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py]]
+- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
 
 ## 관련 테스트
 - [[sdd/code/tests/backend_em/test_type2_step_import_pipeline.py]]

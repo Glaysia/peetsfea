@@ -1,7 +1,7 @@
 ---
 title: type2_runtime.py
 created: 2026-04-18 @ 23:10
-updated: 2026-04-20 @ 00:42
+updated: 2026-04-20 @ 11:18
 tags:
   - build
   - runtime
@@ -13,7 +13,7 @@ tags:
 - Path: `src/peetsfea/type2_runtime.py`
 - Code note path: `sdd/code/src/peetsfea/type2_runtime.py.md`
 - Status: active
-- Related feature plan: [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]]
+- Related feature plan: [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]], [[sdd/plans/0.2.22-type2-plate-stack-full-em]]
 
 ## 역할
 - sampled manifest 기준 export/build orchestration helper를 제공한다.
@@ -25,7 +25,7 @@ tags:
 ## Canonical state
 - default build runner는 `setup_type2_step_ledger` facade다.
 - coil pair exact roles는 setup-ready full path를 쓴다.
-- plate-stack exact roles(`tx_plate_stack` + `rx_plate_stack`)는 setup-ready facade 내부의 port-ready branch를 쓴다.
+- plate-stack exact roles(`tx_plate_stack` + `rx_plate_stack`)도 setup-ready facade 내부의 full setup-ready branch를 쓴다.
 
 ## Invariants / fail-fast
 - existing broken ledger는 rebuild fallback 없이 실패한다.
@@ -43,4 +43,4 @@ tags:
 
 ## 변경 시 주의점
 - plate-stack build를 import-only로 되돌리는 우회 경로를 만들지 않는다.
-- plate-stack branch contract는 port-ready(경계/포트/저장)로 유지하고 mesh/direct EM input 확장을 섞지 않는다.
+- plate-stack branch contract를 reduced port-ready surface로 낮추지 않는다.

@@ -13,6 +13,9 @@ tags:
 ## Source
 - Path: `tests/type2/test_build_type2_entry.py`
 - Code note path: `sdd/code/tests/type2/test_build_type2_entry.py.md`
+- Direct owner: [[sdd/plans/0.2.22-type2-sampled-build-split]]
+- Direct verification target: [[sdd/code/entry/build.py]]
+- Discovery bridge: [[sdd/code/tests/type2/test_sample_type2_entry.py]]
 
 ## 역할
 - build entry/runtime wiring과 manifest-driven runner behavior를 검증한다.

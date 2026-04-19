@@ -1,7 +1,7 @@
 ---
 title: type2_step_em_input.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-19 @ 23:59
+updated: 2026-04-20 @ 00:45
 tags:
   - hfss-import
   - em
@@ -13,34 +13,47 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_em_input.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_em_input.py.md`
 - Status: active
-- Related feature plan: [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]]
 
-## 역할
-- imported coil objects와 assigned ports를 EM pipeline input으로 정리한다.
+## Ownership
+- Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-full-em]]
+- Primary architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
+
+## 단일 책임
+- validated imported ledger(+assigned ports)를 role-exact EM pipeline payload로 정규화한다.
 
 ## 입력 / 출력
 - 입력: imported ledger, `EmPorts`
 - 출력: `EmPipelineInput`
 
 ## Canonical state
-- current EM input helper는 coil conductor/endpoint semantics 전용이다.
-- active plate roles는 port-ready branch 이후에도 EM endpoint를 만들지 않으므로 unsupported다.
-- plate-stack import metadata가 `stub_port` + reconstructed port sheets로 바뀌어도 direct EM input은 계속 unsupported다.
-- boundary + explicit ports + final save ownership은 setup-ready facade가 가진다.
+- direct EM input은 exact tx/rx role pair만 허용한다.
+  - coil pair: `tx_single_coil` + `rx_single_coil`
+  - plate-stack pair: `tx_plate_stack` + `rx_plate_stack`
+- plate-stack endpoint는 `stub_port` metadata(`start_point_plane_mm`, `end_point_plane_mm`)와 modeled plane(`YZ`) 기반 world 좌표로 생성한다.
+- plate-stack endpoint label은 semantic stub label(`input_stub`, `output_stub`)을 사용한다.
+- ready object 구성은 role-local body 분류를 사용한다.
+  - conductor: role-local copper family 전체
+  - fr4: role-local PCB bodies
+  - ferrite: empty list
 
 ## Invariants / fail-fast
-- plate roles imported names에서 endpoint나 conductor group을 추론하지 않는다.
-- unsupported rejection은 setup-ready/port helper와 의미를 맞춘다.
-- plate roles를 `EmPipelineInput`으로 직접 변환하려는 요청은 즉시 실패해야 한다.
+- modeled object는 정확히 2개여야 하며, 지원 role exact pair가 아니면 즉시 실패한다.
+- duplicated role, unsupported role, mixed pair는 즉시 실패한다.
+- coil role의 imported names는 `>=1 PCB + exactly 1 copper` contract를 강제한다.
+- plate-stack role의 imported names는 `exactly 2 PCB + >=2 copper` contract를 강제한다.
+- plate-stack endpoint는 `terminal_metadata.kind == "stub_port"` 및 `plane == "YZ"`를 강제한다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_port_assignment.py]]
+- [[sdd/code/src/peetsfea/types/geometry.py]]
+- [[sdd/code/src/peetsfea/types/runtime_selection.py]]
 
 ## 관련 테스트
 - [[sdd/code/tests/backend_em/test_type2_step_setup_ready.py]]
 
 ## 변경 시 주의점
-- active plate roles에 fake endpoint metadata를 넣어 EM pipeline으로 넘기지 않는다.
-- plate-stack port-ready support를 이유로 이 helper scope를 암묵적으로 넓히지 않는다.
-- setup-ready가 소유한 reconstructed port-sheet/explicit-port 결과를 direct EM helper ownership으로 역이관하지 않는다.
+- coil endpoint semantics(`outer_corner`/`inner_corner`, group_kind mapping)는 유지해야 한다.
+- plate-stack conductor set은 role-local copper family 전체를 포함해야 하며 PCB/underlay를 섞으면 안 된다.
+- plate-stack endpoint world 변환은 plane contract(YZ)을 우회하거나 fallback으로 대체하면 안 된다.
+- setup-ready facade ownership(경계/포트/해석/저장)은 그대로 유지해야 한다.

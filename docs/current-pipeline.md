@@ -1,7 +1,7 @@
 ---
 title: current pipeline
 created: 2026-04-17 @ 15:55
-updated: 2026-04-19 @ 21:20
+updated: 2026-04-20 @ 00:45
 tags:
   - type2
   - pipeline
@@ -23,7 +23,7 @@ tags:
   4. optional STEP inspection via `notebooks/view_step_files.ipynb` using `VIEW_INDEX = -1` for the fixed example or manifest entry order for sampled outputs
 - `entry/sample.py` always writes `sampled.toml` and may also write STEP artifacts depending on `MAKE_STEP_ON_SAMPLE`.
 - `entry/build.py` always owns `.aedt` generation and will reuse existing STEP artifacts or generate missing STEP per entry before AEDT build.
-- For active plate-stack manifests, `entry/build.py` routes AEDT generation through the role-aware setup-ready facade (port-ready branch), not the import-only helper.
+- For active plate-stack manifests, `entry/build.py` routes AEDT generation through the role-aware setup-ready facade (full-EM-ready branch), not the import-only helper.
 - If `MAKE_STEP_ON_SAMPLE = False`, sampled STEP inspection can fail until `entry/build.py` has processed that entry.
 
 ## Internal Helpers
@@ -31,17 +31,31 @@ tags:
 - `peetsfea.backend.pyaedt.type2_step_import_pipeline` remains the import-only helper.
 - `peetsfea.backend.pyaedt.type2_step_setup_ready` remains the setup-ready helper.
 - `entry/build.py` always calls the setup-ready facade for active type2 build; import-only remains a geometry inspection/import-only surface.
-- The setup-ready facade now handles both exact modeled pairs:
-  - coil pair: full EM helper chain
-  - plate-stack pair: setup-ready port-ready branch
-- Plate-stack still does not own mesh/direct EM input/source/analysis/report/`ValidateDesign`.
-- Direct mesh/EM helper surfaces continue to reject plate-stack roles explicitly.
+- The setup-ready facade now handles both exact modeled pairs through the full EM helper chain:
+  - post-import mesh
+  - radiation boundary
+  - explicit lumped ports
+  - source phase
+  - analysis/report
+  - `validate_pipeline()`
+  - `ValidateDesign()`
+  - final `.aedt` save
+- plate-stack mesh contract is conductor-only copper family bodies in imported exact-name order:
+  - `*_copper_wall_t*`
+  - `*_copper_coil_t*`
+  - `*_bridge_s*`
+  - `*_stub_in`
+  - `*_stub_out`
+- underlay/PCB/reconstructed port-sheet bodies are not mesh targets.
 - plate-stack import-only styling now reconstructs metadata-only `tx_plate_port_sheet` / `rx_plate_port_sheet`
   from ledger `stub_port` metadata; these sheets are not STEP scene bodies.
 - setup-ready plate-stack branch uses the same reconstructed `tx_plate_port_sheet` / `rx_plate_port_sheet`
   with numeric boundary/excitation names `1/1_T1` and `2/2_T1`.
-- plate-stack import-only styling also reconstructs ferrite-family groups as one role group each:
-  `g_ferrite_tx` and `g_ferrite_rx`, with ferrite/PET_PSA/vacuum members in current creation order.
+- active plate-stack ferrite-family STEP exact-name contract is merged-per-material, role당 3-body only:
+  - TX: `tx_stack_pet_psa`, `tx_stack_ferrite`, `tx_stack_air`
+  - RX: `rx_stack_pet_psa`, `rx_stack_ferrite`, `rx_stack_air`
+- plate-stack import-only styling reconstructs ferrite-family groups as one role group each:
+  `g_ferrite_tx` / `g_ferrite_rx` members는 flattened per-set stack가 아니라 위 merged 3 exact bodies다.
 - `docs/tx-rect-void-step.md` is now the legacy coil-only geometry reference.
 - These helpers are lower-level runtime surfaces; the active operator flow is sampled TOML first, then optional sample-side STEP export or build-side missing STEP export, then AEDT build.
 
