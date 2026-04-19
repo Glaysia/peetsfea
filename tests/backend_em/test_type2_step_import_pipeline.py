@@ -17,8 +17,12 @@ _PLATE_STACK_FERRITE_SET_COUNT = 10
 _PLATE_STACK_TURN_COUNT = 3
 _PLATE_STACK_STUB_LENGTH_MM = 5.0
 _PLATE_STACK_PCB_TOTAL_THICKNESS_MM = 0.4
+_TX_COPPER_GROUP_NAME = "g_copper_tx"
+_RX_COPPER_GROUP_NAME = "g_copper_rx"
 _TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
 _RX_FERRITE_GROUP_NAME = "g_ferrite_rx"
+_TX_PLATE_COPPER_NAME = "tx_plate_copper"
+_RX_PLATE_COPPER_NAME = "rx_plate_copper"
 _TX_SINGLE_COIL_FERRITE_GROUP_MEMBER_PREFIXES: tuple[str, ...] = (
     "tx_underlay_ferrite_u",
     "tx_underlay_pet_psa_u",
@@ -691,15 +695,23 @@ def _legacy_tx_plate_stack_imported_name_batch() -> tuple[str, ...]:
 
 def _expected_ferrite_group_for_role(*, role: str, expected_names: list[str]) -> list[ExportedBodyGroup]:
     member_body_names = _ferrite_group_members_for_role(role=role, expected_names=expected_names)
+    if role == "tx_plate_stack":
+        return [
+            {"group_name": _TX_COPPER_GROUP_NAME, "member_body_names": (_TX_PLATE_COPPER_NAME,)},
+            {"group_name": _TX_FERRITE_GROUP_NAME, "member_body_names": member_body_names},
+        ]
+    if role == "rx_plate_stack":
+        return [
+            {"group_name": _RX_COPPER_GROUP_NAME, "member_body_names": (_RX_PLATE_COPPER_NAME,)},
+            {"group_name": _RX_FERRITE_GROUP_NAME, "member_body_names": member_body_names},
+        ]
     if len(member_body_names) == 0:
         return []
     if role.startswith("tx_"):
-        group_name = _TX_FERRITE_GROUP_NAME
-    elif role.startswith("rx_"):
-        group_name = _RX_FERRITE_GROUP_NAME
-    else:
-        raise ValueError(f"unsupported ferrite group role in test helper: {role!r}")
-    return [{"group_name": group_name, "member_body_names": member_body_names}]
+        return [{"group_name": _TX_FERRITE_GROUP_NAME, "member_body_names": member_body_names}]
+    if role.startswith("rx_"):
+        return [{"group_name": _RX_FERRITE_GROUP_NAME, "member_body_names": member_body_names}]
+    raise ValueError(f"unsupported ferrite group role in test helper: {role!r}")
 
 
 def _tx_plate_stack_expected_groups(
@@ -1141,12 +1153,6 @@ def test_import_type2_step_ledger_accepts_tx_and_rx_plate_stack_geometry_only_ro
     ]
     assert modeled_by_id["tx_plate_stack"]["imported_body_groups"] == [
         {
-            "group_name": _TX_FERRITE_GROUP_NAME,
-            "member_object_names": list(_TX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES),
-        }
-    ]
-    assert modeled_by_id["tx_plate_stack"]["imported_body_groups"] == [
-        {
             "group_name": cast(str, group_entry["group_name"]),
             "member_object_names": list(cast(tuple[str, ...], group_entry["member_body_names"])),
         }
@@ -1156,12 +1162,6 @@ def test_import_type2_step_ledger_accepts_tx_and_rx_plate_stack_geometry_only_ro
     assert modeled_by_id["rx_plate_stack"]["imported_object_names"] == [
         *_rx_plate_stack_expected_names(),
         "rx_plate_port_sheet",
-    ]
-    assert modeled_by_id["rx_plate_stack"]["imported_body_groups"] == [
-        {
-            "group_name": _RX_FERRITE_GROUP_NAME,
-            "member_object_names": list(_RX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES),
-        }
     ]
     assert modeled_by_id["rx_plate_stack"]["imported_body_groups"] == [
         {
@@ -1205,6 +1205,59 @@ def test_import_type2_step_ledger_rejects_legacy_plate_stack_u_names(tmp_path: P
     )
 
     with pytest.raises(ValueError, match=r"must include all merged tx plate-stack ferrite members"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            design_name="fake_type2_import",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
+
+
+def test_import_type2_step_ledger_rejects_plate_stack_missing_copper_group(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    modeled_objects = _plate_stack_modeled_objects(tmp_path)
+    tx_entry = cast(dict[str, object], modeled_objects[0])
+    tx_groups = cast(list[dict[str, object]], tx_entry["expected_exported_body_groups"])
+    tx_entry["expected_exported_body_groups"] = [tx_groups[1]]
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=modeled_objects,
+    )
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[_plate_stack_imported_name_batch()]))
+
+    with pytest.raises(ValueError, match=r"must match required role group contract"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            design_name="fake_type2_import",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
+
+
+def test_import_type2_step_ledger_rejects_plate_stack_legacy_segment_leakage(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    modeled_objects = _plate_stack_modeled_objects(tmp_path)
+    tx_entry = cast(dict[str, object], modeled_objects[0])
+    tx_expected_names = cast(list[str], tx_entry["expected_exported_body_names"])
+    tx_expected_names.append("tx_copper_wall_t0")
+    tx_entry["expected_exported_body_count"] = len(tx_expected_names)
+    tx_entry["expected_exported_body_groups"] = [
+        {"group_name": _TX_COPPER_GROUP_NAME, "member_body_names": (_TX_PLATE_COPPER_NAME,)},
+        {"group_name": _TX_FERRITE_GROUP_NAME, "member_body_names": _TX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES},
+    ]
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=modeled_objects,
+    )
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[_plate_stack_imported_name_batch()]))
+
+    with pytest.raises(ValueError, match=r"legacy plate-stack copper segment names"):
         import_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",

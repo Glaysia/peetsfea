@@ -70,6 +70,10 @@ _FERRITE_GROUP_NAMES: dict[Literal["tx", "rx"], str] = {
     "tx": "g_ferrite_tx",
     "rx": "g_ferrite_rx",
 }
+_COPPER_GROUP_NAMES: dict[Literal["tx", "rx"], str] = {
+    "tx": "g_copper_tx",
+    "rx": "g_copper_rx",
+}
 
 
 def _role_config(role: ModeledPlateStackRole) -> _PlateStackRoleConfig:
@@ -84,10 +88,15 @@ def _ferrite_group_name_for_prefix(*, prefix: Literal["tx", "rx"]) -> str:
     return _FERRITE_GROUP_NAMES[prefix]
 
 
-def expected_plate_stack_body_names(
+def _copper_group_name_for_prefix(*, prefix: Literal["tx", "rx"]) -> str:
+    if prefix not in _COPPER_GROUP_NAMES:
+        raise RuntimeError(f"unsupported copper group prefix: {prefix}")
+    return _COPPER_GROUP_NAMES[prefix]
+
+
+def _expected_plate_stack_pre_unite_body_names(
     *,
     role: ModeledPlateStackRole,
-    ferrite_set_count: int,
     turn_count: int,
     pcb_total_thickness_mm: float,
 ) -> tuple[str, ...]:
@@ -113,6 +122,31 @@ def expected_plate_stack_body_names(
     return tuple(body_names)
 
 
+def expected_plate_stack_body_names(
+    *,
+    role: ModeledPlateStackRole,
+    ferrite_set_count: int,
+    turn_count: int,
+    pcb_total_thickness_mm: float,
+) -> tuple[str, ...]:
+    _role_config(role)
+    if ferrite_set_count < 1:
+        raise ValueError(f"{role}.ferrite_set_count must be >= 1 (actual={ferrite_set_count})")
+    if turn_count < 2:
+        raise ValueError(f"{role}.turn_count must be >= 2 (actual={turn_count})")
+    if pcb_total_thickness_mm <= 0.0:
+        raise ValueError(f"{role}.pcb_total_thickness_mm must be > 0 (actual={pcb_total_thickness_mm})")
+    role_config = _role_config(role)
+    return (
+        f"{role_config.prefix}_plate_copper",
+        f"{role_config.prefix}_pcb_wall",
+        f"{role_config.prefix}_stack_pet_psa",
+        f"{role_config.prefix}_stack_ferrite",
+        f"{role_config.prefix}_stack_air",
+        f"{role_config.prefix}_pcb_coil",
+    )
+
+
 def total_plate_stack_thickness_mm(*, spec: ModeledPlateStackSpec) -> float:
     return (2.0 * spec.pcb_total_thickness_mm) + (
         float(spec.ferrite_set_count)
@@ -133,7 +167,12 @@ def expected_plate_stack_body_groups(
         f"{role_config.prefix}_stack_ferrite",
         f"{role_config.prefix}_stack_air",
     )
+    copper_member_body_names = (f"{role_config.prefix}_plate_copper",)
     return (
+        {
+            "group_name": _copper_group_name_for_prefix(prefix=role_config.prefix),
+            "member_body_names": tuple(copper_member_body_names),
+        },
         {
             "group_name": _ferrite_group_name_for_prefix(prefix=role_config.prefix),
             "member_body_names": tuple(ferrite_member_body_names),
@@ -420,18 +459,23 @@ def build_plate_stack_scene_data(
     body_specs.extend((input_stub_spec, output_stub_spec))
     ordered_body_names.extend((input_stub_spec[0], output_stub_spec[0]))
 
+    pre_unite_expected_body_names = _expected_plate_stack_pre_unite_body_names(
+        role=spec.role,
+        turn_count=realized_turn_count,
+        pcb_total_thickness_mm=spec.pcb_total_thickness_mm,
+    )
+    actual_body_names = tuple(ordered_body_names)
+    if actual_body_names != pre_unite_expected_body_names:
+        raise RuntimeError(
+            "type2 plate stack body order drifted from expected contract "
+            f"(role={spec.role}, expected={pre_unite_expected_body_names}, actual={actual_body_names})"
+        )
     expected_body_names = expected_plate_stack_body_names(
         role=spec.role,
         ferrite_set_count=spec.ferrite_set_count,
         turn_count=realized_turn_count,
         pcb_total_thickness_mm=spec.pcb_total_thickness_mm,
     )
-    actual_body_names = tuple(ordered_body_names)
-    if actual_body_names != expected_body_names:
-        raise RuntimeError(
-            "type2 plate stack body order drifted from expected contract "
-            f"(role={spec.role}, expected={expected_body_names}, actual={actual_body_names})"
-        )
     expected_body_groups = expected_plate_stack_body_groups(
         role=spec.role,
         ferrite_set_count=spec.ferrite_set_count,
@@ -496,6 +540,26 @@ def build_plate_stack_scene_data(
     shapes_by_label = {shape.label: shape for shape in all_shapes}
     if len(shapes_by_label) != len(all_shapes):
         raise RuntimeError(f"type2 plate stack shape labels must be unique (role={spec.role})")
+    copper_source_member_names = (
+        *(f"{role_config.prefix}_copper_wall_t{index}" for index in range(realized_turn_count)),
+        *(f"{role_config.prefix}_copper_coil_t{index}" for index in range(realized_turn_count - 1)),
+        *(f"{role_config.prefix}_bridge_s{index}" for index in range((2 * realized_turn_count) - 2)),
+        f"{role_config.prefix}_stub_in",
+        f"{role_config.prefix}_stub_out",
+    )
+    copper_source_shapes = tuple(shapes_by_label[name] for name in copper_source_member_names)
+    plate_copper_label = f"{role_config.prefix}_plate_copper"
+    plate_copper_shape = _build_labeled_united_copper_body(
+        label=plate_copper_label,
+        source_shapes=copper_source_shapes,
+    )
+    final_shapes_by_label = dict(shapes_by_label)
+    final_shapes_by_label[plate_copper_label] = plate_copper_shape
+    if len(final_shapes_by_label) != len(shapes_by_label) + 1:
+        raise RuntimeError(
+            "type2 plate stack final shape labels must stay unique after copper unite "
+            f"(role={spec.role}, label={plate_copper_label})"
+        )
     stack_member_names = {
         member_body_name
         for group_entry in expected_body_groups
@@ -506,19 +570,19 @@ def build_plate_stack_scene_data(
         for group_entry in expected_body_groups
     }
     top_level_shapes: list[bd.Shape] = []
-    for label in ordered_body_names:
+    for label in expected_body_names:
         if label in group_by_first_member_name:
             group_entry = group_by_first_member_name[label]
             top_level_shapes.append(
                 _build_labeled_group(
                     label=group_entry["group_name"],
-                    children=tuple(shapes_by_label[member_name] for member_name in group_entry["member_body_names"]),
+                    children=tuple(final_shapes_by_label[member_name] for member_name in group_entry["member_body_names"]),
                 )
             )
             continue
         if label in stack_member_names:
             continue
-        top_level_shapes.append(shapes_by_label[label])
+        top_level_shapes.append(final_shapes_by_label[label])
     return (
         tuple(top_level_shapes),
         {
@@ -891,6 +955,37 @@ def _build_labeled_group(*, label: str, children: tuple[bd.Shape, ...]) -> bd.Sh
         raise RuntimeError(f"type2 plate stack group must contain children (label={label})")
     group = bd.Compound(children=children, label=label)
     return cast(bd.Shape, group)
+
+
+def _build_labeled_united_copper_body(*, label: str, source_shapes: tuple[bd.Shape, ...]) -> bd.Shape:
+    if len(source_shapes) == 0:
+        raise RuntimeError(f"type2 plate stack copper unite requires at least one source body (label={label})")
+    fused_shape_or_list: bd.Shape | bd.ShapeList[bd.Shape] = source_shapes[0]
+    for source_shape in source_shapes[1:]:
+        fuse_base_shape = (
+            cast(bd.Shape, bd.Compound(children=tuple(fused_shape_or_list)))
+            if isinstance(fused_shape_or_list, bd.ShapeList)
+            else fused_shape_or_list
+        )
+        fused_shape_or_list = fuse_base_shape.fuse(source_shape)
+    if isinstance(fused_shape_or_list, bd.ShapeList):
+        if len(fused_shape_or_list) != 1:
+            raise RuntimeError(
+                "type2 plate stack copper unite must resolve to one connected shape "
+                f"(label={label}, connected_shape_count={len(fused_shape_or_list)})"
+            )
+        united_shape = cast(bd.Shape, fused_shape_or_list[0])
+    else:
+        united_shape = fused_shape_or_list
+    united_solids = tuple(united_shape.solids())
+    if len(united_solids) != 1:
+        raise RuntimeError(
+            "type2 plate stack copper unite must resolve to one solid "
+            f"(label={label}, solid_count={len(united_solids)})"
+        )
+    united_solid = united_solids[0]
+    united_solid.label = label
+    return cast(bd.Shape, united_solid)
 
 
 def _build_labeled_multisolid_box_with_edge_windows(

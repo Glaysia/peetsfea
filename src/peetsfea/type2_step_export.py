@@ -52,9 +52,11 @@ DEFAULT_SCENE_STEP_PATH = DEFAULT_OUTPUT_DIR / "type2_scene.step"
 _TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
 _RX_FERRITE_GROUP_NAME = "g_ferrite_rx"
 _PLATE_STACK_MERGED_BODY_NAMES: tuple[str, ...] = (
+    "tx_plate_copper",
     "tx_stack_pet_psa",
     "tx_stack_ferrite",
     "tx_stack_air",
+    "rx_plate_copper",
     "rx_stack_pet_psa",
     "rx_stack_ferrite",
     "rx_stack_air",
@@ -255,11 +257,11 @@ def _plate_stack_expected_body_groups(
 
 def _ferrite_group_name_for_modeled_role(
     *,
-    role: Literal["tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack"],
+    role: Literal["tx_single_coil", "rx_single_coil"],
 ) -> str:
-    if role in ("tx_single_coil", "tx_plate_stack"):
+    if role == "tx_single_coil":
         return _TX_FERRITE_GROUP_NAME
-    if role in ("rx_single_coil", "rx_plate_stack"):
+    if role == "rx_single_coil":
         return _RX_FERRITE_GROUP_NAME
     raise RuntimeError(f"unsupported ferrite grouping role: {role}")
 
@@ -467,10 +469,23 @@ def _widest_owner_bottom_face_diagonal_vertices(
         *,
         plane_vertices: tuple[tuple[float, float], ...],
     ) -> tuple[tuple[float, float], tuple[float, float]]:
-        best_score = -1.0
-        best_diagonal: tuple[tuple[float, float], tuple[float, float]] | None = None
-        best_key: tuple[tuple[float, float], tuple[float, float]] | None = None
-        for first_index, second_index in ((0, 2), (1, 3)):
+        diagonal_index_pairs = ((0, 2), (1, 3))
+        first_index, second_index = diagonal_index_pairs[0]
+        first_diagonal_vertices = (plane_vertices[first_index], plane_vertices[second_index])
+        best_score = sum(
+            _owner_centerline_perpendicular_distance(
+                point_xy=point_xy,
+                first_center_xy=owner_center_points[0],
+                second_center_xy=owner_center_points[1],
+            )
+            for point_xy in first_diagonal_vertices
+        )
+        best_diagonal = first_diagonal_vertices
+        best_key = cast(
+            tuple[tuple[float, float], tuple[float, float]],
+            tuple(sorted(first_diagonal_vertices)),
+        )
+        for first_index, second_index in diagonal_index_pairs[1:]:
             diagonal_vertices = (plane_vertices[first_index], plane_vertices[second_index])
             score = sum(
                 _owner_centerline_perpendicular_distance(
@@ -486,13 +501,11 @@ def _widest_owner_bottom_face_diagonal_vertices(
             )
             if (
                 score > best_score + 1e-9
-                or (abs(score - best_score) <= 1e-9 and (best_key is None or candidate_key < best_key))
+                or (abs(score - best_score) <= 1e-9 and candidate_key < best_key)
             ):
                 best_score = score
                 best_diagonal = diagonal_vertices
                 best_key = candidate_key
-        if best_diagonal is None:
-            raise RuntimeError("type2 widened terminal-stub diagonal selection produced no candidate")
         return best_diagonal
 
     diagonal_vertices: list[tuple[float, float, float]] = []

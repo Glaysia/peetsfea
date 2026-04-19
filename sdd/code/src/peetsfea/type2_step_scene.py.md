@@ -1,7 +1,7 @@
 ---
 title: type2_step_scene.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 23:59
+updated: 2026-04-20 @ 04:18
 tags:
   - step-export
   - scene
@@ -13,6 +13,7 @@ tags:
 - Path: `src/peetsfea/type2_step_scene.py`
 - Code note path: `sdd/code/src/peetsfea/type2_step_scene.py.md`
 - Status: active
+- Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-copper-unite-grouping]]
 - Related feature plans: [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]]
 
 ## 역할
@@ -26,12 +27,19 @@ tags:
 ## Canonical state
 - TX plate placement truth는 `tx_region` full `YZ`, `min_x` anchor, `+X` stack다.
 - RX plate placement truth는 `rx_region_max` full `YZ`, `min_x` anchor, `+X` stack다.
-- plate role copper/PCB active height는 `shoe_depth_mm`가 제거한 active span을 쓰고, cutout은 shoe fill이 메운다.
+- plate role copper/PCB active height는 owner full `Z` span을 쓴다. `shoe_depth_mm`/shoe fill은 active contract가 아니다.
 - active plate roles terminal metadata는 `kind = "stub_port"`다.
 - active plate roles는 port-sheet STEP body를 export하지 않는다.
-- ferrite family가 scene에 export될 때 role당 정확히 1개 ferrite compound를 만든다:
+- pre-unite 단계에서는 `*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out` 라벨이 남고,
+  final handoff 직전 role당 하나의 united copper 본체를 만든다.
+- final handoff 단계의 ferrite 그룹은 role당 정확히 1개 ferrite compound를 만든다:
   TX `g_ferrite_tx`, RX `g_ferrite_rx`.
+- final handoff ferrite 그룹은 `*_copper_*`/`*_stub_*` 라벨과 분리되어야 하며
+  expected body count를 role당 `6`으로 맞춘다 (`*_plate_copper`, `*_pcb_wall`, `*_stack_pet_psa`, `*_stack_ferrite`, `*_stack_air`, `*_pcb_coil`).
+- final import handoff는 `g_copper_tx`, `g_copper_rx`로부터 각각 `tx_plate_copper`, `rx_plate_copper`를 재구성하며,
+  mesh payload 역시 동일 두 개 body만 사용한다.
 - single-coil ferrite family(`tx_wall_*`, `under_rx_*`)도 export 시 같은 ferrite group contract를 따른다.
+- final exported copper 그룹은 `g_copper_tx -> tx_plate_copper`, `g_copper_rx -> rx_plate_copper`로 metadata와 ledger에 남긴다.
 
 ## Invariants / fail-fast
 - owner plane and role plane must match
@@ -39,6 +47,9 @@ tags:
 - plate role placement를 centered/rebased placement로 바꾸면 안 된다.
 - active plate roles는 coil helper를 호출하면 안 된다.
 - ferrite group member 순서는 family body 생성 순서와 동일해야 한다.
+- active plate roles는 `expected_exported_body_count = 6`을 스킵하면 안 되고,
+  pre-unite label(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`)이 export handoff에 노출되면 안 된다.
+- active plate roles는 imported mesh 대상과 final imported body set에도 role-level conductor 단일 바디만 허용한다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_step_spec.py]]

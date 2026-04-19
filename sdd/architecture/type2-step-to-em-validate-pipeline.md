@@ -53,6 +53,15 @@ tags:
   - ferrite-family child가 ungrouped 상태로 STEP handoff에 남는 export는 unsupported다.
   - ferrite-family group contract는 role별 단일 group이며 `g_ferrite_tx`, `g_ferrite_rx` member는
     flattened per-set stack가 아니라 merged 3-body exact names다.
+  - active plate-stack copper final body contract는 role별 단일 united conductor다.
+    - TX: `tx_plate_copper`
+    - RX: `rx_plate_copper`
+  - plate-stack import-side 검증은 `g_copper_tx`, `g_copper_rx`와
+    `g_ferrite_tx`, `g_ferrite_rx` 모두를 요구한다.
+  - copper segment labels(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`)는
+    pre-unite provenance only이며 final STEP/import/mesh body로 남기지 않는다.
+  - copper group contract는 role별 단일 group이며 `g_copper_tx`, `g_copper_rx` member는
+    각각 `tx_plate_copper`, `rx_plate_copper`다.
 
 ## Runtime Flow
 1. sample 단계가 source TOML에서 frozen sampled TOML을 만들고, `make_step_on_sample=true`일 때만 same-worker scene STEP/retained step ledger까지 만든다.
@@ -98,15 +107,21 @@ tags:
   `assign_radiation_boundary_to_faces`, `AssignLumpedPort` false는 모두 즉시 raise다.
 - setup-ready full EM chain에서는 post-import mesh, source/analysis calls, `ValidateDesign()` false도 즉시 raise다.
 - attached-session path는 dirty design을 재사용하지 않고 fresh design으로 rehome해야 한다.
-- setup-ready mesh contract는 conductor-only exact set이며 imported exact-name order의 copper family 전체다:
-  `*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in`, `*_stub_out`.
+- setup-ready mesh contract는 conductor-only exact set이며 plate-stack pair에서는
+  `tx_plate_copper`, `rx_plate_copper`만 mesh target이다.
 - TX/RX underlay exact-name bodies와 reconstructed port sheets는 mesh 대상에 들어가지 않는다.
 - `*_pcb_wall` / `*_pcb_coil` bodies도 mesh 대상이 아니다.
 - current import/runtime contract에서 `tx_port_sheet` / `rx_port_sheet`는 metadata-driven reconstructed sheet다. PCB/copper exact-name contract와 별도 ownership이다.
 - ferrite-family import/runtime contract에서 per-set sandwich group은 canonical owner가 아니다.
   canonical group contract는 `g_ferrite_tx` / `g_ferrite_rx` 단일 role group이고,
   member는 merged exact names (`*_stack_pet_psa`, `*_stack_ferrite`, `*_stack_air`)다.
-- generic `SOLID*` ferrite-family drift는 import-side rename 대상이 아니라 export-side contract failure다.
+- plate-stack import/runtime contract에서 copper conductor는 `tx_plate_copper`/`rx_plate_copper`로
+  통일되어야 하며, 개별 family segment(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)는
+  도체/mesh 계약의 최종 대상이 아니다.
+- copper import/runtime contract에서 stripe/bridge/stub segment는 canonical imported conductor가 아니다.
+  canonical group contract는 `g_copper_tx` / `g_copper_rx` 단일 role group이고,
+  member는 `tx_plate_copper` / `rx_plate_copper`다.
+- generic `SOLID*` plate-stack drift는 import-side rename 대상이 아니라 export-side contract failure다.
 
 ## Supporting Modules
 - import body assembly: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py.md`

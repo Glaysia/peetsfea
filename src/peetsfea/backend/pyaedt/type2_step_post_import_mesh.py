@@ -22,6 +22,8 @@ _PLATE_STACK_ROLE_PAIR: frozenset[str] = frozenset({_TX_PLATE_STACK_ROLE, _RX_PL
 _ALL_SUPPORTED_MESH_ROLES: frozenset[str] = frozenset({*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR})
 _TX_MESH_OBJECT_CANDIDATES = ("tx_copper_l0", "tx_copper_stack")
 _RX_MESH_OBJECT_NAME = "rx_copper_l0"
+_TX_PLATE_MESH_OBJECT_NAME = "tx_plate_copper"
+_RX_PLATE_MESH_OBJECT_NAME = "rx_plate_copper"
 MESH_LENGTH_MAX_ELEMENTS = "1000"
 MESH_LENGTH_MAX_LENGTH = "5mm"
 
@@ -157,69 +159,32 @@ def _role_name_prefix_for_plate_stack(*, role: str, context: str) -> str:
 
 def _required_plate_stack_mesh_object_names(entry: dict[str, object], *, role: str, context: str) -> list[str]:
     imported_object_names = _imported_object_names(entry, context=context)
+    required_mesh_object_name = _TX_PLATE_MESH_OBJECT_NAME if role == _TX_PLATE_STACK_ROLE else _RX_PLATE_MESH_OBJECT_NAME
+    plate_stack_matches = [name for name in imported_object_names if name == required_mesh_object_name]
+    if len(plate_stack_matches) != 1:
+        raise ValueError(
+            f"{context}.imported_object_names must contain exactly one united plate copper body "
+            f"{required_mesh_object_name!r} for plate-stack mesh "
+            f"(actual={plate_stack_matches}, available={imported_object_names})"
+        )
     role_prefix = _role_name_prefix_for_plate_stack(role=role, context=context)
-
-    def _is_wall(name: str) -> bool:
-        return name.startswith(f"{role_prefix}copper_wall_t")
-
-    def _is_coil(name: str) -> bool:
-        return name.startswith(f"{role_prefix}copper_coil_t")
-
-    def _is_bridge(name: str) -> bool:
-        return name.startswith(f"{role_prefix}bridge_s")
-
-    def _is_stub_in(name: str) -> bool:
-        return name == f"{role_prefix}stub_in"
-
-    def _is_stub_out(name: str) -> bool:
-        return name == f"{role_prefix}stub_out"
-
-    wall_names = [name for name in imported_object_names if _is_wall(name)]
-    coil_names = [name for name in imported_object_names if _is_coil(name)]
-    bridge_names = [name for name in imported_object_names if _is_bridge(name)]
-    stub_in_names = [name for name in imported_object_names if _is_stub_in(name)]
-    stub_out_names = [name for name in imported_object_names if _is_stub_out(name)]
-
-    if not wall_names:
-        raise ValueError(f"{context}.imported_object_names must contain one or more {role_prefix}copper_wall_t* bodies")
-    if not coil_names:
-        raise ValueError(f"{context}.imported_object_names must contain one or more {role_prefix}copper_coil_t* bodies")
-    if not bridge_names:
-        raise ValueError(f"{context}.imported_object_names must contain one or more {role_prefix}bridge_s* bodies")
-    if len(stub_in_names) != 1:
-        raise ValueError(
-            f"{context}.imported_object_names must contain exactly one {role_prefix}stub_in body "
-            f"(actual={stub_in_names})"
-        )
-    if len(stub_out_names) != 1:
-        raise ValueError(
-            f"{context}.imported_object_names must contain exactly one {role_prefix}stub_out body "
-            f"(actual={stub_out_names})"
-        )
-
-    def _is_selected_plate_stack_copper(name: str) -> bool:
-        return _is_wall(name) or _is_coil(name) or _is_bridge(name) or _is_stub_in(name) or _is_stub_out(name)
-
-    plate_stack_copper_names = [name for name in imported_object_names if _is_selected_plate_stack_copper(name)]
-
-    unexpected_role_copper_names = [
+    legacy_segment_names = [
         name
         for name in imported_object_names
-        if name.startswith((f"{role_prefix}copper_", f"{role_prefix}bridge_", f"{role_prefix}stub_"))
-        and not _is_selected_plate_stack_copper(name)
+        if name.startswith((f"{role_prefix}copper_wall_t", f"{role_prefix}copper_coil_t", f"{role_prefix}bridge_s", f"{role_prefix}stub_"))
     ]
-    if unexpected_role_copper_names:
+    if legacy_segment_names:
         raise ValueError(
-            f"{context}.imported_object_names contains unsupported {role_prefix} copper-family bodies for plate-stack mesh "
-            f"(unexpected={unexpected_role_copper_names})"
+            f"{context}.imported_object_names contains legacy plate-stack copper segment leakage for mesh "
+            f"(legacy_names={legacy_segment_names})"
         )
-
-    if not plate_stack_copper_names:
+    solid_drift_names = [name for name in imported_object_names if name.casefold().startswith("solid")]
+    if solid_drift_names:
         raise ValueError(
-            f"{context}.imported_object_names must produce non-empty plate-stack copper mesh targets "
-            "(required families: *_copper_wall_t*, *_copper_coil_t*, *_bridge_s*, *_stub_in, *_stub_out)"
+            f"{context}.imported_object_names contains generic SOLID* drift for plate-stack mesh "
+            f"(solid_names={solid_drift_names})"
         )
-    return plate_stack_copper_names
+    return plate_stack_matches
 
 
 def _resolve_exact_pair_for_mesh(

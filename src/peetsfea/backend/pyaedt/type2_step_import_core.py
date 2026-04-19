@@ -33,6 +33,10 @@ from peetsfea.backend.pyaedt.type2_step_runtime_common import current_object_nam
 
 _TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
 _RX_FERRITE_GROUP_NAME = "g_ferrite_rx"
+_TX_COPPER_GROUP_NAME = "g_copper_tx"
+_RX_COPPER_GROUP_NAME = "g_copper_rx"
+_TX_PLATE_COPPER_NAME = "tx_plate_copper"
+_RX_PLATE_COPPER_NAME = "rx_plate_copper"
 _TX_MERGED_STACK_MEMBER_NAMES: tuple[str, str, str] = (
     "tx_stack_pet_psa",
     "tx_stack_ferrite",
@@ -61,6 +65,21 @@ def _is_legacy_ferrite_family_name_for_plate_stack(name: str) -> bool:
     )
 
 
+def _is_legacy_copper_segment_name_for_plate_stack(name: str) -> bool:
+    return name.startswith(
+        (
+            "tx_copper_wall_t",
+            "tx_copper_coil_t",
+            "tx_bridge_s",
+            "tx_stub_",
+            "rx_copper_wall_t",
+            "rx_copper_coil_t",
+            "rx_bridge_s",
+            "rx_stub_",
+        )
+    )
+
+
 class Type2ImportedLedger(TypedDict):
     source_toml_path: str
     source_step_ledger_path: str
@@ -82,11 +101,13 @@ def _require_plate_stack_merged_material_contract(*, modeled_entry: dict[str, ob
     if role == "tx_plate_stack":
         expected_member_names = _TX_MERGED_STACK_MEMBER_NAMES
         expected_group_name = _TX_FERRITE_GROUP_NAME
-        role_prefix = "tx"
+        expected_copper_group_name = _TX_COPPER_GROUP_NAME
+        required_plate_copper_name = _TX_PLATE_COPPER_NAME
     else:
         expected_member_names = _RX_MERGED_STACK_MEMBER_NAMES
         expected_group_name = _RX_FERRITE_GROUP_NAME
-        role_prefix = "rx"
+        expected_copper_group_name = _RX_COPPER_GROUP_NAME
+        required_plate_copper_name = _RX_PLATE_COPPER_NAME
     expected_exported_body_names = validated_object_names(
         cast(
             Sequence[object],
@@ -111,63 +132,81 @@ def _require_plate_stack_merged_material_contract(*, modeled_entry: dict[str, ob
             f"(legacy_names={legacy_ferrite_member_names}, required={list(expected_member_names)})"
         )
     required_exact_names = (
-        f"{role_prefix}_pcb_wall",
-        f"{role_prefix}_pcb_coil",
-        f"{role_prefix}_stub_in",
-        f"{role_prefix}_stub_out",
+        "tx_pcb_wall" if role == "tx_plate_stack" else "rx_pcb_wall",
+        "tx_pcb_coil" if role == "tx_plate_stack" else "rx_pcb_coil",
+        required_plate_copper_name,
     )
     missing_exact_names = [name for name in required_exact_names if name not in expected_name_set]
     if missing_exact_names:
         raise ValueError(
-            f"{context}.expected_exported_body_names must retain full explicit plate-stack bodies for {role} "
+            f"{context}.expected_exported_body_names must retain required final plate-stack bodies for {role} "
             f"(missing={missing_exact_names}, actual={expected_exported_body_names})"
         )
-    required_family_prefixes = (
-        f"{role_prefix}_copper_wall_t",
-        f"{role_prefix}_copper_coil_t",
-        f"{role_prefix}_bridge_s",
-    )
-    missing_family_prefixes = [
-        family_prefix
-        for family_prefix in required_family_prefixes
-        if not any(name.startswith(family_prefix) for name in expected_exported_body_names)
+    legacy_segment_names = [
+        name for name in expected_exported_body_names if _is_legacy_copper_segment_name_for_plate_stack(name)
     ]
-    if missing_family_prefixes:
+    if legacy_segment_names:
         raise ValueError(
-            f"{context}.expected_exported_body_names must retain full explicit plate-stack body families for {role} "
-            f"(missing_prefixes={missing_family_prefixes}, actual={expected_exported_body_names})"
+            f"{context}.expected_exported_body_names contains legacy plate-stack copper segment names for {role}; "
+            "final imported conductors must use united plate copper names only "
+            f"(legacy_names={legacy_segment_names})"
         )
     raw_groups = require_key(modeled_entry, key="expected_exported_body_groups", context=context)
     if not isinstance(raw_groups, list):
         raise TypeError(f"{context}.expected_exported_body_groups must be a list")
-    if len(raw_groups) != 1:
+    if len(raw_groups) != 2:
         raise ValueError(
-            f"{context}.expected_exported_body_groups must contain exactly one ferrite group for {role} "
+            f"{context}.expected_exported_body_groups must contain copper and ferrite groups for {role} "
             f"(actual={len(raw_groups)})"
         )
-    raw_group = raw_groups[0]
-    if not isinstance(raw_group, dict):
+    raw_copper_group = raw_groups[0]
+    if not isinstance(raw_copper_group, dict):
         raise TypeError(f"{context}.expected_exported_body_groups[0] must be a table/object")
-    group_name = require_non_empty_str(
-        require_key(raw_group, key="group_name", context=f"{context}.expected_exported_body_groups[0]"),
+    copper_group_name = require_non_empty_str(
+        require_key(raw_copper_group, key="group_name", context=f"{context}.expected_exported_body_groups[0]"),
         context=f"{context}.expected_exported_body_groups[0].group_name",
     )
-    if group_name != expected_group_name:
+    if copper_group_name != expected_copper_group_name:
         raise ValueError(
-            f"{context}.expected_exported_body_groups[0].group_name must be {expected_group_name!r} "
-            f"(actual={group_name!r})"
+            f"{context}.expected_exported_body_groups[0].group_name must be {expected_copper_group_name!r} "
+            f"(actual={copper_group_name!r})"
         )
-    group_member_names = validated_object_names(
+    copper_group_member_names = validated_object_names(
         cast(
             Sequence[object],
-            require_key(raw_group, key="member_body_names", context=f"{context}.expected_exported_body_groups[0]"),
+            require_key(raw_copper_group, key="member_body_names", context=f"{context}.expected_exported_body_groups[0]"),
         ),
         context=f"{context}.expected_exported_body_groups[0].member_body_names",
     )
-    if group_member_names != list(expected_member_names):
+    if copper_group_member_names != [required_plate_copper_name]:
         raise ValueError(
-            f"{context}.expected_exported_body_groups[0].member_body_names must match merged plate-stack material contract "
-            f"(expected={list(expected_member_names)}, actual={group_member_names})"
+            f"{context}.expected_exported_body_groups[0].member_body_names must match plate copper group contract "
+            f"(expected={[required_plate_copper_name]}, actual={copper_group_member_names})"
+        )
+
+    raw_ferrite_group = raw_groups[1]
+    if not isinstance(raw_ferrite_group, dict):
+        raise TypeError(f"{context}.expected_exported_body_groups[1] must be a table/object")
+    ferrite_group_name = require_non_empty_str(
+        require_key(raw_ferrite_group, key="group_name", context=f"{context}.expected_exported_body_groups[1]"),
+        context=f"{context}.expected_exported_body_groups[1].group_name",
+    )
+    if ferrite_group_name != expected_group_name:
+        raise ValueError(
+            f"{context}.expected_exported_body_groups[1].group_name must be {expected_group_name!r} "
+            f"(actual={ferrite_group_name!r})"
+        )
+    ferrite_group_member_names = validated_object_names(
+        cast(
+            Sequence[object],
+            require_key(raw_ferrite_group, key="member_body_names", context=f"{context}.expected_exported_body_groups[1]"),
+        ),
+        context=f"{context}.expected_exported_body_groups[1].member_body_names",
+    )
+    if ferrite_group_member_names != list(expected_member_names):
+        raise ValueError(
+            f"{context}.expected_exported_body_groups[1].member_body_names must match merged plate-stack material contract "
+            f"(expected={list(expected_member_names)}, actual={ferrite_group_member_names})"
         )
 
 

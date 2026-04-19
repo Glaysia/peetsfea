@@ -36,6 +36,7 @@ tags:
 - `sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper.md`
 - `sdd/plans/0.2.22-type2-plate-stack-bridge-non-overlap-export.md`
 - `sdd/plans/0.2.22-type2-plate-stack-full-em.md`
+- `sdd/plans/0.2.22-type2-plate-stack-copper-unite-grouping.md`
 
 ## Type2 milestone order
 - single STEP + setup-ready notebook 방향: `sdd/plans/0.2.22-type2-single-step-setup-ready-pipeline.md`
@@ -52,6 +53,7 @@ tags:
 - current RX striped copper extension: `sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper.md`
 - current plate-stack bridge non-overlap export: `sdd/plans/0.2.22-type2-plate-stack-bridge-non-overlap-export.md`
 - plate-stack full EM expansion: `sdd/plans/0.2.22-type2-plate-stack-full-em.md`
+- plate-stack copper unite/grouping contract: `sdd/plans/0.2.22-type2-plate-stack-copper-unite-grouping.md`
 - single-coil corner relief gap: `sdd/plans/0.2.22-type2-single-coil-corner-relief.md`
 - TX coil geometry repair: `sdd/plans/0.2.22-type2-tx-coil-geometry-repair.md`
 - 첫 modeled object role: `sdd/plans/tx-rect-void-step-generator.md`

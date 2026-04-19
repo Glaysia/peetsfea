@@ -34,12 +34,16 @@ tags:
 - exact coil pair는 current full setup-ready path를 유지한다.
 - exact plate-stack pair도 coil pair와 동일하게 full setup-ready pipeline을 수행한다.
 - mixed coil/plate role set과 malformed role set은 HFSS launch 전에 fail-fast로 막는다.
+- plate-stack branch는 `tx_plate_port_sheet` / `rx_plate_port_sheet` 재구성 체인을 그대로 보존하고 stub_port metadata를 downstream EM/mesh 단계까지 전달한다.
 - geometry-view import-only는 sibling import pipeline의 책임으로 계속 남는다.
 - setup-ready는 stable imported name contract를 소비하는 단계이며 geometry heal/subtract/repair ownership이 없다.
 - non-overlap export 이후에도 setup-ready의 runtime boundary는 기존 exact-name/port-sheet reconstruction contract다.
 
 ## Invariants / fail-fast
 - plate-stack branch도 post-import mesh, EM input/grouping/series/subtract, source phase, analysis/report, validate_pipeline, ValidateDesign, final save를 수행한다.
+- plate-stack EM input는 `tx_plate_copper` / `rx_plate_copper`를 tx/rx conductor ready_object로 요구한다.
+- plate-stack 단계는 `g_copper_tx` / `g_copper_rx`와 `g_ferrite_tx` / `g_ferrite_rx`가 모두 존재해야 하며
+  `tx_plate_copper` / `rx_plate_copper`가 없거나 해당 그룹 멤버가 맞지 않으면 즉시 실패다.
 - plate-stack branch의 explicit port contract는 reconstructed `tx_plate_port_sheet` / `rx_plate_port_sheet`를 사용한다.
 - unsupported message는 mesh/EM helper와 의미를 맞춘다.
 - import-only helper direct call과 setup facade branch는 서로 다른 ownership을 유지한다.

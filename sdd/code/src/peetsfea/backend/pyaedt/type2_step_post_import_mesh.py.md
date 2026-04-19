@@ -32,20 +32,17 @@ tags:
   - TX: `tx_copper_l0` 또는 `tx_copper_stack` 중 정확히 하나
   - RX: `rx_copper_l0` 정확히 하나
 - plate-stack pair는 conductor-only exact-name set을 imported exact-name order로 mesh target에 넣는다.
-  - `*_copper_wall_t*`
-  - `*_copper_coil_t*`
-  - `*_bridge_s*`
-  - `*_stub_in`
-  - `*_stub_out`
-- plate-stack mesh target에는 PCB, underlay, reconstructed port sheet가 포함되지 않는다.
+- plate-stack pair는 정확히 `tx_plate_copper`와 `rx_plate_copper`를 conductor mesh target으로 사용한다.
+  개별 `*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`는 도체 mesh 대상이 아니다.
+- plate-stack mesh target에는 PCB, ferrite, underlay, reconstructed port sheet가 포함되지 않는다.
+- legacy pre-unite segment(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)는 final mesh 타겟으로 허용되지 않는다.
 
 ## Invariants / fail-fast
 - modeled_objects는 정확히 2개여야 하며 중복 없는 exact tx/rx pair여야 한다.
 - mixed role family(coil+plate), unsupported role, duplicate role은 즉시 실패한다.
-- plate-stack entry는 각 required copper family를 충족해야 한다.
-  - wall/coil/bridge: role-local prefix 기준 1개 이상
-  - stub_in/stub_out: role-local exact name 각각 정확히 1개
-- plate-stack entry에서 role-local `copper_/bridge_/stub_` 이름 중 contract 밖 body가 있으면 즉시 실패한다.
+- plate-stack entry에서 `tx_plate_copper`/`rx_plate_copper`가 정확히 1개씩 존재해야 한다.
+- plate-stack entry에서 pre-unite segment 라벨이 final conductor 목록에 남아 있으면 즉시 실패한다.
+- `generic SOLID*` 이름은 즉시 실패한다.
 - mesh target은 conductor-only이며 ferrite/pcb/air/port sheet를 제외한다.
 
 ## Collaborators

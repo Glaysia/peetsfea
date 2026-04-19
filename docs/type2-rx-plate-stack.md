@@ -34,12 +34,8 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
 - RX plate-stack port는 reconstructed `rx_plate_port_sheet`를 사용하고 numeric naming은 `2/2_T1`다.
 - `terminal_metadata.kind = "stub_port"`는 import-only reconstructed sheet를 위한 metadata고,
   setup-ready full-EM-ready branch도 동일 reconstructed sheet contract를 사용한다.
-- plate-stack mesh owner는 conductor-only exact set이며 imported exact-name order의 copper family 전체다.
-  - `*_copper_wall_t*`
-  - `*_copper_coil_t*`
-  - `*_bridge_s*`
-  - `*_stub_in`
-  - `*_stub_out`
+- plate-stack mesh owner는 conductor-only exact set이며 plate-stack pair에서는
+  `tx_plate_copper`, `rx_plate_copper`만 mesh target이다.
 - underlay solids, `*_pcb_wall`/`*_pcb_coil`, reconstructed port sheet는 mesh 대상이 아니다.
 - `build_type2_em_input()`는 plate-stack exact pair를 reject하지 않고 `EmPipelineInput`을 조립한다.
 - active example baseline에서 `pcb_total_thickness_mm`는 RX/TX 모두 `0.4 mm`다.
@@ -49,6 +45,7 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
 - `rx_region_max` full `YZ` footprint를 그대로 쓰는 넓은 RX copper/PCB stack을 만든다.
 - RX는 더 이상 `tx_rect_void` coil bridge를 통과하지 않는다.
 - RX ferrite family는 effective-thickness collapse가 아니라 literal 10-set solid taxonomy를 쓴다.
+  Export handoff에서는 literal sets가 material별 united body 3개로 collapse된다.
 
 ## TOML 계약
 - `object_id = "rx_plate_stack"`
@@ -90,37 +87,54 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
 - bridge `z` window는 owner `Z` bounds를 먼저 clip하고, 같은 edge(`Y=max` or `Y=min`)의
   이전 bridge upper bound를 하한으로 써서 same-edge neighboring bridge positive-volume overlap을 금지한다.
 - terminal stub `rx_stub_in`, `rx_stub_out`는 wall-side `t0`, `t{N-1}`에 붙고 `+Y` 방향으로 `5.0 mm` 돌출한다.
+- wall/coil stripes, bridges, terminal stubs는 final export 전에 `rx_plate_copper`로 unite된다.
+  `rx_copper_wall_t*`, `rx_copper_coil_t*`, `rx_bridge_s*`, `rx_stub_in/out` labels는
+  pre-unite source/provenance labels이며 final STEP/import/mesh body names가 아니다.
 - total thickness guard:
   - `2 * pcb_total_thickness_mm + 10 * (0.20 + 0.15 + 0.02) <= rx_region_max.size_x`
 
 ## Exact Body Order
-1. `rx_copper_wall_t0..t{N-1}`
-2. `rx_pcb_wall`
-3. `rx_stack_pet_psa_u0 -> rx_stack_ferrite_u0 -> rx_stack_vacuum_u0 -> ... -> u9`
-4. `rx_pcb_coil`
-5. `rx_copper_coil_t0..t{N-2}`
-6. `rx_bridge_s0..s{2N-3}`
-7. `rx_stub_in`
-8. `rx_stub_out`
+Plate-stack final handoff keeps role-level bodies plus merged ferrite materials.
+Pre-unite segment and per-set labels are provenance-only and do not belong here.
 
-## Ferrite Family Group
-- flat body order와 별개로, ferrite-family bodies는 단일 `g_ferrite_rx` group으로 export된다.
-- group member는 ferrite/PET_PSA/vacuum bodies 전체이며, current creation order를 그대로 따른다.
-  1. `rx_stack_pet_psa_uN`
-  2. `rx_stack_ferrite_uN`
-  3. `rx_stack_vacuum_uN`
+1. `rx_plate_copper`
+2. `rx_pcb_wall`
+3. `rx_stack_pet_psa`
+4. `rx_stack_ferrite`
+5. `rx_stack_air`
+6. `rx_pcb_coil`
+
+## Pre-Unite Copper Segment Order
+1. `rx_copper_wall_t0..t{N-1}`
+2. `rx_copper_coil_t0..t{N-2}`
+3. `rx_bridge_s0..s{2N-3}`
+4. `rx_stub_in`
+5. `rx_stub_out`
+
+이 labels는 geometry provenance와 `stub_port` metadata source로만 남는다. final exported handoff list는
+`rx_plate_copper`, `rx_pcb_wall`, `rx_stack_pet_psa`, `rx_stack_ferrite`, `rx_stack_air`, `rx_pcb_coil`만 허용한다.
+legacy `rx_*_uN` 분할 라벨은 final body list에 남아 있으면 안 된다.
+
+## Ferrite And Copper Groups
+- flat body order와 별개로, copper body는 단일 `g_copper_rx` group으로 export/import 재생성된다.
+  - member: `rx_plate_copper`
+- ferrite-family bodies는 단일 `g_ferrite_rx` group으로 export/import 재생성된다.
+  - `rx_stack_pet_psa`
+  - `rx_stack_ferrite`
+  - `rx_stack_air`
 - AEDT import-only path는 STEP hierarchy를 직접 신뢰하지 않는다.
   imported flat body names와 ledger `expected_exported_body_groups`를 사용해
-  styling 직후 `create_group("g_ferrite_rx")`로 같은 group을 재생성한다.
+  styling 직후 `create_group("g_copper_rx")`와 `create_group("g_ferrite_rx")`로 같은 groups를 재생성한다.
 
 ## Export Metadata
 - `expected_exported_body_count`는 exact-name list 길이로 결정된다.
-- current fixed RX baseline (`pcb_total_thickness_mm = 0.4`, `turn_count = 3`)는 `43` bodies다.
+- current fixed RX baseline (`pcb_total_thickness_mm = 0.4`, `turn_count = 3`)는 final `6` bodies다.
   TX fixed baseline도 같은 `pcb_total_thickness_mm = 0.4`를 사용한다.
-- `expected_exported_body_groups`는 ferrite/PET_PSA/vacuum family 전체를 creation order로 담는
-  단일 `g_ferrite_rx` group을 가진다.
+- `expected_exported_body_groups`는 `g_copper_rx`와 `g_ferrite_rx` groups를 가진다.
 - `canonical_coordinates.pcb_layer_z_positions_mm`는 wall/coil-side PCB 시작 X 두 개를 가진다.
 - `canonical_coordinates.copper_layer_z_positions_mm`는 wall/coil-side copper 시작 X 두 개를 가진다.
 - `terminal_metadata.kind = "stub_port"`를 쓰고, `port_sheet_vertices_xyz`는 `rx_plate_port_sheet`
   reconstruct용 metadata-only rectangle이다. stub rectangle의 `z` span은 full-height conductor layout에서
   계산된 `rx_stub_in/out` bounds를 그대로 따른다.
+- `terminal_metadata.input_stub_body_name` / `output_stub_body_name`은 final imported body names가 아니라
+  pre-unite source stub labels다.

@@ -40,12 +40,9 @@ tags:
   - `validate_pipeline()`
   - `ValidateDesign()`
   - final `.aedt` save
-- plate-stack mesh contract is conductor-only copper family bodies in imported exact-name order:
-  - `*_copper_wall_t*`
-  - `*_copper_coil_t*`
-  - `*_bridge_s*`
-  - `*_stub_in`
-  - `*_stub_out`
+- plate-stack mesh contract is conductor-only united copper bodies:
+  - `tx_plate_copper`
+  - `rx_plate_copper`
 - underlay/PCB/reconstructed port-sheet bodies are not mesh targets.
 - plate-stack import-only styling now reconstructs metadata-only `tx_plate_port_sheet` / `rx_plate_port_sheet`
   from ledger `stub_port` metadata; these sheets are not STEP scene bodies.
@@ -54,8 +51,16 @@ tags:
 - active plate-stack ferrite-family STEP exact-name contract is merged-per-material, role당 3-body only:
   - TX: `tx_stack_pet_psa`, `tx_stack_ferrite`, `tx_stack_air`
   - RX: `rx_stack_pet_psa`, `rx_stack_ferrite`, `rx_stack_air`
-- plate-stack import-only styling reconstructs ferrite-family groups as one role group each:
+- active plate-stack copper STEP exact-name contract is role-united, one conductor body per role:
+  - TX: `tx_plate_copper`
+  - RX: `rx_plate_copper`
+- plate-stack import-only styling reconstructs copper and ferrite-family groups as role groups:
+  `g_copper_tx -> [tx_plate_copper]`, `g_copper_rx -> [rx_plate_copper]`.
+  `g_ferrite_tx -> [tx_stack_pet_psa, tx_stack_ferrite, tx_stack_air]`,
+  `g_ferrite_rx -> [rx_stack_pet_psa, rx_stack_ferrite, rx_stack_air]`.
   `g_ferrite_tx` / `g_ferrite_rx` members는 flattened per-set stack가 아니라 위 merged 3 exact bodies다.
+- import-side validation requires both role copper group and role ferrite group per role to exist in
+  `expected_exported_body_groups`; any missing group or member mismatch is immediate failure before setup-ready.
 - `docs/tx-rect-void-step.md` is now the legacy coil-only geometry reference.
 - These helpers are lower-level runtime surfaces; the active operator flow is sampled TOML first, then optional sample-side STEP export or build-side missing STEP export, then AEDT build.
 

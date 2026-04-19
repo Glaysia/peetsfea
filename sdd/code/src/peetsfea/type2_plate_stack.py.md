@@ -17,7 +17,7 @@ tags:
 - Status: active
 
 ## Ownership
-- Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-material-merge]]
+- Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-copper-unite-grouping]]
 - Primary architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 역할
@@ -26,16 +26,22 @@ tags:
 
 ## 입력 / 출력
 - 입력: plate-stack modeled spec, placement owner spec
-- 출력: united named solids, explicit ferrite group, canonical coordinates, `stub_port` terminal metadata를 포함한 modeled scene data
+- 출력: pre-unite segment bodies(내부 라벨), final handoff용 병합 상태, explicit copper/ferrite groups, canonical coordinates, `stub_port` terminal metadata를 포함한 modeled scene data
 
 ## Canonical state
 - TX는 `tx_region` full `YZ`, `min_x` anchor, `+X` stack를 사용한다.
 - RX는 `rx_region_max` full `YZ`, `min_x` anchor, `+X` stack를 사용한다.
 - wall-side copper turn count는 `N`, coil-side copper turn count는 `N - 1`이다.
 - active conductor 높이는 full owner `Z` span이다.
-- exact flat body order는 `*_copper_wall_t*`, `*_pcb_wall`, merged `*_stack_pet_psa`,
+- pre-unite exact flat body order는 다음이며 최종 handoff의 exported body가 아니다:
+  `*_copper_wall_t*`, `*_pcb_wall`, merged `*_stack_pet_psa`,
   merged `*_stack_ferrite`, merged `*_stack_air`, `*_pcb_coil`,
-  `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`다.
+  `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`.
+- 최종 handoff는 역할별로 하나의 united copper 본체를 가진다:
+  TX `tx_plate_copper`, RX `rx_plate_copper`.
+- 이 최종 본체는 STEP export, import reconstruction, mesh payload에 그대로 사용되는 role-level conductor이다.
+- 역할별 final exported body count는 정확히 `6`:
+  `*_plate_copper`, `*_pcb_wall`, `*_stack_pet_psa`, `*_stack_ferrite`, `*_stack_air`, `*_pcb_coil`.
 - bridge body의 X span은 wall copper와 coil copper 사이 interior-only 구간이다.
 - wall/coil striped copper는 각 pitch slot의 lower-bound 정렬이 아니라 centered 정렬이다.
   - `trace_height_z = pitch_z * metal_fill_factor`
@@ -51,23 +57,28 @@ tags:
   TX `g_ferrite_tx`, RX `g_ferrite_rx`.
 - ferrite group member order는 merged 3-body exact-name contract다:
   `*_stack_pet_psa -> *_stack_ferrite -> *_stack_air`.
+- copper family도 role당 정확히 1개 explicit group만 export한다:
+  TX `g_copper_tx -> [tx_plate_copper]`, RX `g_copper_rx -> [rx_plate_copper]`.
 - 각 merged stack body는 STEP handoff 전에 unite가 끝난 exact named export body여야 한다.
 - ferrite-family child가 ungrouped 상태로 scene root에 노출되면 안 된다.
 - terminal stub는 `*_stub_in`, `*_stub_out` 두 개만 존재하고, 둘 다 wall-side stripe에서 `+Y` 방향으로 `5.0 mm` owner 바깥으로 돌출한다.
-- terminal metadata는 `kind = "stub_port"`와 stub body name, `(y, z)` endpoints, metadata-only port-sheet vertices를 canonical source로 가진다.
+- terminal metadata는 `kind = "stub_port"`와 stub body name, `(y, z)` endpoints, metadata-only port-sheet vertices를
+  pre-unite source segment 라벨(`*_stub_in/out`) 기반 canonical source로 가진다.
 
 ## Invariants / fail-fast
 - `pcb_total_thickness_mm > copper_thickness_mm > 0`
 - `turn_count >= 2`
 - `0 < metal_fill_factor <= 0.6`
 - total thickness는 owner thickness budget 안에 들어가야 한다.
-- body labels는 unique하고 exact-name order contract를 유지해야 한다.
+- pre-unite body labels는 unique하고 exact-name order contract를 유지해야 한다.
 - bridge body는 alternating `Y=max/min` serpentine sequence를 유지한다.
 - bridge/slab/copper pair는 positive-volume intersection이 없어야 하며 face/edge touch만 허용한다.
 - merged stack ferrite-family는 STEP export 계약상 label당 exactly one united named body여야 한다.
 - ferrite-family connector lane은 material별로 분리된 Z band를 사용해 material 간 positive-volume overlap을 만들지 않는다.
 - `pcb_wall`, `pcb_coil`은 기존대로 label당 exactly one solid를 유지해야 한다.
 - ferrite group member 목록은 ferrite family flat exact-name contract와 같은 label set/순서를 공유해야 한다.
+- copper group member 목록은 role-local united copper body 하나와 exact match해야 한다.
+- final handoff/임포트/메시 payload에서도 pre-unite 라벨(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`)이 body list에 노출되지 않는다.
 - import 후 generic `SOLID*`로 분해되는 handoff는 export contract violation이다.
 - outer bounds는 owner `YZ` footprint를 유지하되 `max_y`만 `+5.0 mm` overhang를 허용한다.
 
@@ -87,3 +98,4 @@ tags:
 - geometry/export owner는 `shoe_depth_mm`를 무시하지만 spec layer가 아직 field를 가질 수 있으므로,
   later cleanup 전까지 "parsed but geometry-inert" 상태를 깨지 않도록 주의한다.
 - asymmetric `wall=N / coil=N-1` 계약을 bridge/stub/metadata와 같이 유지해야 한다.
+- `src/peetsfea/type2_plate_stack.py`는 800줄 초과 파일이다. 실질적 Python 변경 전에는 분할 필요성을 먼저 검토한다.

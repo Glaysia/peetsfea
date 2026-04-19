@@ -39,19 +39,8 @@ from tests.fixtures.legacy.type1_spec import TYPE1_OUTPUT_VARIABLES, type1_outpu
 
 
 def _plate_stack_copper_family_imported_names(*, imported_object_names: list[str], role_prefix: str) -> list[str]:
-    return [
-        name
-        for name in imported_object_names
-        if name.startswith(
-            (
-                f"{role_prefix}_copper_wall_t",
-                f"{role_prefix}_copper_coil_t",
-                f"{role_prefix}_bridge_s",
-                f"{role_prefix}_stub_",
-            )
-        )
-        or name in (f"{role_prefix}_copper_wall", f"{role_prefix}_copper_coil", f"{role_prefix}_copper_stack")
-    ]
+    target_name = "tx_plate_copper" if role_prefix == "tx" else "rx_plate_copper"
+    return [name for name in imported_object_names if name == target_name]
 
 
 class _FakeBoundaryModule:
@@ -634,6 +623,19 @@ def test_assign_post_import_mesh_accepts_plate_stack_exact_pair(tmp_path: Path) 
     assert payload[objects_index + 1] == expected_objects
 
 
+def test_assign_post_import_mesh_rejects_plate_stack_legacy_segment_leakage(tmp_path: Path) -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+    imported_modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
+    tx_imported_names = cast(list[str], imported_modeled_objects[0]["imported_object_names"])
+    tx_imported_names.append("tx_stub_in")
+
+    with pytest.raises(ValueError, match=r"legacy plate-stack copper segment leakage"):
+        assign_post_import_mesh(
+            hfss=cast(HfssSession, session),
+            imported_modeled_objects=imported_modeled_objects,
+        )
+
+
 @pytest.mark.parametrize("role", ["tx_plate_stack", "rx_plate_stack"])
 def test_assign_post_import_mesh_rejects_mixed_role_families(role: str) -> None:
     session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
@@ -739,6 +741,18 @@ def test_build_type2_em_input_accepts_plate_stack_exact_pair(tmp_path: Path) -> 
     assert result["context"]["tx_vertical_plane"] == "YZ"
     assert result["context"]["rx_plane"] == "YZ"
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
+
+
+def test_build_type2_em_input_rejects_plate_stack_legacy_segment_leakage(tmp_path: Path) -> None:
+    modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
+    tx_imported_names = cast(list[str], modeled_objects[0]["imported_object_names"])
+    tx_imported_names.append("tx_bridge_s0")
+
+    with pytest.raises(ValueError, match=r"legacy plate-stack copper segment leakage"):
+        build_type2_em_input(
+            imported_ledger=cast(Type2ImportedLedger, _minimal_em_input_ledger(modeled_objects=modeled_objects)),
+            ports=cast(EmPorts, {"tx": ["1_T1"], "rx": ["2_T1"]}),
+        )
 
 
 @pytest.mark.parametrize("role", ["tx_plate_stack", "rx_plate_stack"])

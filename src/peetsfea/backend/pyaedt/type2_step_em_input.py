@@ -10,6 +10,8 @@ from peetsfea.types.manifest import EmPorts, GroupEndpointEntry
 _COIL_ROLE_PAIR: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
 _PLATE_STACK_ROLE_PAIR: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
 _ALL_SUPPORTED_ROLES: frozenset[str] = frozenset({*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR})
+_TX_PLATE_COPPER_NAME = "tx_plate_copper"
+_RX_PLATE_COPPER_NAME = "rx_plate_copper"
 
 
 def _resolve_exact_pair_for_direct_em_input(
@@ -80,19 +82,39 @@ def _copper_names(imported_object_names: list[str], *, role: str) -> list[str]:
     if role == "rx_single_coil":
         return [name for name in imported_object_names if name.startswith("rx_copper_l") or name == "rx_copper_stack"]
     if role == "tx_plate_stack":
-        return [
-            name
-            for name in imported_object_names
-            if name.startswith(("tx_copper_wall_t", "tx_copper_coil_t", "tx_bridge_s", "tx_stub_"))
-            or name in ("tx_copper_wall", "tx_copper_coil", "tx_copper_stack")
-        ]
+        return [name for name in imported_object_names if name == _TX_PLATE_COPPER_NAME]
     assert role == "rx_plate_stack", f"unsupported role for copper name resolution (actual={role!r})"
-    return [
+    return [name for name in imported_object_names if name == _RX_PLATE_COPPER_NAME]
+
+
+def _require_no_plate_stack_legacy_copper_leakage(
+    *,
+    imported_object_names: list[str],
+    role: str,
+    context: str,
+) -> None:
+    if role == "tx_plate_stack":
+        role_prefix = "tx_"
+    elif role == "rx_plate_stack":
+        role_prefix = "rx_"
+    else:
+        return
+    legacy_segment_names = [
         name
         for name in imported_object_names
-        if name.startswith(("rx_copper_wall_t", "rx_copper_coil_t", "rx_bridge_s", "rx_stub_"))
-        or name in ("rx_copper_wall", "rx_copper_coil", "rx_copper_stack")
+        if name.startswith((f"{role_prefix}copper_wall_t", f"{role_prefix}copper_coil_t", f"{role_prefix}bridge_s", f"{role_prefix}stub_"))
     ]
+    if legacy_segment_names:
+        raise ValueError(
+            f"{context}.imported_object_names contains legacy plate-stack copper segment leakage "
+            f"(legacy_names={legacy_segment_names})"
+        )
+    solid_drift_names = [name for name in imported_object_names if name.casefold().startswith("solid")]
+    if solid_drift_names:
+        raise ValueError(
+            f"{context}.imported_object_names contains generic SOLID* drift "
+            f"(solid_names={solid_drift_names})"
+        )
 
 
 def _port_sheet_vertices(entry: dict[str, object], *, context: str) -> tuple[tuple[float, float, float], ...]:
@@ -218,6 +240,16 @@ def build_type2_em_input(
     rx_role = _required_supported_role_for_direct_em_input(rx_entry, context=rx_context)
     tx_imported_names = _imported_object_names(tx_entry, context=tx_context)
     rx_imported_names = _imported_object_names(rx_entry, context=rx_context)
+    _require_no_plate_stack_legacy_copper_leakage(
+        imported_object_names=tx_imported_names,
+        role=tx_role,
+        context=tx_context,
+    )
+    _require_no_plate_stack_legacy_copper_leakage(
+        imported_object_names=rx_imported_names,
+        role=rx_role,
+        context=rx_context,
+    )
     tx_pcb_names = _pcb_names(tx_imported_names, role=tx_role)
     tx_copper_names = _copper_names(tx_imported_names, role=tx_role)
     rx_pcb_names = _pcb_names(rx_imported_names, role=rx_role)
@@ -226,14 +258,18 @@ def build_type2_em_input(
         if len(tx_pcb_names) < 1 or len(tx_copper_names) != 1:
             raise ValueError(f"{tx_context}.imported_object_names must contain one or more PCB names and exactly one copper name")
     else:
-        if len(tx_pcb_names) != 2 or len(tx_copper_names) < 2:
-            raise ValueError(f"{tx_context}.imported_object_names must contain exactly two PCB names and two or more copper names")
+        if len(tx_pcb_names) != 2 or len(tx_copper_names) != 1:
+            raise ValueError(
+                f"{tx_context}.imported_object_names must contain exactly two PCB names and exactly one plate copper name"
+            )
     if rx_role in _COIL_ROLE_PAIR:
         if len(rx_pcb_names) < 1 or len(rx_copper_names) != 1:
             raise ValueError(f"{rx_context}.imported_object_names must contain one or more PCB names and exactly one copper name")
     else:
-        if len(rx_pcb_names) != 2 or len(rx_copper_names) < 2:
-            raise ValueError(f"{rx_context}.imported_object_names must contain exactly two PCB names and two or more copper names")
+        if len(rx_pcb_names) != 2 or len(rx_copper_names) != 1:
+            raise ValueError(
+                f"{rx_context}.imported_object_names must contain exactly two PCB names and exactly one plate copper name"
+            )
     non_model_object_names: list[str] = []
     for index, entry in enumerate(imported_ledger["non_model_objects"]):
         non_model_object_names.extend(_imported_object_names(entry, context=f"non_model_objects[{index}]"))

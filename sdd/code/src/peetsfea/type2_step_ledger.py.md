@@ -1,7 +1,7 @@
 ---
 title: type2_step_ledger.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 23:40
+updated: 2026-04-20 @ 04:18
 tags:
   - step-export
   - ledger
@@ -13,6 +13,7 @@ tags:
 - Path: `src/peetsfea/type2_step_ledger.py`
 - Code note path: `sdd/code/src/peetsfea/type2_step_ledger.py.md`
 - Status: active
+- Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-copper-unite-grouping]]
 - Related feature plan: [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]]
 
 ## 역할
@@ -24,13 +25,24 @@ tags:
 
 ## Canonical state
 - modeled role union에는 `tx_plate_stack`와 `rx_plate_stack`가 포함된다.
-- active plate role canonical handoff는 `expected_exported_body_names`, `expected_exported_body_count`, `canonical_coordinates`, `terminal_metadata.kind = "stub_port"`다.
+- active plate role canonical handoff는 `expected_exported_body_names`, `expected_exported_body_groups`,
+  `expected_exported_body_count`, `canonical_coordinates`, `terminal_metadata.kind = "stub_port"`다.
+- `expected_exported_body_names`는 role-local 6-body 정렬을 유지한다:
+  `*_plate_copper`, `*_pcb_wall`, `*_stack_pet_psa`, `*_stack_ferrite`, `*_stack_air`, `*_pcb_coil`.
 - plate role field ownership은 input TOML에 두고, ledger는 exact export contract만 보존한다.
+- final handoff role당 expected_exported_body_count는 `6`이다.
+- expected_exported_body_groups는 다음을 반영한다:
+  - `g_copper_tx -> [tx_plate_copper]`
+  - `g_ferrite_tx -> [tx_stack_pet_psa, tx_stack_ferrite, tx_stack_air]`
+  - `g_copper_rx -> [rx_plate_copper]`
+  - `g_ferrite_rx -> [rx_stack_pet_psa, rx_stack_ferrite, rx_stack_air]`
+- `terminal_metadata.input_stub_body_name`/`output_stub_body_name`은 pre-unite segment source label(`*_stub_in/out`)으로 보존한다.
 
 ## Invariants / fail-fast
 - active plate roles는 generator-owned exact-name order와 exact-name count를 lossless로 유지해야 한다.
 - plate role terminal metadata wire shape는 stub body names, plane endpoints, 4-vertex port sheet를 lossless로 유지해야 한다.
 - ledger shape mismatch와 missing retained `outputs`는 hard failure다.
+- active plate roles에서 exported/imported handoff body list는 pre-unite 라벨(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`)을 포함해선 안 된다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_step_scene.py]]

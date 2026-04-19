@@ -14,8 +14,12 @@ _SUPPORTED_MODELED_ROLES: frozenset[str] = frozenset(
 )
 _SUPPORTED_MODELED_PLANES: frozenset[str] = frozenset({"XY", "YZ"})
 _PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
+_TX_COPPER_GROUP_NAME = "g_copper_tx"
+_RX_COPPER_GROUP_NAME = "g_copper_rx"
 _TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
 _RX_FERRITE_GROUP_NAME = "g_ferrite_rx"
+_TX_PLATE_COPPER_NAME = "tx_plate_copper"
+_RX_PLATE_COPPER_NAME = "rx_plate_copper"
 _TX_MERGED_STACK_PET_PSA_NAME = "tx_stack_pet_psa"
 _TX_MERGED_STACK_FERRITE_NAME = "tx_stack_ferrite"
 _TX_MERGED_STACK_AIR_NAME = "tx_stack_air"
@@ -45,6 +49,22 @@ _RX_FERRITE_GROUP_MEMBER_PREFIXES: tuple[str, ...] = (
     "under_rx_pet_psa_u",
     "under_rx_air_u",
 )
+_LEGACY_PLATE_STACK_COPPER_NAME_PREFIXES: tuple[str, ...] = (
+    "tx_copper_wall_t",
+    "tx_copper_coil_t",
+    "tx_bridge_s",
+    "tx_stub_",
+    "rx_copper_wall_t",
+    "rx_copper_coil_t",
+    "rx_bridge_s",
+    "rx_stub_",
+)
+
+
+def _is_legacy_plate_stack_copper_segment_name(name: str) -> bool:
+    return name.startswith(_LEGACY_PLATE_STACK_COPPER_NAME_PREFIXES)
+
+
 def _is_tx_ferrite_family_name(name: str) -> bool:
     if name in _TX_MERGED_STACK_MEMBER_NAMES:
         return True
@@ -378,6 +398,56 @@ def _ferrite_group_contract_for_role(
     return (expected_group_name, ferrite_group_members)
 
 
+def _group_contract_for_role(
+    *,
+    role: str,
+    expected_exported_body_names: list[str],
+    context: str,
+) -> list[tuple[str, list[str]]]:
+    ferrite_group_name, ferrite_group_members = _ferrite_group_contract_for_role(
+        role=role,
+        expected_exported_body_names=expected_exported_body_names,
+        context=context,
+    )
+    if role == "tx_plate_stack":
+        if _TX_PLATE_COPPER_NAME not in expected_exported_body_names:
+            raise ValueError(
+                f"{context}.expected_exported_body_names must include {_TX_PLATE_COPPER_NAME!r} for tx_plate_stack"
+            )
+        legacy_segment_names = [
+            name for name in expected_exported_body_names if _is_legacy_plate_stack_copper_segment_name(name)
+        ]
+        if legacy_segment_names:
+            raise ValueError(
+                f"{context}.expected_exported_body_names contains legacy plate-stack copper segment names "
+                f"(legacy_names={legacy_segment_names})"
+            )
+        return [
+            (_TX_COPPER_GROUP_NAME, [_TX_PLATE_COPPER_NAME]),
+            (ferrite_group_name, ferrite_group_members),
+        ]
+    if role == "rx_plate_stack":
+        if _RX_PLATE_COPPER_NAME not in expected_exported_body_names:
+            raise ValueError(
+                f"{context}.expected_exported_body_names must include {_RX_PLATE_COPPER_NAME!r} for rx_plate_stack"
+            )
+        legacy_segment_names = [
+            name for name in expected_exported_body_names if _is_legacy_plate_stack_copper_segment_name(name)
+        ]
+        if legacy_segment_names:
+            raise ValueError(
+                f"{context}.expected_exported_body_names contains legacy plate-stack copper segment names "
+                f"(legacy_names={legacy_segment_names})"
+            )
+        return [
+            (_RX_COPPER_GROUP_NAME, [_RX_PLATE_COPPER_NAME]),
+            (ferrite_group_name, ferrite_group_members),
+        ]
+    if len(ferrite_group_members) == 0:
+        return []
+    return [(ferrite_group_name, ferrite_group_members)]
+
+
 def _validate_modeled_ferrite_group_contract(
     *,
     role: str,
@@ -385,37 +455,31 @@ def _validate_modeled_ferrite_group_contract(
     validated_groups: list[dict[str, object]],
     context: str,
 ) -> None:
-    expected_group_name, expected_member_names = _ferrite_group_contract_for_role(
+    expected_group_contract = _group_contract_for_role(
         role=role,
         expected_exported_body_names=expected_exported_body_names,
         context=context,
     )
-    if not expected_member_names:
-        if len(validated_groups) != 0:
+    if len(validated_groups) != len(expected_group_contract):
+        raise ValueError(
+            f"{context}.expected_exported_body_groups must match required role group contract "
+            f"(role={role}, expected_groups={len(expected_group_contract)}, actual_groups={len(validated_groups)})"
+        )
+    for index, (expected_group_name, expected_member_names) in enumerate(expected_group_contract):
+        validated_group = validated_groups[index]
+        actual_group_name = cast(str, validated_group["group_name"])
+        if actual_group_name != expected_group_name:
             raise ValueError(
-                f"{context}.expected_exported_body_groups must be empty when no ferrite family bodies exist "
-                f"(role={role}, actual_groups={len(validated_groups)})"
+                f"{context}.expected_exported_body_groups[{index}].group_name must be {expected_group_name!r} "
+                f"(actual={actual_group_name!r})"
             )
-        return
-    if len(validated_groups) != 1:
-        raise ValueError(
-            f"{context}.expected_exported_body_groups must contain exactly one ferrite group "
-            f"(role={role}, actual_groups={len(validated_groups)})"
-        )
-    validated_group = validated_groups[0]
-    actual_group_name = cast(str, validated_group["group_name"])
-    if actual_group_name != expected_group_name:
-        raise ValueError(
-            f"{context}.expected_exported_body_groups[0].group_name must be {expected_group_name!r} "
-            f"(actual={actual_group_name!r})"
-        )
-    actual_member_names = cast(list[str], validated_group["member_body_names"])
-    if actual_member_names != expected_member_names:
-        raise ValueError(
-            f"{context}.expected_exported_body_groups[0].member_body_names must match ferrite family members "
-            "in expected_exported_body_names order "
-            f"(expected={expected_member_names}, actual={actual_member_names})"
-        )
+        actual_member_names = cast(list[str], validated_group["member_body_names"])
+        if actual_member_names != expected_member_names:
+            raise ValueError(
+                f"{context}.expected_exported_body_groups[{index}].member_body_names must match role contract "
+                "in expected_exported_body_names order "
+                f"(expected={expected_member_names}, actual={actual_member_names})"
+            )
 
 
 def validated_object_names(raw_names: Sequence[object], *, context: str) -> list[str]:

@@ -1,7 +1,7 @@
 ---
 title: Sub-Agent Spawn Policy
 created: 2026-04-19 @ 14:50
-updated: 2026-04-19 @ 14:55
+updated: 2026-04-19 @ 15:31
 tags:
   - governance
   - agents
@@ -19,13 +19,17 @@ tags:
 ## Model Allowlist
 - 기본 단일 서브에이전트 생성의 1차 생성은 `gpt-5.3-codex-spark`와 `reasoning_effort="medium"` 조합만 허용한다.
 - 기본 단일 서브에이전트 생성의 1차 생성이 실패했을 때만 2차 생성으로 `gpt-5.3-codex`와 `reasoning_effort="medium"` 조합을 허용한다.
-- 분배 모드에서는 `gpt-5.3-codex-spark` `medium` 에이전트 2를 동시에 작업에 투입한다.
+- 분배 모드의 1차 생성은 `gpt-5.3-codex-spark` `medium` 에이전트 2개만 동시에 작업에 투입한다.
+- 분배 모드의 1차 생성 쌍 중 하나라도 실패했을 때만 2차 생성으로 `gpt-5.3-codex` `medium` 에이전트 2개를 동시에 작업에 투입한다.
+- 분배 모드에서 Spark 에이전트와 non-Spark 에이전트를 섞은 조합은 금지한다.
 - 위 두 조합 외의 모델 또는 reasoning effort는 사용하지 않는다.
 
 ## Default Retry Order
 1. 먼저 `gpt-5.3-codex-spark` `medium`으로 생성한다.
 2. 생성 호출 또는 초기 시작이 실패하면 같은 작업을 `gpt-5.3-codex` `medium`으로 다시 생성한다.
 3. 2차도 실패하면 다른 모델로 우회하지 않는다. 상위 에이전트가 직접 처리하거나, 막힌 이유를 사용자에게 보고하고 다음 결정을 받는다.
+
+분배 모드에서는 먼저 `gpt-5.3-codex-spark` `medium` 2개를 생성한다. 이 1차 생성 쌍 중 하나라도 실패하면 Spark 쌍을 완료 조합으로 취급하지 않고, 같은 작업 분배를 `gpt-5.3-codex` `medium` 2개로 다시 생성한다. 2차 non-Spark 쌍도 실패하면 다른 모델로 우회하지 않는다.
 
 ## Distribution Trigger
 사용자가 `서브에이전트규칙을 읽고 일을 분배해`라고 요청하면 분배 모드로 처리한다.
@@ -34,7 +38,11 @@ tags:
 
 - `gpt-5.3-codex-spark` `medium` 에이전트 2개
 
+위 Spark 쌍 생성 중 하나라도 실패하면 두 작업 모두 `gpt-5.3-codex` `medium` 에이전트 2개로 다시 생성한다. 분배 모드에서는 Spark 1개와 non-Spark 1개를 섞어 완료 조합으로 사용하지 않는다.
+
 두 서브에이전트는 직접 코드 작성, 테스트 작성, 리팩터링, 버그 수정 같은 주요 구현 작업을 맡는다. 상위 에이전트는 문서 수정, SDD note 갱신, 작업 분해, 충돌 조정, 최종 통합 검토를 직접 맡는다.
+- 상위 에이전트의 직접 수정 범위는 기본적으로 Markdown/SDD 문서로 제한하고, 구현 `.py` 수정은 서브에이전트에 배정한다.
+- 구현 서브에이전트의 완료 조건은 담당 `.py` 또는 Python test 변경이며, Markdown-only 변경은 완료로 인정하지 않는다.
 
 분배 모드에서도 `fork_context=true`는 금지한다. 각 서브에이전트에는 필요한 범위의 파일 경로, 책임 범위, 금지 사항, 검증 기대치를 `message` 또는 `items`로 명시한다.
 
@@ -70,13 +78,35 @@ tags:
 
 실패 시에는 같은 형태를 유지하고 `model`만 `gpt-5.3-codex`로 바꾼다.
 
-분배 모드 생성:
+분배 모드 1차 생성:
 
 ```json
 {
   "agent_type": "worker",
   "fork_context": false,
   "model": "gpt-5.3-codex-spark",
+  "reasoning_effort": "medium",
+  "message": "<bounded implementation task A>"
+}
+```
+
+```json
+{
+  "agent_type": "worker",
+  "fork_context": false,
+  "model": "gpt-5.3-codex-spark",
+  "reasoning_effort": "medium",
+  "message": "<bounded implementation task B>"
+}
+```
+
+분배 모드 1차 생성 쌍 중 하나라도 실패했을 때의 2차 생성:
+
+```json
+{
+  "agent_type": "worker",
+  "fork_context": false,
+  "model": "gpt-5.3-codex",
   "reasoning_effort": "medium",
   "message": "<bounded implementation task A>"
 }
@@ -96,6 +126,7 @@ tags:
 - 생성 시 모델 이름을 생략하지 않는다.
 - 생성 시 reasoning effort를 생략하지 않는다.
 - 컨텍스트 전달은 필요한 범위만 명시한다.
+- 분배 모드에서는 Spark/Spark 또는 non-Spark/non-Spark 쌍만 완료 조합으로 인정한다.
 - 분배 모드에서는 첫 `done` 또는 `awaiting instruction` 상태를 실제 완료로 간주하지 않는다.
 - 기본 단일 서브에이전트 생성의 fallback은 한 단계만 허용한다.
 - 다른 모델 추가는 이 문서 자체를 갱신하는 변경으로만 허용한다.

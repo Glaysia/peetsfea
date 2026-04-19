@@ -19,11 +19,11 @@ flowchart TD
     StepScene["run/sampled/type2/<design_id>/type2_scene.step"]
     StepLedger["run/sampled/type2/<design_id>/type2_step_ledger.json\n+ em_policy"]
     ImportEntry["entry/import_type2_step.py"]
-    ImportCore["type2_step_import_core\nimport + partition + styling\n+ merged ferrite-group reconstruction\n+ port-sheet reconstruction"]
+    ImportCore["type2_step_import_core\nimport + partition + styling\n+ copper/ferrite group reconstruction\n+ port-sheet reconstruction"]
     ImportLedger["run/sampled/type2/<design_id>/type2_imported_ledger.json"]
     ImportAedt["run/sampled/type2/<design_id>/<design_id>.aedt"]
     SetupEntry["entry/setup_type2_step.py"]
-    Mesh["type2_step_post_import_mesh\nLength1 on conductor-only copper family\n*_copper_wall_t*|*_copper_coil_t*|*_bridge_s*|*_stub_in|*_stub_out"]
+    Mesh["type2_step_post_import_mesh\nLength1 on conductor-only united copper\ntx_plate_copper|rx_plate_copper"]
     Boundary["build_boundary()\nabsolute-offset region\nexact 6 faces"]
     Ports["type2_step_port_assignment\n1/1_T1, 2/2_T1"]
     Adapter["type2_step_em_input\n-> EmPipelineInput"]
@@ -73,15 +73,23 @@ flowchart TD
 - active plate-stack ferrite-family child는 ungrouped 상태로 STEP handoff에 남기지 않는다.
 - ferrite-family group contract는 per-set sandwich가 아니라 role별 단일 group이다:
   `g_ferrite_tx` / `g_ferrite_rx` members는 flattened per-set stack가 아니라 merged 3 exact bodies다.
-- import에서 ferrite-family가 generic `SOLID*`로 보이면 export contract failure로 본다.
+- active plate-stack copper STEP exact names는 role당 united conductor body다:
+  TX `tx_plate_copper`, RX `rx_plate_copper`.
+- copper segment labels(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`)는
+  pre-unite provenance only이며 final handoff body가 아니다.
+- copper group contract는 role별 단일 group이다:
+  `g_copper_tx -> [tx_plate_copper]`, `g_copper_rx -> [rx_plate_copper]`.
+- ferrite group contract은 role별 단일 group이며 `g_ferrite_tx` / `g_ferrite_rx`가 각각
+  `stack_pet_psa -> stack_ferrite -> stack_air` 순서의 3개 멤버를 가져야 한다.
+- import에서 plate-stack body가 generic `SOLID*`로 보이면 export contract failure로 본다.
 - radiation boundary와 explicit lumped port는 setup-ready runtime이 1회만 만든다.
 - plate-stack exact pair도 setup-ready에서 source phase, analysis/report, `validate_pipeline()`,
   `ValidateDesign()`, final save까지 full EM chain을 같은 순서로 수행한다.
 - 0.2.22 document contract에서 underlay footprint source는 coil bounds가 아니라 owner region full bounds다.
 - TX underlay는 `tx_region` full `XY` footprint + TX-only `underlay_gap_mm`, RX underlay는 `rx_region_max` full `YZ` footprint + `-X` boundary anchor를 쓴다.
 - underlay exact names는 TX `tx_underlay_*`, RX `under_rx_*`이며, underlay exact object/body names는 feature-local rule로 `<= 32` chars다.
-- mesh owner는 계속 conductor-only다. underlay/`*_pcb_wall`/`*_pcb_coil`/reconstructed port-sheet는
-  mesh target set에 들어가지 않는다.
+- mesh owner는 계속 conductor-only다. plate-stack pair에서는 `tx_plate_copper`와 `rx_plate_copper`만
+  mesh target이며, underlay/`*_pcb_wall`/`*_pcb_coil`/reconstructed port-sheet는 mesh target set에 들어가지 않는다.
 
 ## Handoff
 - Owning architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
