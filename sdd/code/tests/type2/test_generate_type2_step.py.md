@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-19 @ 23:10
+updated: 2026-04-19 @ 21:24
 tags:
   - tests
   - type2
@@ -21,7 +21,8 @@ tags:
 
 ## Canonical coverage
 - `tx_plate_stack` / `rx_plate_stack` parser acceptance
-- active example loader expects shared TX/RX `pcb_total_thickness_mm = 0.4`
+- active fixed example loader expects shared TX/RX `pcb_total_thickness_mm = 0.4`
+- `examples/type2_sweep.toml` is the mutable sampling SSOT and this test file must not pin its concrete sweep values.
 - object id mismatch / coil-only field rejection
 - plate-stack `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio` validation plus explicit rejection of removed `shoe_depth_mm`
 - TX/RX pre-unite baseline contract keeps per-turn/bridge/stub segment bodies; final handoff contract은
@@ -56,5 +57,6 @@ tags:
   - same-edge neighboring bridges (`Y=max`끼리, `Y=min`끼리)도 positive-volume intersection이 없어야 한다.
 
 ## 변경 시 주의점
-- active example role drift와 exact-name order drift를 같은 테스트 층에서 잡아야 한다.
+- fixed example role drift와 exact-name order drift를 같은 테스트 층에서 잡아야 한다.
+- sweep example TOML 값 변경은 authoring change로 취급하며, parser/export unit tests가 구체 range 값을 검사하지 않는다.
 - exact name/order drift 검사는 pre-unite segment contracts와 final export-contract(`6` final bodies per role)를 함께 검증해야 한다.

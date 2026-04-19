@@ -1149,46 +1149,6 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert rx_entry.z_usage_ratio.start == pytest.approx(0.3)
 
 
-def test_load_sweep_example_type2_toml_parses_expected_sampling_contract() -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    source_toml = repo_root / "examples" / "type2_sweep.toml"
-    spec = load_type2_step_spec(source_toml)
-
-    assert spec.simulation.radiation_margin_mm == pytest.approx(3500.0)
-    assert spec.outputs == type1_outputs_spec()
-    assert len(spec.non_model_objects) == 6
-    assert len(spec.modeled_objects) == 2
-    modeled_by_id = {entry.object_id: entry for entry in spec.modeled_objects}
-    tx_entry = modeled_by_id["tx_plate_stack"]
-    rx_entry = modeled_by_id["rx_plate_stack"]
-    assert tx_entry.role == "tx_plate_stack"
-    assert tx_entry.pcb_total_thickness_mm == pytest.approx(_PLATE_STACK_EXAMPLE_PCB_TOTAL_THICKNESS_MM)
-    assert tx_entry.copper_thickness_mm == pytest.approx(0.035)
-    assert not hasattr(tx_entry, "ferrite_set_count")
-    assert tx_entry.turn_count.start == pytest.approx(2.0)
-    assert tx_entry.turn_count.end == pytest.approx(10.0)
-    assert tx_entry.turn_count.count == 9
-    assert tx_entry.metal_fill_factor.start == pytest.approx(0.2)
-    assert tx_entry.metal_fill_factor.end == pytest.approx(0.6)
-    assert tx_entry.metal_fill_factor.count == 15
-    assert tx_entry.z_usage_ratio.start == pytest.approx(0.03)
-    assert tx_entry.z_usage_ratio.end == pytest.approx(0.6)
-    assert tx_entry.z_usage_ratio.count == 17
-    assert rx_entry.role == "rx_plate_stack"
-    assert rx_entry.pcb_total_thickness_mm == pytest.approx(_PLATE_STACK_EXAMPLE_PCB_TOTAL_THICKNESS_MM)
-    assert rx_entry.copper_thickness_mm == pytest.approx(0.1)
-    assert not hasattr(rx_entry, "ferrite_set_count")
-    assert rx_entry.turn_count.start == pytest.approx(2.0)
-    assert rx_entry.turn_count.end == pytest.approx(10.0)
-    assert rx_entry.turn_count.count == 9
-    assert rx_entry.metal_fill_factor.start == pytest.approx(0.2)
-    assert rx_entry.metal_fill_factor.end == pytest.approx(0.6)
-    assert rx_entry.metal_fill_factor.count == 15
-    assert rx_entry.z_usage_ratio.start == pytest.approx(0.03)
-    assert rx_entry.z_usage_ratio.end == pytest.approx(0.6)
-    assert rx_entry.z_usage_ratio.count == 17
-
-
 def test_load_type2_step_spec_rejects_duplicate_object_id(tmp_path: Path) -> None:
     toml_path = _write_spec(tmp_path, _type2_spec_text(modeled_object_id="floor"))
 
