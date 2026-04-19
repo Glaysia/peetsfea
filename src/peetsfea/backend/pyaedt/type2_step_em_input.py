@@ -9,6 +9,9 @@ from peetsfea.types.manifest import EmPorts, GroupEndpointEntry
 
 _COIL_ROLE_PAIR: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
 _PLATE_STACK_ROLE_PAIR: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
+_MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset(
+    {"tx_plate_stack", "rx_single_coil"}
+)
 _ALL_SUPPORTED_ROLES: frozenset[str] = frozenset({*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR})
 _TX_PLATE_COPPER_NAME = "tx_plate_copper"
 _RX_PLATE_COPPER_NAME = "rx_plate_copper"
@@ -34,12 +37,23 @@ def _is_tx_plate_stack_copper_name(name: str) -> bool:
     return name == _TX_PLATE_COPPER_NAME
 
 
-def _resolve_exact_pair_for_direct_em_input(
+def _resolve_supported_direct_em_input_entries(
     modeled_objects: list[dict[str, object]],
-) -> tuple[dict[str, object], dict[str, object], str, str]:
+) -> list[tuple[str, dict[str, object], str]]:
+    if len(modeled_objects) == 1:
+        context = "modeled_objects[0]"
+        single = modeled_objects[0]
+        role = _required_supported_role_for_direct_em_input(single, context=context)
+        if role != "rx_single_coil":
+            raise ValueError(
+                "type2 setup-ready EM input accepts one modeled_objects entry only for rx_single_coil "
+                f"(actual={role!r})"
+            )
+        return [("rx", single, context)]
     if len(modeled_objects) != 2:
         raise ValueError(
             "type2 setup-ready EM input requires exactly two modeled_objects entries "
+            "for paired mode or one rx_single_coil entry for RX-only mode "
             f"(actual={len(modeled_objects)})"
         )
     entry_by_role: dict[str, dict[str, object]] = {}
@@ -55,22 +69,24 @@ def _resolve_exact_pair_for_direct_em_input(
         modeled_roles.append(role)
     role_set = frozenset(modeled_roles)
     if role_set == _COIL_ROLE_PAIR:
-        return (
-            entry_by_role["tx_single_coil"],
-            entry_by_role["rx_single_coil"],
-            "modeled_objects[tx_single_coil]",
-            "modeled_objects[rx_single_coil]",
-        )
+        return [
+            ("tx", entry_by_role["tx_single_coil"], "modeled_objects[tx_single_coil]"),
+            ("rx", entry_by_role["rx_single_coil"], "modeled_objects[rx_single_coil]"),
+        ]
     if role_set == _PLATE_STACK_ROLE_PAIR:
-        return (
-            entry_by_role["tx_plate_stack"],
-            entry_by_role["rx_plate_stack"],
-            "modeled_objects[tx_plate_stack]",
-            "modeled_objects[rx_plate_stack]",
-        )
+        return [
+            ("tx", entry_by_role["tx_plate_stack"], "modeled_objects[tx_plate_stack]"),
+            ("rx", entry_by_role["rx_plate_stack"], "modeled_objects[rx_plate_stack]"),
+        ]
+    if role_set == _MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR:
+        return [
+            ("tx", entry_by_role["tx_plate_stack"], "modeled_objects[tx_plate_stack]"),
+            ("rx", entry_by_role["rx_single_coil"], "modeled_objects[rx_single_coil]"),
+        ]
     raise ValueError(
         "type2 setup-ready EM input requires one exact supported tx/rx role pair: "
         "['tx_single_coil', 'rx_single_coil'] or ['tx_plate_stack', 'rx_plate_stack'] "
+        "or ['tx_plate_stack', 'rx_single_coil'] "
         f"(roles={modeled_roles})"
     )
 
@@ -272,7 +288,65 @@ def build_type2_em_input(
     imported_ledger: Type2ImportedLedger,
     ports: EmPorts,
 ) -> EmPipelineInput:
-    tx_entry, rx_entry, tx_context, rx_context = _resolve_exact_pair_for_direct_em_input(imported_ledger["modeled_objects"])
+    entries = _resolve_supported_direct_em_input_entries(imported_ledger["modeled_objects"])
+    if len(entries) == 1:
+        _, rx_entry, rx_context = entries[0]
+        rx_role = _required_supported_role_for_direct_em_input(rx_entry, context=rx_context)
+        rx_imported_names = _imported_object_names(rx_entry, context=rx_context)
+        _require_no_plate_stack_legacy_copper_leakage(
+            imported_object_names=rx_imported_names,
+            role=rx_role,
+            context=rx_context,
+        )
+        rx_pcb_names = _pcb_names(rx_imported_names, role=rx_role)
+        rx_copper_names = _copper_names(rx_imported_names, role=rx_role)
+        if len(rx_pcb_names) < 1 or len(rx_copper_names) != 1:
+            raise ValueError(
+                f"{rx_context}.imported_object_names must contain one or more PCB names and exactly one copper name"
+            )
+        non_model_object_names: list[str] = []
+        for index, entry in enumerate(imported_ledger["non_model_objects"]):
+            non_model_object_names.extend(_imported_object_names(entry, context=f"non_model_objects[{index}]"))
+        object_names = sorted(non_model_object_names + rx_imported_names)
+        rx_plane = require_non_empty_str(
+            require_key(rx_entry, key="plane", context=rx_context),
+            context=f"{rx_context}.plane",
+        )
+        return {
+            "ready_objects": {
+                "tx_conductors": [],
+                "rx_conductors": sorted(rx_copper_names),
+                "ferrite_objects": [],
+                "fr4_objects": sorted(rx_pcb_names),
+                "scene_bbox_source_objects": sorted(non_model_object_names),
+            },
+            "endpoints": {
+                "tx": [],
+                "rx": [_endpoint_entry(entry=rx_entry, role=rx_role, context=rx_context)],
+            },
+            "context": {
+                "dd_mirror_plane": "XZ",
+                "rx_plane": rx_plane,
+                "tx_vertical_plane": rx_plane,
+                "source": "type2_step_setup_ready",
+                "object_names": object_names,
+            },
+            "ports": {
+                "tx": list(ports["tx"]),
+                "rx": list(ports["rx"]),
+            },
+        }
+    tx_entry: dict[str, object] = {}
+    rx_entry: dict[str, object] = {}
+    tx_context = ""
+    rx_context = ""
+    for key, entry, context in entries:
+        if key == "tx":
+            tx_entry = entry
+            tx_context = context
+        else:
+            rx_entry = entry
+            rx_context = context
     tx_role = _required_supported_role_for_direct_em_input(tx_entry, context=tx_context)
     rx_role = _required_supported_role_for_direct_em_input(rx_entry, context=rx_context)
     tx_imported_names = _imported_object_names(tx_entry, context=tx_context)

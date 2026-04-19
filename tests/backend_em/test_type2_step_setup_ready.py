@@ -35,6 +35,7 @@ from tests.backend_em.test_type2_step_import_pipeline import (
     _rx_single_coil_entry,
     _rx_plate_stack_entry,
     _rx_plate_stack_expected_names,
+    _tx_plate_stack_expected_names,
     _single_layer_imported_name_batch,
     _single_layer_imported_name_batch_with_role_aware_underlay,
     _single_layer_modeled_objects,
@@ -260,6 +261,9 @@ class _SetupReadyHfss(_ImportFakeHfss):
             category,
             differential_pairs,
         )
+        if len(self._excitation_names) == 1:
+            rx_name = self._excitation_names[0]
+            return [f"S({rx_name},{rx_name})"]
         tx_name = self._excitation_names[0]
         rx_name = self._excitation_names[1]
         return [
@@ -373,6 +377,27 @@ def _tx_array_imported_name_batch(*, branch_count: int) -> tuple[str, ...]:
         "rx_region_max",
         *_tx_plate_stack_array_expected_names(branch_count=branch_count),
         *_rx_plate_stack_expected_names(),
+    )
+
+
+def _mixed_tx_plate_stack_rx_single_imported_name_batch() -> tuple[str, ...]:
+    return (
+        "environment",
+        "tx_region",
+        "rx_region_max",
+        *_tx_plate_stack_expected_names(),
+        "rx_pcb_l0",
+        "rx_copper_l0",
+    )
+
+
+def _rx_only_imported_name_batch() -> tuple[str, ...]:
+    return (
+        "environment",
+        "tx_region",
+        "rx_region_max",
+        "rx_pcb_l0",
+        "rx_copper_l0",
     )
 
 
@@ -712,6 +737,54 @@ def test_assign_post_import_mesh_accepts_plate_stack_exact_pair(tmp_path: Path) 
     assert payload[objects_index + 1] == expected_objects
 
 
+def test_assign_post_import_mesh_accepts_tx_plate_stack_with_rx_single_coil_mesh(tmp_path: Path) -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+    modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
+    modeled_objects[1] = _coil_modeled_objects_with_imported_names(tmp_path)[1]
+
+    result = assign_post_import_mesh(
+        hfss=cast(HfssSession, session),
+        imported_modeled_objects=modeled_objects,
+    )
+
+    payload = session.mesh_module.assign_length_op_calls[0]
+    objects_index = payload.index("Objects:=")
+
+    assert result["objects"] == ["tx_plate_copper", "rx_copper_l0"]
+    assert payload[objects_index + 1] == ["tx_plate_copper", "rx_copper_l0"]
+
+
+def test_assign_post_import_mesh_accepts_rx_single_coil_only(tmp_path: Path) -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+    modeled_objects = [_coil_modeled_objects_with_imported_names(tmp_path)[1]]
+
+    result = assign_post_import_mesh(
+        hfss=cast(HfssSession, session),
+        imported_modeled_objects=modeled_objects,
+    )
+
+    assert session.mesh_module.assign_length_op_calls == [
+        [
+            "NAME:Length1",
+            "RefineInside:=",
+            False,
+            "Enabled:=",
+            True,
+            "Objects:=",
+            ["rx_copper_l0"],
+            "RestrictElem:=",
+            False,
+            "NumMaxElem:=",
+            "1000",
+            "RestrictLength:=",
+            True,
+            "MaxLength:=",
+            "5mm",
+        ]
+    ]
+    assert result["objects"] == ["rx_copper_l0"]
+
+
 def test_assign_post_import_mesh_rejects_plate_stack_legacy_segment_leakage(tmp_path: Path) -> None:
     session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
     imported_modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
@@ -725,7 +798,7 @@ def test_assign_post_import_mesh_rejects_plate_stack_legacy_segment_leakage(tmp_
         )
 
 
-@pytest.mark.parametrize("role", ["tx_plate_stack", "rx_plate_stack"])
+@pytest.mark.parametrize("role", ["rx_plate_stack"])
 def test_assign_post_import_mesh_rejects_mixed_role_families(role: str) -> None:
     session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
     imported_modeled_objects = _role_aware_mesh_entries()
@@ -796,7 +869,58 @@ def test_assign_type2_lumped_ports_accepts_plate_stack_exact_pair(tmp_path: Path
     assert result == {"tx": ["1_T1"], "rx": ["2_T1"]}
 
 
-@pytest.mark.parametrize("role", ["tx_plate_stack", "rx_plate_stack"])
+def test_assign_type2_lumped_ports_accepts_tx_plate_stack_with_rx_single_coil_ports(tmp_path: Path) -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+    modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
+    modeled_objects[1] = _coil_modeled_objects_with_imported_names(tmp_path)[1]
+    _rewrite_plate_stack_terminal_metadata_to_equal_stripe_pitch(modeled_objects[0])
+    tx_sheet_name = cast(str, cast(list[object], modeled_objects[0]["imported_object_names"])[-1])
+    rx_sheet_name = cast(str, cast(list[object], modeled_objects[1]["imported_object_names"])[-1])
+    _seed_port_sheet_edges_from_terminal_metadata(
+        cast(_SetupReadyModeler, session.modeler),
+        entry=modeled_objects[0],
+        sheet_name=tx_sheet_name,
+    )
+    _seed_port_sheet_edges_from_terminal_metadata(
+        cast(_SetupReadyModeler, session.modeler),
+        entry=modeled_objects[1],
+        sheet_name=rx_sheet_name,
+    )
+
+    result = assign_type2_lumped_ports(
+        hfss=cast(HfssSession, session),
+        modeler=cast(ModelerSession, session.modeler),
+        imported_ledger=cast(Type2ImportedLedger, {"modeled_objects": modeled_objects}),
+    )
+
+    assert len(session.oboundary.assign_lumped_port_calls) == 2
+    assert session._excitation_names == ["1_T1", "2_T1"]
+    assert result == {"tx": ["1_T1"], "rx": ["2_T1"]}
+
+
+def test_assign_type2_lumped_ports_accepts_rx_single_coil_only(tmp_path: Path) -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+    modeled_objects = [_coil_modeled_objects_with_imported_names(tmp_path)[1]]
+    rx_sheet_name = cast(str, cast(list[object], modeled_objects[0]["imported_object_names"])[-1])
+    _seed_port_sheet_edges_from_terminal_metadata(
+        cast(_SetupReadyModeler, session.modeler),
+        entry=modeled_objects[0],
+        sheet_name=rx_sheet_name,
+    )
+
+    result = assign_type2_lumped_ports(
+        hfss=cast(HfssSession, session),
+        modeler=cast(ModelerSession, session.modeler),
+        imported_ledger=cast(Type2ImportedLedger, {"modeled_objects": modeled_objects}),
+    )
+
+    assert len(session.oboundary.assign_lumped_port_calls) == 1
+    assert session.oboundary.assign_lumped_port_calls[0][0] == "NAME:1"
+    assert session._excitation_names == ["1_T1"]
+    assert result == {"tx": [], "rx": ["1_T1"]}
+
+
+@pytest.mark.parametrize("role", ["rx_plate_stack"])
 def test_assign_type2_lumped_ports_rejects_mixed_role_families(tmp_path: Path, role: str) -> None:
     session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
     modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
@@ -817,7 +941,7 @@ def test_assign_type2_lumped_ports_rejects_incomplete_plate_stack_pair(tmp_path:
     session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
     modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
 
-    with pytest.raises(ValueError, match=r"requires exactly two modeled_objects entries"):
+    with pytest.raises(ValueError, match=r"accepts one modeled_objects entry only for rx_single_coil"):
         assign_type2_lumped_ports(
             hfss=cast(HfssSession, session),
             modeler=cast(ModelerSession, session.modeler),
@@ -867,6 +991,46 @@ def test_build_type2_em_input_accepts_plate_stack_exact_pair(tmp_path: Path) -> 
     assert result["context"]["tx_vertical_plane"] == "YZ"
     assert result["context"]["rx_plane"] == "YZ"
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
+
+
+def test_build_type2_em_input_accepts_tx_plate_stack_with_rx_single_coil(tmp_path: Path) -> None:
+    tx_modeled = cast(
+        dict[str, object],
+        _plate_stack_modeled_objects_with_imported_names(tmp_path)[0],
+    )
+    rx_modeled = cast(dict[str, object], _coil_modeled_objects_with_imported_names(tmp_path)[1])
+    _rewrite_plate_stack_terminal_metadata_to_equal_stripe_pitch(tx_modeled)
+    modeled_objects = [tx_modeled, rx_modeled]
+
+    result = build_type2_em_input(
+        imported_ledger=cast(Type2ImportedLedger, _minimal_em_input_ledger(modeled_objects=modeled_objects)),
+        ports=cast(EmPorts, {"tx": ["1_T1"], "rx": ["2_T1"]}),
+    )
+
+    assert result["ready_objects"]["tx_conductors"] == ["tx_plate_copper"]
+    assert result["ready_objects"]["rx_conductors"] == ["rx_copper_l0"]
+    assert result["endpoints"]["tx"][0]["group_kind"] == "tx_plate_stack"
+    assert result["endpoints"]["rx"][0]["group_kind"] == "rx_dd"
+    assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
+
+
+def test_build_type2_em_input_accepts_rx_single_coil_only(tmp_path: Path) -> None:
+    modeled_objects = [_coil_modeled_objects_with_imported_names(tmp_path)[1]]
+
+    result = build_type2_em_input(
+        imported_ledger=cast(Type2ImportedLedger, _minimal_em_input_ledger(modeled_objects=modeled_objects)),
+        ports=cast(EmPorts, {"tx": [], "rx": ["1_T1"]}),
+    )
+
+    assert result["ready_objects"]["tx_conductors"] == []
+    assert result["ready_objects"]["rx_conductors"] == ["rx_copper_l0"]
+    assert result["ready_objects"]["fr4_objects"] == ["rx_pcb_l0"]
+    assert result["ready_objects"]["ferrite_objects"] == []
+    assert result["endpoints"]["tx"] == []
+    assert result["endpoints"]["rx"][0]["group_kind"] == "rx_dd"
+    assert result["context"]["tx_vertical_plane"] == "YZ"
+    assert result["context"]["rx_plane"] == "YZ"
+    assert result["ports"] == {"tx": [], "rx": ["1_T1"]}
 
 
 def test_build_type2_em_input_accepts_tx_plate_stack_array_branch_pcb_names(tmp_path: Path) -> None:
@@ -920,13 +1084,9 @@ def test_build_type2_em_input_rejects_plate_stack_legacy_segment_leakage(tmp_pat
         )
 
 
-@pytest.mark.parametrize("role", ["tx_plate_stack", "rx_plate_stack"])
-def test_build_type2_em_input_rejects_mixed_role_families(tmp_path: Path, role: str) -> None:
+def test_build_type2_em_input_rejects_inverse_mixed_role_family(tmp_path: Path) -> None:
     modeled_objects = _plate_stack_modeled_objects_with_imported_names(tmp_path)
-    if role == "tx_plate_stack":
-        modeled_objects[1] = _coil_modeled_objects_with_imported_names(tmp_path)[1]
-    else:
-        modeled_objects[0] = _coil_modeled_objects_with_imported_names(tmp_path)[0]
+    modeled_objects[0] = _coil_modeled_objects_with_imported_names(tmp_path)[0]
 
     with pytest.raises(ValueError, match=r"requires one exact supported tx/rx role pair"):
         build_type2_em_input(
@@ -950,7 +1110,7 @@ def test_setup_type2_step_ledger_raises_when_required_mesh_role_is_missing(tmp_p
         )
     )
 
-    with pytest.raises(ValueError, match=r"setup facade requires exactly two modeled_objects entries"):
+    with pytest.raises(ValueError, match=r"supports a single modeled role only for RX-only mode"):
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_setup_ready.aedt",
@@ -960,6 +1120,51 @@ def test_setup_type2_step_ledger_raises_when_required_mesh_role_is_missing(tmp_p
 
     assert session.desktop_class.release_calls == []
     assert not imported_ledger_path.exists()
+
+
+def test_setup_type2_step_ledger_rx_single_coil_only_runs_until_rx_only_tx_tml_guard(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=[_rx_single_coil_entry(tmp_path)],
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_setup_ready.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[_rx_only_imported_name_batch()]))
+
+    with pytest.raises(ValueError, match=r"Output expression references TX_TML but RX-only mode has no TX terminal"):
+        setup_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=output_aedt_path,
+            imported_ledger_path=imported_ledger_path,
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
+
+    assert session.mesh_module.assign_length_op_calls == [
+        [
+            "NAME:Length1",
+            "RefineInside:=",
+            False,
+            "Enabled:=",
+            True,
+            "Objects:=",
+            ["rx_copper_l0"],
+            "RestrictElem:=",
+            False,
+            "NumMaxElem:=",
+            "1000",
+            "RestrictLength:=",
+            True,
+            "MaxLength:=",
+            "5mm",
+        ]
+    ]
+    assert len(session.oboundary.assign_lumped_port_calls) == 1
+    assert session._excitation_names == ["1_T1"]
+    assert session.save_project_calls == []
+    assert session.desktop_class.release_calls == [(True, True)]
 
 
 def test_setup_type2_step_ledger_raises_when_port_sheet_vertices_are_malformed(tmp_path: Path) -> None:
@@ -1280,14 +1485,41 @@ def test_setup_type2_step_ledger_reconstructs_rotated_tx_plate_stack_array_port_
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
 
 
-@pytest.mark.parametrize("role", ["tx_plate_stack", "rx_plate_stack"])
-def test_setup_type2_step_ledger_rejects_mixed_role_families_before_hfss(tmp_path: Path, role: str) -> None:
+def test_setup_type2_step_ledger_accepts_tx_plate_stack_with_rx_single_coil_and_runs_full_setup_ready(
+    tmp_path: Path,
+) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
     modeled_objects = _plate_stack_modeled_objects(tmp_path)
-    if role == "tx_plate_stack":
-        modeled_objects[1] = _rx_single_coil_entry(tmp_path)
-    else:
-        modeled_objects[0] = _modeled_entry(source_metadata_path=str(tmp_path / "tx.metadata.json"))
+    modeled_objects[1] = _rx_single_coil_entry(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=modeled_objects,
+    )
+    session = _SetupReadyHfss(
+        modeler=_SetupReadyModeler(imported_name_batches=[_mixed_tx_plate_stack_rx_single_imported_name_batch()])
+    )
+
+    result = cast(
+        Type2SetupReadyResult,
+        setup_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_setup_ready.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        ),
+    )
+
+    assert result["mesh"]["objects"] == ["tx_plate_copper", "rx_copper_l0"]
+    assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
+    assert result["validation_report"] == {"ok": True, "gate": "hard_fail", "message": "ok"}
+
+
+def test_setup_type2_step_ledger_rejects_inverse_mixed_role_family_before_hfss(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    modeled_objects = _plate_stack_modeled_objects(tmp_path)
+    modeled_objects[0] = _modeled_entry(source_metadata_path=str(tmp_path / "tx.metadata.json"))
     _write_ledger(
         ledger_path,
         scene_step_path=scene_step,
@@ -1314,7 +1546,7 @@ def test_setup_type2_step_ledger_rejects_incomplete_plate_stack_pair_before_hfss
         modeled_objects=modeled_objects,
     )
 
-    with pytest.raises(ValueError, match=r"requires exactly two modeled_objects entries"):
+    with pytest.raises(ValueError, match=r"supports a single modeled role only for RX-only mode"):
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_setup_ready.aedt",

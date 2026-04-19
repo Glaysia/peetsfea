@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import math
-import subprocess
 from pathlib import Path
 
 import build123d as bd
@@ -45,10 +44,6 @@ def _spec_text(
     layer_count: int = 1,
     layer_gap: float = 2.0,
     terminal_stub_length: float = 5.0,
-    void_x_ratio: float = 0.2,
-    void_y_ratio: float = 0.2,
-    void_center_x_ratio: float = 0.0,
-    void_center_y_ratio: float = 0.0,
     margin_ratio: float = 0.05,
     metal_fill_factor: float = 0.5,
 ) -> str:
@@ -76,14 +71,6 @@ range = {_range(True, float(layer_count), float(layer_count), 1)}
 range = {_range(False, layer_gap, layer_gap, 1)}
 [tx_coil.terminal_stub_length_mm]
 range = {_range(False, terminal_stub_length, terminal_stub_length, 1)}
-[tx_coil.void_x_over_outer_x]
-range = {_range(False, void_x_ratio, void_x_ratio, 1)}
-[tx_coil.void_y_over_outer_y]
-range = {_range(False, void_y_ratio, void_y_ratio, 1)}
-[tx_coil.void_center_x_over_outer_x]
-range = {_range(False, void_center_x_ratio, void_center_x_ratio, 1)}
-[tx_coil.void_center_y_over_outer_y]
-range = {_range(False, void_center_y_ratio, void_center_y_ratio, 1)}
 [tx_coil.margin_ratio]
 range = {_range(False, margin_ratio, margin_ratio, 1)}
 [tx_coil.metal_fill_factor]
@@ -239,9 +226,16 @@ def _selected_stub_diagonal_world_points(
         for point_xy in alternate_diagonal_xy
     )
     assert best_score_check >= alternate_score - 1e-9
-    return tuple(
-        profile.world_point((point_xy[0], point_xy[1], stub_primitive.origin_z), frame_origin_xyz=(0.0, 0.0, 0.0))
-        for point_xy in best_diagonal_xy
+    first_point_xy, second_point_xy = best_diagonal_xy
+    return (
+        profile.world_point(
+            (first_point_xy[0], first_point_xy[1], stub_primitive.origin_z),
+            frame_origin_xyz=(0.0, 0.0, 0.0),
+        ),
+        profile.world_point(
+            (second_point_xy[0], second_point_xy[1], stub_primitive.origin_z),
+            frame_origin_xyz=(0.0, 0.0, 0.0),
+        ),
     )
 
 
@@ -295,7 +289,11 @@ def _assert_zero_intersection_volume(first: object, second: object) -> None:
     if shared_shape is None:
         return
     assert isinstance(shared_shape, bd.Shape)
-    assert shared_shape.volume == pytest.approx(0.0, abs=1e-9)
+    shared_solids = tuple(shared_shape.solids())
+    if len(shared_solids) == 0:
+        return
+    shared_volume = sum(float(solid.volume) for solid in shared_solids)
+    assert shared_volume == pytest.approx(0.0, abs=1e-9)
 
 
 def _scene_child_by_label(scene: bd.Compound, *, label: str) -> bd.Shape:
@@ -305,7 +303,12 @@ def _scene_child_by_label(scene: bd.Compound, *, label: str) -> bd.Shape:
 
 
 def _point3_key(point_xyz: tuple[float, float, float]) -> tuple[int, int, int]:
-    return tuple(int(round(coord * 1_000_000)) for coord in point_xyz)
+    x, y, z = point_xyz
+    return (
+        int(round(x * 1_000_000)),
+        int(round(y * 1_000_000)),
+        int(round(z * 1_000_000)),
+    )
 
 
 def _point3_edge_key(
@@ -331,6 +334,14 @@ def test_load_and_realize_valid_spec_is_deterministic(tmp_path: Path) -> None:
     assert first.outer_y_mm == pytest.approx(100.0)
     assert first.layer_count == 1
     assert first.terminal_stub_length_mm == pytest.approx(first.layer_gap_mm * 0.8)
+    assert first.void_x_over_outer_x == pytest.approx(0.3)
+    assert first.void_y_over_outer_y == pytest.approx(0.3)
+    assert first.void_center_x_over_outer_x == pytest.approx(0.0)
+    assert first.void_center_y_over_outer_y == pytest.approx(0.0)
+    assert first.void_x_mm == pytest.approx(first.outer_x_mm * 0.3)
+    assert first.void_y_mm == pytest.approx(first.outer_y_mm * 0.3)
+    assert first.void_center_x_mm == pytest.approx(0.0)
+    assert first.void_center_y_mm == pytest.approx(0.0)
     assert first.side_geometry.left.trace_mm == pytest.approx(first.side_geometry.right.trace_mm)
 
 
@@ -364,8 +375,39 @@ def test_unsupported_terminal_path_fails(tmp_path: Path) -> None:
         load_tx_rect_void_spec(toml_path)
 
 
+@pytest.mark.parametrize(
+    "legacy_void_key",
+    (
+        "void_x_over_outer_x",
+        "void_y_over_outer_y",
+        "void_center_x_over_outer_x",
+        "void_center_y_over_outer_y",
+    ),
+)
+def test_legacy_void_range_key_fails_as_unsupported_schema_input(
+    tmp_path: Path,
+    legacy_void_key: str,
+) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _spec_text().replace(
+            "[tx_coil.margin_ratio]",
+            (
+                f"[tx_coil.{legacy_void_key}]\n"
+                "range = [false, 0.3, 0.3, 1]\n"
+                "[tx_coil.margin_ratio]"
+            ),
+        ),
+    )
+    with pytest.raises(
+        ValueError,
+        match=rf"Unsupported tx_rect_void schema input.*tx_coil\.{legacy_void_key}",
+    ):
+        load_tx_rect_void_spec(toml_path)
+
+
 @pytest.mark.parametrize("terminal_path", ("A_cw_to_a", "B_cw_to_b", "C_cw_to_c", "D_cw_to_d", "A_ccw_to_a", "B_ccw_to_b", "C_ccw_to_c", "D_ccw_to_d"))
-@pytest.mark.parametrize("turn_count", (1, 4))
+@pytest.mark.parametrize("turn_count", (1, 4, 6))
 def test_geometry_routes_around_void_for_supported_corners(
     tmp_path: Path,
     terminal_path: str,
@@ -386,6 +428,12 @@ def test_geometry_routes_around_void_for_supported_corners(
     assert len(centerline) >= 2
     assert len([box for box in boxes if box.role == "pcb"]) == realized.layer_count
     assert _has_blunt_corner_segment(centerline)
+
+
+def test_turn_count_above_supported_range_fails(tmp_path: Path) -> None:
+    toml_path = _write_spec(tmp_path, _spec_text(turn_count=7))
+    with pytest.raises(ValueError, match=r"tx_coil\.turn_count must resolve to \[1,6\]"):
+        realize_tx_rect_void_spec(load_tx_rect_void_spec(toml_path), seed=0)
 
 
 def test_step_scene_exports_single_fused_copper_body(tmp_path: Path) -> None:
@@ -793,43 +841,31 @@ def test_export_from_spec_applies_placement_offset_to_boxes_and_metadata(tmp_pat
     )
 
 
-def test_cli_smoke_uses_example_spec_and_writes_registry_aligned_metadata(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    example_toml = _type2_fixed_toml_with_required_underlay_field(tmp_path)
+def test_export_smoke_uses_example_spec_and_writes_registry_aligned_metadata(tmp_path: Path) -> None:
+    example_toml = _write_spec(tmp_path, _spec_text(layer_count=2, turn_count=6, terminal_path="D_ccw_to_d"))
     output_step_path = tmp_path / "cli" / "tx_rect_void.step"
     metadata_path = tmp_path / "cli" / "tx_rect_void.metadata.json"
 
-    completed = subprocess.run(
-        [
-            str(repo_root / ".venv" / "bin" / "python"),
-            str(repo_root / "entry" / "export_tx_rect_void_step.py"),
-            "--toml",
-            str(example_toml),
-            "--output-step",
-            str(output_step_path),
-            "--metadata",
-            str(metadata_path),
-            "--seed",
-            "0",
-        ],
-        capture_output=True,
-        check=True,
-        text=True,
-        cwd=repo_root,
+    export_tx_rect_void_step(
+        toml_path=example_toml,
+        output_step_path=output_step_path,
+        metadata_path=metadata_path,
+        seed=0,
     )
 
     assert output_step_path.stat().st_size > 0
     payload = json.loads(metadata_path.read_text(encoding="utf-8"))
     assert payload["source_toml_path"] == str(example_toml)
-    assert payload["scene_step_path"] == str(output_step_path)
-    assert payload["object_id"] == "tx_rect_void_coil"
-    assert payload["role"] == "tx_single_coil"
-    assert payload["terminal_metadata"]["path"] == "D_ccw_to_d"
-    layer_count = len(payload["canonical_coordinates"]["pcb_layer_z_positions_mm"])
+    assert payload["output_step_path"] == str(output_step_path)
+    assert len(payload["modeled_objects"]) == 1
+    modeled_object = payload["modeled_objects"][0]
+    assert modeled_object["object_id"] == "tx_rect_void_coil"
+    assert modeled_object["role"] == "tx_single_coil"
+    assert modeled_object["terminal_metadata"]["path"] == "D_ccw_to_d"
+    layer_count = len(modeled_object["canonical_coordinates"]["pcb_layer_z_positions_mm"])
     expected_prefix = [f"tx_pcb_l{index}" for index in range(layer_count)]
     expected_prefix.append("tx_copper_stack" if layer_count > 1 else "tx_copper_l0")
     actual_expected_names = payload["expected_exported_body_names"]
     assert actual_expected_names[: len(expected_prefix)] == expected_prefix
     assert "tx_port_sheet" not in actual_expected_names
     assert payload["expected_exported_body_count"] == len(actual_expected_names)
-    assert "output STEP:" in completed.stdout

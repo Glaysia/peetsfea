@@ -1,7 +1,7 @@
 ---
 title: type2_step_scene.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 04:18
+updated: 2026-04-20 @ 21:35
 tags:
   - step-export
   - scene
@@ -16,6 +16,7 @@ tags:
 - Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-copper-unite-grouping]]
 - Related feature plans: [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]]
 - Related TX array plan: [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
+- Related RX backing plan: [[sdd/plans/0.2.22-type2-rx-single-coil-full-backing]]
 
 ## 역할
 - type2 non-model scene와 modeled scene dispatch를 담당한다.
@@ -42,6 +43,8 @@ tags:
 - final import handoff는 `g_copper_tx`, `g_copper_rx`로부터 concrete conductor members를 재구성하며,
   mesh payload도 conductor-only member set을 사용한다.
 - single-coil ferrite family(`tx_wall_*`, `under_rx_*`)도 export 시 같은 ferrite group contract를 따른다.
+- RX single-coil backing uses `under_rx_ferrite_u0`, `under_rx_pet_psa_u0`, `under_rx_air_u0` to fill the full
+  remaining `rx_region_max` X depth behind the 0.4 mm RX coil stack, preserving PET/PSA:ferrite:air ratio `1.5:2.0:0.2`.
 - final exported copper 그룹은 single/array TX/RX에서 `g_copper_tx -> tx_plate_copper`,
   `g_copper_rx -> rx_plate_copper`로 고정된다.
 - TX array branch count must not create extra modeled entries or extra TX port sheets.
@@ -51,10 +54,13 @@ tags:
 - modeled bounds는 owner bounds를 넘으면 안 된다.
 - plate role placement를 centered/rebased placement로 바꾸면 안 된다.
 - active plate roles는 coil helper를 호출하면 안 된다.
+- single-coil scene bridge consumes spec-resolved `outer_x_mm` / `outer_y_mm` that are derived from public usage ratios against the placement owner span at parse time, then delegates to the rect/void core.
+- removed single-coil `void_*` public inputs must not be reconstructed from type2 scene state.
 - ferrite group member 순서는 family body 생성 순서와 동일해야 한다.
 - active single-branch plate roles는 `expected_exported_body_count = 6`을 스킵하면 안 되고,
   pre-unite label(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`)이 export handoff에 노출되면 안 된다.
 - active plate roles는 imported mesh 대상과 final imported body set에 concrete conductor members만 허용한다.
+- RX backing available thickness must be positive; otherwise scene generation fails instead of shrinking or omitting slabs.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_step_spec.py]]

@@ -127,8 +127,8 @@ def _single_coil_range_owner_specs(
     modeled_spec: ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec,
 ) -> tuple[tuple[str, RangeSpec], ...]:
     owner_specs: list[tuple[str, RangeSpec]] = [
-        (f"modeled_objects.{modeled_spec.object_id}.outer_x_mm", modeled_spec.outer_x_mm),
-        (f"modeled_objects.{modeled_spec.object_id}.outer_y_mm", modeled_spec.outer_y_mm),
+        (f"modeled_objects.{modeled_spec.object_id}.outer_x_usage_ratio", modeled_spec.outer_x_usage_ratio),
+        (f"modeled_objects.{modeled_spec.object_id}.outer_y_usage_ratio", modeled_spec.outer_y_usage_ratio),
         (f"modeled_objects.{modeled_spec.object_id}.turn_count", modeled_spec.turn_count),
         (f"modeled_objects.{modeled_spec.object_id}.layer_count", modeled_spec.layer_count),
         (
@@ -139,22 +139,6 @@ def _single_coil_range_owner_specs(
         (
             f"modeled_objects.{modeled_spec.object_id}.terminal_stub_length_mm",
             modeled_spec.terminal_stub_length_mm,
-        ),
-        (
-            f"modeled_objects.{modeled_spec.object_id}.void_x_over_outer_x",
-            modeled_spec.void_x_over_outer_x,
-        ),
-        (
-            f"modeled_objects.{modeled_spec.object_id}.void_y_over_outer_y",
-            modeled_spec.void_y_over_outer_y,
-        ),
-        (
-            f"modeled_objects.{modeled_spec.object_id}.void_center_x_over_outer_x",
-            modeled_spec.void_center_x_over_outer_x,
-        ),
-        (
-            f"modeled_objects.{modeled_spec.object_id}.void_center_y_over_outer_y",
-            modeled_spec.void_center_y_over_outer_y,
         ),
         (f"modeled_objects.{modeled_spec.object_id}.margin_ratio", modeled_spec.margin_ratio),
         (f"modeled_objects.{modeled_spec.object_id}.metal_fill_factor", modeled_spec.metal_fill_factor),

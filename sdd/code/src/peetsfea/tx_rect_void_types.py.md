@@ -1,7 +1,7 @@
 ---
 title: tx_rect_void_types.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-20 @ 15:05
 tags:
   - tx-rect-void
 ---
@@ -25,10 +25,13 @@ tags:
 ## Canonical state
 - module-level mutable state는 없다.
 - canonical profile registry `_PROFILE_BY_ROLE`만 이 파일이 소유한다.
+- `SingleCoilRangeSpec` owns only sampled/public ranges still accepted by the core TOML; fixed void ratios are realization constants, not range fields.
 
 ## Invariants / fail-fast
 - role별 `object_id`, `plane`, `placement_owner_id`, body-name prefix는 stable contract여야 한다.
 - runtime/state type는 nullable fallback 없이 required field를 유지해야 한다.
+- `SingleCoilRangeSpec`는 public TOML sampled fields만 소유하며 legacy `void_*` range ownership을 포함하지 않는다.
+- realized state may retain derived void dimensions/bounds needed by geometry, but must not expose removed void range ownership as public mutable input.
 
 ## 직접 의존
 - 표준 라이브러리 `dataclasses`, `typing`.

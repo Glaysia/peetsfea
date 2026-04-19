@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 23:10
+updated: 2026-04-20 @ 21:35
 tags:
   - step-export
   - spec
@@ -30,6 +30,9 @@ tags:
 - RX plate object/owner/plane은 `rx_plate_stack` / `rx_region_max` / `YZ`다.
 - TX plate role public fields are `pcb_total_thickness_mm`, `copper_thickness_mm`, `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio`, `tx_coil_count`, `tx_array_x_usage_ratio`.
 - RX plate role public fields remain `pcb_total_thickness_mm`, `copper_thickness_mm`, `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio`.
+- single-coil public outer envelope fields are `outer_x_usage_ratio` and `outer_y_usage_ratio`, not mm fields.
+- single-coil `void_*` public fields are removed; the reusable core keeps centered `0.3 x 0.3` void geometry as an internal fixed contract.
+- `render_tx_rect_void_toml()` is a compatibility bridge into the reusable core and must omit removed core `void_*` range tables; the core owns the fixed centered void ratios.
 - `tx_coil_count` is TX-only and means total parallel-connected TX plate-stack branches including the original.
 - `tx_array_x_usage_ratio` is TX-only and scales the full available TX array branch-origin X span, where `1.0` preserves full-span placement.
 - plate `turn_count`는 wall-side copper turn owner다.
@@ -47,6 +50,7 @@ tags:
 - RX `tx_coil_count` and `tx_array_x_usage_ratio` must fail as unsupported.
 - old type2 schema id와 removed plate field `shoe_depth_mm`는 즉시 실패한다.
 - plate roles에 coil-only keys가 나타나면 즉시 실패한다.
+- single-coil usage ratios must realize to `0 < ratio <= 1`; legacy `outer_x_mm`, `outer_y_mm`, and `void_*` fields fail as unsupported public type2 input.
 - active example drift는 role/object_id/owner/plane mismatch를 허용하지 않는다.
 
 ## Collaborators

@@ -43,7 +43,9 @@ tags:
 - port sheet geometry is owned by one explicit start/end bottom-face square pair, not by a single lowest stub square and not by the terminal-pair span, but this layer emits that ownership as metadata rather than STEP face bodies.
 - for TX, that owner pair is always the two vertical-bus bottom faces; single-layer TX synthesizes the same bus footprint from its one-layer terminal-stub column. RX keeps the two terminal-stub bottom faces.
 - the metadata-owned sheet polygon must lie in the shared plane of the two owner bottom faces, include both widened diagonals as sheet edges, and use the remaining two edges as cross-owner bridges.
+- RX `rx_single_coil` terminal stubs stay within the modeled PCB+copper stack thickness so type2 can use the remaining `rx_region_max` X span as full backing material. TX terminal stubs keep the legacy below-PCB extension.
 - when the resolved owner pair does not expose exactly one `start` owner and one `end` owner, two valid bottom-face squares, a shared bottom-face plane, distinct owner centers, or two non-degenerate widened diagonals, export must raise immediately with owner context.
+- polygon-to-face conversion must produce exactly one wire before build123d face construction; ambiguous or empty builder output is a hard geometry failure.
 
 ## 직접 의존
 - [[sdd/code/src/peetsfea/tx_rect_void_types.py]]
@@ -65,6 +67,7 @@ tags:
 - `tx_port_sheet` / `rx_port_sheet`는 이 core layer의 STEP body labels가 아니라 later metadata-driven reconstruction labels다.
 - TX underlay exact-name solids는 scene-layer contract다. core export note와 scene/export/import notes를 분리 유지한다.
 - the widened diagonal choice on each terminal-stub bottom square must stay deterministic; changing the inter-stub-centerline scoring contract changes the exported sheet boundary.
+- Do not apply the RX terminal-stub thickness constraint to TX; TX multilayer bus and port-sheet metadata depend on the existing below-PCB stub extension.
 - metadata-owned sheet rule drift와 scene-layer underlay/body-taxonomy drift는 다른 책임이므로 한 수정으로 뭉개면 안 된다.
 
 ## Links

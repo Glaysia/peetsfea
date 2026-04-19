@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_setup_ready.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 18:20
+updated: 2026-04-20 @ 23:59
 tags:
   - tests
   - backend-em
@@ -19,7 +19,8 @@ tags:
 
 ## Canonical coverage
 - setup facade enforces exact two-entry tx/rx role pairs before HFSS launch
-- mixed role families are rejected fail-fast before runtime attach
+- active RX-only `rx_single_coil` is accepted through full setup-ready
+- malformed role sets are rejected fail-fast before runtime attach
 - direct mesh helper and direct port assignment accept only exact tx/rx family pairs
 - plate-stack fixtures use active `terminal_metadata.kind == "stub_port"` contract from import-pipeline helpers,
   including the left-side `-Y` sheet plane
@@ -28,6 +29,7 @@ tags:
   radiation boundary, sources, analysis/report payload, `ValidateDesign`, save, imported-ledger write shape를 함께 검증한다.
 - TX array setup-ready coverage must keep one `tx_plate_stack` entry, united `tx_plate_copper`, one TX port, one RX port,
   and the same mesh/source/report contract.
+- Mixed-pair coverage must keep TX plate mesh/port semantics and RX `rx_copper_l0` / `rx_port_sheet` semantics together.
 - TX array fake HFSS import batches model AEDT solid-only scene import with no connector-sheet reconstruction for new ledgers.
 - TX array port-sheet coverage must use branch 0 terminal metadata as one `tx_plate_port_sheet`.
 - plate-stack setup-ready failure coverage는 missing concrete conductor,

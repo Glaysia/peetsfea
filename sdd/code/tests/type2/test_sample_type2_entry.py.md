@@ -1,7 +1,7 @@
 ---
 title: test_sample_type2_entry.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-19 @ 23:10
+updated: 2026-04-20 @ 21:35
 tags:
   - tests
   - type2
@@ -22,17 +22,20 @@ tags:
 - sample entrypoint의 operator-facing progress/stage stdout contract를 검증한다.
 
 ## Canonical coverage
-- active example uses `tx_plate_stack` + `rx_plate_stack`
-- active example plate-stack PCB total uses a shared TX/RX baseline of `0.4 mm`
-- sampled owner paths는 source order canonical surface(`tx.turn_count`, `tx.metal_fill_factor`, `tx.z_usage_ratio`, `tx.y_usage_ratio`, `tx.tx_coil_count`, `tx.tx_array_x_usage_ratio`, `rx.turn_count`, `rx.metal_fill_factor`, `rx.z_usage_ratio`, `rx.y_usage_ratio`)를 따른다
-- sampled TOML keeps plate scalar fields fixed
-- sampled TOML keeps sampled `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio`, `tx_coil_count`, `tx_array_x_usage_ratio` owners를 `count=1` scalar range로 freeze한다
-- sampled TOML excludes removed `shoe_depth_mm` from both modeled payload and sampled metadata
-- sampled TOML excludes removed `ferrite_set_count` from plate-stack payload while preserving the active sampled surface
+- active example uses RX single-coil source only
+- sampled owner paths cover only `rx_rect_void_coil` effective sampled degrees:
+  - `outer_x_usage_ratio`
+  - `outer_y_usage_ratio`
+  - `turn_count`
+  - `metal_fill_factor`
+- `rx_rect_void_coil.layer_count` stays fixed `count=1` and is not part of sampled owner paths.
+- `rx_rect_void_coil.underlay_repeat_count` is fixed for full backing and is not part of sampled owner paths.
+- sampled TOML keeps non-sampled RX fields as fixed scalar ranges.
+- sampled TOML excludes removed `void_*` fields and keeps usage ratios unitless.
 - manifest identity and hash contract remain unchanged
-- `MAKE_STEP_ON_SAMPLE=True` single-worker path emits coarse STEP stage lines around export.
+- `MAKE_STEP_ON_SAMPLE=True` path emits coarse STEP stage lines around export.
 - `MAKE_STEP_ON_SAMPLE=False` does not emit STEP stage lines and does not call the exporter.
 
 ## 변경 시 주의점
-- sampled owner assertions를 role-blind coil field enumeration으로 되돌리지 않는다.
+- sampled owner assertions를 role-blind로 환원하지 않는다.
 - stage-log assertions는 manifest JSON shape나 design identity contract를 대체하지 않는다.

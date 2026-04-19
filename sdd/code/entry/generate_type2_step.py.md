@@ -1,7 +1,7 @@
 ---
 title: generate_type2_step.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 00:25
+updated: 2026-04-20 @ 21:35
 tags:
   - step-export
 ---
@@ -89,8 +89,8 @@ tags:
 - prototype modeled object ids는 role별 canonical id (`tx_rect_void_coil`, `rx_rect_void_coil`)와 일치해야 하며 `material = composite`를 강제한다.
 - modeled object는 `model_state=true`여야 한다.
 - modeled object range/terminal fields 누락 또는 타입 위반은 즉시 실패한다.
-- modeled object uses `outer_y_mm`; ratio-based outer-y input is no longer accepted.
-- `outer_x_mm` / `outer_y_mm` are routing-envelope inputs, not exported PCB size guarantees.
+- single-coil public inputs are `outer_x_usage_ratio` / `outer_y_usage_ratio`; owner-span-scaled `outer_x_mm` / `outer_y_mm` are derived internally before core delegation.
+- derived `outer_x_mm` / `outer_y_mm` are routing-envelope inputs, not exported PCB size guarantees.
 - current modeled object surface still carries `terminal_stub_length_mm`, but geometry ownership is derived from `layer_gap_mm * 0.8`.
 - `underlay_repeat_count` is a TX/RX shared modeled-object field with canonical encoding `[true, 0, 8, 5]` and realized set `{0, 2, 4, 6, 8}`.
 - `underlay_gap_mm` is a TX-only modeled-object field with canonical encoding `[false, 1.0, 10.0, 4]` and realized set `{1.0, 4.0, 7.0, 10.0}`.

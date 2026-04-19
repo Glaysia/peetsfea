@@ -109,10 +109,6 @@ class SingleCoilRangeSpec:
     layer_count: RangeSpec
     layer_gap_mm: RangeSpec
     terminal_stub_length_mm: RangeSpec
-    void_x_over_outer_x: RangeSpec
-    void_y_over_outer_y: RangeSpec
-    void_center_x_over_outer_x: RangeSpec
-    void_center_y_over_outer_y: RangeSpec
     margin_ratio: RangeSpec
     metal_fill_factor: RangeSpec
 

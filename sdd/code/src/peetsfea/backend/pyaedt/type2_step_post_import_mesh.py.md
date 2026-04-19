@@ -1,7 +1,7 @@
 ---
 title: type2_step_post_import_mesh.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 18:20
+updated: 2026-04-20 @ 23:59
 tags:
   - hfss-import
   - mesh
@@ -17,6 +17,7 @@ tags:
 ## Ownership
 - Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-full-em]]
 - TX array plan: [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
+- RX-only active plan: [[sdd/plans/0.2.22-type2-rx-only-baseline]]
 - Primary architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 역할
@@ -28,12 +29,14 @@ tags:
 - 출력: mesh summary
 
 ## Canonical state
-- helper는 exact pair `['tx_single_coil', 'rx_single_coil']` 또는 `['tx_plate_stack', 'rx_plate_stack']`만 지원한다.
+- active helper path supports one-entry `['rx_single_coil']`.
+- retained historical role-pair support must stay explicit where kept.
 - TX array remains the same `['tx_plate_stack', 'rx_plate_stack']` exact pair.
 - coil pair의 mesh target 해석은 기존과 동일하다.
   - TX: `tx_copper_l0` 또는 `tx_copper_stack` 중 정확히 하나
   - RX: `rx_copper_l0` 정확히 하나
 - plate-stack pair는 conductor-only exact-name set을 imported exact-name order로 mesh target에 넣는다.
+- RX-only mesh target list contains `rx_copper_l0` only.
 - TX plate-stack pair는 single/array 모두 `tx_plate_copper`와 `rx_plate_copper`를 conductor mesh target으로 사용한다.
   개별 `*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`는 도체 mesh 대상이 아니다.
 - Branch-local TX array intermediate copper bodies and connector bridges are fused before import and are not separate mesh targets.
@@ -41,8 +44,8 @@ tags:
 - legacy pre-unite segment(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)는 final mesh 타겟으로 허용되지 않는다.
 
 ## Invariants / fail-fast
-- modeled_objects는 정확히 2개여야 하며 중복 없는 exact tx/rx pair여야 한다.
-- mixed role family(coil+plate), unsupported role, duplicate role은 즉시 실패한다.
+- active RX-only modeled_objects length is exactly 1 and role is exactly `rx_single_coil`.
+- unsupported role sets, unsupported roles, and duplicate roles fail immediately.
 - plate-stack entry에서 required concrete conductor members가 존재해야 한다. RX는 `rx_plate_copper` 정확히 1개다.
 - plate-stack entry에서 pre-unite segment 라벨이 final conductor 목록에 남아 있으면 즉시 실패한다.
 - `generic SOLID*` 이름은 즉시 실패한다.

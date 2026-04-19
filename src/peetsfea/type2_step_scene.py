@@ -43,6 +43,9 @@ _NON_MODEL_VISIBLE_GROUPS: tuple[tuple[str, str, Literal["XY", "YZ", "ZX", "mixe
 _UNDERLAY_FERRITE_THICKNESS_MM = 0.20
 _UNDERLAY_PET_PSA_THICKNESS_MM = 0.15
 _UNDERLAY_AIR_THICKNESS_MM = 0.02
+_RX_BACKING_AIR_RATIO = 0.2
+_RX_BACKING_PET_PSA_RATIO = 1.5
+_RX_BACKING_FERRITE_RATIO = 2.0
 _UNDERLAY_MAX_LABEL_LENGTH = 32
 _TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
 _RX_FERRITE_GROUP_NAME = "g_ferrite_rx"
@@ -967,6 +970,8 @@ def _build_rx_underlay_scene_shapes(
     *,
     owner_spec: NonModelBoxSpec,
     repeat_count: int,
+    modeled_bounds_min_xyz: Point3,
+    modeled_bounds_max_xyz: Point3,
 ) -> tuple[bd.Shape, ...]:
     if owner_spec.plane != "YZ":
         raise RuntimeError(f"type2 rx underlay requires YZ owner plane (owner={owner_spec.object_id})")
@@ -979,29 +984,32 @@ def _build_rx_underlay_scene_shapes(
             "type2 rx underlay footprint must be positive "
             f"(object_id={owner_spec.object_id}, size={owner_spec.size_xyz})"
         )
-    unit_thickness_mm = _underlay_unit_thickness_mm()
-    total_thickness_mm = repeat_count * unit_thickness_mm
-    if total_thickness_mm > owner_size_x:
+    owner_max_x = owner_origin_x + owner_size_x
+    modeled_min_x = modeled_bounds_min_xyz[0]
+    modeled_max_x = modeled_bounds_max_xyz[0]
+    if modeled_max_x > owner_max_x + 1e-9:
         raise RuntimeError(
-            "type2 rx underlay stack must fit inside rx_region_max thickness "
-            f"(owner={owner_spec.object_id}, owner_size_x={owner_size_x}, total_thickness_mm={total_thickness_mm}, "
-            f"repeat_count={repeat_count})"
+            "type2 rx modeled stack must fit inside rx_region_max thickness "
+            f"(owner={owner_spec.object_id}, owner_max_x={owner_max_x}, modeled_max_x={modeled_max_x})"
         )
-    air_thickness_mm = _effective_underlay_layer_thickness_mm(
-        repeat_count=repeat_count,
-        layer_thickness_mm=_UNDERLAY_AIR_THICKNESS_MM,
-        context="type2 rx underlay air",
-    )
-    pet_thickness_mm = _effective_underlay_layer_thickness_mm(
-        repeat_count=repeat_count,
-        layer_thickness_mm=_UNDERLAY_PET_PSA_THICKNESS_MM,
-        context="type2 rx underlay pet_psa",
-    )
-    ferrite_thickness_mm = _effective_underlay_layer_thickness_mm(
-        repeat_count=repeat_count,
-        layer_thickness_mm=_UNDERLAY_FERRITE_THICKNESS_MM,
-        context="type2 rx underlay ferrite",
-    )
+    if modeled_min_x < owner_origin_x - 1e-9:
+        raise RuntimeError(
+            "type2 rx modeled stack must not extend past rx_region_max -X boundary "
+            f"(owner={owner_spec.object_id}, owner_min_x={owner_origin_x}, modeled_min_x={modeled_min_x})"
+        )
+    available_backing_thickness_mm = modeled_min_x - owner_origin_x
+    if available_backing_thickness_mm <= 0.0:
+        raise RuntimeError(
+            "type2 rx full backing requires positive remaining thickness "
+            f"(owner={owner_spec.object_id}, owner_min_x={owner_origin_x}, modeled_min_x={modeled_min_x}, "
+            f"available_backing_thickness_mm={available_backing_thickness_mm})"
+        )
+    ratio_total = _RX_BACKING_AIR_RATIO + _RX_BACKING_PET_PSA_RATIO + _RX_BACKING_FERRITE_RATIO
+    if ratio_total <= 0.0:
+        raise RuntimeError(f"type2 rx backing ratio sum must be > 0 (ratio_total={ratio_total})")
+    air_thickness_mm = available_backing_thickness_mm * (_RX_BACKING_AIR_RATIO / ratio_total)
+    pet_thickness_mm = available_backing_thickness_mm * (_RX_BACKING_PET_PSA_RATIO / ratio_total)
+    ferrite_thickness_mm = available_backing_thickness_mm * (_RX_BACKING_FERRITE_RATIO / ratio_total)
     air_origin_x = owner_origin_x
     pet_origin_x = air_origin_x + air_thickness_mm
     ferrite_origin_x = pet_origin_x + pet_thickness_mm
@@ -1110,6 +1118,8 @@ def build_modeled_single_coil_scene_data(
                 _build_rx_underlay_scene_shapes(
                     owner_spec=owner_spec,
                     repeat_count=underlay_repeat_count,
+                    modeled_bounds_min_xyz=modeled_bounds_min_xyz,
+                    modeled_bounds_max_xyz=modeled_bounds_max_xyz,
                 )
                 if underlay_repeat_count > 0
                 else ()

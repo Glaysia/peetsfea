@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import re
-from typing import cast
+from typing import Literal, TypedDict, cast
 
-from peetsfea.aedt import Hfss
 from peetsfea.aedt.protocols import AnalysisSetupModuleSession, DesignSession, HfssSession
 from peetsfea.aedt.protocols import ReportSetupModuleSession, TraceProviderSession
 
@@ -155,7 +154,20 @@ def _require_terminal_name(*, terminal_name: str, excitation_names: list[str], r
     return normalized_map[normalized_terminal_name]
 
 
-def _resolve_port_terms_for_expressions(hfss: HfssSession, ports: EmPorts) -> tuple[str, str, str]:
+class _TxRxPostTerms(TypedDict):
+    mode: Literal["tx_rx_pair"]
+    tx_terminal_name: str
+    rx_terminal_name: str
+    s_function: str
+
+
+class _RxOnlyPostTerms(TypedDict):
+    mode: Literal["rx_only"]
+    rx_terminal_name: str
+    s_function: str
+
+
+def _resolve_port_terms_for_expressions(hfss: HfssSession, ports: EmPorts) -> _TxRxPostTerms | _RxOnlyPostTerms:
     provider: TraceProviderSession = hfss
     traces = provider.get_traces_for_plot(True, True, "", "", "S(", ())
     if not traces:
@@ -166,38 +178,70 @@ def _resolve_port_terms_for_expressions(hfss: HfssSession, ports: EmPorts) -> tu
     function_names = {function_name for function_name, _, _ in terms}
     s_function = "St" if "St" in function_names else "S"
     excitation_names = list(hfss.excitation_names)
-    if len(ports["tx"]) != 1 or len(ports["rx"]) != 1:
+    tx_ports = ports["tx"]
+    rx_ports = ports["rx"]
+    has_tx_port = len(tx_ports) == 1
+    has_rx_port = len(rx_ports) == 1
+    is_tx_rx_pair = has_tx_port and has_rx_port
+    is_rx_only = (not has_tx_port) and has_rx_port and len(tx_ports) == 0
+    if not (is_tx_rx_pair or is_rx_only):
         raise ValueError(
-            "EM post-processing requires exactly one TX port and one RX port "
-            f"(tx_ports={ports['tx']}, rx_ports={ports['rx']})"
+            "EM post-processing requires either one TX+one RX pair or RX-only "
+            f"(tx_ports={tx_ports}, rx_ports={rx_ports})"
         )
-    tx_terminal_name = _require_terminal_name(
-        terminal_name=ports["tx"][0],
-        excitation_names=excitation_names,
-        role="tx",
-    )
     rx_terminal_name = _require_terminal_name(
-        terminal_name=ports["rx"][0],
+        terminal_name=rx_ports[0],
         excitation_names=excitation_names,
         role="rx",
     )
-    return tx_terminal_name, rx_terminal_name, s_function
+    if is_rx_only:
+        return {
+            "mode": "rx_only",
+            "rx_terminal_name": rx_terminal_name,
+            "s_function": s_function,
+        }
+    tx_terminal_name = _require_terminal_name(
+        terminal_name=tx_ports[0],
+        excitation_names=excitation_names,
+        role="tx",
+    )
+    return {
+        "mode": "tx_rx_pair",
+        "tx_terminal_name": tx_terminal_name,
+        "rx_terminal_name": rx_terminal_name,
+        "s_function": s_function,
+    }
 
 
 def build_post_templates(hfss: HfssSession, outputs: OutputsSpec, ports: EmPorts) -> list[PostTemplateResult]:
     templates = [build_post_template(outputs)]
     design = cast(DesignSession, hfss.odesign)
     report_setup = cast(ReportSetupModuleSession, design.GetModule("ReportSetup"))
-    tx_port_name, rx_port_name, s_function = _resolve_port_terms_for_expressions(hfss, ports)
+    terms = _resolve_port_terms_for_expressions(hfss, ports)
+    rx_port_name = terms["rx_terminal_name"]
+    s_function = terms["s_function"]
     built: list[PostTemplateResult] = []
     for template in templates:
         for output_variable in template["output_variables"]:
-            expression = (
-                output_variable["expression"]
-                .replace("TX_TML", tx_port_name)
-                .replace("RX_TML", rx_port_name)
-                .replace("S(", f"{s_function}(")
-            )
+            expression = output_variable["expression"]
+            create_output_context: dict[str, object] = {
+                "name": output_variable["name"],
+                "solution": template["solution_name"],
+                "rx_port": rx_port_name,
+                "mode": terms["mode"],
+            }
+            if terms["mode"] == "tx_rx_pair" and "TX_TML" in expression:
+                tx_port_name = terms["tx_terminal_name"]
+                expression = expression.replace("TX_TML", tx_port_name)
+                create_output_context["tx_port"] = tx_port_name
+            if terms["mode"] == "rx_only" and "TX_TML" in expression:
+                raise ValueError(
+                    "Output expression references TX_TML but RX-only mode has no TX terminal "
+                    f"(output={output_variable['name']}, expression={output_variable['expression']})"
+                )
+            if "RX_TML" in expression:
+                expression = expression.replace("RX_TML", rx_port_name)
+            expression = expression.replace("S(", f"{s_function}(")
             raise_on_false(
                 hfss.create_output_variable(
                     variable=output_variable["name"],
@@ -205,12 +249,7 @@ def build_post_templates(hfss: HfssSession, outputs: OutputsSpec, ports: EmPorts
                     solution=template["solution_name"],
                 ),
                 operation="create_output_variable",
-                context={
-                    "name": output_variable["name"],
-                    "solution": template["solution_name"],
-                    "tx_port": tx_port_name,
-                    "rx_port": rx_port_name,
-                },
+                context=create_output_context,
             )
         context: list[object] = []
         variations: list[object] = []

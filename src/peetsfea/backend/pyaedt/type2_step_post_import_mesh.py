@@ -19,6 +19,7 @@ _TX_PLATE_STACK_ROLE = "tx_plate_stack"
 _RX_PLATE_STACK_ROLE = "rx_plate_stack"
 _COIL_ROLE_PAIR: frozenset[str] = frozenset({_TX_ROLE, _RX_ROLE})
 _PLATE_STACK_ROLE_PAIR: frozenset[str] = frozenset({_TX_PLATE_STACK_ROLE, _RX_PLATE_STACK_ROLE})
+_MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset({_TX_PLATE_STACK_ROLE, _RX_ROLE})
 _ALL_SUPPORTED_MESH_ROLES: frozenset[str] = frozenset({*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR})
 _TX_MESH_OBJECT_CANDIDATES = ("tx_copper_l0", "tx_copper_stack")
 _RX_MESH_OBJECT_NAME = "rx_copper_l0"
@@ -227,12 +228,22 @@ def _required_plate_stack_mesh_object_names(entry: dict[str, object], *, role: s
     return plate_stack_matches
 
 
-def _resolve_exact_pair_for_mesh(
+def _resolve_supported_mesh_entries(
     imported_modeled_objects: Sequence[dict[str, object]],
-) -> tuple[dict[str, object], dict[str, object], str, str]:
+) -> list[tuple[str, dict[str, object], str]]:
+    if len(imported_modeled_objects) == 1:
+        context = "modeled_objects[0]"
+        single = imported_modeled_objects[0]
+        role = _required_supported_mesh_role(single, context=context)
+        if role != _RX_ROLE:
+            raise ValueError(
+                "Post-import mesh assignment accepts one modeled_objects entry only for rx_single_coil in RX-only mode "
+                f"(actual={role!r})"
+            )
+        return [(role, single, context)]
     if len(imported_modeled_objects) != 2:
         raise ValueError(
-            "Post-import mesh assignment requires exactly two modeled_objects entries "
+            "Post-import mesh assignment requires either one modeled_objects entry or an exact tx/rx role pair "
             f"(actual={len(imported_modeled_objects)})"
         )
     entry_by_role: dict[str, dict[str, object]] = {}
@@ -248,33 +259,63 @@ def _resolve_exact_pair_for_mesh(
         modeled_roles.append(role)
     role_set = frozenset(modeled_roles)
     if role_set == _COIL_ROLE_PAIR:
-        return (
-            entry_by_role[_TX_ROLE],
-            entry_by_role[_RX_ROLE],
-            f"modeled_objects[{_TX_ROLE}]",
-            f"modeled_objects[{_RX_ROLE}]",
-        )
+        return [
+            (_TX_ROLE, entry_by_role[_TX_ROLE], f"modeled_objects[{_TX_ROLE}]"),
+            (_RX_ROLE, entry_by_role[_RX_ROLE], f"modeled_objects[{_RX_ROLE}]"),
+        ]
     if role_set == _PLATE_STACK_ROLE_PAIR:
-        return (
-            entry_by_role[_TX_PLATE_STACK_ROLE],
-            entry_by_role[_RX_PLATE_STACK_ROLE],
-            f"modeled_objects[{_TX_PLATE_STACK_ROLE}]",
-            f"modeled_objects[{_RX_PLATE_STACK_ROLE}]",
-        )
+        return [
+            (_TX_PLATE_STACK_ROLE, entry_by_role[_TX_PLATE_STACK_ROLE], f"modeled_objects[{_TX_PLATE_STACK_ROLE}]"),
+            (_RX_PLATE_STACK_ROLE, entry_by_role[_RX_PLATE_STACK_ROLE], f"modeled_objects[{_RX_PLATE_STACK_ROLE}]"),
+        ]
+    if role_set == _MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR:
+        return [
+            (_TX_PLATE_STACK_ROLE, entry_by_role[_TX_PLATE_STACK_ROLE], f"modeled_objects[{_TX_PLATE_STACK_ROLE}]"),
+            (_RX_ROLE, entry_by_role[_RX_ROLE], f"modeled_objects[{_RX_ROLE}]"),
+        ]
     raise ValueError(
         "Post-import mesh assignment requires one exact supported tx/rx role pair: "
         "['tx_single_coil', 'rx_single_coil'] or ['tx_plate_stack', 'rx_plate_stack'] "
+        "or ['tx_plate_stack', 'rx_single_coil'] "
         f"(roles={modeled_roles})"
     )
 
 
 def _required_mesh_object_names(imported_modeled_objects: Sequence[dict[str, object]]) -> list[str]:
-    tx_entry, rx_entry, tx_context, rx_context = _resolve_exact_pair_for_mesh(imported_modeled_objects)
+    resolved = _resolve_supported_mesh_entries(imported_modeled_objects)
+    if len(resolved) == 1:
+        role, rx_entry, rx_context = resolved[0]
+        assert role == _RX_ROLE, f"single-model mesh input must be rx_single_coil, got {role!r}"
+        return [_required_rx_mesh_object_name(rx_entry, context=rx_context)]
+    tx_entry: dict[str, object] = {}
+    rx_entry: dict[str, object] = {}
+    tx_context = ""
+    rx_context = ""
+    tx_found = False
+    rx_found = False
+    for role, entry, context in resolved:
+        if role in (_TX_ROLE, _TX_PLATE_STACK_ROLE):
+            tx_entry = entry
+            tx_context = context
+            tx_found = True
+        elif role in (_RX_ROLE, _RX_PLATE_STACK_ROLE):
+            rx_entry = entry
+            rx_context = context
+            rx_found = True
+    if not tx_found:
+        raise ValueError(f"mesh resolution missing tx entry from {resolved}")
+    if not rx_found:
+        raise ValueError(f"mesh resolution missing rx entry from {resolved}")
     tx_role = _required_supported_mesh_role(tx_entry, context=tx_context)
     rx_role = _required_supported_mesh_role(rx_entry, context=rx_context)
     if tx_role == _TX_ROLE and rx_role == _RX_ROLE:
         return [
             _required_tx_mesh_object_name(tx_entry, context=tx_context),
+            _required_rx_mesh_object_name(rx_entry, context=rx_context),
+        ]
+    if tx_role == _TX_PLATE_STACK_ROLE and rx_role == _RX_ROLE:
+        return [
+            *_required_plate_stack_mesh_object_names(tx_entry, role=tx_role, context=tx_context),
             _required_rx_mesh_object_name(rx_entry, context=rx_context),
         ]
     if tx_role == _TX_PLATE_STACK_ROLE and rx_role == _RX_PLATE_STACK_ROLE:

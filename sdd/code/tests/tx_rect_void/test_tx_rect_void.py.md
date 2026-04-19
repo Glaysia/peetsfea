@@ -1,7 +1,7 @@
 ---
 title: test_tx_rect_void.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-20 @ 15:06
 tags:
   - tx-rect-void
 ---
@@ -29,9 +29,12 @@ tags:
 ## Canonical state
 - module-level runtime state는 없다.
 - canonical fixtures는 `_spec_text()`가 생성하는 internal TX rect/void TOML이다.
+- fixtures no longer declare `void_*` range tables; the core fixed centered void contract is asserted through realized geometry.
 
 ## Invariants / fail-fast
 - missing keys, bad ranges, unsupported terminal path, layer gap below 2mm는 즉시 실패해야 한다.
+- legacy `void_*` TOML keys fail as unsupported schema input.
+- supported `turn_count` upper bound regression은 `6`까지 허용되고 `7`은 fail-fast해야 한다.
 - supported corner/direction terminal paths는 blunt centerline을 만들어야 하며,
   적어도 하나 이상의 45도 beveled segment를 포함해야 한다.
 - same-corner terminal path는 type1-derived planner를 사용해 outer terminal을 next-ring 좌표로 seed해야 한다.

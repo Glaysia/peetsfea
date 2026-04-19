@@ -12,6 +12,9 @@ from peetsfea.types.manifest import EmPorts
 
 _COIL_ROLE_PAIR: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
 _PLATE_STACK_ROLE_PAIR: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
+_MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset(
+    {"tx_plate_stack", "rx_single_coil"}
+)
 _ALL_SUPPORTED_ROLES: frozenset[str] = frozenset({*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR})
 
 
@@ -19,8 +22,7 @@ def _current_excitation_name_map(hfss: HfssSession) -> dict[str, str]:
     return normalized_excitation_name_map(list(hfss.excitation_names))
 
 
-def _required_numeric_port_name_for_role(*, hfss: HfssSession, role: str) -> str:
-    preferred_name = "1" if role == "tx" else "2"
+def _required_numeric_port_name_for_slot(*, hfss: HfssSession, slot: str) -> str:
     used_indices: set[int] = set()
     for raw_name in [*get_boundary_names(hfss), *_current_excitation_name_map(hfss)]:
         normalized = normalize_excitation_name(raw_name)
@@ -29,13 +31,13 @@ def _required_numeric_port_name_for_role(*, hfss: HfssSession, role: str) -> str
         index = int(normalized)
         if index > 0:
             used_indices.add(index)
-    preferred_index = int(preferred_name)
+    preferred_index = int(slot)
     if preferred_index in used_indices:
         raise ValueError(
-            f"{role} semantic port requires fixed numeric boundary name {preferred_name} "
+            f"port assignment requires fixed numeric boundary name {slot} "
             f"(used_indices={sorted(used_indices)})"
         )
-    return preferred_name
+    return slot
 
 
 def _capture_new_excitation_name(
@@ -189,9 +191,16 @@ def _assign_role_port(
     modeler: ModelerSession,
     entry: dict[str, object],
     role: str,
+    slot: str = "1",
     context: str,
 ) -> str:
+    if slot not in ("1", "2"):
+        raise ValueError(f"{context}.slot must be '1' or '2' for direct port assignment (actual={slot!r})")
     entry_role = _required_supported_role_for_direct_port_assignment(entry, context=context)
+    if role == "tx" and not entry_role.startswith("tx_"):
+        raise ValueError(f"{context}.role mismatch for tx port assignment (entry_role={entry_role!r})")
+    if role == "rx" and not entry_role.startswith("rx_"):
+        raise ValueError(f"{context}.role mismatch for rx port assignment (entry_role={entry_role!r})")
     raw_imported_names = require_key(entry, key="imported_object_names", context=context)
     if isinstance(raw_imported_names, (str, bytes)) or not isinstance(raw_imported_names, list):
         raise TypeError(f"{context}.imported_object_names must be a list of strings")
@@ -223,7 +232,7 @@ def _assign_role_port(
         expected_second=vertices[2],
         context=f"{context}.reference",
     )
-    boundary_name = _required_numeric_port_name_for_role(hfss=hfss, role=role)
+    boundary_name = _required_numeric_port_name_for_slot(hfss=hfss, slot=slot)
     expected_excitation_name = f"{boundary_name}_T1"
     before_map = _current_excitation_name_map(hfss)
     assign_lumped_port(
@@ -250,32 +259,44 @@ def assign_type2_lumped_ports(
     modeler: ModelerSession,
     imported_ledger: Type2ImportedLedger,
 ) -> EmPorts:
-    tx_entry, rx_entry, tx_context, rx_context = _resolve_exact_pair_for_direct_port_assignment(
-        imported_ledger["modeled_objects"]
-    )
-    tx_port = _assign_role_port(
-        hfss=hfss,
-        modeler=modeler,
-        entry=tx_entry,
-        role="tx",
-        context=tx_context,
-    )
-    rx_port = _assign_role_port(
-        hfss=hfss,
-        modeler=modeler,
-        entry=rx_entry,
-        role="rx",
-        context=rx_context,
-    )
-    return {"tx": [tx_port], "rx": [rx_port]}
+    assignments = _resolve_supported_direct_port_assignment_entries(imported_ledger["modeled_objects"])
+    tx_ports: list[str] = []
+    rx_ports: list[str] = []
+    is_rx_only = len(assignments) == 1
+    for port_key, entry, context in assignments:
+        slot = "1" if (is_rx_only and port_key == "rx") or port_key == "tx" else "2"
+        assigned_port = _assign_role_port(
+            hfss=hfss,
+            modeler=modeler,
+            entry=entry,
+            role=port_key,
+            slot=slot,
+            context=context,
+        )
+        if port_key == "tx":
+            tx_ports.append(assigned_port)
+        else:
+            rx_ports.append(assigned_port)
+    return {"tx": tx_ports, "rx": rx_ports}
 
 
-def _resolve_exact_pair_for_direct_port_assignment(
+def _resolve_supported_direct_port_assignment_entries(
     modeled_objects: list[dict[str, object]],
-) -> tuple[dict[str, object], dict[str, object], str, str]:
+) -> list[tuple[str, dict[str, object], str]]:
+    if len(modeled_objects) == 1:
+        context = "modeled_objects[0]"
+        single = modeled_objects[0]
+        role = _required_supported_role_for_direct_port_assignment(single, context=context)
+        if role != "rx_single_coil":
+            raise ValueError(
+                "type2 setup-ready direct port assignment accepts one modeled_objects entry only for rx_single_coil "
+                f"(actual={role!r})"
+            )
+        return [("rx", single, context)]
     if len(modeled_objects) != 2:
         raise ValueError(
             "type2 setup-ready direct port assignment requires exactly two modeled_objects entries "
+            "for paired mode or one rx_single_coil entry for RX-only mode "
             f"(actual={len(modeled_objects)})"
         )
     entry_by_role: dict[str, dict[str, object]] = {}
@@ -291,22 +312,24 @@ def _resolve_exact_pair_for_direct_port_assignment(
         modeled_roles.append(role)
     role_set = frozenset(modeled_roles)
     if role_set == _COIL_ROLE_PAIR:
-        return (
-            entry_by_role["tx_single_coil"],
-            entry_by_role["rx_single_coil"],
-            "modeled_objects[tx_single_coil]",
-            "modeled_objects[rx_single_coil]",
-        )
+        return [
+            ("tx", entry_by_role["tx_single_coil"], "modeled_objects[tx_single_coil]"),
+            ("rx", entry_by_role["rx_single_coil"], "modeled_objects[rx_single_coil]"),
+        ]
     if role_set == _PLATE_STACK_ROLE_PAIR:
-        return (
-            entry_by_role["tx_plate_stack"],
-            entry_by_role["rx_plate_stack"],
-            "modeled_objects[tx_plate_stack]",
-            "modeled_objects[rx_plate_stack]",
-        )
+        return [
+            ("tx", entry_by_role["tx_plate_stack"], "modeled_objects[tx_plate_stack]"),
+            ("rx", entry_by_role["rx_plate_stack"], "modeled_objects[rx_plate_stack]"),
+        ]
+    if role_set == _MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR:
+        return [
+            ("tx", entry_by_role["tx_plate_stack"], "modeled_objects[tx_plate_stack]"),
+            ("rx", entry_by_role["rx_single_coil"], "modeled_objects[rx_single_coil]"),
+        ]
     raise ValueError(
         "type2 setup-ready direct port assignment requires one exact supported tx/rx role pair: "
         "['tx_single_coil', 'rx_single_coil'] or ['tx_plate_stack', 'rx_plate_stack'] "
+        "or ['tx_plate_stack', 'rx_single_coil'] "
         f"(roles={modeled_roles})"
     )
 

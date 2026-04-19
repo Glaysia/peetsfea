@@ -41,9 +41,15 @@ DEFAULT_OUTPUT_AEDT_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_setup_ready"
 DEFAULT_DESIGN_NAME = "type2_step_setup_ready"
 _COIL_ROLE_PAIR: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
 _PLATE_STACK_ROLE_PAIR: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
+_MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset(
+    {"tx_plate_stack", "rx_single_coil"}
+)
 _ALL_SUPPORTED_ROLE_PAIRS: frozenset[str] = frozenset({*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR})
+_RX_SINGLE_COIL_ROLE: str = "rx_single_coil"
 _SETUP_BRANCH_COIL_FULL_READY = "coil_full_setup_ready"
 _SETUP_BRANCH_PLATE_STACK_FULL_READY = "plate_stack_full_setup_ready"
+_SETUP_BRANCH_MIXED_TX_PLATE_STACK_RX_SINGLE_READY = "mixed_tx_plate_stack_rx_single_ready"
+_SETUP_BRANCH_RX_SINGLE_READY = "rx_single_ready"
 
 HfssFactory = Callable[[str], HfssSession]
 
@@ -105,9 +111,21 @@ def _modeled_role(*, entry: dict[str, object], context: str) -> str:
 
 def _resolve_setup_branch(ledger: ValidatedStepLedger) -> str:
     modeled_entries = ledger["modeled_objects"]
+    if len(modeled_entries) == 1:
+        only_role = _modeled_role(
+            entry=modeled_entries[0]["entry"],
+            context="modeled_objects[0]",
+        )
+        if only_role != _RX_SINGLE_COIL_ROLE:
+            raise ValueError(
+                "type2 setup facade supports a single modeled role only for RX-only mode "
+                f"(required_role={_RX_SINGLE_COIL_ROLE!r}, actual_role={only_role!r})"
+            )
+        return _SETUP_BRANCH_RX_SINGLE_READY
     if len(modeled_entries) != 2:
         raise ValueError(
-            "type2 setup facade requires exactly two modeled_objects entries "
+            "type2 setup facade requires exactly two modeled_objects entries for paired setup "
+            "or one rx_single_coil entry for RX-only "
             f"(actual={len(modeled_entries)})"
         )
     modeled_roles: list[str] = []
@@ -134,9 +152,12 @@ def _resolve_setup_branch(ledger: ValidatedStepLedger) -> str:
         return _SETUP_BRANCH_COIL_FULL_READY
     if role_set == _PLATE_STACK_ROLE_PAIR:
         return _SETUP_BRANCH_PLATE_STACK_FULL_READY
+    if role_set == _MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR:
+        return _SETUP_BRANCH_MIXED_TX_PLATE_STACK_RX_SINGLE_READY
     raise ValueError(
         "type2 setup facade rejects mixed modeled role families; expected exact pair "
         "['tx_single_coil', 'rx_single_coil'] or ['tx_plate_stack', 'rx_plate_stack'] "
+        "or ['tx_plate_stack', 'rx_single_coil'] "
         f"(roles={modeled_roles})"
     )
 
@@ -210,6 +231,8 @@ def _setup_ready_from_loaded_ledger_full(
         "analysis": analysis,
         "validation_report": validation_report,
     }
+
+
 def _setup_ready_from_loaded_ledger_by_branch(
     *,
     hfss: HfssSession,
@@ -230,6 +253,24 @@ def _setup_ready_from_loaded_ledger_by_branch(
             design_variables=design_variables,
         )
     if setup_branch == _SETUP_BRANCH_PLATE_STACK_FULL_READY:
+        return _setup_ready_from_loaded_ledger_full(
+            hfss=hfss,
+            step_ledger_path=step_ledger_path,
+            output_aedt_path=output_aedt_path,
+            imported_ledger_path=imported_ledger_path,
+            ledger=ledger,
+            design_variables=design_variables,
+        )
+    if setup_branch == _SETUP_BRANCH_MIXED_TX_PLATE_STACK_RX_SINGLE_READY:
+        return _setup_ready_from_loaded_ledger_full(
+            hfss=hfss,
+            step_ledger_path=step_ledger_path,
+            output_aedt_path=output_aedt_path,
+            imported_ledger_path=imported_ledger_path,
+            ledger=ledger,
+            design_variables=design_variables,
+        )
+    if setup_branch == _SETUP_BRANCH_RX_SINGLE_READY:
         return _setup_ready_from_loaded_ledger_full(
             hfss=hfss,
             step_ledger_path=step_ledger_path,

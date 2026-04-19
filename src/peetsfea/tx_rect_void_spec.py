@@ -31,6 +31,31 @@ _OUTER_TO_INNER_CORNER: dict[CornerLabel, InnerCornerLabel] = {
     "D": "d",
 }
 _MIN_COPPER_TRACE_WIDTH_MM = 0.5
+_FIXED_VOID_X_OVER_OUTER_X_RATIO = 0.3
+_FIXED_VOID_Y_OVER_OUTER_Y_RATIO = 0.3
+_FIXED_VOID_CENTER_X_OVER_OUTER_X_RATIO = 0.0
+_FIXED_VOID_CENTER_Y_OVER_OUTER_Y_RATIO = 0.0
+_UNSUPPORTED_TX_COIL_VOID_KEYS: frozenset[str] = frozenset(
+    {
+        "void_x_over_outer_x",
+        "void_y_over_outer_y",
+        "void_center_x_over_outer_x",
+        "void_center_y_over_outer_y",
+    }
+)
+
+
+def _fail_if_unsupported_tx_void_ranges(tx_table: dict[str, object]) -> None:
+    present_unsupported_keys = tuple(
+        key for key in _UNSUPPORTED_TX_COIL_VOID_KEYS if key in tx_table
+    )
+    if len(present_unsupported_keys) == 0:
+        return
+    unsupported_keys_text = ", ".join(f"tx_coil.{key}" for key in sorted(present_unsupported_keys))
+    raise ValueError(
+        "Unsupported tx_rect_void schema input; legacy void range tables are removed "
+        f"(keys={unsupported_keys_text})"
+    )
 
 
 def _require_key(table: dict[str, object], key: str, context: str) -> object:
@@ -133,6 +158,7 @@ def load_tx_rect_void_spec(toml_path: Path) -> SingleCoilRectVoidSpec:
     if manufacturing.copper_thickness_mm <= 0.0:
         raise ValueError("manufacturing.copper_thickness_mm must be > 0")
     tx_table = _require_table(_require_key(root, "tx_coil", toml_path.name), "tx_coil")
+    _fail_if_unsupported_tx_void_ranges(tx_table)
     terminal_table = _require_table(_require_key(tx_table, "terminal_path", "tx_coil"), "tx_coil.terminal_path")
     if set(terminal_table.keys()) != {"value"}:
         raise ValueError("tx_coil.terminal_path must contain only ['value']")
@@ -154,18 +180,6 @@ def load_tx_rect_void_spec(toml_path: Path) -> SingleCoilRectVoidSpec:
                 "terminal_stub_length_mm",
                 "tx_coil",
                 expect_integer=False,
-            ),
-            void_x_over_outer_x=_require_range_table(
-                tx_table, "void_x_over_outer_x", "tx_coil", expect_integer=False
-            ),
-            void_y_over_outer_y=_require_range_table(
-                tx_table, "void_y_over_outer_y", "tx_coil", expect_integer=False
-            ),
-            void_center_x_over_outer_x=_require_range_table(
-                tx_table, "void_center_x_over_outer_x", "tx_coil", expect_integer=False
-            ),
-            void_center_y_over_outer_y=_require_range_table(
-                tx_table, "void_center_y_over_outer_y", "tx_coil", expect_integer=False
             ),
             margin_ratio=_require_range_table(tx_table, "margin_ratio", "tx_coil", expect_integer=False),
             metal_fill_factor=_require_range_table(tx_table, "metal_fill_factor", "tx_coil", expect_integer=False),
@@ -283,18 +297,18 @@ def realize_tx_rect_void_spec(
     turn_count = int(_select_range_value(coil.turn_count, seed=seed))
     layer_count = int(_select_range_value(coil.layer_count, seed=seed))
     layer_gap_mm = float(_select_range_value(coil.layer_gap_mm, seed=seed))
-    void_x_ratio = float(_select_range_value(coil.void_x_over_outer_x, seed=seed))
-    void_y_ratio = float(_select_range_value(coil.void_y_over_outer_y, seed=seed))
-    void_center_x_ratio = float(_select_range_value(coil.void_center_x_over_outer_x, seed=seed))
-    void_center_y_ratio = float(_select_range_value(coil.void_center_y_over_outer_y, seed=seed))
+    void_x_ratio = _FIXED_VOID_X_OVER_OUTER_X_RATIO
+    void_y_ratio = _FIXED_VOID_Y_OVER_OUTER_Y_RATIO
+    void_center_x_ratio = _FIXED_VOID_CENTER_X_OVER_OUTER_X_RATIO
+    void_center_y_ratio = _FIXED_VOID_CENTER_Y_OVER_OUTER_Y_RATIO
     margin_ratio = float(_select_range_value(coil.margin_ratio, seed=seed))
     metal_fill_factor = float(_select_range_value(coil.metal_fill_factor, seed=seed))
     if outer_x_mm <= 0.0:
         raise ValueError(f"tx_coil.outer_x_mm must resolve to > 0 (actual={outer_x_mm})")
     if outer_y_mm <= 0.0:
         raise ValueError(f"tx_coil.outer_y_mm must resolve to > 0 (actual={outer_y_mm})")
-    if turn_count < 1 or turn_count > 4:
-        raise ValueError(f"tx_coil.turn_count must resolve to [1,4] (actual={turn_count})")
+    if turn_count < 1 or turn_count > 6:
+        raise ValueError(f"tx_coil.turn_count must resolve to [1,6] (actual={turn_count})")
     if layer_count < 1:
         raise ValueError(f"tx_coil.layer_count must resolve to >= 1 (actual={layer_count})")
     if profile.role == "rx_single_coil" and layer_count != 1:

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import cast
 
-from peetsfea.aedt import Hfss
 from peetsfea.aedt.protocols import DesignSession, HfssSession, SolutionsModuleSession
 from peetsfea.backend.pyaedt.failfast import raise_on_false
 
@@ -26,23 +25,75 @@ def apply_sources_phase(hfss: HfssSession, ports: EmPorts) -> dict[str, str]:
     design = cast(DesignSession, hfss.odesign)
     solutions = cast(SolutionsModuleSession, design.GetModule("Solutions"))
     excitation_names = list(hfss.excitation_names)
-    if len(ports["tx"]) != 1 or len(ports["rx"]) != 1:
+    tx_ports = list(ports["tx"])
+    rx_ports = list(ports["rx"])
+    is_tx_rx_pair = len(tx_ports) == 1 and len(rx_ports) == 1
+    is_rx_only = len(tx_ports) == 0 and len(rx_ports) == 1
+    if not (is_tx_rx_pair or is_rx_only):
         raise ValueError(
-            "apply_sources_phase requires exactly one TX port and one RX port "
-            f"(tx_ports={ports['tx']}, rx_ports={ports['rx']})"
+            "apply_sources_phase requires either one TX+one RX port pair or one RX-only port "
+            f"(tx_ports={tx_ports}, rx_ports={rx_ports})"
         )
-    tx_source_name = _require_excitation_name(
-        name=ports["tx"][0],
-        excitation_names=excitation_names,
-        role="tx",
-    )
+    if is_tx_rx_pair:
+        tx_source_name = _require_excitation_name(
+            name=tx_ports[0],
+            excitation_names=excitation_names,
+            role="tx",
+        )
+        rx_source_name = _require_excitation_name(
+            name=rx_ports[0],
+            excitation_names=excitation_names,
+            role="rx",
+        )
+
+        payload: list[object] = [
+            [
+                "UseIncidentVoltage:=",
+                True,
+                "IncludePortPostProcessing:=",
+                False,
+                "UseElementPatternMode:=",
+                False,
+                "SpecifySystemPower:=",
+                False,
+            ],
+            [
+                "Name:=",
+                tx_source_name,
+                "Magnitude:=",
+                "288V",
+                "Phase:=",
+                "0deg",
+            ],
+            [
+                "Name:=",
+                rx_source_name,
+                "Magnitude:=",
+                "0V",
+                "Phase:=",
+                "0deg",
+            ],
+        ]
+        raise_on_false(
+            solutions.EditSources(payload),
+            operation="EditSources",
+            context={"tx_source_name": tx_source_name, "rx_source_name": rx_source_name},
+        )
+        return {
+            "tx_source_name": tx_source_name,
+            "tx_phase_deg": "0deg",
+            "tx_magnitude": "288V",
+            "rx_source_name": rx_source_name,
+            "rx_phase_deg": "0deg",
+            "rx_magnitude": "0V",
+        }
+
     rx_source_name = _require_excitation_name(
-        name=ports["rx"][0],
+        name=rx_ports[0],
         excitation_names=excitation_names,
         role="rx",
     )
-
-    payload: list[object] = [
+    payload = [
         [
             "UseIncidentVoltage:=",
             True,
@@ -55,17 +106,9 @@ def apply_sources_phase(hfss: HfssSession, ports: EmPorts) -> dict[str, str]:
         ],
         [
             "Name:=",
-            tx_source_name,
-            "Magnitude:=",
-            "288V",
-            "Phase:=",
-            "0deg",
-        ],
-        [
-            "Name:=",
             rx_source_name,
             "Magnitude:=",
-            "0V",
+            "1V",
             "Phase:=",
             "0deg",
         ],
@@ -73,13 +116,10 @@ def apply_sources_phase(hfss: HfssSession, ports: EmPorts) -> dict[str, str]:
     raise_on_false(
         solutions.EditSources(payload),
         operation="EditSources",
-        context={"tx_source_name": tx_source_name, "rx_source_name": rx_source_name},
+        context={"rx_source_name": rx_source_name},
     )
     return {
-        "tx_source_name": tx_source_name,
-        "tx_phase_deg": "0deg",
-        "tx_magnitude": "288V",
         "rx_source_name": rx_source_name,
         "rx_phase_deg": "0deg",
-        "rx_magnitude": "0V",
+        "rx_magnitude": "1V",
     }

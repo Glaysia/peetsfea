@@ -176,11 +176,17 @@ def _transform_box_spec(
 
 
 def _copper_box_from_primitive(primitive: CopperPrimitive) -> BoxSpec:
+    if primitive.feature not in ("terminal_stub", "vertical_bus"):
+        raise ValueError(
+            "copper primitive box decomposition only supports terminal stubs and vertical buses "
+            f"(label={primitive.label}, feature={primitive.feature})"
+        )
+    box_feature = cast(Literal["terminal_stub", "vertical_bus"], primitive.feature)
     bounds = _polygon_bounds(primitive.polygon_xy)
     return BoxSpec(
         label=primitive.label,
         role="copper",
-        feature=primitive.feature,
+        feature=box_feature,
         layer_index=primitive.layer_index,
         origin_xyz=(bounds.min_x, bounds.min_y, primitive.origin_z),
         size_xyz=(bounds.max_x - bounds.min_x, bounds.max_y - bounds.min_y, primitive.size_z),
@@ -217,8 +223,12 @@ def _copper_primitives_for_layer(
         )
     stub_side_mm = realized.trace_width_mm * _TERMINAL_STUB_SIDE_RATIO
     overlap_mm = min((stub_side_mm / 2.0) / 2.0, max(realized.copper_thickness_mm, 1e-3))
-    stub_origin_z = pcb_z - realized.terminal_stub_length_mm
-    stub_size_z = realized.terminal_stub_length_mm + realized.pcb_thickness_mm + realized.copper_thickness_mm
+    if profile.role == "rx_single_coil":
+        stub_origin_z = pcb_z
+        stub_size_z = realized.pcb_thickness_mm + realized.copper_thickness_mm
+    else:
+        stub_origin_z = pcb_z - realized.terminal_stub_length_mm
+        stub_size_z = realized.terminal_stub_length_mm + realized.pcb_thickness_mm + realized.copper_thickness_mm
     for stub_name, endpoint_xy, inward_point_xy in (
         ("start", centerline[0], centerline[1]),
         ("end", centerline[-1], centerline[-2]),
@@ -319,7 +329,13 @@ def _validate_copper_primitives_do_not_short(copper_primitives: tuple[CopperPrim
 def _face_from_polygon_xy(polygon_xy: Polygon2) -> bd.Face:
     with bd.BuildLine() as builder:
         bd.Polyline(*polygon_xy, close=True)
-    return cast(bd.Face, bd.make_face(builder.line.wires()[0]))
+    line = builder.line
+    if line is None:
+        raise RuntimeError("polygon face builder produced no line")
+    wires = tuple(line.wires())
+    if len(wires) != 1:
+        raise RuntimeError(f"polygon face builder must produce exactly one wire (actual={len(wires)})")
+    return cast(bd.Face, bd.make_face(edges=tuple(wires[0].edges())))
 
 
 def _plane_for_local_z(

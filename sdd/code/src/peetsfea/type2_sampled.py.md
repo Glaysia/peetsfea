@@ -1,7 +1,7 @@
 ---
 title: type2_sampled.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-19 @ 23:10
+updated: 2026-04-20 @ 21:35
 tags:
   - sampling
   - build
@@ -25,6 +25,8 @@ tags:
 
 ## Canonical state
 - sampled owner canonical path는 `modeled_objects.<object_id>.<field>`다.
+- active RX single-coil sampled outer envelope owners use `outer_x_usage_ratio` and `outer_y_usage_ratio`.
+- removed single-coil `void_*` fields are not sampled owners and must not appear in sampled metadata or build design variables.
 - active `tx_plate_stack`와 `rx_plate_stack`도 sampled owner를 가질 수 있다.
 - active sweep contract에서 plate-stack sampled owners는 source order 기준으로
   - `modeled_objects.tx_plate_stack.turn_count`
@@ -43,6 +45,7 @@ tags:
 
 ## Invariants / fail-fast
 - sampled metadata owner list는 source exportable sampled owner set과 exact match여야 한다.
+- usage-ratio design variables are unitless; only `_mm` owners receive `mm` expressions.
 - plate roles에서 terminal-path driven coil-only sampled field assert를 요구하면 안 된다.
 - plate-stack free range owners는 deterministic seed selection으로 scalar로 freeze되고 sampled metadata에 그대로 기록되어야 한다.
 - `tx_coil_count` is an integer owner and design variable expression is unitless.

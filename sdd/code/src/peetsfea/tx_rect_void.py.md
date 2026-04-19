@@ -1,7 +1,7 @@
 ---
 title: tx_rect_void.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-20 @ 15:05
 tags:
   - tx-rect-void
 ---
@@ -53,10 +53,11 @@ tags:
 - `design.units`는 `mm`이어야 한다.
 - range table은 `[is_integer, start, end, count]` 형식이어야 하며, count는 1 이상이어야 한다.
 - `outer_y_mm`는 ratio가 아니라 canonical mm 단위 routing-envelope range다.
-- `turn_count`는 1..4, `tx_single_coil.layer_count`는 1 이상, `rx_single_coil.layer_count`는 여전히 1이어야 하며 `layer_gap_mm`는 2.0 이상이어야 한다.
+- `turn_count`는 1..6, `tx_single_coil.layer_count`는 1 이상, `rx_single_coil.layer_count`는 여전히 1이어야 하며 `layer_gap_mm`는 2.0 이상이어야 한다.
 - runtime stub 길이는 `layer_gap_mm * 0.8`에서 derive되며 양수여야 한다. TOML의 `terminal_stub_length_mm`는 current parser compatibility field일 뿐 geometry owner가 아니다.
 - `metal_fill_factor`는 0.15..0.60이어야 하며 realized trace width는 모든 side에서 0.5mm 이상이어야 한다.
-- v1은 centered same-corner route만 지원하므로 void center ratios는 public type2 example에서 0으로 고정한다.
+- v1은 centered same-corner route만 지원하므로 void keepout은 core 내부에서 centered `0.3 x 0.3` 비율로 고정한다.
+- legacy public `tx_coil.void_*` range tables are rejected at parse time as unsupported schema input.
 - void bounds는 outer bounds 안에 axis-specific margin을 두고 들어와야 한다.
 - blunt centerline은 모든 turn corner에서 45도 beveled segment를 만들어야 하며, same-corner seed/start/end ownership은 바뀌면 안 된다.
 - inner corner bevel trim은 void keepout을 침범하지 않도록 줄어들어야 한다.
