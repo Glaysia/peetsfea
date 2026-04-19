@@ -26,8 +26,10 @@ _PLATE_STACK_PCB_TOTAL_THICKNESS_MM = 0.4
 _EXPECTED_SAMPLED_OWNER_PATHS = (
     "modeled_objects.tx_plate_stack.turn_count",
     "modeled_objects.tx_plate_stack.metal_fill_factor",
+    "modeled_objects.tx_plate_stack.z_usage_ratio",
     "modeled_objects.rx_plate_stack.turn_count",
     "modeled_objects.rx_plate_stack.metal_fill_factor",
+    "modeled_objects.rx_plate_stack.z_usage_ratio",
 )
 _EXPECTED_DESIGN_VARIABLE_NAMES = tuple(owner_path.replace(".", "_") for owner_path in _EXPECTED_SAMPLED_OWNER_PATHS)
 
@@ -42,15 +44,23 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
     tx_fill_range = cast(
         list[object], cast(dict[str, object], modeled_by_id["tx_plate_stack"]["metal_fill_factor"])["range"]
     )
+    tx_z_usage_ratio_range = cast(
+        list[object], cast(dict[str, object], modeled_by_id["tx_plate_stack"]["z_usage_ratio"])["range"]
+    )
     rx_turn_range = cast(list[object], cast(dict[str, object], modeled_by_id["rx_plate_stack"]["turn_count"])["range"])
     rx_fill_range = cast(
         list[object], cast(dict[str, object], modeled_by_id["rx_plate_stack"]["metal_fill_factor"])["range"]
     )
+    rx_z_usage_ratio_range = cast(
+        list[object], cast(dict[str, object], modeled_by_id["rx_plate_stack"]["z_usage_ratio"])["range"]
+    )
     return (
         (_EXPECTED_DESIGN_VARIABLE_NAMES[0], str(int(cast(int | float, tx_turn_range[1])))),
         (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, tx_fill_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(int(cast(int | float, rx_turn_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(float(cast(int | float, rx_fill_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(float(cast(int | float, tx_z_usage_ratio_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(int(cast(int | float, rx_turn_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, rx_fill_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, rx_z_usage_ratio_range[1])))),
     )
 
 
@@ -60,6 +70,7 @@ class _FakePlateStackModeledSpec:
     role: str
     turn_count: RangeSpec
     metal_fill_factor: RangeSpec
+    z_usage_ratio: RangeSpec
 
 
 @dataclass(frozen=True)
@@ -71,8 +82,10 @@ def _patch_plate_stack_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     original_loader = type2_sampled.load_type2_step_spec
     tx_turn_count = RangeSpec(is_integer=True, start=3.0, end=5.0, count=3)
     tx_fill_factor = RangeSpec(is_integer=False, start=0.3, end=0.5, count=3)
+    tx_z_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.3, count=3)
     rx_turn_count = RangeSpec(is_integer=True, start=6.0, end=8.0, count=3)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.4, end=0.6, count=3)
+    rx_z_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=0.4, count=3)
     fake_spec = _FakePlateStackType2Spec(
         modeled_objects=(
             _FakePlateStackModeledSpec(
@@ -80,12 +93,14 @@ def _patch_plate_stack_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 role="tx_plate_stack",
                 turn_count=tx_turn_count,
                 metal_fill_factor=tx_fill_factor,
+                z_usage_ratio=tx_z_usage_ratio,
             ),
             _FakePlateStackModeledSpec(
                 object_id="rx_plate_stack",
                 role="rx_plate_stack",
                 turn_count=rx_turn_count,
                 metal_fill_factor=rx_fill_factor,
+                z_usage_ratio=rx_z_usage_ratio,
             ),
         )
     )
@@ -193,30 +208,32 @@ origin_xyz = [200.0, -100.0, 0.0]
 size_xyz = [10.0, 200.0, 200.0]
 
 [[modeled_objects]]
-object_id = "tx_plate_stack"
-role = "tx_plate_stack"
-material = "composite"
-model_state = true
-pcb_total_thickness_mm = {_PLATE_STACK_PCB_TOTAL_THICKNESS_MM}
-copper_thickness_mm = 0.035
-ferrite_set_count = 10
-[modeled_objects.turn_count]
-range = [true, 3, 5, 3]
-[modeled_objects.metal_fill_factor]
-range = [false, 0.3, 0.5, 3]
+    object_id = "tx_plate_stack"
+    role = "tx_plate_stack"
+    material = "composite"
+    model_state = true
+    pcb_total_thickness_mm = {_PLATE_STACK_PCB_TOTAL_THICKNESS_MM}
+    copper_thickness_mm = 0.035
+    [modeled_objects.turn_count]
+    range = [true, 3, 5, 3]
+    [modeled_objects.metal_fill_factor]
+    range = [false, 0.3, 0.5, 3]
+    [modeled_objects.z_usage_ratio]
+    range = [false, 0.1, 0.3, 3]
 
 [[modeled_objects]]
-object_id = "rx_plate_stack"
-role = "rx_plate_stack"
-material = "composite"
-model_state = true
-pcb_total_thickness_mm = {_PLATE_STACK_PCB_TOTAL_THICKNESS_MM}
-copper_thickness_mm = 0.1
-ferrite_set_count = 10
-[modeled_objects.turn_count]
-range = [true, 6, 8, 3]
-[modeled_objects.metal_fill_factor]
-range = [false, 0.4, 0.6, 3]
+    object_id = "rx_plate_stack"
+    role = "rx_plate_stack"
+    material = "composite"
+    model_state = true
+    pcb_total_thickness_mm = {_PLATE_STACK_PCB_TOTAL_THICKNESS_MM}
+    copper_thickness_mm = 0.1
+    [modeled_objects.turn_count]
+    range = [true, 6, 8, 3]
+    [modeled_objects.metal_fill_factor]
+    range = [false, 0.4, 0.6, 3]
+    [modeled_objects.z_usage_ratio]
+    range = [false, 0.2, 0.4, 3]
 """.strip()
 
 
@@ -347,7 +364,7 @@ def test_build_type2_builds_plate_stack_manifest_with_setup_ready_runner(
     assert cast(str, setup_ready_calls[0]["design_name"]) == results[0]["design_id"]
     design_variables = cast(tuple[tuple[str, str], ...], setup_ready_calls[0]["design_variables"])
     assert tuple(name for name, _ in design_variables) == _EXPECTED_DESIGN_VARIABLE_NAMES
-    assert len(design_variables) == 4
+    assert len(design_variables) == 6
     assert all(expression != "" for _, expression in design_variables)
     assert results[0]["aedt_path"] == str(cast(Path, setup_ready_calls[0]["output_aedt_path"]))
     assert results[0]["imported_ledger_path"] == str(cast(Path, setup_ready_calls[0]["imported_ledger_path"]))
@@ -407,7 +424,7 @@ def test_build_type2_accepts_plate_stack_manifest_when_forced_to_setup_ready_run
     }
     design_variables = cast(tuple[tuple[str, str], ...], calls[0]["design_variables"])
     assert tuple(name for name, _ in design_variables) == _EXPECTED_DESIGN_VARIABLE_NAMES
-    assert len(design_variables) == 4
+    assert len(design_variables) == 6
     assert all(expression != "" for _, expression in design_variables)
 
 
@@ -510,8 +527,16 @@ def test_build_type2_debug_builds_only_requested_design_with_single_job(
         captured["runner"] = runner
         return expected_result
 
-    fake_exporter = object()
-    fake_runner = object()
+    def fake_exporter(**kwargs: object) -> object:
+        return kwargs
+
+    def fake_runner(**kwargs: object) -> _Type2BuildRunnerResult:
+        return {
+            "aedt_path": str(kwargs["output_aedt_path"]),
+            "source_step_ledger_path": str(kwargs["step_ledger_path"]),
+            "imported_ledger_path": str(kwargs["imported_ledger_path"]),
+        }
+
     monkeypatch.setattr(build_entry, "build_prepared_type2_designs", _fake_build_prepared_type2_designs)
     results = build_type2_debug(
         manifest_path=manifest_path,

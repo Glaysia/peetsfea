@@ -17,7 +17,6 @@ ModeledObjectRole = Literal["tx_single_coil", "rx_single_coil", "tx_plate_stack"
 _UNDERLAY_REPEAT_COUNT_CANDIDATES = (0, 2, 4, 6, 8)
 _TX_UNDERLAY_GAP_MM_CANDIDATES = (1.0, 4.0, 7.0, 10.0)
 _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES = (0, 1)
-_PLATE_STACK_FERRITE_SET_COUNT = 10
 _TYPE2_SCHEMA_ID = "peetsfea.type2.step.v2"
 
 
@@ -91,9 +90,9 @@ class ModeledPlateStackCommonSpec:
     model_state: Literal[True]
     pcb_total_thickness_mm: float
     copper_thickness_mm: float
-    ferrite_set_count: int
     turn_count: RangeSpec
     metal_fill_factor: RangeSpec
+    z_usage_ratio: RangeSpec
 
 
 @dataclass(frozen=True)
@@ -453,15 +452,6 @@ def _parse_modeled_plate_stack(
             f"{context}.pcb_total_thickness_mm must be > copper_thickness_mm "
             f"(pcb_total_thickness_mm={pcb_total_thickness_mm}, copper_thickness_mm={copper_thickness_mm})"
         )
-    raw_ferrite_set_count = _require_key(table, "ferrite_set_count", context)
-    if isinstance(raw_ferrite_set_count, bool) or not isinstance(raw_ferrite_set_count, int):
-        raise TypeError(f"{context}.ferrite_set_count must be int")
-    ferrite_set_count = raw_ferrite_set_count
-    if ferrite_set_count != _PLATE_STACK_FERRITE_SET_COUNT:
-        raise ValueError(
-            f"{context}.ferrite_set_count must be {_PLATE_STACK_FERRITE_SET_COUNT} "
-            f"(actual={ferrite_set_count})"
-        )
     turn_count = _require_range(table, "turn_count", context, expect_integer=True)
     turn_count_candidates = _integer_range_candidates(turn_count)
     if any(candidate < 2 for candidate in turn_count_candidates):
@@ -476,6 +466,13 @@ def _parse_modeled_plate_stack(
             f"{context}.metal_fill_factor must realize to values > 0 and <= 0.6 "
             f"(actual={metal_fill_factor_candidates})"
         )
+    z_usage_ratio = _require_range(table, "z_usage_ratio", context, expect_integer=False)
+    z_usage_ratio_candidates = _float_range_candidates(z_usage_ratio)
+    if any(candidate <= 0.0 or candidate > 1.0 for candidate in z_usage_ratio_candidates):
+        raise ValueError(
+            f"{context}.z_usage_ratio must realize to values > 0 and <= 1 "
+            f"(actual={z_usage_ratio_candidates})"
+        )
     allowed_keys = {
         "object_id",
         "role",
@@ -483,9 +480,9 @@ def _parse_modeled_plate_stack(
         "model_state",
         "pcb_total_thickness_mm",
         "copper_thickness_mm",
-        "ferrite_set_count",
         "turn_count",
         "metal_fill_factor",
+        "z_usage_ratio",
     }
     extra_keys = sorted(set(table.keys()) - allowed_keys)
     if extra_keys:
@@ -501,9 +498,9 @@ def _parse_modeled_plate_stack(
             model_state=True,
             pcb_total_thickness_mm=pcb_total_thickness_mm,
             copper_thickness_mm=copper_thickness_mm,
-            ferrite_set_count=ferrite_set_count,
             turn_count=turn_count,
             metal_fill_factor=metal_fill_factor,
+            z_usage_ratio=z_usage_ratio,
         )
     return ModeledRxPlateStackSpec(
         object_id=object_id,
@@ -512,9 +509,9 @@ def _parse_modeled_plate_stack(
         model_state=True,
         pcb_total_thickness_mm=pcb_total_thickness_mm,
         copper_thickness_mm=copper_thickness_mm,
-        ferrite_set_count=ferrite_set_count,
         turn_count=turn_count,
         metal_fill_factor=metal_fill_factor,
+        z_usage_ratio=z_usage_ratio,
     )
 
 
@@ -706,6 +703,20 @@ def resolve_modeled_plate_stack_metal_fill_factor(spec: ModeledPlateStackSpec, *
     return candidates[index]
 
 
+def resolve_modeled_plate_stack_z_usage_ratio(spec: ModeledPlateStackSpec, *, seed: int) -> float:
+    candidates = _float_range_candidates(spec.z_usage_ratio)
+    if any(candidate <= 0.0 or candidate > 1.0 for candidate in candidates):
+        raise ValueError(
+            f"{spec.role}.z_usage_ratio must realize to values > 0 and <= 1 "
+            f"(actual={candidates})"
+        )
+    if len(candidates) == 1:
+        return candidates[0]
+    range_path = f"modeled_objects.{spec.object_id}.z_usage_ratio"
+    index = _resolve_seeded_candidate_index(seed=seed, range_path=range_path, candidate_count=len(candidates))
+    return candidates[index]
+
+
 def _require_type2_schema_id(root: dict[str, object], *, context: str) -> str:
     schema_id = _require_non_empty_str(root, "schema_id", context)
     if schema_id != _TYPE2_SCHEMA_ID:
@@ -840,6 +851,7 @@ __all__ = [
     "placement_owner_id_for_role",
     "resolve_modeled_plate_stack_metal_fill_factor",
     "resolve_modeled_plate_stack_turn_count",
+    "resolve_modeled_plate_stack_z_usage_ratio",
     "resolve_modeled_underlay_gap_mm",
     "resolve_modeled_underlay_repeat_count",
     "resolve_modeled_wall_parallel_stack_present",

@@ -51,6 +51,8 @@ tags:
 - active plate-stack ferrite-family STEP exact-name contract is merged-per-material, role당 3-body only:
   - TX: `tx_stack_pet_psa`, `tx_stack_ferrite`, `tx_stack_air`
   - RX: `rx_stack_pet_psa`, `rx_stack_ferrite`, `rx_stack_air`
+- plate-stack ferrite-family geometry is authored as three direct equivalent slabs. `ferrite_set_count` is not a public type2 field;
+  the historical 10-set baseline remains only as fixed internal thickness: PET/PSA `1.5 mm`, ferrite `2.0 mm`, air `0.2 mm`.
 - active plate-stack copper STEP exact-name contract is role-united, one conductor body per role:
   - TX: `tx_plate_copper`
   - RX: `rx_plate_copper`

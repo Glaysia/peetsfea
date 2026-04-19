@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 02:26
+updated: 2026-04-19 @ 22:30
 tags:
   - tests
   - type2
@@ -13,7 +13,7 @@ tags:
 ## Source
 - Path: `tests/type2/test_generate_type2_step.py`
 - Code note path: `sdd/code/tests/type2/test_generate_type2_step.py.md`
-- Direct owner: [[sdd/plans/0.2.22-type2-remove-plate-stack-shoe-contract]]
+- Direct owner: [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]]
 - Direct verification target: [[sdd/code/entry/generate_type2_step.py]]
 
 ## 역할
@@ -23,12 +23,12 @@ tags:
 - `tx_plate_stack` / `rx_plate_stack` parser acceptance
 - active example loader expects shared TX/RX `pcb_total_thickness_mm = 0.4`
 - object id mismatch / coil-only field rejection
-- plate-stack `turn_count`, `metal_fill_factor` validation plus explicit rejection of removed `shoe_depth_mm`
+- plate-stack `turn_count`, `metal_fill_factor`, `z_usage_ratio` validation plus explicit rejection of removed `shoe_depth_mm`
 - TX/RX pre-unite baseline contract keeps per-turn/bridge/stub segment bodies; final handoff contract은
   role-level copper/ferrite role bodies로 정규화되며 6-body exact-name 순서를 유지한다.
-- TX full `tx_region` YZ + `min_x` anchor
-- RX full `rx_region_max` YZ + `min_x` anchor
-- full-height plate-stack conductor/PCB placement without shoe cutout bands
+- TX top-anchored `z_usage_ratio` Z window over full `tx_region` Y + `min_x` anchor
+- RX bottom-anchored `z_usage_ratio` Z window over full `rx_region_max` Y + `min_x` anchor
+- reduced-height plate-stack conductor/PCB/ferrite placement without shoe cutout bands
 - plate-stack striped copper Z 배치는 pitch-slot centered placement를 검증한다.
 - wall-side `N`, coil-side `N-1`, bridge `2N-2`, stub 2개 contract
 - role별 단일 ferrite/copper group contract:
@@ -41,7 +41,8 @@ tags:
   `stack_pet_psa -> stack_ferrite -> stack_air`를 유지
 - plate-stack ferrite group object(`g_ferrite_tx`, `g_ferrite_rx`)의 child label order가 exact member order와 일치해야 한다.
 - plate-stack export scene/ledger에 `*_stack_*_uN`/`SOLID*` label이 나타나면 contract 위반으로 간주한다.
-- united ferrite-family geometry는 각 merged body의 X-span이 `pcb_wall.max_x -> pcb_coil.min_x` 전체 구간과 일치해야 한다.
+- equivalent ferrite-family geometry는 X 순서와 두께를 직접 검증한다:
+  `pcb_wall.max_x -> PET/PSA(1.5) -> ferrite(2.0) -> air(0.2) -> pcb_coil.min_x`.
 - pre-unite 라벨(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`)이 exported/imported handoff body list에
   남아 있으면 즉시 실패로 본다.
 - single-coil ferrite families(`tx_wall_*`, `under_rx_*`) export 시 동일 ferrite-group contract

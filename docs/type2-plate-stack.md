@@ -1,7 +1,7 @@
 ---
 title: type2-plate-stack
 created: 2026-04-19 @ 21:20
-updated: 2026-04-19 @ 15:55
+updated: 2026-04-19 @ 22:30
 tags:
   - type2
   - tx
@@ -23,7 +23,7 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
   RX-specific 문서는 role-local detail reference이며 canonical owner가 아니다.
 - plate-stack entries는 coil terminal reconstruction owner가 아니라 geometry/export owner다.
 - active geometry/export contract가 읽는 plate-stack field set은 `pcb_total_thickness_mm`,
-  `copper_thickness_mm`, `ferrite_set_count`, `turn_count`, `metal_fill_factor`다.
+  `copper_thickness_mm`, `turn_count`, `metal_fill_factor`, `z_usage_ratio`다.
 - active example PCB total thickness baseline은 TX/RX 모두 `pcb_total_thickness_mm = 0.4`다.
   legacy `1.6/0.4` split guidance는 active plate-stack contract가 아니다.
 - `shoe_depth_mm`는 active type2 plate-stack public field가 아니다. plate-stack modeled object에
@@ -55,7 +55,15 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
   - RX: `g_copper_rx -> [rx_plate_copper]`, `g_ferrite_rx -> [rx_stack_pet_psa, rx_stack_ferrite, rx_stack_air]`
 - `g_ferrite_tx`, `g_ferrite_rx`는 flattened per-set member가 아니라 위 merged 3-body exact names를 reference한다.
 - per-set `*_stack_sandwich_uN` group과 old `*_u0..u9` plate-stack exact-name contract는 active path가 아니다.
-- striped copper는 full owner `Z` height를 `turn_count + 0.5` pitch slot으로 나눈 `pitch_z`를 기준으로 하고,
+- `ferrite_set_count`는 active type2 public field가 아니다. plate-stack modeled object에 남아 있으면 loader가 unsupported key로 즉시 실패한다.
+- ferrite-family geometry는 여러 내부 sheet를 깔아 만들지 않고 historical 10-set baseline의 등가 두께 slab 3개로 직접 만든다:
+  PET/PSA `1.5 mm`, ferrite `2.0 mm`, air `0.2 mm`.
+- `z_usage_ratio`는 role owner의 Z span 중 active stack이 사용할 비율이다. realized 값은 `0 < ratio <= 1`이다.
+  active examples use fixed `[false, 0.3, 0.3, 1]` and sweep `[false, 0.03, 0.6, 17]`.
+- TX active Z window는 `tx_region` top `z_usage_ratio` span이고, RX active Z window는 `rx_region_max`
+  bottom `z_usage_ratio` span이다.
+- PCB, PET/PSA, ferrite, air, copper stripe, bridge, stub, terminal metadata, ledger bounds는 모두 같은 active Z window를 쓴다.
+- striped copper는 active `Z` height를 `turn_count + 0.5` pitch slot으로 나눈 `pitch_z`를 기준으로 하고,
   `trace_height_z = pitch_z * metal_fill_factor`, `stripe_center_offset_z = (pitch_z - trace_height_z) / 2`를 사용한다.
 - wall/coil stripe는 각 pitch slot lower-bound에 바로 붙지 않고 slot 중심으로 정렬된다.
 - bridge `*_bridge_s*`는 `wall0 -> coil0 -> wall1 -> ... -> wallN-1 -> coilN-1` serpentine
@@ -102,13 +110,11 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
 - `build_type2_em_input()`는 plate-stack exact pair를 reject하지 않고 `EmPipelineInput`을 조립한다.
 
 ## Role Notes
-- `tx_plate_stack`: active TX plate-stack는 `tx_region` full `YZ` footprint를 쓰고
-  `tx_region.min_x`에 붙어 `+X` 방향으로 쌓인다. wall/coil-side striped copper는 full owner `Z`
-  height를 공유하고, input terminal stub는 wall-side `t0`, output terminal stub는 coil-side
+- `tx_plate_stack`: active TX plate-stack는 `tx_region` full Y와 top `z_usage_ratio` Z window를 쓰고
+  `tx_region.min_x`에 붙어 `+X` 방향으로 쌓인다. input terminal stub는 wall-side `t0`, output terminal stub는 coil-side
   `t{N-1}`에서 각각 `-Y`로 `5.0 mm` 돌출한다.
-- `rx_plate_stack`: active RX plate-stack는 `rx_region_max` full `YZ` footprint를 쓰고
-  `rx_region_max.min_x`에 붙어 `+X` 방향으로 쌓인다. wall/coil-side striped copper는 full owner `Z`
-  height를 공유하고, terminal stub는 같은 규칙으로 wall-side `t0` input과 coil-side `t{N-1}`
+- `rx_plate_stack`: active RX plate-stack는 `rx_region_max` full Y와 bottom `z_usage_ratio` Z window를 쓰고
+  `rx_region_max.min_x`에 붙어 `+X` 방향으로 쌓인다. terminal stub는 같은 규칙으로 wall-side `t0` input과 coil-side `t{N-1}`
   output에서 `-Y`로 돌출한다.
 
 ## Legacy Coil Reference

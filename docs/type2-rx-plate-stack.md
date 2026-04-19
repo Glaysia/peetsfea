@@ -1,7 +1,7 @@
 ---
 title: type2-rx-plate-stack
 created: 2026-04-19 @ 18:05
-updated: 2026-04-19 @ 15:55
+updated: 2026-04-19 @ 22:30
 tags:
   - type2
   - rx
@@ -42,10 +42,9 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
   legacy `1.6/0.4` split guidance는 active plate-stack contract가 아니다.
 
 ## 목적
-- `rx_region_max` full `YZ` footprint를 그대로 쓰는 넓은 RX copper/PCB stack을 만든다.
+- `rx_region_max` full Y와 bottom `z_usage_ratio` Z window를 쓰는 RX copper/PCB/ferrite stack을 만든다.
 - RX는 더 이상 `tx_rect_void` coil bridge를 통과하지 않는다.
-- RX ferrite family는 effective-thickness collapse가 아니라 literal 10-set solid taxonomy를 쓴다.
-  Export handoff에서는 literal sets가 material별 united body 3개로 collapse된다.
+- RX ferrite family는 literal 10-set solid taxonomy가 아니라 historical 10-set baseline의 등가 두께 slab 3개를 직접 쓴다.
 
 ## TOML 계약
 - `object_id = "rx_plate_stack"`
@@ -53,9 +52,11 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
 - `material = "composite"`
 - `model_state = true`
 - `pcb_total_thickness_mm > copper_thickness_mm > 0`
-- `ferrite_set_count = 10`
+- `ferrite_set_count`는 active RX plate-stack public field가 아니다.
 - `turn_count`는 정수 range고 realized 값은 `>= 2`여야 한다.
 - `metal_fill_factor`는 float range고 realized 값은 `> 0`, `<= 0.6`여야 한다.
+- `z_usage_ratio`는 float range고 realized 값은 `> 0`, `<= 1`이어야 한다.
+  RX는 `rx_region_max` 아래쪽부터 `z_usage_ratio`만큼의 Z span을 사용한다.
 - `shoe_depth_mm`는 active RX plate-stack public field가 아니다. plate-stack modeled object에
   남아 있으면 loader가 removed field로 즉시 실패한다.
 - coil-only field `outer_*`, `layer_count`, `terminal_path`, `void_*`, `margin_ratio`,
@@ -63,24 +64,24 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
 
 ## Geometry Contract
 - placement owner는 `rx_region_max`다.
-- footprint source of truth는 `rx_region_max` full `YZ` size다.
+- footprint source of truth는 `rx_region_max` full Y와 bottom active Z window다.
 - stack는 `rx_region_max.min_x`에 붙고 `+X` 방향으로 자란다.
-- wall/coil-side PCB와 copper stripe는 owner full `Z` height를 그대로 사용한다.
+- wall/coil-side PCB, ferrite-family slab, copper stripe는 같은 active Z window를 사용한다.
 - `pcb_total_thickness_mm`은 copper 1 layer를 포함한 board total thickness다.
   - wall-side board: `rx_copper_wall_t*`, `rx_pcb_wall`
   - coil-side board: `rx_pcb_coil`, `rx_copper_coil_t*`
   - epoxy thickness는 `pcb_total_thickness_mm - copper_thickness_mm`
-- ferrite/PET_PSA/vacuum set는 literal 10회로 export되고, 각 ferrite는 유전체가 앞뒤로 오도록
-  interleaved order를 쓴다.
-  - ferrite `0.20 mm`
-  - PET/PSA `0.15 mm`
-  - vacuum `0.02 mm`
+- ferrite/PET_PSA/vacuum family는 등가 slab 3개로 직접 export된다.
+  - PET/PSA `1.5 mm`
+  - ferrite `2.0 mm`
+  - vacuum `0.2 mm`
 - `N = realized turn_count`
-- `pitch_z = rx_region_max.size_z / (N + 0.5)`
+- `active_size_z = rx_region_max.size_z * z_usage_ratio`
+- `pitch_z = active_size_z / (N + 0.5)`
 - `trace_height_z = pitch_z * metal_fill_factor`
 - `stripe_center_offset_z = (pitch_z - trace_height_z) / 2`
-- wall-side stripe `t{i}`는 `z_min + i * pitch_z + stripe_center_offset_z`에서 시작한다.
-- coil-side stripe `t{i}`는 `z_min + pitch_z / 2 + i * pitch_z + stripe_center_offset_z`에서 시작한다.
+- wall-side stripe `t{i}`는 `active_z_min + i * pitch_z + stripe_center_offset_z`에서 시작한다.
+- coil-side stripe `t{i}`는 `active_z_min + pitch_z / 2 + i * pitch_z + stripe_center_offset_z`에서 시작한다.
 - wall-side와 coil-side stripe count는 모두 `N`개다.
 - side bridge `rx_bridge_s*`는 `Y=max/min`을 번갈아 쓰며
   `wall_t0 -> coil_t0 -> wall_t1 -> ... -> wall_t{N-1} -> coil_t{N-1}`를 잇는다.
@@ -92,7 +93,7 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
   `rx_copper_wall_t*`, `rx_copper_coil_t*`, `rx_bridge_s*`, `rx_stub_in/out` labels는
   pre-unite source/provenance labels이며 final STEP/import/mesh body names가 아니다.
 - total thickness guard:
-  - `2 * pcb_total_thickness_mm + 10 * (0.20 + 0.15 + 0.02) <= rx_region_max.size_x`
+  - `2 * pcb_total_thickness_mm + 1.5 + 2.0 + 0.2 <= rx_region_max.size_x`
 
 ## Exact Body Order
 Plate-stack final handoff keeps role-level bodies plus merged ferrite materials.
@@ -135,7 +136,7 @@ legacy `rx_*_uN` 분할 라벨은 final body list에 남아 있으면 안 된다
 - `canonical_coordinates.pcb_layer_z_positions_mm`는 wall/coil-side PCB 시작 X 두 개를 가진다.
 - `canonical_coordinates.copper_layer_z_positions_mm`는 wall/coil-side copper 시작 X 두 개를 가진다.
 - `terminal_metadata.kind = "stub_port"`를 쓰고, `port_sheet_vertices_xyz`는 `rx_plate_port_sheet`
-  reconstruct용 metadata-only rectangle이다. stub rectangle의 `z` span은 full-height conductor layout에서
+  reconstruct용 metadata-only rectangle이다. stub rectangle의 `z` span은 bottom active Z window에서
   계산된 `rx_stub_in/out` bounds를 그대로 따르며 sheet plane은 owner `min_y - 5.0 mm`다.
 - `terminal_metadata.input_stub_body_name` / `output_stub_body_name`은 final imported body names가 아니라
   pre-unite source stub labels다.

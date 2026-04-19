@@ -14,7 +14,7 @@ tags:
 - Path: `src/peetsfea/type2_rx_plate_stack.py`
 - Code note path: `sdd/code/src/peetsfea/type2_rx_plate_stack.py.md`
 - Status: active transition module
-- Related feature plans: [[sdd/plans/0.2.22-type2-rx-plate-stack]], [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]]
+- Related feature plans: [[sdd/plans/0.2.22-type2-rx-plate-stack]], [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]], [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]]
 
 ## 역할
 - RX compatibility forwarder다.
@@ -28,6 +28,7 @@ tags:
 ## Canonical state
 - RX contract 자체는 shared owner state를 그대로 따른다: full `YZ` footprint, `rx_region_max.min_x` anchor, `+X` stack.
 - exact body order/group/terminal metadata truth도 shared owner output이 유일한 source다.
+- RX ferrite-family thickness policy is inherited from shared owner: public `ferrite_set_count` is absent and the three slabs use fixed equivalent baseline thickness.
 
 ## Invariants / fail-fast
 - wrapper는 local geometry를 만들지 않는다.

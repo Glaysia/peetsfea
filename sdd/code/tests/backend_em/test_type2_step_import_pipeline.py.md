@@ -22,7 +22,7 @@ tags:
 ## Canonical coverage
 - active TX/RX plate-stack import succeeds
 - exact TX/RX plate body labels are preserved as export-side provenance
-- plate-stack exact order keeps the full explicit body list while final imported conductor collapses to `tx_plate_copper`/`rx_plate_copper`; ferrite-family labels follow the merged 3-body contract(`PET/PSA -> ferrite -> air`) with grouped ferrite-family metadata, asymmetric turns, and stub bodies.
+- plate-stack exact order keeps the full explicit body list while final imported conductor collapses to `tx_plate_copper`/`rx_plate_copper`; ferrite-family labels follow the direct equivalent 3-slab contract(`PET/PSA -> ferrite -> air`) with grouped ferrite-family metadata, asymmetric turns, and stub bodies.
 - plate-stack positive path explicitly verifies merged ferrite-family imported names are exact (`tx_stack_pet_psa/tx_stack_ferrite/tx_stack_air`, `rx_stack_pet_psa/rx_stack_ferrite/rx_stack_air`) and contain no generic `SOLID*` drift
 - plate-stack positive path explicitly verifies copper 그룹(`g_copper_tx`, `g_copper_rx`)이 각각 `tx_plate_copper`, `rx_plate_copper`를 포함하고
   `g_ferrite_tx` / `g_ferrite_rx` group membership/member order가 온전히 유지되는지 확인한다.

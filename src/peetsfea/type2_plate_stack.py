@@ -12,16 +12,15 @@ from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import resolve_modeled_plate_stack_metal_fill_factor
 from peetsfea.type2_step_spec import resolve_modeled_plate_stack_turn_count
+from peetsfea.type2_step_spec import resolve_modeled_plate_stack_z_usage_ratio
 
-_FERRITE_THICKNESS_MM = 0.20
-_PET_PSA_THICKNESS_MM = 0.15
-_AIR_THICKNESS_MM = 0.02
+_STACK_PET_PSA_THICKNESS_MM = 1.5
+_FERRITE_STACK_THICKNESS_MM = 2.0
+_AIR_STACK_THICKNESS_MM = 0.2
 _MAX_LABEL_LENGTH = 32
-_EXPECTED_FERRITE_SET_COUNT = 10
 _PLATE_STACK_STUB_LENGTH_MM = 5.0
 _PLATE_STACK_TERMINAL_METADATA_KIND = "stub_port"
 _GEOMETRY_EPSILON_MM = 1e-9
-_CONNECTOR_LANE_COUNT = 3
 
 
 @dataclass(frozen=True)
@@ -37,13 +36,6 @@ class _PlateStackRoleConfig:
 @dataclass(frozen=True)
 class _BridgeEdgeWindow:
     y_edge: Literal["min", "max"]
-    z_min_mm: float
-    z_max_mm: float
-
-
-@dataclass(frozen=True)
-class _StackConnectorLane:
-    stack_label: str
     z_min_mm: float
     z_max_mm: float
 
@@ -125,13 +117,10 @@ def _expected_plate_stack_pre_unite_body_names(
 def expected_plate_stack_body_names(
     *,
     role: ModeledPlateStackRole,
-    ferrite_set_count: int,
     turn_count: int,
     pcb_total_thickness_mm: float,
 ) -> tuple[str, ...]:
     _role_config(role)
-    if ferrite_set_count < 1:
-        raise ValueError(f"{role}.ferrite_set_count must be >= 1 (actual={ferrite_set_count})")
     if turn_count < 2:
         raise ValueError(f"{role}.turn_count must be >= 2 (actual={turn_count})")
     if pcb_total_thickness_mm <= 0.0:
@@ -149,19 +138,17 @@ def expected_plate_stack_body_names(
 
 def total_plate_stack_thickness_mm(*, spec: ModeledPlateStackSpec) -> float:
     return (2.0 * spec.pcb_total_thickness_mm) + (
-        float(spec.ferrite_set_count)
-        * (_FERRITE_THICKNESS_MM + _PET_PSA_THICKNESS_MM + _AIR_THICKNESS_MM)
+        _STACK_PET_PSA_THICKNESS_MM
+        + _FERRITE_STACK_THICKNESS_MM
+        + _AIR_STACK_THICKNESS_MM
     )
 
 
 def expected_plate_stack_body_groups(
     *,
     role: ModeledPlateStackRole,
-    ferrite_set_count: int,
 ) -> tuple[ExportedBodyGroup, ...]:
     role_config = _role_config(role)
-    if ferrite_set_count < 1:
-        raise ValueError(f"{role}.ferrite_set_count must be >= 1 for ferrite grouping (actual={ferrite_set_count})")
     ferrite_member_body_names = (
         f"{role_config.prefix}_stack_pet_psa",
         f"{role_config.prefix}_stack_ferrite",
@@ -202,11 +189,6 @@ def build_plate_stack_scene_data(
             "type2 striped plate stack currently requires YZ modeled plane and X thickness axis "
             f"(role={spec.role}, modeled_plane={role_config.modeled_plane}, thickness_axis_index={role_config.thickness_axis_index})"
         )
-    if spec.ferrite_set_count != _EXPECTED_FERRITE_SET_COUNT:
-        raise ValueError(
-            f"{spec.role}.ferrite_set_count must be {_EXPECTED_FERRITE_SET_COUNT} for the active literal-set contract "
-            f"(actual={spec.ferrite_set_count})"
-        )
     if spec.pcb_total_thickness_mm <= spec.copper_thickness_mm:
         raise ValueError(
             f"{spec.role}.pcb_total_thickness_mm must be > copper_thickness_mm "
@@ -217,6 +199,7 @@ def build_plate_stack_scene_data(
 
     realized_turn_count = resolve_modeled_plate_stack_turn_count(spec, seed=seed)
     realized_metal_fill_factor = resolve_modeled_plate_stack_metal_fill_factor(spec, seed=seed)
+    realized_z_usage_ratio = resolve_modeled_plate_stack_z_usage_ratio(spec, seed=seed)
 
     owner_origin_x, owner_origin_y, owner_origin_z = owner_spec.origin_xyz
     owner_size_x, owner_size_y, owner_size_z = owner_spec.size_xyz
@@ -237,15 +220,20 @@ def build_plate_stack_scene_data(
             "type2 rx plate stack must fit inside rx_region_max thickness "
             f"(owner_size_x={owner_size_x}, total_thickness_mm={total_thickness_mm})"
         )
-    active_conductor_size_z = owner_size_z
+    active_conductor_size_z = owner_size_z * realized_z_usage_ratio
     if active_conductor_size_z <= 0.0:
         raise RuntimeError(
             f"type2 {spec.role} active conductor height must be > 0 "
-            f"(owner_size_z={owner_size_z})"
+            f"(owner_size_z={owner_size_z}, z_usage_ratio={realized_z_usage_ratio})"
         )
 
-    conductor_origin_z = owner_origin_z
-    conductor_max_z = owner_origin_z + owner_size_z
+    if spec.role == "tx_plate_stack":
+        conductor_origin_z = owner_origin_z + owner_size_z - active_conductor_size_z
+    elif spec.role == "rx_plate_stack":
+        conductor_origin_z = owner_origin_z
+    else:
+        raise RuntimeError(f"unsupported type2 plate-stack role for active Z window: {spec.role}")
+    conductor_max_z = conductor_origin_z + active_conductor_size_z
     pitch_denominator = float(realized_turn_count) + 0.5
     if pitch_denominator <= 0.0:
         raise RuntimeError(
@@ -266,11 +254,6 @@ def build_plate_stack_scene_data(
     current_position_mm = owner_origin_x
     body_specs: list[tuple[str, tuple[float, float, float], tuple[float, float, float]]] = []
     ordered_body_names: list[str] = []
-    stack_member_specs: dict[str, list[tuple[tuple[float, float, float], tuple[float, float, float]]]] = {
-        f"{role_config.prefix}_stack_pet_psa": [],
-        f"{role_config.prefix}_stack_ferrite": [],
-        f"{role_config.prefix}_stack_air": [],
-    }
     stack_pet_label = f"{role_config.prefix}_stack_pet_psa"
     stack_ferrite_label = f"{role_config.prefix}_stack_ferrite"
     stack_air_label = f"{role_config.prefix}_stack_air"
@@ -316,44 +299,44 @@ def build_plate_stack_scene_data(
     wall_pcb_origin_mm = current_position_mm
     current_position_mm += pcb_epoxy_thickness_mm
 
-    for _index in range(spec.ferrite_set_count):
-        pet_spec = _yz_body_spec(
-            label=stack_pet_label,
-            owner_spec=owner_spec,
-            layer_origin_x_mm=current_position_mm,
-            layer_thickness_x_mm=_PET_PSA_THICKNESS_MM,
-            body_origin_z_mm=owner_origin_z,
-            body_size_z_mm=owner_size_z,
-        )
-        _pet_label, pet_origin_xyz, pet_size_xyz = pet_spec
-        stack_member_specs[stack_pet_label].append((pet_origin_xyz, pet_size_xyz))
-        bridge_clearance_labels.add(stack_pet_label)
-        current_position_mm += _PET_PSA_THICKNESS_MM
-        ferrite_spec = _yz_body_spec(
-            label=stack_ferrite_label,
-            owner_spec=owner_spec,
-            layer_origin_x_mm=current_position_mm,
-            layer_thickness_x_mm=_FERRITE_THICKNESS_MM,
-            body_origin_z_mm=owner_origin_z,
-            body_size_z_mm=owner_size_z,
-        )
-        _ferrite_label, ferrite_origin_xyz, ferrite_size_xyz = ferrite_spec
-        stack_member_specs[stack_ferrite_label].append((ferrite_origin_xyz, ferrite_size_xyz))
-        bridge_clearance_labels.add(stack_ferrite_label)
-        current_position_mm += _FERRITE_THICKNESS_MM
-        air_spec = _yz_body_spec(
-            label=stack_air_label,
-            owner_spec=owner_spec,
-            layer_origin_x_mm=current_position_mm,
-            layer_thickness_x_mm=_AIR_THICKNESS_MM,
-            body_origin_z_mm=owner_origin_z,
-            body_size_z_mm=owner_size_z,
-        )
-        _air_label, air_origin_xyz, air_size_xyz = air_spec
-        stack_member_specs[stack_air_label].append((air_origin_xyz, air_size_xyz))
-        bridge_clearance_labels.add(stack_air_label)
-        current_position_mm += _AIR_THICKNESS_MM
-    ordered_body_names.extend((stack_pet_label, stack_ferrite_label, stack_air_label))
+    pet_spec = _yz_body_spec(
+        label=stack_pet_label,
+        owner_spec=owner_spec,
+        layer_origin_x_mm=current_position_mm,
+        layer_thickness_x_mm=_STACK_PET_PSA_THICKNESS_MM,
+        body_origin_z_mm=conductor_origin_z,
+        body_size_z_mm=active_conductor_size_z,
+    )
+    body_specs.append(pet_spec)
+    ordered_body_names.append(stack_pet_label)
+    bridge_clearance_labels.add(stack_pet_label)
+    current_position_mm += _STACK_PET_PSA_THICKNESS_MM
+
+    ferrite_spec = _yz_body_spec(
+        label=stack_ferrite_label,
+        owner_spec=owner_spec,
+        layer_origin_x_mm=current_position_mm,
+        layer_thickness_x_mm=_FERRITE_STACK_THICKNESS_MM,
+        body_origin_z_mm=conductor_origin_z,
+        body_size_z_mm=active_conductor_size_z,
+    )
+    body_specs.append(ferrite_spec)
+    ordered_body_names.append(stack_ferrite_label)
+    bridge_clearance_labels.add(stack_ferrite_label)
+    current_position_mm += _FERRITE_STACK_THICKNESS_MM
+
+    air_spec = _yz_body_spec(
+        label=stack_air_label,
+        owner_spec=owner_spec,
+        layer_origin_x_mm=current_position_mm,
+        layer_thickness_x_mm=_AIR_STACK_THICKNESS_MM,
+        body_origin_z_mm=conductor_origin_z,
+        body_size_z_mm=active_conductor_size_z,
+    )
+    body_specs.append(air_spec)
+    ordered_body_names.append(stack_air_label)
+    bridge_clearance_labels.add(stack_air_label)
+    current_position_mm += _AIR_STACK_THICKNESS_MM
 
     coil_pcb_label = f"{role_config.prefix}_pcb_coil"
     body_specs.append(
@@ -476,24 +459,22 @@ def build_plate_stack_scene_data(
         )
     expected_body_names = expected_plate_stack_body_names(
         role=spec.role,
-        ferrite_set_count=spec.ferrite_set_count,
         turn_count=realized_turn_count,
         pcb_total_thickness_mm=spec.pcb_total_thickness_mm,
     )
     expected_body_groups = expected_plate_stack_body_groups(
         role=spec.role,
-        ferrite_set_count=spec.ferrite_set_count,
     )
 
     outer_bounds_max_xyz = (
         owner_origin_x + total_thickness_mm,
         owner_origin_y + owner_size_y,
-        owner_origin_z + owner_size_z,
+        conductor_max_z,
     )
     outer_bounds_size_xyz = (
         total_thickness_mm,
         owner_size_y + _PLATE_STACK_STUB_LENGTH_MM,
-        owner_size_z,
+        active_conductor_size_z,
     )
 
     flat_shapes: tuple[bd.Shape, ...] = tuple(
@@ -510,37 +491,7 @@ def build_plate_stack_scene_data(
         else _build_labeled_solid_box(label=label, origin_xyz=origin_xyz, size_xyz=size_xyz)
         for label, origin_xyz, size_xyz in body_specs
     )
-    stack_span_min_x = min(
-        origin_xyz[0]
-        for stack_label in (stack_pet_label, stack_ferrite_label, stack_air_label)
-        for origin_xyz, _size_xyz in stack_member_specs[stack_label]
-    )
-    stack_span_max_x = max(
-        origin_xyz[0] + size_xyz[0]
-        for stack_label in (stack_pet_label, stack_ferrite_label, stack_air_label)
-        for origin_xyz, size_xyz in stack_member_specs[stack_label]
-    )
-    stack_connector_lanes = _stack_connector_lanes_for_merged_material_bodies(
-        stack_labels=(stack_pet_label, stack_ferrite_label, stack_air_label),
-        bridge_windows=tuple(bridge_windows),
-        owner_origin_z_mm=owner_origin_z,
-        owner_size_z_mm=owner_size_z,
-    )
-    stack_shapes = tuple(
-        _build_labeled_multisolid_box_with_edge_windows(
-            label=stack_label,
-            member_specs=tuple(stack_member_specs[stack_label]),
-            owner_origin_y_mm=owner_origin_y,
-            owner_size_y_mm=owner_size_y,
-            edge_strip_width_y_mm=spec.copper_thickness_mm,
-            edge_windows=tuple(bridge_windows),
-            stack_span_min_x_mm=stack_span_min_x,
-            stack_span_max_x_mm=stack_span_max_x,
-            connector_lanes=stack_connector_lanes,
-        )
-        for stack_label in (stack_pet_label, stack_ferrite_label, stack_air_label)
-    )
-    all_shapes = flat_shapes + stack_shapes
+    all_shapes = flat_shapes
     shapes_by_label = {shape.label: shape for shape in all_shapes}
     if len(shapes_by_label) != len(all_shapes):
         raise RuntimeError(f"type2 plate stack shape labels must be unique (role={spec.role})")
@@ -604,7 +555,7 @@ def build_plate_stack_scene_data(
                 "outer_bounds_min_xyz": (
                     owner_origin_x,
                     owner_origin_y - _PLATE_STACK_STUB_LENGTH_MM,
-                    owner_origin_z,
+                    conductor_origin_z,
                 ),
                 "outer_bounds_max_xyz": outer_bounds_max_xyz,
                 "outer_bounds_size_xyz": outer_bounds_size_xyz,
@@ -861,95 +812,6 @@ def _build_labeled_solid_box_with_edge_windows(
     return cast(bd.Shape, solid)
 
 
-def _stack_connector_lanes_for_merged_material_bodies(
-    *,
-    stack_labels: tuple[str, str, str],
-    bridge_windows: tuple[_BridgeEdgeWindow, ...],
-    owner_origin_z_mm: float,
-    owner_size_z_mm: float,
-) -> tuple[_StackConnectorLane, ...]:
-    if len(stack_labels) != _CONNECTOR_LANE_COUNT:
-        raise RuntimeError(
-            "type2 plate stack connector lane contract requires exactly three stack labels "
-            f"(actual={len(stack_labels)})"
-        )
-    owner_max_z_mm = owner_origin_z_mm + owner_size_z_mm
-    if owner_max_z_mm <= owner_origin_z_mm:
-        raise RuntimeError(
-            "type2 plate stack owner Z span must be positive for connector lane resolution "
-            f"(owner_origin_z_mm={owner_origin_z_mm}, owner_size_z_mm={owner_size_z_mm})"
-        )
-    min_edge_windows = tuple(window for window in bridge_windows if window.y_edge == "min")
-    if len(min_edge_windows) == 0:
-        raise RuntimeError("type2 plate stack connector lane resolution requires min-edge bridge windows")
-    first_min_window_start = min(window.z_min_mm for window in min_edge_windows)
-    lane_band_z_max_mm = min(owner_max_z_mm, first_min_window_start)
-    lane_band_size_mm = lane_band_z_max_mm - owner_origin_z_mm
-    if lane_band_size_mm <= _GEOMETRY_EPSILON_MM:
-        raise RuntimeError(
-            "type2 plate stack connector lane band must have positive Z span "
-            f"(owner_origin_z_mm={owner_origin_z_mm}, lane_band_z_max_mm={lane_band_z_max_mm})"
-        )
-    lane_slice_size_mm = lane_band_size_mm / float((2 * _CONNECTOR_LANE_COUNT) + 1)
-    if lane_slice_size_mm <= _GEOMETRY_EPSILON_MM:
-        raise RuntimeError(
-            "type2 plate stack connector lane slice must have positive Z span "
-            f"(lane_band_size_mm={lane_band_size_mm}, lane_slice_size_mm={lane_slice_size_mm})"
-        )
-    connector_lanes: list[_StackConnectorLane] = []
-    for lane_index, stack_label in enumerate(stack_labels):
-        z_min_mm = owner_origin_z_mm + lane_slice_size_mm * float((2 * lane_index) + 1)
-        z_max_mm = z_min_mm + lane_slice_size_mm
-        connector_lanes.append(
-            _StackConnectorLane(
-                stack_label=stack_label,
-                z_min_mm=z_min_mm,
-                z_max_mm=z_max_mm,
-            )
-        )
-    return tuple(connector_lanes)
-
-
-def _connector_corridor_shape(
-    *,
-    stack_span_min_x_mm: float,
-    stack_span_max_x_mm: float,
-    owner_origin_y_mm: float,
-    edge_strip_width_y_mm: float,
-    connector_lane: _StackConnectorLane,
-) -> bd.Shape:
-    corridor_size_x_mm = stack_span_max_x_mm - stack_span_min_x_mm
-    corridor_size_z_mm = connector_lane.z_max_mm - connector_lane.z_min_mm
-    if corridor_size_x_mm <= _GEOMETRY_EPSILON_MM or corridor_size_z_mm <= _GEOMETRY_EPSILON_MM:
-        raise RuntimeError(
-            "type2 plate stack connector corridor size must be positive "
-            f"(label={connector_lane.stack_label}, size_x_mm={corridor_size_x_mm}, size_z_mm={corridor_size_z_mm})"
-        )
-    return cast(
-        bd.Shape,
-        bd.Box(
-            corridor_size_x_mm,
-            edge_strip_width_y_mm,
-            corridor_size_z_mm,
-            align=(bd.Align.MIN, bd.Align.MIN, bd.Align.MIN),
-        ).moved(
-            bd.Location(
-                (
-                    stack_span_min_x_mm,
-                    owner_origin_y_mm,
-                    connector_lane.z_min_mm,
-                )
-            )
-        ),
-    )
-
-
-def _require_fused_shape(*, fused: bd.Shape | bd.ShapeList[bd.Shape], context: str) -> bd.Shape:
-    if isinstance(fused, bd.ShapeList):
-        raise RuntimeError(f"{context} must resolve to one connected shape (actual={len(fused)})")
-    return cast(bd.Shape, fused)
-
-
 def _build_labeled_group(*, label: str, children: tuple[bd.Shape, ...]) -> bd.Shape:
     if len(label) > _MAX_LABEL_LENGTH:
         raise RuntimeError(
@@ -991,87 +853,6 @@ def _build_labeled_united_copper_body(*, label: str, source_shapes: tuple[bd.Sha
     united_solid = united_solids[0]
     united_solid.label = label
     return cast(bd.Shape, united_solid)
-
-
-def _build_labeled_multisolid_box_with_edge_windows(
-    *,
-    label: str,
-    member_specs: tuple[tuple[tuple[float, float, float], tuple[float, float, float]], ...],
-    owner_origin_y_mm: float,
-    owner_size_y_mm: float,
-    edge_strip_width_y_mm: float,
-    edge_windows: tuple[_BridgeEdgeWindow, ...],
-    stack_span_min_x_mm: float,
-    stack_span_max_x_mm: float,
-    connector_lanes: tuple[_StackConnectorLane, ...],
-) -> bd.Shape:
-    if len(label) > _MAX_LABEL_LENGTH:
-        raise RuntimeError(
-            "type2 plate stack body label must be <= 32 chars "
-            f"(label={label}, length={len(label)})"
-        )
-    if len(member_specs) == 0:
-        raise RuntimeError(f"type2 plate stack merged material body must contain solids (label={label})")
-    if len(connector_lanes) != _CONNECTOR_LANE_COUNT:
-        raise RuntimeError(
-            "type2 plate stack merged material body requires exactly three connector lanes "
-            f"(label={label}, actual={len(connector_lanes)})"
-        )
-    connector_lane_by_label = {lane.stack_label: lane for lane in connector_lanes}
-    if len(connector_lane_by_label) != len(connector_lanes):
-        raise RuntimeError("type2 plate stack connector lane labels must be unique")
-    if label not in connector_lane_by_label:
-        raise RuntimeError(f"type2 plate stack connector lane mapping is missing label {label}")
-    connector_corridors_by_label = {
-        lane_label: _connector_corridor_shape(
-            stack_span_min_x_mm=stack_span_min_x_mm,
-            stack_span_max_x_mm=stack_span_max_x_mm,
-            owner_origin_y_mm=owner_origin_y_mm,
-            edge_strip_width_y_mm=edge_strip_width_y_mm,
-            connector_lane=lane_spec,
-        )
-        for lane_label, lane_spec in connector_lane_by_label.items()
-    }
-    processed_members: list[bd.Shape] = []
-    for origin_xyz, size_xyz in member_specs:
-        member_shape = _build_labeled_solid_box_with_edge_windows(
-            label="stack_member",
-            origin_xyz=origin_xyz,
-            size_xyz=size_xyz,
-            owner_origin_y_mm=owner_origin_y_mm,
-            owner_size_y_mm=owner_size_y_mm,
-            edge_strip_width_y_mm=edge_strip_width_y_mm,
-            edge_windows=edge_windows,
-        )
-        for corridor_shape in connector_corridors_by_label.values():
-            member_shape = cast(bd.Shape, member_shape - corridor_shape)
-        member_solids = tuple(member_shape.solids())
-        if len(member_solids) != 1:
-            raise RuntimeError(
-                "type2 plate stack connector corridor subtraction must keep each member as one solid "
-                f"(label={label}, member_origin={origin_xyz}, member_size={size_xyz}, solid_count={len(member_solids)})"
-            )
-        processed_members.append(cast(bd.Shape, member_solids[0]))
-
-    connector_shape = connector_corridors_by_label[label]
-    merged_shape = _require_fused_shape(
-        fused=processed_members[0].fuse(connector_shape),
-        context=f"type2 plate stack connector fusion must connect material body {label}",
-    )
-    for member_shape in processed_members[1:]:
-        merged_shape = _require_fused_shape(
-            fused=merged_shape.fuse(member_shape),
-            context=f"type2 plate stack member fusion must stay connected for {label}",
-        )
-    merged_solids = tuple(merged_shape.solids())
-    if len(merged_solids) != 1:
-        raise RuntimeError(
-            "type2 plate stack merged material body must resolve to exactly one connected solid "
-            f"(label={label}, solid_count={len(merged_solids)})"
-        )
-    merged_solid = merged_solids[0]
-    merged_solid.label = label
-    return cast(bd.Shape, merged_solid)
 
 
 __all__ = [

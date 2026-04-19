@@ -232,7 +232,6 @@ def _plate_stack_expected_body_names(
     return list(
         expected_plate_stack_body_names(
             role=spec.role,
-            ferrite_set_count=spec.ferrite_set_count,
             turn_count=realized_turn_count,
             pcb_total_thickness_mm=spec.pcb_total_thickness_mm,
         )
@@ -250,7 +249,6 @@ def _plate_stack_expected_body_groups(
         }
         for group_entry in expected_plate_stack_body_groups(
             role=spec.role,
-            ferrite_set_count=spec.ferrite_set_count,
         )
     ]
 

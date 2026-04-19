@@ -18,13 +18,11 @@ def total_rx_plate_stack_thickness_mm(*, spec: ModeledRxPlateStackSpec) -> float
 
 def expected_rx_plate_stack_body_names(
     *,
-    ferrite_set_count: int,
     turn_count: int,
     pcb_total_thickness_mm: float,
 ) -> tuple[str, ...]:
     return expected_plate_stack_body_names(
         role=_RX_PLATE_STACK_ROLE,
-        ferrite_set_count=ferrite_set_count,
         turn_count=turn_count,
         pcb_total_thickness_mm=pcb_total_thickness_mm,
     )

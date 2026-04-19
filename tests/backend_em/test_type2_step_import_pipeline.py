@@ -13,7 +13,6 @@ from peetsfea.type2_plate_stack import expected_plate_stack_body_names
 from peetsfea.type2_step_ledger import ExportedBodyGroup
 from tests.fixtures.legacy.type1_spec import type1_outputs_spec
 
-_PLATE_STACK_FERRITE_SET_COUNT = 10
 _PLATE_STACK_TURN_COUNT = 3
 _PLATE_STACK_STUB_LENGTH_MM = 5.0
 _PLATE_STACK_PCB_TOTAL_THICKNESS_MM = 0.4
@@ -629,14 +628,12 @@ def _single_layer_imported_name_batch_with_role_aware_underlay(
 
 def _tx_plate_stack_expected_names(
     *,
-    ferrite_set_count: int = _PLATE_STACK_FERRITE_SET_COUNT,
     turn_count: int = _PLATE_STACK_TURN_COUNT,
     pcb_total_thickness_mm: float = _PLATE_STACK_PCB_TOTAL_THICKNESS_MM,
 ) -> list[str]:
     return list(
         expected_plate_stack_body_names(
             role="tx_plate_stack",
-            ferrite_set_count=ferrite_set_count,
             turn_count=turn_count,
             pcb_total_thickness_mm=pcb_total_thickness_mm,
         )
@@ -645,14 +642,12 @@ def _tx_plate_stack_expected_names(
 
 def _rx_plate_stack_expected_names(
     *,
-    ferrite_set_count: int = _PLATE_STACK_FERRITE_SET_COUNT,
     turn_count: int = _PLATE_STACK_TURN_COUNT,
     pcb_total_thickness_mm: float = _PLATE_STACK_PCB_TOTAL_THICKNESS_MM,
 ) -> list[str]:
     return list(
         expected_plate_stack_body_names(
             role="rx_plate_stack",
-            ferrite_set_count=ferrite_set_count,
             turn_count=turn_count,
             pcb_total_thickness_mm=pcb_total_thickness_mm,
         )
@@ -721,18 +716,14 @@ def _expected_ferrite_group_for_role(*, role: str, expected_names: list[str]) ->
 
 
 def _tx_plate_stack_expected_groups(
-    *,
-    ferrite_set_count: int = _PLATE_STACK_FERRITE_SET_COUNT,
 ) -> list[ExportedBodyGroup]:
-    expected_names = _tx_plate_stack_expected_names(ferrite_set_count=ferrite_set_count)
+    expected_names = _tx_plate_stack_expected_names()
     return _expected_ferrite_group_for_role(role="tx_plate_stack", expected_names=expected_names)
 
 
 def _rx_plate_stack_expected_groups(
-    *,
-    ferrite_set_count: int = _PLATE_STACK_FERRITE_SET_COUNT,
 ) -> list[ExportedBodyGroup]:
-    expected_names = _rx_plate_stack_expected_names(ferrite_set_count=ferrite_set_count)
+    expected_names = _rx_plate_stack_expected_names()
     return _expected_ferrite_group_for_role(role="rx_plate_stack", expected_names=expected_names)
 
 

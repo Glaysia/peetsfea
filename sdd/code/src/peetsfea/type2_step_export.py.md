@@ -15,7 +15,7 @@ tags:
 - Status: active
 
 ## Ownership
-- Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-copper-unite-grouping]]
+- Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]]
 - Primary architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 역할
@@ -30,6 +30,7 @@ tags:
 ## Canonical state
 - TX/RX plate-stack ledger validation contract는 pre-unite surface와 final handoff surface를 분리해 유지한다.
 - pre-unite exact body list에는 explicit copper/pcb/bridge/stub names가 남고, ferrite-family는 merged material body names로 정규화된다.
+- ferrite-family material names are produced as direct equivalent slabs; export does not depend on a public `ferrite_set_count`.
 - final export surface에서는 role당 6개 이름만 handoff한다(동일 순서로 import reconstruction/mesh 기대치도 공유):
   `tx_plate_copper`, `tx_pcb_wall`, `tx_stack_pet_psa`, `tx_stack_ferrite`, `tx_stack_air`, `tx_pcb_coil`,
   `rx_plate_copper`, `rx_pcb_wall`, `rx_stack_pet_psa`, `rx_stack_ferrite`, `rx_stack_air`, `rx_pcb_coil`.
@@ -56,6 +57,7 @@ tags:
 - export body groups는 `expected_exported_body_groups` contract과 exact match여야 한다. (`g_copper_*`, `g_ferrite_*`)
 - `expected_exported_body_count`는 TX/RX 각각 `6`이어야 한다.
 - active plate roles에서 old `*_stack_*_uN` contract는 허용하지 않는다.
+- active plate roles에서 `ferrite_set_count`를 public input 또는 ledger/export 계산 dependency로 되살리면 안 된다.
 - final export body list에서는 `*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`가 없어야 한다.
 - active plate roles는 `tx_rect_void` direct-export bridge를 통과하면 안 된다.
 - exported solid pair positive-volume overlap은 fail-fast failure다.
@@ -77,5 +79,5 @@ tags:
 - geometry-only plate roles를 coil export self-check 규칙에 다시 묶지 않는다.
 - direct TX single-coil export helper와 active full-scene export contract를 혼동하지 않는다.
 - plate-stack metadata-only port sheet를 STEP body list에 섞지 않는다.
-- spec parser가 여전히 `shoe_depth_mm`를 가질 수 있어도 export contract는 그 field에 의존하지 않는다.
+- removed public fields such as `shoe_depth_mm` and `ferrite_set_count` must not re-enter export contracts.
 - import/runtime에서 geometry heal/subtract를 하지 않으므로 export 단계 non-overlap contract를 약화하지 않는다.
