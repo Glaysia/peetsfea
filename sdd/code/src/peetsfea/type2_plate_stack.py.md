@@ -66,7 +66,7 @@ tags:
 - 각 merged stack body는 STEP handoff 전에 unite가 끝난 exact named export body여야 한다.
 - ferrite-family child가 ungrouped 상태로 scene root에 노출되면 안 된다.
 - terminal stub는 `*_stub_in`, `*_stub_out` 두 개만 존재한다. input stub는 wall-side `t0`,
-  output stub는 coil-side `t{N-1}`에서 각각 `+Y` 방향으로 `5.0 mm` owner 바깥으로 돌출한다.
+  output stub는 coil-side `t{N-1}`에서 각각 `-Y` 방향으로 `5.0 mm` owner 바깥으로 돌출한다.
 - terminal metadata는 `kind = "stub_port"`와 stub body name, `(y, z)` endpoints, metadata-only port-sheet vertices를
   pre-unite source segment 라벨(`*_stub_in/out`) 기반 canonical source로 가진다.
 
@@ -85,7 +85,7 @@ tags:
 - copper group member 목록은 role-local united copper body 하나와 exact match해야 한다.
 - final handoff/임포트/메시 payload에서도 pre-unite 라벨(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`)이 body list에 노출되지 않는다.
 - import 후 generic `SOLID*`로 분해되는 handoff는 export contract violation이다.
-- outer bounds는 owner `YZ` footprint를 유지하되 `max_y`만 `+5.0 mm` overhang를 허용한다.
+- outer bounds는 owner `YZ` footprint를 유지하되 `min_y`만 `-5.0 mm` overhang를 허용한다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_step_scene.py]]

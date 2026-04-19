@@ -34,6 +34,7 @@ from tests.backend_em.test_type2_step_import_pipeline import (
     _single_layer_imported_name_batch_with_role_aware_underlay,
     _single_layer_modeled_objects,
     _single_layer_modeled_objects_with_role_aware_underlay,
+    _plate_stack_non_model_entry,
     _source_paths,
     _write_ledger,
 )
@@ -355,7 +356,8 @@ def _rewrite_plate_stack_terminal_metadata_to_equal_stripe_pitch(
     _size_x, size_y, size_z = (float(component) for component in outer_size_xyz)
     wall_copper_x = float(copper_layer_positions_mm[0])
     coil_copper_x = float(copper_layer_positions_mm[1])
-    sheet_y = origin_y + size_y
+    owner_min_y = origin_y + _PLATE_STACK_STUB_LENGTH_MM
+    sheet_y = owner_min_y - _PLATE_STACK_STUB_LENGTH_MM
     pitch_z = size_z / float(turn_count + 0.5)
     trace_height_z = pitch_z * metal_fill_factor
     stripe_centering_offset_z = (pitch_z - trace_height_z) / 2.0
@@ -374,8 +376,7 @@ def _rewrite_plate_stack_terminal_metadata_to_equal_stripe_pitch(
         [coil_copper_x, sheet_y, coil_last_origin_z + trace_height_z],
         [wall_copper_x, sheet_y, wall_first_origin_z + trace_height_z],
     ]
-    # The modeled outer bounds include stub protrusion in +Y.
-    assert sheet_y == pytest.approx(origin_y + (size_y - _PLATE_STACK_STUB_LENGTH_MM) + _PLATE_STACK_STUB_LENGTH_MM)
+    assert sheet_y == pytest.approx(owner_min_y - _PLATE_STACK_STUB_LENGTH_MM)
 
 
 def _minimal_em_input_ledger(*, modeled_objects: list[dict[str, object]]) -> dict[str, object]:
@@ -1046,7 +1047,7 @@ def test_setup_type2_step_ledger_accepts_plate_stack_exact_pair_and_runs_full_se
     _write_ledger(
         ledger_path,
         scene_step_path=scene_step,
-        non_model_objects=[_non_model_entry()],
+        non_model_objects=[_plate_stack_non_model_entry()],
         modeled_objects=modeled_objects,
     )
     output_aedt_path = tmp_path / "aedt" / "type2_setup_ready.aedt"

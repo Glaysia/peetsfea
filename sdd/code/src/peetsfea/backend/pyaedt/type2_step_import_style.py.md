@@ -34,7 +34,7 @@ tags:
 
 ## Invariants / fail-fast
 - active plate role placement validation은 TX `min_x` anchor와 RX `min_x` anchor를 role-aware로 검사해야 한다.
-- plate roles는 `owner.max_y + 5.0 mm` overhang만 허용하고 나머지 owner-fit anchor는 유지해야 한다.
+- plate roles는 `owner.min_y - 5.0 mm` overhang만 허용하고 나머지 owner-fit anchor는 유지해야 한다.
 - imported object styling은 exact-name partition 결과만 사용한다.
 - plate-stack ferrite-family material preflight(`ensure_underlay_materials`)는 merged exact-name contract만 인식하고 legacy `*_stack_*_uN` fallback을 두지 않는다.
 

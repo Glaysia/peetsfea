@@ -46,6 +46,7 @@ tags:
   남아 있으면 즉시 실패로 본다.
 - single-coil ferrite families(`tx_wall_*`, `under_rx_*`) export 시 동일 ferrite-group contract
 - plate-stack `stub_port` terminal metadata + metadata-only reconstructed sheet geometry
+- plate-stack terminal stubs and sheet metadata use the owner `min_y - 5.0 mm` plane for the left-side `-Y` endpoint.
 - `terminal_metadata.input_stub_body_name`/`output_stub_body_name`은 pre-unite 라벨(`*_stub_in/out`)을 참조해야 하며
   imported final copper body명을 가리키면 안 된다.
 - bridge contract regression:

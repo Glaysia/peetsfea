@@ -21,7 +21,8 @@ tags:
 - setup facade enforces exact two-entry tx/rx role pairs before HFSS launch
 - mixed role families are rejected fail-fast before runtime attach
 - direct mesh helper and direct port assignment accept only exact tx/rx family pairs
-- plate-stack fixtures use active `terminal_metadata.kind == "stub_port"` contract from import-pipeline helpers
+- plate-stack fixtures use active `terminal_metadata.kind == "stub_port"` contract from import-pipeline helpers,
+  including the left-side `-Y` sheet plane
 - plate-stack setup-ready success path은 `tx_plate_copper`/`rx_plate_copper` conductor set,
   `g_copper_tx`/`g_copper_rx`, `g_ferrite_tx`/`g_ferrite_rx` 그룹, mesh/port/EM 체인,
   radiation boundary, sources, analysis/report payload, `ValidateDesign`, save, imported-ledger write shape를 함께 검증한다.

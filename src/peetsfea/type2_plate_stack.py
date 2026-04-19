@@ -487,7 +487,7 @@ def build_plate_stack_scene_data(
 
     outer_bounds_max_xyz = (
         owner_origin_x + total_thickness_mm,
-        owner_origin_y + owner_size_y + _PLATE_STACK_STUB_LENGTH_MM,
+        owner_origin_y + owner_size_y,
         owner_origin_z + owner_size_z,
     )
     outer_bounds_size_xyz = (
@@ -601,7 +601,11 @@ def build_plate_stack_scene_data(
             "expected_exported_body_groups": expected_body_groups,
             "canonical_coordinates": {
                 "frame_origin_xyz": owner_spec.origin_xyz,
-                "outer_bounds_min_xyz": owner_spec.origin_xyz,
+                "outer_bounds_min_xyz": (
+                    owner_origin_x,
+                    owner_origin_y - _PLATE_STACK_STUB_LENGTH_MM,
+                    owner_origin_z,
+                ),
                 "outer_bounds_max_xyz": outer_bounds_max_xyz,
                 "outer_bounds_size_xyz": outer_bounds_size_xyz,
                 "pcb_layer_z_positions_mm": (wall_pcb_origin_mm, coil_pcb_origin_mm),
@@ -623,11 +627,11 @@ def _plate_stack_terminal_metadata(
     input_label, input_origin_xyz, input_size_xyz = input_stub_spec
     output_label, output_origin_xyz, output_size_xyz = output_stub_spec
     input_origin_x, input_origin_y, input_origin_z = input_origin_xyz
-    input_size_x, input_size_y, input_size_z = input_size_xyz
+    _input_size_x, _input_size_y, input_size_z = input_size_xyz
     output_origin_x, output_origin_y, output_origin_z = output_origin_xyz
-    output_size_x, output_size_y, output_size_z = output_size_xyz
-    input_tip_y = input_origin_y + input_size_y
-    output_tip_y = output_origin_y + output_size_y
+    _output_size_x, _output_size_y, output_size_z = output_size_xyz
+    input_tip_y = input_origin_y
+    output_tip_y = output_origin_y
     if abs(input_tip_y - output_tip_y) > 1e-9:
         raise RuntimeError(
             "type2 plate stack stub tips must share one Y plane "
@@ -728,7 +732,7 @@ def _stub_body_spec(
         )
     return (
         label,
-        (layer_origin_x_mm, owner_origin_y + owner_size_y, stub_origin_z_mm),
+        (layer_origin_x_mm, owner_origin_y - _PLATE_STACK_STUB_LENGTH_MM, stub_origin_z_mm),
         (layer_thickness_x_mm, _PLATE_STACK_STUB_LENGTH_MM, stub_size_z_mm),
     )
 def _build_labeled_solid_box(

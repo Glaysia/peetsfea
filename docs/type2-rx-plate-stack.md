@@ -87,7 +87,7 @@ TX/RX shared generation ownership과 thickness baseline canonical source는 shar
 - bridge `z` window는 owner `Z` bounds를 먼저 clip하고, 같은 edge(`Y=max` or `Y=min`)의
   이전 bridge upper bound를 하한으로 써서 same-edge neighboring bridge positive-volume overlap을 금지한다.
 - terminal stub `rx_stub_in`은 wall-side `t0`, `rx_stub_out`은 coil-side `t{N-1}`에 붙고
-  둘 다 `+Y` 방향으로 `5.0 mm` 돌출한다.
+  둘 다 `-Y` 방향으로 `5.0 mm` 돌출한다.
 - wall/coil stripes, bridges, terminal stubs는 final export 전에 `rx_plate_copper`로 unite된다.
   `rx_copper_wall_t*`, `rx_copper_coil_t*`, `rx_bridge_s*`, `rx_stub_in/out` labels는
   pre-unite source/provenance labels이며 final STEP/import/mesh body names가 아니다.
@@ -136,6 +136,6 @@ legacy `rx_*_uN` 분할 라벨은 final body list에 남아 있으면 안 된다
 - `canonical_coordinates.copper_layer_z_positions_mm`는 wall/coil-side copper 시작 X 두 개를 가진다.
 - `terminal_metadata.kind = "stub_port"`를 쓰고, `port_sheet_vertices_xyz`는 `rx_plate_port_sheet`
   reconstruct용 metadata-only rectangle이다. stub rectangle의 `z` span은 full-height conductor layout에서
-  계산된 `rx_stub_in/out` bounds를 그대로 따른다.
+  계산된 `rx_stub_in/out` bounds를 그대로 따르며 sheet plane은 owner `min_y - 5.0 mm`다.
 - `terminal_metadata.input_stub_body_name` / `output_stub_body_name`은 final imported body names가 아니라
   pre-unite source stub labels다.

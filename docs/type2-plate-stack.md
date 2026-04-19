@@ -105,11 +105,11 @@ import-only surface다. active example baseline에서 TX/RX PCB total thickness�
 - `tx_plate_stack`: active TX plate-stack는 `tx_region` full `YZ` footprint를 쓰고
   `tx_region.min_x`에 붙어 `+X` 방향으로 쌓인다. wall/coil-side striped copper는 full owner `Z`
   height를 공유하고, input terminal stub는 wall-side `t0`, output terminal stub는 coil-side
-  `t{N-1}`에서 각각 `+Y`로 `5.0 mm` 돌출한다.
+  `t{N-1}`에서 각각 `-Y`로 `5.0 mm` 돌출한다.
 - `rx_plate_stack`: active RX plate-stack는 `rx_region_max` full `YZ` footprint를 쓰고
   `rx_region_max.min_x`에 붙어 `+X` 방향으로 쌓인다. wall/coil-side striped copper는 full owner `Z`
   height를 공유하고, terminal stub는 같은 규칙으로 wall-side `t0` input과 coil-side `t{N-1}`
-  output에서 `+Y`로 돌출한다.
+  output에서 `-Y`로 돌출한다.
 
 ## Legacy Coil Reference
 - `tx_single_coil` / legacy `rx_single_coil` coil geometry reference는

@@ -655,6 +655,7 @@ def validate_modeled_bounds_against_owner(
     owner_min_x, owner_min_y, owner_min_z = outer_bounds_min_xyz(owner_member, context=owner_context)
     owner_size_x, owner_size_y, owner_size_z = outer_bounds_size_xyz(owner_member, context=owner_context)
     allowed_modeled_size_y = owner_size_y + _PLATE_STACK_STUB_LENGTH_MM if role in ("tx_plate_stack", "rx_plate_stack") else owner_size_y
+    plate_stack_expected_min_y = owner_min_y - _PLATE_STACK_STUB_LENGTH_MM
     if modeled_size_x > owner_size_x or modeled_size_y > allowed_modeled_size_y or modeled_size_z > owner_size_z:
         raise ValueError(
             f"{context} outer bounds must fit inside {owner_id} "
@@ -674,7 +675,7 @@ def validate_modeled_bounds_against_owner(
             or abs(modeled_size_z - owner_size_z) > _PLACEMENT_TOLERANCE
         ):
             raise ValueError(
-                "tx_plate_stack must already occupy the full tx_region YZ footprint plus +Y stub overhang "
+                "tx_plate_stack must already occupy the full tx_region YZ footprint plus -Y stub overhang "
                 f"(modeled_size={(modeled_size_y, modeled_size_z)}, owner_size={(owner_size_y + _PLATE_STACK_STUB_LENGTH_MM, owner_size_z)})"
             )
         if abs(modeled_min_x - owner_min_x) > _PLACEMENT_TOLERANCE:
@@ -682,10 +683,10 @@ def validate_modeled_bounds_against_owner(
                 "tx_plate_stack outer bounds min_x must already touch tx_region min_x "
                 f"(actual={modeled_min_x}, expected={owner_min_x})"
             )
-        if abs(modeled_min_y - owner_min_y) > _PLACEMENT_TOLERANCE:
+        if abs(modeled_min_y - plate_stack_expected_min_y) > _PLACEMENT_TOLERANCE:
             raise ValueError(
-                "tx_plate_stack outer bounds min_y must already touch tx_region min_y "
-                f"(actual={modeled_min_y}, expected={owner_min_y})"
+                "tx_plate_stack outer bounds min_y must already include tx_region -Y stub overhang "
+                f"(actual={modeled_min_y}, expected={plate_stack_expected_min_y})"
             )
         if abs(modeled_min_z - owner_min_z) > _PLACEMENT_TOLERANCE:
             raise ValueError(
@@ -706,7 +707,7 @@ def validate_modeled_bounds_against_owner(
             or abs(modeled_size_z - owner_size_z) > _PLACEMENT_TOLERANCE
         ):
             raise ValueError(
-                "rx_plate_stack must already occupy the full rx_region_max YZ footprint plus +Y stub overhang "
+                "rx_plate_stack must already occupy the full rx_region_max YZ footprint plus -Y stub overhang "
                 f"(modeled_size={(modeled_size_y, modeled_size_z)}, owner_size={(owner_size_y + _PLATE_STACK_STUB_LENGTH_MM, owner_size_z)})"
             )
         if abs(modeled_min_x - owner_min_x) > _PLACEMENT_TOLERANCE:
@@ -714,10 +715,10 @@ def validate_modeled_bounds_against_owner(
                 "rx_plate_stack outer bounds min_x must already touch rx_region_max min_x "
                 f"(actual={modeled_min_x}, expected={owner_min_x})"
             )
-        if abs(modeled_min_y - owner_min_y) > _PLACEMENT_TOLERANCE:
+        if abs(modeled_min_y - plate_stack_expected_min_y) > _PLACEMENT_TOLERANCE:
             raise ValueError(
-                "rx_plate_stack outer bounds min_y must already touch rx_region_max min_y "
-                f"(actual={modeled_min_y}, expected={owner_min_y})"
+                "rx_plate_stack outer bounds min_y must already include rx_region_max -Y stub overhang "
+                f"(actual={modeled_min_y}, expected={plate_stack_expected_min_y})"
             )
         if abs(modeled_min_z - owner_min_z) > _PLACEMENT_TOLERANCE:
             raise ValueError(

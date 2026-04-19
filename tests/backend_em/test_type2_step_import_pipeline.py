@@ -121,6 +121,12 @@ def _non_model_entry(*, object_id: str = "type2_non_model_scene") -> dict[str, o
     }
 
 
+def _plate_stack_non_model_entry() -> dict[str, object]:
+    import copy
+
+    return copy.deepcopy(_non_model_entry())
+
+
 def _modeled_entry(
     *,
     object_id: str = "tx_rect_void_coil",
@@ -786,7 +792,7 @@ def _plate_stack_terminal_metadata(
     conductor_origin_z = owner_origin_z
     input_origin_z = conductor_origin_z
     output_origin_z = conductor_origin_z + (pitch_z * float(turn_count - 1))
-    sheet_y = owner_origin_y + owner_size_y + _PLATE_STACK_STUB_LENGTH_MM
+    sheet_y = owner_origin_y - _PLATE_STACK_STUB_LENGTH_MM
     z_min = input_origin_z
     z_max = output_origin_z + trace_height_z
     return {
@@ -810,7 +816,7 @@ def _tx_plate_stack_entry(tmp_path: Path) -> dict[str, object]:
         role="tx_plate_stack",
         plane="YZ",
         placement_owner_id="tx_region",
-        origin_xyz=(0.0, -140.0, 0.0),
+        origin_xyz=(0.0, -145.0, 0.0),
         size_xyz=(6.9, 285.0, 90.0),
         source_metadata_path=str(tmp_path / "tx_plate_stack.metadata.json"),
         expected_names=_tx_plate_stack_expected_names(),
@@ -834,7 +840,7 @@ def _rx_plate_stack_entry(tmp_path: Path) -> dict[str, object]:
         role="rx_plate_stack",
         plane="YZ",
         placement_owner_id="rx_region_max",
-        origin_xyz=(0.0, -280.0, 139.0),
+        origin_xyz=(0.0, -285.0, 139.0),
         size_xyz=(4.5, 565.0, 360.0),
         source_metadata_path=str(tmp_path / "rx_plate_stack.metadata.json"),
         expected_names=_rx_plate_stack_expected_names(),
@@ -1101,7 +1107,7 @@ def test_import_type2_step_ledger_accepts_tx_and_rx_plate_stack_geometry_only_ro
     _write_ledger(
         ledger_path,
         scene_step_path=scene_step,
-        non_model_objects=[_non_model_entry()],
+        non_model_objects=[_plate_stack_non_model_entry()],
         modeled_objects=_plate_stack_modeled_objects(tmp_path),
     )
     output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"

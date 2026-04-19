@@ -1624,7 +1624,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     region_min_x, region_min_y, region_min_z = tx_region_member["canonical_coordinates"]["outer_bounds_min_xyz"]
     region_size_x, region_size_y, region_size_z = tx_region_member["canonical_coordinates"]["outer_bounds_size_xyz"]
     assert tx_min_x == pytest.approx(region_min_x)
-    assert tx_min_y == pytest.approx(region_min_y)
+    assert tx_min_y == pytest.approx(region_min_y - 5.0)
     assert tx_min_z == pytest.approx(region_min_z)
     expected_tx_total_thickness_mm = total_plate_stack_thickness_mm(spec=cast(ModeledPlateStackSpec, tx_modeled_spec))
     assert tx_size_x == pytest.approx(expected_tx_total_thickness_mm)
@@ -1636,8 +1636,8 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     tx_step_min_xyz, tx_step_max_xyz = _body_bbox(scene_step_path, label="tx_plate_copper")
     assert tx_step_min_xyz[0] == pytest.approx(region_min_x)
     assert tx_step_max_xyz[0] == pytest.approx(region_min_x + expected_tx_total_thickness_mm)
-    assert tx_step_min_xyz[1] == pytest.approx(region_min_y)
-    assert tx_step_max_xyz[1] == pytest.approx(region_min_y + region_size_y + 5.0)
+    assert tx_step_min_xyz[1] == pytest.approx(region_min_y - 5.0)
+    assert tx_step_max_xyz[1] == pytest.approx(region_min_y + region_size_y)
     assert tx_step_min_xyz[2] >= region_min_z + tx_centering_offset_z - 1e-8
     assert tx_step_max_xyz[2] <= region_min_z + region_size_z - tx_centering_offset_z + 1e-8
     tx_terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
@@ -1645,8 +1645,8 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     tx_end_point_plane = cast(list[float], tx_terminal_metadata["end_point_plane_mm"])
     assert tx_terminal_metadata["input_stub_body_name"] == "tx_stub_in"
     assert tx_terminal_metadata["output_stub_body_name"] == "tx_stub_out"
-    assert tx_start_point_plane[0] == pytest.approx(region_min_y + region_size_y + 5.0)
-    assert tx_end_point_plane[0] == pytest.approx(region_min_y + region_size_y + 5.0)
+    assert tx_start_point_plane[0] == pytest.approx(region_min_y - 5.0)
+    assert tx_end_point_plane[0] == pytest.approx(region_min_y - 5.0)
     tx_wall_first_center_z = region_min_z + tx_centering_offset_z + (tx_trace_height_z / 2.0)
     tx_coil_last_center_z = (
         region_min_z
@@ -1661,20 +1661,20 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     tx_wall_first_origin_z = region_min_z + tx_centering_offset_z
     tx_coil_last_origin_z = region_min_z + (tx_pitch_z / 2.0) + (tx_pitch_z * float(tx_turn_count - 1)) + tx_centering_offset_z
     assert {(round(x, 8), round(y, 8), round(z, 8)) for x, y, z in tx_port_sheet_vertices} == {
-        (round(region_min_x, 8), round(region_min_y + region_size_y + 5.0, 8), round(tx_wall_first_origin_z, 8)),
+        (round(region_min_x, 8), round(region_min_y - 5.0, 8), round(tx_wall_first_origin_z, 8)),
         (
             round(region_min_x + expected_tx_total_thickness_mm - tx_modeled_spec.copper_thickness_mm, 8),
-            round(region_min_y + region_size_y + 5.0, 8),
+            round(region_min_y - 5.0, 8),
             round(tx_coil_last_origin_z, 8),
         ),
         (
             round(region_min_x + expected_tx_total_thickness_mm - tx_modeled_spec.copper_thickness_mm, 8),
-            round(region_min_y + region_size_y + 5.0, 8),
+            round(region_min_y - 5.0, 8),
             round(tx_coil_last_origin_z + tx_trace_height_z, 8),
         ),
         (
             round(region_min_x, 8),
-            round(region_min_y + region_size_y + 5.0, 8),
+            round(region_min_y - 5.0, 8),
             round(tx_wall_first_origin_z + tx_trace_height_z, 8),
         ),
     }
@@ -1735,7 +1735,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert all(len(name) <= 32 for name in rx_expected_names)
     assert cast(dict[str, object], rx_entry["terminal_metadata"])["kind"] == "stub_port"
     assert rx_min_x == pytest.approx(rx_region_min_x)
-    assert rx_min_y == pytest.approx(rx_region_min_y)
+    assert rx_min_y == pytest.approx(rx_region_min_y - 5.0)
     assert rx_min_z == pytest.approx(rx_region_min_z)
     expected_rx_total_thickness_mm = total_plate_stack_thickness_mm(spec=cast(ModeledPlateStackSpec, rx_modeled_spec))
     assert rx_size_x == pytest.approx(expected_rx_total_thickness_mm)
@@ -1747,8 +1747,8 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     rx_step_min_xyz, rx_step_max_xyz = _body_bbox(scene_step_path, label="rx_plate_copper")
     assert rx_step_min_xyz[0] == pytest.approx(rx_region_min_x)
     assert rx_step_max_xyz[0] == pytest.approx(rx_region_min_x + expected_rx_total_thickness_mm)
-    assert rx_step_min_xyz[1] == pytest.approx(rx_region_min_y)
-    assert rx_step_max_xyz[1] == pytest.approx(rx_region_min_y + rx_region_size_y + 5.0)
+    assert rx_step_min_xyz[1] == pytest.approx(rx_region_min_y - 5.0)
+    assert rx_step_max_xyz[1] == pytest.approx(rx_region_min_y + rx_region_size_y)
     assert rx_step_min_xyz[2] >= rx_region_min_z + rx_centering_offset_z - 1e-8
     assert rx_step_max_xyz[2] <= rx_region_min_z + rx_region_size_z - rx_centering_offset_z + 1e-8
     rx_terminal_metadata = cast(dict[str, object], rx_entry["terminal_metadata"])
@@ -1756,8 +1756,8 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     rx_end_point_plane = cast(list[float], rx_terminal_metadata["end_point_plane_mm"])
     assert rx_terminal_metadata["input_stub_body_name"] == "rx_stub_in"
     assert rx_terminal_metadata["output_stub_body_name"] == "rx_stub_out"
-    assert rx_start_point_plane[0] == pytest.approx(rx_region_min_y + rx_region_size_y + 5.0)
-    assert rx_end_point_plane[0] == pytest.approx(rx_region_min_y + rx_region_size_y + 5.0)
+    assert rx_start_point_plane[0] == pytest.approx(rx_region_min_y - 5.0)
+    assert rx_end_point_plane[0] == pytest.approx(rx_region_min_y - 5.0)
     rx_wall_first_center_z = rx_region_min_z + rx_centering_offset_z + (rx_trace_height_z / 2.0)
     rx_coil_last_center_z = (
         rx_region_min_z
@@ -1772,20 +1772,20 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     rx_wall_first_origin_z = rx_region_min_z + rx_centering_offset_z
     rx_coil_last_origin_z = rx_region_min_z + (rx_pitch_z / 2.0) + (rx_pitch_z * float(rx_turn_count - 1)) + rx_centering_offset_z
     assert {(round(x, 8), round(y, 8), round(z, 8)) for x, y, z in rx_port_sheet_vertices} == {
-        (round(rx_region_min_x, 8), round(rx_region_min_y + rx_region_size_y + 5.0, 8), round(rx_wall_first_origin_z, 8)),
+        (round(rx_region_min_x, 8), round(rx_region_min_y - 5.0, 8), round(rx_wall_first_origin_z, 8)),
         (
             round(rx_region_min_x + expected_rx_total_thickness_mm - rx_modeled_spec.copper_thickness_mm, 8),
-            round(rx_region_min_y + rx_region_size_y + 5.0, 8),
+            round(rx_region_min_y - 5.0, 8),
             round(rx_coil_last_origin_z, 8),
         ),
         (
             round(rx_region_min_x + expected_rx_total_thickness_mm - rx_modeled_spec.copper_thickness_mm, 8),
-            round(rx_region_min_y + rx_region_size_y + 5.0, 8),
+            round(rx_region_min_y - 5.0, 8),
             round(rx_coil_last_origin_z + rx_trace_height_z, 8),
         ),
         (
             round(rx_region_min_x, 8),
-            round(rx_region_min_y + rx_region_size_y + 5.0, 8),
+            round(rx_region_min_y - 5.0, 8),
             round(rx_wall_first_origin_z + rx_trace_height_z, 8),
         ),
     }
@@ -2205,7 +2205,7 @@ def test_export_type2_step_artifacts_places_tx_plate_stack_on_tx_region_min_x_an
     )
     assert tx_entry["expected_exported_body_count"] == len(tx_entry["expected_exported_body_names"])
     assert tx_min_x == pytest.approx(region_min_x)
-    assert tx_min_y == pytest.approx(region_min_y)
+    assert tx_min_y == pytest.approx(region_min_y - 5.0)
     assert tx_min_z == pytest.approx(region_min_z)
     assert tx_size_x == pytest.approx(total_plate_stack_thickness_mm(spec=cast(ModeledPlateStackSpec, tx_modeled_spec)))
     assert tx_size_y == pytest.approx(region_size_y + 5.0)
@@ -2216,8 +2216,8 @@ def test_export_type2_step_artifacts_places_tx_plate_stack_on_tx_region_min_x_an
     tx_step_min_xyz, tx_step_max_xyz = _body_bbox(Path(ledger["scene_step_path"]), label="tx_plate_copper")
     assert tx_step_min_xyz[0] == pytest.approx(region_min_x)
     assert tx_step_max_xyz[0] == pytest.approx(region_min_x + tx_size_x)
-    assert tx_step_min_xyz[1] == pytest.approx(region_min_y)
-    assert tx_step_max_xyz[1] == pytest.approx(region_min_y + region_size_y + 5.0)
+    assert tx_step_min_xyz[1] == pytest.approx(region_min_y - 5.0)
+    assert tx_step_max_xyz[1] == pytest.approx(region_min_y + region_size_y)
     assert tx_step_min_xyz[2] >= region_min_z + tx_centering_offset_z - 1e-8
     assert tx_step_max_xyz[2] <= region_min_z + region_size_z - tx_centering_offset_z + 1e-8
 
@@ -2259,7 +2259,7 @@ def test_export_type2_step_artifacts_places_rx_plate_stack_on_rx_region_max_min_
     )
     assert rx_entry["expected_exported_body_count"] == len(rx_entry["expected_exported_body_names"])
     assert rx_min_x == pytest.approx(region_min_x)
-    assert rx_min_y == pytest.approx(region_min_y)
+    assert rx_min_y == pytest.approx(region_min_y - 5.0)
     assert rx_min_z == pytest.approx(region_min_z)
     assert rx_size_x == pytest.approx(total_plate_stack_thickness_mm(spec=cast(ModeledPlateStackSpec, rx_modeled_spec)))
     assert rx_size_y == pytest.approx(region_size_y + 5.0)
@@ -2270,8 +2270,8 @@ def test_export_type2_step_artifacts_places_rx_plate_stack_on_rx_region_max_min_
     rx_step_min_xyz, rx_step_max_xyz = _body_bbox(Path(ledger["scene_step_path"]), label="rx_plate_copper")
     assert rx_step_min_xyz[0] == pytest.approx(region_min_x)
     assert rx_step_max_xyz[0] == pytest.approx(region_min_x + rx_size_x)
-    assert rx_step_min_xyz[1] == pytest.approx(region_min_y)
-    assert rx_step_max_xyz[1] == pytest.approx(region_min_y + region_size_y + 5.0)
+    assert rx_step_min_xyz[1] == pytest.approx(region_min_y - 5.0)
+    assert rx_step_max_xyz[1] == pytest.approx(region_min_y + region_size_y)
     assert rx_step_min_xyz[2] >= region_min_z + rx_centering_offset_z - 1e-8
     assert rx_step_max_xyz[2] <= region_min_z + region_size_z - rx_centering_offset_z + 1e-8
 

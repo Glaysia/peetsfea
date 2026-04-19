@@ -29,6 +29,7 @@ tags:
 - plate-stack export contract 실패 회귀로 `g_copper_tx`/`g_copper_rx` 또는 `g_ferrite_tx`/`g_ferrite_rx` 하나라도 누락될 경우
   import가 즉시 실패해야 함을 보장한다.
 - plate roles reconstruct `tx_plate_port_sheet` / `rx_plate_port_sheet`
+- plate-stack `stub_port` fixture metadata uses the left-side `-Y` sheet plane, matching generated STEP ledger coordinates.
 - role-aware owner-fit validation catches bad TX/RX anchors
 - imported ledger preserves plate-stack `stub_port` metadata
 - TX/RX plate-stack expected-name generation reuses the full explicit export contract for provenance while requiring final plate-stack imported conductors to be `tx_plate_copper`/`rx_plate_copper`.
