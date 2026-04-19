@@ -39,11 +39,10 @@ def expected_tx_plate_stack_array_body_names(
             "tx_stack_air",
             "tx_pcb_coil",
         )
-    names: list[str] = []
+    names: list[str] = [_TX_PLATE_COPPER_NAME]
     for index in range(tx_coil_count):
         names.extend(
             (
-                f"tx_b{index}_plate_copper",
                 f"tx_b{index}_pcb_wall",
                 f"tx_b{index}_stack_pet_psa",
                 f"tx_b{index}_stack_ferrite",
@@ -51,8 +50,6 @@ def expected_tx_plate_stack_array_body_names(
                 f"tx_b{index}_pcb_coil",
             )
         )
-    for index in range(tx_coil_count - 1):
-        names.extend((f"tx_array_input_sheet_s{index}", f"tx_array_output_sheet_s{index}"))
     return tuple(names)
 
 
@@ -74,22 +71,7 @@ def expected_tx_plate_stack_array_body_groups(
                 f"tx_b{index}_stack_air",
             )
         )
-    if tx_coil_count == 1:
-        copper_members = (_TX_PLATE_COPPER_NAME,)
-    else:
-        copper_members = tuple(
-            [
-                *(f"tx_b{index}_plate_copper" for index in range(tx_coil_count)),
-                *(
-                    connector_name
-                    for index in range(tx_coil_count - 1)
-                    for connector_name in (
-                        f"tx_array_input_sheet_s{index}",
-                        f"tx_array_output_sheet_s{index}",
-                    )
-                ),
-            ]
-        )
+    copper_members = (_TX_PLATE_COPPER_NAME,)
     return (
         {
             "group_name": _TX_COPPER_GROUP_NAME,
@@ -268,7 +250,7 @@ def build_tx_plate_stack_array_scene_data(
             shape=copper_shape,
             axis=branch_hinge_axis,
             angle_deg=branch_rotation_angle_deg,
-            label=f"tx_b{index}_plate_copper",
+            label=f"tx_b{index}_plate_copper_source",
         )
         _require_branch_z_bounds(
             shape=copper_shape,
@@ -384,45 +366,85 @@ def build_tx_plate_stack_array_scene_data(
             "type2 tx array terminal edge ledger must contain one input/output edge per branch "
             f"(branch_count={tx_coil_count}, input_edges={len(branch_input_edges)}, output_edges={len(branch_output_edges)})"
         )
-    connector_sheet_vertices_by_name: dict[str, tuple[tuple[float, float, float], ...]] = {}
     input_connector_shapes: list[bd.Shape] = []
     output_connector_shapes: list[bd.Shape] = []
     for index in range(tx_coil_count - 1):
-        input_label = f"tx_array_input_sheet_s{index}"
-        input_vertices = _sheet_connector_vertices(
+        input_label = f"tx_array_input_bridge_s{index}"
+        input_vertices = _bridge_connector_vertices(
             label=input_label,
             first_edge=branch_input_edges[index],
             second_edge=branch_input_edges[index + 1],
         )
-        connector_sheet_vertices_by_name[input_label] = input_vertices
-        input_connector_shapes.append(_labeled_sheet_connector_face(label=input_label, edge_points=input_vertices))
+        input_connector_shapes.append(
+            _labeled_bridge_connector_body(
+                label=input_label,
+                edge_points=input_vertices,
+                y_min=tip_y,
+                thickness_y_mm=spec.copper_thickness_mm,
+            )
+        )
 
-        output_label = f"tx_array_output_sheet_s{index}"
-        output_vertices = _sheet_connector_vertices(
+        output_label = f"tx_array_output_bridge_s{index}"
+        output_vertices = _bridge_connector_vertices(
             label=output_label,
             first_edge=branch_output_edges[index],
             second_edge=branch_output_edges[index + 1],
         )
-        connector_sheet_vertices_by_name[output_label] = output_vertices
-        output_connector_shapes.append(_labeled_sheet_connector_face(label=output_label, edge_points=output_vertices))
-    for connector_shape in (*input_connector_shapes, *output_connector_shapes):
+        output_connector_shapes.append(
+            _labeled_bridge_connector_body(
+                label=output_label,
+                edge_points=output_vertices,
+                y_min=tip_y,
+                thickness_y_mm=spec.copper_thickness_mm,
+            )
+        )
+    bridge_connector_shapes = (*input_connector_shapes, *output_connector_shapes)
+    for connector_shape in bridge_connector_shapes:
+        if not connector_shape.label:
+            raise RuntimeError("type2 tx array connector bridge label must be non-empty")
         connector_solids = tuple(connector_shape.solids())
-        if len(connector_solids) != 0:
+        if len(connector_solids) != 1:
             raise RuntimeError(
-                "type2 tx array connector must be a sheet face only "
+                "type2 tx array connector bridge must contain exactly one solid "
                 f"(label={connector_shape.label}, solid_count={len(connector_solids)})"
             )
-        connector_faces = tuple(connector_shape.faces())
-        if len(connector_faces) != 1:
+        connector_bbox = connector_shape.bounding_box()
+        connector_size_y = connector_bbox.max.Y - connector_bbox.min.Y
+        if connector_size_y <= 0.0:
             raise RuntimeError(
-                "type2 tx array connector must emit exactly one face "
-                f"(label={connector_shape.label}, face_count={len(connector_faces)})"
+                "type2 tx array connector bridge thickness must be positive "
+                f"(label={connector_shape.label}, thickness_y_mm={connector_size_y})"
             )
+        if abs(connector_size_y - spec.copper_thickness_mm) > 1e-9:
+            raise RuntimeError(
+                "type2 tx array connector bridge thickness must match copper thickness "
+                f"(label={connector_shape.label}, thickness_y_mm={connector_size_y}, copper_thickness_mm={spec.copper_thickness_mm})"
+            )
+        if abs(connector_bbox.min.Y - tip_y) > 1e-9:
+            raise RuntimeError(
+                "type2 tx array connector bridge Y min must align with branch tip Y plane "
+                f"(label={connector_shape.label}, actual={connector_bbox.min.Y}, expected={tip_y})"
+            )
+    fused_copper_shape = _build_labeled_united_copper_body(
+        label=_TX_PLATE_COPPER_NAME,
+        source_shapes=tuple((*branch_copper_shapes, *bridge_connector_shapes)),
+    )
+    fused_copper_solids = tuple(fused_copper_shape.solids())
+    if len(fused_copper_solids) != 1:
+        raise RuntimeError(
+            "type2 tx array copper fuse must resolve to one solid "
+            f"(solid_count={len(fused_copper_solids)})"
+        )
+    fused_copper_solid = fused_copper_solids[0]
+    if fused_copper_solid.volume <= 0.0:
+        raise RuntimeError(
+            "type2 tx array fused copper must have positive volume "
+            f"(volume={fused_copper_solid.volume})"
+        )
+    fused_copper_solid.label = _TX_PLATE_COPPER_NAME
 
     ferrite_group_shape = bd.Compound(children=tuple(branch_ferrite_shapes), label=_TX_FERRITE_GROUP_NAME)
-    top_level_shapes: list[bd.Shape] = list(branch_copper_shapes)
-    top_level_shapes.extend(input_connector_shapes)
-    top_level_shapes.extend(output_connector_shapes)
+    top_level_shapes: list[bd.Shape] = [cast(bd.Shape, fused_copper_solid)]
     top_level_shapes.extend(branch_pcb_shapes)
     top_level_shapes.append(cast(bd.Shape, ferrite_group_shape))
 
@@ -430,12 +452,6 @@ def build_tx_plate_stack_array_scene_data(
     expected_exported_body_groups = expected_tx_plate_stack_array_body_groups(tx_coil_count=tx_coil_count)
     if not branch_input_edges or not branch_output_edges:
         raise RuntimeError("type2 tx array terminal metadata requires at least one branch range")
-    for connector_shape in (*input_connector_shapes, *output_connector_shapes):
-        if abs(connector_shape.bounding_box().min.Y - tip_y) > 1e-9:
-            raise RuntimeError(
-                "type2 tx array connector sheet Y min must align with branch tip Y plane "
-                f"(label={connector_shape.label}, actual={connector_shape.bounding_box().min.Y}, expected={tip_y})"
-            )
     if not copied_branch_rotation_angles_deg:
         raise RuntimeError("type2 tx array copied branch rotation angles must record every branch")
     bbox_list = tuple(shape.bounding_box() for shape in top_level_shapes)
@@ -452,21 +468,8 @@ def build_tx_plate_stack_array_scene_data(
     canonical_coordinates["copied_branch_rotation_target_xyz"] = rotation_target_xyz
     canonical_coordinates["copied_branch_hinge_edge_endpoints_xyz"] = tuple(copied_branch_hinge_edges_xyz)
     canonical_coordinates["copied_branch_rotation_angles_deg"] = tuple(copied_branch_rotation_angles_deg)
-    canonical_coordinates["connector_sheet_vertices_xyz_by_name"] = connector_sheet_vertices_by_name
 
-    terminal_metadata = {
-        "kind": "stub_port",
-        "input_stub_body_name": "tx_array_input_sheet_s0",
-        "output_stub_body_name": "tx_array_output_sheet_s0",
-        "start_point_plane_mm": (tip_y, (input_z_min + input_z_max) / 2.0),
-        "end_point_plane_mm": (tip_y, (output_z_min + output_z_max) / 2.0),
-        "port_sheet_vertices_xyz": (
-            (min(point[0] for point in input_points), tip_y, input_z_min),
-            (max(point[0] for point in output_points), tip_y, output_z_min),
-            (max(point[0] for point in output_points), tip_y, output_z_max),
-            (min(point[0] for point in input_points), tip_y, input_z_max),
-        ),
-    }
+    terminal_metadata = dict(first_branch_scene_data["terminal_metadata"])
     return (
         tuple(top_level_shapes),
         {
@@ -633,7 +636,7 @@ def _rotate_point_about_axis_y(
     return (rotated_x, point_y, rotated_z)
 
 
-def _sheet_connector_vertices(
+def _bridge_connector_vertices(
     *,
     label: str,
     first_edge: tuple[tuple[float, float, float], tuple[float, float, float]],
@@ -644,35 +647,99 @@ def _sheet_connector_vertices(
     for point_index, point in enumerate(edge_points):
         if abs(point[1] - first_y) > 1e-9:
             raise RuntimeError(
-                "type2 tx array sheet connector points must share one Y sheet plane "
+                "type2 tx array connector bridge points must share one Y plane "
                 f"(label={label}, point_index={point_index}, y={point[1]}, expected_y={first_y})"
             )
     return edge_points
 
 
-def _labeled_sheet_connector_face(
+def _labeled_bridge_connector_body(
     *,
     label: str,
     edge_points: tuple[tuple[float, float, float], ...],
+    y_min: float,
+    thickness_y_mm: float,
 ) -> bd.Shape:
     if len(edge_points) != 4:
         raise RuntimeError(
-            "type2 tx array sheet connector face requires exactly four points "
+            "type2 tx array connector bridge requires exactly four points "
             f"(label={label}, point_count={len(edge_points)})"
         )
-    with bd.BuildLine() as connector_line:
-        bd.Polyline(*edge_points, close=True)
-    assert connector_line.line is not None, "type2 tx array connector sheet polyline must produce a wire"
-    connector_sketch = bd.make_face(edges=tuple(connector_line.line.edges()))
-    connector_faces = tuple(connector_sketch.faces())
-    if len(connector_faces) != 1:
+    if thickness_y_mm <= 0.0:
         raise RuntimeError(
-            "type2 tx array sheet connector must produce exactly one face "
-            f"(label={label}, face_count={len(connector_faces)})"
+            "type2 tx array connector bridge thickness must be > 0 "
+            f"(label={label}, thickness_y_mm={thickness_y_mm})"
         )
-    connector_face = connector_faces[0]
-    connector_face.label = label
-    return cast(bd.Shape, connector_face)
+    x_min = min(point[0] for point in edge_points)
+    x_max = max(point[0] for point in edge_points)
+    z_min = min(point[2] for point in edge_points)
+    z_max = max(point[2] for point in edge_points)
+    size_x = x_max - x_min
+    size_z = z_max - z_min
+    if size_x <= 0.0:
+        raise RuntimeError(
+            "type2 tx array connector bridge X span must be positive "
+            f"(label={label}, size_x={size_x})"
+        )
+    if size_z <= 0.0:
+        raise RuntimeError(
+            "type2 tx array connector bridge Z span must be positive "
+            f"(label={label}, size_z={size_z})"
+        )
+    bridge_shape = cast(
+        bd.Shape,
+        bd.Box(
+            size_x,
+            thickness_y_mm,
+            size_z,
+            align=(bd.Align.MIN, bd.Align.MIN, bd.Align.MIN),
+        ).moved(bd.Location((x_min, y_min, z_min))),
+    )
+    solids = tuple(bridge_shape.solids())
+    if len(solids) != 1:
+        raise RuntimeError(
+            "type2 tx array connector bridge must resolve to exactly one solid "
+            f"(label={label}, solid_count={len(solids)})"
+        )
+    bridge_solid = solids[0]
+    if bridge_solid.volume <= 0.0:
+        raise RuntimeError(
+            "type2 tx array connector bridge must have positive volume "
+            f"(label={label}, volume={bridge_solid.volume})"
+        )
+    bridge_solid.label = label
+    return cast(bd.Shape, bridge_solid)
+
+
+def _build_labeled_united_copper_body(*, label: str, source_shapes: tuple[bd.Shape, ...]) -> bd.Shape:
+    if len(source_shapes) == 0:
+        raise RuntimeError(f"type2 tx array copper unite requires at least one source body (label={label})")
+    fused_shape_or_list: bd.Shape | bd.ShapeList[bd.Shape] = source_shapes[0]
+    for source_shape in source_shapes[1:]:
+        fuse_base_shape = (
+            cast(bd.Shape, bd.Compound(children=tuple(fused_shape_or_list)))
+            if isinstance(fused_shape_or_list, bd.ShapeList)
+            else fused_shape_or_list
+        )
+        fused_shape_or_list = fuse_base_shape.fuse(source_shape)
+    if isinstance(fused_shape_or_list, bd.ShapeList):
+        if len(fused_shape_or_list) != 1:
+            raise RuntimeError(
+                "type2 tx array copper unite must resolve to one connected shape "
+                f"(label={label}, connected_shape_count={len(fused_shape_or_list)})"
+            )
+        united_shape = cast(bd.Shape, fused_shape_or_list[0])
+    else:
+        united_shape = fused_shape_or_list
+    united_solids = tuple(united_shape.solids())
+    if len(united_solids) != 1:
+        raise RuntimeError(
+            "type2 tx array copper unite must resolve to one solid "
+            f"(label={label}, solid_count={len(united_solids)})"
+        )
+    united_solid = united_solids[0]
+    united_solid.label = label
+    return cast(bd.Shape, united_solid)
 
 
 __all__ = [

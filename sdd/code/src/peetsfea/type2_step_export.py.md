@@ -1,7 +1,7 @@
 ---
 title: type2_step_export.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 04:18
+updated: 2026-04-20 @ 18:20
 tags:
   - step-export
   - export
@@ -35,11 +35,11 @@ tags:
 - final export surface for RX and single-branch TX handoff uses role-local 6-name order:
   `tx_plate_copper`, `tx_pcb_wall`, `tx_stack_pet_psa`, `tx_stack_ferrite`, `tx_stack_air`, `tx_pcb_coil`,
   `rx_plate_copper`, `rx_pcb_wall`, `rx_stack_pet_psa`, `rx_stack_ferrite`, `rx_stack_air`, `rx_pcb_coil`.
-- TX `tx_coil_count > 1` expands branch-local copper/non-copper final names and per-adjacent connector sheet faces in
-  the TX modeled entry.
+- TX `tx_coil_count > 1` expands branch-local non-copper final names, but exports one united `tx_plate_copper`
+  conductor that includes branch copper and thick connector bridge solids.
 - pre-unite 정확 body count는 realized turn-count에 따라 달라지며 role당 `3`으로 축약되지 않는다.
 - expected_exported_body_groups는 copper/ferrite family를 각각 다음으로 노출한다:
-  - `g_copper_tx -> [tx_plate_copper]` for single TX, or TX branch copper bodies plus connector sheet faces for arrays
+  - `g_copper_tx -> [tx_plate_copper]`
   - `g_ferrite_tx -> [tx branch ferrite-family bodies in exact export order]`
   - `g_copper_rx -> [rx_plate_copper]`
   - `g_ferrite_rx -> [rx_stack_pet_psa, rx_stack_ferrite, rx_stack_air]`
@@ -51,8 +51,8 @@ tags:
   - `g_copper_rx`, `g_ferrite_rx`
 - ferrite group members는 merged material names 3개 순서와 exact match해야 한다.
 - active plate roles도 metadata-only port-sheet self-check를 수행한다.
-- `stub_port` metadata의 `input_stub_body_name`, `output_stub_body_name`은 single TX/RX에서는 pre-unite 라벨
-  (`*_stub_in/out`)이고 TX array에서는 connector sheet labels다.
+- `stub_port` metadata의 `input_stub_body_name`, `output_stub_body_name`은 plate-stack source terminal labels이며
+  TX array에서는 branch 0 terminal geometry를 기준으로 한 단일 TX port를 유지한다.
 - imported body handoff는 copper/ferrite role body names를 그대로 사용하며, copper 그룹은 `g_copper_tx`, `g_copper_rx`로, ferrite 그룹은 `g_ferrite_tx`, `g_ferrite_rx`로 복원해야 한다.
 - reporter phase surface는 `build_scene`, `export_scene_step`, `finalize_step_artifacts`로 제한한다.
 

@@ -30,16 +30,16 @@ tags:
   `expected_exported_body_count`, `canonical_coordinates`, `terminal_metadata.kind = "stub_port"`다.
 - `expected_exported_body_names`는 RX와 single-branch TX에서 role-local 6-body 정렬을 유지한다:
   `*_plate_copper`, `*_pcb_wall`, `*_stack_pet_psa`, `*_stack_ferrite`, `*_stack_air`, `*_pcb_coil`.
-- TX arrays expand branch-local copper/non-copper exact names and connector sheet faces in the same TX modeled entry.
+- TX arrays expand branch-local non-copper exact names while keeping one united `tx_plate_copper` in the same TX modeled entry.
 - plate role field ownership은 input TOML에 두고, ledger는 exact export contract만 보존한다.
 - final handoff expected_exported_body_count is the exact exported list length; RX and TX `tx_coil_count = 1` remain `6`.
 - expected_exported_body_groups는 다음을 반영한다:
-  - `g_copper_tx -> [tx_plate_copper]` for single TX, or TX branch copper bodies plus connector sheet faces for arrays
+  - `g_copper_tx -> [tx_plate_copper]`
   - `g_ferrite_tx -> [TX exact ferrite-family body names in export order]`
   - `g_copper_rx -> [rx_plate_copper]`
   - `g_ferrite_rx -> [rx_stack_pet_psa, rx_stack_ferrite, rx_stack_air]`
-- `terminal_metadata.input_stub_body_name`/`output_stub_body_name`은 single TX/RX에서는 pre-unite segment source
-  label(`*_stub_in/out`)이고 TX array에서는 connector sheet labels다.
+- `terminal_metadata.input_stub_body_name`/`output_stub_body_name`은 plate-stack source terminal labels이며
+  TX array에서는 branch 0 terminal geometry를 기준으로 한다.
 
 ## Invariants / fail-fast
 - active plate roles는 generator-owned exact-name order와 exact-name count를 lossless로 유지해야 한다.

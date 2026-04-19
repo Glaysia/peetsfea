@@ -892,11 +892,10 @@ def _plate_stack_imported_name_batch_with_rx_solid_drift() -> tuple[str, ...]:
 
 
 def _tx_plate_stack_array_expected_names(*, branch_count: int) -> list[str]:
-    names: list[str] = []
+    names: list[str] = [_TX_PLATE_COPPER_NAME]
     for index in range(branch_count):
         names.extend(
             (
-                f"tx_b{index}_plate_copper",
                 f"tx_b{index}_pcb_wall",
                 f"tx_b{index}_stack_pet_psa",
                 f"tx_b{index}_stack_ferrite",
@@ -904,29 +903,7 @@ def _tx_plate_stack_array_expected_names(*, branch_count: int) -> list[str]:
                 f"tx_b{index}_pcb_coil",
             )
         )
-    for index in range(branch_count - 1):
-        names.extend((f"tx_array_input_sheet_s{index}", f"tx_array_output_sheet_s{index}"))
     return names
-
-
-def _tx_plate_stack_array_connector_vertices_by_name(*, branch_count: int) -> dict[str, list[list[float]]]:
-    vertices_by_name: dict[str, list[list[float]]] = {}
-    for index in range(branch_count - 1):
-        x0 = float(index)
-        x1 = float(index + 1)
-        vertices_by_name[f"tx_array_input_sheet_s{index}"] = [
-            [x0, -145.0, 10.0],
-            [x1, -145.0, 10.0],
-            [x1, -145.0, 20.0],
-            [x0, -145.0, 20.0],
-        ]
-        vertices_by_name[f"tx_array_output_sheet_s{index}"] = [
-            [x0, -145.0, 40.0],
-            [x1, -145.0, 40.0],
-            [x1, -145.0, 50.0],
-            [x0, -145.0, 50.0],
-        ]
-    return vertices_by_name
 
 
 def _tx_plate_stack_array_expected_groups(*, branch_count: int) -> list[ExportedBodyGroup]:
@@ -940,11 +917,7 @@ def _tx_plate_stack_array_expected_groups(*, branch_count: int) -> list[Exported
     return [
         {
             "group_name": _TX_COPPER_GROUP_NAME,
-            "member_body_names": tuple(
-                name
-                for name in _tx_plate_stack_array_expected_names(branch_count=branch_count)
-                if name.endswith("_plate_copper") or name.startswith("tx_array_")
-            ),
+            "member_body_names": (_TX_PLATE_COPPER_NAME,),
         },
         {"group_name": _TX_FERRITE_GROUP_NAME, "member_body_names": ferrite_members},
     ]
@@ -1527,13 +1500,7 @@ def test_import_type2_step_ledger_accepts_tx_plate_stack_array_exact_names(tmp_p
     tx_entry["expected_exported_body_names"] = _tx_plate_stack_array_expected_names(branch_count=branch_count)
     tx_entry["expected_exported_body_count"] = len(cast(list[str], tx_entry["expected_exported_body_names"]))
     tx_entry["expected_exported_body_groups"] = _tx_plate_stack_array_expected_groups(branch_count=branch_count)
-    tx_coordinates = cast(dict[str, object], tx_entry["canonical_coordinates"])
-    tx_coordinates["connector_sheet_vertices_xyz_by_name"] = _tx_plate_stack_array_connector_vertices_by_name(
-        branch_count=branch_count
-    )
     tx_terminal = cast(dict[str, object], tx_entry["terminal_metadata"])
-    tx_terminal["input_stub_body_name"] = "tx_array_input_sheet_s0"
-    tx_terminal["output_stub_body_name"] = "tx_array_output_sheet_s0"
     tx_vertices = cast(list[list[float]], tx_terminal["port_sheet_vertices_xyz"])
     tx_vertices[1][0] = 80.0
     tx_vertices[2][0] = 80.0
@@ -1544,22 +1511,11 @@ def test_import_type2_step_ledger_accepts_tx_plate_stack_array_exact_names(tmp_p
         modeled_objects=modeled_objects,
     )
     tx_expected_names = cast(list[str], tx_entry["expected_exported_body_names"])
-    reversed_branch_copper_names = [
-        name
-        for name in reversed(tx_expected_names)
-        if name.startswith("tx_b") and name.endswith("_plate_copper")
-    ]
-    non_copper_tx_names = [
-        name
-        for name in tx_expected_names
-        if not name.startswith("tx_array_") and name not in reversed_branch_copper_names
-    ]
     imported_names = (
         "environment",
         "tx_region",
         "rx_region_max",
-        *reversed_branch_copper_names,
-        *non_copper_tx_names,
+        *tx_expected_names,
         *_rx_plate_stack_expected_names(),
     )
     session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[tuple(imported_names)]))
@@ -1574,14 +1530,12 @@ def test_import_type2_step_ledger_accepts_tx_plate_stack_array_exact_names(tmp_p
 
     imported_tx_entry = next(entry for entry in result["modeled_objects"] if entry["object_id"] == "tx_plate_stack")
     imported_tx_names = cast(list[str], imported_tx_entry["imported_object_names"])
-    assert "tx_b0_plate_copper" in imported_tx_names
-    assert "tx_array_input_sheet_s0" in imported_tx_names
+    assert "tx_plate_copper" in imported_tx_names
     assert "tx_b0_pcb_wall" in imported_tx_names
     assert "tx_b2_stack_ferrite" in imported_tx_names
     assert "tx_pcb_wall" not in imported_tx_names
-    assert session.modeler.create_polyline_calls[0]["name"] == "tx_array_input_sheet_s0"
-    assert session.modeler.create_polyline_calls[1]["name"] == "tx_array_output_sheet_s0"
-    assert session.modeler.objects["tx_array_input_sheet_s0"].color == (184, 115, 51)
+    created_polyline_names = [cast(str, call["name"]) for call in session.modeler.create_polyline_calls]
+    assert created_polyline_names == ["tx_plate_port_sheet", "rx_plate_port_sheet"]
 
 
 def test_import_type2_step_ledger_fails_unclaimed_solid_name_as_export_contract_violation(tmp_path: Path) -> None:

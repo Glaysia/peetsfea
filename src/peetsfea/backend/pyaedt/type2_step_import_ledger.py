@@ -102,6 +102,10 @@ def _is_tx_array_connector_sheet_name(name: str) -> bool:
 def _is_tx_array_copper_name(name: str) -> bool:
     return _is_tx_branch_stack_member(name, suffix="_plate_copper") or _is_tx_array_connector_sheet_name(name)
 
+
+def _is_tx_pre_unite_plate_stack_copper_name(name: str) -> bool:
+    return _is_tx_array_copper_name(name)
+
 _NON_MODEL_REQUIRED_FIELDS = (
     "object_id",
     "role",
@@ -454,12 +458,18 @@ def _group_contract_for_role(
         context=context,
     )
     if role == "tx_plate_stack":
-        copper_group_members = [
-            name for name in expected_exported_body_names if name == _TX_PLATE_COPPER_NAME or _is_tx_array_copper_name(name)
-        ]
-        if not copper_group_members:
+        if _TX_PLATE_COPPER_NAME not in expected_exported_body_names:
             raise ValueError(
                 f"{context}.expected_exported_body_names must include tx plate-stack copper members"
+            )
+        copper_group_members = [_TX_PLATE_COPPER_NAME]
+        pre_unite_copper_names = [
+            name for name in expected_exported_body_names if _is_tx_pre_unite_plate_stack_copper_name(name)
+        ]
+        if pre_unite_copper_names:
+            raise ValueError(
+                f"{context}.expected_exported_body_names contains pre-unite tx copper leakage "
+                f"(leaked_names={pre_unite_copper_names})"
             )
         legacy_segment_names = [
             name for name in expected_exported_body_names if _is_legacy_plate_stack_copper_segment_name(name)

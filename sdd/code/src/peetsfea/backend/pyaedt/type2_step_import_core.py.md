@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_core.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 15:05
+updated: 2026-04-20 @ 18:20
 tags:
   - hfss-import
   - core
@@ -28,15 +28,14 @@ tags:
 
 ## Canonical state
 - import core는 geometry-view import-only owner다.
-- Scene STEP import intentionally does not depend on AEDT free-surface shell import for TX array connector sheets.
-  TX array connector sheet conductors are recreated as AEDT sheet objects from canonical ledger vertices before partition.
+- Scene STEP import for new TX arrays expects the connector bridges to already be fused into `tx_plate_copper`;
+  no TX array connector sheet reconstruction is required for newly generated ledgers.
 - Scene STEP import requests no AEDT import group creation; if AEDT still reports wrapper names matching the scene STEP stem,
   core removes only those non-ledger wrapper names before exact-name partitioning.
 - active plate roles도 imported ledger modeled entry로 남긴다.
 - imported ledger는 export ledger contract를 유지하면서 import-only 전 과정에서 다음을 강제한다:
   - final single-branch plate-stack 도체 단일 바디: `tx_plate_copper`, `rx_plate_copper`
-  - TX array conductor members: `tx_b{i}_plate_copper` plus `tx_array_input_sheet_s{i}` /
-    `tx_array_output_sheet_s{i}` connector sheet faces
+  - TX array conductor member: `tx_plate_copper`
   - copper group recreation: `g_copper_tx -> concrete TX conductor members`,
     `g_copper_rx -> ['rx_plate_copper']`
   - ferrite group recreation: `g_ferrite_tx -> TX exact branch ferrite-family members`,
@@ -51,15 +50,15 @@ tags:
 ## Invariants / fail-fast
 - scene import가 새 HFSS objects를 만들지 않으면 실패한다.
 - wrapper-name normalization must never remove names present in the ledger-owned expected scene name set.
-- TX array connector sheet reconstruction requires `canonical_coordinates.connector_sheet_vertices_xyz_by_name`
-  to contain one four-vertex loop for every `tx_array_input_sheet_s*` and `tx_array_output_sheet_s*` expected name.
+- New TX array ledgers must not require `canonical_coordinates.connector_sheet_vertices_xyz_by_name`; connector bridge
+  provenance may be recorded for audit, but concrete import partitioning uses `tx_plate_copper`.
 - owner-fit validation과 style application이 끝난 뒤 adapter entry를 만든다.
 - plate-stack role에서 `expected_exported_body_names`/`expected_exported_body_groups`가 export-side contract와 다르면
   import 전에 즉시 실패한다.
 - plate-stack role에서 required concrete copper members가 누락되거나 `g_copper_tx`/`g_copper_rx`,
   `g_ferrite_tx`/`g_ferrite_rx`가 누락되면 즉시 실패한다.
-- TX array imported ledger must still contain one `tx_plate_stack` modeled entry, with branch copper bodies and
-  connector sheet faces preserved as TX conductor members.
+- TX array imported ledger must still contain one `tx_plate_stack` modeled entry, with `tx_plate_copper` preserved as
+  the only TX conductor member.
 - legacy final segment label(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)이 도체 계약으로 남아 있으면 즉시 실패한다.
 - generic `SOLID*` drift는 import repair 없이 즉시 실패한다.
 - ferrite group recreation은 styling 직후, imported ledger merge 전에 실행한다.

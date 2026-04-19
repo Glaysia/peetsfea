@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TypedDict, cast
 
-from peetsfea.aedt.proxies import cover_lines, create_group, create_polyline
+from peetsfea.aedt.proxies import create_group
 from peetsfea.aedt.protocols import HfssSession, ModelerSession
 from peetsfea.backend.pyaedt.failfast import raise_on_false
 from peetsfea.backend.pyaedt.type2_modeled_import_adapter import build_single_imported_modeled_object_entry
@@ -13,7 +13,6 @@ from peetsfea.backend.pyaedt.type2_step_import_ledger import (
     ValidatedStepLedger,
     find_owner_member,
     member_object_id,
-    require_float_triplet,
     require_key,
     require_member_objects,
     require_non_empty_str,
@@ -69,7 +68,7 @@ def _is_tx_array_connector_sheet_name(name: str) -> bool:
     return False
 
 
-def _is_tx_array_copper_name(name: str) -> bool:
+def _is_tx_pre_unite_plate_stack_copper_name(name: str) -> bool:
     return _is_tx_branch_stack_member(name, suffix="_plate_copper") or _is_tx_array_connector_sheet_name(name)
 
 
@@ -115,150 +114,6 @@ def _remove_scene_import_wrapper_names(
             f"(scene_step_path={ledger['scene_step_path']}, wrapper_names={wrapper_names})"
         )
     return filtered_names
-
-
-def _covered_sheet_name(covered: object, *, expected_name: str, context: str) -> str:
-    if covered is True:
-        return expected_name
-    if isinstance(covered, str):
-        return require_non_empty_str(covered, context=f"{context}.covered_name")
-    if isinstance(covered, list):
-        if len(covered) != 1:
-            raise RuntimeError(f"{context}.cover_lines result list must contain exactly one item (actual={len(covered)})")
-        first = covered[0]
-        if isinstance(first, str):
-            return require_non_empty_str(first, context=f"{context}.covered_name")
-        assert hasattr(first, "name"), f"{context}.cover_lines result object must expose name"
-        first_name = getattr(first, "name")
-        return require_non_empty_str(first_name, context=f"{context}.covered_name")
-    assert hasattr(covered, "name"), f"{context}.cover_lines result must expose name"
-    raw_name = getattr(covered, "name")
-    return require_non_empty_str(raw_name, context=f"{context}.covered_name")
-
-
-def _required_sheet_vertices(
-    value: object,
-    *,
-    context: str,
-) -> tuple[tuple[float, float, float], ...]:
-    if isinstance(value, (str, bytes)) or not isinstance(value, list):
-        raise TypeError(f"{context} must be a list of 3D vertices")
-    vertices: list[tuple[float, float, float]] = []
-    for index, raw_vertex in enumerate(value):
-        vertices.append(require_float_triplet(raw_vertex, context=f"{context}[{index}]"))
-    if len(vertices) != 4:
-        raise ValueError(f"{context} must contain exactly 4 vertices")
-    return tuple(vertices)
-
-
-def _connector_sheet_vertices_by_name(
-    *,
-    modeled_entry: dict[str, object],
-    connector_sheet_names: list[str],
-    context: str,
-) -> dict[str, tuple[tuple[float, float, float], ...]]:
-    raw_coordinates = require_key(modeled_entry, key="canonical_coordinates", context=context)
-    assert isinstance(raw_coordinates, dict), f"{context}.canonical_coordinates must be a table/object"
-    raw_vertices_by_name = require_key(
-        raw_coordinates,
-        key="connector_sheet_vertices_xyz_by_name",
-        context=f"{context}.canonical_coordinates",
-    )
-    assert isinstance(raw_vertices_by_name, dict), (
-        f"{context}.canonical_coordinates.connector_sheet_vertices_xyz_by_name must be a table/object"
-    )
-    vertices_by_name: dict[str, tuple[tuple[float, float, float], ...]] = {}
-    for sheet_name in connector_sheet_names:
-        if sheet_name not in raw_vertices_by_name:
-            raise ValueError(
-                f"{context}.canonical_coordinates.connector_sheet_vertices_xyz_by_name is missing "
-                f"required connector sheet vertices (sheet_name={sheet_name!r})"
-            )
-        vertices_by_name[sheet_name] = _required_sheet_vertices(
-            raw_vertices_by_name[sheet_name],
-            context=f"{context}.canonical_coordinates.connector_sheet_vertices_xyz_by_name[{sheet_name}]",
-        )
-    return vertices_by_name
-
-
-def _create_connector_sheet(
-    *,
-    modeler: ModelerSession,
-    sheet_name: str,
-    vertices_xyz: tuple[tuple[float, float, float], ...],
-    context: str,
-) -> str:
-    polyline_created = create_polyline(
-        modeler,
-        points=[[x, y, z] for x, y, z in vertices_xyz],
-        name=sheet_name,
-        material="copper",
-        close_surface=True,
-        cover_surface=False,
-    )
-    assert hasattr(polyline_created, "name"), f"{context}.create_polyline result must expose name"
-    raw_loop_name = getattr(polyline_created, "name")
-    loop_name = require_non_empty_str(raw_loop_name, context=f"{context}.loop_name")
-    if loop_name != sheet_name:
-        raise RuntimeError(
-            f"{context}.create_polyline name drifted for TX array connector sheet "
-            f"(requested={sheet_name!r}, actual={loop_name!r})"
-        )
-    covered = cover_lines(modeler, assignment=loop_name)
-    covered_name = _covered_sheet_name(covered, expected_name=sheet_name, context=f"{context}[{sheet_name}]")
-    if covered_name != sheet_name:
-        raise RuntimeError(
-            f"{context}.cover_lines name drifted for TX array connector sheet "
-            f"(requested={sheet_name!r}, actual={covered_name!r})"
-        )
-    return covered_name
-
-
-def _reconstruct_tx_array_connector_sheets(
-    *,
-    modeler: ModelerSession,
-    ledger: ValidatedStepLedger,
-    imported_scene_object_names: list[str],
-) -> list[str]:
-    reconstructed_names = list(imported_scene_object_names)
-    claimed_names = set(reconstructed_names)
-    for index, validated_entry in enumerate(ledger["modeled_objects"]):
-        context = f"modeled_objects[{index}]"
-        modeled_entry = validated_entry["entry"]
-        role = require_non_empty_str(require_key(modeled_entry, key="role", context=context), context=f"{context}.role")
-        if role != "tx_plate_stack":
-            continue
-        expected_names = expected_exported_body_names(modeled_entry, context=context)
-        connector_sheet_names = [name for name in expected_names if _is_tx_array_connector_sheet_name(name)]
-        if not connector_sheet_names:
-            continue
-        already_imported_connector_names = [name for name in connector_sheet_names if name in claimed_names]
-        if already_imported_connector_names:
-            raise ValueError(
-                "TX array connector sheets must be reconstructed from canonical ledger vertices, "
-                "not imported as STEP free-surface shells "
-                f"(already_imported={already_imported_connector_names})"
-            )
-        vertices_by_name = _connector_sheet_vertices_by_name(
-            modeled_entry=modeled_entry,
-            connector_sheet_names=connector_sheet_names,
-            context=context,
-        )
-        for sheet_name in connector_sheet_names:
-            created_name = _create_connector_sheet(
-                modeler=modeler,
-                sheet_name=sheet_name,
-                vertices_xyz=vertices_by_name[sheet_name],
-                context=f"{context}.tx_array_connector_sheet",
-            )
-            if created_name in claimed_names:
-                raise RuntimeError(
-                    "TX array connector sheet reconstruction produced a duplicate object name "
-                    f"(sheet_name={created_name!r})"
-                )
-            reconstructed_names.append(created_name)
-            claimed_names.add(created_name)
-    return reconstructed_names
 
 
 def _is_legacy_ferrite_family_name_for_plate_stack(name: str) -> bool:
@@ -371,13 +226,19 @@ def _require_plate_stack_merged_material_contract(*, modeled_entry: dict[str, ob
                 f"{context}.expected_exported_body_names must retain balanced tx plate-stack pcb wall/coil counts "
                 f"(pcb_wall={len(pcb_wall_names)}, pcb_coil={len(pcb_coil_names)})"
             )
-        tx_copper_names = [
-            name for name in expected_exported_body_names if name == required_plate_copper_name or _is_tx_array_copper_name(name)
-        ]
-        if not tx_copper_names:
+        if required_plate_copper_name not in expected_name_set:
             raise ValueError(
-                f"{context}.expected_exported_body_names must retain tx plate-stack copper bodies for {role} "
+                f"{context}.expected_exported_body_names must retain required final plate-stack bodies for {role} "
                 f"(actual={expected_exported_body_names})"
+            )
+        tx_pre_unite_copper_names = [
+            name for name in expected_exported_body_names if _is_tx_pre_unite_plate_stack_copper_name(name)
+        ]
+        if tx_pre_unite_copper_names:
+            raise ValueError(
+                f"{context}.expected_exported_body_names contains pre-unite tx copper leakage for {role}; "
+                "final imported conductors must use united plate copper names only "
+                f"(leaked_names={tx_pre_unite_copper_names})"
             )
     else:
         required_exact_names = (
@@ -428,7 +289,7 @@ def _require_plate_stack_merged_material_contract(*, modeled_entry: dict[str, ob
         context=f"{context}.expected_exported_body_groups[0].member_body_names",
     )
     if role == "tx_plate_stack":
-        expected_copper_group_member_names = tx_copper_names
+        expected_copper_group_member_names = [required_plate_copper_name]
     else:
         expected_copper_group_member_names = [required_plate_copper_name]
     if copper_group_member_names != expected_copper_group_member_names:
@@ -586,11 +447,6 @@ def build_imported_ledger(
         object_id="type2_scene",
     )
     imported_scene_object_names = _remove_scene_import_wrapper_names(
-        ledger=ledger,
-        imported_scene_object_names=imported_scene_object_names,
-    )
-    imported_scene_object_names = _reconstruct_tx_array_connector_sheets(
-        modeler=modeler,
         ledger=ledger,
         imported_scene_object_names=imported_scene_object_names,
     )

@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_setup_ready.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 15:25
+updated: 2026-04-20 @ 18:20
 tags:
   - tests
   - backend-em
@@ -26,11 +26,10 @@ tags:
 - plate-stack setup-ready success path은 concrete TX/RX conductor set,
   `g_copper_tx`/`g_copper_rx`, `g_ferrite_tx`/`g_ferrite_rx` 그룹, mesh/port/EM 체인,
   radiation boundary, sources, analysis/report payload, `ValidateDesign`, save, imported-ledger write shape를 함께 검증한다.
-- TX array setup-ready coverage must keep one `tx_plate_stack` entry, branch copper bodies plus connector sheet faces,
-  one TX port, one RX port, and the same mesh/source/report contract.
-- TX array fake HFSS import batches model AEDT solid-only scene import; connector sheet faces are reconstructed from
-  ledger canonical vertices before setup-ready partition and port assignment.
-- TX array port-sheet coverage must accept rotated copied-branch terminal metadata as one shared `tx_plate_port_sheet`.
+- TX array setup-ready coverage must keep one `tx_plate_stack` entry, united `tx_plate_copper`, one TX port, one RX port,
+  and the same mesh/source/report contract.
+- TX array fake HFSS import batches model AEDT solid-only scene import with no connector-sheet reconstruction for new ledgers.
+- TX array port-sheet coverage must use branch 0 terminal metadata as one `tx_plate_port_sheet`.
 - plate-stack setup-ready failure coverage는 missing concrete conductor,
   missing copper group, missing ferrite group, legacy segment name leakage, SOLID* drift, group-member mismatch를 fail-fast로 요구한다.
 - legacy coil full setup path expectations remain intact where still supported

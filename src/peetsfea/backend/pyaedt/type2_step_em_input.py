@@ -31,11 +31,7 @@ def _is_tx_array_connector_sheet_name(name: str) -> bool:
 
 
 def _is_tx_plate_stack_copper_name(name: str) -> bool:
-    return (
-        name == _TX_PLATE_COPPER_NAME
-        or _is_tx_branch_pcb_name(name, suffix="_plate_copper")
-        or _is_tx_array_connector_sheet_name(name)
-    )
+    return name == _TX_PLATE_COPPER_NAME
 
 
 def _resolve_exact_pair_for_direct_em_input(
@@ -139,6 +135,17 @@ def _require_no_plate_stack_legacy_copper_leakage(
             f"{context}.imported_object_names contains legacy plate-stack copper segment leakage "
             f"(legacy_names={legacy_segment_names})"
         )
+    if role == "tx_plate_stack":
+        pre_unite_copper_names = [
+            name
+            for name in imported_object_names
+            if _is_tx_branch_pcb_name(name, suffix="_plate_copper") or _is_tx_array_connector_sheet_name(name)
+        ]
+        if pre_unite_copper_names:
+            raise ValueError(
+                f"{context}.imported_object_names contains pre-unite tx copper leakage "
+                f"(leaked_names={pre_unite_copper_names})"
+            )
     solid_drift_names = [name for name in imported_object_names if name.casefold().startswith("solid")]
     if solid_drift_names:
         raise ValueError(

@@ -1,7 +1,7 @@
 ---
 title: test_type2_tx_plate_stack_array_import.py
 created: 2026-04-20 @ 04:35
-updated: 2026-04-20 @ 15:25
+updated: 2026-04-20 @ 18:20
 tags:
   - tests
   - hfss-import
@@ -26,18 +26,16 @@ tags:
 
 ## Canonical state
 - Imported ledger has one `tx_plate_stack` modeled entry, one `rx_plate_stack` modeled entry.
-- TX branch bodies remain owned by the single TX modeled entry.
-- Connector sheet faces are not expected from fake STEP import batches; import core reconstructs them from
-  `canonical_coordinates.connector_sheet_vertices_xyz_by_name`.
+- TX branch PCB/ferrite bodies remain owned by the single TX modeled entry.
+- TX conductor import uses the united `tx_plate_copper`; connector sheet faces are not reconstructed for new ledgers.
 - TX array placement validation allows X overflow from rotated copied branches while still rejecting Z overflow.
 - Setup-ready still assigns one TX excitation and one RX excitation.
 
 ## Invariants / fail-fast
 - Missing branch ferrite/PCB names fail exact-name validation.
 - Legacy segment leakage and generic `SOLID*` drift remain hard failures.
-- Mesh target remains conductor-only: TX branch copper bodies plus TX connector sheet faces, and RX `rx_plate_copper`.
-- Missing canonical connector sheet vertices is a stale-ledger/import-contract failure.
-- Rotated TX array metadata must reconstruct exactly one shared `tx_plate_port_sheet`.
+- Mesh target remains conductor-only: `tx_plate_copper` and `rx_plate_copper`.
+- TX array metadata must reconstruct exactly one `tx_plate_port_sheet` from branch 0 terminal vertices.
 
 ## 직접 의존
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py]]

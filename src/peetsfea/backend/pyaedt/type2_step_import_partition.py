@@ -164,6 +164,10 @@ def _is_tx_array_copper_name(name: str) -> bool:
     return _is_tx_branch_stack_member(name, suffix="_plate_copper") or _is_tx_array_connector_sheet_name(name)
 
 
+def _is_tx_pre_unite_plate_stack_copper_name(name: str) -> bool:
+    return _is_tx_array_copper_name(name)
+
+
 def _is_legacy_plate_stack_copper_segment_name(name: str) -> bool:
     return name.startswith(_LEGACY_PLATE_STACK_COPPER_NAME_PREFIXES)
 
@@ -327,7 +331,7 @@ def _group_contract_for_role(
         )
         ferrite_group_name = _TX_FERRITE_GROUP_NAME
         copper_group_name = _TX_COPPER_GROUP_NAME
-        copper_member_names = tuple(name for name in expected_names if name == _TX_PLATE_COPPER_NAME or _is_tx_array_copper_name(name))
+        copper_member_names = tuple(name for name in expected_names if name == _TX_PLATE_COPPER_NAME)
     elif role == "rx_plate_stack":
         ferrite_member_names = _RX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES
         ferrite_group_name = _RX_FERRITE_GROUP_NAME
@@ -340,6 +344,13 @@ def _group_contract_for_role(
         raise ValueError(
             f"{context}.expected_exported_body_names must include copper members for {role}"
         )
+    if role == "tx_plate_stack":
+        pre_unite_copper_names = [name for name in expected_names if _is_tx_pre_unite_plate_stack_copper_name(name)]
+        if pre_unite_copper_names:
+            raise ValueError(
+                f"{context}.expected_exported_body_names contains pre-unite tx copper leakage "
+                f"(leaked_names={pre_unite_copper_names})"
+            )
     legacy_segment_names = [name for name in expected_names if _is_legacy_plate_stack_copper_segment_name(name)]
     if legacy_segment_names:
         raise ValueError(
@@ -395,7 +406,7 @@ def _body_role_from_expected_name(expected_name: str, *, context: str) -> str:
         _RX_PCB_COIL_NAME,
     ) or _is_tx_branch_stack_member(expected_name, suffix="_pcb_wall") or _is_tx_branch_stack_member(expected_name, suffix="_pcb_coil"):
         return _BODY_ROLE_PCB
-    if expected_name.startswith(("tx_copper_l", "rx_copper_l")) or _is_tx_array_copper_name(expected_name) or expected_name in (
+    if expected_name.startswith(("tx_copper_l", "rx_copper_l")) or expected_name in (
             "tx_copper_stack",
             "rx_copper_stack",
             _TX_PLATE_COPPER_NAME,
@@ -415,7 +426,7 @@ def _body_role_from_expected_name(expected_name: str, *, context: str) -> str:
     raise ValueError(
         "unsupported exported body name; expected tx_pcb_l*/tx_copper_l*/tx_copper_stack/"
         "tx_copper_wall/tx_pcb_wall/tx_plate_copper/tx_stack_ferrite/tx_stack_pet_psa/"
-        "tx_stack_air/tx_b*_plate_copper/tx_array_*_sheet_s*/tx_b*_stack_ferrite/tx_b*_stack_pet_psa/tx_b*_stack_air/tx_pcb_coil/tx_copper_coil "
+        "tx_stack_air/tx_b*_stack_ferrite/tx_b*_stack_pet_psa/tx_b*_stack_air/tx_pcb_coil/tx_copper_coil "
         "tx_underlay_ferrite_u*/tx_underlay_pet_psa_u*/tx_underlay_air_u* "
         "tx_wall_ferrite_u*/tx_wall_pet_psa_u*/tx_wall_air_u* "
         "or rx_pcb_l*/rx_copper_l*/rx_copper_stack/"
@@ -442,7 +453,6 @@ def _resolved_copper_names(imported_object_names: list[str]) -> list[str]:
         name
         for name in imported_object_names
         if name.startswith(("tx_copper_l", "rx_copper_l"))
-        or _is_tx_array_copper_name(name)
         or name in (
             "tx_copper_stack",
             "rx_copper_stack",
@@ -572,16 +582,9 @@ def resolve_modeled_body_names(
         _require_plate_stack_merged_ferrite_name_contract(role=role, expected_names=expected_names, context=context)
         expected_copper_count = expected_roles.count(_BODY_ROLE_COPPER)
         if role == "tx_plate_stack":
-            expected_tx_array_copper_names = [name for name in expected_names if _is_tx_array_copper_name(name)]
-            if expected_tx_array_copper_names:
-                if expected_copper_count != len(expected_tx_array_copper_names):
-                    raise ValueError(
-                        "tx array plate-stack type2 import requires every array copper member to resolve as copper "
-                        f"(expected_copper={expected_tx_array_copper_names}, roles={expected_roles})"
-                    )
-            elif expected_copper_count != 1:
+            if expected_copper_count != 1:
                 raise ValueError(
-                    "tx plate-stack type2 import requires exactly one merged plate copper body or array copper members "
+                    "tx plate-stack type2 import requires exactly one merged plate copper body "
                     f"(actual={expected_names})"
                 )
         elif expected_copper_count != 1:
@@ -639,21 +642,16 @@ def resolve_modeled_body_names(
                 "plate-stack type2 import rejects legacy copper segment labels as final imported conductors "
                 f"(legacy_names={legacy_segment_names})"
             )
-        expected_tx_array_copper_names = [
-            name
-            for name in expected_names
-            if _is_tx_array_copper_name(name)
-        ]
         if role == "tx_plate_stack":
-            if expected_tx_array_copper_names:
-                if len(copper_names) != len(expected_tx_array_copper_names) or set(copper_names) != set(
-                    expected_tx_array_copper_names
-                ):
-                    raise ValueError(
-                        "tx plate-stack type2 import requires concrete array copper members after exact-name matching "
-                        f"(expected={expected_tx_array_copper_names}, actual={copper_names})"
-                    )
-            elif copper_names != [_TX_PLATE_COPPER_NAME]:
+            pre_unite_copper_names = [
+                name for name in imported_object_names if _is_tx_pre_unite_plate_stack_copper_name(name)
+            ]
+            if pre_unite_copper_names:
+                raise ValueError(
+                    "tx plate-stack type2 import rejects pre-unite tx copper leakage after exact-name matching "
+                    f"(leaked_names={pre_unite_copper_names})"
+                )
+            if copper_names != [_TX_PLATE_COPPER_NAME]:
                 raise ValueError(
                     "tx plate-stack type2 import requires merged plate copper name after exact-name matching "
                     f"(expected={[_TX_PLATE_COPPER_NAME]}, actual={copper_names})"

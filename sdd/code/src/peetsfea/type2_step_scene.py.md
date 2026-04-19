@@ -37,13 +37,13 @@ tags:
 - final handoff 단계의 ferrite 그룹은 role당 정확히 1개 ferrite compound를 만든다:
   TX `g_ferrite_tx`, RX `g_ferrite_rx`.
 - final handoff ferrite 그룹은 `*_copper_*`/`*_stub_*` 라벨과 분리되어야 한다.
-- RX and TX `tx_coil_count = 1` keep role-level `6` body handoff; TX arrays expand branch-local copper/non-copper
-  bodies plus connector sheet faces.
+- RX and TX `tx_coil_count = 1` keep role-level `6` body handoff; TX arrays expand branch-local non-copper
+  bodies while keeping one united `tx_plate_copper`.
 - final import handoff는 `g_copper_tx`, `g_copper_rx`로부터 concrete conductor members를 재구성하며,
   mesh payload도 conductor-only member set을 사용한다.
 - single-coil ferrite family(`tx_wall_*`, `under_rx_*`)도 export 시 같은 ferrite group contract를 따른다.
-- final exported copper 그룹은 single TX/RX에서는 `g_copper_tx -> tx_plate_copper`, `g_copper_rx -> rx_plate_copper`이고,
-  TX array에서는 branch copper bodies와 connector sheets를 `g_copper_tx`에 남긴다.
+- final exported copper 그룹은 single/array TX/RX에서 `g_copper_tx -> tx_plate_copper`,
+  `g_copper_rx -> rx_plate_copper`로 고정된다.
 - TX array branch count must not create extra modeled entries or extra TX port sheets.
 
 ## Invariants / fail-fast

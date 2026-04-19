@@ -123,15 +123,6 @@ def _is_tx_branch_stack_member(name: str, *, suffix: str) -> bool:
     return middle.isdigit()
 
 
-def _is_tx_array_connector_sheet_name(name: str) -> bool:
-    for prefix in ("tx_array_input_sheet_s", "tx_array_output_sheet_s"):
-        if not name.startswith(prefix):
-            continue
-        suffix = name[len(prefix):]
-        return suffix.isdigit()
-    return False
-
-
 def _is_tx_plate_stack_array_expected_name(name: str) -> bool:
     return any(
         _is_tx_branch_stack_member(name, suffix=suffix)
@@ -665,12 +656,6 @@ def _apply_copper_material_and_visual_state(
         _set_object_material(object_ref, material_name=_TX_COPPER_MATERIAL, context=context)
     elif "Surface Material" in valid_properties:
         _set_object_surface_material(object_ref, material_name=_TX_COPPER_MATERIAL, context=context)
-    elif _is_tx_array_connector_sheet_name(object_name):
-        if "Model" not in valid_properties:
-            raise RuntimeError(
-                f"{context} TX array connector sheet must expose Model property "
-                f"(valid_properties={valid_properties})"
-            )
     else:
         raise RuntimeError(
             f"{context} does not expose a supported copper material property "

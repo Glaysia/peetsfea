@@ -1,7 +1,7 @@
 ---
 title: type2_plate_stack.py
 created: 2026-04-19 @ 21:42
-updated: 2026-04-19 @ 23:10
+updated: 2026-04-20 @ 18:20
 tags:
   - step-export
   - tx
@@ -39,8 +39,8 @@ tags:
 - In TX array mode, `tx_array_x_usage_ratio` scales the full available branch-origin X span while keeping
   `tx_region.min_x` anchor, every branch active Z window is top-aligned to `tx_region.max_z`, Z remains owner-bounded,
   and rotated copied branches may overflow in X.
-- TX array branch conductors remain branch-local `tx_b{i}_plate_copper` bodies and are connected by input/output
-  connector sheet faces. They are not united through cuboid buses into one `tx_plate_copper`.
+- TX array branch conductors are connected by input/output copper bridge solids and fused into one final
+  `tx_plate_copper` body before STEP handoff.
 - RX는 `rx_region_max`의 bottom `z_usage_ratio` Z window, global `Y=0` centered `y_usage_ratio` Y window, `min_x` anchor, `+X` stack를 사용한다.
 - wall-side copper stripe count와 coil-side copper stripe count는 모두 `N = turn_count`이다.
 - active stack 높이는 `owner_size_z * z_usage_ratio`이며 copper/PCB/ferrite-family 모두 같은 active Z window를 쓴다.
@@ -51,10 +51,9 @@ tags:
   `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`.
 - single-branch 최종 handoff는 역할별로 하나의 united copper 본체를 가진다:
   TX `tx_plate_copper`, RX `rx_plate_copper`.
-- TX array handoff uses branch copper bodies plus connector sheet faces as the concrete conductor set.
+- TX array handoff uses one united `tx_plate_copper` as the concrete conductor set.
 - RX final exported body count is exactly `6`; TX is exactly `6` only when `tx_coil_count = 1`.
-- TX `tx_coil_count > 1` final body list contains branch-local copper/PCB/ferrite-family/PCB bodies plus `N-1`
-  input connector sheets and `N-1` output connector sheets.
+- TX `tx_coil_count > 1` final body list contains one `tx_plate_copper` plus branch-local PCB/ferrite-family/PCB bodies.
 - Single-branch final exported body count is:
   `*_plate_copper`, `*_pcb_wall`, `*_stack_pet_psa`, `*_stack_ferrite`, `*_stack_air`, `*_pcb_coil`.
 - bridge body의 X span은 wall copper와 coil copper 사이 interior-only 구간이다.
@@ -76,15 +75,14 @@ tags:
 - ferrite group member order는 merged 3-body exact-name contract다:
   `*_stack_pet_psa -> *_stack_ferrite -> *_stack_air`.
 - copper family도 role당 정확히 1개 explicit group만 export한다:
-  single TX `g_copper_tx -> [tx_plate_copper]`, TX array `g_copper_tx -> [branch copper bodies + connector sheets]`,
-  RX `g_copper_rx -> [rx_plate_copper]`.
+  TX `g_copper_tx -> [tx_plate_copper]`, RX `g_copper_rx -> [rx_plate_copper]`.
 - 각 merged stack body는 STEP handoff 전에 unite가 끝난 exact named export body여야 한다.
 - ferrite-family child가 ungrouped 상태로 scene root에 노출되면 안 된다.
 - terminal stub는 `*_stub_in`, `*_stub_out` 두 개만 존재한다. input stub는 wall-side `t0`,
   output stub는 coil-side `t{N-1}`에서 각각 `-Y` 방향으로 `5.0 mm` active Y window 바깥으로 돌출한다.
 - terminal metadata는 `kind = "stub_port"`와 stub body name, `(y, z)` endpoints, metadata-only port-sheet vertices를
   pre-unite source segment 라벨(`*_stub_in/out`) 기반 canonical source로 가진다.
-- TX array terminal metadata points to the connector sheet labels and remains one TX port surface.
+- TX array terminal metadata uses branch 0 terminal geometry and remains one TX port surface.
 
 ## Invariants / fail-fast
 - `pcb_total_thickness_mm > copper_thickness_mm > 0`

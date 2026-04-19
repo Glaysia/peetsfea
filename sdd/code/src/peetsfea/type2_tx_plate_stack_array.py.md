@@ -1,7 +1,7 @@
 ---
 title: type2_tx_plate_stack_array.py
 created: 2026-04-20 @ 04:35
-updated: 2026-04-20 @ 15:05
+updated: 2026-04-20 @ 18:20
 tags:
   - step-export
   - tx
@@ -18,12 +18,14 @@ tags:
 - Related plan: [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
 
 ## 역할
-- TX plate-stack branch placement, branch-local final body names, and parallel sheet connector geometry helpers를 담당한다.
+- TX plate-stack branch placement, branch-local non-copper final body names, thick parallel connector bridge geometry,
+  and final united TX copper handoff를 담당한다.
 - oversized `type2_plate_stack.py`가 branch array arithmetic을 직접 더 떠안지 않도록 분리된 helper boundary다.
 
 ## 입력 / 출력
 - 입력: TX/RX owner bounds, realized TX count, active Y/Z windows, plate-stack thickness values, branch source body specs
-- 출력: branch placement descriptors, branch-local final names, per-adjacent-branch sheet connector faces, array-level canonical coordinates and metadata fragments
+- 출력: branch placement descriptors, branch-local non-copper final names, per-adjacent-branch copper bridge solids,
+  united `tx_plate_copper`, array-level canonical coordinates and metadata fragments
 
 ## Canonical state
 - `tx_coil_count = 1`은 existing single-branch exact-name compatibility mode다.
@@ -34,14 +36,15 @@ tags:
 - Every branch active Z window is top-aligned to `tx_region.max_z` before rotation; rotated copied branches must keep bounding Z inside `tx_region`.
 - X placement may overflow `tx_region` after copied-branch rotation; Z placement may not.
 - Canonical coordinates record copied-branch hinge edges, negative rotation angles, rotation target,
-  and every adjacent-branch connector sheet's four world vertices by exact sheet name.
-- branch-local final names use `tx_b{i}_...` naming, including `tx_b{i}_plate_copper`.
-- TX branches are electrically parallel-connected by `N-1` input connector sheets and `N-1` output connector sheets built from transformed adjacent branch terminal edges.
-- Connector sheets remain sheet faces with zero solids; they are not extruded, thickened, boxed, or united into `tx_plate_copper`.
-- Connector sheet vertices are emitted into ledger metadata so AEDT import can reconstruct those sheet conductors without
-  relying on STEP free-surface shell import behavior.
-- `g_copper_tx.member_body_names` follows `expected_exported_body_names` order exactly: branch copper bodies first,
-  then connector sheets interleaved by adjacent segment (`input_s0`, `output_s0`, `input_s1`, `output_s1`, ...).
+  and every adjacent-branch connector bridge footprint by exact bridge name.
+- Branch-local copper shapes are intermediate implementation state only; exported TX array copper is one exact
+  `tx_plate_copper` solid.
+- TX branches are electrically parallel-connected by `N-1` input connector bridge solids and `N-1` output connector bridge solids built from transformed adjacent branch terminal edges.
+- Connector bridges have positive copper volume with thickness `spec.copper_thickness_mm` and are fused into `tx_plate_copper`
+  before STEP handoff.
+- `g_copper_tx.member_body_names` is exactly `("tx_plate_copper",)` for single and multi-branch TX plate-stack exports.
+- `terminal_metadata` for `tx_coil_count > 1` uses branch `0` terminal metadata and therefore reconstructs the lumped
+  port only on coil 0.
 
 ## Invariants / fail-fast
 - `1 <= tx_coil_count <= 4`
@@ -50,10 +53,9 @@ tags:
 - copied-branch rotation target must be physically meaningful: RX bottom center must be above the TX top hinge plane and at larger X than the branch hinge X.
 - rotated copied branches must not exceed `tx_region` Z bounds.
 - branch-local final body names must be unique and <= AEDT name length constraints already enforced by export helpers.
-- input and output connector sheets must not collapse into the same conductor path before branch coils connect them through branch geometry.
-- connector sheet labels must resolve to exactly one face and zero solids in export tests.
-- each connector sheet name in `expected_exported_body_names` must have exactly four canonical vertices recorded under
-  `canonical_coordinates.connector_sheet_vertices_xyz_by_name`.
+- input and output connector bridges must not collapse into the same conductor path before branch coils connect them through branch geometry.
+- connector bridge labels are intermediate provenance only and must not appear in final `expected_exported_body_names`.
+- final `tx_plate_copper` must resolve to exactly one solid after fusing branch copper and connector bridge solids.
 - helper must not create additional modeled ledger entries or additional TX ports.
 
 ## 직접 의존
@@ -69,5 +71,6 @@ tags:
 
 ## 변경 시 주의점
 - helper는 geometry owner가 아니라 TX array arithmetic/label owner다. RX plate-stack geometry must remain shared baseline behavior.
-- parallel sheet connector behavior must stay single-port compatible with setup-ready EM path.
+- parallel bridge connector behavior must stay single-port compatible with setup-ready EM path, with the TX port assigned
+  only on branch 0 metadata.
 - Do not route `tx_single_coil` through this module.

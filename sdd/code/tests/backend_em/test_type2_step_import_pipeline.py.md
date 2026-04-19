@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_import_pipeline.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 15:05
+updated: 2026-04-20 @ 18:20
 tags:
   - tests
   - backend-em
@@ -23,16 +23,14 @@ tags:
 - active TX/RX plate-stack import succeeds
 - exact TX/RX plate body labels are preserved as export-side provenance
 - plate-stack exact order keeps the full explicit body list while final imported conductor members remain concrete export
-  members: single TX/RX use `tx_plate_copper`/`rx_plate_copper`, TX array uses branch copper bodies plus connector sheets.
+  members: TX/RX use `tx_plate_copper`/`rx_plate_copper` for single and array cases.
   Ferrite-family labels follow the direct equivalent 3-slab contract(`PET/PSA -> ferrite -> air`) with grouped ferrite-family metadata, asymmetric turns, and stub bodies.
 - plate-stack positive path explicitly verifies merged ferrite-family imported names are exact (`tx_stack_pet_psa/tx_stack_ferrite/tx_stack_air`, `rx_stack_pet_psa/rx_stack_ferrite/rx_stack_air`) and contain no generic `SOLID*` drift
 - plate-stack positive path explicitly verifies copper 그룹(`g_copper_tx`, `g_copper_rx`)이 concrete conductor members를 포함하고
   `g_ferrite_tx` / `g_ferrite_rx` group membership/member order가 온전히 유지되는지 확인한다.
-- TX array import coverage must accept branch-local TX PCB/ferrite-family bodies and branch/sheet copper members under
+- TX array import coverage must accept branch-local TX PCB/ferrite-family bodies and a united `tx_plate_copper` under
   one `tx_plate_stack` entry.
-- TX array import coverage must reconstruct connector sheet conductors from canonical ledger vertices before partition
-  when AEDT scene import returns only the solid bodies.
-- TX array import coverage accepts AEDT branch-copper object order drift while preserving ledger order in recreated groups.
+- TX array import coverage must not reconstruct connector sheet conductors for newly generated ledgers.
 - plate-stack export contract 실패 회귀로 `g_copper_tx`/`g_copper_rx` 또는 `g_ferrite_tx`/`g_ferrite_rx` 하나라도 누락될 경우
   import가 즉시 실패해야 함을 보장한다.
 - plate roles reconstruct `tx_plate_port_sheet` / `rx_plate_port_sheet`

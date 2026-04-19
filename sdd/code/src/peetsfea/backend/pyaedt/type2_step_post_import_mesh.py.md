@@ -1,7 +1,7 @@
 ---
 title: type2_step_post_import_mesh.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 00:32
+updated: 2026-04-20 @ 18:20
 tags:
   - hfss-import
   - mesh
@@ -34,10 +34,9 @@ tags:
   - TX: `tx_copper_l0` 또는 `tx_copper_stack` 중 정확히 하나
   - RX: `rx_copper_l0` 정확히 하나
 - plate-stack pair는 conductor-only exact-name set을 imported exact-name order로 mesh target에 넣는다.
-- single TX plate-stack pair는 `tx_plate_copper`와 `rx_plate_copper`를 conductor mesh target으로 사용한다.
-  TX array pair는 branch copper bodies와 connector sheet faces plus `rx_plate_copper`를 사용한다.
+- TX plate-stack pair는 single/array 모두 `tx_plate_copper`와 `rx_plate_copper`를 conductor mesh target으로 사용한다.
   개별 `*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`는 도체 mesh 대상이 아니다.
-- Branch-local TX array copper bodies and connector sheet faces are mesh targets; branch PCB/ferrite bodies are not.
+- Branch-local TX array intermediate copper bodies and connector bridges are fused before import and are not separate mesh targets.
 - plate-stack mesh target에는 PCB, ferrite, underlay, reconstructed port sheet가 포함되지 않는다.
 - legacy pre-unite segment(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)는 final mesh 타겟으로 허용되지 않는다.
 

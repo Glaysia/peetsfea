@@ -45,7 +45,7 @@ def _is_tx_array_connector_sheet_name(name: str) -> bool:
 
 
 def _is_tx_plate_stack_mesh_object_name(name: str) -> bool:
-    return name == _TX_PLATE_MESH_OBJECT_NAME or _is_tx_branch_plate_copper_name(name) or _is_tx_array_connector_sheet_name(name)
+    return name == _TX_PLATE_MESH_OBJECT_NAME
 
 
 class Type2ImportedMeshSummary(TypedDict):
@@ -181,12 +181,22 @@ def _required_plate_stack_mesh_object_names(entry: dict[str, object], *, role: s
     imported_object_names = _imported_object_names(entry, context=context)
     if role == _TX_PLATE_STACK_ROLE:
         plate_stack_matches = [name for name in imported_object_names if _is_tx_plate_stack_mesh_object_name(name)]
-        required_mesh_object_name = "tx plate-stack copper members"
-        if len(plate_stack_matches) < 1:
+        required_mesh_object_name = _TX_PLATE_MESH_OBJECT_NAME
+        if len(plate_stack_matches) != 1:
             raise ValueError(
-                f"{context}.imported_object_names must contain one or more plate copper bodies "
+                f"{context}.imported_object_names must contain exactly one united plate copper body "
                 f"{required_mesh_object_name!r} for plate-stack mesh "
                 f"(actual={plate_stack_matches}, available={imported_object_names})"
+            )
+        pre_unite_copper_names = [
+            name
+            for name in imported_object_names
+            if _is_tx_branch_plate_copper_name(name) or _is_tx_array_connector_sheet_name(name)
+        ]
+        if pre_unite_copper_names:
+            raise ValueError(
+                f"{context}.imported_object_names contains pre-unite tx copper leakage for mesh "
+                f"(leaked_names={pre_unite_copper_names})"
             )
     else:
         required_mesh_object_name = _RX_PLATE_MESH_OBJECT_NAME

@@ -1,7 +1,7 @@
 ---
 title: test_type2_tx_plate_stack_array_export.py
 created: 2026-04-20 @ 04:35
-updated: 2026-04-20 @ 15:05
+updated: 2026-04-20 @ 18:20
 tags:
   - tests
   - step-export
@@ -26,9 +26,8 @@ tags:
 
 ## Canonical state
 - `N=1` preserves old TX names.
-- `N>1` uses branch-local copper/non-copper names and per-adjacent-branch connector sheet names.
-- `g_copper_tx` contains every branch copper body plus every input/output connector sheet in
-  `expected_exported_body_names` order; `g_ferrite_tx` expands to all branch ferrite-family bodies.
+- `N>1` uses branch-local non-copper names and one united `tx_plate_copper`.
+- `g_copper_tx` contains exactly `tx_plate_copper`; `g_ferrite_tx` expands to all branch ferrite-family bodies.
 - `tx_array_x_usage_ratio` reduces the full available branch-origin X span before copied-branch rotation.
 - `b0` stays unrotated; `b1..` rotate with negative slope about their top far-side long edge so the free end tilts toward the RX bottom center.
 - Rotated copied branches may extend outside `tx_region` in X but must stay inside `tx_region` in Z.
@@ -39,9 +38,10 @@ tags:
 - Generic `SOLID*` drift is forbidden.
 - TX array canonical bounds must touch `tx_region.max_z` and stay within owner Z bounds.
 - Ratio-scaled unrotated branch origins must match `tx_array_x_usage_ratio`; final X bounds may grow after rotation.
-- Adjacent-branch connector sheets must keep one TX port metadata surface and must have one face with zero solids.
-- Canonical coordinates must record rotation target, hinge edges, negative per-branch angles, and one four-vertex
-  world-coordinate loop per connector sheet exact name.
+- Adjacent-branch connector bridge solids must be fused into `tx_plate_copper`.
+- Canonical coordinates must record rotation target, hinge edges, negative per-branch angles, and connector bridge
+  provenance sufficient to audit branch-to-branch parallel connectivity.
+- TX port metadata must match branch 0 terminal metadata, not the full array envelope.
 
 ## 직접 의존
 - [[sdd/code/src/peetsfea/type2_plate_stack.py]]

@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_ledger.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 02:20
+updated: 2026-04-20 @ 18:20
 tags:
   - hfss-import
   - import-only
@@ -32,19 +32,17 @@ tags:
 - setup-ready/mesh/port/EM rejection은 downstream stage의 책임이며, 여기서는 import-only acceptance를 우선한다.
 - plate-stack의 export-side `tx_copper_wall_t*`, `tx_copper_coil_t*`, `tx_bridge_s*`, `tx_stub_in/out`,
   `rx_copper_wall_t*`, `rx_copper_coil_t*`, `rx_bridge_s*`, `rx_stub_in/out`는 pre-unite provenance로만 취급한다.
-- final import ledger의 single-branch plate-stack 도체는 `tx_plate_copper`, `rx_plate_copper` 단일 body다.
-  TX array 도체는 `tx_b{i}_plate_copper` branch bodies와 input/output connector sheet faces다.
+- final import ledger의 plate-stack 도체는 single/array 모두 `tx_plate_copper`, `rx_plate_copper` 단일 body다.
 - ferrite grouping contract는 per-`uN` sandwich가 아니라 role-family 단일 그룹이다: TX=`g_ferrite_tx`, RX=`g_ferrite_rx`.
 - active plate-stack roles의 ferrite group member contract는 merged exact-name 3개다:
   TX=`tx_stack_pet_psa`, `tx_stack_ferrite`, `tx_stack_air`;
   RX=`rx_stack_pet_psa`, `rx_stack_ferrite`, `rx_stack_air`.
 - expected_imported_body_groups는 role 단위로 항상 `g_copper_tx`/`g_copper_rx` 및 `g_ferrite_tx`/`g_ferrite_rx`를 포함해야 한다.
-- TX arrays allow branch-local ferrite-family body names and branch-local/sheet copper members.
+- TX arrays allow branch-local ferrite-family body names, but copper membership is the united `tx_plate_copper`.
 - single-coil roles는 기존 underlay/wall prefix family contract를 유지한다.
 - copper grouping contract는 plate-stack role별 단일 그룹을 사용한다:
   TX=`g_copper_tx`, RX=`g_copper_rx`;
-  RX는 `member_names == ['rx_plate_copper']`, single TX는 `member_names == ['tx_plate_copper']`,
-  TX array는 branch copper bodies와 connector sheet faces를 ordered member set으로 가진다.
+  RX는 `member_names == ['rx_plate_copper']`, TX는 single/array 모두 `member_names == ['tx_plate_copper']`를 가진다.
 - ferrite grouping contract은 TX/RX 각각 `g_ferrite_tx`, `g_ferrite_rx` 단일 그룹을 기대하며
   멤버 순서는 `pet_psa -> ferrite -> air`로 strict하게 고정한다.
 - final imported conductor 후보가 없거나 `g_copper_*` 그룹이 재생성되지 않으면 hard failure다.

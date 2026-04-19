@@ -39,7 +39,6 @@ from tests.backend_em.test_type2_step_import_pipeline import (
     _single_layer_imported_name_batch_with_role_aware_underlay,
     _single_layer_modeled_objects,
     _single_layer_modeled_objects_with_role_aware_underlay,
-    _tx_plate_stack_array_connector_vertices_by_name,
     _tx_plate_stack_array_expected_groups,
     _tx_plate_stack_array_expected_names,
     _source_paths,
@@ -50,15 +49,6 @@ from tests.fixtures.legacy.type1_spec import TYPE1_OUTPUT_VARIABLES, type1_outpu
 
 def _plate_stack_copper_family_imported_names(*, imported_object_names: list[str], role_prefix: str) -> list[str]:
     target_name = "tx_plate_copper" if role_prefix == "tx" else "rx_plate_copper"
-    if role_prefix == "tx":
-        return [
-            name
-            for name in imported_object_names
-            if name == target_name
-            or (name.startswith("tx_b") and name.endswith("_plate_copper"))
-            or name.startswith("tx_array_input_sheet_s")
-            or name.startswith("tx_array_output_sheet_s")
-        ]
     return [name for name in imported_object_names if name == target_name]
 
 
@@ -353,8 +343,6 @@ def _tx_array_port_sheet_metadata(*, branch_count: int) -> dict[str, object]:
         copper_thickness_mm=0.035,
         prefix="tx",
     )
-    terminal["input_stub_body_name"] = "tx_array_input_sheet_s0"
-    terminal["output_stub_body_name"] = "tx_array_output_sheet_s0"
     raw_vertices = cast(list[list[float]], terminal["port_sheet_vertices_xyz"])
     raw_vertices[1][0] = 80.0 + float(branch_count)
     raw_vertices[2][0] = 80.0 + float(branch_count)
@@ -362,7 +350,7 @@ def _tx_array_port_sheet_metadata(*, branch_count: int) -> dict[str, object]:
 
 
 def _tx_array_modeled_entry(tmp_path: Path, *, branch_count: int) -> dict[str, object]:
-    entry = _plate_stack_modeled_entry(
+    return _plate_stack_modeled_entry(
         object_id="tx_plate_stack",
         role="tx_plate_stack",
         plane="YZ",
@@ -376,11 +364,6 @@ def _tx_array_modeled_entry(tmp_path: Path, *, branch_count: int) -> dict[str, o
         copper_layer_positions_mm=[0.0, 6.865],
         terminal_metadata=_tx_array_port_sheet_metadata(branch_count=branch_count),
     )
-    canonical_coordinates = cast(dict[str, object], entry["canonical_coordinates"])
-    canonical_coordinates["connector_sheet_vertices_xyz_by_name"] = _tx_plate_stack_array_connector_vertices_by_name(
-        branch_count=branch_count
-    )
-    return entry
 
 
 def _tx_array_imported_name_batch(*, branch_count: int) -> tuple[str, ...]:
@@ -388,11 +371,7 @@ def _tx_array_imported_name_batch(*, branch_count: int) -> tuple[str, ...]:
         "environment",
         "tx_region",
         "rx_region_max",
-        *[
-            name
-            for name in _tx_plate_stack_array_expected_names(branch_count=branch_count)
-            if not name.startswith("tx_array_")
-        ],
+        *_tx_plate_stack_array_expected_names(branch_count=branch_count),
         *_rx_plate_stack_expected_names(),
     )
 
@@ -896,14 +875,11 @@ def test_build_type2_em_input_accepts_tx_plate_stack_array_branch_pcb_names(tmp_
     _rewrite_plate_stack_terminal_metadata_to_equal_stripe_pitch(modeled_objects[1])
     tx_imported_names = cast(list[str], modeled_objects[0]["imported_object_names"])
     tx_imported_names[:] = [
-        "tx_b0_plate_copper",
+        "tx_plate_copper",
         "tx_b0_pcb_wall",
         "tx_b0_pcb_coil",
-        "tx_b1_plate_copper",
         "tx_b1_pcb_wall",
         "tx_b1_pcb_coil",
-        "tx_array_input_sheet_s0",
-        "tx_array_output_sheet_s0",
         "tx_b0_stack_pet_psa",
         "tx_b0_stack_ferrite",
         "tx_b0_stack_air",
@@ -918,12 +894,7 @@ def test_build_type2_em_input_accepts_tx_plate_stack_array_branch_pcb_names(tmp_
         ports=cast(EmPorts, {"tx": ["1_T1"], "rx": ["2_T1"]}),
     )
 
-    assert result["ready_objects"]["tx_conductors"] == [
-        "tx_array_input_sheet_s0",
-        "tx_array_output_sheet_s0",
-        "tx_b0_plate_copper",
-        "tx_b1_plate_copper",
-    ]
+    assert result["ready_objects"]["tx_conductors"] == ["tx_plate_copper"]
     assert result["ready_objects"]["rx_conductors"] == ["rx_plate_copper"]
     assert result["ready_objects"]["fr4_objects"] == sorted(
         [
@@ -1297,8 +1268,7 @@ def test_setup_type2_step_ledger_reconstructs_rotated_tx_plate_stack_array_port_
 
     tx_imported_names = cast(list[str], tx_modeled[0]["imported_object_names"])
     rx_imported_names = cast(list[str], rx_modeled[0]["imported_object_names"])
-    assert "tx_b0_plate_copper" in tx_imported_names
-    assert "tx_array_input_sheet_s0" in tx_imported_names
+    assert "tx_plate_copper" in tx_imported_names
     assert tx_imported_names.count("tx_plate_port_sheet") == 1
     assert rx_imported_names.count("rx_plate_copper") == 1
 

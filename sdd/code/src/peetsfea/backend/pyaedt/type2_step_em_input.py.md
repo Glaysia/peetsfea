@@ -1,7 +1,7 @@
 ---
 title: type2_step_em_input.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 00:45
+updated: 2026-04-20 @ 18:20
 tags:
   - hfss-import
   - em
@@ -34,20 +34,19 @@ tags:
 - plate-stack endpoint는 `stub_port` metadata(`start_point_plane_mm`, `end_point_plane_mm`)와 modeled plane(`YZ`) 기반 world 좌표로 생성한다.
 - plate-stack endpoint label은 semantic stub label(`input_stub`, `output_stub`)을 사용한다.
 - ready object 구성은 role-local body 분류를 사용한다.
-  - conductor: single TX/RX plate-stack은 `tx_plate_copper` 또는 `rx_plate_copper`; TX array는 branch
-    copper bodies와 connector sheet faces 전체
+  - conductor: plate-stack은 single/array 모두 `tx_plate_copper` 또는 `rx_plate_copper`
   - fr4: role-local PCB bodies
   - ferrite: empty list
-- TX array conductor names are the exported branch copper bodies plus connector sheet faces; branch-local PCB/ferrite
-  bodies must not add TX conductors or ports.
+- TX array conductor name is the exported united `tx_plate_copper`; branch-local PCB/ferrite bodies must not add TX
+  conductors or ports.
 - pre-unite segment 이름(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)은 ready conductor에서 제외된다.
 
 ## Invariants / fail-fast
 - modeled object는 정확히 2개여야 하며, 지원 role exact pair가 아니면 즉시 실패한다.
 - duplicated role, unsupported role, mixed pair는 즉시 실패한다.
 - coil role의 imported names는 `>=1 PCB + exactly 1 copper` contract를 강제한다.
-- plate-stack role은 PCB 2개와 ready conductor set을 사용한다. TX array conductor set은 여러 branch/sheet
-  members를 허용하지만, RX는 계속 `rx_plate_copper` 정확히 1개를 사용한다.
+- plate-stack role은 PCB bodies와 ready conductor set을 사용한다. TX/RX conductors are exactly
+  `tx_plate_copper` / `rx_plate_copper` for new plate-stack array exports.
 - plate-stack role의 ready conductor가 concrete exported copper member가 아니거나 legacy segment(`*_copper_wall_t*`,
   `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)가 남아 있으면 즉시 실패한다.
 - plate-stack EM target은 concrete exported copper members만 허용하며 개별 pre-unite copper family segment가 남아 있으면 즉시 실패한다.

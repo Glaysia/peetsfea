@@ -92,12 +92,10 @@ def test_export_type2_tx_plate_stack_array_contract(tmp_path: Path) -> None:
 
     tx_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_plate_stack")
     expected_names = tx_entry["expected_exported_body_names"]
-    assert "tx_plate_copper" not in expected_names
-    assert "tx_b0_plate_copper" in expected_names
-    assert "tx_b1_plate_copper" in expected_names
-    assert "tx_b2_plate_copper" in expected_names
-    assert "tx_array_input_sheet_s0" in expected_names
-    assert "tx_array_output_sheet_s1" in expected_names
+    assert "tx_plate_copper" in expected_names
+    assert all(f"tx_b{index}_plate_copper" not in expected_names for index in range(3))
+    assert not any(name.startswith("tx_array_input_sheet_s") for name in expected_names)
+    assert not any(name.startswith("tx_array_output_sheet_s") for name in expected_names)
     assert "tx_b0_pcb_wall" in expected_names
     assert "tx_b1_stack_ferrite" in expected_names
     assert "tx_b2_pcb_coil" in expected_names
@@ -105,30 +103,19 @@ def test_export_type2_tx_plate_stack_array_contract(tmp_path: Path) -> None:
     tx_groups = tx_entry["expected_exported_body_groups"]
     assert len(tx_groups) == 2
     assert tx_groups[0]["group_name"] == "g_copper_tx"
-    assert tx_groups[0]["member_body_names"] == (
-        "tx_b0_plate_copper",
-        "tx_b1_plate_copper",
-        "tx_b2_plate_copper",
-        "tx_array_input_sheet_s0",
-        "tx_array_output_sheet_s0",
-        "tx_array_input_sheet_s1",
-        "tx_array_output_sheet_s1",
-    )
+    assert tx_groups[0]["member_body_names"] == ("tx_plate_copper",)
     assert tx_groups[1]["group_name"] == "g_ferrite_tx"
     assert len(tx_groups[1]["member_body_names"]) == 9
 
     scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
-    assert "tx_b0_plate_copper" in scene_shapes_by_label
-    assert "tx_array_input_sheet_s0" in scene_shapes_by_label
-    assert len(tuple(scene_shapes_by_label["tx_array_input_sheet_s0"].solids())) == 0
-    assert len(tuple(scene_shapes_by_label["tx_array_input_sheet_s0"].faces())) == 1
-    assert "tx_array_output_sheet_s0" in scene_shapes_by_label
-    assert len(tuple(scene_shapes_by_label["tx_array_output_sheet_s0"].solids())) == 0
-    assert len(tuple(scene_shapes_by_label["tx_array_output_sheet_s0"].faces())) == 1
-    for connector_name in ("tx_array_input_sheet_s0", "tx_array_input_sheet_s1", "tx_array_output_sheet_s0", "tx_array_output_sheet_s1"):
-        connector_shape = scene_shapes_by_label[connector_name]
-        assert len(tuple(connector_shape.solids())) == 0
-        assert len(tuple(connector_shape.faces())) == 1
+    assert "tx_plate_copper" in scene_shapes_by_label
+    tx_plate_copper_shape = scene_shapes_by_label["tx_plate_copper"]
+    tx_plate_copper_solids = tuple(tx_plate_copper_shape.solids())
+    assert len(tx_plate_copper_solids) == 1
+    assert tx_plate_copper_solids[0].volume > 0.0
+    assert all(f"tx_b{index}_plate_copper" not in scene_shapes_by_label for index in range(3))
+    assert not any(label.startswith("tx_array_input_sheet_s") for label in scene_shapes_by_label)
+    assert not any(label.startswith("tx_array_output_sheet_s") for label in scene_shapes_by_label)
     assert "tx_b0_pcb_wall" in scene_shapes_by_label
     assert "tx_b2_pcb_coil" in scene_shapes_by_label
 
@@ -152,19 +139,7 @@ def test_export_type2_tx_plate_stack_array_contract(tmp_path: Path) -> None:
     tx_coordinates = cast(dict[str, object], tx_entry["canonical_coordinates"])
     tx_min_xyz = cast(tuple[float, float, float], tx_coordinates["outer_bounds_min_xyz"])
     tx_size_xyz = cast(tuple[float, float, float], tx_coordinates["outer_bounds_size_xyz"])
-    connector_vertices_by_name = cast(dict[str, object], tx_coordinates["connector_sheet_vertices_xyz_by_name"])
-    assert set(connector_vertices_by_name) == {
-        "tx_array_input_sheet_s0",
-        "tx_array_output_sheet_s0",
-        "tx_array_input_sheet_s1",
-        "tx_array_output_sheet_s1",
-    }
-    for raw_vertices in connector_vertices_by_name.values():
-        connector_vertices = cast(tuple[tuple[float, float, float], ...], raw_vertices)
-        assert len(connector_vertices) == 4
-        connector_y = connector_vertices[0][1]
-        assert all(vertex[1] == pytest.approx(connector_y) for vertex in connector_vertices)
-        assert connector_y == pytest.approx(tx_min_xyz[1])
+    assert "connector_sheet_vertices_xyz_by_name" not in tx_coordinates
     assert tx_min_xyz[2] + tx_size_xyz[2] == pytest.approx(tx_region_top_z)
     expected_tx_size_x = branch_total_thickness + ((tx_region_size_xyz[0] - branch_total_thickness) * 0.6)
     assert tx_min_xyz[0] == pytest.approx(tx_region_min_xyz[0])
@@ -190,14 +165,11 @@ def test_export_type2_tx_plate_stack_array_contract(tmp_path: Path) -> None:
 
     tx_terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
     assert tx_terminal_metadata["kind"] == "stub_port"
-    assert tx_terminal_metadata["input_stub_body_name"] == "tx_array_input_sheet_s0"
-    assert tx_terminal_metadata["output_stub_body_name"] == "tx_array_output_sheet_s0"
+    assert tx_terminal_metadata["input_stub_body_name"] == "tx_stub_in"
+    assert tx_terminal_metadata["output_stub_body_name"] == "tx_stub_out"
     terminal_sheet_vertices = cast(tuple[tuple[float, float, float], ...], tx_terminal_metadata["port_sheet_vertices_xyz"])
     assert len(terminal_sheet_vertices) == 4
-    branch_input_x_values: list[float] = []
-    branch_output_x_values: list[float] = []
-    branch_input_z_ranges: list[tuple[float, float]] = []
-    branch_output_z_ranges: list[tuple[float, float]] = []
+    branch0_terminal_metadata: dict[str, object] | None = None
 
     for branch_index in range(3):
         branch_spec = replace(
@@ -219,6 +191,8 @@ def test_export_type2_tx_plate_stack_array_contract(tmp_path: Path) -> None:
             dict[str, object],
             branch_scene_data["terminal_metadata"],
         )
+        if branch_index == 0:
+            branch0_terminal_metadata = branch_terminal_metadata
         branch_vertices = cast(
             tuple[tuple[float, float, float], ...], branch_terminal_metadata["port_sheet_vertices_xyz"]
         )
@@ -234,10 +208,6 @@ def test_export_type2_tx_plate_stack_array_contract(tmp_path: Path) -> None:
                 )
                 for point in branch_vertices
             )
-        branch_input_x_values.append(branch_vertices[0][0])
-        branch_output_x_values.append(branch_vertices[1][0])
-        branch_input_z_ranges.append((min(branch_vertices[0][2], branch_vertices[3][2]), max(branch_vertices[0][2], branch_vertices[3][2])))
-        branch_output_z_ranges.append((min(branch_vertices[1][2], branch_vertices[2][2]), max(branch_vertices[1][2], branch_vertices[2][2])))
 
         if branch_index > 0:
             hinge_edge = copied_hinge_edges[branch_index]
@@ -250,20 +220,19 @@ def test_export_type2_tx_plate_stack_array_contract(tmp_path: Path) -> None:
                 assert branch_shape.bounding_box().min.Z >= tx_region_bottom_z - 1e-6
                 assert branch_shape.bounding_box().max.Z <= tx_region_max_z + 1e-6
 
-    expected_input_z_min = min(z_min for z_min, _z_max in branch_input_z_ranges)
-    expected_input_z_max = max(z_max for _z_min, z_max in branch_input_z_ranges)
-    expected_output_z_min = min(z_min for z_min, _z_max in branch_output_z_ranges)
-    expected_output_z_max = max(z_max for _z_min, z_max in branch_output_z_ranges)
-    expected_terminal_sheet = (
-        (min(branch_input_x_values), tx_region_min_xyz[1] - 5.0, expected_input_z_min),
-        (max(branch_output_x_values), tx_region_min_xyz[1] - 5.0, expected_output_z_min),
-        (max(branch_output_x_values), tx_region_min_xyz[1] - 5.0, expected_output_z_max),
-        (min(branch_input_x_values), tx_region_min_xyz[1] - 5.0, expected_input_z_max),
+    assert branch0_terminal_metadata is not None
+    assert tx_terminal_metadata["start_point_plane_mm"] == pytest.approx(
+        cast(tuple[float, float], branch0_terminal_metadata["start_point_plane_mm"])
     )
-    for expected_vertex, actual_vertex in zip(expected_terminal_sheet, terminal_sheet_vertices, strict=True):
+    assert tx_terminal_metadata["end_point_plane_mm"] == pytest.approx(
+        cast(tuple[float, float], branch0_terminal_metadata["end_point_plane_mm"])
+    )
+    for expected_vertex, actual_vertex in zip(
+        cast(tuple[tuple[float, float, float], ...], branch0_terminal_metadata["port_sheet_vertices_xyz"]),
+        terminal_sheet_vertices,
+        strict=True,
+    ):
         assert expected_vertex == pytest.approx(actual_vertex)
-    assert tx_terminal_metadata["start_point_plane_mm"] == pytest.approx((tx_region_min_xyz[1] - 5.0, (expected_input_z_min + expected_input_z_max) / 2.0))
-    assert tx_terminal_metadata["end_point_plane_mm"] == pytest.approx((tx_region_min_xyz[1] - 5.0, (expected_output_z_min + expected_output_z_max) / 2.0))
 
     for branch_index in range(3):
         branch_shape = scene_shapes_by_label[f"tx_b{branch_index}_pcb_wall"]
