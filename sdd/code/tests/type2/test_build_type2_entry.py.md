@@ -13,7 +13,7 @@ tags:
 ## Source
 - Path: `tests/type2/test_build_type2_entry.py`
 - Code note path: `sdd/code/tests/type2/test_build_type2_entry.py.md`
-- Direct owner: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]]
+- Direct owner: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
 - Direct verification target: [[sdd/code/entry/build.py]]
 - Discovery bridge: [[sdd/code/tests/type2/test_sample_type2_entry.py]]
 
@@ -31,7 +31,7 @@ tags:
 - this suite keeps scope at build-entry wiring and runner handoff contracts, not setup-ready runtime internals
 - free plate-stack sampled owners drive non-empty `design_variables` with canonical owner-name order
 - active example keeps a shared TX/RX plate-stack PCB total baseline at `0.4 mm`
-- active manifest/schema surface no longer carries `shoe_depth_mm` or `ferrite_set_count`, while sampled `turn_count` / `metal_fill_factor` / `z_usage_ratio` / `y_usage_ratio` ranges replay through design variables
+- active manifest/schema surface no longer carries `shoe_depth_mm` or `ferrite_set_count`, while sampled `turn_count` / `metal_fill_factor` / `z_usage_ratio` / `y_usage_ratio` / TX `tx_coil_count` / TX `tx_array_x_usage_ratio` ranges replay through design variables
 - manifest parallelism contracts remain intact
 
 ## 변경 시 주의점

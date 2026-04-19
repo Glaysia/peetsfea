@@ -13,7 +13,7 @@ tags:
 ## Source
 - Path: `tests/type2/test_generate_type2_step.py`
 - Code note path: `sdd/code/tests/type2/test_generate_type2_step.py.md`
-- Direct owner: [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]]
+- Direct owner: [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
 - Direct verification target: [[sdd/code/entry/generate_type2_step.py]]
 
 ## 역할
@@ -25,6 +25,7 @@ tags:
 - `examples/type2_sweep.toml` is the mutable sampling SSOT and this test file must not pin its concrete sweep values.
 - object id mismatch / coil-only field rejection
 - plate-stack `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio` validation plus explicit rejection of removed `shoe_depth_mm`
+- TX `tx_coil_count` and `tx_array_x_usage_ratio` v4 parser validation is covered either here or in the dedicated count/sampling regression.
 - TX/RX pre-unite baseline contract keeps per-turn/bridge/stub segment bodies; final handoff contract은
   role-level copper/ferrite role bodies로 정규화되며 6-body exact-name 순서를 유지한다.
 - TX top-anchored `z_usage_ratio` Z window over global `Y=0` centered `y_usage_ratio` Y window + `min_x` anchor
@@ -36,6 +37,7 @@ tags:
   - `g_copper_tx -> [tx_plate_copper]`, `g_ferrite_tx -> [tx_stack_pet_psa, tx_stack_ferrite, tx_stack_air]`
   - `g_copper_rx -> [rx_plate_copper]`, `g_ferrite_rx -> [rx_stack_pet_psa, rx_stack_ferrite, rx_stack_air]`
 - plate-stack role에서 `g_copper_*` 또는 `g_ferrite_*` 누락/멤버 mismatch를 회귀 테스트로 반드시 잡는다.
+- TX array export coverage must keep `N=1` compatibility and verify `N>1` branch-local names with one `tx_plate_copper`.
 - merged material ferrite-member ordering (`stack_pet_psa -> stack_ferrite -> stack_air`)
 - plate-stack merged material body는 export-side unite 완료 후 label당 exactly one solid(`Solid`)로 유지
 - plate-stack ferrite group member는 merged exact names 3개만 포함하고 그룹 순서는
@@ -59,4 +61,4 @@ tags:
 ## 변경 시 주의점
 - fixed example role drift와 exact-name order drift를 같은 테스트 층에서 잡아야 한다.
 - sweep example TOML 값 변경은 authoring change로 취급하며, parser/export unit tests가 구체 range 값을 검사하지 않는다.
-- exact name/order drift 검사는 pre-unite segment contracts와 final export-contract(`6` final bodies per role)를 함께 검증해야 한다.
+- exact name/order drift 검사는 pre-unite segment contracts와 final export-contract를 함께 검증해야 한다. RX and single-branch TX stay at `6`; TX arrays expand branch-local non-copper names.

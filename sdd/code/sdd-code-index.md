@@ -77,6 +77,7 @@ Test note inventory:
 - `sdd/code/src/peetsfea/type2_step_ledger.py.md`
 - `sdd/code/src/peetsfea/type2_step_export.py.md`
 - `sdd/code/src/peetsfea/type2_rx_plate_stack.py.md`
+- `sdd/code/src/peetsfea/type2_tx_plate_stack_array.py.md`
   - `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py.md`
   - `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_partition.py.md`
   - `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_style.py.md`
@@ -89,6 +90,10 @@ Test note inventory:
   - `sdd/code/src/peetsfea/aedt/proxies_base.py.md`
   - `sdd/code/src/peetsfea/aedt/proxies_ops.py.md`
   - `sdd/code/src/peetsfea/aedt/proxies_inspect.py.md`
+- Planned TX array test notes:
+  - `sdd/code/tests/type2/test_type2_tx_coil_count_spec_sampling.py.md`
+  - `sdd/code/tests/type2/test_type2_tx_plate_stack_array_export.py.md`
+  - `sdd/code/tests/backend_em/test_type2_tx_plate_stack_array_import.py.md`
 
 ## 운영 메모
 - 이 인덱스는 전체 레포 백필 목록이 아니다.

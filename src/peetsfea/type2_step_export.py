@@ -41,8 +41,12 @@ from peetsfea.type2_step_spec import load_type2_step_spec
 from peetsfea.type2_step_spec import placement_owner_id_for_role
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
 from peetsfea.type2_step_spec import resolve_modeled_plate_stack_turn_count
+from peetsfea.type2_step_spec import resolve_modeled_tx_coil_count
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
 from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
+from peetsfea.type2_tx_plate_stack_array import build_tx_plate_stack_array_scene_data
+from peetsfea.type2_tx_plate_stack_array import expected_tx_plate_stack_array_body_groups
+from peetsfea.type2_tx_plate_stack_array import expected_tx_plate_stack_array_body_names
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_TOML_PATH = REPO_ROOT / "examples" / "type2_fixed.toml"
@@ -228,6 +232,12 @@ def _plate_stack_expected_body_names(
     spec: ModeledTxPlateStackSpec | ModeledRxPlateStackSpec,
     seed: int,
 ) -> list[str]:
+    if isinstance(spec, ModeledTxPlateStackSpec):
+        return list(
+            expected_tx_plate_stack_array_body_names(
+                tx_coil_count=resolve_modeled_tx_coil_count(spec, seed=seed),
+            )
+        )
     realized_turn_count = resolve_modeled_plate_stack_turn_count(spec, seed=seed)
     return list(
         expected_plate_stack_body_names(
@@ -241,7 +251,18 @@ def _plate_stack_expected_body_names(
 def _plate_stack_expected_body_groups(
     *,
     spec: ModeledTxPlateStackSpec | ModeledRxPlateStackSpec,
+    seed: int,
 ) -> list[dict[str, object]]:
+    if isinstance(spec, ModeledTxPlateStackSpec):
+        return [
+            {
+                "group_name": group_entry["group_name"],
+                "member_body_names": group_entry["member_body_names"],
+            }
+            for group_entry in expected_tx_plate_stack_array_body_groups(
+                tx_coil_count=resolve_modeled_tx_coil_count(spec, seed=seed),
+            )
+        ]
     return [
         {
             "group_name": group_entry["group_name"],
@@ -350,6 +371,7 @@ def _require_modeled_expected_body_contract(
             )
             expected_groups = _plate_stack_expected_body_groups(
                 spec=cast(ModeledTxPlateStackSpec | ModeledRxPlateStackSpec, modeled_spec),
+                seed=seed,
             )
         else:
             raise ValueError(f"unsupported modeled object role in type2 ledger: {role}")
@@ -623,11 +645,20 @@ def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path:
             non_model for non_model in spec.non_model_objects if non_model.object_id == placement_owner_id_for_role(modeled_spec.role)
         )
         if isinstance(modeled_spec, (ModeledTxPlateStackSpec, ModeledRxPlateStackSpec)):
-            _scene_children, expected_scene_data = build_modeled_scene_data(
-                modeled_spec,
-                owner_spec=owner_spec,
-                seed=seed,
-            )
+            if isinstance(modeled_spec, ModeledTxPlateStackSpec) and resolve_modeled_tx_coil_count(modeled_spec, seed=seed) > 1:
+                rx_owner_spec = require_non_model_object_spec(spec.non_model_objects, object_id="rx_region_max")
+                _scene_children, expected_scene_data = build_tx_plate_stack_array_scene_data(
+                    modeled_spec,
+                    owner_spec=owner_spec,
+                    rx_owner_spec=rx_owner_spec,
+                    seed=seed,
+                )
+            else:
+                _scene_children, expected_scene_data = build_modeled_scene_data(
+                    modeled_spec,
+                    owner_spec=owner_spec,
+                    seed=seed,
+                )
             expected_terminal_metadata = expected_scene_data["terminal_metadata"]
             if terminal_metadata != expected_terminal_metadata:
                 raise RuntimeError(
@@ -737,11 +768,20 @@ def export_type2_step_artifacts(
             object_id=placement_owner_id_for_role(modeled_spec.role),
         )
         metadata_path = object_metadata_dir / f"{modeled_spec.object_id}.metadata.json"
-        modeled_scene_shapes, scene_data = build_modeled_scene_data(
-            modeled_spec,
-            owner_spec=owner_spec,
-            seed=seed,
-        )
+        if isinstance(modeled_spec, ModeledTxPlateStackSpec):
+            rx_owner_spec = require_non_model_object_spec(spec.non_model_objects, object_id="rx_region_max")
+            modeled_scene_shapes, scene_data = build_tx_plate_stack_array_scene_data(
+                modeled_spec,
+                owner_spec=owner_spec,
+                rx_owner_spec=rx_owner_spec,
+                seed=seed,
+            )
+        else:
+            modeled_scene_shapes, scene_data = build_modeled_scene_data(
+                modeled_spec,
+                owner_spec=owner_spec,
+                seed=seed,
+            )
         write_modeled_source_metadata(
             metadata_path=metadata_path,
             source_toml_path=toml_path,

@@ -123,7 +123,7 @@ range = {wall_parallel_stack_present_range}
 """.rstrip()
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v2"
+schema_id = "peetsfea.type2.step.v4"
 runtime_compatible = false
 
 [design]
@@ -259,7 +259,7 @@ def _type2_rx_plate_stack_spec_text(
         extra_body = f"\n{extra_body}"
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v2"
+schema_id = "peetsfea.type2.step.v4"
 runtime_compatible = false
 
 [design]
@@ -364,9 +364,18 @@ def _type2_tx_plate_stack_spec_text(
     metal_fill_factor_range: str = "[false, 0.4, 0.4, 1]",
     z_usage_ratio_range: str = "[false, 0.3, 0.3, 1]",
     y_usage_ratio_range: str = "[false, 1.0, 1.0, 1]",
+    tx_coil_count_range: str = "[true, 1.0, 1.0, 1]",
+    tx_array_x_usage_ratio_range: str = "[false, 1.0, 1.0, 1]",
     radiation_margin_mm: float = 3500.0,
     extra_modeled_lines: tuple[str, ...] = (),
 ) -> str:
+    tx_modeled_lines = (
+        "[modeled_objects.tx_coil_count]",
+        f"range = {tx_coil_count_range}",
+        "[modeled_objects.tx_array_x_usage_ratio]",
+        f"range = {tx_array_x_usage_ratio_range}",
+        *extra_modeled_lines,
+    )
     return _type2_rx_plate_stack_spec_text(
         modeled_object_id=modeled_object_id,
         modeled_role=modeled_role,
@@ -377,7 +386,7 @@ def _type2_tx_plate_stack_spec_text(
         z_usage_ratio_range=z_usage_ratio_range,
         y_usage_ratio_range=y_usage_ratio_range,
         radiation_margin_mm=radiation_margin_mm,
-        extra_modeled_lines=extra_modeled_lines,
+        extra_modeled_lines=tx_modeled_lines,
     ).replace(
         '[[non_model_objects]]\n'
         'id = "tx_region"\n'
@@ -1178,13 +1187,14 @@ def test_load_type2_step_spec_parses_tx_plate_stack_contract(tmp_path: Path) -> 
     assert tx_entry.turn_count.start == pytest.approx(3.0)
     assert tx_entry.metal_fill_factor.start == pytest.approx(0.4)
     assert tx_entry.z_usage_ratio.start == pytest.approx(0.3)
+    assert tx_entry.tx_array_x_usage_ratio.start == pytest.approx(1.0)
 
 
 def test_load_type2_step_spec_rejects_legacy_type2_schema_id(tmp_path: Path) -> None:
-    toml_text = _type2_rx_plate_stack_spec_text().replace("peetsfea.type2.step.v2", "peetsfea.type2.step.v1", 1)
+    toml_text = _type2_rx_plate_stack_spec_text().replace("peetsfea.type2.step.v4", "peetsfea.type2.step.v1", 1)
     toml_path = _write_spec(tmp_path, toml_text)
 
-    with pytest.raises(ValueError, match=r"schema_id must be 'peetsfea\.type2\.step\.v2'"):
+    with pytest.raises(ValueError, match=r"schema_id must be 'peetsfea\.type2\.step\.v4'"):
         load_type2_step_spec(toml_path)
 
 
