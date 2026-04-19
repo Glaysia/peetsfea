@@ -10,8 +10,15 @@ import pytest
 
 import entry.build as build_entry
 import peetsfea.type2_sampled as type2_sampled
-from entry.build import _Type2BuildRunnerResult, build_type2
+from entry.build import (
+    _Type2BuildRunnerResult,
+    _setup_type2_step_ledger_gui_debug,
+    build_type2,
+    build_type2_debug,
+    run_build_cli,
+)
 from entry.sample import sample_type2
+from peetsfea.type2_runtime import Type2BuiltArtifact
 from peetsfea.type2_sampled import PreparedType2Build
 from peetsfea.type2_step_spec import RangeSpec
 
@@ -456,3 +463,148 @@ def test_build_type2_rejects_missing_make_step_on_sample_config(tmp_path: Path) 
 
     with pytest.raises(ValueError, match=r"type2 sample manifest config is missing required key 'make_step_on_sample'"):
         build_type2(manifest_path=manifest_path)
+
+
+def test_build_type2_debug_builds_only_requested_design_with_single_job(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _patch_plate_stack_spec_loader(monkeypatch)
+    source_toml_path = _write_source_type2_toml(tmp_path)
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+
+    sampled_manifest = sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=8,
+        seed_n=2,
+        sampler_n=1,
+        aedt_builder_n=2,
+        make_step_on_sample=False,
+    )
+
+    selected_design_id = sampled_manifest["entries"][1]["design_id"]
+    captured: dict[str, object] = {}
+    expected_result: list[Type2BuiltArtifact] = [
+        {
+            "design_id": selected_design_id,
+            "sampled_toml_path": "sampled.toml",
+            "aedt_path": "output.aedt",
+            "source_step_ledger_path": "source.ledger",
+            "imported_ledger_path": "imported.ledger",
+        }
+    ]
+
+    def _fake_build_prepared_type2_designs(
+        prepared_builds: tuple[PreparedType2Build, ...],
+        *,
+        jobs: int,
+        exporter: object,
+        runner: object,
+    ) -> list[Type2BuiltArtifact]:
+        captured["prepared_builds"] = prepared_builds
+        captured["jobs"] = jobs
+        captured["exporter"] = exporter
+        captured["runner"] = runner
+        return expected_result
+
+    fake_exporter = object()
+    fake_runner = object()
+    monkeypatch.setattr(build_entry, "build_prepared_type2_designs", _fake_build_prepared_type2_designs)
+    results = build_type2_debug(
+        manifest_path=manifest_path,
+        design_id=selected_design_id,
+        exporter=fake_exporter,
+        runner=fake_runner,
+    )
+
+    assert results is expected_result
+    prepared_builds = cast(tuple[PreparedType2Build, ...], captured["prepared_builds"])
+    assert len(prepared_builds) == 1
+    assert prepared_builds[0].design_id == selected_design_id
+    assert cast(int, captured["jobs"]) == 1
+    assert captured["exporter"] is fake_exporter
+    assert captured["runner"] is fake_runner
+
+
+def test_setup_type2_step_ledger_gui_debug_uses_gui_visible_hfss(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    class _FakeHfss:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            captured["hfss_kwargs"] = dict(kwargs)
+
+    monkeypatch.setattr(build_entry, "Hfss", _FakeHfss)
+
+    def _fake_setup(
+        *,
+        hfss: object,
+        step_ledger_path: Path,
+        output_aedt_path: Path,
+        imported_ledger_path: Path,
+        design_variables: tuple[tuple[str, str], ...],
+    ) -> _Type2BuildRunnerResult:
+        captured["runner_kwargs"] = {
+            "hfss": hfss,
+            "step_ledger_path": step_ledger_path,
+            "output_aedt_path": output_aedt_path,
+            "imported_ledger_path": imported_ledger_path,
+            "design_variables": design_variables,
+        }
+        return {
+            "aedt_path": str(output_aedt_path),
+            "source_step_ledger_path": str(step_ledger_path),
+            "imported_ledger_path": str(imported_ledger_path),
+        }
+
+    monkeypatch.setattr(build_entry, "setup_type2_step_ledger_into_hfss", _fake_setup)
+
+    step_ledger_path = Path("/tmp/ledger.json")
+    output_aedt_path = Path("/tmp/output.aedt")
+    imported_ledger_path = Path("/tmp/imported.json")
+    design_variables = (("var_x", "1"), ("var_y", "2"))
+    design_name = "design-02"
+
+    result = _setup_type2_step_ledger_gui_debug(
+        step_ledger_path=step_ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        design_name=design_name,
+        design_variables=design_variables,
+    )
+
+    hfss_kwargs = cast(dict[str, object], captured["hfss_kwargs"])
+    assert hfss_kwargs["design"] == design_name
+    assert hfss_kwargs["non_graphical"] is False
+    assert hfss_kwargs["new_desktop"] is True
+    assert hfss_kwargs["close_on_exit"] is False
+
+    runner_kwargs = cast(dict[str, object], captured["runner_kwargs"])
+    assert isinstance(runner_kwargs["hfss"], _FakeHfss)
+    assert runner_kwargs["step_ledger_path"] == step_ledger_path
+    assert runner_kwargs["output_aedt_path"] == output_aedt_path
+    assert runner_kwargs["imported_ledger_path"] == imported_ledger_path
+    assert runner_kwargs["design_variables"] == design_variables
+    assert result == {
+        "aedt_path": str(output_aedt_path),
+        "source_step_ledger_path": str(step_ledger_path),
+        "imported_ledger_path": str(imported_ledger_path),
+    }
+
+
+def test_run_build_cli_rejects_debug_without_design_id(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(SystemExit):
+        run_build_cli(("--debug", "--manifest", str(manifest_path)))
+
+
+def test_run_build_cli_rejects_design_id_without_debug(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(SystemExit):
+        run_build_cli(("--manifest", str(manifest_path), "--design-id", "abc"))

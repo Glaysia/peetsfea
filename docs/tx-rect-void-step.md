@@ -172,7 +172,7 @@ legacy `rx_single_coil` reference로만 유지된다.
 - type2 HFSS import는 modeled object를 다시 `move()`하지 않는다. export ledger가
   이미 최종 배치를 소유하고, import는 그 계약만 검증한다.
 - TX underlay bodies는 explicit STEP imported solids다. port sheet는 반대로 metadata-driven HFSS reconstruction surface다.
-- mesh ownership은 conductor-only다. legacy `tx_copper_l0` / `tx_copper_stack`, legacy `rx_copper_l0` 같은 conductor bodies만 mesh 대상이고 underlay slabs는 대상이 아니다. plate-stack roles는 current phase에서 mesh/import/setup-ready/EM 대상이 아니다.
+- mesh ownership은 conductor-only다. legacy `tx_copper_l0` / `tx_copper_stack`, legacy `rx_copper_l0` 같은 conductor bodies만 mesh 대상이고 underlay slabs는 대상이 아니다. active plate-stack setup-ready branch는 retained ledger handoff 뒤 full EM chain으로 이어지며, import-only helper는 geometry inspection ownership으로만 유지된다.
 
 ## 범위 제외
 - HFSS ports, sources, solving.

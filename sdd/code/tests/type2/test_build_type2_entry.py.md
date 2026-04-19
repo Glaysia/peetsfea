@@ -24,6 +24,9 @@ tags:
 - active plate-stack manifest can still export missing STEP
 - default build path keeps setup-ready facade routing for exact plate-stack pair, delegating full-EM-ready setup ownership to that runtime
 - explicit runner override is accepted for the exact plate-stack pair without mutating build-entry call wiring
+- debug build mode selects exactly one requested design id, forces sequential `jobs=1`, and keeps setup-ready routing
+- debug GUI runner constructs a GUI-visible HFSS session with `close_on_exit=False` and delegates release behavior to attached-session setup-ready runtime
+- debug CLI rejects missing target design id instead of choosing a manifest entry implicitly
 - plate-stack build call shape remains setup-ready oriented (`step_ledger_path`, `output_aedt_path`, `imported_ledger_path`, `design_name`, `design_variables`)
 - this suite keeps scope at build-entry wiring and runner handoff contracts, not setup-ready runtime internals
 - free plate-stack sampled owners drive non-empty `design_variables` with canonical owner-name order

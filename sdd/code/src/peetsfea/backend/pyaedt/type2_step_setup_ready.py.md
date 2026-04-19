@@ -1,7 +1,7 @@
 ---
 title: type2_step_setup_ready.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 11:18
+updated: 2026-04-20 @ 12:24
 tags:
   - hfss-import
   - em
@@ -57,5 +57,5 @@ tags:
 
 ## 변경 시 주의점
 - branch selection을 HFSS 생성 이후로 늦추지 않는다.
-- plate-stack exact pair를 reduced port-only contract로 되돌리지 않는다.
+- plate-stack exact pair를 reduced partial-setup contract로 되돌리지 않는다.
 - setup-ready 경로에 geometry-repair fallback을 추가하지 않는다.

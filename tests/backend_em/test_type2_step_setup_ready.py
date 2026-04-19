@@ -141,6 +141,7 @@ class _SetupReadyDesign(_ImportFakeDesign):
     def __init__(self, *, mesh_module: _FakeMeshModule, parent: "_SetupReadyHfss") -> None:
         super().__init__(mesh_module=mesh_module)
         self._parent = parent
+        self.validate_design_calls = 0
 
     def GetModule(self, name: str) -> object:
         self.get_module_calls.append(name)
@@ -155,6 +156,7 @@ class _SetupReadyDesign(_ImportFakeDesign):
         raise AssertionError(f"unexpected module lookup in fake design: {name}")
 
     def ValidateDesign(self) -> object:
+        self.validate_design_calls += 1
         return self._parent.validate_design_result
 
 
@@ -957,6 +959,7 @@ def test_setup_type2_step_ledger_accepts_plate_stack_exact_pair_and_runs_full_se
         modeled_objects=modeled_objects,
     )
     output_aedt_path = tmp_path / "aedt" / "type2_setup_ready.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
     session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[_plate_stack_imported_name_batch()]))
 
     result = cast(
@@ -964,7 +967,7 @@ def test_setup_type2_step_ledger_accepts_plate_stack_exact_pair_and_runs_full_se
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=output_aedt_path,
-            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            imported_ledger_path=imported_ledger_path,
             hfss_factory=lambda _: cast(HfssSession, session),
         ),
     )
@@ -984,17 +987,65 @@ def test_setup_type2_step_ledger_accepts_plate_stack_exact_pair_and_runs_full_se
 
     assert result["mesh"]["objects"] == expected_mesh_objects
     assert payload[objects_index + 1] == expected_mesh_objects
+    assert set(result) == {
+        "source_toml_path",
+        "source_step_ledger_path",
+        "scene_step_path",
+        "seed",
+        "aedt_path",
+        "imported_ledger_path",
+        "mesh",
+        "boundary",
+        "ports",
+        "sources",
+        "analysis",
+        "validation_report",
+    }
+    assert result["boundary"] == {
+        "type": "radiation",
+        "offset_type": "Absolute Offset",
+        "offset_value": "3500.0",
+        "region_name": "Region_Abs_3500mm",
+        "face_count": "6",
+    }
+    assert session.radiation_boundary_calls == [
+        ([10], "Rad_RegionAbs_0"),
+        ([11], "Rad_RegionAbs_1"),
+        ([12], "Rad_RegionAbs_2"),
+        ([13], "Rad_RegionAbs_3"),
+        ([14], "Rad_RegionAbs_4"),
+        ([15], "Rad_RegionAbs_5"),
+    ]
+    assert len(session.oboundary.assign_lumped_port_calls) == 2
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
     assert result["sources"]["tx_source_name"] == "1_T1"
     assert result["sources"]["rx_source_name"] == "2_T1"
     assert result["analysis"]["setup_name"] == "Setup1"
     assert result["validation_report"] == {"ok": True, "gate": "hard_fail", "message": "ok"}
+    assert session.design.validate_design_calls == 1
+    assert {"MeshSetup", "AnalysisSetup", "Solutions", "ReportSetup"}.issubset(set(session.design.get_module_calls))
     assert session.edited_sources_payloads
     assert session.inserted_setup_types == ["HfssDriven"]
     assert session.created_output_variables == _expected_output_variables()
+    outputs = type1_outputs_spec()
+    expected_trace_names = [name for name, _ in TYPE1_OUTPUT_VARIABLES]
     assert session.created_reports[0]["plot_name"] == "Output Variables Table1"
+    assert session.created_reports[0]["report_category"] == outputs["report_category"]
+    assert session.created_reports[0]["plot_type"] == outputs["plot_type"]
+    assert session.created_reports[0]["setup_sweep_name"] == outputs["solution_name"]
+    assert session.created_reports[0]["variations"] == [f"{outputs['primary_sweep']}:=", ["All"]]
+    assert session.created_reports[0]["components"] == [
+        "X Component:=",
+        outputs["primary_sweep"],
+        "Y Component:=",
+        expected_trace_names,
+    ]
     assert session.save_project_calls == [str(output_aedt_path)]
     assert session.desktop_class.release_calls == [(True, True)]
+    imported_payload = _imported_ledger_payload(imported_ledger_path)
+    assert "mesh" not in imported_payload
+    assert "boundary" not in imported_payload
+    assert imported_payload["aedt_path"] == str(output_aedt_path)
 
 
 @pytest.mark.parametrize("role", ["tx_plate_stack", "rx_plate_stack"])

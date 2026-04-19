@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_setup_ready.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 02:16
+updated: 2026-04-19 @ 13:46
 tags:
   - tests
   - backend-em
@@ -20,8 +20,9 @@ tags:
 ## Canonical coverage
 - setup facade enforces exact two-entry tx/rx role pairs before HFSS launch
 - mixed role families are rejected fail-fast before runtime attach
-- direct mesh helper rejects plate-stack roles while direct port assignment accepts only exact tx/rx family pairs
+- direct mesh helper and direct port assignment accept only exact tx/rx family pairs
 - plate-stack fixtures use active `terminal_metadata.kind == "stub_port"` contract from import-pipeline helpers
+- plate-stack setup-ready success path asserts full helper chain side effects (mesh, radiation boundary, ports, sources, analysis/report payload, `ValidateDesign`, save, imported-ledger write shape)
 - legacy coil full setup path expectations remain intact where still supported
 
 ## 변경 시 주의점
