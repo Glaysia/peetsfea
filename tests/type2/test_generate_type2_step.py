@@ -93,6 +93,8 @@ def _type2_spec_text(
     underlay_repeat_count_range: str | None = None,
     underlay_gap_range: str | None = None,
     wall_parallel_stack_present_range: str | None = None,
+    tx_region_actual_x_division_count_range: str = "[true, 1, 1, 1]",
+    tx_region_actual_y_division_count_range: str = "[true, 1, 1, 1]",
 ) -> str:
     if underlay_repeat_count_range is None:
         underlay_repeat_count_range = _range(True, 0.0, 8.0, 5)
@@ -132,7 +134,7 @@ range = {wall_parallel_stack_present_range}
         outer_y_usage_ratio_range = _range(False, 60.0 / 280.0, 60.0 / 280.0, 1)
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v5"
+schema_id = "peetsfea.type2.step.v6"
 runtime_compatible = false
 
 [design]
@@ -217,6 +219,10 @@ source_region_id = "tx_region"
 range = [false, 0.3, 0.3, 1]
 [non_model_objects.y_usage_ratio]
 range = [false, 0.3, 0.3, 1]
+[non_model_objects.x_division_count]
+range = {tx_region_actual_x_division_count_range}
+[non_model_objects.y_division_count]
+range = {tx_region_actual_y_division_count_range}
 
 [[modeled_objects]]
 object_id = "{modeled_object_id}"
@@ -265,13 +271,15 @@ def _type2_rx_plate_stack_spec_text(
     y_usage_ratio_range: str = "[false, 1.0, 1.0, 1]",
     radiation_margin_mm: float = 3500.0,
     extra_modeled_lines: tuple[str, ...] = (),
+    tx_region_actual_x_division_count_range: str = "[true, 1, 1, 1]",
+    tx_region_actual_y_division_count_range: str = "[true, 1, 1, 1]",
 ) -> str:
     extra_body = "\n".join(extra_modeled_lines)
     if extra_body != "":
         extra_body = f"\n{extra_body}"
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v5"
+schema_id = "peetsfea.type2.step.v6"
 runtime_compatible = false
 
 [design]
@@ -356,6 +364,10 @@ source_region_id = "tx_region"
 range = [false, 0.3, 0.3, 1]
 [non_model_objects.y_usage_ratio]
 range = [false, 0.3, 0.3, 1]
+[non_model_objects.x_division_count]
+range = {tx_region_actual_x_division_count_range}
+[non_model_objects.y_division_count]
+range = {tx_region_actual_y_division_count_range}
 
 [[modeled_objects]]
     object_id = "{modeled_object_id}"
@@ -741,6 +753,42 @@ def _assert_zero_intersection_volume(first: object, second: object) -> None:
         return
     assert isinstance(shared_shape, bd.Shape)
     assert sum(solid.volume for solid in shared_shape.solids()) == pytest.approx(0.0, abs=1e-9)
+
+
+def _tx_region_actual_tile_names(*, x_division_count: int, y_division_count: int) -> tuple[str, ...]:
+    if x_division_count == 1 and y_division_count == 1:
+        return ("tx_region_actual",)
+    return tuple(
+        f"tx_region_actual_x{x_index}_y{y_index}"
+        for x_index in range(x_division_count)
+        for y_index in range(y_division_count)
+    )
+
+
+def _assert_tx_region_actual_tiles_contract(
+    *,
+    scene_shapes_by_label: dict[str, bd.Shape],
+    tile_names: tuple[str, ...],
+    expected_origin_xyz: tuple[float, float, float],
+    expected_size_xyz: tuple[float, float, float],
+) -> None:
+    tile_boxes = [scene_shapes_by_label[name].bounding_box() for name in tile_names]
+    min_x = min(box.min.X for box in tile_boxes)
+    min_y = min(box.min.Y for box in tile_boxes)
+    min_z = min(box.min.Z for box in tile_boxes)
+    max_x = max(box.max.X for box in tile_boxes)
+    max_y = max(box.max.Y for box in tile_boxes)
+    max_z = max(box.max.Z for box in tile_boxes)
+    assert (min_x, min_y, min_z) == pytest.approx(expected_origin_xyz)
+    assert (max_x - min_x, max_y - min_y, max_z - min_z) == pytest.approx(expected_size_xyz)
+    for first_index in range(len(tile_names)):
+        first_box = tile_boxes[first_index]
+        for second_index in range(first_index + 1, len(tile_names)):
+            second_box = tile_boxes[second_index]
+            overlap_x = min(first_box.max.X, second_box.max.X) - max(first_box.min.X, second_box.min.X)
+            overlap_y = min(first_box.max.Y, second_box.max.Y) - max(first_box.min.Y, second_box.min.Y)
+            overlap_z = min(first_box.max.Z, second_box.max.Z) - max(first_box.min.Z, second_box.min.Z)
+            assert overlap_x <= 1e-9 or overlap_y <= 1e-9 or overlap_z <= 1e-9
 
 
 def _assert_plate_stack_bridge_non_overlap(
@@ -1308,10 +1356,10 @@ def test_load_type2_step_spec_parses_tx_plate_stack_contract(tmp_path: Path) -> 
 
 
 def test_load_type2_step_spec_rejects_legacy_type2_schema_id(tmp_path: Path) -> None:
-    toml_text = _type2_rx_plate_stack_spec_text().replace("peetsfea.type2.step.v5", "peetsfea.type2.step.v1", 1)
+    toml_text = _type2_rx_plate_stack_spec_text().replace("peetsfea.type2.step.v6", "peetsfea.type2.step.v1", 1)
     toml_path = _write_spec(tmp_path, toml_text)
 
-    with pytest.raises(ValueError, match=r"schema_id must be 'peetsfea\.type2\.step\.v5'"):
+    with pytest.raises(ValueError, match=r"schema_id must be 'peetsfea\.type2\.step\.v6'"):
         load_type2_step_spec(toml_path)
 
 
@@ -1970,6 +2018,44 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     )
     for label in scene_shapes_by_label:
         assert not label.startswith(legacy_prefixes)
+
+
+def test_export_type2_step_artifacts_tiles_tx_region_actual_for_forced_3x3_divisions(tmp_path: Path) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_spec_text(
+            modeled_object_id="rx_rect_void_coil",
+            modeled_role="rx_single_coil",
+            tx_region_actual_x_division_count_range="[true, 3, 3, 1]",
+            tx_region_actual_y_division_count_range="[true, 3, 3, 1]",
+        ),
+    )
+    ledger = export_type2_step_artifacts(
+        toml_path=toml_path,
+        output_dir=tmp_path / "out",
+        ledger_path=tmp_path / "out" / "ledger.json",
+        seed=0,
+    )
+
+    non_model_entry = ledger["non_model_objects"][0]
+    tile_names = _tx_region_actual_tile_names(x_division_count=3, y_division_count=3)
+    assert non_model_entry["member_object_ids"] == ("environment", "tx_region", *tile_names, "rx_region_max")
+    member_objects = non_model_entry["member_objects"]
+    tx_region_actual_members = [member for member in member_objects if cast(str, member["role"]) == "tx_region_actual"]
+    assert tuple(cast(str, member["object_id"]) for member in tx_region_actual_members) == tile_names
+    for member in tx_region_actual_members:
+        assert member["canonical_coordinates"]["outer_bounds_size_xyz"] == pytest.approx((16.0, 28.0, 90.0))
+
+    scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
+    for tile_name in tile_names:
+        assert tile_name in scene_shapes_by_label
+        assert type(scene_shapes_by_label[tile_name]).__name__ == "Solid"
+    _assert_tx_region_actual_tiles_contract(
+        scene_shapes_by_label=scene_shapes_by_label,
+        tile_names=tile_names,
+        expected_origin_xyz=(0.0, -42.0, 0.0),
+        expected_size_xyz=(48.0, 84.0, 90.0),
+    )
 
 
 @pytest.mark.parametrize("layer_count", (2, 3))

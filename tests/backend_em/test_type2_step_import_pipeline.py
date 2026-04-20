@@ -79,7 +79,56 @@ def _non_model_member_entry(
     }
 
 
-def _non_model_entry(*, object_id: str = "type2_non_model_scene") -> dict[str, object]:
+def _tx_region_actual_member_names(*, x_division_count: int = 1, y_division_count: int = 1) -> tuple[str, ...]:
+    if x_division_count == 1 and y_division_count == 1:
+        return ("tx_region_actual",)
+    return tuple(
+        f"tx_region_actual_x{x_index}_y{y_index}"
+        for x_index in range(x_division_count)
+        for y_index in range(y_division_count)
+    )
+
+
+def _tx_region_actual_member_entries(*, x_division_count: int = 1, y_division_count: int = 1) -> list[dict[str, object]]:
+    tile_names = _tx_region_actual_member_names(x_division_count=x_division_count, y_division_count=y_division_count)
+    tx_origin_x = 0.0
+    tx_origin_y = -140.0
+    tx_origin_z = 0.0
+    tx_size_x = 160.0
+    tx_size_y = 280.0
+    tx_size_z = 90.0
+    tile_size_x = tx_size_x / float(x_division_count)
+    tile_size_y = tx_size_y / float(y_division_count)
+    entries: list[dict[str, object]] = []
+    for x_index in range(x_division_count):
+        for y_index in range(y_division_count):
+            tile_name = tile_names[(x_index * y_division_count) + y_index]
+            entries.append(
+                _non_model_member_entry(
+                    object_id=tile_name,
+                    role="tx_region_actual",
+                    origin_xyz=(
+                        tx_origin_x + (tile_size_x * float(x_index)),
+                        tx_origin_y + (tile_size_y * float(y_index)),
+                        tx_origin_z,
+                    ),
+                    size_xyz=(tile_size_x, tile_size_y, tx_size_z),
+                    plane="YZ",
+                )
+            )
+    return entries
+
+
+def _non_model_entry(
+    *,
+    object_id: str = "type2_non_model_scene",
+    tx_region_actual_x_division_count: int = 1,
+    tx_region_actual_y_division_count: int = 1,
+) -> dict[str, object]:
+    tx_region_actual_member_names = _tx_region_actual_member_names(
+        x_division_count=tx_region_actual_x_division_count,
+        y_division_count=tx_region_actual_y_division_count,
+    )
     return {
         "object_id": object_id,
         "role": "non_model_scene",
@@ -93,7 +142,7 @@ def _non_model_entry(*, object_id: str = "type2_non_model_scene") -> dict[str, o
         },
         "plane": "mixed",
         "non_model": True,
-        "member_object_ids": ("environment", "tx_region", "tx_region_actual", "rx_region_max"),
+        "member_object_ids": ("environment", "tx_region", *tx_region_actual_member_names, "rx_region_max"),
         "member_objects": [
             _non_model_member_entry(
                 object_id="environment",
@@ -109,12 +158,9 @@ def _non_model_entry(*, object_id: str = "type2_non_model_scene") -> dict[str, o
                 size_xyz=(160.0, 280.0, 90.0),
                 plane="YZ",
             ),
-            _non_model_member_entry(
-                object_id="tx_region_actual",
-                role="tx_region_actual",
-                origin_xyz=(0.0, -140.0, 0.0),
-                size_xyz=(160.0, 280.0, 90.0),
-                plane="YZ",
+            *_tx_region_actual_member_entries(
+                x_division_count=tx_region_actual_x_division_count,
+                y_division_count=tx_region_actual_y_division_count,
             ),
             _non_model_member_entry(
                 object_id="rx_region_max",
@@ -565,10 +611,27 @@ def _single_layer_modeled_objects(tmp_path: Path) -> list[dict[str, object]]:
 
 
 def _single_layer_imported_name_batch() -> tuple[str, ...]:
+    return _single_layer_imported_name_batch_with_tx_region_actual_divisions(
+        tx_region_actual_x_division_count=1,
+        tx_region_actual_y_division_count=1,
+    )
+
+
+def _single_layer_imported_name_batch_with_tx_region_actual_divisions(
+    *,
+    tx_region_actual_x_division_count: int,
+    tx_region_actual_y_division_count: int,
+) -> tuple[str, ...]:
+    tx_region_actual_member_names = _tx_region_actual_member_names()
+    if tx_region_actual_x_division_count != 1 or tx_region_actual_y_division_count != 1:
+        tx_region_actual_member_names = _tx_region_actual_member_names(
+            x_division_count=tx_region_actual_x_division_count,
+            y_division_count=tx_region_actual_y_division_count,
+        )
     return (
         "environment",
         "tx_region",
-        "tx_region_actual",
+        *tx_region_actual_member_names,
         "rx_region_max",
         "tx_pcb_l0",
         "tx_copper_l0",
@@ -634,10 +697,11 @@ def _single_layer_imported_name_batch_with_role_aware_underlay(
     tx_wall_repeat_count: int = 0,
     rx_repeat_count: int,
 ) -> tuple[str, ...]:
+    tx_region_actual_member_names = _tx_region_actual_member_names()
     return (
         "environment",
         "tx_region",
-        "tx_region_actual",
+        *tx_region_actual_member_names,
         "rx_region_max",
         "tx_pcb_l0",
         "tx_copper_l0",
@@ -708,10 +772,11 @@ def _legacy_tx_plate_stack_expected_names() -> list[str]:
 
 
 def _legacy_tx_plate_stack_imported_name_batch() -> tuple[str, ...]:
+    tx_region_actual_member_names = _tx_region_actual_member_names()
     return (
         "environment",
         "tx_region",
-        "tx_region_actual",
+        *tx_region_actual_member_names,
         "rx_region_max",
         *_legacy_tx_plate_stack_expected_names(),
     )
@@ -880,10 +945,11 @@ def _plate_stack_modeled_objects(tmp_path: Path) -> list[dict[str, object]]:
 
 
 def _plate_stack_imported_name_batch() -> tuple[str, ...]:
+    tx_region_actual_member_names = _tx_region_actual_member_names()
     return (
         "environment",
         "tx_region",
-        "tx_region_actual",
+        *tx_region_actual_member_names,
         "rx_region_max",
         *_tx_plate_stack_expected_names(),
         *_rx_plate_stack_expected_names(),
@@ -977,10 +1043,11 @@ def test_import_type2_step_ledger_imports_single_scene_and_writes_partitioned_le
 
     assert session.modeler.import_calls == [scene_step]
     assert session.modeler.import_kwargs_calls == [{"import_free_surfaces": False, "create_group": False}]
+    tx_region_actual_member_names = _tx_region_actual_member_names()
     assert session.modeler.model_state_calls == [
         ("environment", False),
         ("tx_region", False),
-        ("tx_region_actual", False),
+        *((name, False) for name in tx_region_actual_member_names),
         ("rx_region_max", False),
         ("tx_pcb_l0", True),
         ("tx_copper_l0", True),
@@ -1009,6 +1076,66 @@ def test_import_type2_step_ledger_imports_single_scene_and_writes_partitioned_le
     assert written == result
 
 
+def test_import_type2_step_ledger_accepts_tiled_tx_region_actual_member_names(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    tx_region_actual_x_division_count = 3
+    tx_region_actual_y_division_count = 3
+    tx_region_actual_member_names = _tx_region_actual_member_names(
+        x_division_count=tx_region_actual_x_division_count,
+        y_division_count=tx_region_actual_y_division_count,
+    )
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[
+            _non_model_entry(
+                tx_region_actual_x_division_count=tx_region_actual_x_division_count,
+                tx_region_actual_y_division_count=tx_region_actual_y_division_count,
+            )
+        ],
+        modeled_objects=_single_layer_modeled_objects(tmp_path),
+    )
+    session = _FakeHfss(
+        modeler=_FakeModeler(
+            imported_name_batches=[
+                _single_layer_imported_name_batch_with_tx_region_actual_divisions(
+                    tx_region_actual_x_division_count=tx_region_actual_x_division_count,
+                    tx_region_actual_y_division_count=tx_region_actual_y_division_count,
+                )
+            ]
+        )
+    )
+
+    result = import_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+        imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+        design_name="fake_type2_import",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    expected_non_model_model_state_calls = [
+        ("environment", False),
+        ("tx_region", False),
+        *((name, False) for name in tx_region_actual_member_names),
+        ("rx_region_max", False),
+    ]
+    assert session.modeler.model_state_calls[: len(expected_non_model_model_state_calls)] == expected_non_model_model_state_calls
+    imported_non_model_entry = result["non_model_objects"][0]
+    assert tuple(cast(list[str], imported_non_model_entry["member_object_ids"])) == (
+        "environment",
+        "tx_region",
+        *tx_region_actual_member_names,
+        "rx_region_max",
+    )
+    assert imported_non_model_entry["imported_object_names"] == [
+        "environment",
+        "tx_region",
+        *tx_region_actual_member_names,
+        "rx_region_max",
+    ]
+
+
 def test_import_type2_step_ledger_allows_missing_optional_port_sheet_bodies(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
     _write_ledger(
@@ -1023,7 +1150,7 @@ def test_import_type2_step_ledger_allows_missing_optional_port_sheet_bodies(tmp_
                 (
                     "environment",
                     "tx_region",
-                    "tx_region_actual",
+                    *_tx_region_actual_member_names(),
                     "rx_region_max",
                     "tx_pcb_l0",
                     "tx_copper_l0",
@@ -1524,10 +1651,11 @@ def test_import_type2_step_ledger_accepts_tx_plate_stack_array_exact_names(tmp_p
         modeled_objects=modeled_objects,
     )
     tx_expected_names = cast(list[str], tx_entry["expected_exported_body_names"])
+    tx_region_actual_member_names = _tx_region_actual_member_names()
     imported_names = (
         "environment",
         "tx_region",
-        "tx_region_actual",
+        *tx_region_actual_member_names,
         "rx_region_max",
         *tx_expected_names,
         *_rx_plate_stack_expected_names(),
@@ -1563,7 +1691,7 @@ def test_import_type2_step_ledger_fails_unclaimed_solid_name_as_export_contract_
     session = _FakeHfss(
         modeler=_FakeModeler(
             imported_name_batches=[
-                ("environment", "tx_region", "tx_region_actual", "rx_region_max", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet", "SOLID_404")
+                ("environment", "tx_region", *_tx_region_actual_member_names(), "rx_region_max", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet", "SOLID_404")
             ]
         )
     )
@@ -1598,7 +1726,7 @@ def test_import_type2_step_ledger_styles_multilayer_tx_parallel_stack_before_mes
     output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
     session = _FakeHfss(
         modeler=_FakeModeler(
-            imported_name_batches=[("environment", "tx_region", "tx_region_actual", "rx_region_max", "tx_pcb_l0", "tx_pcb_l1", "tx_copper_stack")]
+            imported_name_batches=[("environment", "tx_region", *_tx_region_actual_member_names(), "rx_region_max", "tx_pcb_l0", "tx_pcb_l1", "tx_copper_stack")]
         )
     )
 
@@ -1628,7 +1756,7 @@ def test_import_type2_step_ledger_fails_when_modeled_labels_are_not_preserved(tm
         non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry()],
     )
-    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "tx_region_actual", "rx_region_max", "SOLID_7", "tx_copper_l0")]))
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", *_tx_region_actual_member_names(), "rx_region_max", "SOLID_7", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"missing required modeled body name"):
         import_type2_step_ledger(
@@ -1650,7 +1778,7 @@ def test_import_type2_step_ledger_fails_when_scene_import_contains_unclaimed_obj
     )
     session = _FakeHfss(
         modeler=_FakeModeler(
-            imported_name_batches=[("environment", "tx_region", "tx_region_actual", "rx_region_max", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet", "mystery")]
+            imported_name_batches=[("environment", "tx_region", *_tx_region_actual_member_names(), "rx_region_max", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet", "mystery")]
         )
     )
 
@@ -1692,7 +1820,7 @@ def test_import_type2_step_ledger_fails_when_modeled_tx_is_not_centered_on_tx_re
         non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry(origin_xyz=(0.0, -16.0, 87.2))],
     )
-    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "tx_region_actual", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", *_tx_region_actual_member_names(), "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"center_y must already align with tx_region center_y"):
         import_type2_step_ledger(
@@ -1712,7 +1840,7 @@ def test_import_type2_step_ledger_fails_when_modeled_tx_does_not_touch_tx_region
         non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry(origin_xyz=(0.1, -15.0, 87.2))],
     )
-    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "tx_region_actual", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", *_tx_region_actual_member_names(), "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"outer bounds min_x must already touch tx_region min_x"):
         import_type2_step_ledger(
@@ -1732,7 +1860,7 @@ def test_import_type2_step_ledger_fails_when_modeled_tx_does_not_fit_tx_region(t
         non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry(size_xyz=(170.0, 30.0, 2.8))],
     )
-    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "tx_region_actual", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", *_tx_region_actual_member_names(), "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"outer bounds must fit inside tx_region"):
         import_type2_step_ledger(
@@ -1752,7 +1880,7 @@ def test_import_type2_step_ledger_fails_when_modeled_tx_is_not_top_aligned_to_tx
         non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry(origin_xyz=(0.0, -15.0, 87.1))],
     )
-    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "tx_region_actual", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", *_tx_region_actual_member_names(), "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"outer bounds max_z must already touch tx_region max_z"):
         import_type2_step_ledger(

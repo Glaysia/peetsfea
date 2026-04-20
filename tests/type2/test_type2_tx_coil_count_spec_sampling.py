@@ -20,7 +20,7 @@ def _type2_plate_stack_toml(
 ) -> str:
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v5"
+schema_id = "peetsfea.type2.step.v6"
 runtime_compatible = false
 
 [design]
@@ -75,6 +75,10 @@ source_region_id = "tx_region"
 range = [false, 0.3, 0.3, 1]
 [non_model_objects.y_usage_ratio]
 range = [false, 0.3, 0.3, 1]
+[non_model_objects.x_division_count]
+range = [true, 1, 1, 1]
+[non_model_objects.y_division_count]
+range = [true, 1, 1, 1]
 
 [[modeled_objects]]
 object_id = "tx_plate_stack"

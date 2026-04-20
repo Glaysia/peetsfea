@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 13:08
+updated: 2026-04-20 @ 14:08
 tags:
   - step-export
   - spec
@@ -25,9 +25,9 @@ tags:
 
 ## Canonical state
 - active plate roles는 `tx_plate_stack`와 `rx_plate_stack`다.
-- active type2 schema id는 `peetsfea.type2.step.v5`다.
+- active type2 schema id는 `peetsfea.type2.step.v6`다.
 - `tx_region` remains the maximum TX reservation non-model box.
-- `tx_region_actual` is a derived non-model sampled box owned by `tx_region`, using `x_usage_ratio` and `y_usage_ratio`.
+- `tx_region_actual` is a derived non-model sampled box owned by `tx_region`, using `x_usage_ratio`, `y_usage_ratio`, `x_division_count`, and `y_division_count`.
 - `tx_region_actual` anchors at `tx_region.min_x`, centers on `tx_region` Y, and preserves full `tx_region` Z.
 - TX plate object/owner/plane은 `tx_plate_stack` / `tx_region` / `YZ`다.
 - RX plate object/owner/plane은 `rx_plate_stack` / `rx_region_max` / `YZ`다.
@@ -57,6 +57,7 @@ tags:
 - single-coil outer usage ratios must realize to `0 < ratio <= 1`; single-coil `void_usage_ratio` must realize to `0 < ratio < 1`; legacy `outer_x_mm`, `outer_y_mm`, and split/centered legacy `void_*` fields fail as unsupported public type2 input.
 - active example drift는 role/object_id/owner/plane mismatch를 허용하지 않는다.
 - `tx_region_actual` ratio candidates must realize to `0 < ratio <= 1`; missing source `tx_region` or unsupported source id fails immediately.
+- `tx_region_actual` division counts accept only canonical `[true, 1, 3, 3]` or fixed `[true, n, n, 1]` where `n in {1, 2, 3}`.
 - This file exceeds 800 lines; narrow parser extensions may proceed under the documented ownership boundary, but broad parser changes should split first.
 
 ## Collaborators

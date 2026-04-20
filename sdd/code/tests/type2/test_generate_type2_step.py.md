@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 13:08
+updated: 2026-04-20 @ 14:08
 tags:
   - tests
   - type2
@@ -22,8 +22,8 @@ tags:
 ## Canonical coverage
 - `tx_plate_stack`, `rx_plate_stack`, and `rx_single_coil` parser/export acceptance
 - active fixed example loader expects one modeled object: RX `rx_single_coil`
-- active fixed example also expects derived non-model `tx_region_actual` with fixed 0.3 X/Y usage ratios.
-- export ledger coverage verifies `tx_region_actual` is min-X anchored, Y-centered, and full-Z relative to `tx_region`.
+- active fixed example also expects derived non-model `tx_region_actual` with fixed 0.3 X/Y usage ratios and 1x1 division.
+- export ledger coverage verifies `tx_region_actual` is min-X anchored, Y-centered, full-Z relative to `tx_region`, and can resolve to 3x3 concrete tiles.
 - RX single-coil public schema uses `outer_x_usage_ratio` / `outer_y_usage_ratio`; parser resolves owner-span-scaled `outer_x_mm` / `outer_y_mm` for core delegation.
 - single-coil public schema uses `void_usage_ratio` for centered equal X/Y void size; legacy type2 single-coil `outer_*_mm` and split/centered `void_*` public keys are unsupported.
 - `examples/type2_sweep.toml` is the mutable sampling SSOT and this test file must not pin its concrete sweep values.
@@ -67,5 +67,5 @@ tags:
 ## 변경 시 주의점
 - fixed example role drift와 mixed-pair exact-name order drift를 같은 테스트 층에서 잡아야 한다.
 - sweep example TOML 값 변경은 authoring change로 취급하며, parser/export unit tests가 구체 range 값을 검사하지 않는다.
-- `tx_region_actual` fixture updates must keep backend non-model import fixture member names in sync.
+- `tx_region_actual` fixture updates must keep backend non-model import fixture member names in sync, including multi-tile names.
 - exact name/order drift 검사는 pre-unite segment contracts와 final export-contract를 함께 검증해야 한다. RX and single-branch TX stay at `6`; TX arrays expand branch-local non-copper names.

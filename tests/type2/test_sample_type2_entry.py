@@ -22,6 +22,8 @@ from peetsfea.type2_step_spec import load_type2_step_spec
 _EXPECTED_SAMPLED_OWNER_PATHS = [
     "non_model_objects.tx_region_actual.x_usage_ratio",
     "non_model_objects.tx_region_actual.y_usage_ratio",
+    "non_model_objects.tx_region_actual.x_division_count",
+    "non_model_objects.tx_region_actual.y_division_count",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
@@ -56,6 +58,8 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
     tx_region_actual_x_usage_ratio = RangeSpec(is_integer=False, start=0.3, end=1.0, count=27)
     tx_region_actual_y_usage_ratio = RangeSpec(is_integer=False, start=0.3, end=1.0, count=27)
+    tx_region_actual_x_division_count = RangeSpec(is_integer=True, start=1, end=3, count=3)
+    tx_region_actual_y_division_count = RangeSpec(is_integer=True, start=1, end=3, count=3)
 
     fake_spec = _FakeRxOnlyType2Spec(
         non_model_derived_objects=(
@@ -65,6 +69,8 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 source_region_id="tx_region",
                 x_usage_ratio=tx_region_actual_x_usage_ratio,
                 y_usage_ratio=tx_region_actual_y_usage_ratio,
+                x_division_count=tx_region_actual_x_division_count,
+                y_division_count=tx_region_actual_y_division_count,
             ),
         ),
         modeled_objects=(
@@ -103,7 +109,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
 def _source_type2_toml_text() -> str:
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v5"
+schema_id = "peetsfea.type2.step.v6"
 runtime_compatible = false
 
 [design]
@@ -202,6 +208,10 @@ source_region_id = "tx_region"
 range = [false, 0.3, 1.0, 27]
 [non_model_objects.y_usage_ratio]
 range = [false, 0.3, 1.0, 27]
+[non_model_objects.x_division_count]
+range = [true, 1, 3, 3]
+[non_model_objects.y_division_count]
+range = [true, 1, 3, 3]
 
 [[modeled_objects]]
     object_id = "rx_rect_void_coil"
@@ -367,6 +377,20 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert tx_region_actual_y_range[3] == 1
     assert tx_region_actual_y_range[1] == tx_region_actual_y_range[2]
     assert 0.3 <= float(cast(int | float, tx_region_actual_y_range[1])) <= 1.0
+    tx_region_actual_x_division_count_range = cast(
+        list[object], cast(dict[str, object], tx_region_actual["x_division_count"])["range"]
+    )
+    assert tx_region_actual_x_division_count_range[0] is True
+    assert tx_region_actual_x_division_count_range[3] == 1
+    assert tx_region_actual_x_division_count_range[1] == tx_region_actual_x_division_count_range[2]
+    assert cast(int, tx_region_actual_x_division_count_range[1]) in {1, 2, 3}
+    tx_region_actual_y_division_count_range = cast(
+        list[object], cast(dict[str, object], tx_region_actual["y_division_count"])["range"]
+    )
+    assert tx_region_actual_y_division_count_range[0] is True
+    assert tx_region_actual_y_division_count_range[3] == 1
+    assert tx_region_actual_y_division_count_range[1] == tx_region_actual_y_division_count_range[2]
+    assert cast(int, tx_region_actual_y_division_count_range[1]) in {1, 2, 3}
 
     rx_modeled_object = sampled_payload["modeled_objects"][0]
     assert rx_modeled_object["object_id"] == "rx_rect_void_coil"

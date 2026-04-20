@@ -1,7 +1,7 @@
 ---
 title: test_sample_type2_entry.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 13:08
+updated: 2026-04-20 @ 14:08
 tags:
   - tests
   - type2
@@ -23,7 +23,7 @@ tags:
 
 ## Canonical coverage
 - active example uses RX single-coil source only
-- active example keeps RX single-coil as the only modeled object and adds sampled non-model `tx_region_actual` X/Y usage owners.
+- active example keeps RX single-coil as the only modeled object and adds sampled non-model `tx_region_actual` X/Y usage and X/Y division owners.
 - sampled owner paths cover only `rx_rect_void_coil` effective sampled degrees:
   - `outer_x_usage_ratio`
   - `outer_y_usage_ratio`
@@ -35,7 +35,7 @@ tags:
 - sampled TOML keeps non-sampled RX fields as fixed scalar ranges.
 - sampled TOML excludes removed split/centered `void_*` fields and keeps usage ratios, including `void_usage_ratio`, unitless.
 - manifest identity and hash contract remain unchanged
-- sampled metadata and manifest owner paths include the two `non_model_objects.tx_region_actual.*_usage_ratio` owners before modeled RX owners.
+- sampled metadata and manifest owner paths include the four `non_model_objects.tx_region_actual.*` owners before modeled RX owners.
 - `MAKE_STEP_ON_SAMPLE=True` path emits coarse STEP stage lines around export.
 - `MAKE_STEP_ON_SAMPLE=False` does not emit STEP stage lines and does not call the exporter.
 

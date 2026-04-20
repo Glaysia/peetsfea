@@ -1,7 +1,7 @@
 ---
 title: current pipeline
 created: 2026-04-17 @ 15:55
-updated: 2026-04-20 @ 13:08
+updated: 2026-04-20 @ 14:08
 tags:
   - type2
   - pipeline
@@ -19,6 +19,7 @@ tags:
   geometry, TX ports, TX sources, or TX output expressions.
 - Active type2 includes a sampled non-modeled `tx_region_actual` box inside maximum `tx_region`; its X/Y usage ratios
   reserve the future actual TX footprint while preserving full `tx_region` Z.
+- `tx_region_actual` can also be sampled into equal X/Y divisions, producing up to 9 concrete non-modeled tile bodies.
 - RX single-coil geometry uses the rect/void coil contract in [`docs/tx-rect-void-step.md`](tx-rect-void-step.md).
 - The active runtime flow is:
   1. `entry/sample.py`

@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_import_pipeline.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 13:08
+updated: 2026-04-20 @ 14:08
 tags:
   - tests
   - backend-em
@@ -51,7 +51,7 @@ tags:
   centered active span plus the fixed `-Y` stub overhang.
 - active plate-stack import rejects Y bounds that fit inside the owner but are off the global centered active-window contract.
 - TX array import must not create extra modeled entries or per-branch port sheets.
-- Non-model import fixtures include `tx_region_actual` as an imported non-model member between `tx_region` and `rx_region_max`.
+- Non-model import fixtures include concrete `tx_region_actual` member names between `tx_region` and `rx_region_max`; multi-tile tests use `tx_region_actual_x{xi}_y{yi}` names.
 
 ## 변경 시 주의점
 - import-only success와 setup-ready failure를 같은 assertion으로 묶지 않는다.

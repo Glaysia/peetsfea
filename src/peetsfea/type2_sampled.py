@@ -32,6 +32,8 @@ _INTEGER_RANGE_FIELD_NAMES = (
     "underlay_repeat_count",
     "wall_parallel_stack_present",
     "tx_coil_count",
+    "x_division_count",
+    "y_division_count",
 )
 _SAMPLED_METADATA_TABLE = "sampled"
 _SAMPLED_SINGLE_COIL_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
@@ -121,6 +123,14 @@ def _tx_region_actual_range_owner_specs(
     return (
         (f"non_model_objects.{non_model_spec.object_id}.x_usage_ratio", non_model_spec.x_usage_ratio),
         (f"non_model_objects.{non_model_spec.object_id}.y_usage_ratio", non_model_spec.y_usage_ratio),
+        (
+            f"non_model_objects.{non_model_spec.object_id}.x_division_count",
+            non_model_spec.x_division_count,
+        ),
+        (
+            f"non_model_objects.{non_model_spec.object_id}.y_division_count",
+            non_model_spec.y_division_count,
+        ),
     )
 
 

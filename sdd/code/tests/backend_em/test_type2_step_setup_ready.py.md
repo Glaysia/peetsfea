@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_setup_ready.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 13:08
+updated: 2026-04-20 @ 14:08
 tags:
   - tests
   - backend-em
@@ -32,7 +32,7 @@ tags:
   and the same mesh/source/report contract.
 - Mixed-pair coverage must keep TX plate mesh/port semantics and RX `rx_copper_l0` / `rx_port_sheet` semantics together.
 - TX array fake HFSS import batches model AEDT solid-only scene import with no connector-sheet reconstruction for new ledgers.
-- fake imported non-model batches include `tx_region_actual` so setup-ready sees the same non-model scene member set as export/import.
+- fake imported non-model batches include concrete `tx_region_actual` member names so setup-ready sees the same non-model scene member set as export/import.
 - TX array port-sheet coverage must use branch 0 terminal metadata as one `tx_plate_port_sheet`.
 - plate-stack setup-ready failure coverage는 missing concrete conductor,
   missing copper group, missing ferrite group, legacy segment name leakage, SOLID* drift, group-member mismatch를 fail-fast로 요구한다.

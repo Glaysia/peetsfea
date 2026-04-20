@@ -1,7 +1,7 @@
 ---
 title: type2_step_scene.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 13:08
+updated: 2026-04-20 @ 14:08
 tags:
   - step-export
   - scene
@@ -29,8 +29,8 @@ tags:
 
 ## Canonical state
 - TX plate placement truth는 `tx_region` full `YZ`, `min_x` anchor, `+X` stack다.
-- `tx_region_actual` is a non-modeled scene member derived from `tx_region`; it is not a modeled placement owner until future TX work explicitly changes that contract.
-- non-model scene member order is `environment`, `tx_region`, `tx_region_actual`, `rx_region_max`.
+- `tx_region_actual` is a non-modeled scene member family derived from `tx_region`; it is not a modeled placement owner until future TX work explicitly changes that contract.
+- non-model scene member order is `environment`, `tx_region`, `tx_region_actual` concrete tile members, `rx_region_max`.
 - TX plate array placement truth is delegated to the plate-stack builder/helper and remains a single modeled scene entry.
 - RX plate placement truth는 `rx_region_max` full `YZ`, `min_x` anchor, `+X` stack다.
 - plate role copper/PCB active height는 owner full `Z` span을 쓴다. `shoe_depth_mm`/shoe fill은 active contract가 아니다.
@@ -65,6 +65,7 @@ tags:
 - active plate roles는 imported mesh 대상과 final imported body set에 concrete conductor members만 허용한다.
 - RX backing available thickness must be positive; otherwise scene generation fails instead of shrinking or omitting slabs.
 - `tx_region_actual` must fit within `tx_region` by construction; scene generation should fail if derived bounds drift outside the source region.
+- `tx_region_actual` tile bodies must be equal subdivisions of the realized actual region, with no gaps or overlaps.
 - This file exceeds 800 lines; this narrow non-model grouping extension is allowed, but broad scene refactors should split first.
 
 ## Collaborators

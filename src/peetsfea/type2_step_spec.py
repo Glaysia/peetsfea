@@ -24,7 +24,11 @@ _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_COUNT = 14
 _TX_REGION_ACTUAL_USAGE_RATIO_START = 0.3
 _TX_REGION_ACTUAL_USAGE_RATIO_END = 1.0
 _TX_REGION_ACTUAL_USAGE_RATIO_COUNT = 27
-_TYPE2_SCHEMA_ID = "peetsfea.type2.step.v5"
+_TX_REGION_ACTUAL_DIVISION_COUNT_START = 1
+_TX_REGION_ACTUAL_DIVISION_COUNT_END = 3
+_TX_REGION_ACTUAL_DIVISION_COUNT_COUNT = 3
+_TX_REGION_ACTUAL_DIVISION_COUNT_VALUES = (1, 2, 3)
+_TYPE2_SCHEMA_ID = "peetsfea.type2.step.v6"
 
 
 @dataclass(frozen=True)
@@ -55,6 +59,8 @@ class NonModelTxRegionActualSpec:
     source_region_id: Literal["tx_region"]
     x_usage_ratio: RangeSpec
     y_usage_ratio: RangeSpec
+    x_division_count: RangeSpec
+    y_division_count: RangeSpec
 
 
 @dataclass(frozen=True)
@@ -322,6 +328,15 @@ def _is_canonical_tx_region_actual_usage_ratio_range(range_spec: RangeSpec) -> b
     )
 
 
+def _is_canonical_tx_region_actual_division_count_range(range_spec: RangeSpec) -> bool:
+    return (
+        range_spec.is_integer is True
+        and math.isclose(range_spec.start, float(_TX_REGION_ACTUAL_DIVISION_COUNT_START), rel_tol=0.0, abs_tol=1e-12)
+        and math.isclose(range_spec.end, float(_TX_REGION_ACTUAL_DIVISION_COUNT_END), rel_tol=0.0, abs_tol=1e-12)
+        and range_spec.count == _TX_REGION_ACTUAL_DIVISION_COUNT_COUNT
+    )
+
+
 def _require_tx_region_actual_usage_ratio_range(
     table: dict[str, object],
     *,
@@ -350,6 +365,31 @@ def _require_tx_region_actual_usage_ratio_range(
     )
 
 
+def _require_tx_region_actual_division_count_range(
+    table: dict[str, object],
+    *,
+    key: str,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, key, context, expect_integer=True)
+    candidates = _integer_range_candidates(range_spec)
+    if any(candidate < 1 or candidate > 3 for candidate in candidates):
+        raise ValueError(
+            f"{context}.{key} must realize to values in [1, 2, 3] "
+            f"(actual={candidates})"
+        )
+    if _is_canonical_tx_region_actual_division_count_range(range_spec):
+        return range_spec
+    if range_spec.count == 1 and math.isclose(range_spec.start, range_spec.end, rel_tol=0.0, abs_tol=1e-12):
+        if int(range_spec.start) in _TX_REGION_ACTUAL_DIVISION_COUNT_VALUES:
+            return range_spec
+    raise ValueError(
+        f"{context}.{key}.range must be canonical [true, 1, 3, 3] "
+        " or fixed [true, n, n, 1] for n in {1, 2, 3} "
+        f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
+    )
+
+
 def _parse_non_model_tx_region_actual(
     raw_object: object,
     *,
@@ -370,7 +410,15 @@ def _parse_non_model_tx_region_actual(
     source_region_id = _require_non_empty_str(table, "source_region_id", context)
     if source_region_id != "tx_region":
         raise ValueError(f"{context}.source_region_id must be 'tx_region' (actual={source_region_id!r})")
-    allowed_keys = {"id", "kind", "source_region_id", "x_usage_ratio", "y_usage_ratio"}
+    allowed_keys = {
+        "id",
+        "kind",
+        "source_region_id",
+        "x_usage_ratio",
+        "y_usage_ratio",
+        "x_division_count",
+        "y_division_count",
+    }
     extra_keys = sorted(set(table.keys()) - allowed_keys)
     if extra_keys:
         raise ValueError(f"{context} contains unsupported keys for tx_region_actual (actual={extra_keys})")
@@ -380,6 +428,8 @@ def _parse_non_model_tx_region_actual(
         source_region_id="tx_region",
         x_usage_ratio=_require_tx_region_actual_usage_ratio_range(table, key="x_usage_ratio", context=context),
         y_usage_ratio=_require_tx_region_actual_usage_ratio_range(table, key="y_usage_ratio", context=context),
+        x_division_count=_require_tx_region_actual_division_count_range(table, key="x_division_count", context=context),
+        y_division_count=_require_tx_region_actual_division_count_range(table, key="y_division_count", context=context),
     )
 
 

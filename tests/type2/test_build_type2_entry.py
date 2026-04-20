@@ -30,6 +30,8 @@ from peetsfea.type2_step_spec import load_type2_step_spec
 _EXPECTED_SAMPLED_OWNER_PATHS = (
     "non_model_objects.tx_region_actual.x_usage_ratio",
     "non_model_objects.tx_region_actual.y_usage_ratio",
+    "non_model_objects.tx_region_actual.x_division_count",
+    "non_model_objects.tx_region_actual.y_division_count",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
@@ -62,6 +64,12 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
     tx_region_actual_y_range = cast(
         list[object], cast(dict[str, object], non_model_by_id["tx_region_actual"]["y_usage_ratio"])["range"]
     )
+    tx_region_actual_x_division_range = cast(
+        list[object], cast(dict[str, object], non_model_by_id["tx_region_actual"]["x_division_count"])["range"]
+    )
+    tx_region_actual_y_division_range = cast(
+        list[object], cast(dict[str, object], non_model_by_id["tx_region_actual"]["y_division_count"])["range"]
+    )
     rx_outer_x_range = cast(
         list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["outer_x_usage_ratio"])["range"]
     )
@@ -80,11 +88,13 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
     return (
         (_EXPECTED_DESIGN_VARIABLE_NAMES[0], str(float(cast(int | float, tx_region_actual_x_range[1])))),
         (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, tx_region_actual_y_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(float(cast(int | float, rx_outer_x_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(float(cast(int | float, rx_outer_y_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, rx_void_ratio_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(int(cast(int | float, rx_turn_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(float(cast(int | float, rx_fill_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(int(cast(int | float, tx_region_actual_x_division_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(int(cast(int | float, tx_region_actual_y_division_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, rx_outer_x_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, rx_outer_y_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(float(cast(int | float, rx_void_ratio_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[7], str(int(cast(int | float, rx_turn_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[8], str(float(cast(int | float, rx_fill_range[1])))),
     )
 
 
@@ -110,6 +120,8 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
     tx_region_actual_x_usage_ratio = RangeSpec(is_integer=False, start=0.3, end=1.0, count=27)
     tx_region_actual_y_usage_ratio = RangeSpec(is_integer=False, start=0.3, end=1.0, count=27)
+    tx_region_actual_x_division_count = RangeSpec(is_integer=True, start=1, end=3, count=3)
+    tx_region_actual_y_division_count = RangeSpec(is_integer=True, start=1, end=3, count=3)
     fake_spec = _FakeRxOnlyType2Spec(
         non_model_derived_objects=(
             NonModelTxRegionActualSpec(
@@ -118,6 +130,8 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 source_region_id="tx_region",
                 x_usage_ratio=tx_region_actual_x_usage_ratio,
                 y_usage_ratio=tx_region_actual_y_usage_ratio,
+                x_division_count=tx_region_actual_x_division_count,
+                y_division_count=tx_region_actual_y_division_count,
             ),
         ),
         modeled_objects=(
@@ -156,7 +170,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
 def _source_type2_toml_text() -> str:
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v5"
+schema_id = "peetsfea.type2.step.v6"
 runtime_compatible = false
 
 [design]
@@ -255,6 +269,10 @@ source_region_id = "tx_region"
 range = [false, 0.3, 1.0, 27]
 [non_model_objects.y_usage_ratio]
 range = [false, 0.3, 1.0, 27]
+[non_model_objects.x_division_count]
+range = [true, 1, 3, 3]
+[non_model_objects.y_division_count]
+range = [true, 1, 3, 3]
 
 [[modeled_objects]]
     object_id = "rx_rect_void_coil"

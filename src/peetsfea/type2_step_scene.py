@@ -41,7 +41,6 @@ from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
 _NON_MODEL_VISIBLE_GROUPS: tuple[tuple[str, str, Literal["XY", "YZ", "ZX", "mixed"], tuple[str, ...]], ...] = (
     ("environment", "environment", "mixed", ("floor", "shelf", "wall", "tv")),
     ("tx_region", "tx_region", "XY", ("tx_region",)),
-    ("tx_region_actual", "tx_region_actual", "XY", ("tx_region_actual",)),
     ("rx_region_max", "rx_region_max", "YZ", ("rx_region_max",)),
 )
 _UNDERLAY_FERRITE_THICKNESS_MM = 0.20
@@ -139,10 +138,34 @@ def _non_model_group_specs(
     specs: tuple[NonModelBoxSpec, ...],
 ) -> tuple[tuple[str, str, Literal["XY", "YZ", "ZX", "mixed"], tuple[NonModelBoxSpec, ...]], ...]:
     groups: list[tuple[str, str, Literal["XY", "YZ", "ZX", "mixed"], tuple[NonModelBoxSpec, ...]]] = []
+    tx_region_actual_specs = tuple(spec for spec in specs if spec.kind == "tx_region_actual")
+    if len(tx_region_actual_specs) == 0:
+        raise RuntimeError("type2 non-model registry must contain at least one tx_region_actual concrete object")
+    tx_region_actual_sorted_specs = tuple(sorted(tx_region_actual_specs, key=lambda spec: spec.object_id))
     for object_id, role, plane, member_ids in _NON_MODEL_VISIBLE_GROUPS:
         group_specs = tuple(require_non_model_object_spec(specs, object_id=member_id) for member_id in member_ids)
         groups.append((object_id, role, plane, group_specs))
+        if object_id == "tx_region":
+            groups.append(("tx_region_actual", "tx_region_actual", "XY", tx_region_actual_sorted_specs))
     return tuple(groups)
+
+
+def _is_concrete_tx_region_actual_object_id(object_id: str) -> bool:
+    if object_id == "tx_region_actual":
+        return True
+    if not object_id.startswith("tx_region_actual_x"):
+        return False
+    if "_y" not in object_id:
+        return False
+    x_fragment, y_fragment = object_id.split("_y", maxsplit=1)
+    if not x_fragment.startswith("tx_region_actual_x"):
+        return False
+    x_index_text = x_fragment[len("tx_region_actual_x") :]
+    if x_index_text == "" or y_fragment == "":
+        return False
+    if not x_index_text.isdigit() or not y_fragment.isdigit():
+        return False
+    return True
 
 
 def _float_range_candidates(range_spec: RangeSpec) -> tuple[float, ...]:
@@ -165,6 +188,42 @@ def _selected_float_candidate(*, range_spec: RangeSpec, owner_path: str, seed: i
     return candidates[index]
 
 
+def _integer_range_candidates(range_spec: RangeSpec) -> tuple[int, ...]:
+    if range_spec.is_integer is not True:
+        raise ValueError("non-model actual region division count requires integer range spec")
+    if range_spec.count == 1:
+        value = int(round(range_spec.start))
+        if not math.isclose(range_spec.start, float(value), rel_tol=0.0, abs_tol=1e-12):
+            raise ValueError(
+                "non-model actual region fixed integer range must realize to an integer "
+                f"(start={range_spec.start})"
+            )
+        return (value,)
+    step = (range_spec.end - range_spec.start) / float(range_spec.count - 1)
+    candidates: list[int] = []
+    for index in range(range_spec.count):
+        raw_value = range_spec.start + (step * index)
+        int_value = int(round(raw_value))
+        if not math.isclose(raw_value, float(int_value), rel_tol=0.0, abs_tol=1e-9):
+            raise ValueError(
+                "non-model actual region integer range must realize to integer candidates "
+                f"(raw_value={raw_value}, int_value={int_value}, index={index})"
+            )
+        candidates.append(int_value)
+    return tuple(candidates)
+
+
+def _selected_integer_candidate(*, range_spec: RangeSpec, owner_path: str, seed: int) -> int:
+    candidates = _integer_range_candidates(range_spec)
+    if len(candidates) == 0:
+        raise ValueError(f"No integer candidates generated for non-model sampled owner: {owner_path}")
+    if len(candidates) == 1:
+        return candidates[0]
+    digest = hashlib.blake2b(f"{seed}:{owner_path}".encode("utf-8"), digest_size=8).digest()
+    index = int.from_bytes(digest, byteorder="big", signed=False) % len(candidates)
+    return candidates[index]
+
+
 def resolve_non_model_scene_specs(
     *,
     base_specs: tuple[NonModelBoxSpec, ...],
@@ -173,8 +232,8 @@ def resolve_non_model_scene_specs(
 ) -> tuple[NonModelBoxSpec, ...]:
     resolved_specs = list(base_specs)
     for derived_spec in derived_specs:
-        resolved_specs.append(
-            _resolved_tx_region_actual_spec(
+        resolved_specs.extend(
+            _resolved_tx_region_actual_specs(
                 derived_spec=derived_spec,
                 base_specs=base_specs,
                 seed=seed,
@@ -183,12 +242,12 @@ def resolve_non_model_scene_specs(
     return tuple(resolved_specs)
 
 
-def _resolved_tx_region_actual_spec(
+def _resolved_tx_region_actual_specs(
     *,
     derived_spec: NonModelTxRegionActualSpec,
     base_specs: tuple[NonModelBoxSpec, ...],
     seed: int,
-) -> NonModelBoxSpec:
+) -> tuple[NonModelBoxSpec, ...]:
     tx_region_spec = require_non_model_object_spec(base_specs, object_id=derived_spec.source_region_id)
     tx_origin_x, tx_origin_y, tx_origin_z = tx_region_spec.origin_xyz
     tx_size_x, tx_size_y, tx_size_z = tx_region_spec.size_xyz
@@ -202,6 +261,26 @@ def _resolved_tx_region_actual_spec(
         owner_path=f"non_model_objects.{derived_spec.object_id}.y_usage_ratio",
         seed=seed,
     )
+    x_division_count = _selected_integer_candidate(
+        range_spec=derived_spec.x_division_count,
+        owner_path=f"non_model_objects.{derived_spec.object_id}.x_division_count",
+        seed=seed,
+    )
+    y_division_count = _selected_integer_candidate(
+        range_spec=derived_spec.y_division_count,
+        owner_path=f"non_model_objects.{derived_spec.object_id}.y_division_count",
+        seed=seed,
+    )
+    if x_division_count < 1:
+        raise RuntimeError(
+            "derived tx_region_actual x_division_count must be >= 1 "
+            f"(actual={x_division_count})"
+        )
+    if y_division_count < 1:
+        raise RuntimeError(
+            "derived tx_region_actual y_division_count must be >= 1 "
+            f"(actual={y_division_count})"
+        )
     actual_size_x = tx_size_x * x_usage_ratio
     actual_size_y = tx_size_y * y_usage_ratio
     actual_size_z = tx_size_z
@@ -227,17 +306,40 @@ def _resolved_tx_region_actual_spec(
             f"(tx_region_origin={tx_region_spec.origin_xyz}, tx_region_size={tx_region_spec.size_xyz}, "
             f"tx_region_actual_origin={actual_origin_xyz}, tx_region_actual_size={(actual_size_x, actual_size_y, actual_size_z)})"
         )
-    return NonModelBoxSpec(
-        object_id=derived_spec.object_id,
-        kind=derived_spec.kind,
-        primitive="box",
-        present=True,
-        non_model=True,
-        material=tx_region_spec.material,
-        plane=tx_region_spec.plane,
-        origin_xyz=actual_origin_xyz,
-        size_xyz=(actual_size_x, actual_size_y, actual_size_z),
-    )
+    tile_size_x = actual_size_x / float(x_division_count)
+    tile_size_y = actual_size_y / float(y_division_count)
+    if tile_size_x <= 0.0 or tile_size_y <= 0.0:
+        raise RuntimeError(
+            "derived tx_region_actual tile size must be positive "
+            f"(tile_size_x={tile_size_x}, tile_size_y={tile_size_y}, "
+            f"x_division_count={x_division_count}, y_division_count={y_division_count})"
+        )
+    tile_specs: list[NonModelBoxSpec] = []
+    for x_index in range(x_division_count):
+        for y_index in range(y_division_count):
+            tile_origin_xyz: Point3 = (
+                actual_origin_xyz[0] + (tile_size_x * float(x_index)),
+                actual_origin_xyz[1] + (tile_size_y * float(y_index)),
+                actual_origin_xyz[2],
+            )
+            if x_division_count == 1 and y_division_count == 1:
+                tile_object_id = derived_spec.object_id
+            else:
+                tile_object_id = f"{derived_spec.object_id}_x{x_index}_y{y_index}"
+            tile_specs.append(
+                NonModelBoxSpec(
+                    object_id=tile_object_id,
+                    kind=derived_spec.kind,
+                    primitive="box",
+                    present=True,
+                    non_model=True,
+                    material=tx_region_spec.material,
+                    plane=tx_region_spec.plane,
+                    origin_xyz=tile_origin_xyz,
+                    size_xyz=(tile_size_x, tile_size_y, actual_size_z),
+                )
+            )
+    return tuple(tile_specs)
 
 
 def _build_non_model_group_shape(*, object_id: str, specs: tuple[NonModelBoxSpec, ...]) -> bd.Shape:
@@ -260,11 +362,35 @@ def _build_non_model_group_shape(*, object_id: str, specs: tuple[NonModelBoxSpec
 def _non_model_scene_members(specs: tuple[NonModelBoxSpec, ...]) -> tuple[NonModelSceneMemberLedgerEntry, ...]:
     members: list[NonModelSceneMemberLedgerEntry] = []
     for object_id, role, plane, group_specs in _non_model_group_specs(specs):
+        if object_id == "tx_region_actual":
+            for tx_region_actual_spec in group_specs:
+                if tx_region_actual_spec.kind != "tx_region_actual":
+                    raise RuntimeError(
+                        "tx_region_actual concrete scene member must preserve kind tx_region_actual "
+                        f"(object_id={tx_region_actual_spec.object_id}, kind={tx_region_actual_spec.kind})"
+                    )
+                if not _is_concrete_tx_region_actual_object_id(tx_region_actual_spec.object_id):
+                    raise RuntimeError(
+                        "tx_region_actual concrete scene member must use concrete object id contract "
+                        f"(object_id={tx_region_actual_spec.object_id})"
+                    )
+                members.append(
+                    {
+                        "object_id": tx_region_actual_spec.object_id,
+                        "role": role,
+                        "material": tx_region_actual_spec.material,
+                        "model_state": False,
+                        "canonical_coordinates": _canonical_from_box(tx_region_actual_spec),
+                        "plane": tx_region_actual_spec.plane,
+                        "non_model": True,
+                    }
+                )
+            continue
         resolved_plane = plane
-        if object_id in ("tx_region", "tx_region_actual"):
+        if object_id == "tx_region":
             if len(group_specs) != 1:
                 raise RuntimeError(
-                    "tx_region and tx_region_actual scene members must derive from one source spec "
+                    "tx_region scene member must derive from one source spec "
                     f"(object_id={object_id}, source_count={len(group_specs)})"
                 )
             resolved_plane = group_specs[0].plane
@@ -288,10 +414,14 @@ def _non_model_scene_members(specs: tuple[NonModelBoxSpec, ...]) -> tuple[NonMod
 
 
 def build_non_model_scene_shapes(specs: tuple[NonModelBoxSpec, ...]) -> tuple[bd.Shape, ...]:
-    return tuple(
-        _build_non_model_group_shape(object_id=object_id, specs=group_specs)
-        for object_id, _role, _plane, group_specs in _non_model_group_specs(specs)
-    )
+    scene_shapes: list[bd.Shape] = []
+    for object_id, _role, _plane, group_specs in _non_model_group_specs(specs):
+        if object_id == "tx_region_actual":
+            for tx_region_actual_spec in group_specs:
+                scene_shapes.append(_build_non_model_shape(tx_region_actual_spec))
+            continue
+        scene_shapes.append(_build_non_model_group_shape(object_id=object_id, specs=group_specs))
+    return tuple(scene_shapes)
 
 
 def build_non_model_scene_entry(specs: tuple[NonModelBoxSpec, ...]) -> NonModelObjectLedgerEntry:
