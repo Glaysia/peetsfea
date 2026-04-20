@@ -67,6 +67,7 @@ class ModeledSingleCoilCommonSpec:
     underlay_repeat_count: RangeSpec
     layer_gap_mm: RangeSpec
     terminal_stub_length_mm: RangeSpec
+    void_usage_ratio: RangeSpec
     margin_ratio: RangeSpec
     metal_fill_factor: RangeSpec
     terminal_path: str
@@ -390,6 +391,13 @@ def _parse_modeled_single_coil(
     )
     layer_gap_mm = _require_range(table, "layer_gap_mm", context, expect_integer=False)
     terminal_stub_length_mm = _require_range(table, "terminal_stub_length_mm", context, expect_integer=False)
+    void_usage_ratio = _require_range(table, "void_usage_ratio", context, expect_integer=False)
+    void_usage_ratio_candidates = _float_range_candidates(void_usage_ratio)
+    if any(candidate <= 0.0 or candidate >= 1.0 for candidate in void_usage_ratio_candidates):
+        raise ValueError(
+            f"{context}.void_usage_ratio must realize to values > 0 and < 1 "
+            f"(actual={void_usage_ratio_candidates})"
+        )
     margin_ratio = _require_range(table, "margin_ratio", context, expect_integer=False)
     metal_fill_factor = _require_range(table, "metal_fill_factor", context, expect_integer=False)
     tx_allowed_keys = {
@@ -408,6 +416,7 @@ def _parse_modeled_single_coil(
         "wall_parallel_stack_present",
         "layer_gap_mm",
         "terminal_stub_length_mm",
+        "void_usage_ratio",
         "margin_ratio",
         "metal_fill_factor",
         "terminal_path",
@@ -426,6 +435,7 @@ def _parse_modeled_single_coil(
         "underlay_repeat_count",
         "layer_gap_mm",
         "terminal_stub_length_mm",
+        "void_usage_ratio",
         "margin_ratio",
         "metal_fill_factor",
         "terminal_path",
@@ -453,6 +463,7 @@ def _parse_modeled_single_coil(
             underlay_repeat_count=underlay_repeat_count,
             layer_gap_mm=layer_gap_mm,
             terminal_stub_length_mm=terminal_stub_length_mm,
+            void_usage_ratio=void_usage_ratio,
             margin_ratio=margin_ratio,
             metal_fill_factor=metal_fill_factor,
             terminal_path=terminal_path,
@@ -485,6 +496,7 @@ def _parse_modeled_single_coil(
         underlay_repeat_count=underlay_repeat_count,
         layer_gap_mm=layer_gap_mm,
         terminal_stub_length_mm=terminal_stub_length_mm,
+        void_usage_ratio=void_usage_ratio,
         margin_ratio=margin_ratio,
         metal_fill_factor=metal_fill_factor,
         terminal_path=terminal_path,
@@ -1090,6 +1102,8 @@ def render_tx_rect_void_toml(spec: ModeledSingleCoilCommonSpec) -> str:
             f"range = {_format_range(spec.layer_gap_mm)}",
             "[tx_coil.terminal_stub_length_mm]",
             f"range = {_format_range(spec.terminal_stub_length_mm)}",
+            "[tx_coil.void_usage_ratio]",
+            f"range = {_format_range(spec.void_usage_ratio)}",
             "[tx_coil.margin_ratio]",
             f"range = {_format_range(spec.margin_ratio)}",
             "[tx_coil.metal_fill_factor]",

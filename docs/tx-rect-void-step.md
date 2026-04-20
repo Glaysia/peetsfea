@@ -1,7 +1,7 @@
 ---
 title: tx-rect-void-step
 created: 2026-04-17 @ 04:20
-updated: 2026-04-19 @ 21:20
+updated: 2026-04-20 @ 23:59
 tags:
   - type2
   - tx-rect-void
@@ -61,6 +61,8 @@ legacy `rx_single_coil` reference로만 유지된다.
   - public example TOML(`examples/type2_fixed.toml`, `examples/type2_sweep.toml`)은 둘 다 `[true, 1, 1, 1]`로 고정해 wall stack을 항상 켠다
 - type2 public schema에서는 `void_*` 필드를 지원하지 않는다.
   legacy `void_*` 키가 type2 modeled object에 존재하면 즉시 실패한다.
+- `void_usage_ratio`는 centered void의 X/Y size ratio를 같이 제어하는 active public sampled field다.
+  RX sweep baseline은 `0.2..0.8`, `count=10`을 사용한다.
 - `margin_ratio`는 대응하는 outer axis 대비 비율로 void-to-outer 최소
   clearance를 정의한다.
 - `metal_fill_factor`는 각 side-local pitch cell에서 copper trace가 차지하는
@@ -157,6 +159,7 @@ legacy `rx_single_coil` reference로만 유지된다.
 | `placement_owner_id` | `tx_region` 또는 `rx_region_max`. |
 | `material` | 고정값 `composite`. |
 | `model_state` | 고정값 `true`. |
+| `void_usage_ratio` | centered void의 local X/Y size ratio를 같은 값으로 정하는 canonical public sampled owner. |
 | `step_path` | export된 STEP 파일의 serialized path string이다. |
 | `expected_exported_body_names` | import diff count 검증용 expected body names다. |
 | `expected_exported_body_count` | expected body names 수와 같아야 한다. |

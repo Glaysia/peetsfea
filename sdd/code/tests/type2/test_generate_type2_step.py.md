@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 21:35
+updated: 2026-04-20 @ 23:59
 tags:
   - tests
   - type2
@@ -13,7 +13,7 @@ tags:
 ## Source
 - Path: `tests/type2/test_generate_type2_step.py`
 - Code note path: `sdd/code/tests/type2/test_generate_type2_step.py.md`
-- Direct owner: [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
+- Direct owner: [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]]
 - Direct verification target: [[sdd/code/entry/generate_type2_step.py]]
 
 ## 역할
@@ -23,7 +23,7 @@ tags:
 - `tx_plate_stack`, `rx_plate_stack`, and `rx_single_coil` parser/export acceptance
 - active fixed example loader expects one modeled object: RX `rx_single_coil`
 - RX single-coil public schema uses `outer_x_usage_ratio` / `outer_y_usage_ratio`; parser resolves owner-span-scaled `outer_x_mm` / `outer_y_mm` for core delegation.
-- legacy type2 single-coil `outer_*_mm` and `void_*` public keys are unsupported and renderer output omits removed void fields.
+- single-coil public schema uses `void_usage_ratio` for centered equal X/Y void size; legacy type2 single-coil `outer_*_mm` and split/centered `void_*` public keys are unsupported.
 - `examples/type2_sweep.toml` is the mutable sampling SSOT and this test file must not pin its concrete sweep values.
 - object id mismatch / coil-only field rejection
 - plate-stack `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio` validation plus explicit rejection of removed `shoe_depth_mm`

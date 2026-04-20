@@ -24,10 +24,12 @@ from peetsfea.type2_runtime import Type2BuiltArtifact
 from peetsfea.type2_sampled import PreparedType2Build
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import RangeSpec
+from peetsfea.type2_step_spec import load_type2_step_spec
 
 _EXPECTED_SAMPLED_OWNER_PATHS = (
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
+    "modeled_objects.rx_rect_void_coil.void_usage_ratio",
     "modeled_objects.rx_rect_void_coil.turn_count",
     "modeled_objects.rx_rect_void_coil.metal_fill_factor",
 )
@@ -53,6 +55,9 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
     rx_outer_y_range = cast(
         list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["outer_y_usage_ratio"])["range"]
     )
+    rx_void_ratio_range = cast(
+        list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["void_usage_ratio"])["range"]
+    )
     rx_turn_range = cast(
         list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["turn_count"])["range"]
     )
@@ -62,8 +67,9 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
     return (
         (_EXPECTED_DESIGN_VARIABLE_NAMES[0], str(float(cast(int | float, rx_outer_x_range[1])))),
         (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, rx_outer_y_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(int(cast(int | float, rx_turn_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(float(cast(int | float, rx_fill_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(float(cast(int | float, rx_void_ratio_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(int(cast(int | float, rx_turn_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, rx_fill_range[1])))),
     )
 
 
@@ -73,9 +79,10 @@ class _FakeRxOnlyType2Spec:
 
 
 def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
-    original_loader = type2_sampled.load_type2_step_spec
+    source_spec_loader = load_type2_step_spec
     rx_outer_x_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.6, count=17)
     rx_outer_y_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.6, count=17)
+    rx_void_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.6, count=17)
     rx_outer_x = RangeSpec(is_integer=False, start=20.0, end=120.0, count=17)
     rx_outer_y = RangeSpec(is_integer=False, start=20.0, end=120.0, count=17)
     rx_turn_count = RangeSpec(is_integer=True, start=2.0, end=6.0, count=5)
@@ -96,6 +103,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 copper_thickness_mm=0.1,
                 outer_x_usage_ratio=rx_outer_x_usage_ratio,
                 outer_y_usage_ratio=rx_outer_y_usage_ratio,
+                void_usage_ratio=rx_void_usage_ratio,
                 outer_x_mm=rx_outer_x,
                 outer_y_mm=rx_outer_y,
                 turn_count=rx_turn_count,
@@ -113,7 +121,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     def _patched_loader(toml_path: Path) -> object:
         if toml_path.name == "type2_sweep.toml":
             return fake_spec
-        return original_loader(toml_path)
+        return source_spec_loader(toml_path)
 
     monkeypatch.setattr(type2_sampled, "load_type2_step_spec", _patched_loader)
 
@@ -222,6 +230,8 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.outer_x_usage_ratio]
     range = [false, 0.1, 0.6, 17]
     [modeled_objects.outer_y_usage_ratio]
+    range = [false, 0.1, 0.6, 17]
+    [modeled_objects.void_usage_ratio]
     range = [false, 0.1, 0.6, 17]
     [modeled_objects.turn_count]
     range = [true, 2, 6, 5]

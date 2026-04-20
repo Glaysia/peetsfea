@@ -1,7 +1,7 @@
 ---
 title: test_sample_type2_entry.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 21:35
+updated: 2026-04-20 @ 23:59
 tags:
   - tests
   - type2
@@ -13,7 +13,7 @@ tags:
 ## Source
 - Path: `tests/type2/test_sample_type2_entry.py`
 - Code note path: `sdd/code/tests/type2/test_sample_type2_entry.py.md`
-- Direct owner: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
+- Direct owner: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]]
 - Direct verification target: [[sdd/code/entry/sample.py]]
 - Discovery bridge: [[sdd/code/tests/type2/test_build_type2_entry.py]]
 
@@ -26,12 +26,13 @@ tags:
 - sampled owner paths cover only `rx_rect_void_coil` effective sampled degrees:
   - `outer_x_usage_ratio`
   - `outer_y_usage_ratio`
+  - `void_usage_ratio`
   - `turn_count`
   - `metal_fill_factor`
 - `rx_rect_void_coil.layer_count` stays fixed `count=1` and is not part of sampled owner paths.
 - `rx_rect_void_coil.underlay_repeat_count` is fixed for full backing and is not part of sampled owner paths.
 - sampled TOML keeps non-sampled RX fields as fixed scalar ranges.
-- sampled TOML excludes removed `void_*` fields and keeps usage ratios unitless.
+- sampled TOML excludes removed split/centered `void_*` fields and keeps usage ratios, including `void_usage_ratio`, unitless.
 - manifest identity and hash contract remain unchanged
 - `MAKE_STEP_ON_SAMPLE=True` path emits coarse STEP stage lines around export.
 - `MAKE_STEP_ON_SAMPLE=False` does not emit STEP stage lines and does not call the exporter.

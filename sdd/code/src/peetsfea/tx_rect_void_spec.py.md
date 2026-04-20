@@ -1,7 +1,7 @@
 ---
 title: tx_rect_void_spec.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 15:05
+updated: 2026-04-20 @ 23:59
 tags:
   - tx-rect-void
 ---
@@ -25,13 +25,14 @@ tags:
 ## Canonical state
 - module-level mutable state는 없다.
 - canonical realized geometry inputs는 `SingleCoilRectVoidSpec`와 `RealizedSingleCoilRectVoid`다.
-- void keepout geometry is no longer a TOML-owned input; realization uses fixed centered ratios `0.3 x 0.3`.
+- void keepout size is TOML-owned by canonical `void_usage_ratio`; realization applies the selected value to both local X and local Y while keeping the void centered.
 
 ## Invariants / fail-fast
 - `design.units`는 `mm`여야 한다.
 - range table shape/count/type 위반은 즉시 raise한다.
 - `terminal_stub_length_mm` runtime ownership은 derived `layer_gap_mm * 0.8` 규칙을 따른다.
-- TOML `void_*` keys are unsupported and fail immediately instead of changing geometry.
+- TOML legacy split/centered `void_*` keys are unsupported and fail immediately instead of changing geometry.
+- `void_usage_ratio` must realize to `0 < ratio < 1`; invalid candidates fail before geometry construction.
 - `turn_count` resolved value는 `1..6`이어야 하며 범위를 벗어나면 즉시 raise한다.
 - `rx_single_coil.layer_count != 1`은 계속 fail-fast한다.
 

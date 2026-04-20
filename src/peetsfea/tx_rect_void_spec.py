@@ -31,8 +31,6 @@ _OUTER_TO_INNER_CORNER: dict[CornerLabel, InnerCornerLabel] = {
     "D": "d",
 }
 _MIN_COPPER_TRACE_WIDTH_MM = 0.5
-_FIXED_VOID_X_OVER_OUTER_X_RATIO = 0.3
-_FIXED_VOID_Y_OVER_OUTER_Y_RATIO = 0.3
 _FIXED_VOID_CENTER_X_OVER_OUTER_X_RATIO = 0.0
 _FIXED_VOID_CENTER_Y_OVER_OUTER_Y_RATIO = 0.0
 _UNSUPPORTED_TX_COIL_VOID_KEYS: frozenset[str] = frozenset(
@@ -172,6 +170,7 @@ def load_tx_rect_void_spec(toml_path: Path) -> SingleCoilRectVoidSpec:
         tx_coil=SingleCoilRangeSpec(
             outer_x_mm=_require_range_table(tx_table, "outer_x_mm", "tx_coil", expect_integer=False),
             outer_y_mm=_require_range_table(tx_table, "outer_y_mm", "tx_coil", expect_integer=False),
+            void_usage_ratio=_require_range_table(tx_table, "void_usage_ratio", "tx_coil", expect_integer=False),
             turn_count=_require_range_table(tx_table, "turn_count", "tx_coil", expect_integer=True),
             layer_count=_require_range_table(tx_table, "layer_count", "tx_coil", expect_integer=True),
             layer_gap_mm=_require_range_table(tx_table, "layer_gap_mm", "tx_coil", expect_integer=False),
@@ -297,8 +296,9 @@ def realize_tx_rect_void_spec(
     turn_count = int(_select_range_value(coil.turn_count, seed=seed))
     layer_count = int(_select_range_value(coil.layer_count, seed=seed))
     layer_gap_mm = float(_select_range_value(coil.layer_gap_mm, seed=seed))
-    void_x_ratio = _FIXED_VOID_X_OVER_OUTER_X_RATIO
-    void_y_ratio = _FIXED_VOID_Y_OVER_OUTER_Y_RATIO
+    void_usage_ratio = float(_select_range_value(coil.void_usage_ratio, seed=seed))
+    void_x_ratio = void_usage_ratio
+    void_y_ratio = void_usage_ratio
     void_center_x_ratio = _FIXED_VOID_CENTER_X_OVER_OUTER_X_RATIO
     void_center_y_ratio = _FIXED_VOID_CENTER_Y_OVER_OUTER_Y_RATIO
     margin_ratio = float(_select_range_value(coil.margin_ratio, seed=seed))
@@ -319,8 +319,7 @@ def realize_tx_rect_void_spec(
     if layer_gap_mm < 2.0:
         raise ValueError(f"tx_coil.layer_gap_mm must be >= 2.0 (actual={layer_gap_mm})")
     terminal_stub_length_mm = _derived_terminal_stub_length_mm(layer_gap_mm=layer_gap_mm)
-    _validate_ratio(void_x_ratio, path="tx_coil.void_x_over_outer_x")
-    _validate_ratio(void_y_ratio, path="tx_coil.void_y_over_outer_y")
+    _validate_ratio(void_usage_ratio, path="tx_coil.void_usage_ratio")
     _validate_ratio(margin_ratio, path="tx_coil.margin_ratio")
     _validate_ratio(metal_fill_factor, path="tx_coil.metal_fill_factor")
     if metal_fill_factor < 0.15 or metal_fill_factor > 0.60:

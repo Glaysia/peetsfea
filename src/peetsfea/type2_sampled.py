@@ -129,6 +129,7 @@ def _single_coil_range_owner_specs(
     owner_specs: list[tuple[str, RangeSpec]] = [
         (f"modeled_objects.{modeled_spec.object_id}.outer_x_usage_ratio", modeled_spec.outer_x_usage_ratio),
         (f"modeled_objects.{modeled_spec.object_id}.outer_y_usage_ratio", modeled_spec.outer_y_usage_ratio),
+        (f"modeled_objects.{modeled_spec.object_id}.void_usage_ratio", modeled_spec.void_usage_ratio),
         (f"modeled_objects.{modeled_spec.object_id}.turn_count", modeled_spec.turn_count),
         (f"modeled_objects.{modeled_spec.object_id}.layer_count", modeled_spec.layer_count),
         (

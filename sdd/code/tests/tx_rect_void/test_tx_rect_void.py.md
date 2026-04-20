@@ -1,7 +1,7 @@
 ---
 title: test_tx_rect_void.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 15:06
+updated: 2026-04-20 @ 23:59
 tags:
   - tx-rect-void
 ---
@@ -11,7 +11,7 @@ tags:
 ## Source
 - Path: `tests/tx_rect_void/test_tx_rect_void.py`
 - Code note path: `sdd/code/tests/tx_rect_void/test_tx_rect_void.py.md`
-- Related plans: [[sdd/plans/tx-rect-void-step-generator]], [[sdd/plans/0.2.22-type2-single-coil-corner-relief]]
+- Related plans: [[sdd/plans/tx-rect-void-step-generator]], [[sdd/plans/0.2.22-type2-single-coil-corner-relief]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]]
 - Related code: [[sdd/code/src/peetsfea/tx_rect_void.py]], [[sdd/code/src/peetsfea/tx_rect_void_geometry.py]]
 
 ## 역할
@@ -29,11 +29,12 @@ tags:
 ## Canonical state
 - module-level runtime state는 없다.
 - canonical fixtures는 `_spec_text()`가 생성하는 internal TX rect/void TOML이다.
-- fixtures no longer declare `void_*` range tables; the core fixed centered void contract is asserted through realized geometry.
+- fixtures declare canonical `void_usage_ratio`; legacy split/centered `void_*` range tables remain rejected.
 
 ## Invariants / fail-fast
 - missing keys, bad ranges, unsupported terminal path, layer gap below 2mm는 즉시 실패해야 한다.
-- legacy `void_*` TOML keys fail as unsupported schema input.
+- `void_usage_ratio` drives equal centered X/Y void size in realized geometry.
+- legacy split/centered `void_*` TOML keys fail as unsupported schema input.
 - supported `turn_count` upper bound regression은 `6`까지 허용되고 `7`은 fail-fast해야 한다.
 - supported corner/direction terminal paths는 blunt centerline을 만들어야 하며,
   적어도 하나 이상의 45도 beveled segment를 포함해야 한다.

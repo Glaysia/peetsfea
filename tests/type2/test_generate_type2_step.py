@@ -233,6 +233,8 @@ range = {underlay_repeat_count_range}
 range = {_range(False, 2.0, 2.0, 1)}
 [modeled_objects.terminal_stub_length_mm]
 range = {_range(False, 5.0, 5.0, 1)}
+[modeled_objects.void_usage_ratio]
+range = {_range(False, 0.2, 0.2, 1)}
 [modeled_objects.margin_ratio]
 range = {_range(False, 0.05, 0.05, 1)}
 [modeled_objects.metal_fill_factor]
@@ -417,7 +419,12 @@ def _tx_rect_void_spec_text(*, terminal_path: str = "A_cw_to_a") -> str:
     return _tx_rect_void_spec_text_with_layer_count(terminal_path=terminal_path, layer_count=1)
 
 
-def _tx_rect_void_spec_text_with_layer_count(*, terminal_path: str = "A_cw_to_a", layer_count: int = 1) -> str:
+def _tx_rect_void_spec_text_with_layer_count(
+    *,
+    terminal_path: str = "A_cw_to_a",
+    layer_count: int = 1,
+    void_usage_ratio_range: str = "[false, 0.2, 0.2, 1]",
+) -> str:
     return f"""
 spec_version = "0.2.22"
 schema_id = "peetsfea.tx_rect_void_coil.step.v1"
@@ -442,6 +449,8 @@ range = {_range(True, float(layer_count), float(layer_count), 1)}
 range = {_range(False, 2.0, 2.0, 1)}
 [tx_coil.terminal_stub_length_mm]
 range = {_range(False, 5.0, 5.0, 1)}
+[tx_coil.void_usage_ratio]
+range = {void_usage_ratio_range}
 [tx_coil.margin_ratio]
 range = {_range(False, 0.05, 0.05, 1)}
 [tx_coil.metal_fill_factor]
@@ -1198,6 +1207,9 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert rx_entry.underlay_repeat_count.start == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.end == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.count == 1
+    assert rx_entry.void_usage_ratio.start == pytest.approx(0.2)
+    assert rx_entry.void_usage_ratio.end == pytest.approx(0.2)
+    assert rx_entry.void_usage_ratio.count == 1
     assert rx_entry.metal_fill_factor.start == pytest.approx(0.5)
 
 
@@ -1216,6 +1228,9 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     assert rx_entry.underlay_repeat_count.start == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.end == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.count == 1
+    assert rx_entry.void_usage_ratio.start == pytest.approx(0.2)
+    assert rx_entry.void_usage_ratio.end == pytest.approx(0.2)
+    assert rx_entry.void_usage_ratio.count == 1
     assert rx_entry.terminal_path == "A_cw_to_a"
     rx_profile = profile_for_modeled_role(cast(Literal["rx_single_coil"], rx_entry.role))
     assert rx_profile.plane == "YZ"
@@ -1437,6 +1452,24 @@ def test_load_type2_step_spec_rejects_plate_stack_metal_fill_factor_above_suppor
     )
 
     with pytest.raises(ValueError, match=r"metal_fill_factor must realize to values > 0 and <= 0.6"):
+        load_type2_step_spec(toml_path)
+
+
+@pytest.mark.parametrize("invalid_value", (0.0, 1.0))
+def test_load_type2_step_spec_rejects_single_coil_non_open_interval_void_usage_ratio(
+    tmp_path: Path,
+    invalid_value: float,
+) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_spec_text().replace(
+            "[modeled_objects.void_usage_ratio]\nrange = [false, 0.2, 0.2, 1]",
+            f"[modeled_objects.void_usage_ratio]\nrange = [false, {invalid_value}, {invalid_value}, 1]",
+            1,
+        ),
+    )
+
+    with pytest.raises(ValueError, match=r"void_usage_ratio must realize to values > 0 and < 1"):
         load_type2_step_spec(toml_path)
 
 
@@ -1768,10 +1801,29 @@ def test_render_tx_rect_void_toml_omits_type2_underlay_fields_from_core_bridge(t
     assert "underlay_repeat_count" not in rendered
     assert "underlay_gap_mm" not in rendered
     assert "wall_parallel_stack_present" not in rendered
+    assert "[tx_coil.void_usage_ratio]" in rendered
     assert "void_x_over_outer_x" not in rendered
     assert "void_y_over_outer_y" not in rendered
     assert "void_center_x_over_outer_x" not in rendered
     assert "void_center_y_over_outer_y" not in rendered
+
+
+def test_realize_tx_rect_void_spec_uses_single_void_usage_ratio_for_x_and_y(tmp_path: Path) -> None:
+    tx_rect_void_toml_path = tmp_path / "tx_rect_void.toml"
+    tx_rect_void_toml_path.write_text(
+        _tx_rect_void_spec_text_with_layer_count(
+            layer_count=1,
+            void_usage_ratio_range=_range(False, 0.2, 0.8, 10),
+        ),
+        encoding="utf-8",
+    )
+    spec = load_tx_rect_void_spec(tx_rect_void_toml_path)
+    realized = realize_tx_rect_void_spec(spec, seed=7)
+
+    assert 0.0 < realized.void_x_over_outer_x < 1.0
+    assert realized.void_x_over_outer_x == pytest.approx(realized.void_y_over_outer_y)
+    assert realized.void_center_x_over_outer_x == pytest.approx(0.0)
+    assert realized.void_center_y_over_outer_y == pytest.approx(0.0)
 
 
 def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_path: Path) -> None:

@@ -105,6 +105,7 @@ class RangeSpec:
 class SingleCoilRangeSpec:
     outer_x_mm: RangeSpec
     outer_y_mm: RangeSpec
+    void_usage_ratio: RangeSpec
     turn_count: RangeSpec
     layer_count: RangeSpec
     layer_gap_mm: RangeSpec

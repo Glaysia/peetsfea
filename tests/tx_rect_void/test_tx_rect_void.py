@@ -44,6 +44,7 @@ def _spec_text(
     layer_count: int = 1,
     layer_gap: float = 2.0,
     terminal_stub_length: float = 5.0,
+    void_usage_ratio: float = 0.2,
     margin_ratio: float = 0.05,
     metal_fill_factor: float = 0.5,
 ) -> str:
@@ -71,6 +72,8 @@ range = {_range(True, float(layer_count), float(layer_count), 1)}
 range = {_range(False, layer_gap, layer_gap, 1)}
 [tx_coil.terminal_stub_length_mm]
 range = {_range(False, terminal_stub_length, terminal_stub_length, 1)}
+[tx_coil.void_usage_ratio]
+range = {_range(False, void_usage_ratio, void_usage_ratio, 1)}
 [tx_coil.margin_ratio]
 range = {_range(False, margin_ratio, margin_ratio, 1)}
 [tx_coil.metal_fill_factor]
@@ -334,12 +337,12 @@ def test_load_and_realize_valid_spec_is_deterministic(tmp_path: Path) -> None:
     assert first.outer_y_mm == pytest.approx(100.0)
     assert first.layer_count == 1
     assert first.terminal_stub_length_mm == pytest.approx(first.layer_gap_mm * 0.8)
-    assert first.void_x_over_outer_x == pytest.approx(0.3)
-    assert first.void_y_over_outer_y == pytest.approx(0.3)
+    assert first.void_x_over_outer_x == pytest.approx(0.2)
+    assert first.void_y_over_outer_y == pytest.approx(0.2)
     assert first.void_center_x_over_outer_x == pytest.approx(0.0)
     assert first.void_center_y_over_outer_y == pytest.approx(0.0)
-    assert first.void_x_mm == pytest.approx(first.outer_x_mm * 0.3)
-    assert first.void_y_mm == pytest.approx(first.outer_y_mm * 0.3)
+    assert first.void_x_mm == pytest.approx(first.outer_x_mm * 0.2)
+    assert first.void_y_mm == pytest.approx(first.outer_y_mm * 0.2)
     assert first.void_center_x_mm == pytest.approx(0.0)
     assert first.void_center_y_mm == pytest.approx(0.0)
     assert first.side_geometry.left.trace_mm == pytest.approx(first.side_geometry.right.trace_mm)
