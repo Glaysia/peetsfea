@@ -27,12 +27,14 @@ tags:
 - export ledger coverage verifies `tx_region_actual_stack_space` bodies are generated one-for-one with concrete `tx_region_actual` tiles, with fixed `total_thickness_mm = 5.0`, top-face alignment before tilt, and scale-derived similar footprint.
 - export coverage verifies `tilt_enabled = 1` rotates only the stack-space bodies toward the modeled RX center, keeps guide tiles axis-aligned, and clamps tilted stack-space bounding boxes under owning tile tops.
 - `tx_rect_void_columns` geometry-only export tests verify:
-  - realized body count tracks `x_division_count * y_division_count * layer_count * 2` (PCB/copper per layer per realized tile),
-  - no `tx_copper_stack`, no vertical bus, no TX port sheet, no TX ferrite/underlay labels,
+  - realized body count tracks `x_division_count * y_division_count * ((layer_count * 2) + 2)` (PCB/copper coil per layer plus two terminal bodies per realized tile),
+  - no `tx_copper_stack`, no separate inter-layer vertical bus, no TX port sheet, no TX ferrite/underlay labels,
+  - terminal bodies (`_stub_s`/`_stub_e`) exist exactly twice per tile, connect all same-terminal layer anchors, descend toward world `-Z`, and expose a tilted contact face matching the coil/collector plane,
+  - terminal names never use per-layer suffixes (`_stub_*_lN`) and only emit one `..._stub_s` and one `..._stub_e` per tile,
   - unrealized column turn fields (`turn_count_x1/x2` when columns are not realized) do not perturb exported geometry,
   - realized column turn fields perturb geometry for the corresponding realized X-column,
   - TX column outer footprint is inherited from each realized `tx_region_actual_stack_space` tile instead of a modeled-object outer usage ratio,
-  - modeled TX bodies remain within realized `tx_region_actual_stack_space` bounds.
+  - modeled TX coil bodies remain within realized `tx_region_actual_stack_space` bounds while terminal bodies may protrude below it.
 - RX single-coil public schema uses `outer_x_usage_ratio` / `outer_y_usage_ratio`; parser resolves owner-span-scaled `outer_x_mm` / `outer_y_mm` for core delegation.
 - single-coil public schema uses `void_usage_ratio` for centered equal X/Y void size; legacy type2 single-coil `outer_*_mm` and split/centered `void_*` public keys are unsupported.
 - `examples/type2_sweep.toml` is the mutable sampling SSOT and this test file must not pin its concrete sweep values.

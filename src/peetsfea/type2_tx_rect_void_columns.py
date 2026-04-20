@@ -42,13 +42,25 @@ class TxRectVoidColumnsTileScene:
     x_index: int
     y_index: int
     stack_space_center_xyz: Point3
+    terminal_stub_body_names: tuple[tuple[str, str], ...]
     scene_shapes: tuple[bd.Shape, ...]
+
+
+@dataclass(frozen=True)
+class TxRectVoidColumnsTileTerminalAnchors:
+    stack_space_object_id: str
+    x_index: int
+    y_index: int
+    terminal_stub_body_names: tuple[tuple[str, str], ...]
+    terminal_anchor_box_specs: tuple[tuple[BoxSpec, BoxSpec], ...]
 
 
 @dataclass(frozen=True)
 class TxRectVoidColumnsBuildResult:
     tile_scenes: tuple[TxRectVoidColumnsTileScene, ...]
+    tile_terminal_anchors: tuple[TxRectVoidColumnsTileTerminalAnchors, ...]
     expected_exported_body_names: tuple[str, ...]
+    terminal_stub_length_mm: float
     layer_count: int
 
 
@@ -227,6 +239,26 @@ def _transform_modeled_box_spec(
     )
 
 
+def _translated_box_spec(
+    box_spec: BoxSpec,
+    *,
+    translation_xyz: Point3,
+    label: str,
+) -> BoxSpec:
+    return BoxSpec(
+        label=label,
+        role=box_spec.role,
+        feature=box_spec.feature,
+        layer_index=box_spec.layer_index,
+        origin_xyz=(
+            box_spec.origin_xyz[0] + translation_xyz[0],
+            box_spec.origin_xyz[1] + translation_xyz[1],
+            box_spec.origin_xyz[2] + translation_xyz[2],
+        ),
+        size_xyz=box_spec.size_xyz,
+    )
+
+
 def _resolved_column_range_spec(
     *,
     spec: ModeledTxRectVoidColumnsSpec,
@@ -325,7 +357,7 @@ def _realized_boxes_for_column(
     resolved_ranges: _ResolvedSingleCoilRangeSpec,
     owner_spec: NonModelBoxSpec,
     seed: int,
-) -> tuple[tuple[bd.Shape, ...], int]:
+) -> tuple[tuple[bd.Shape, ...], tuple[tuple[BoxSpec, BoxSpec], ...], int]:
     owner_size_x, owner_size_y, owner_size_z = owner_spec.size_xyz
     target_outer_x_mm = owner_size_x
     target_outer_y_mm = owner_size_y
@@ -467,20 +499,29 @@ def _realized_boxes_for_column(
         shape.moved(bd.Location(translation_xyz))
         for shape in scaled_children_raw
     )
+    translated_anchor_boxes_by_label = {
+        box.label: _translated_box_spec(box, translation_xyz=translation_xyz, label=box.label)
+        for box in scaled_local_boxes
+        if box.feature == "terminal_stub"
+    }
     base_pcb_label = f"{_TX_RECT_VOID_COLUMNS_PROFILE.pcb_body_prefix}_l0"
     base_copper_label = f"{_TX_RECT_VOID_COLUMNS_PROFILE.copper_body_prefix}_l0"
+    base_stub_start_label = f"{_TX_RECT_VOID_COLUMNS_PROFILE.copper_body_prefix}_l0_stub_start"
+    base_stub_end_label = f"{_TX_RECT_VOID_COLUMNS_PROFILE.copper_body_prefix}_l0_stub_end"
     base_shapes_by_label = {shape.label: shape for shape in translated_base_children}
     if base_pcb_label not in base_shapes_by_label or base_copper_label not in base_shapes_by_label:
         raise RuntimeError(
             "tx_rect_void_columns single-layer base geometry must expose one PCB and one copper body "
             f"(owner={owner_spec.object_id}, labels={tuple(base_shapes_by_label.keys())})"
         )
-    for expected_label in (base_pcb_label, base_copper_label):
-        if expected_label not in base_shapes_by_label:
+    for expected_label in (base_stub_start_label, base_stub_end_label):
+        if expected_label not in translated_anchor_boxes_by_label:
             raise RuntimeError(
-                f"tx_rect_void_columns missing expected base label {expected_label} in base geometry"
+                f"tx_rect_void_columns single-layer base geometry must expose {expected_label} anchor metadata "
+                f"(owner={owner_spec.object_id})"
             )
     layer_shapes: list[bd.Shape] = []
+    layer_anchor_box_pairs: list[tuple[BoxSpec, BoxSpec]] = []
     for layer_index in range(resolved_ranges.layer_count):
         downward_layers = resolved_ranges.layer_count - 1 - layer_index
         shift_delta_z = -float(downward_layers) * layer_step_mm
@@ -488,9 +529,21 @@ def _realized_boxes_for_column(
         copper_shape = base_shapes_by_label[base_copper_label].moved(bd.Location((0.0, 0.0, shift_delta_z)))
         pcb_shape.label = f"{_TX_RECT_VOID_COLUMNS_PROFILE.pcb_body_prefix}_l{layer_index}"
         copper_shape.label = f"{_TX_RECT_VOID_COLUMNS_PROFILE.copper_body_prefix}_l{layer_index}"
+        anchor_translation_xyz = (0.0, 0.0, shift_delta_z)
+        stub_start_anchor = _translated_box_spec(
+            translated_anchor_boxes_by_label[base_stub_start_label],
+            translation_xyz=anchor_translation_xyz,
+            label=f"{_TX_RECT_VOID_COLUMNS_PROFILE.copper_body_prefix}_l{layer_index}_stub_start",
+        )
+        stub_end_anchor = _translated_box_spec(
+            translated_anchor_boxes_by_label[base_stub_end_label],
+            translation_xyz=anchor_translation_xyz,
+            label=f"{_TX_RECT_VOID_COLUMNS_PROFILE.copper_body_prefix}_l{layer_index}_stub_end",
+        )
         layer_shapes.append(pcb_shape)
         layer_shapes.append(copper_shape)
-    return (tuple(layer_shapes), resolved_ranges.layer_count)
+        layer_anchor_box_pairs.append((stub_start_anchor, stub_end_anchor))
+    return (tuple(layer_shapes), tuple(layer_anchor_box_pairs), resolved_ranges.layer_count)
 
 
 def _validate_label_length(*, label: str) -> None:
@@ -499,6 +552,58 @@ def _validate_label_length(*, label: str) -> None:
             "tx_rect_void_columns body name exceeds AEDT-friendly limit "
             f"(label={label}, length={len(label)}, max={_MAX_BODY_LABEL_LENGTH})"
         )
+
+
+def _deterministic_stub_label(
+    *,
+    x_index: int,
+    y_index: int,
+    layer_index: int,
+    terminal_hint: str,
+) -> str:
+    candidate = f"txrvc_x{x_index}_y{y_index}_stub_{terminal_hint}_l{layer_index}"
+    if len(candidate) <= _MAX_BODY_LABEL_LENGTH:
+        return candidate
+    compact_digest = hashlib.blake2b(
+        f"txrvc_x{x_index}_y{y_index}_stub_{terminal_hint}_l{layer_index}".encode("utf-8"),
+        digest_size=6,
+    ).hexdigest()
+    terminal_token = terminal_hint[:1] if terminal_hint else "x"
+    compact = f"txrvc_x{x_index}_y{y_index}_{terminal_token}_l{layer_index}_{compact_digest[:6]}"
+    if len(compact) <= _MAX_BODY_LABEL_LENGTH:
+        return compact
+    compact_short = f"txrvc_{compact_digest[:12]}"
+    if len(compact_short) > _MAX_BODY_LABEL_LENGTH:
+        raise RuntimeError(
+            "tx_rect_void_columns fallback body name exceeds AEDT-friendly limit "
+            f"(label={compact_short}, length={len(compact_short)}, max={_MAX_BODY_LABEL_LENGTH})"
+        )
+    return compact_short
+
+
+def _deterministic_terminal_body_label(
+    *,
+    x_index: int,
+    y_index: int,
+    terminal_hint: str,
+) -> str:
+    candidate = f"txrvc_x{x_index}_y{y_index}_stub_{terminal_hint}"
+    if len(candidate) <= _MAX_BODY_LABEL_LENGTH:
+        return candidate
+    compact_digest = hashlib.blake2b(
+        f"txrvc_x{x_index}_y{y_index}_stub_{terminal_hint}".encode("utf-8"),
+        digest_size=6,
+    ).hexdigest()
+    compact = f"txrvc_{terminal_hint}_{compact_digest[:6]}"
+    if len(compact) <= _MAX_BODY_LABEL_LENGTH:
+        return compact
+    compact_short = f"txrvc_{compact_digest[:12]}"
+    if len(compact_short) > _MAX_BODY_LABEL_LENGTH:
+        raise RuntimeError(
+            "tx_rect_void_columns fallback body name exceeds AEDT-friendly limit "
+            f"(label={compact_short}, length={len(compact_short)}, max={_MAX_BODY_LABEL_LENGTH})"
+        )
+    return compact_short
 
 
 def build_tx_rect_void_columns_axis_aligned_tile_scenes(
@@ -530,6 +635,7 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
     for x_index in x_indices:
         resolved_ranges_by_x[x_index] = _resolved_single_coil_range_spec(spec=spec, x_index=x_index, seed=seed)
     shared_layer_count = resolved_ranges_by_x[x_indices[0]].layer_count
+    terminal_stub_length_mm = resolved_ranges_by_x[x_indices[0]].terminal_stub_length_mm
     for x_index in x_indices[1:]:
         layer_count = resolved_ranges_by_x[x_index].layer_count
         if layer_count != shared_layer_count:
@@ -538,9 +644,10 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
                 f"(x0={shared_layer_count}, x{x_index}={layer_count})"
             )
     tile_scenes: list[TxRectVoidColumnsTileScene] = []
+    tile_terminal_anchors: list[TxRectVoidColumnsTileTerminalAnchors] = []
     expected_body_names: list[str] = []
     for x_index, y_index, stack_space_spec in sorted_indexed_specs:
-        scene_children, layer_count = _realized_boxes_for_column(
+        scene_children, terminal_anchor_box_pairs, layer_count = _realized_boxes_for_column(
             spec=spec,
             resolved_ranges=resolved_ranges_by_x[x_index],
             owner_spec=stack_space_spec,
@@ -558,6 +665,7 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
                 f"(tile={stack_space_spec.object_id})"
             )
         renamed_shapes: list[bd.Shape] = []
+        terminal_anchor_box_specs: list[tuple[BoxSpec, BoxSpec]] = []
         for layer_index in range(layer_count):
             old_pcb_label = f"{_TX_RECT_VOID_COLUMNS_PROFILE.pcb_body_prefix}_l{layer_index}"
             old_copper_label = f"{_TX_RECT_VOID_COLUMNS_PROFILE.copper_body_prefix}_l{layer_index}"
@@ -566,20 +674,77 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
                     "tx_rect_void_columns tile scene must expose one PCB and one copper body per layer "
                     f"(tile={stack_space_spec.object_id}, layer_index={layer_index})"
                 )
+            if layer_index >= len(terminal_anchor_box_pairs):
+                raise RuntimeError(
+                    "tx_rect_void_columns tile scene must expose one start/end terminal anchor pair per layer "
+                    f"(tile={stack_space_spec.object_id}, layer_index={layer_index})"
+                )
             pcb_label = f"txrvc_x{x_index}_y{y_index}_pcb_l{layer_index}"
             copper_label = f"txrvc_x{x_index}_y{y_index}_cu_l{layer_index}"
+            layer_stub_start_label = _deterministic_stub_label(
+                x_index=x_index,
+                y_index=y_index,
+                layer_index=layer_index,
+                terminal_hint="s",
+            )
+            layer_stub_end_label = _deterministic_stub_label(
+                x_index=x_index,
+                y_index=y_index,
+                layer_index=layer_index,
+                terminal_hint="e",
+            )
             _validate_label_length(label=pcb_label)
             _validate_label_length(label=copper_label)
+            _validate_label_length(label=layer_stub_start_label)
+            _validate_label_length(label=layer_stub_end_label)
             pcb_shape = shapes_by_label[old_pcb_label]
             copper_shape = shapes_by_label[old_copper_label]
+            old_stub_start_box, old_stub_end_box = terminal_anchor_box_pairs[layer_index]
+            stub_start_box = _translated_box_spec(
+                old_stub_start_box,
+                translation_xyz=(0.0, 0.0, 0.0),
+                label=layer_stub_start_label,
+            )
+            stub_end_box = _translated_box_spec(
+                old_stub_end_box,
+                translation_xyz=(0.0, 0.0, 0.0),
+                label=layer_stub_end_label,
+            )
             pcb_shape.label = pcb_label
             copper_shape.label = copper_label
             renamed_shapes.append(pcb_shape)
             renamed_shapes.append(copper_shape)
+            terminal_anchor_box_specs.append((stub_start_box, stub_end_box))
             expected_body_names.append(pcb_label)
             expected_body_names.append(copper_label)
+
+        generic_stub_start_label = _deterministic_terminal_body_label(
+            x_index=x_index,
+            y_index=y_index,
+            terminal_hint="s",
+        )
+        generic_stub_end_label = _deterministic_terminal_body_label(
+            x_index=x_index,
+            y_index=y_index,
+            terminal_hint="e",
+        )
+        _validate_label_length(label=generic_stub_start_label)
+        _validate_label_length(label=generic_stub_end_label)
+        terminal_stub_names = ((generic_stub_start_label, generic_stub_end_label),)
+        expected_body_names.append(generic_stub_start_label)
+        expected_body_names.append(generic_stub_end_label)
         tx_region_actual_object_id = _parent_tx_region_actual_object_id_for_stack_space(
             object_id=stack_space_spec.object_id
+        )
+        tile_terminal_names = terminal_stub_names
+        tile_terminal_anchors.append(
+            TxRectVoidColumnsTileTerminalAnchors(
+                stack_space_object_id=stack_space_spec.object_id,
+                x_index=x_index,
+                y_index=y_index,
+                terminal_stub_body_names=tile_terminal_names,
+                terminal_anchor_box_specs=tuple(terminal_anchor_box_specs),
+            )
         )
         stack_space_center_xyz = (
             stack_space_spec.origin_xyz[0] + (stack_space_spec.size_xyz[0] * 0.5),
@@ -593,6 +758,7 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
                 x_index=x_index,
                 y_index=y_index,
                 stack_space_center_xyz=stack_space_center_xyz,
+                terminal_stub_body_names=tile_terminal_names,
                 scene_shapes=tuple(renamed_shapes),
             )
         )
@@ -603,7 +769,9 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
         )
     return TxRectVoidColumnsBuildResult(
         tile_scenes=tuple(tile_scenes),
+        tile_terminal_anchors=tuple(tile_terminal_anchors),
         expected_exported_body_names=tuple(expected_body_names),
+        terminal_stub_length_mm=terminal_stub_length_mm,
         layer_count=shared_layer_count,
     )
 
@@ -611,5 +779,6 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
 __all__ = [
     "TxRectVoidColumnsBuildResult",
     "TxRectVoidColumnsTileScene",
+    "TxRectVoidColumnsTileTerminalAnchors",
     "build_tx_rect_void_columns_axis_aligned_tile_scenes",
 ]

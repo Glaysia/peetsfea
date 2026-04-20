@@ -18,6 +18,7 @@ tags:
 - Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]]
 - TX array plan: [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
 - TX actual-region plan: [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]]
+- Scene split plan: [[sdd/plans/0.2.22-type2-step-scene-split]]
 - Primary architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 역할
@@ -58,7 +59,9 @@ tags:
 - reporter phase surface는 `build_scene`, `export_scene_step`, `finalize_step_artifacts`로 제한한다.
 - Full-scene export must carry resolved `tx_region_actual` tile bodies as non-model members in the shared non-model scene ledger.
 - Full-scene export must carry resolved `tx_region_actual_stack_space` materialless tile members and apply deterministic tilt transforms shared with geometry-only TX column bodies.
-- `tx_rect_void_columns` modeled export is geometry-only: per realized X/Y tile and layer it emits PCB+copper bodies only, with no ferrite/underlay, no `tx_copper_stack`, no terminal bus/port sheet, and no source/connection metadata.
+- Shared non-model tilt helpers and canonical shape extraction are imported from split scene helper modules, not private helpers on `type2_step_scene.py`.
+- `tx_rect_void_columns` modeled export is geometry-only: per realized X/Y tile and layer it emits PCB+copper coil bodies, and per tile it emits exactly two start/end copper terminal bodies using tile-level labels (`txrvc_x{X}_y{Y}_stub_s`, `txrvc_x{X}_y{Y}_stub_e`). Each terminal body joins all same-terminal per-layer anchors via one ruled loft and then descends in world `-Z`, with no ferrite/underlay, no `tx_copper_stack`, no separate terminal bus/port sheet, and no source/connection metadata.
+- `tx_rect_void_columns` terminal-anchor resolution prefers terminal metadata payloads (for example BoxSpec-derived anchors from producer metadata) and uses explicit stub-labeled tile-scene anchors as compatibility input only.
 
 ## Invariants / fail-fast
 - export body names/count는 role contract와 exact match여야 한다.
@@ -72,11 +75,15 @@ tags:
 - plate role body-order drift는 import-side exact-name contract drift다.
 - plate role `terminal_metadata.kind`는 `stub_port` 외 값을 허용하지 않는다.
 - `tx_rect_void_columns` must emit `terminal_metadata.kind = "geometry_only"` and skip single-coil/plate port-sheet validation flow.
+- `tx_rect_void_columns` terminal metadata must expose exactly one tile-level start/end terminal pair and `layer_count` per-layer anchor-box pairs. Export maps start/end anchors by pair position, not by per-layer suffix parsing.
+- `tx_rect_void_columns` terminal bodies must use `terminal_stub_length_mm`, overlap every same-terminal transformed layer anchor, descend toward world `-Z`, and are allowed to protrude below the tilted stack-space owner. Their contact/top face must follow the tilted anchor/collector plane rather than a horizontal box face, and stack-space containment checks apply only to non-terminal tile bodies.
 - reporter callback은 progress visibility only이며 exporter의 fail-fast contract를 완화하지 않는다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_plate_stack.py]]
 - [[sdd/code/src/peetsfea/type2_step_scene.py]]
+- [[sdd/code/src/peetsfea/type2_scene_geometry.py]]
+- [[sdd/code/src/peetsfea/type2_non_model_scene.py]]
 - [[sdd/code/src/peetsfea/type2_tx_rect_void_columns.py]]
 - [[sdd/code/src/peetsfea/type2_step_ledger.py]]
 - [[sdd/code/src/peetsfea/type2_sampled.py]]

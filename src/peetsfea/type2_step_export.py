@@ -28,19 +28,19 @@ from peetsfea.type2_step_ledger import build_modeled_object_ledger_entry
 from peetsfea.type2_step_ledger import build_type2_step_ledger
 from peetsfea.type2_step_ledger import write_modeled_source_metadata
 from peetsfea.type2_step_ledger import write_type2_step_ledger
+from peetsfea.type2_scene_geometry import canonical_from_shape
+from peetsfea.type2_non_model_scene import TxRegionActualStackSpaceTiltTransform
+from peetsfea.type2_non_model_scene import apply_tx_region_actual_stack_space_tilt_transform
+from peetsfea.type2_non_model_scene import build_non_model_scene_entry
+from peetsfea.type2_non_model_scene import build_non_model_scene_shapes
+from peetsfea.type2_non_model_scene import is_concrete_tx_region_actual_stack_space_object_id
+from peetsfea.type2_non_model_scene import parent_tx_region_actual_object_id_for_stack_space_object_id
+from peetsfea.type2_non_model_scene import require_non_model_object_spec
+from peetsfea.type2_non_model_scene import resolve_non_model_scene_specs
+from peetsfea.type2_non_model_scene import resolve_tx_region_actual_stack_space_tilt_enabled
+from peetsfea.type2_non_model_scene import resolve_tx_region_actual_stack_space_tilt_transform
 from peetsfea.type2_step_scene import build_modeled_scene_data
 from peetsfea.type2_step_scene import build_modeled_single_coil_scene_data
-from peetsfea.type2_step_scene import build_non_model_scene_entry
-from peetsfea.type2_step_scene import build_non_model_scene_shapes
-from peetsfea.type2_step_scene import TxRegionActualStackSpaceTiltTransform
-from peetsfea.type2_step_scene import _canonical_from_shape
-from peetsfea.type2_step_scene import _resolve_tx_region_actual_stack_space_tilt_transform
-from peetsfea.type2_step_scene import apply_tx_region_actual_stack_space_tilt_transform
-from peetsfea.type2_step_scene import _is_concrete_tx_region_actual_stack_space_object_id
-from peetsfea.type2_step_scene import _parent_tx_region_actual_object_id_for_stack_space_object_id
-from peetsfea.type2_step_scene import require_non_model_object_spec
-from peetsfea.type2_step_scene import resolve_non_model_scene_specs
-from peetsfea.type2_step_scene import resolve_tx_region_actual_stack_space_tilt_enabled
 from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
@@ -60,6 +60,7 @@ from peetsfea.type2_step_spec import resolve_modeled_tx_coil_count
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
 from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
 from peetsfea.type2_tx_rect_void_columns import TxRectVoidColumnsBuildResult
+from peetsfea.type2_tx_rect_void_columns import TxRectVoidColumnsTileTerminalAnchors
 from peetsfea.type2_tx_rect_void_columns import build_tx_rect_void_columns_axis_aligned_tile_scenes
 from peetsfea.type2_tx_plate_stack_array import build_tx_plate_stack_array_scene_data
 from peetsfea.type2_tx_plate_stack_array import expected_tx_plate_stack_array_body_groups
@@ -122,6 +123,64 @@ def _canonical_coordinates_center_xyz(
         origin_xyz[1] + (size_xyz[1] * 0.5),
         origin_xyz[2] + (size_xyz[2] * 0.5),
     )
+
+
+def _face_from_xy_polygon(points_xy: tuple[tuple[float, float], ...]) -> bd.Face:
+    if len(points_xy) < 3:
+        raise RuntimeError(
+            "tx_rect_void_columns terminal metadata polygon requires at least three points "
+            f"(points={points_xy})"
+        )
+    with bd.BuildLine() as builder:
+        bd.Polyline(*points_xy, close=True)
+    line = builder.line
+    if line is None:
+        raise RuntimeError("tx_rect_void_columns terminal polygon builder returned no line")
+    wires = tuple(line.wires())
+    if len(wires) != 1:
+        raise RuntimeError(
+            "tx_rect_void_columns terminal polygon builder must produce one wire "
+            f"(actual={len(wires)})"
+        )
+    return cast(bd.Face, bd.make_face(edges=tuple(wires[0].edges())))
+
+
+def _face_from_box_spec_top_polygon(
+    *,
+    box_spec: BoxSpec,
+) -> bd.Face:
+    if box_spec.size_xyz[2] <= 0.0:
+        raise RuntimeError(
+            "tx_rect_void_columns terminal anchor box must have positive z extent "
+            f"(label={box_spec.label}, size_xyz={box_spec.size_xyz})"
+        )
+    origin_x, origin_y, origin_z = box_spec.origin_xyz
+    size_x, size_y, size_z = box_spec.size_xyz
+    top_z = origin_z + size_z
+    return _face_from_xy_polygon(
+        points_xy=(
+            (origin_x, origin_y),
+            (origin_x + size_x, origin_y),
+            (origin_x + size_x, origin_y + size_y),
+            (origin_x, origin_y + size_y),
+        )
+    ).moved(
+        bd.Location((0.0, 0.0, top_z))
+    )
+
+
+def _point_xyz_from_vertex(vertex: bd.Vertex) -> tuple[float, float, float]:
+    return (vertex.X, vertex.Y, vertex.Z)
+
+
+def _face_xy_vertices(face: bd.Face) -> tuple[tuple[float, float, float], ...]:
+    vertices = tuple(face.vertices())
+    if len(vertices) != 4:
+        raise RuntimeError(
+            "tx_rect_void_columns terminal anchor top polygon must have four vertices "
+            f"(actual={len(vertices)}, label={face.label})"
+        )
+    return tuple(_point_xyz_from_vertex(vertex) for vertex in vertices)
 
 
 def _is_modeled_rx_object(*, role: str) -> bool:
@@ -357,11 +416,11 @@ def _build_non_model_scene_entry_and_shapes(
     stack_space_tilt_placements: dict[str, dict[str, object]] = {}
     for member_index, member_object in enumerate(member_objects):
         object_id = member_object["object_id"]
-        if not _is_concrete_tx_region_actual_stack_space_object_id(object_id):
+        if not is_concrete_tx_region_actual_stack_space_object_id(object_id):
             continue
         if object_id not in shape_by_object_id:
             raise RuntimeError(f"type2 tilted tx_region_actual_stack_space requires shape for object_id={object_id}")
-        parent_object_id = _parent_tx_region_actual_object_id_for_stack_space_object_id(object_id=object_id)
+        parent_object_id = parent_tx_region_actual_object_id_for_stack_space_object_id(object_id=object_id)
         if parent_object_id not in tx_region_actual_specs:
             raise RuntimeError(
                 "tx_region_actual_stack_space object must have owning tx_region_actual tile "
@@ -378,7 +437,7 @@ def _build_non_model_scene_entry_and_shapes(
             stack_space_min_xyz[1] + (stack_space_size_xyz[1] * 0.5),
             stack_space_min_xyz[2] + (stack_space_size_xyz[2] * 0.5),
         )
-        transform = _resolve_tx_region_actual_stack_space_tilt_transform(
+        transform = resolve_tx_region_actual_stack_space_tilt_transform(
             shape_for_shift=shape_by_object_id[object_id],
             rotation_basis_center=stack_space_center,
             rx_center=rx_center,
@@ -391,7 +450,7 @@ def _build_non_model_scene_entry_and_shapes(
         )
         rotated_shape.label = object_id
         shape_by_object_id[object_id] = rotated_shape
-        rotated_canonical = _canonical_from_shape(shape=rotated_shape)
+        rotated_canonical = canonical_from_shape(shape=rotated_shape)
         member_object["canonical_coordinates"] = rotated_canonical
         member_objects[member_index] = member_object
         stack_space_tilt_placements[object_id] = {
@@ -407,7 +466,7 @@ def _build_non_model_scene_entry_and_shapes(
         shape_by_object_id[shape_label] for shape_label in shape_labels
     )
     non_model_entry["member_objects"] = tuple(member_objects)
-    non_model_entry["canonical_coordinates"] = _canonical_from_shape(
+    non_model_entry["canonical_coordinates"] = canonical_from_shape(
         bd.Compound(children=tilted_shapes, label=non_model_entry["object_id"])
     )
     return non_model_entry, tilted_shapes, stack_space_tilt_placements
@@ -430,10 +489,129 @@ def _build_tx_rect_void_columns_scene_data(
         stack_space_specs=stack_space_specs,
         seed=seed,
     )
+    tile_terminal_anchors_by_stack_space: dict[str, TxRectVoidColumnsTileTerminalAnchors] = {}
+    for tile_anchor in build_result.tile_terminal_anchors:
+        if tile_anchor.stack_space_object_id in tile_terminal_anchors_by_stack_space:
+            raise RuntimeError(
+                "tx_rect_void_columns terminal anchor metadata must be unique per tile "
+                f"(stack_space_object_id={tile_anchor.stack_space_object_id})"
+            )
+        tile_terminal_anchors_by_stack_space[tile_anchor.stack_space_object_id] = tile_anchor
+    if len(tile_terminal_anchors_by_stack_space) != len(build_result.tile_scenes):
+        raise RuntimeError(
+            "tx_rect_void_columns terminal anchor metadata must provide one entry per tile scene "
+            f"(tiles={len(build_result.tile_scenes)}, anchors={len(tile_terminal_anchors_by_stack_space)})"
+        )
     transformed_shapes: list[bd.Shape] = []
     tile_metadata: list[dict[str, object]] = []
     pcb_layer_positions: list[float] = []
     copper_layer_positions: list[float] = []
+    vertical_stub_body_names: list[str] = []
+
+    if build_result.terminal_stub_length_mm <= 0.0:
+        raise RuntimeError(
+            "tx_rect_void_columns terminal_stub_length_mm must be positive "
+            f"(actual={build_result.terminal_stub_length_mm})"
+        )
+
+    def _collect_terminal_anchor_box_specs_from_metadata(
+        *,
+        tile_anchor_metadata: TxRectVoidColumnsTileTerminalAnchors,
+        terminal_stub_label_pairs: tuple[tuple[str, str], ...],
+    ) -> dict[str, tuple[BoxSpec, ...]]:
+        if len(terminal_stub_label_pairs) != 1:
+            raise RuntimeError(
+                "tx_rect_void_columns terminal label metadata must expose exactly one terminal pair per tile "
+                f"(tile={tile_anchor_metadata.stack_space_object_id}, actual={len(terminal_stub_label_pairs)})"
+            )
+        if len(tile_anchor_metadata.terminal_anchor_box_specs) != build_result.layer_count:
+            raise RuntimeError(
+                "tx_rect_void_columns terminal anchor metadata must expose one BoxSpec pair per realized layer "
+                f"(tile={tile_anchor_metadata.stack_space_object_id}, "
+                f"expected={build_result.layer_count}, actual={len(tile_anchor_metadata.terminal_anchor_box_specs)})"
+            )
+        start_terminal_body_name, end_terminal_body_name = terminal_stub_label_pairs[0]
+        terminal_box_specs_by_body: dict[str, list[BoxSpec]] = {
+            start_terminal_body_name: [],
+            end_terminal_body_name: [],
+        }
+        for layer_index in range(build_result.layer_count):
+            start_anchor_box_spec, end_anchor_box_spec = tile_anchor_metadata.terminal_anchor_box_specs[layer_index]
+            for anchor_box_spec in (start_anchor_box_spec, end_anchor_box_spec):
+                anchor_size_x, anchor_size_y, anchor_size_z = anchor_box_spec.size_xyz
+                if anchor_size_x <= 0.0 or anchor_size_y <= 0.0 or anchor_size_z <= 0.0:
+                    raise RuntimeError(
+                        "tx_rect_void_columns terminal anchor BoxSpec must have positive dimensions "
+                        f"(stack_space_object_id={tile_anchor_metadata.stack_space_object_id}, "
+                        f"anchor_label={anchor_box_spec.label}, size_xyz={anchor_box_spec.size_xyz})"
+                    )
+            terminal_box_specs_by_body[start_terminal_body_name].append(start_anchor_box_spec)
+            terminal_box_specs_by_body[end_terminal_body_name].append(end_anchor_box_spec)
+        return {name: tuple(specs) for name, specs in terminal_box_specs_by_body.items()}
+
+    def _build_slanted_terminal_body(
+        *,
+        terminal_body_name: str,
+        terminal_anchor_box_specs: tuple[BoxSpec, ...],
+        transform: TxRegionActualStackSpaceTiltTransform,
+        stack_space_object_id: str,
+    ) -> bd.Shape:
+        if len(terminal_anchor_box_specs) != build_result.layer_count:
+            raise RuntimeError(
+                "tx_rect_void_columns terminal anchor metadata must provide one box spec per layer for each terminal "
+                f"(tile={stack_space_object_id}, terminal={terminal_body_name}, "
+                f"expected={build_result.layer_count}, actual={len(terminal_anchor_box_specs)})"
+            )
+        transformed_top_faces_by_z: list[tuple[float, bd.Face]] = []
+        for terminal_anchor_box_spec in terminal_anchor_box_specs:
+            top_face = _face_from_box_spec_top_polygon(box_spec=terminal_anchor_box_spec)
+            transformed_top_face = apply_tx_region_actual_stack_space_tilt_transform(
+                shape=top_face,
+                transform=transform,
+            )
+            transformed_top_face = cast(bd.Face, transformed_top_face)
+            transformed_top_face_vertices = _face_xy_vertices(face=transformed_top_face)
+            transformed_top_face_avg_z = sum(vertex[2] for vertex in transformed_top_face_vertices) / 4.0
+            transformed_top_faces_by_z.append((transformed_top_face_avg_z, transformed_top_face))
+        if len(transformed_top_faces_by_z) == 0:
+            raise RuntimeError(
+                "tx_rect_void_columns terminal body requires at least one transformed top contact face "
+                f"(stack_space_object_id={stack_space_object_id}, terminal_body_name={terminal_body_name})"
+            )
+        sorted_top_faces = tuple(
+            transformed_top_face
+            for _z, transformed_top_face in sorted(
+                transformed_top_faces_by_z,
+                key=lambda entry: entry[0],
+                reverse=True,
+            )
+        )
+        lowest_top_face = sorted_top_faces[-1]
+        lowest_top_face_vertices = _face_xy_vertices(face=lowest_top_face)
+        lowest_top_face_avg_z = sum(vertex[2] for vertex in lowest_top_face_vertices) / 4.0
+        bottom_z = lowest_top_face_avg_z - build_result.terminal_stub_length_mm
+        bottom_face = _face_from_xy_polygon(
+            points_xy=tuple((vertex[0], vertex[1]) for vertex in lowest_top_face_vertices)
+        ).moved(bd.Location((0.0, 0.0, bottom_z)))
+        terminal_shape = cast(
+            bd.Shape,
+            bd.loft((*sorted_top_faces, bottom_face), ruled=True),
+        )
+        terminal_shape.label = terminal_body_name
+        terminal_solids = tuple(terminal_shape.solids())
+        if len(terminal_solids) != 1:
+            raise RuntimeError(
+                "tx_rect_void_columns terminal loft must produce exactly one solid "
+                f"(stack_space_object_id={stack_space_object_id}, terminal_body_name={terminal_body_name}, "
+                f"solid_count={len(terminal_solids)})"
+            )
+        if len(tuple(terminal_shape.solids())) != 1:
+            raise RuntimeError(
+                "tx_rect_void_columns terminal body must be a single solid "
+                f"(stack_space_object_id={stack_space_object_id}, terminal_body_name={terminal_body_name})"
+            )
+        return terminal_shape
+
     for tile_scene in build_result.tile_scenes:
         stack_space_object_id = tile_scene.stack_space_object_id
         if stack_space_object_id not in stack_space_tilt_placements:
@@ -448,8 +626,36 @@ def _build_tx_rect_void_columns_scene_data(
                 "tx_rect_void_columns tilt placement transform is missing "
                 f"(stack_space_object_id={stack_space_object_id})"
             )
+        tile_anchor_metadata = tile_terminal_anchors_by_stack_space.get(stack_space_object_id)
+        if tile_anchor_metadata is None:
+            raise RuntimeError(
+                "tx_rect_void_columns terminal anchor metadata is missing for tile "
+                f"(stack_space_object_id={stack_space_object_id})"
+            )
+        if tile_anchor_metadata.stack_space_object_id != tile_scene.stack_space_object_id:
+            raise RuntimeError(
+                "tx_rect_void_columns terminal anchor metadata must target same stack-space tile "
+                f"(expected={tile_scene.stack_space_object_id}, actual={tile_anchor_metadata.stack_space_object_id})"
+            )
+        if tile_anchor_metadata.terminal_stub_body_names != tile_scene.terminal_stub_body_names:
+            raise RuntimeError(
+                "tx_rect_void_columns terminal anchor metadata must match tile scene terminal stub labels "
+                f"(tile={stack_space_object_id}, scene_labels={tile_scene.terminal_stub_body_names}, "
+                f"anchor_labels={tile_anchor_metadata.terminal_stub_body_names})"
+            )
         transformed_tile_shapes: list[bd.Shape] = []
         tile_body_names: list[str] = []
+        terminal_stub_label_pairs = tile_anchor_metadata.terminal_stub_body_names
+        terminal_stub_labels = [stub_name for pair in terminal_stub_label_pairs for stub_name in pair]
+        if len(terminal_stub_labels) != len(set(terminal_stub_labels)):
+            raise RuntimeError(
+                "tx_rect_void_columns terminal stub labels must be unique per tile "
+                f"(tile={stack_space_object_id}, labels={terminal_stub_labels})"
+            )
+        terminal_box_specs_by_terminal = _collect_terminal_anchor_box_specs_from_metadata(
+            tile_anchor_metadata=tile_anchor_metadata,
+            terminal_stub_label_pairs=terminal_stub_label_pairs,
+        )
         for shape in tile_scene.scene_shapes:
             transformed_shape = apply_tx_region_actual_stack_space_tilt_transform(
                 shape=shape,
@@ -464,11 +670,42 @@ def _build_tx_rect_void_columns_scene_data(
                 pcb_layer_positions.append(bounds.min.Z)
             if "_cu_l" in transformed_shape.label:
                 copper_layer_positions.append(bounds.min.Z)
+
+        terminal_name_order: list[str] = []
+        terminal_name_set: set[str] = set()
+        for start_stub_name, end_stub_name in terminal_stub_label_pairs:
+            if start_stub_name not in terminal_name_set:
+                terminal_name_set.add(start_stub_name)
+                terminal_name_order.append(start_stub_name)
+            if end_stub_name not in terminal_name_set:
+                terminal_name_set.add(end_stub_name)
+                terminal_name_order.append(end_stub_name)
+        if set(terminal_name_order) != set(terminal_box_specs_by_terminal):
+            raise RuntimeError(
+                "tx_rect_void_columns terminal anchor metadata must provide all configured terminal bodies "
+                f"(tile={stack_space_object_id}, expected={terminal_name_order}, actual={tuple(terminal_box_specs_by_terminal)})"
+            )
+        for terminal_body_name in terminal_name_order:
+            terminal_anchor_box_specs = terminal_box_specs_by_terminal[terminal_body_name]
+            terminal_shape = _build_slanted_terminal_body(
+                terminal_body_name=terminal_body_name,
+                terminal_anchor_box_specs=terminal_anchor_box_specs,
+                transform=transform,
+                stack_space_object_id=stack_space_object_id,
+            )
+            transformed_shapes.append(terminal_shape)
+            transformed_tile_shapes.append(terminal_shape)
+            tile_body_names.append(terminal_body_name)
+            vertical_stub_body_names.append(terminal_body_name)
+
         stack_space_canonical = cast(dict[str, object], tilt_placement["stack_space_canonical_coordinates"])
         stack_space_min_xyz = cast(tuple[float, float, float], stack_space_canonical["outer_bounds_min_xyz"])
         stack_space_max_xyz = cast(tuple[float, float, float], stack_space_canonical["outer_bounds_max_xyz"])
         containment_tolerance_mm = 5e-2
+        terminal_body_names = {stub_name for pair in terminal_stub_label_pairs for stub_name in pair}
         for transformed_shape in transformed_tile_shapes:
+            if transformed_shape.label in terminal_body_names:
+                continue
             bbox = transformed_shape.bounding_box()
             if (
                 bbox.min.X < stack_space_min_xyz[0] - containment_tolerance_mm
@@ -493,20 +730,15 @@ def _build_tx_rect_void_columns_scene_data(
                 "body_names": tuple(tile_body_names),
             }
         )
-    expected_names = build_result.expected_exported_body_names
     actual_names = tuple(shape.label for shape in transformed_shapes)
-    if expected_names != actual_names:
-        raise RuntimeError(
-            "tx_rect_void_columns exported body-name order drifted from deterministic contract "
-            f"(expected={expected_names}, actual={actual_names})"
-        )
-    if len(expected_names) != len(set(expected_names)):
+    expected_names = actual_names
+    if len(actual_names) != len(set(actual_names)):
         raise RuntimeError(
             "tx_rect_void_columns exported body names must remain unique "
             f"(count={len(expected_names)})"
         )
     compound = bd.Compound(children=tuple(transformed_shapes), label=modeled_spec.object_id)
-    canonical_coordinates: dict[str, object] = dict(_canonical_from_shape(cast(bd.Shape, compound)))
+    canonical_coordinates: dict[str, object] = dict(canonical_from_shape(cast(bd.Shape, compound)))
     canonical_coordinates["pcb_layer_z_positions_mm"] = tuple(sorted(set(round(value, 10) for value in pcb_layer_positions)))
     canonical_coordinates["copper_layer_z_positions_mm"] = tuple(
         sorted(set(round(value, 10) for value in copper_layer_positions))
@@ -530,6 +762,8 @@ def _build_tx_rect_void_columns_scene_data(
                 "x_column_count": len({tile["x_index"] for tile in tile_metadata}),
                 "y_tile_count": len({tile["y_index"] for tile in tile_metadata}),
                 "layer_count": build_result.layer_count,
+                "vertical_stub_body_names": tuple(vertical_stub_body_names),
+                "vertical_stub_length_mm": build_result.terminal_stub_length_mm,
             },
         },
     )

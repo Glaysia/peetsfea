@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 import json
 import math
+import re
 import tempfile
 from pathlib import Path
 from typing import Literal, cast
@@ -481,6 +482,7 @@ def _type2_tx_rect_void_columns_spec_text(
     turn_count_x0_range: str = "[true, 2, 2, 1]",
     turn_count_x1_range: str = "[true, 3, 3, 1]",
     turn_count_x2_range: str = "[true, 4, 4, 1]",
+    terminal_stub_length_mm: float = 10.0,
 ) -> str:
     return f"""
 spec_version = "0.2.22"
@@ -596,7 +598,7 @@ range = {layer_count_range}
 [modeled_objects.layer_gap_mm]
 range = [false, 2.0, 2.0, 1]
 [modeled_objects.terminal_stub_length_mm]
-range = [false, 5.0, 5.0, 1]
+range = [false, {terminal_stub_length_mm}, {terminal_stub_length_mm}, 1]
 [modeled_objects.void_usage_ratio]
 range = [false, 0.2, 0.2, 1]
 [modeled_objects.margin_ratio]
@@ -1065,6 +1067,82 @@ def _assert_modeled_bodies_within_tx_region_actual_stack_space(
                 contained = True
                 break
         assert contained, f"modeled body must fit inside one stack-space tile (body={body_name})"
+
+
+def _assert_tx_rect_void_columns_bodies_within_stack_space_allowing_stub_protrusion(
+    *,
+    ledger: dict[str, object],
+    modeled_object_id: str,
+) -> None:
+    non_model_entry = cast(dict[str, object], cast(list[object], ledger["non_model_objects"])[0])
+    member_objects = cast(list[object], non_model_entry["member_objects"])
+    stack_space_members = [
+        cast(dict[str, object], member)
+        for member in member_objects
+        if cast(str, cast(dict[str, object], member)["role"]) == "tx_region_actual_stack_space"
+    ]
+    assert len(stack_space_members) > 0
+    stack_space_boxes = []
+    for member in stack_space_members:
+        canonical = cast(dict[str, object], member["canonical_coordinates"])
+        min_xyz = cast(tuple[float, float, float], canonical["outer_bounds_min_xyz"])
+        max_xyz = cast(tuple[float, float, float], canonical["outer_bounds_max_xyz"])
+        stack_space_boxes.append((min_xyz, max_xyz))
+
+    modeled_entry = next(
+        cast(dict[str, object], entry)
+        for entry in cast(list[object], ledger["modeled_objects"])
+        if cast(dict[str, object], entry)["object_id"] == modeled_object_id
+    )
+    expected_names = cast(tuple[str, ...], modeled_entry["expected_exported_body_names"])
+    scene_shapes_by_label = _step_shapes_by_label(Path(cast(str, ledger["scene_step_path"])))
+    containment_tolerance_mm = 5e-2
+    for body_name in expected_names:
+        body_shape = scene_shapes_by_label[body_name]
+        if ("_pcb_l" in body_name or "_cu_l" in body_name) and "_stub_" not in body_name:
+            body_bbox = body_shape.bounding_box()
+            contained = False
+            for stack_space_min_xyz, stack_space_max_xyz in stack_space_boxes:
+                if (
+                    body_bbox.min.X >= stack_space_min_xyz[0] - containment_tolerance_mm
+                    and body_bbox.max.X <= stack_space_max_xyz[0] + containment_tolerance_mm
+                    and body_bbox.min.Y >= stack_space_min_xyz[1] - containment_tolerance_mm
+                    and body_bbox.max.Y <= stack_space_max_xyz[1] + containment_tolerance_mm
+                    and body_bbox.min.Z >= stack_space_min_xyz[2] - containment_tolerance_mm
+                    and body_bbox.max.Z <= stack_space_max_xyz[2] + containment_tolerance_mm
+                ):
+                    contained = True
+                    break
+            assert contained, f"modeled body must fit inside one stack-space tile (body={body_name})"
+
+
+def _stub_body_touches_or_overlaps_all_layer_anchors(
+    *,
+    stub_shape: bd.Shape,
+    scene_shapes_by_label: dict[str, bd.Shape],
+    tile_pcb_cu_labels: tuple[tuple[tuple[int, int], tuple[str, str]], ...],
+    tolerance_mm: float = 1e-2,
+) -> None:
+    stub_bbox = stub_shape.bounding_box()
+    for tile_index, pcb_and_copper_labels in tile_pcb_cu_labels:
+        connected_for_layer = False
+        for anchor_label in pcb_and_copper_labels:
+            anchor_shape = scene_shapes_by_label[anchor_label]
+            anchor_bbox = anchor_shape.bounding_box()
+            overlaps = (
+                stub_bbox.max.X >= anchor_bbox.min.X - tolerance_mm
+                and stub_bbox.min.X <= anchor_bbox.max.X + tolerance_mm
+                and stub_bbox.max.Y >= anchor_bbox.min.Y - tolerance_mm
+                and stub_bbox.min.Y <= anchor_bbox.max.Y + tolerance_mm
+                and stub_bbox.max.Z >= anchor_bbox.min.Z - tolerance_mm
+                and stub_bbox.min.Z <= anchor_bbox.max.Z + tolerance_mm
+            )
+            if overlaps:
+                connected_for_layer = True
+                break
+        assert connected_for_layer, (
+            f"terminal stub must overlap each layer anchor set (stub={stub_shape.label})"
+        )
 
 
 def _assert_plate_stack_bridge_non_overlap(
@@ -2539,7 +2617,7 @@ def test_export_type2_step_artifacts_tx_rect_void_columns_exports_geometry_only_
         if cast(dict[str, object], entry)["object_id"] == "tx_rect_void_columns"
     )
     expected_names = cast(tuple[str, ...], modeled_entry["expected_exported_body_names"])
-    expected_count = x_division_count * y_division_count * layer_count * 2
+    expected_count = x_division_count * y_division_count * ((layer_count * 2) + 2)
     assert modeled_entry["expected_exported_body_count"] == expected_count
     assert len(expected_names) == expected_count
     assert tuple(cast(list[object], modeled_entry["expected_exported_body_groups"])) == ()
@@ -2555,13 +2633,163 @@ def test_export_type2_step_artifacts_tx_rect_void_columns_exports_geometry_only_
     )
     for body_name in expected_names:
         assert all(blocked not in body_name for blocked in blocked_substrings)
+    pcb_names = tuple(name for name in expected_names if "_pcb_l" in name)
+    copper_names = tuple(
+        name for name in expected_names if "_cu_l" in name and "_stub_" not in name
+    )
+    stub_names = tuple(name for name in expected_names if "_stub_" in name)
+    assert len(pcb_names) == x_division_count * y_division_count * layer_count
+    assert len(copper_names) == x_division_count * y_division_count * layer_count
+    assert len(stub_names) == x_division_count * y_division_count * 2
+
+    non_model_objects = cast(list[object], ledger["non_model_objects"])
+    non_model_entry = cast(dict[str, object], non_model_objects[0])
+    member_objects = cast(list[object], non_model_entry["member_objects"])
+    rx_region_member = next(
+        member
+        for member in member_objects
+        if cast(str, cast(dict[str, object], member)["object_id"]) == "rx_region_max"
+    )
+    rx_region_canonical = cast(dict[str, object], cast(dict[str, object], rx_region_member)["canonical_coordinates"])
+    rx_region_min_xyz = cast(tuple[float, float, float], rx_region_canonical["outer_bounds_min_xyz"])
+    rx_region_size_xyz = cast(tuple[float, float, float], rx_region_canonical["outer_bounds_size_xyz"])
+    rx_region_center = (
+        rx_region_min_xyz[0] + (rx_region_size_xyz[0] * 0.5),
+        rx_region_min_xyz[1] + (rx_region_size_xyz[1] * 0.5),
+        rx_region_min_xyz[2] + (rx_region_size_xyz[2] * 0.5),
+    )
+
+    stack_space_members = {
+        cast(str, cast(dict[str, object], member)["object_id"]): cast(dict[str, object], member)
+        for member in member_objects
+        if cast(str, cast(dict[str, object], member)["role"]) == "tx_region_actual_stack_space"
+    }
+
+    def _stack_space_object_id_for_tile(*, x_index: int, y_index: int) -> str:
+        if x_division_count == 1 and y_division_count == 1 and x_index == 0 and y_index == 0:
+            return "tx_region_actual_stack_space"
+        return f"tx_region_actual_stack_space_x{x_index}_y{y_index}"
+
+    def _horizontal_bottom_z(*, shape: bd.Shape) -> float:
+        bbox = shape.bounding_box()
+        return bbox.min.Z
+
+    def _average_face_z_closest_to_direction(*, shape: bd.Shape, direction_xyz: tuple[float, float, float]) -> float:
+        best_dot = -math.inf
+        best_average_z = 0.0
+        for face in shape.faces():
+            normal = face.normal_at()
+            normal_xyz = _normalize_vector_xyz((normal.X, normal.Y, normal.Z))
+            dot_value = _dot_xyz(normal_xyz, direction_xyz)
+            if dot_value > best_dot:
+                vertices = tuple(face.vertices())
+                assert len(vertices) >= 3
+                best_dot = dot_value
+                best_average_z = sum(vertex.Z for vertex in vertices) / float(len(vertices))
+        assert math.isfinite(best_dot)
+        return best_average_z
+
+    def _stack_space_shape_for_tile(
+        *,
+        x_index: int,
+        y_index: int,
+    ) -> bd.Shape:
+        stack_space_id = _stack_space_object_id_for_tile(x_index=x_index, y_index=y_index)
+        assert stack_space_id in stack_space_members, f"missing stack-space tile: {stack_space_id}"
+        return scene_shapes_by_label[stack_space_id]
+
     scene_shapes_by_label = _step_shapes_by_label(Path(cast(str, ledger["scene_step_path"])))
+    for stub_name in stub_names:
+        assert stub_name in scene_shapes_by_label
+        assert re.match(r"^txrvc_x\d+_y\d+_stub_[se]$", stub_name) is not None
+        assert re.search(r"_stub_[a-z]+_l\d+$", stub_name) is None
+    by_tile_and_layer: dict[tuple[int, int], list[str]] = {}
+    for stub_name in stub_names:
+        try:
+            match = re.match(r"^txrvc_x(?P<x>\d+)_y(?P<y>\d+)_stub_(?P<terminal>[se])$", stub_name)
+            assert match is not None
+            x_index = int(match.group("x"))
+            y_index = int(match.group("y"))
+            terminal = match.group("terminal")
+        except Exception as exc:  # pragma: no cover
+            raise AssertionError(f"unexpected terminal stub label format for tx_rect_void_columns: {stub_name}") from exc
+        assert terminal in ("s", "e")
+        by_tile_and_layer.setdefault((x_index, y_index), []).append(terminal)
+    assert len(by_tile_and_layer) == x_division_count * y_division_count
+    for terminal_names in by_tile_and_layer.values():
+        assert tuple(sorted(terminal_names)) == ("e", "s")
+
+    for stub_name in stub_names:
+        stub_shape = scene_shapes_by_label[stub_name]
+        match = re.match(r"^txrvc_x(?P<x>\d+)_y(?P<y>\d+)_stub_(?P<terminal>[se])$", stub_name)
+        assert match is not None
+        tile_x_index = int(match.group("x"))
+        tile_y_index = int(match.group("y"))
+        first_layer_pcb_label = f"txrvc_x{match.group('x')}_y{match.group('y')}_pcb_l0"
+        first_layer_copper_label = f"txrvc_x{match.group('x')}_y{match.group('y')}_cu_l0"
+        assert first_layer_pcb_label in pcb_names
+        assert first_layer_copper_label in copper_names
+        first_layer_copper_bbox = scene_shapes_by_label[first_layer_copper_label].bounding_box()
+        stub_bbox = stub_shape.bounding_box()
+        tile_stack_space_shape = _stack_space_shape_for_tile(
+            x_index=tile_x_index,
+            y_index=tile_y_index,
+        )
+        tile_stack_space_bbox = tile_stack_space_shape.bounding_box()
+        stack_space_center = (
+            (tile_stack_space_bbox.min.X + tile_stack_space_bbox.max.X) * 0.5,
+            (tile_stack_space_bbox.min.Y + tile_stack_space_bbox.max.Y) * 0.5,
+            (tile_stack_space_bbox.min.Z + tile_stack_space_bbox.max.Z) * 0.5,
+        )
+        direction_to_rx = _normalize_vector_xyz(
+            (
+                rx_region_center[0] - stack_space_center[0],
+                rx_region_center[1] - stack_space_center[1],
+                rx_region_center[2] - stack_space_center[2],
+            )
+        )
+        stack_space_top_normal = _face_normal_closest_to_direction(
+            shape=tile_stack_space_shape,
+            direction_xyz=direction_to_rx,
+        )
+        stub_top_normal = _face_normal_closest_to_direction(
+            shape=stub_shape,
+            direction_xyz=direction_to_rx,
+        )
+        assert abs(_dot_xyz(stub_top_normal, stack_space_top_normal)) >= 0.999
+        assert abs(stub_top_normal[2]) < 0.995
+        top_contact_average_z = _average_face_z_closest_to_direction(
+            shape=stub_shape,
+            direction_xyz=direction_to_rx,
+        )
+        terminal_body_height_z = top_contact_average_z - _horizontal_bottom_z(shape=stub_shape)
+        assert terminal_body_height_z >= 10.0 - 1e-8
+        assert terminal_body_height_z <= 15.0 + 1e-8
+        assert stub_bbox.max.Z <= tile_stack_space_bbox.max.Z + 5e-1
+        _stub_body_touches_or_overlaps_all_layer_anchors(
+            stub_shape=stub_shape,
+            scene_shapes_by_label=scene_shapes_by_label,
+            tile_pcb_cu_labels=tuple(
+                (
+                    (tile_x_index, tile_y_index),
+                    (
+                        f"txrvc_x{match.group('x')}_y{match.group('y')}_pcb_l{layer_index}",
+                        f"txrvc_x{match.group('x')}_y{match.group('y')}_cu_l{layer_index}",
+                    ),
+                )
+                for layer_index in range(layer_count)
+            ),
+        )
+
     assert "tx_copper_stack" not in scene_shapes_by_label
     assert "tx_port_sheet" not in scene_shapes_by_label
     assert all("vertical_bus" not in label for label in scene_shapes_by_label)
     assert all("underlay" not in label for label in scene_shapes_by_label)
     assert all("ferrite" not in label for label in scene_shapes_by_label)
-    _assert_modeled_bodies_within_tx_region_actual_stack_space(
+    assert all("stack_pet_psa" not in label for label in expected_names)
+    assert all("stack_ferrite" not in label for label in expected_names)
+    assert all("stack_air" not in label for label in expected_names)
+    _assert_tx_rect_void_columns_bodies_within_stack_space_allowing_stub_protrusion(
         ledger=ledger,
         modeled_object_id="tx_rect_void_columns",
     )

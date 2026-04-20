@@ -27,6 +27,7 @@ tags:
 - tx-rect-void-columns example verifies shared TX owner sampling is independent from RX owner-range changes.
 - tx-rect-void-columns sample metadata includes only effective `turn_count_x*` owner paths for the resolved `tx_region_actual.x_division_count` and excludes inactive `turn_count_x*` paths.
 - tx-rect-void-columns sample metadata excludes `outer_x_usage_ratio` and `outer_y_usage_ratio` because the TX outer footprint is owned by `tx_region_actual_stack_space`.
+- tx-rect-void-columns examples keep `terminal_stub_length_mm` fixed at 10.0 mm for floorward geometry-only stubs, so it is not an effective sampled owner until intentionally reopened.
 - sampled owner paths cover only `rx_rect_void_coil` effective sampled degrees:
   - `outer_x_usage_ratio`
   - `outer_y_usage_ratio`

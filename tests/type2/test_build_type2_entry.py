@@ -25,6 +25,7 @@ from peetsfea.type2_sampled import PreparedType2Build
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
+from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 
@@ -329,6 +330,7 @@ range = [true, 1, 1, 1]
     range = [false, 0.2, 0.6, 15]
     [modeled_objects.terminal_path]
     value = "A_cw_to_a"
+
 """.strip()
 
 
@@ -336,6 +338,114 @@ def _write_source_type2_toml(tmp_path: Path) -> Path:
     path = tmp_path / "type2_sweep.toml"
     path.write_text(_source_type2_toml_text(), encoding="utf-8")
     return path
+
+
+def _source_type2_toml_text_with_tx_rect_void_columns() -> str:
+    return """
+spec_version = "0.2.22"
+schema_id = "peetsfea.type2.step.v6"
+runtime_compatible = false
+
+[design]
+units = "mm"
+
+[backend]
+authoring_tool = "build123d"
+solver_tool = "hfss"
+interchange_format = "step"
+
+[simulation]
+radiation_margin_mm = 3500.0
+
+[outputs]
+report_name = "Output Variables Table1"
+solution_name = "Setup1 : LastAdaptive"
+primary_sweep = "Freq"
+report_category = "Terminal Solution Data"
+plot_type = "Data Table"
+
+[[outputs.variables]]
+name = "Ltx_uH"
+expression = "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"
+
+[[non_model_objects]]
+id = "tx_region"
+kind = "tx_region"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [0.0, -140.0, 0.0]
+size_xyz = [160.0, 280.0, 90.0]
+
+[[non_model_objects]]
+id = "tx_region_actual"
+kind = "tx_region_actual"
+source_region_id = "tx_region"
+[non_model_objects.x_usage_ratio]
+range = [false, 0.3, 1.0, 27]
+[non_model_objects.y_usage_ratio]
+range = [false, 0.3, 1.0, 27]
+[non_model_objects.x_division_count]
+range = [true, 1, 3, 3]
+[non_model_objects.y_division_count]
+range = [true, 1, 3, 3]
+
+[[non_model_objects]]
+id = "tx_region_actual_stack_space"
+kind = "tx_region_actual_stack_space"
+source_region_id = "tx_region_actual"
+total_thickness_mm = 5.0
+[non_model_objects.scale_ratio]
+range = [false, 0.35, 0.95, 25]
+[non_model_objects.tilt_enabled]
+range = [true, 1, 1, 1]
+
+[[modeled_objects]]
+object_id = "tx_rect_void_columns"
+role = "tx_rect_void_columns"
+material = "composite"
+model_state = true
+pcb_thickness_mm = 0.3
+copper_thickness_mm = 0.1
+[modeled_objects.layer_count]
+range = [true, 1, 3, 3]
+[modeled_objects.layer_gap_mm]
+range = [false, 2, 2, 1]
+[modeled_objects.terminal_stub_length_mm]
+range = [false, 10.0, 10.0, 1]
+[modeled_objects.void_usage_ratio]
+range = [false, 0.2, 0.6, 15]
+[modeled_objects.margin_ratio]
+range = [false, 0.05, 0.05, 1]
+[modeled_objects.metal_fill_factor]
+range = [false, 0.2, 0.6, 15]
+[modeled_objects.terminal_path]
+value = "A_cw_to_a"
+[modeled_objects.turn_count_x0]
+range = [true, 2, 6, 5]
+[modeled_objects.turn_count_x1]
+range = [true, 2, 6, 5]
+[modeled_objects.turn_count_x2]
+range = [true, 2, 6, 5]
+""".strip()
+
+
+def test_build_type2_source_toml_keeps_tx_rect_void_columns_terminal_stub_fixed(tmp_path: Path) -> None:
+    source_toml_path = tmp_path / "type2_tx_rect_source.toml"
+    source_toml_path.write_text(_source_type2_toml_text_with_tx_rect_void_columns(), encoding="utf-8")
+    source_spec = load_type2_step_spec(source_toml_path)
+    tx_rect_spec = next(
+        modeled_object
+        for modeled_object in source_spec.modeled_objects
+        if modeled_object.object_id == "tx_rect_void_columns"
+    )
+    assert isinstance(tx_rect_spec, ModeledTxRectVoidColumnsSpec)
+    assert tx_rect_spec.terminal_stub_length_mm.start == 10.0
+    assert tx_rect_spec.terminal_stub_length_mm.end == 10.0
+    assert tx_rect_spec.terminal_stub_length_mm.count == 1
+    assert tx_rect_spec.terminal_stub_length_mm.is_integer is False
 
 
 def test_build_type2_reads_aedt_builder_n_from_manifest(

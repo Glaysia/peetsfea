@@ -32,6 +32,7 @@ tags:
 - this suite keeps scope at build-entry wiring and runner handoff contracts, not setup-ready runtime internals
 - sampled owner replay drives non-empty RX `design_variables` with canonical owner-name order
 - sampled owner replay now also drives unitless `tx_region_actual` non-model usage-ratio, integer division-count, and `tx_region_actual_stack_space.scale_ratio` design variables. Fixed `tx_region_actual_stack_space.tilt_enabled` is excluded.
+- build helper source fixture that includes `tx_rect_void_columns` keeps its `terminal_stub_length_mm` fixed at `[false, 10.0, 10.0, 1]`, preserving non-sampled behavior and avoiding unintended TX stub ownership in build-path sampling.
 - setup-ready/build path fails fast for geometry-only `tx_rect_void_columns` modeled roles with a clear unsupported-role message before runner-side source/port setup.
 - geometry-only `tx_rect_void_columns` unsupported-role coverage does not expect TX outer-envelope design variables; that footprint is non-model stack-space state.
 - RX effective sampled owners are `outer_x_usage_ratio`, `outer_y_usage_ratio`, `void_usage_ratio`, `turn_count`, `metal_fill_factor`; `layer_count`, full-backing `underlay_repeat_count`, and removed split/centered `void_*` fields are excluded from `design_variables`

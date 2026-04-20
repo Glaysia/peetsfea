@@ -17,6 +17,7 @@ from peetsfea.type2_sampled import manifest_entry_for_sample_index
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
+from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 
@@ -688,7 +689,7 @@ range = [true, 1, 3, 3]
 [modeled_objects.layer_gap_mm]
 range = [false, 2, 2, 1]
 [modeled_objects.terminal_stub_length_mm]
-range = [false, 5, 5, 1]
+range = [false, 10.0, 10.0, 1]
 [modeled_objects.void_usage_ratio]
 range = [false, 0.1, 0.6, 17]
 [modeled_objects.margin_ratio]
@@ -729,6 +730,16 @@ def test_tx_rect_void_columns_shared_sampling_is_independent_from_rx_sampling(tm
 
     baseline_values = dict(type2_sampled.sampled_owner_values(baseline_spec, seed=17))
     shifted_rx_values = dict(type2_sampled.sampled_owner_values(shifted_rx_spec, seed=17))
+    baseline_tx_spec = next(
+        modeled_object
+        for modeled_object in baseline_spec.modeled_objects
+        if modeled_object.object_id == "tx_rect_void_columns"
+    )
+    assert isinstance(baseline_tx_spec, ModeledTxRectVoidColumnsSpec)
+    assert baseline_tx_spec.terminal_stub_length_mm.start == 10.0
+    assert baseline_tx_spec.terminal_stub_length_mm.end == 10.0
+    assert baseline_tx_spec.terminal_stub_length_mm.count == 1
+    assert baseline_tx_spec.terminal_stub_length_mm.is_integer is False
 
     tx_shared_owner_paths = (
         "modeled_objects.tx_rect_void_columns.void_usage_ratio",
@@ -812,3 +823,12 @@ def test_sample_type2_tx_rect_void_columns_metadata_tracks_only_effective_turn_c
     sampled_payload = tomllib.loads(Path(manifest_entry["sampled_toml_path"]).read_text(encoding="utf-8"))
     sampled_metadata_owner_paths = cast(list[str], sampled_payload["sampled"]["sampled_owner_paths"])
     assert sampled_metadata_owner_paths == owner_paths
+    tx_rect_modeled_object = next(
+        modeled_object
+        for modeled_object in cast(list[dict[str, object]], sampled_payload["modeled_objects"])
+        if modeled_object["object_id"] == "tx_rect_void_columns"
+    )
+    terminal_stub_payload = cast(dict[str, object], tx_rect_modeled_object["terminal_stub_length_mm"])
+    assert terminal_stub_payload["range"] == [False, 10.0, 10.0, 1]
+    assert "modeled_objects.tx_rect_void_columns.terminal_stub_length_mm" not in owner_paths
+    assert "modeled_objects.tx_rect_void_columns.terminal_stub_length_mm" not in sampled_metadata_owner_paths

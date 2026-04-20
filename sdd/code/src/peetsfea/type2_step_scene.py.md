@@ -20,10 +20,12 @@ tags:
 - Related TX actual-region plan: [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]]
 - Related TX actual-region stack-space plan: [[sdd/plans/0.2.22-type2-tx-actual-region-pcb-non-model]]
 - Related TX rect/void columns plan: [[sdd/plans/0.2.22-type2-tx-rect-void-columns-geometry]]
+- Split plan: [[sdd/plans/0.2.22-type2-step-scene-split]]
 
 ## 역할
-- type2 non-model scene와 modeled scene dispatch를 담당한다.
+- type2 scene compatibility facade와 modeled scene dispatch를 담당한다.
 - active TX/RX plate roles는 shared `type2_plate_stack.py`로 seed-aware dispatch하고, legacy single-coil roles만 coil builder를 탄다.
+- split 이후 non-model scene, single-coil port/underlay/scene implementation은 전용 모듈로 위임한다.
 
 ## 입력 / 출력
 - 입력: parsed type2 spec, owner region specs, seed
@@ -84,6 +86,11 @@ tags:
 - [[sdd/code/src/peetsfea/type2_step_ledger.py]]
 - [[sdd/code/src/peetsfea/type2_step_export.py]]
 - [[sdd/code/src/peetsfea/type2_tx_rect_void_columns.py]]
+- [[sdd/code/src/peetsfea/type2_scene_geometry.py]]
+- [[sdd/code/src/peetsfea/type2_non_model_scene.py]]
+- [[sdd/code/src/peetsfea/type2_single_coil_ports.py]]
+- [[sdd/code/src/peetsfea/type2_single_coil_underlay.py]]
+- [[sdd/code/src/peetsfea/type2_single_coil_scene.py]]
 
 ## 관련 테스트
 - [[sdd/code/tests/type2/test_generate_type2_step.py]]
@@ -91,3 +98,4 @@ tags:
 ## 변경 시 주의점
 - active plate roles에 single-coil terminal-path semantics를 끌어오지 않는다.
 - shared plate-stack placement contract와 import-side owner-fit validation을 같이 유지해야 한다.
+- split 후 `type2_step_scene.py`에서 underscore helper를 export facade처럼 유지하지 않는다.
