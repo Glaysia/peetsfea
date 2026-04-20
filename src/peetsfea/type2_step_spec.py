@@ -28,6 +28,10 @@ _TX_REGION_ACTUAL_DIVISION_COUNT_START = 1
 _TX_REGION_ACTUAL_DIVISION_COUNT_END = 3
 _TX_REGION_ACTUAL_DIVISION_COUNT_COUNT = 3
 _TX_REGION_ACTUAL_DIVISION_COUNT_VALUES = (1, 2, 3)
+_TX_REGION_ACTUAL_PCB_SCALE_RATIO_START = 0.35
+_TX_REGION_ACTUAL_PCB_SCALE_RATIO_END = 0.95
+_TX_REGION_ACTUAL_PCB_SCALE_RATIO_COUNT = 25
+_TX_REGION_ACTUAL_PCB_THICKNESS_MM = 5.0
 _TYPE2_SCHEMA_ID = "peetsfea.type2.step.v6"
 
 
@@ -61,6 +65,19 @@ class NonModelTxRegionActualSpec:
     y_usage_ratio: RangeSpec
     x_division_count: RangeSpec
     y_division_count: RangeSpec
+
+
+@dataclass(frozen=True)
+class NonModelTxRegionActualPcbSpec:
+    object_id: Literal["tx_region_actual_pcb"]
+    kind: Literal["tx_region_actual_pcb"]
+    source_region_id: Literal["tx_region_actual"]
+    material: str
+    thickness_mm: float
+    scale_ratio: RangeSpec
+
+
+NonModelDerivedSpec = NonModelTxRegionActualSpec | NonModelTxRegionActualPcbSpec
 
 
 @dataclass(frozen=True)
@@ -140,7 +157,7 @@ class Type2StepSpec:
     simulation: Type2SimulationPolicy
     outputs: OutputsSpec
     non_model_objects: tuple[NonModelBoxSpec, ...]
-    non_model_derived_objects: tuple[NonModelTxRegionActualSpec, ...]
+    non_model_derived_objects: tuple[NonModelDerivedSpec, ...]
     modeled_objects: tuple[ModeledObjectSpec, ...]
 
 
@@ -430,6 +447,91 @@ def _parse_non_model_tx_region_actual(
         y_usage_ratio=_require_tx_region_actual_usage_ratio_range(table, key="y_usage_ratio", context=context),
         x_division_count=_require_tx_region_actual_division_count_range(table, key="x_division_count", context=context),
         y_division_count=_require_tx_region_actual_division_count_range(table, key="y_division_count", context=context),
+    )
+
+
+def _is_canonical_tx_region_actual_pcb_scale_ratio_range(range_spec: RangeSpec) -> bool:
+    return (
+        range_spec.is_integer is False
+        and math.isclose(range_spec.start, _TX_REGION_ACTUAL_PCB_SCALE_RATIO_START, rel_tol=0.0, abs_tol=1e-12)
+        and math.isclose(range_spec.end, _TX_REGION_ACTUAL_PCB_SCALE_RATIO_END, rel_tol=0.0, abs_tol=1e-12)
+        and range_spec.count == _TX_REGION_ACTUAL_PCB_SCALE_RATIO_COUNT
+    )
+
+
+def _require_tx_region_actual_pcb_scale_ratio_range(
+    table: dict[str, object],
+    *,
+    key: str,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, key, context, expect_integer=False)
+    candidates = _float_range_candidates(range_spec)
+    if any(
+        candidate < _TX_REGION_ACTUAL_PCB_SCALE_RATIO_START
+        or candidate > _TX_REGION_ACTUAL_PCB_SCALE_RATIO_END
+        for candidate in candidates
+    ):
+        raise ValueError(
+            f"{context}.{key} must realize to values in "
+            f"[{_TX_REGION_ACTUAL_PCB_SCALE_RATIO_START}, {_TX_REGION_ACTUAL_PCB_SCALE_RATIO_END}] "
+            f"(actual={candidates})"
+        )
+    if _is_canonical_tx_region_actual_pcb_scale_ratio_range(range_spec):
+        return range_spec
+    if range_spec.count == 1 and math.isclose(range_spec.start, range_spec.end, rel_tol=0.0, abs_tol=1e-12):
+        return range_spec
+    raise ValueError(
+        f"{context}.{key}.range must be canonical [false, 0.35, 0.95, 25] "
+        "or fixed [false, r, r, 1] for 0.35 <= r <= 0.95 "
+        f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
+    )
+
+
+def _parse_non_model_tx_region_actual_pcb(
+    raw_object: object,
+    *,
+    index: int,
+    seen_object_ids: set[str],
+) -> NonModelTxRegionActualPcbSpec:
+    context = f"non_model_objects[{index}]"
+    table = _require_table(raw_object, context)
+    object_id = _require_non_empty_str(table, "id", context)
+    if object_id in seen_object_ids:
+        raise ValueError(f"duplicate object id: {object_id}")
+    seen_object_ids.add(object_id)
+    if object_id != "tx_region_actual_pcb":
+        raise ValueError(f"{context}.id must be 'tx_region_actual_pcb' (actual={object_id!r})")
+    kind = _require_non_empty_str(table, "kind", context)
+    if kind != "tx_region_actual_pcb":
+        raise ValueError(f"{context}.kind must be 'tx_region_actual_pcb' (actual={kind!r})")
+    source_region_id = _require_non_empty_str(table, "source_region_id", context)
+    if source_region_id != "tx_region_actual":
+        raise ValueError(f"{context}.source_region_id must be 'tx_region_actual' (actual={source_region_id!r})")
+    thickness_mm = _require_float_value(table, "thickness_mm", context)
+    if not math.isclose(thickness_mm, _TX_REGION_ACTUAL_PCB_THICKNESS_MM, rel_tol=0.0, abs_tol=1e-12):
+        raise ValueError(
+            f"{context}.thickness_mm must be {_TX_REGION_ACTUAL_PCB_THICKNESS_MM} "
+            f"(actual={thickness_mm})"
+        )
+    allowed_keys = {
+        "id",
+        "kind",
+        "source_region_id",
+        "material",
+        "thickness_mm",
+        "scale_ratio",
+    }
+    extra_keys = sorted(set(table.keys()) - allowed_keys)
+    if extra_keys:
+        raise ValueError(f"{context} contains unsupported keys for tx_region_actual_pcb (actual={extra_keys})")
+    return NonModelTxRegionActualPcbSpec(
+        object_id="tx_region_actual_pcb",
+        kind="tx_region_actual_pcb",
+        source_region_id="tx_region_actual",
+        material=_require_non_empty_str(table, "material", context),
+        thickness_mm=thickness_mm,
+        scale_ratio=_require_tx_region_actual_pcb_scale_ratio_range(table, key="scale_ratio", context=context),
     )
 
 
@@ -1172,7 +1274,7 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
 
     seen_object_ids: set[str] = set()
     non_model_box_specs: list[NonModelBoxSpec] = []
-    non_model_derived_specs: list[NonModelTxRegionActualSpec] = []
+    non_model_derived_specs: list[NonModelDerivedSpec] = []
     for index, raw_object in enumerate(raw_non_model_objects):
         context = f"{toml_path.name}.non_model_objects[{index}]"
         table = _require_table(raw_object, context)
@@ -1182,11 +1284,34 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
                 _parse_non_model_tx_region_actual(raw_object, index=index, seen_object_ids=seen_object_ids)
             )
             continue
+        if kind == "tx_region_actual_pcb":
+            non_model_derived_specs.append(
+                _parse_non_model_tx_region_actual_pcb(raw_object, index=index, seen_object_ids=seen_object_ids)
+            )
+            continue
         non_model_box_specs.append(_parse_non_model_box(raw_object, index=index, seen_object_ids=seen_object_ids))
     non_model_objects = tuple(non_model_box_specs)
     non_model_derived_objects = tuple(non_model_derived_specs)
     non_model_specs_by_id = {spec.object_id: spec for spec in non_model_objects}
+    tx_region_actual_spec_count = sum(
+        1 for spec in non_model_derived_objects if isinstance(spec, NonModelTxRegionActualSpec)
+    )
+    if tx_region_actual_spec_count != 1:
+        raise ValueError(
+            f"{toml_path.name} requires exactly one tx_region_actual derived non-model object "
+            f"(actual={tx_region_actual_spec_count})"
+        )
+    tx_region_actual_pcb_spec_count = sum(
+        1 for spec in non_model_derived_objects if isinstance(spec, NonModelTxRegionActualPcbSpec)
+    )
+    if tx_region_actual_pcb_spec_count != 1:
+        raise ValueError(
+            f"{toml_path.name} requires exactly one tx_region_actual_pcb derived non-model object "
+            f"(actual={tx_region_actual_pcb_spec_count})"
+        )
     for spec in non_model_derived_objects:
+        if isinstance(spec, NonModelTxRegionActualPcbSpec):
+            continue
         if spec.source_region_id not in non_model_specs_by_id:
             raise ValueError(
                 f"{toml_path.name} requires tx_region_actual source region '{spec.source_region_id}' in non_model_objects"
@@ -1283,7 +1408,9 @@ __all__ = [
     "ModeledTxPlateStackSpec",
     "ModeledTxSingleCoilSpec",
     "NonModelBoxSpec",
+    "NonModelDerivedSpec",
     "NonModelTxRegionActualSpec",
+    "NonModelTxRegionActualPcbSpec",
     "Point3",
     "RangeSpec",
     "Type2SimulationPolicy",

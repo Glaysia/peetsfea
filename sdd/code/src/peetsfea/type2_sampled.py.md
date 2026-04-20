@@ -1,7 +1,7 @@
 ---
 title: type2_sampled.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-20 @ 14:08
+updated: 2026-04-20 @ 14:30
 tags:
   - sampling
   - build
@@ -26,6 +26,7 @@ tags:
 ## Canonical state
 - sampled owner canonical paths are `modeled_objects.<object_id>.<field>` and `non_model_objects.<object_id>.<field>`.
 - active TX actual-region non-model sampled owners are `non_model_objects.tx_region_actual.x_usage_ratio`, `y_usage_ratio`, `x_division_count`, and `y_division_count`.
+- active TX actual-region PCB non-model sampled owner is `non_model_objects.tx_region_actual_pcb.scale_ratio`.
 - active RX single-coil sampled outer envelope owners use `outer_x_usage_ratio` and `outer_y_usage_ratio`.
 - active single-coil sampled void owner is `void_usage_ratio`; it is unitless and freezes into sampled TOML like other range owners.
 - removed legacy split/centered single-coil `void_*` fields are not sampled owners and must not appear in sampled metadata or build design variables.

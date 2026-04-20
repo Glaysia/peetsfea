@@ -30,7 +30,9 @@ from peetsfea.type2_step_spec import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
+from peetsfea.type2_step_spec import NonModelDerivedSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
+from peetsfea.type2_step_spec import NonModelTxRegionActualPcbSpec
 from peetsfea.type2_step_spec import Point3
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
@@ -142,11 +144,21 @@ def _non_model_group_specs(
     if len(tx_region_actual_specs) == 0:
         raise RuntimeError("type2 non-model registry must contain at least one tx_region_actual concrete object")
     tx_region_actual_sorted_specs = tuple(sorted(tx_region_actual_specs, key=lambda spec: spec.object_id))
+    tx_region_actual_pcb_specs = tuple(spec for spec in specs if spec.kind == "tx_region_actual_pcb")
+    if len(tx_region_actual_pcb_specs) == 0:
+        raise RuntimeError(
+            "type2 non-model registry must contain at least one tx_region_actual_pcb concrete object "
+            f"(actual={len(tx_region_actual_pcb_specs)})"
+        )
+    tx_region_actual_pcb_sorted_specs = tuple(
+        sorted(tx_region_actual_pcb_specs, key=lambda spec: spec.object_id)
+    )
     for object_id, role, plane, member_ids in _NON_MODEL_VISIBLE_GROUPS:
         group_specs = tuple(require_non_model_object_spec(specs, object_id=member_id) for member_id in member_ids)
         groups.append((object_id, role, plane, group_specs))
         if object_id == "tx_region":
             groups.append(("tx_region_actual", "tx_region_actual", "XY", tx_region_actual_sorted_specs))
+            groups.append(("tx_region_actual_pcb", "tx_region_actual_pcb", "XY", tx_region_actual_pcb_sorted_specs))
     return tuple(groups)
 
 
@@ -166,6 +178,36 @@ def _is_concrete_tx_region_actual_object_id(object_id: str) -> bool:
     if not x_index_text.isdigit() or not y_fragment.isdigit():
         return False
     return True
+
+
+def _is_concrete_tx_region_actual_pcb_object_id(object_id: str) -> bool:
+    if object_id == "tx_region_actual_pcb":
+        return True
+    if not object_id.startswith("tx_region_actual_pcb_x"):
+        return False
+    if "_y" not in object_id:
+        return False
+    x_fragment, y_fragment = object_id.split("_y", maxsplit=1)
+    if not x_fragment.startswith("tx_region_actual_pcb_x"):
+        return False
+    x_index_text = x_fragment[len("tx_region_actual_pcb_x") :]
+    if x_index_text == "" or y_fragment == "":
+        return False
+    if not x_index_text.isdigit() or not y_fragment.isdigit():
+        return False
+    return True
+
+
+def _concrete_tx_region_actual_pcb_object_id(*, tx_region_actual_object_id: str) -> str:
+    if not _is_concrete_tx_region_actual_object_id(tx_region_actual_object_id):
+        raise RuntimeError(
+            "tx_region_actual_pcb object id derivation requires concrete tx_region_actual object id "
+            f"(actual={tx_region_actual_object_id})"
+        )
+    if tx_region_actual_object_id == "tx_region_actual":
+        return "tx_region_actual_pcb"
+    suffix = tx_region_actual_object_id.removeprefix("tx_region_actual")
+    return f"tx_region_actual_pcb{suffix}"
 
 
 def _float_range_candidates(range_spec: RangeSpec) -> tuple[float, ...]:
@@ -227,15 +269,31 @@ def _selected_integer_candidate(*, range_spec: RangeSpec, owner_path: str, seed:
 def resolve_non_model_scene_specs(
     *,
     base_specs: tuple[NonModelBoxSpec, ...],
-    derived_specs: tuple[NonModelTxRegionActualSpec, ...],
+    derived_specs: tuple[NonModelDerivedSpec, ...],
     seed: int,
 ) -> tuple[NonModelBoxSpec, ...]:
     resolved_specs = list(base_specs)
+    tx_region_actual_specs: tuple[NonModelBoxSpec, ...] = ()
     for derived_spec in derived_specs:
+        if isinstance(derived_spec, NonModelTxRegionActualPcbSpec):
+            continue
+        if not isinstance(derived_spec, NonModelTxRegionActualSpec):
+            raise RuntimeError(f"unsupported non-model derived spec: {type(derived_spec).__name__}")
+        tx_region_actual_specs = _resolved_tx_region_actual_specs(
+            derived_spec=derived_spec,
+            base_specs=base_specs,
+            seed=seed,
+        )
+        resolved_specs.extend(tx_region_actual_specs)
+    for derived_spec in derived_specs:
+        if isinstance(derived_spec, NonModelTxRegionActualSpec):
+            continue
+        if not isinstance(derived_spec, NonModelTxRegionActualPcbSpec):
+            raise RuntimeError(f"unsupported non-model derived spec: {type(derived_spec).__name__}")
         resolved_specs.extend(
-            _resolved_tx_region_actual_specs(
+            _resolved_tx_region_actual_pcb_specs(
                 derived_spec=derived_spec,
-                base_specs=base_specs,
+                tx_region_actual_specs=tx_region_actual_specs,
                 seed=seed,
             )
         )
@@ -342,6 +400,77 @@ def _resolved_tx_region_actual_specs(
     return tuple(tile_specs)
 
 
+def _resolved_tx_region_actual_pcb_specs(
+    *,
+    derived_spec: NonModelTxRegionActualPcbSpec,
+    tx_region_actual_specs: tuple[NonModelBoxSpec, ...],
+    seed: int,
+) -> tuple[NonModelBoxSpec, ...]:
+    if len(tx_region_actual_specs) == 0:
+        raise RuntimeError("tx_region_actual_pcb requires resolved tx_region_actual specs")
+    scale_ratio = _selected_float_candidate(
+        range_spec=derived_spec.scale_ratio,
+        owner_path=f"non_model_objects.{derived_spec.object_id}.scale_ratio",
+        seed=seed,
+    )
+    if scale_ratio <= 0.0 or scale_ratio > 1.0:
+        raise RuntimeError(f"tx_region_actual_pcb scale_ratio must be > 0 and <= 1 (actual={scale_ratio})")
+    if derived_spec.thickness_mm <= 0.0:
+        raise RuntimeError(
+            f"tx_region_actual_pcb thickness_mm must be > 0 (actual={derived_spec.thickness_mm})"
+        )
+    if not math.isclose(derived_spec.thickness_mm, 5.0, rel_tol=0.0, abs_tol=1e-12):
+        raise RuntimeError(
+            "tx_region_actual_pcb thickness_mm must be exactly 5.0 in runtime scene resolution "
+            f"(actual={derived_spec.thickness_mm})"
+        )
+    pcb_size_z = derived_spec.thickness_mm
+    tile_specs: list[NonModelBoxSpec] = []
+    for tx_region_actual_spec in tx_region_actual_specs:
+        if tx_region_actual_spec.kind != "tx_region_actual":
+            raise RuntimeError(
+                "tx_region_actual_pcb source registry must contain only tx_region_actual objects "
+                f"(object_id={tx_region_actual_spec.object_id}, kind={tx_region_actual_spec.kind})"
+            )
+        if not _is_concrete_tx_region_actual_object_id(tx_region_actual_spec.object_id):
+            raise RuntimeError(
+                "tx_region_actual_pcb source registry must contain concrete tx_region_actual object ids "
+                f"(actual={tx_region_actual_spec.object_id})"
+            )
+        tile_size_x, tile_size_y, tile_size_z = tx_region_actual_spec.size_xyz
+        tile_origin_x, tile_origin_y, tile_origin_z = tx_region_actual_spec.origin_xyz
+        pcb_size_x = tile_size_x * scale_ratio
+        pcb_size_y = tile_size_y * scale_ratio
+        pcb_origin_xyz: Point3 = (
+            tile_origin_x + ((tile_size_x - pcb_size_x) / 2.0),
+            tile_origin_y + ((tile_size_y - pcb_size_y) / 2.0),
+            tile_origin_z + tile_size_z - pcb_size_z,
+        )
+        tx_region_actual_top_z = tile_origin_z + tile_size_z
+        if abs((pcb_origin_xyz[2] + pcb_size_z) - tx_region_actual_top_z) > 1e-9:
+            raise RuntimeError(
+                "tx_region_actual_pcb top face must touch tx_region_actual top face "
+                f"(tx_region_actual_object_id={tx_region_actual_spec.object_id}, pcb_origin={pcb_origin_xyz}, "
+                f"pcb_size={(pcb_size_x, pcb_size_y, pcb_size_z)}, tx_region_actual_top_z={tx_region_actual_top_z})"
+            )
+        tile_specs.append(
+            NonModelBoxSpec(
+                object_id=_concrete_tx_region_actual_pcb_object_id(
+                    tx_region_actual_object_id=tx_region_actual_spec.object_id
+                ),
+                kind=derived_spec.kind,
+                primitive="box",
+                present=True,
+                non_model=True,
+                material=derived_spec.material,
+                plane="XY",
+                origin_xyz=pcb_origin_xyz,
+                size_xyz=(pcb_size_x, pcb_size_y, pcb_size_z),
+            )
+        )
+    return tuple(tile_specs)
+
+
 def _build_non_model_group_shape(*, object_id: str, specs: tuple[NonModelBoxSpec, ...]) -> bd.Shape:
     if not specs:
         raise ValueError(f"non-model group shape requires at least one spec ({object_id})")
@@ -362,18 +491,26 @@ def _build_non_model_group_shape(*, object_id: str, specs: tuple[NonModelBoxSpec
 def _non_model_scene_members(specs: tuple[NonModelBoxSpec, ...]) -> tuple[NonModelSceneMemberLedgerEntry, ...]:
     members: list[NonModelSceneMemberLedgerEntry] = []
     for object_id, role, plane, group_specs in _non_model_group_specs(specs):
-        if object_id == "tx_region_actual":
+        if object_id in ("tx_region_actual", "tx_region_actual_pcb"):
+            expected_kind = "tx_region_actual" if object_id == "tx_region_actual" else "tx_region_actual_pcb"
             for tx_region_actual_spec in group_specs:
-                if tx_region_actual_spec.kind != "tx_region_actual":
+                if tx_region_actual_spec.kind != expected_kind:
                     raise RuntimeError(
-                        "tx_region_actual concrete scene member must preserve kind tx_region_actual "
+                        f"{object_id} concrete scene member must preserve kind {expected_kind} "
                         f"(object_id={tx_region_actual_spec.object_id}, kind={tx_region_actual_spec.kind})"
                     )
-                if not _is_concrete_tx_region_actual_object_id(tx_region_actual_spec.object_id):
-                    raise RuntimeError(
-                        "tx_region_actual concrete scene member must use concrete object id contract "
-                        f"(object_id={tx_region_actual_spec.object_id})"
-                    )
+                if object_id == "tx_region_actual":
+                    if not _is_concrete_tx_region_actual_object_id(tx_region_actual_spec.object_id):
+                        raise RuntimeError(
+                            "tx_region_actual concrete scene member must use concrete object id contract "
+                            f"(object_id={tx_region_actual_spec.object_id})"
+                        )
+                if object_id == "tx_region_actual_pcb":
+                    if not _is_concrete_tx_region_actual_pcb_object_id(tx_region_actual_spec.object_id):
+                        raise RuntimeError(
+                            "tx_region_actual_pcb concrete scene member must use concrete object id contract "
+                            f"(object_id={tx_region_actual_spec.object_id})"
+                        )
                 members.append(
                     {
                         "object_id": tx_region_actual_spec.object_id,
@@ -416,7 +553,7 @@ def _non_model_scene_members(specs: tuple[NonModelBoxSpec, ...]) -> tuple[NonMod
 def build_non_model_scene_shapes(specs: tuple[NonModelBoxSpec, ...]) -> tuple[bd.Shape, ...]:
     scene_shapes: list[bd.Shape] = []
     for object_id, _role, _plane, group_specs in _non_model_group_specs(specs):
-        if object_id == "tx_region_actual":
+        if object_id in ("tx_region_actual", "tx_region_actual_pcb"):
             for tx_region_actual_spec in group_specs:
                 scene_shapes.append(_build_non_model_shape(tx_region_actual_spec))
             continue

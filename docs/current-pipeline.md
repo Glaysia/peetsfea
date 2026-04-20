@@ -20,6 +20,9 @@ tags:
 - Active type2 includes a sampled non-modeled `tx_region_actual` box inside maximum `tx_region`; its X/Y usage ratios
   reserve the future actual TX footprint while preserving full `tx_region` Z.
 - `tx_region_actual` can also be sampled into equal X/Y divisions, producing up to 9 concrete non-modeled tile bodies.
+- Active type2 also includes sampled non-modeled `tx_region_actual_pcb` bodies, one per realized
+  `tx_region_actual` concrete tile. Each PCB top face touches its tile top face, thickness is fixed at `5.0 mm`,
+  and the shared `scale_ratio` samples each tile's similar rectangle over `0.35..0.95` with `count=25`.
 - RX single-coil geometry uses the rect/void coil contract in [`docs/tx-rect-void-step.md`](tx-rect-void-step.md).
 - The active runtime flow is:
   1. `entry/sample.py`

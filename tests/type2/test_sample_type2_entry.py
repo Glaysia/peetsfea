@@ -15,6 +15,7 @@ import peetsfea.type2_sampled as type2_sampled
 from entry.sample import sample_type2
 from peetsfea.type2_sampled import manifest_entry_for_sample_index
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
+from peetsfea.type2_step_spec import NonModelTxRegionActualPcbSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
@@ -24,6 +25,7 @@ _EXPECTED_SAMPLED_OWNER_PATHS = [
     "non_model_objects.tx_region_actual.y_usage_ratio",
     "non_model_objects.tx_region_actual.x_division_count",
     "non_model_objects.tx_region_actual.y_division_count",
+    "non_model_objects.tx_region_actual_pcb.scale_ratio",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
@@ -38,7 +40,7 @@ _RX_NON_SAMPLED_OWNER_PATHS = [
 
 @dataclass(frozen=True)
 class _FakeRxOnlyType2Spec:
-    non_model_derived_objects: tuple[NonModelTxRegionActualSpec, ...]
+    non_model_derived_objects: tuple[NonModelTxRegionActualSpec | NonModelTxRegionActualPcbSpec, ...]
     modeled_objects: tuple[ModeledRxSingleCoilSpec, ...]
 
 
@@ -60,6 +62,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     tx_region_actual_y_usage_ratio = RangeSpec(is_integer=False, start=0.3, end=1.0, count=27)
     tx_region_actual_x_division_count = RangeSpec(is_integer=True, start=1, end=3, count=3)
     tx_region_actual_y_division_count = RangeSpec(is_integer=True, start=1, end=3, count=3)
+    tx_region_actual_pcb_scale_ratio = RangeSpec(is_integer=False, start=0.35, end=0.95, count=25)
 
     fake_spec = _FakeRxOnlyType2Spec(
         non_model_derived_objects=(
@@ -71,6 +74,14 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 y_usage_ratio=tx_region_actual_y_usage_ratio,
                 x_division_count=tx_region_actual_x_division_count,
                 y_division_count=tx_region_actual_y_division_count,
+            ),
+            NonModelTxRegionActualPcbSpec(
+                object_id="tx_region_actual_pcb",
+                kind="tx_region_actual_pcb",
+                source_region_id="tx_region_actual",
+                material="FR4_epoxy",
+                thickness_mm=5.0,
+                scale_ratio=tx_region_actual_pcb_scale_ratio,
             ),
         ),
         modeled_objects=(
@@ -212,6 +223,15 @@ range = [false, 0.3, 1.0, 27]
 range = [true, 1, 3, 3]
 [non_model_objects.y_division_count]
 range = [true, 1, 3, 3]
+
+[[non_model_objects]]
+id = "tx_region_actual_pcb"
+kind = "tx_region_actual_pcb"
+source_region_id = "tx_region_actual"
+material = "FR4_epoxy"
+thickness_mm = 5.0
+[non_model_objects.scale_ratio]
+range = [false, 0.35, 0.95, 25]
 
 [[modeled_objects]]
     object_id = "rx_rect_void_coil"
@@ -391,6 +411,16 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert tx_region_actual_y_division_count_range[3] == 1
     assert tx_region_actual_y_division_count_range[1] == tx_region_actual_y_division_count_range[2]
     assert cast(int, tx_region_actual_y_division_count_range[1]) in {1, 2, 3}
+    tx_region_actual_pcb = next(
+        non_model for non_model in non_model_objects if non_model["id"] == "tx_region_actual_pcb"
+    )
+    tx_region_actual_pcb_scale_ratio_range = cast(
+        list[object], cast(dict[str, object], tx_region_actual_pcb["scale_ratio"])["range"]
+    )
+    assert tx_region_actual_pcb_scale_ratio_range[0] is False
+    assert tx_region_actual_pcb_scale_ratio_range[3] == 1
+    assert tx_region_actual_pcb_scale_ratio_range[1] == tx_region_actual_pcb_scale_ratio_range[2]
+    assert 0.35 <= float(cast(int | float, tx_region_actual_pcb_scale_ratio_range[1])) <= 0.95
 
     rx_modeled_object = sampled_payload["modeled_objects"][0]
     assert rx_modeled_object["object_id"] == "rx_rect_void_coil"

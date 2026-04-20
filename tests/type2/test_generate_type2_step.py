@@ -95,6 +95,7 @@ def _type2_spec_text(
     wall_parallel_stack_present_range: str | None = None,
     tx_region_actual_x_division_count_range: str = "[true, 1, 1, 1]",
     tx_region_actual_y_division_count_range: str = "[true, 1, 1, 1]",
+    tx_region_actual_pcb_scale_ratio_range: str = "[false, 0.35, 0.35, 1]",
 ) -> str:
     if underlay_repeat_count_range is None:
         underlay_repeat_count_range = _range(True, 0.0, 8.0, 5)
@@ -224,6 +225,15 @@ range = {tx_region_actual_x_division_count_range}
 [non_model_objects.y_division_count]
 range = {tx_region_actual_y_division_count_range}
 
+[[non_model_objects]]
+id = "tx_region_actual_pcb"
+kind = "tx_region_actual_pcb"
+source_region_id = "tx_region_actual"
+material = "FR4_epoxy"
+thickness_mm = 5.0
+[non_model_objects.scale_ratio]
+range = {tx_region_actual_pcb_scale_ratio_range}
+
 [[modeled_objects]]
 object_id = "{modeled_object_id}"
 role = "{modeled_role}"
@@ -273,6 +283,7 @@ def _type2_rx_plate_stack_spec_text(
     extra_modeled_lines: tuple[str, ...] = (),
     tx_region_actual_x_division_count_range: str = "[true, 1, 1, 1]",
     tx_region_actual_y_division_count_range: str = "[true, 1, 1, 1]",
+    tx_region_actual_pcb_scale_ratio_range: str = "[false, 0.35, 0.35, 1]",
 ) -> str:
     extra_body = "\n".join(extra_modeled_lines)
     if extra_body != "":
@@ -368,6 +379,15 @@ range = [false, 0.3, 0.3, 1]
 range = {tx_region_actual_x_division_count_range}
 [non_model_objects.y_division_count]
 range = {tx_region_actual_y_division_count_range}
+
+[[non_model_objects]]
+id = "tx_region_actual_pcb"
+kind = "tx_region_actual_pcb"
+source_region_id = "tx_region_actual"
+material = "FR4_epoxy"
+thickness_mm = 5.0
+[non_model_objects.scale_ratio]
+range = {tx_region_actual_pcb_scale_ratio_range}
 
 [[modeled_objects]]
     object_id = "{modeled_object_id}"
@@ -760,6 +780,16 @@ def _tx_region_actual_tile_names(*, x_division_count: int, y_division_count: int
         return ("tx_region_actual",)
     return tuple(
         f"tx_region_actual_x{x_index}_y{y_index}"
+        for x_index in range(x_division_count)
+        for y_index in range(y_division_count)
+    )
+
+
+def _tx_region_actual_pcb_tile_names(*, x_division_count: int, y_division_count: int) -> tuple[str, ...]:
+    if x_division_count == 1 and y_division_count == 1:
+        return ("tx_region_actual_pcb",)
+    return tuple(
+        f"tx_region_actual_pcb_x{x_index}_y{y_index}"
         for x_index in range(x_division_count)
         for y_index in range(y_division_count)
     )
@@ -1937,9 +1967,15 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert non_model_entry["object_id"] == "type2_non_model_scene"
     assert non_model_entry["role"] == "non_model_scene"
     assert non_model_entry["plane"] == "mixed"
-    assert non_model_entry["member_object_ids"] == ("environment", "tx_region", "tx_region_actual", "rx_region_max")
+    assert non_model_entry["member_object_ids"] == (
+        "environment",
+        "tx_region",
+        "tx_region_actual",
+        "tx_region_actual_pcb",
+        "rx_region_max",
+    )
     member_objects = non_model_entry["member_objects"]
-    assert len(member_objects) == 4
+    assert len(member_objects) == 5
     environment_member = next(member for member in member_objects if member["object_id"] == "environment")
     assert environment_member["role"] == "environment"
     assert environment_member["plane"] == "mixed"
@@ -1953,6 +1989,17 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert tx_region_actual_member["role"] == "tx_region_actual"
     assert tx_region_actual_member["canonical_coordinates"]["outer_bounds_min_xyz"] == (0.0, -42.0, 0.0)
     assert tx_region_actual_member["canonical_coordinates"]["outer_bounds_size_xyz"] == (48.0, 84.0, 90.0)
+    tx_region_actual_pcb_member = next(
+        member for member in member_objects if member["object_id"] == "tx_region_actual_pcb"
+    )
+    assert tx_region_actual_pcb_member["role"] == "tx_region_actual_pcb"
+    assert tx_region_actual_pcb_member["material"] == "FR4_epoxy"
+    assert tx_region_actual_pcb_member["canonical_coordinates"]["outer_bounds_min_xyz"] == pytest.approx(
+        (15.6, -14.7, 85.0)
+    )
+    assert tx_region_actual_pcb_member["canonical_coordinates"]["outer_bounds_size_xyz"] == pytest.approx(
+        (16.8, 29.4, 5.0)
+    )
     rx_region_member = next(member for member in member_objects if member["object_id"] == "rx_region_max")
     assert rx_region_member["canonical_coordinates"]["outer_bounds_min_xyz"] == (0.0, -280.0, 139.0)
     rx_region_size_x = cast(tuple[float, float, float], rx_region_member["canonical_coordinates"]["outer_bounds_size_xyz"])[0]
@@ -1978,6 +2025,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
         "environment",
         "tx_region",
         "tx_region_actual",
+        "tx_region_actual_pcb",
         "rx_region_max",
         *rx_expected_names,
         *rx_group_names,
@@ -1986,7 +2034,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert all(not label.startswith("tx_plate_") for label in scene_shapes_by_label)
     assert "g_copper_tx" not in scene_shapes_by_label
     assert "g_ferrite_tx" not in scene_shapes_by_label
-    for label in {"environment", "tx_region", "tx_region_actual", "rx_region_max", *rx_expected_names}:
+    for label in {"environment", "tx_region", "tx_region_actual", "tx_region_actual_pcb", "rx_region_max", *rx_expected_names}:
         assert type(scene_shapes_by_label[label]).__name__ == "Solid"
     for label in rx_group_names:
         assert type(scene_shapes_by_label[label]).__name__ == "Compound"
@@ -2039,17 +2087,52 @@ def test_export_type2_step_artifacts_tiles_tx_region_actual_for_forced_3x3_divis
 
     non_model_entry = ledger["non_model_objects"][0]
     tile_names = _tx_region_actual_tile_names(x_division_count=3, y_division_count=3)
-    assert non_model_entry["member_object_ids"] == ("environment", "tx_region", *tile_names, "rx_region_max")
+    pcb_tile_names = _tx_region_actual_pcb_tile_names(x_division_count=3, y_division_count=3)
+    assert non_model_entry["member_object_ids"] == (
+        "environment",
+        "tx_region",
+        *tile_names,
+        *pcb_tile_names,
+        "rx_region_max",
+    )
     member_objects = non_model_entry["member_objects"]
     tx_region_actual_members = [member for member in member_objects if cast(str, member["role"]) == "tx_region_actual"]
     assert tuple(cast(str, member["object_id"]) for member in tx_region_actual_members) == tile_names
     for member in tx_region_actual_members:
         assert member["canonical_coordinates"]["outer_bounds_size_xyz"] == pytest.approx((16.0, 28.0, 90.0))
+    tx_region_actual_pcb_members = [
+        member for member in member_objects if cast(str, member["role"]) == "tx_region_actual_pcb"
+    ]
+    assert tuple(cast(str, member["object_id"]) for member in tx_region_actual_pcb_members) == pcb_tile_names
+    pcb_coordinates_by_name = {
+        cast(str, member["object_id"]): cast(dict[str, object], member["canonical_coordinates"])
+        for member in tx_region_actual_pcb_members
+    }
+    tile_coordinates_by_name = {
+        cast(str, member["object_id"]): cast(dict[str, object], member["canonical_coordinates"])
+        for member in tx_region_actual_members
+    }
+    for tile_name, pcb_name in zip(tile_names, pcb_tile_names, strict=True):
+        tile_bounds = tile_coordinates_by_name[tile_name]
+        pcb_bounds = pcb_coordinates_by_name[pcb_name]
+        assert isinstance(tile_bounds["outer_bounds_size_xyz"], tuple)
+        assert isinstance(pcb_bounds["outer_bounds_size_xyz"], tuple)
+        tile_size_xyz = cast(tuple[float, float, float], tile_bounds["outer_bounds_size_xyz"])
+        pcb_size_xyz = cast(tuple[float, float, float], pcb_bounds["outer_bounds_size_xyz"])
+        tile_min_xyz = cast(tuple[float, float, float], tile_bounds["outer_bounds_min_xyz"])
+        pcb_min_xyz = cast(tuple[float, float, float], pcb_bounds["outer_bounds_min_xyz"])
+        tile_max_z = tile_min_xyz[2] + tile_size_xyz[2]
+        assert pcb_size_xyz == pytest.approx((tile_size_xyz[0] * 0.35, tile_size_xyz[1] * 0.35, 5.0))
+        assert pcb_min_xyz[2] + 5.0 == pytest.approx(tile_max_z)
 
     scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
     for tile_name in tile_names:
         assert tile_name in scene_shapes_by_label
         assert type(scene_shapes_by_label[tile_name]).__name__ == "Solid"
+    for pcb_name in pcb_tile_names:
+        assert pcb_name in scene_shapes_by_label
+        assert type(scene_shapes_by_label[pcb_name]).__name__ == "Solid"
+    assert "tx_region_actual_pcb" not in scene_shapes_by_label
     _assert_tx_region_actual_tiles_contract(
         scene_shapes_by_label=scene_shapes_by_label,
         tile_names=tile_names,

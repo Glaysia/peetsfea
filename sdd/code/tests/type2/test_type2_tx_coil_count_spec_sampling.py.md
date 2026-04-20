@@ -1,7 +1,7 @@
 ---
 title: test_type2_tx_coil_count_spec_sampling.py
 created: 2026-04-20 @ 04:35
-updated: 2026-04-20 @ 13:08
+updated: 2026-04-20 @ 14:30
 tags:
   - tests
   - sampling
@@ -14,7 +14,7 @@ tags:
 - Path: `tests/type2/test_type2_tx_coil_count_spec_sampling.py`
 - Code note path: `sdd/code/tests/type2/test_type2_tx_coil_count_spec_sampling.py.md`
 - Status: planned
-- Related plan: [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]]
+- Related plan: [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]], [[sdd/plans/0.2.22-type2-tx-actual-region-pcb-non-model]]
 
 ## 역할
 - `tx_coil_count` and `tx_array_x_usage_ratio` parser, sampling, sampled TOML freeze, and design variable contracts를 방어한다.
@@ -33,7 +33,7 @@ tags:
 - RX plate-stack must reject `tx_coil_count` and `tx_array_x_usage_ratio`.
 - Noncanonical integer ranges and values outside `1..4` fail before generation.
 - Sampled metadata and replay exact-match guards must include the new owner when count is sampled.
-- Fixture TOML uses active type2 schema v5 and includes fixed `tx_region_actual` non-model owners so this test can focus on TX plate-stack sampled owners.
+- Fixture TOML uses active type2 schema v6 and includes fixed `tx_region_actual` and `tx_region_actual_pcb` non-model owners so this test can focus on TX plate-stack sampled owners.
 
 ## 직접 의존
 - [[sdd/code/src/peetsfea/type2_step_spec.py]]

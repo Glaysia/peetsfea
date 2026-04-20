@@ -17,7 +17,9 @@ from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
+from peetsfea.type2_step_spec import NonModelDerivedSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
+from peetsfea.type2_step_spec import NonModelTxRegionActualPcbSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
@@ -113,8 +115,18 @@ def _modeled_roles(spec: Type2StepSpec) -> tuple[str, ...]:
 def _non_model_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpec], ...]:
     owner_specs: list[tuple[str, RangeSpec]] = []
     for non_model_spec in spec.non_model_derived_objects:
-        owner_specs.extend(_tx_region_actual_range_owner_specs(non_model_spec))
+        owner_specs.extend(_derived_non_model_range_owner_specs(non_model_spec))
     return tuple(owner_specs)
+
+
+def _derived_non_model_range_owner_specs(
+    non_model_spec: NonModelDerivedSpec,
+) -> tuple[tuple[str, RangeSpec], ...]:
+    if isinstance(non_model_spec, NonModelTxRegionActualSpec):
+        return _tx_region_actual_range_owner_specs(non_model_spec)
+    if isinstance(non_model_spec, NonModelTxRegionActualPcbSpec):
+        return _tx_region_actual_pcb_range_owner_specs(non_model_spec)
+    raise RuntimeError(f"unsupported non-model derived spec: {type(non_model_spec).__name__}")
 
 
 def _tx_region_actual_range_owner_specs(
@@ -132,6 +144,12 @@ def _tx_region_actual_range_owner_specs(
             non_model_spec.y_division_count,
         ),
     )
+
+
+def _tx_region_actual_pcb_range_owner_specs(
+    non_model_spec: NonModelTxRegionActualPcbSpec,
+) -> tuple[tuple[str, RangeSpec], ...]:
+    return ((f"non_model_objects.{non_model_spec.object_id}.scale_ratio", non_model_spec.scale_ratio),)
 
 
 def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpec], ...]:

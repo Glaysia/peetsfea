@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 14:08
+updated: 2026-04-20 @ 14:30
 tags:
   - step-export
   - spec
@@ -13,7 +13,7 @@ tags:
 - Path: `src/peetsfea/type2_step_spec.py`
 - Code note path: `sdd/code/src/peetsfea/type2_step_spec.py.md`
 - Status: active
-- Related feature plans: [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]], [[sdd/plans/0.2.22-type2-remove-plate-stack-shoe-contract]], [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]]
+- Related feature plans: [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]], [[sdd/plans/0.2.22-type2-remove-plate-stack-shoe-contract]], [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]], [[sdd/plans/0.2.22-type2-tx-actual-region-pcb-non-model]]
 
 ## 역할
 - type2 TOML object registry를 typed non-model / modeled spec으로 정규화한다.
@@ -29,6 +29,8 @@ tags:
 - `tx_region` remains the maximum TX reservation non-model box.
 - `tx_region_actual` is a derived non-model sampled box owned by `tx_region`, using `x_usage_ratio`, `y_usage_ratio`, `x_division_count`, and `y_division_count`.
 - `tx_region_actual` anchors at `tx_region.min_x`, centers on `tx_region` Y, and preserves full `tx_region` Z.
+- `tx_region_actual_pcb` is a derived non-model sampled PCB template owned by realized concrete `tx_region_actual` tiles, using fixed `thickness_mm = 5.0` and sampled `scale_ratio`.
+- `tx_region_actual_pcb.scale_ratio` scales each realized concrete actual-region tile top-view rectangle uniformly and keeps each PCB centered in its tile.
 - TX plate object/owner/plane은 `tx_plate_stack` / `tx_region` / `YZ`다.
 - RX plate object/owner/plane은 `rx_plate_stack` / `rx_region_max` / `YZ`다.
 - TX plate role public fields are `pcb_total_thickness_mm`, `copper_thickness_mm`, `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio`, `tx_coil_count`, `tx_array_x_usage_ratio`.
@@ -58,6 +60,8 @@ tags:
 - active example drift는 role/object_id/owner/plane mismatch를 허용하지 않는다.
 - `tx_region_actual` ratio candidates must realize to `0 < ratio <= 1`; missing source `tx_region` or unsupported source id fails immediately.
 - `tx_region_actual` division counts accept only canonical `[true, 1, 3, 3]` or fixed `[true, n, n, 1]` where `n in {1, 2, 3}`.
+- active type2 TOML must contain exactly one `tx_region_actual` and exactly one `tx_region_actual_pcb` derived non-model object.
+- `tx_region_actual_pcb` must source from `tx_region_actual`, require `thickness_mm = 5.0`, and accept only canonical `scale_ratio = [false, 0.35, 0.95, 25]` or fixed `[false, r, r, 1]` where `0.35 <= r <= 0.95`.
 - This file exceeds 800 lines; narrow parser extensions may proceed under the documented ownership boundary, but broad parser changes should split first.
 
 ## Collaborators

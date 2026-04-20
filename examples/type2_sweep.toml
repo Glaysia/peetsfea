@@ -142,6 +142,15 @@ range = [true, 1, 3, 3]
 [non_model_objects.y_division_count]
 range = [true, 1, 3, 3]
 
+[[non_model_objects]]
+id = "tx_region_actual_pcb"
+kind = "tx_region_actual_pcb"
+source_region_id = "tx_region_actual"
+material = "FR4_epoxy"
+thickness_mm = 5.0
+[non_model_objects.scale_ratio]
+range = [false, 0.35, 0.95, 25]
+
 # ----------------------------------------------------------------------------
 # Modeled object registry
 # ----------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 ---
 title: type2_step_scene.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 14:08
+updated: 2026-04-20 @ 14:30
 tags:
   - step-export
   - scene
@@ -18,6 +18,7 @@ tags:
 - Related TX array plan: [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
 - Related RX backing plan: [[sdd/plans/0.2.22-type2-rx-single-coil-full-backing]]
 - Related TX actual-region plan: [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]]
+- Related TX actual-region PCB plan: [[sdd/plans/0.2.22-type2-tx-actual-region-pcb-non-model]]
 
 ## 역할
 - type2 non-model scene와 modeled scene dispatch를 담당한다.
@@ -30,7 +31,8 @@ tags:
 ## Canonical state
 - TX plate placement truth는 `tx_region` full `YZ`, `min_x` anchor, `+X` stack다.
 - `tx_region_actual` is a non-modeled scene member family derived from `tx_region`; it is not a modeled placement owner until future TX work explicitly changes that contract.
-- non-model scene member order is `environment`, `tx_region`, `tx_region_actual` concrete tile members, `rx_region_max`.
+- `tx_region_actual_pcb` is a non-modeled PCB scene member family derived one-for-one from realized concrete `tx_region_actual` tile footprints.
+- non-model scene member order is `environment`, `tx_region`, `tx_region_actual` concrete tile members, matching `tx_region_actual_pcb` concrete members, `rx_region_max`.
 - TX plate array placement truth is delegated to the plate-stack builder/helper and remains a single modeled scene entry.
 - RX plate placement truth는 `rx_region_max` full `YZ`, `min_x` anchor, `+X` stack다.
 - plate role copper/PCB active height는 owner full `Z` span을 쓴다. `shoe_depth_mm`/shoe fill은 active contract가 아니다.
@@ -66,6 +68,7 @@ tags:
 - RX backing available thickness must be positive; otherwise scene generation fails instead of shrinking or omitting slabs.
 - `tx_region_actual` must fit within `tx_region` by construction; scene generation should fail if derived bounds drift outside the source region.
 - `tx_region_actual` tile bodies must be equal subdivisions of the realized actual region, with no gaps or overlaps.
+- each `tx_region_actual_pcb` concrete member must be centered in its owning actual-region tile `XY` footprint, keep a similar rectangle via one shared scale ratio, have 5 mm Z thickness, and touch that tile's top face.
 - This file exceeds 800 lines; this narrow non-model grouping extension is allowed, but broad scene refactors should split first.
 
 ## Collaborators
