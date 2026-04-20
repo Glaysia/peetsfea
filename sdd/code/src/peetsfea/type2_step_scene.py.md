@@ -1,7 +1,7 @@
 ---
 title: type2_step_scene.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 21:35
+updated: 2026-04-20 @ 13:08
 tags:
   - step-export
   - scene
@@ -17,6 +17,7 @@ tags:
 - Related feature plans: [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]]
 - Related TX array plan: [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
 - Related RX backing plan: [[sdd/plans/0.2.22-type2-rx-single-coil-full-backing]]
+- Related TX actual-region plan: [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]]
 
 ## 역할
 - type2 non-model scene와 modeled scene dispatch를 담당한다.
@@ -28,6 +29,8 @@ tags:
 
 ## Canonical state
 - TX plate placement truth는 `tx_region` full `YZ`, `min_x` anchor, `+X` stack다.
+- `tx_region_actual` is a non-modeled scene member derived from `tx_region`; it is not a modeled placement owner until future TX work explicitly changes that contract.
+- non-model scene member order is `environment`, `tx_region`, `tx_region_actual`, `rx_region_max`.
 - TX plate array placement truth is delegated to the plate-stack builder/helper and remains a single modeled scene entry.
 - RX plate placement truth는 `rx_region_max` full `YZ`, `min_x` anchor, `+X` stack다.
 - plate role copper/PCB active height는 owner full `Z` span을 쓴다. `shoe_depth_mm`/shoe fill은 active contract가 아니다.
@@ -61,6 +64,8 @@ tags:
   pre-unite label(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`)이 export handoff에 노출되면 안 된다.
 - active plate roles는 imported mesh 대상과 final imported body set에 concrete conductor members만 허용한다.
 - RX backing available thickness must be positive; otherwise scene generation fails instead of shrinking or omitting slabs.
+- `tx_region_actual` must fit within `tx_region` by construction; scene generation should fail if derived bounds drift outside the source region.
+- This file exceeds 800 lines; this narrow non-model grouping extension is allowed, but broad scene refactors should split first.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_step_spec.py]]

@@ -17,6 +17,7 @@ from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
+from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
@@ -107,6 +108,22 @@ def _modeled_roles(spec: Type2StepSpec) -> tuple[str, ...]:
     return tuple(_modeled_spec_role(modeled_spec) for modeled_spec in spec.modeled_objects)
 
 
+def _non_model_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpec], ...]:
+    owner_specs: list[tuple[str, RangeSpec]] = []
+    for non_model_spec in spec.non_model_derived_objects:
+        owner_specs.extend(_tx_region_actual_range_owner_specs(non_model_spec))
+    return tuple(owner_specs)
+
+
+def _tx_region_actual_range_owner_specs(
+    non_model_spec: NonModelTxRegionActualSpec,
+) -> tuple[tuple[str, RangeSpec], ...]:
+    return (
+        (f"non_model_objects.{non_model_spec.object_id}.x_usage_ratio", non_model_spec.x_usage_ratio),
+        (f"non_model_objects.{non_model_spec.object_id}.y_usage_ratio", non_model_spec.y_usage_ratio),
+    )
+
+
 def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpec], ...]:
     owner_specs: list[tuple[str, RangeSpec]] = []
     for modeled_spec in spec.modeled_objects:
@@ -121,6 +138,10 @@ def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpe
             continue
         raise RuntimeError(f"unsupported modeled object role for sampled owner resolution: {role}")
     return tuple(owner_specs)
+
+
+def _all_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpec], ...]:
+    return _non_model_range_owner_specs(spec) + _modeled_range_owner_specs(spec)
 
 
 def _single_coil_range_owner_specs(
@@ -180,11 +201,11 @@ def _plate_stack_range_owner_specs(
 
 
 def exportable_sampled_owner_paths(spec: Type2StepSpec) -> tuple[str, ...]:
-    return tuple(owner_path for owner_path, range_spec in _modeled_range_owner_specs(spec) if range_spec.count != 1)
+    return tuple(owner_path for owner_path, range_spec in _all_range_owner_specs(spec) if range_spec.count != 1)
 
 
 def _range_spec_for_owner_path(spec: Type2StepSpec, owner_path: str) -> RangeSpec:
-    for candidate_owner_path, range_spec in _modeled_range_owner_specs(spec):
+    for candidate_owner_path, range_spec in _all_range_owner_specs(spec):
         if candidate_owner_path == owner_path:
             return range_spec
     raise ValueError(f"Unknown type2 sampled owner path: {owner_path}")
@@ -235,7 +256,7 @@ def _selected_value_for_owner_path(range_spec: RangeSpec, *, owner_path: str, se
 
 def sampled_owner_values(spec: Type2StepSpec, *, seed: int) -> tuple[tuple[str, SampledScalar], ...]:
     sampled_values: list[tuple[str, SampledScalar]] = []
-    for owner_path, range_spec in _modeled_range_owner_specs(spec):
+    for owner_path, range_spec in _all_range_owner_specs(spec):
         if range_spec.count == 1:
             continue
         sampled_values.append(
@@ -308,14 +329,41 @@ def _modeled_object_table(raw_spec: TOMLTable, *, object_id: str) -> TOMLTable:
     raw_modeled_objects = raw_spec["modeled_objects"]
     if not isinstance(raw_modeled_objects, list):
         raise TypeError("modeled_objects must be an array of tables")
-    matches = [
-        entry
-        for entry in raw_modeled_objects
-        if isinstance(entry, dict) and entry.get("object_id") == object_id
-    ]
+    matches: list[TOMLTable] = []
+    for entry in raw_modeled_objects:
+        if not isinstance(entry, dict):
+            raise TypeError("modeled_objects entries must be tables")
+        if "object_id" not in entry:
+            raise ValueError("modeled_objects entries must contain object_id")
+        raw_object_id = entry["object_id"]
+        if not isinstance(raw_object_id, str):
+            raise TypeError("modeled_objects[].object_id must be str")
+        if raw_object_id == object_id:
+            matches.append(cast(TOMLTable, entry))
     if len(matches) != 1:
         raise ValueError(f"type2 source TOML must contain exactly one modeled object with object_id={object_id!r}")
-    return cast(TOMLTable, matches[0])
+    return matches[0]
+
+
+def _non_model_object_table(raw_spec: TOMLTable, *, object_id: str) -> TOMLTable:
+    assert "non_model_objects" in raw_spec, "type2 source TOML must contain non_model_objects"
+    raw_non_model_objects = raw_spec["non_model_objects"]
+    if not isinstance(raw_non_model_objects, list):
+        raise TypeError("non_model_objects must be an array of tables")
+    matches: list[TOMLTable] = []
+    for entry in raw_non_model_objects:
+        if not isinstance(entry, dict):
+            raise TypeError("non_model_objects entries must be tables")
+        if "id" not in entry:
+            raise ValueError("non_model_objects entries must contain id")
+        raw_id = entry["id"]
+        if not isinstance(raw_id, str):
+            raise TypeError("non_model_objects[].id must be str")
+        if raw_id == object_id:
+            matches.append(cast(TOMLTable, entry))
+    if len(matches) != 1:
+        raise ValueError(f"type2 source TOML must contain exactly one non-model object with id={object_id!r}")
+    return matches[0]
 
 
 def _freeze_owner_range_in_raw_spec(
@@ -326,13 +374,19 @@ def _freeze_owner_range_in_raw_spec(
     range_spec: RangeSpec,
 ) -> None:
     owner_parts = owner_path.split(".")
-    if len(owner_parts) != 3 or owner_parts[0] != "modeled_objects":
+    if len(owner_parts) != 3:
         raise ValueError(f"Unsupported type2 sampled owner path: {owner_path}")
-    _, object_id, field_name = owner_parts
-    modeled_table = _modeled_object_table(raw_spec, object_id=object_id)
-    if field_name not in modeled_table:
+    owner_root, object_id, field_name = owner_parts
+    owner_table: TOMLTable
+    if owner_root == "modeled_objects":
+        owner_table = _modeled_object_table(raw_spec, object_id=object_id)
+    elif owner_root == "non_model_objects":
+        owner_table = _non_model_object_table(raw_spec, object_id=object_id)
+    else:
+        raise ValueError(f"Unsupported type2 sampled owner path: {owner_path}")
+    if field_name not in owner_table:
         raise ValueError(f"type2 source TOML is missing sampled owner field: {owner_path}")
-    raw_field = modeled_table[field_name]
+    raw_field = owner_table[field_name]
     if not isinstance(raw_field, dict):
         raise TypeError(f"{owner_path} must be a table containing range")
     if range_spec.is_integer:
@@ -955,11 +1009,11 @@ def prepare_type2_build(sampled_toml_path: Path) -> PreparedType2Build:
             "type2 sampled TOML metadata must exactly match source exportable sampled owners "
             f"(expected={expected_sampled_owner_paths}, actual={tuple(metadata['sampled_owner_paths'])})"
         )
-    for owner_path, range_spec in _modeled_range_owner_specs(sampled_spec):
+    for owner_path, range_spec in _all_range_owner_specs(sampled_spec):
         if range_spec.count != 1:
-            raise ValueError(f"type2 build input TOML must freeze all modeled range owners to count=1: {owner_path}")
+            raise ValueError(f"type2 build input TOML must freeze all range owners to count=1: {owner_path}")
         if range_spec.start != range_spec.end:
-            raise ValueError(f"type2 build input TOML must freeze modeled range owners with identical bounds: {owner_path}")
+            raise ValueError(f"type2 build input TOML must freeze range owners with identical bounds: {owner_path}")
     design_variables = tuple(
         (
             _design_variable_name(owner_path),

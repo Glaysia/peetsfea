@@ -374,6 +374,7 @@ def _tx_array_imported_name_batch(*, branch_count: int) -> tuple[str, ...]:
     return (
         "environment",
         "tx_region",
+        "tx_region_actual",
         "rx_region_max",
         *_tx_plate_stack_array_expected_names(branch_count=branch_count),
         *_rx_plate_stack_expected_names(),
@@ -384,6 +385,7 @@ def _mixed_tx_plate_stack_rx_single_imported_name_batch() -> tuple[str, ...]:
     return (
         "environment",
         "tx_region",
+        "tx_region_actual",
         "rx_region_max",
         *_tx_plate_stack_expected_names(),
         "rx_pcb_l0",
@@ -395,6 +397,7 @@ def _rx_only_imported_name_batch() -> tuple[str, ...]:
     return (
         "environment",
         "tx_region",
+        "tx_region_actual",
         "rx_region_max",
         "rx_pcb_l0",
         "rx_copper_l0",
@@ -454,7 +457,7 @@ def _rewrite_plate_stack_terminal_metadata_to_equal_stripe_pitch(
 
 def _minimal_em_input_ledger(*, modeled_objects: list[dict[str, object]]) -> dict[str, object]:
     non_model_object = _non_model_entry()
-    non_model_object["imported_object_names"] = ["environment", "tx_region", "rx_region_max"]
+    non_model_object["imported_object_names"] = ["environment", "tx_region", "tx_region_actual", "rx_region_max"]
     return {
         "non_model_objects": [non_model_object],
         "modeled_objects": modeled_objects,
@@ -655,6 +658,7 @@ def test_setup_type2_step_ledger_accepts_multilayer_tx_copper_stack_mesh(tmp_pat
                 (
                     "environment",
                     "tx_region",
+                    "tx_region_actual",
                     "rx_region_max",
                     "tx_pcb_l0",
                     "tx_pcb_l1",
@@ -1106,7 +1110,7 @@ def test_setup_type2_step_ledger_raises_when_required_mesh_role_is_missing(tmp_p
     imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
     session = _SetupReadyHfss(
         modeler=_SetupReadyModeler(
-            imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]
+            imported_name_batches=[("environment", "tx_region", "tx_region_actual", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]
         )
     )
 

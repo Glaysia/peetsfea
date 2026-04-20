@@ -132,7 +132,7 @@ range = {wall_parallel_stack_present_range}
         outer_y_usage_ratio_range = _range(False, 60.0 / 280.0, 60.0 / 280.0, 1)
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v4"
+schema_id = "peetsfea.type2.step.v5"
 runtime_compatible = false
 
 [design]
@@ -208,6 +208,15 @@ material = "vacuum"
 plane = "YZ"
 origin_xyz = [200.0, -100.0, 0.0]
 size_xyz = [10.0, 200.0, 200.0]
+
+[[non_model_objects]]
+id = "tx_region_actual"
+kind = "tx_region_actual"
+source_region_id = "tx_region"
+[non_model_objects.x_usage_ratio]
+range = [false, 0.3, 0.3, 1]
+[non_model_objects.y_usage_ratio]
+range = [false, 0.3, 0.3, 1]
 
 [[modeled_objects]]
 object_id = "{modeled_object_id}"
@@ -262,7 +271,7 @@ def _type2_rx_plate_stack_spec_text(
         extra_body = f"\n{extra_body}"
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v4"
+schema_id = "peetsfea.type2.step.v5"
 runtime_compatible = false
 
 [design]
@@ -338,6 +347,15 @@ material = "vacuum"
 plane = "YZ"
 origin_xyz = [200.0, -100.0, 0.0]
 size_xyz = [10.0, 200.0, 200.0]
+
+[[non_model_objects]]
+id = "tx_region_actual"
+kind = "tx_region_actual"
+source_region_id = "tx_region"
+[non_model_objects.x_usage_ratio]
+range = [false, 0.3, 0.3, 1]
+[non_model_objects.y_usage_ratio]
+range = [false, 0.3, 0.3, 1]
 
 [[modeled_objects]]
     object_id = "{modeled_object_id}"
@@ -1290,10 +1308,10 @@ def test_load_type2_step_spec_parses_tx_plate_stack_contract(tmp_path: Path) -> 
 
 
 def test_load_type2_step_spec_rejects_legacy_type2_schema_id(tmp_path: Path) -> None:
-    toml_text = _type2_rx_plate_stack_spec_text().replace("peetsfea.type2.step.v4", "peetsfea.type2.step.v1", 1)
+    toml_text = _type2_rx_plate_stack_spec_text().replace("peetsfea.type2.step.v5", "peetsfea.type2.step.v1", 1)
     toml_path = _write_spec(tmp_path, toml_text)
 
-    with pytest.raises(ValueError, match=r"schema_id must be 'peetsfea\.type2\.step\.v4'"):
+    with pytest.raises(ValueError, match=r"schema_id must be 'peetsfea\.type2\.step\.v5'"):
         load_type2_step_spec(toml_path)
 
 
@@ -1871,9 +1889,9 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert non_model_entry["object_id"] == "type2_non_model_scene"
     assert non_model_entry["role"] == "non_model_scene"
     assert non_model_entry["plane"] == "mixed"
-    assert non_model_entry["member_object_ids"] == ("environment", "tx_region", "rx_region_max")
+    assert non_model_entry["member_object_ids"] == ("environment", "tx_region", "tx_region_actual", "rx_region_max")
     member_objects = non_model_entry["member_objects"]
-    assert len(member_objects) == 3
+    assert len(member_objects) == 4
     environment_member = next(member for member in member_objects if member["object_id"] == "environment")
     assert environment_member["role"] == "environment"
     assert environment_member["plane"] == "mixed"
@@ -1883,6 +1901,10 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert tx_region_member["role"] == "tx_region"
     assert tx_region_member["canonical_coordinates"]["outer_bounds_min_xyz"] == (0.0, -140.0, 0.0)
     assert tx_region_member["canonical_coordinates"]["outer_bounds_size_xyz"] == (160.0, 280.0, 90.0)
+    tx_region_actual_member = next(member for member in member_objects if member["object_id"] == "tx_region_actual")
+    assert tx_region_actual_member["role"] == "tx_region_actual"
+    assert tx_region_actual_member["canonical_coordinates"]["outer_bounds_min_xyz"] == (0.0, -42.0, 0.0)
+    assert tx_region_actual_member["canonical_coordinates"]["outer_bounds_size_xyz"] == (48.0, 84.0, 90.0)
     rx_region_member = next(member for member in member_objects if member["object_id"] == "rx_region_max")
     assert rx_region_member["canonical_coordinates"]["outer_bounds_min_xyz"] == (0.0, -280.0, 139.0)
     rx_region_size_x = cast(tuple[float, float, float], rx_region_member["canonical_coordinates"]["outer_bounds_size_xyz"])[0]
@@ -1907,6 +1929,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     expected_scene_labels = {
         "environment",
         "tx_region",
+        "tx_region_actual",
         "rx_region_max",
         *rx_expected_names,
         *rx_group_names,
@@ -1915,7 +1938,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert all(not label.startswith("tx_plate_") for label in scene_shapes_by_label)
     assert "g_copper_tx" not in scene_shapes_by_label
     assert "g_ferrite_tx" not in scene_shapes_by_label
-    for label in {"environment", "tx_region", "rx_region_max", *rx_expected_names}:
+    for label in {"environment", "tx_region", "tx_region_actual", "rx_region_max", *rx_expected_names}:
         assert type(scene_shapes_by_label[label]).__name__ == "Solid"
     for label in rx_group_names:
         assert type(scene_shapes_by_label[label]).__name__ == "Compound"

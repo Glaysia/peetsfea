@@ -30,6 +30,7 @@ from peetsfea.type2_step_scene import build_modeled_single_coil_scene_data
 from peetsfea.type2_step_scene import build_non_model_scene_entry
 from peetsfea.type2_step_scene import build_non_model_scene_shapes
 from peetsfea.type2_step_scene import require_non_model_object_spec
+from peetsfea.type2_step_scene import resolve_non_model_scene_specs
 from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
@@ -759,8 +760,13 @@ def export_type2_step_artifacts(
     object_metadata_dir = output_dir / "metadata"
 
     stage_reporter("build_scene")
-    non_model_entries = [build_non_model_scene_entry(spec.non_model_objects)]
-    scene_shapes: list[bd.Shape] = list(build_non_model_scene_shapes(spec.non_model_objects))
+    resolved_non_model_specs = resolve_non_model_scene_specs(
+        base_specs=spec.non_model_objects,
+        derived_specs=spec.non_model_derived_objects,
+        seed=seed,
+    )
+    non_model_entries = [build_non_model_scene_entry(resolved_non_model_specs)]
+    scene_shapes: list[bd.Shape] = list(build_non_model_scene_shapes(resolved_non_model_specs))
     modeled_entries = []
     for modeled_spec in spec.modeled_objects:
         owner_spec = require_non_model_object_spec(

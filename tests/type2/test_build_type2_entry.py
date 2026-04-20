@@ -22,11 +22,14 @@ from entry.build import (
 from entry.sample import sample_type2
 from peetsfea.type2_runtime import Type2BuiltArtifact
 from peetsfea.type2_sampled import PreparedType2Build
+from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 
 _EXPECTED_SAMPLED_OWNER_PATHS = (
+    "non_model_objects.tx_region_actual.x_usage_ratio",
+    "non_model_objects.tx_region_actual.y_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
@@ -45,10 +48,20 @@ _BuildRunner = Callable[..., _Type2BuildRunnerResult]
 
 def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tuple[tuple[str, str], ...]:
     payload = tomllib.loads(sampled_toml_path.read_text(encoding="utf-8"))
+    non_model_objects = cast(list[dict[str, object]], payload["non_model_objects"])
+    non_model_by_id: dict[str, dict[str, object]] = {
+        cast(str, non_model_object["id"]): non_model_object for non_model_object in non_model_objects
+    }
     modeled_objects = cast(list[dict[str, object]], payload["modeled_objects"])
     modeled_by_id: dict[str, dict[str, object]] = {
         cast(str, modeled_object["object_id"]): modeled_object for modeled_object in modeled_objects
     }
+    tx_region_actual_x_range = cast(
+        list[object], cast(dict[str, object], non_model_by_id["tx_region_actual"]["x_usage_ratio"])["range"]
+    )
+    tx_region_actual_y_range = cast(
+        list[object], cast(dict[str, object], non_model_by_id["tx_region_actual"]["y_usage_ratio"])["range"]
+    )
     rx_outer_x_range = cast(
         list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["outer_x_usage_ratio"])["range"]
     )
@@ -65,16 +78,19 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
         list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["metal_fill_factor"])["range"]
     )
     return (
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[0], str(float(cast(int | float, rx_outer_x_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, rx_outer_y_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(float(cast(int | float, rx_void_ratio_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(int(cast(int | float, rx_turn_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, rx_fill_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[0], str(float(cast(int | float, tx_region_actual_x_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, tx_region_actual_y_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(float(cast(int | float, rx_outer_x_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(float(cast(int | float, rx_outer_y_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, rx_void_ratio_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(int(cast(int | float, rx_turn_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(float(cast(int | float, rx_fill_range[1])))),
     )
 
 
 @dataclass(frozen=True)
 class _FakeRxOnlyType2Spec:
+    non_model_derived_objects: tuple[NonModelTxRegionActualSpec, ...]
     modeled_objects: tuple[ModeledRxSingleCoilSpec, ...]
 
 
@@ -92,7 +108,18 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     rx_terminal_stub = RangeSpec(is_integer=False, start=5.0, end=5.0, count=1)
     rx_margin_ratio = RangeSpec(is_integer=False, start=0.05, end=0.05, count=1)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
+    tx_region_actual_x_usage_ratio = RangeSpec(is_integer=False, start=0.3, end=1.0, count=27)
+    tx_region_actual_y_usage_ratio = RangeSpec(is_integer=False, start=0.3, end=1.0, count=27)
     fake_spec = _FakeRxOnlyType2Spec(
+        non_model_derived_objects=(
+            NonModelTxRegionActualSpec(
+                object_id="tx_region_actual",
+                kind="tx_region_actual",
+                source_region_id="tx_region",
+                x_usage_ratio=tx_region_actual_x_usage_ratio,
+                y_usage_ratio=tx_region_actual_y_usage_ratio,
+            ),
+        ),
         modeled_objects=(
             ModeledRxSingleCoilSpec(
                 object_id="rx_rect_void_coil",
@@ -129,7 +156,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
 def _source_type2_toml_text() -> str:
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v4"
+schema_id = "peetsfea.type2.step.v5"
 runtime_compatible = false
 
 [design]
@@ -219,6 +246,15 @@ material = "vacuum"
 plane = "YZ"
 origin_xyz = [200.0, -100.0, 0.0]
 size_xyz = [10.0, 200.0, 200.0]
+
+[[non_model_objects]]
+id = "tx_region_actual"
+kind = "tx_region_actual"
+source_region_id = "tx_region"
+[non_model_objects.x_usage_ratio]
+range = [false, 0.3, 1.0, 27]
+[non_model_objects.y_usage_ratio]
+range = [false, 0.3, 1.0, 27]
 
 [[modeled_objects]]
     object_id = "rx_rect_void_coil"

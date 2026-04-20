@@ -1,7 +1,7 @@
 ---
 title: type2_sampled.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-20 @ 23:59
+updated: 2026-04-20 @ 13:08
 tags:
   - sampling
   - build
@@ -13,7 +13,7 @@ tags:
 - Path: `src/peetsfea/type2_sampled.py`
 - Code note path: `sdd/code/src/peetsfea/type2_sampled.py.md`
 - Status: active
-- Related feature plans: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]]
+- Related feature plans: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]]
 
 ## 역할
 - type2 sampled owner-path selection, frozen sampled TOML rendering, manifest/build planning을 담당한다.
@@ -24,7 +24,8 @@ tags:
 - 출력: sampled TOML, manifest entries, prepared build metadata
 
 ## Canonical state
-- sampled owner canonical path는 `modeled_objects.<object_id>.<field>`다.
+- sampled owner canonical paths are `modeled_objects.<object_id>.<field>` and `non_model_objects.<object_id>.<field>`.
+- active TX actual-region non-model sampled owners are `non_model_objects.tx_region_actual.x_usage_ratio` and `non_model_objects.tx_region_actual.y_usage_ratio`.
 - active RX single-coil sampled outer envelope owners use `outer_x_usage_ratio` and `outer_y_usage_ratio`.
 - active single-coil sampled void owner is `void_usage_ratio`; it is unitless and freezes into sampled TOML like other range owners.
 - removed legacy split/centered single-coil `void_*` fields are not sampled owners and must not appear in sampled metadata or build design variables.
@@ -51,6 +52,8 @@ tags:
 - plate-stack free range owners는 deterministic seed selection으로 scalar로 freeze되고 sampled metadata에 그대로 기록되어야 한다.
 - `tx_coil_count` is an integer owner and design variable expression is unitless.
 - `tx_array_x_usage_ratio` is a floating owner and design variable expression is unitless.
+- non-model usage-ratio design variables are unitless and must freeze into sampled TOML with count `1`, same as modeled usage ratios.
+- This file exceeds 800 lines; this narrow extension is allowed, but future sampler restructuring should split ownership first.
 - stage reporting이 실패/지원 여부를 바꾸면 안 되며, exporter failure는 기존처럼 즉시 raise되어야 한다.
 
 ## Collaborators

@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_import_pipeline.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 18:20
+updated: 2026-04-20 @ 13:08
 tags:
   - tests
   - backend-em
@@ -13,7 +13,7 @@ tags:
 ## Source
 - Path: `tests/backend_em/test_type2_step_import_pipeline.py`
 - Code note path: `sdd/code/tests/backend_em/test_type2_step_import_pipeline.py.md`
-- Direct owner: [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
+- Direct owner: [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]]
 - Direct verification target: [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py]]
 
 ## 역할
@@ -51,6 +51,7 @@ tags:
   centered active span plus the fixed `-Y` stub overhang.
 - active plate-stack import rejects Y bounds that fit inside the owner but are off the global centered active-window contract.
 - TX array import must not create extra modeled entries or per-branch port sheets.
+- Non-model import fixtures include `tx_region_actual` as an imported non-model member between `tx_region` and `rx_region_max`.
 
 ## 변경 시 주의점
 - import-only success와 setup-ready failure를 같은 assertion으로 묶지 않는다.

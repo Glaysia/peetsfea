@@ -1,7 +1,7 @@
 ---
 title: current pipeline
 created: 2026-04-17 @ 15:55
-updated: 2026-04-20 @ 23:59
+updated: 2026-04-20 @ 13:08
 tags:
   - type2
   - pipeline
@@ -15,8 +15,10 @@ tags:
 - `examples/type2_fixed.toml` remains the fixed single-design reference.
 - Type2 TOML owns both the STEP authoring registry and the EM report/output-variable contract.
 - The active default modeled set is RX-only: `rx_single_coil`.
-- This is a reset point for future TX work, not a TX disable mode. Active type2 does not emit TX geometry,
-  TX ports, TX sources, TX output expressions, or TX sampled owners.
+- This is a reset point for future TX modeled work, not a TX disable mode. Active type2 does not emit TX modeled
+  geometry, TX ports, TX sources, or TX output expressions.
+- Active type2 includes a sampled non-modeled `tx_region_actual` box inside maximum `tx_region`; its X/Y usage ratios
+  reserve the future actual TX footprint while preserving full `tx_region` Z.
 - RX single-coil geometry uses the rect/void coil contract in [`docs/tx-rect-void-step.md`](tx-rect-void-step.md).
 - The active runtime flow is:
   1. `entry/sample.py`

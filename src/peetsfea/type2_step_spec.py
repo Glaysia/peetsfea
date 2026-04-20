@@ -21,7 +21,10 @@ _TX_PLATE_STACK_COIL_COUNT_CANDIDATES = (1, 2, 3, 4)
 _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_START = 0.1
 _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_END = 0.6
 _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_COUNT = 14
-_TYPE2_SCHEMA_ID = "peetsfea.type2.step.v4"
+_TX_REGION_ACTUAL_USAGE_RATIO_START = 0.3
+_TX_REGION_ACTUAL_USAGE_RATIO_END = 1.0
+_TX_REGION_ACTUAL_USAGE_RATIO_COUNT = 27
+_TYPE2_SCHEMA_ID = "peetsfea.type2.step.v5"
 
 
 @dataclass(frozen=True)
@@ -43,6 +46,15 @@ class NonModelBoxSpec:
     plane: Literal["XY", "YZ", "ZX"]
     origin_xyz: Point3
     size_xyz: Point3
+
+
+@dataclass(frozen=True)
+class NonModelTxRegionActualSpec:
+    object_id: Literal["tx_region_actual"]
+    kind: Literal["tx_region_actual"]
+    source_region_id: Literal["tx_region"]
+    x_usage_ratio: RangeSpec
+    y_usage_ratio: RangeSpec
 
 
 @dataclass(frozen=True)
@@ -122,6 +134,7 @@ class Type2StepSpec:
     simulation: Type2SimulationPolicy
     outputs: OutputsSpec
     non_model_objects: tuple[NonModelBoxSpec, ...]
+    non_model_derived_objects: tuple[NonModelTxRegionActualSpec, ...]
     modeled_objects: tuple[ModeledObjectSpec, ...]
 
 
@@ -297,6 +310,76 @@ def _parse_non_model_box(
         plane=_require_plane(table, "plane", context),
         origin_xyz=_require_point3(table, "origin_xyz", context, positive=False),
         size_xyz=_require_point3(table, "size_xyz", context, positive=True),
+    )
+
+
+def _is_canonical_tx_region_actual_usage_ratio_range(range_spec: RangeSpec) -> bool:
+    return (
+        range_spec.is_integer is False
+        and math.isclose(range_spec.start, _TX_REGION_ACTUAL_USAGE_RATIO_START, rel_tol=0.0, abs_tol=1e-12)
+        and math.isclose(range_spec.end, _TX_REGION_ACTUAL_USAGE_RATIO_END, rel_tol=0.0, abs_tol=1e-12)
+        and range_spec.count == _TX_REGION_ACTUAL_USAGE_RATIO_COUNT
+    )
+
+
+def _require_tx_region_actual_usage_ratio_range(
+    table: dict[str, object],
+    *,
+    key: str,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, key, context, expect_integer=False)
+    candidates = _float_range_candidates(range_spec)
+    if any(
+        candidate < _TX_REGION_ACTUAL_USAGE_RATIO_START or candidate > _TX_REGION_ACTUAL_USAGE_RATIO_END
+        for candidate in candidates
+    ):
+        raise ValueError(
+            f"{context}.{key} must realize to values in "
+            f"[{_TX_REGION_ACTUAL_USAGE_RATIO_START}, {_TX_REGION_ACTUAL_USAGE_RATIO_END}] "
+            f"(actual={candidates})"
+        )
+    if _is_canonical_tx_region_actual_usage_ratio_range(range_spec):
+        return range_spec
+    if range_spec.count == 1 and math.isclose(range_spec.start, range_spec.end, rel_tol=0.0, abs_tol=1e-12):
+        return range_spec
+    raise ValueError(
+        f"{context}.{key}.range must be canonical [false, 0.3, 1.0, 27] "
+        "or fixed [false, r, r, 1] for 0.3 <= r <= 1.0 "
+        f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
+    )
+
+
+def _parse_non_model_tx_region_actual(
+    raw_object: object,
+    *,
+    index: int,
+    seen_object_ids: set[str],
+) -> NonModelTxRegionActualSpec:
+    context = f"non_model_objects[{index}]"
+    table = _require_table(raw_object, context)
+    object_id = _require_non_empty_str(table, "id", context)
+    if object_id in seen_object_ids:
+        raise ValueError(f"duplicate object id: {object_id}")
+    seen_object_ids.add(object_id)
+    if object_id != "tx_region_actual":
+        raise ValueError(f"{context}.id must be 'tx_region_actual' (actual={object_id!r})")
+    kind = _require_non_empty_str(table, "kind", context)
+    if kind != "tx_region_actual":
+        raise ValueError(f"{context}.kind must be 'tx_region_actual' (actual={kind!r})")
+    source_region_id = _require_non_empty_str(table, "source_region_id", context)
+    if source_region_id != "tx_region":
+        raise ValueError(f"{context}.source_region_id must be 'tx_region' (actual={source_region_id!r})")
+    allowed_keys = {"id", "kind", "source_region_id", "x_usage_ratio", "y_usage_ratio"}
+    extra_keys = sorted(set(table.keys()) - allowed_keys)
+    if extra_keys:
+        raise ValueError(f"{context} contains unsupported keys for tx_region_actual (actual={extra_keys})")
+    return NonModelTxRegionActualSpec(
+        object_id="tx_region_actual",
+        kind="tx_region_actual",
+        source_region_id="tx_region",
+        x_usage_ratio=_require_tx_region_actual_usage_ratio_range(table, key="x_usage_ratio", context=context),
+        y_usage_ratio=_require_tx_region_actual_usage_ratio_range(table, key="y_usage_ratio", context=context),
     )
 
 
@@ -1038,11 +1121,32 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
         raise ValueError("modeled_objects must not be empty")
 
     seen_object_ids: set[str] = set()
-    non_model_objects = tuple(
-        _parse_non_model_box(raw_object, index=index, seen_object_ids=seen_object_ids)
-        for index, raw_object in enumerate(raw_non_model_objects)
-    )
+    non_model_box_specs: list[NonModelBoxSpec] = []
+    non_model_derived_specs: list[NonModelTxRegionActualSpec] = []
+    for index, raw_object in enumerate(raw_non_model_objects):
+        context = f"{toml_path.name}.non_model_objects[{index}]"
+        table = _require_table(raw_object, context)
+        kind = _require_non_empty_str(table, "kind", context)
+        if kind == "tx_region_actual":
+            non_model_derived_specs.append(
+                _parse_non_model_tx_region_actual(raw_object, index=index, seen_object_ids=seen_object_ids)
+            )
+            continue
+        non_model_box_specs.append(_parse_non_model_box(raw_object, index=index, seen_object_ids=seen_object_ids))
+    non_model_objects = tuple(non_model_box_specs)
+    non_model_derived_objects = tuple(non_model_derived_specs)
     non_model_specs_by_id = {spec.object_id: spec for spec in non_model_objects}
+    for spec in non_model_derived_objects:
+        if spec.source_region_id not in non_model_specs_by_id:
+            raise ValueError(
+                f"{toml_path.name} requires tx_region_actual source region '{spec.source_region_id}' in non_model_objects"
+            )
+        source_spec = non_model_specs_by_id[spec.source_region_id]
+        if source_spec.kind != "tx_region":
+            raise ValueError(
+                f"{toml_path.name} tx_region_actual source region must have kind 'tx_region' "
+                f"(actual={source_spec.kind!r})"
+            )
     modeled_objects_list: list[ModeledObjectSpec] = []
     for index, raw_object in enumerate(raw_modeled_objects):
         context = f"{toml_path.name}.modeled_objects[{index}]"
@@ -1067,6 +1171,7 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
         simulation=_parse_simulation_policy(root, context=toml_path.name),
         outputs=parse_outputs_table(_require_key(root, "outputs", toml_path.name), context=f"{toml_path.name}.outputs"),
         non_model_objects=non_model_objects,
+        non_model_derived_objects=non_model_derived_objects,
         modeled_objects=modeled_objects,
     )
 
@@ -1128,6 +1233,7 @@ __all__ = [
     "ModeledTxPlateStackSpec",
     "ModeledTxSingleCoilSpec",
     "NonModelBoxSpec",
+    "NonModelTxRegionActualSpec",
     "Point3",
     "RangeSpec",
     "Type2SimulationPolicy",

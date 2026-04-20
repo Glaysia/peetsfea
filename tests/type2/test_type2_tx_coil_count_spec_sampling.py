@@ -20,7 +20,7 @@ def _type2_plate_stack_toml(
 ) -> str:
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v4"
+schema_id = "peetsfea.type2.step.v5"
 runtime_compatible = false
 
 [design]
@@ -66,6 +66,15 @@ material = "vacuum"
 plane = "YZ"
 origin_xyz = [200.0, -100.0, 0.0]
 size_xyz = [10.0, 200.0, 200.0]
+
+[[non_model_objects]]
+id = "tx_region_actual"
+kind = "tx_region_actual"
+source_region_id = "tx_region"
+[non_model_objects.x_usage_ratio]
+range = [false, 0.3, 0.3, 1]
+[non_model_objects.y_usage_ratio]
+range = [false, 0.3, 0.3, 1]
 
 [[modeled_objects]]
 object_id = "tx_plate_stack"

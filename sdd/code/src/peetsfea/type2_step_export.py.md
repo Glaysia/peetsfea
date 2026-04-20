@@ -1,7 +1,7 @@
 ---
 title: type2_step_export.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 18:20
+updated: 2026-04-20 @ 13:08
 tags:
   - step-export
   - export
@@ -17,6 +17,7 @@ tags:
 ## Ownership
 - Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]]
 - TX array plan: [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
+- TX actual-region plan: [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]]
 - Primary architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
 
 ## 역할
@@ -55,6 +56,7 @@ tags:
   TX array에서는 branch 0 terminal geometry를 기준으로 한 단일 TX port를 유지한다.
 - imported body handoff는 copper/ferrite role body names를 그대로 사용하며, copper 그룹은 `g_copper_tx`, `g_copper_rx`로, ferrite 그룹은 `g_ferrite_tx`, `g_ferrite_rx`로 복원해야 한다.
 - reporter phase surface는 `build_scene`, `export_scene_step`, `finalize_step_artifacts`로 제한한다.
+- Full-scene export must carry `tx_region_actual` as a non-model member in the shared non-model scene ledger.
 
 ## Invariants / fail-fast
 - export body names/count는 role contract와 exact match여야 한다.

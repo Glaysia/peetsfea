@@ -1,7 +1,7 @@
 ---
 title: Plan Note Index
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 23:10
+updated: 2026-04-20 @ 13:08
 tags:
   - sdd
 ---
@@ -44,6 +44,7 @@ tags:
 - `sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio.md`
 - `sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array.md`
 - `sdd/plans/0.2.22-type2-rx-only-baseline.md`
+- `sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling.md`
 
 ## Type2 milestone order
 - single STEP + setup-ready notebook 방향: `sdd/plans/0.2.22-type2-single-step-setup-ready-pipeline.md`
@@ -68,6 +69,7 @@ tags:
 - plate-stack global Y=0 centered usage window: `sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio.md`
 - TX plate-stack parallel count/array: `sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array.md`
 - RX-only active baseline and TX removal: `sdd/plans/0.2.22-type2-rx-only-baseline.md`
+- TX actual non-model sampled region: `sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling.md`
 - single-coil corner relief gap: `sdd/plans/0.2.22-type2-single-coil-corner-relief.md`
 - TX coil geometry repair: `sdd/plans/0.2.22-type2-tx-coil-geometry-repair.md`
 - 첫 modeled object role: `sdd/plans/tx-rect-void-step-generator.md`

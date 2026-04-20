@@ -4,7 +4,7 @@
 # Non-model guide objects and modeled objects are declared together.
 
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v4"
+schema_id = "peetsfea.type2.step.v5"
 runtime_compatible = false
 
 [design]
@@ -128,6 +128,15 @@ material = "vacuum"
 plane = "YZ"
 origin_xyz = [0.0, -280.0, 139.0]
 size_xyz = [5.0, 560.0, 360.0]
+
+[[non_model_objects]]
+id = "tx_region_actual"
+kind = "tx_region_actual"
+source_region_id = "tx_region"
+[non_model_objects.x_usage_ratio]
+range = [false, 0.3, 1.0, 27]
+[non_model_objects.y_usage_ratio]
+range = [false, 0.3, 1.0, 27]
 
 # ----------------------------------------------------------------------------
 # Modeled object registry

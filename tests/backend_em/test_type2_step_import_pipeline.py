@@ -93,7 +93,7 @@ def _non_model_entry(*, object_id: str = "type2_non_model_scene") -> dict[str, o
         },
         "plane": "mixed",
         "non_model": True,
-        "member_object_ids": ("environment", "tx_region", "rx_region_max"),
+        "member_object_ids": ("environment", "tx_region", "tx_region_actual", "rx_region_max"),
         "member_objects": [
             _non_model_member_entry(
                 object_id="environment",
@@ -105,6 +105,13 @@ def _non_model_entry(*, object_id: str = "type2_non_model_scene") -> dict[str, o
             _non_model_member_entry(
                 object_id="tx_region",
                 role="tx_region",
+                origin_xyz=(0.0, -140.0, 0.0),
+                size_xyz=(160.0, 280.0, 90.0),
+                plane="YZ",
+            ),
+            _non_model_member_entry(
+                object_id="tx_region_actual",
+                role="tx_region_actual",
                 origin_xyz=(0.0, -140.0, 0.0),
                 size_xyz=(160.0, 280.0, 90.0),
                 plane="YZ",
@@ -561,6 +568,7 @@ def _single_layer_imported_name_batch() -> tuple[str, ...]:
     return (
         "environment",
         "tx_region",
+        "tx_region_actual",
         "rx_region_max",
         "tx_pcb_l0",
         "tx_copper_l0",
@@ -629,6 +637,7 @@ def _single_layer_imported_name_batch_with_role_aware_underlay(
     return (
         "environment",
         "tx_region",
+        "tx_region_actual",
         "rx_region_max",
         "tx_pcb_l0",
         "tx_copper_l0",
@@ -702,6 +711,7 @@ def _legacy_tx_plate_stack_imported_name_batch() -> tuple[str, ...]:
     return (
         "environment",
         "tx_region",
+        "tx_region_actual",
         "rx_region_max",
         *_legacy_tx_plate_stack_expected_names(),
     )
@@ -873,6 +883,7 @@ def _plate_stack_imported_name_batch() -> tuple[str, ...]:
     return (
         "environment",
         "tx_region",
+        "tx_region_actual",
         "rx_region_max",
         *_tx_plate_stack_expected_names(),
         *_rx_plate_stack_expected_names(),
@@ -969,6 +980,7 @@ def test_import_type2_step_ledger_imports_single_scene_and_writes_partitioned_le
     assert session.modeler.model_state_calls == [
         ("environment", False),
         ("tx_region", False),
+        ("tx_region_actual", False),
         ("rx_region_max", False),
         ("tx_pcb_l0", True),
         ("tx_copper_l0", True),
@@ -1011,6 +1023,7 @@ def test_import_type2_step_ledger_allows_missing_optional_port_sheet_bodies(tmp_
                 (
                     "environment",
                     "tx_region",
+                    "tx_region_actual",
                     "rx_region_max",
                     "tx_pcb_l0",
                     "tx_copper_l0",
@@ -1514,6 +1527,7 @@ def test_import_type2_step_ledger_accepts_tx_plate_stack_array_exact_names(tmp_p
     imported_names = (
         "environment",
         "tx_region",
+        "tx_region_actual",
         "rx_region_max",
         *tx_expected_names,
         *_rx_plate_stack_expected_names(),
@@ -1549,7 +1563,7 @@ def test_import_type2_step_ledger_fails_unclaimed_solid_name_as_export_contract_
     session = _FakeHfss(
         modeler=_FakeModeler(
             imported_name_batches=[
-                ("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet", "SOLID_404")
+                ("environment", "tx_region", "tx_region_actual", "rx_region_max", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet", "SOLID_404")
             ]
         )
     )
@@ -1584,7 +1598,7 @@ def test_import_type2_step_ledger_styles_multilayer_tx_parallel_stack_before_mes
     output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
     session = _FakeHfss(
         modeler=_FakeModeler(
-            imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_pcb_l1", "tx_copper_stack")]
+            imported_name_batches=[("environment", "tx_region", "tx_region_actual", "rx_region_max", "tx_pcb_l0", "tx_pcb_l1", "tx_copper_stack")]
         )
     )
 
@@ -1614,7 +1628,7 @@ def test_import_type2_step_ledger_fails_when_modeled_labels_are_not_preserved(tm
         non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry()],
     )
-    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "rx_region_max", "SOLID_7", "tx_copper_l0")]))
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "tx_region_actual", "rx_region_max", "SOLID_7", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"missing required modeled body name"):
         import_type2_step_ledger(
@@ -1636,7 +1650,7 @@ def test_import_type2_step_ledger_fails_when_scene_import_contains_unclaimed_obj
     )
     session = _FakeHfss(
         modeler=_FakeModeler(
-            imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet", "mystery")]
+            imported_name_batches=[("environment", "tx_region", "tx_region_actual", "rx_region_max", "tx_pcb_l0", "tx_copper_l0", "tx_port_sheet", "mystery")]
         )
     )
 
@@ -1678,7 +1692,7 @@ def test_import_type2_step_ledger_fails_when_modeled_tx_is_not_centered_on_tx_re
         non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry(origin_xyz=(0.0, -16.0, 87.2))],
     )
-    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "tx_region_actual", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"center_y must already align with tx_region center_y"):
         import_type2_step_ledger(
@@ -1698,7 +1712,7 @@ def test_import_type2_step_ledger_fails_when_modeled_tx_does_not_touch_tx_region
         non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry(origin_xyz=(0.1, -15.0, 87.2))],
     )
-    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "tx_region_actual", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"outer bounds min_x must already touch tx_region min_x"):
         import_type2_step_ledger(
@@ -1718,7 +1732,7 @@ def test_import_type2_step_ledger_fails_when_modeled_tx_does_not_fit_tx_region(t
         non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry(size_xyz=(170.0, 30.0, 2.8))],
     )
-    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "tx_region_actual", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"outer bounds must fit inside tx_region"):
         import_type2_step_ledger(
@@ -1738,7 +1752,7 @@ def test_import_type2_step_ledger_fails_when_modeled_tx_is_not_top_aligned_to_tx
         non_model_objects=[_non_model_entry()],
         modeled_objects=[_modeled_entry(origin_xyz=(0.0, -15.0, 87.1))],
     )
-    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", "tx_region_actual", "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"outer bounds max_z must already touch tx_region max_z"):
         import_type2_step_ledger(
