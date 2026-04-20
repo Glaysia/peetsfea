@@ -96,7 +96,7 @@ def _type2_spec_text(
     tx_region_actual_x_division_count_range: str = "[true, 1, 1, 1]",
     tx_region_actual_y_division_count_range: str = "[true, 1, 1, 1]",
     tx_region_actual_pcb_scale_ratio_range: str = "[false, 0.35, 0.35, 1]",
-    tx_region_actual_pcb_tilt_enabled_range: str = "[true, 0, 0, 1]",
+    tx_region_actual_pcb_tilt_enabled_range: str = "[true, 1, 1, 1]",
 ) -> str:
     if underlay_repeat_count_range is None:
         underlay_repeat_count_range = _range(True, 0.0, 8.0, 5)
@@ -287,7 +287,7 @@ def _type2_rx_plate_stack_spec_text(
     tx_region_actual_x_division_count_range: str = "[true, 1, 1, 1]",
     tx_region_actual_y_division_count_range: str = "[true, 1, 1, 1]",
     tx_region_actual_pcb_scale_ratio_range: str = "[false, 0.35, 0.35, 1]",
-    tx_region_actual_pcb_tilt_enabled_range: str = "[true, 0, 0, 1]",
+    tx_region_actual_pcb_tilt_enabled_range: str = "[true, 1, 1, 1]",
 ) -> str:
     extra_body = "\n".join(extra_modeled_lines)
     if extra_body != "":
@@ -2171,8 +2171,11 @@ def test_export_type2_step_artifacts_tiles_tx_region_actual_for_forced_3x3_divis
         tile_min_xyz = cast(tuple[float, float, float], tile_bounds["outer_bounds_min_xyz"])
         pcb_min_xyz = cast(tuple[float, float, float], pcb_bounds["outer_bounds_min_xyz"])
         tile_max_z = tile_min_xyz[2] + tile_size_xyz[2]
-        assert pcb_size_xyz == pytest.approx((tile_size_xyz[0] * 0.35, tile_size_xyz[1] * 0.35, 5.0))
-        assert pcb_min_xyz[2] + 5.0 == pytest.approx(tile_max_z)
+        assert pcb_size_xyz[0] > tile_size_xyz[0] * 0.35
+        assert pcb_size_xyz[1] >= (tile_size_xyz[1] * 0.35) - 1e-8
+        assert pcb_size_xyz[2] > 5.0
+        assert pcb_min_xyz[2] >= tile_min_xyz[2] - 1e-8
+        assert cast(tuple[float, float, float], pcb_bounds["outer_bounds_max_xyz"])[2] <= tile_max_z + 1e-8
 
     scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
     for tile_name in tile_names:

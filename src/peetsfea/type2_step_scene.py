@@ -123,11 +123,17 @@ def resolve_tx_region_actual_pcb_tilt_enabled(
     derived_spec: NonModelTxRegionActualPcbSpec,
     seed: int,
 ) -> int:
-    return _selected_integer_candidate(
+    tilt_enabled = _selected_integer_candidate(
         range_spec=derived_spec.tilt_enabled,
         owner_path=f"non_model_objects.{derived_spec.object_id}.tilt_enabled",
         seed=seed,
     )
+    if tilt_enabled != 1:
+        raise RuntimeError(
+            "tx_region_actual_pcb.tilt_enabled must be fixed on at runtime "
+            f"(actual={tilt_enabled})"
+        )
+    return tilt_enabled
 
 
 def _parent_tx_region_actual_object_id_for_pcb_object_id(*, object_id: str) -> str:

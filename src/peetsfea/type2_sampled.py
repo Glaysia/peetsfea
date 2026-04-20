@@ -33,7 +33,6 @@ _INTEGER_RANGE_FIELD_NAMES = (
     "layer_count",
     "underlay_repeat_count",
     "wall_parallel_stack_present",
-    "tilt_enabled",
     "tx_coil_count",
     "x_division_count",
     "y_division_count",
@@ -152,7 +151,6 @@ def _tx_region_actual_pcb_range_owner_specs(
 ) -> tuple[tuple[str, RangeSpec], ...]:
     return (
         (f"non_model_objects.{non_model_spec.object_id}.scale_ratio", non_model_spec.scale_ratio),
-        (f"non_model_objects.{non_model_spec.object_id}.tilt_enabled", non_model_spec.tilt_enabled),
     )
 
 

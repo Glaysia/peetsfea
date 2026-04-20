@@ -23,8 +23,8 @@ tags:
 - Active type2 also includes sampled non-modeled `tx_region_actual_pcb` bodies, one per realized
   `tx_region_actual` concrete tile. Each PCB top face touches its tile top face, thickness is fixed at `5.0 mm`,
   and the shared `scale_ratio` samples each tile's similar rectangle over `0.35..0.95` with `count=25`.
-- `tx_region_actual_pcb.tilt_enabled` can tilt only those PCB bodies toward the modeled RX center; guide tiles
-  remain axis-aligned, and tilted PCB bodies are shifted down if needed so their bbox stays under the owning tile top.
+- `tx_region_actual_pcb.tilt_enabled` is fixed on. It tilts only those PCB bodies toward the modeled RX center;
+  guide tiles remain axis-aligned, and tilted PCB bodies are shifted down if needed so their bbox stays under the owning tile top.
 - RX single-coil geometry uses the rect/void coil contract in [`docs/tx-rect-void-step.md`](tx-rect-void-step.md).
 - The active runtime flow is:
   1. `entry/sample.py`

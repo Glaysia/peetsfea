@@ -31,7 +31,7 @@ tags:
 - build call shape remains setup-ready oriented (`step_ledger_path`, `output_aedt_path`, `imported_ledger_path`, `design_name`, `design_variables`)
 - this suite keeps scope at build-entry wiring and runner handoff contracts, not setup-ready runtime internals
 - sampled owner replay drives non-empty RX `design_variables` with canonical owner-name order
-- sampled owner replay now also drives unitless `tx_region_actual` non-model usage-ratio, integer division-count, `tx_region_actual_pcb.scale_ratio`, and integer `tx_region_actual_pcb.tilt_enabled` design variables.
+- sampled owner replay now also drives unitless `tx_region_actual` non-model usage-ratio, integer division-count, and `tx_region_actual_pcb.scale_ratio` design variables. Fixed `tx_region_actual_pcb.tilt_enabled` is excluded.
 - RX effective sampled owners are `outer_x_usage_ratio`, `outer_y_usage_ratio`, `void_usage_ratio`, `turn_count`, `metal_fill_factor`; `layer_count`, full-backing `underlay_repeat_count`, and removed split/centered `void_*` fields are excluded from `design_variables`
 - manifest parallelism contracts remain intact
 

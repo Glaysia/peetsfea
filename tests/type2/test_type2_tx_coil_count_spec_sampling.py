@@ -9,7 +9,6 @@ from peetsfea.type2_sampled import sampled_owner_values
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 from peetsfea.type2_step_spec import NonModelTxRegionActualPcbSpec
-from peetsfea.type2_step_spec import resolve_non_model_tx_region_actual_pcb_tilt_enabled
 from peetsfea.type2_step_spec import resolve_modeled_tx_array_x_usage_ratio
 from peetsfea.type2_step_spec import resolve_modeled_tx_coil_count
 
@@ -18,7 +17,7 @@ def _type2_plate_stack_toml(
     *,
     tx_tx_coil_count_range: str,
     tx_array_x_usage_ratio_range: str = "[false, 1.0, 1.0, 1]",
-    tx_region_actual_pcb_tilt_enabled_range: str = "[true, 0, 1, 2]",
+    tx_region_actual_pcb_tilt_enabled_range: str = "[true, 1, 1, 1]",
     rx_tx_only_block: str = "",
 ) -> str:
     return f"""
@@ -225,12 +224,7 @@ def test_tx_array_x_usage_ratio_rejects_noncanonical_nonfixed_range(tmp_path: Pa
         load_type2_step_spec(toml_path)
 
 
-def test_tx_region_actual_pcb_tilt_enabled_accepts_canonical_and_fixed_ranges_and_resolves(tmp_path: Path) -> None:
-    canonical_path = _write_toml(
-        tmp_path,
-        text=_type2_plate_stack_toml(tx_tx_coil_count_range="[true, 1, 4, 4]"),
-    )
-    canonical_pcb_spec = _tx_region_actual_pcb_spec_from_loaded_spec(canonical_path)
+def test_tx_region_actual_pcb_tilt_enabled_accepts_only_fixed_on_range(tmp_path: Path) -> None:
     fixed_path = _write_toml(
         tmp_path,
         text=_type2_plate_stack_toml(
@@ -240,28 +234,15 @@ def test_tx_region_actual_pcb_tilt_enabled_accepts_canonical_and_fixed_ranges_an
         ),
     )
     fixed_pcb_spec = _tx_region_actual_pcb_spec_from_loaded_spec(fixed_path)
-    fixed_zero_path = _write_toml(
-        tmp_path,
-        text=_type2_plate_stack_toml(
-            tx_tx_coil_count_range="[true, 2, 2, 1]",
-            tx_array_x_usage_ratio_range="[false, 1.0, 1.0, 1]",
-            tx_region_actual_pcb_tilt_enabled_range="[true, 0, 0, 1]",
-        ),
-    )
-    fixed_zero_pcb_spec = _tx_region_actual_pcb_spec_from_loaded_spec(fixed_zero_path)
 
-    canonical_value = resolve_non_model_tx_region_actual_pcb_tilt_enabled(canonical_pcb_spec, seed=21)
-    fixed_value = resolve_non_model_tx_region_actual_pcb_tilt_enabled(fixed_pcb_spec, seed=21)
-    fixed_zero_value = resolve_non_model_tx_region_actual_pcb_tilt_enabled(fixed_zero_pcb_spec, seed=21)
-
-    assert canonical_value in {False, True}
-    assert fixed_value is True
-    assert fixed_zero_value is False
+    assert fixed_pcb_spec.tilt_enabled.start == 1.0
+    assert fixed_pcb_spec.tilt_enabled.end == 1.0
+    assert fixed_pcb_spec.tilt_enabled.count == 1
 
 
-def test_tx_region_actual_pcb_tilt_enabled_rejects_wrong_integer_shape_and_float_ranges(tmp_path: Path) -> None:
+def test_tx_region_actual_pcb_tilt_enabled_rejects_non_fixed_on_ranges(tmp_path: Path) -> None:
     wrong_is_integer_toml = _type2_plate_stack_toml(tx_tx_coil_count_range="[true, 1, 4, 4]").replace(
-        "[non_model_objects.tilt_enabled]\nrange = [true, 0, 1, 2]",
+        "[non_model_objects.tilt_enabled]\nrange = [true, 1, 1, 1]",
         "[non_model_objects.tilt_enabled]\nrange = [false, 0, 1, 2]",
     )
     with pytest.raises(
@@ -272,12 +253,12 @@ def test_tx_region_actual_pcb_tilt_enabled_rejects_wrong_integer_shape_and_float
         load_type2_step_spec(toml_path)
 
     out_of_domain_toml = _type2_plate_stack_toml(tx_tx_coil_count_range="[true, 1, 4, 4]").replace(
-        "[non_model_objects.tilt_enabled]\nrange = [true, 0, 1, 2]",
-        "[non_model_objects.tilt_enabled]\nrange = [true, 0, 2, 2]",
+        "[non_model_objects.tilt_enabled]\nrange = [true, 1, 1, 1]",
+        "[non_model_objects.tilt_enabled]\nrange = [true, 0, 0, 1]",
     )
     with pytest.raises(
         ValueError,
-        match=r"tilt_enabled must realize to values in \(0, 1\)",
+        match=r"tilt_enabled\.range must be fixed \[true, 1, 1, 1\]",
     ):
         load_type2_step_spec(_write_toml(tmp_path, text=out_of_domain_toml))
 
@@ -287,7 +268,7 @@ def test_tx_region_actual_pcb_tilt_enabled_rejects_wrong_integer_shape_and_float
     )
     with pytest.raises(
         ValueError,
-        match=r"tilt_enabled\.range must be canonical \[true, 0, 1, 2\]",
+        match=r"tilt_enabled\.range must be fixed \[true, 1, 1, 1\]",
     ):
         load_type2_step_spec(_write_toml(tmp_path, text=noncanonical_integer_toml))
 

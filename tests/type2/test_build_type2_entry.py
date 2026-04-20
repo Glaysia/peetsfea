@@ -34,7 +34,6 @@ _EXPECTED_SAMPLED_OWNER_PATHS = (
     "non_model_objects.tx_region_actual.x_division_count",
     "non_model_objects.tx_region_actual.y_division_count",
     "non_model_objects.tx_region_actual_pcb.scale_ratio",
-    "non_model_objects.tx_region_actual_pcb.tilt_enabled",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
@@ -76,9 +75,6 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
     tx_region_actual_pcb_scale_ratio_range = cast(
         list[object], cast(dict[str, object], non_model_by_id["tx_region_actual_pcb"]["scale_ratio"])["range"]
     )
-    tx_region_actual_pcb_tilt_enabled_range = cast(
-        list[object], cast(dict[str, object], non_model_by_id["tx_region_actual_pcb"]["tilt_enabled"])["range"]
-    )
     rx_outer_x_range = cast(
         list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["outer_x_usage_ratio"])["range"]
     )
@@ -100,12 +96,11 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
         (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(int(cast(int | float, tx_region_actual_x_division_range[1])))),
         (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(int(cast(int | float, tx_region_actual_y_division_range[1])))),
         (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, tx_region_actual_pcb_scale_ratio_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(int(cast(int | float, tx_region_actual_pcb_tilt_enabled_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(float(cast(int | float, rx_outer_x_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[7], str(float(cast(int | float, rx_outer_y_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[8], str(float(cast(int | float, rx_void_ratio_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[9], str(int(cast(int | float, rx_turn_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[10], str(float(cast(int | float, rx_fill_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, rx_outer_x_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(float(cast(int | float, rx_outer_y_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[7], str(float(cast(int | float, rx_void_ratio_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[8], str(int(cast(int | float, rx_turn_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[9], str(float(cast(int | float, rx_fill_range[1])))),
     )
 
 
@@ -134,7 +129,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     tx_region_actual_x_division_count = RangeSpec(is_integer=True, start=1, end=3, count=3)
     tx_region_actual_y_division_count = RangeSpec(is_integer=True, start=1, end=3, count=3)
     tx_region_actual_pcb_scale_ratio = RangeSpec(is_integer=False, start=0.35, end=0.95, count=25)
-    tx_region_actual_pcb_tilt_enabled = RangeSpec(is_integer=True, start=0, end=1, count=2)
+    tx_region_actual_pcb_tilt_enabled = RangeSpec(is_integer=True, start=1, end=1, count=1)
     fake_spec = _FakeRxOnlyType2Spec(
         non_model_derived_objects=(
             NonModelTxRegionActualSpec(
@@ -305,7 +300,7 @@ thickness_mm = 5.0
 [non_model_objects.scale_ratio]
 range = [false, 0.35, 0.95, 25]
 [non_model_objects.tilt_enabled]
-range = [true, 0, 1, 2]
+range = [true, 1, 1, 1]
 
 [[modeled_objects]]
     object_id = "rx_rect_void_coil"

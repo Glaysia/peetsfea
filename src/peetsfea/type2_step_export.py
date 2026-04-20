@@ -330,10 +330,8 @@ def _build_non_model_scene_entry_and_shapes(
 ) -> tuple[NonModelObjectLedgerEntry, tuple[bd.Shape, ...]]:
     non_model_entry = build_non_model_scene_entry(resolved_non_model_specs)
     shapes = list(build_non_model_scene_shapes(resolved_non_model_specs))
-    if tilt_enabled == 0:
-        return non_model_entry, tuple(shapes)
     if tilt_enabled != 1:
-        raise RuntimeError(f"tx_region_actual_pcb tilt_enabled must be 0 or 1 (actual={tilt_enabled})")
+        raise RuntimeError(f"tx_region_actual_pcb tilt_enabled must be fixed to 1 (actual={tilt_enabled})")
     if rx_center is None:
         raise RuntimeError("tilt-enabled tx_region_actual_pcb requires modeled RX center")
 
