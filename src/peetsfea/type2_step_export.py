@@ -21,6 +21,9 @@ from peetsfea.type2_plate_stack import expected_plate_stack_body_names
 from peetsfea.type2_step_ledger import Type2DirectModeledArtifact
 from peetsfea.type2_step_ledger import Type2ImportEmPolicy
 from peetsfea.type2_step_ledger import Type2StepLedger
+from peetsfea.type2_step_ledger import NonModelObjectLedgerEntry
+from peetsfea.type2_step_ledger import ModeledObjectSceneData
+from peetsfea.type2_step_ledger import CanonicalCoordinates
 from peetsfea.type2_step_ledger import build_modeled_object_ledger_entry
 from peetsfea.type2_step_ledger import build_type2_step_ledger
 from peetsfea.type2_step_ledger import write_modeled_source_metadata
@@ -29,15 +32,23 @@ from peetsfea.type2_step_scene import build_modeled_scene_data
 from peetsfea.type2_step_scene import build_modeled_single_coil_scene_data
 from peetsfea.type2_step_scene import build_non_model_scene_entry
 from peetsfea.type2_step_scene import build_non_model_scene_shapes
+from peetsfea.type2_step_scene import _canonical_from_shape
+from peetsfea.type2_step_scene import _is_concrete_tx_region_actual_pcb_object_id
+from peetsfea.type2_step_scene import _parent_tx_region_actual_object_id_for_pcb_object_id
+from peetsfea.type2_step_scene import _rotate_tx_region_actual_pcb_shape_toward_center
 from peetsfea.type2_step_scene import require_non_model_object_spec
 from peetsfea.type2_step_scene import resolve_non_model_scene_specs
+from peetsfea.type2_step_scene import resolve_tx_region_actual_pcb_tilt_enabled
 from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
+from peetsfea.type2_step_spec import NonModelTxRegionActualPcbSpec
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
+from peetsfea.type2_step_spec import NonModelDerivedSpec
+from peetsfea.type2_step_spec import Point3
 from peetsfea.type2_step_spec import load_type2_step_spec
 from peetsfea.type2_step_spec import placement_owner_id_for_role
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
@@ -93,6 +104,23 @@ def _validate_top_level_scene_child(shape: bd.Shape) -> None:
             "type2 scene STEP top-level non-solid child must contain exactly one face "
             f"(label={shape.label}, face_count={face_count})"
         )
+
+
+def _canonical_coordinates_center_xyz(
+    *,
+    canonical_coordinates: CanonicalCoordinates,
+) -> Point3:
+    origin_xyz = canonical_coordinates["outer_bounds_min_xyz"]
+    size_xyz = canonical_coordinates["outer_bounds_size_xyz"]
+    return (
+        origin_xyz[0] + (size_xyz[0] * 0.5),
+        origin_xyz[1] + (size_xyz[1] * 0.5),
+        origin_xyz[2] + (size_xyz[2] * 0.5),
+    )
+
+
+def _is_modeled_rx_object(*, role: str) -> bool:
+    return role in ("rx_single_coil", "rx_plate_stack")
 
 
 def _remove_generated_type2_artifacts(output_dir: Path) -> None:
@@ -273,6 +301,99 @@ def _plate_stack_expected_body_groups(
             role=spec.role,
         )
     ]
+
+
+def _resolve_modeled_rx_center_from_scene_data(
+    *,
+    modeled_scene_data: tuple[ModeledObjectSceneData, ...],
+) -> Point3:
+    if not modeled_scene_data:
+        raise RuntimeError("modeled scene data must exist when resolving modeled RX center")
+    rx_scene_data = tuple(scene_data for scene_data in modeled_scene_data if _is_modeled_rx_object(role=scene_data["role"]))
+    if len(rx_scene_data) != 1:
+        raise RuntimeError(
+            f"type2 tilt-enabled tx_region_actual_pcb requires exactly one modeled RX object (actual={len(rx_scene_data)})"
+        )
+    return _canonical_coordinates_center_xyz(
+        canonical_coordinates=cast(
+            CanonicalCoordinates,
+            rx_scene_data[0]["canonical_coordinates"],
+        )
+    )
+
+
+def _build_non_model_scene_entry_and_shapes(
+    *,
+    resolved_non_model_specs: tuple[NonModelBoxSpec, ...],
+    tilt_enabled: int,
+    rx_center: Point3 | None,
+) -> tuple[NonModelObjectLedgerEntry, tuple[bd.Shape, ...]]:
+    non_model_entry = build_non_model_scene_entry(resolved_non_model_specs)
+    shapes = list(build_non_model_scene_shapes(resolved_non_model_specs))
+    if tilt_enabled == 0:
+        return non_model_entry, tuple(shapes)
+    if tilt_enabled != 1:
+        raise RuntimeError(f"tx_region_actual_pcb tilt_enabled must be 0 or 1 (actual={tilt_enabled})")
+    if rx_center is None:
+        raise RuntimeError("tilt-enabled tx_region_actual_pcb requires modeled RX center")
+
+    shape_by_object_id: dict[str, bd.Shape] = {}
+    for shape in shapes:
+        shape_by_object_id[shape.label] = shape
+
+    tx_region_actual_specs = {
+        spec.object_id: spec
+        for spec in resolved_non_model_specs
+        if spec.kind == "tx_region_actual"
+    }
+    if not tx_region_actual_specs:
+        raise RuntimeError("type2 non-model registry must contain tx_region_actual tile specs when tilting tx_region_actual_pcb")
+
+    member_objects = list(non_model_entry["member_objects"])
+    for member_index, member_object in enumerate(member_objects):
+        object_id = member_object["object_id"]
+        if not _is_concrete_tx_region_actual_pcb_object_id(object_id):
+            continue
+        if object_id not in shape_by_object_id:
+            raise RuntimeError(f"type2 tilted tx_region_actual_pcb requires shape for object_id={object_id}")
+        parent_object_id = _parent_tx_region_actual_object_id_for_pcb_object_id(object_id=object_id)
+        if parent_object_id not in tx_region_actual_specs:
+            raise RuntimeError(
+                "tx_region_actual_pcb object must have owning tx_region_actual tile "
+                f"(object_id={object_id}, parent_object_id={parent_object_id})"
+            )
+        tile_spec = tx_region_actual_specs[parent_object_id]
+        tile_top_z = tile_spec.origin_xyz[2] + tile_spec.size_xyz[2]
+        tile_bottom_z = tile_spec.origin_xyz[2]
+        pcb_canonical = member_object["canonical_coordinates"]
+        pcb_min_xyz = cast(tuple[float, float, float], pcb_canonical["outer_bounds_min_xyz"])
+        pcb_size_xyz = cast(tuple[float, float, float], pcb_canonical["outer_bounds_size_xyz"])
+        pcb_center = (
+            pcb_min_xyz[0] + (pcb_size_xyz[0] * 0.5),
+            pcb_min_xyz[1] + (pcb_size_xyz[1] * 0.5),
+            pcb_min_xyz[2] + (pcb_size_xyz[2] * 0.5),
+        )
+        rotated_shape, rotated_canonical = _rotate_tx_region_actual_pcb_shape_toward_center(
+            shape=shape_by_object_id[object_id],
+            final_body_center=pcb_center,
+            rx_center=rx_center,
+            tile_bottom_z=tile_bottom_z,
+            tile_top_z=tile_top_z,
+        )
+        rotated_shape.label = object_id
+        shape_by_object_id[object_id] = rotated_shape
+        member_object["canonical_coordinates"] = rotated_canonical
+        member_objects[member_index] = member_object
+
+    shape_labels = tuple(shape.label for shape in shapes)
+    tilted_shapes = tuple(
+        shape_by_object_id[shape_label] for shape_label in shape_labels
+    )
+    non_model_entry["member_objects"] = tuple(member_objects)
+    non_model_entry["canonical_coordinates"] = _canonical_from_shape(
+        bd.Compound(children=tilted_shapes, label=non_model_entry["object_id"])
+    )
+    return non_model_entry, tilted_shapes
 
 
 def _ferrite_group_name_for_modeled_role(
@@ -765,8 +886,21 @@ def export_type2_step_artifacts(
         derived_specs=spec.non_model_derived_objects,
         seed=seed,
     )
-    non_model_entries = [build_non_model_scene_entry(resolved_non_model_specs)]
-    scene_shapes: list[bd.Shape] = list(build_non_model_scene_shapes(resolved_non_model_specs))
+    pcb_derived_specs = tuple(
+        derived_spec for derived_spec in spec.non_model_derived_objects if isinstance(derived_spec, NonModelTxRegionActualPcbSpec)
+    )
+    if len(pcb_derived_specs) != 1:
+        raise RuntimeError(
+            "type2 export requires exactly one tx_region_actual_pcb derived spec "
+            f"(actual={len(pcb_derived_specs)})"
+        )
+    tx_region_actual_pcb_tilt_enabled = resolve_tx_region_actual_pcb_tilt_enabled(
+        derived_spec=pcb_derived_specs[0],
+        seed=seed,
+    )
+
+    modeled_scene_data: list[ModeledObjectSceneData] = []
+    modeled_scene_shapes: list[bd.Shape] = []
     modeled_entries = []
     for modeled_spec in spec.modeled_objects:
         owner_spec = require_non_model_object_spec(
@@ -776,14 +910,14 @@ def export_type2_step_artifacts(
         metadata_path = object_metadata_dir / f"{modeled_spec.object_id}.metadata.json"
         if isinstance(modeled_spec, ModeledTxPlateStackSpec):
             rx_owner_spec = require_non_model_object_spec(spec.non_model_objects, object_id="rx_region_max")
-            modeled_scene_shapes, scene_data = build_tx_plate_stack_array_scene_data(
+            current_modeled_scene_shapes, scene_data = build_tx_plate_stack_array_scene_data(
                 modeled_spec,
                 owner_spec=owner_spec,
                 rx_owner_spec=rx_owner_spec,
                 seed=seed,
             )
         else:
-            modeled_scene_shapes, scene_data = build_modeled_scene_data(
+            current_modeled_scene_shapes, scene_data = build_modeled_scene_data(
                 modeled_spec,
                 owner_spec=owner_spec,
                 seed=seed,
@@ -798,8 +932,22 @@ def export_type2_step_artifacts(
             scene_data=scene_data,
             source_metadata_path=metadata_path,
         )
-        scene_shapes.extend(modeled_scene_shapes)
+        modeled_scene_data.append(scene_data)
+        modeled_scene_shapes.extend(current_modeled_scene_shapes)
         modeled_entries.append(modeled_entry)
+
+    rx_center: Point3 | None = None
+    if tx_region_actual_pcb_tilt_enabled == 1:
+        rx_center = _resolve_modeled_rx_center_from_scene_data(
+            modeled_scene_data=tuple(modeled_scene_data),
+        )
+    non_model_entry, non_model_scene_shapes = _build_non_model_scene_entry_and_shapes(
+        resolved_non_model_specs=resolved_non_model_specs,
+        tilt_enabled=tx_region_actual_pcb_tilt_enabled,
+        rx_center=rx_center,
+    )
+    non_model_entries = [non_model_entry]
+    scene_shapes = [*non_model_scene_shapes, *modeled_scene_shapes]
 
     scene_body_names = tuple(shape.label for shape in scene_shapes)
     if len(scene_body_names) != len(set(scene_body_names)):

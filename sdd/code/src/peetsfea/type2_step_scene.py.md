@@ -33,6 +33,7 @@ tags:
 - `tx_region_actual` is a non-modeled scene member family derived from `tx_region`; it is not a modeled placement owner until future TX work explicitly changes that contract.
 - `tx_region_actual_pcb` is a non-modeled PCB scene member family derived one-for-one from realized concrete `tx_region_actual` tile footprints.
 - non-model scene member order is `environment`, `tx_region`, `tx_region_actual` concrete tile members, matching `tx_region_actual_pcb` concrete members, `rx_region_max`.
+- `tx_region_actual_pcb.tilt_enabled = 1` tilts only concrete PCB bodies toward the modeled RX object center; guide tiles remain unrotated.
 - TX plate array placement truth is delegated to the plate-stack builder/helper and remains a single modeled scene entry.
 - RX plate placement truth는 `rx_region_max` full `YZ`, `min_x` anchor, `+X` stack다.
 - plate role copper/PCB active height는 owner full `Z` span을 쓴다. `shoe_depth_mm`/shoe fill은 active contract가 아니다.
@@ -69,6 +70,8 @@ tags:
 - `tx_region_actual` must fit within `tx_region` by construction; scene generation should fail if derived bounds drift outside the source region.
 - `tx_region_actual` tile bodies must be equal subdivisions of the realized actual region, with no gaps or overlaps.
 - each `tx_region_actual_pcb` concrete member must be centered in its owning actual-region tile `XY` footprint, keep a similar rectangle via one shared scale ratio, have 5 mm Z thickness, and touch that tile's top face.
+- tilted `tx_region_actual_pcb` concrete members must keep their face normal directed at the modeled RX outer-bounds center.
+- tilted `tx_region_actual_pcb` concrete members must be shifted down if required so their rotated bounding box does not exceed the owning tile top, and must fail if this shift makes the bbox drop below the owning tile bottom.
 - This file exceeds 800 lines; this narrow non-model grouping extension is allowed, but broad scene refactors should split first.
 
 ## Collaborators

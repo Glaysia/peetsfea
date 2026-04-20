@@ -150,6 +150,8 @@ material = "FR4_epoxy"
 thickness_mm = 5.0
 [non_model_objects.scale_ratio]
 range = [false, 0.35, 0.95, 25]
+[non_model_objects.tilt_enabled]
+range = [true, 0, 1, 2]
 
 # ----------------------------------------------------------------------------
 # Modeled object registry

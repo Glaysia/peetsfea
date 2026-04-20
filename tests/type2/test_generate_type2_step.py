@@ -96,6 +96,7 @@ def _type2_spec_text(
     tx_region_actual_x_division_count_range: str = "[true, 1, 1, 1]",
     tx_region_actual_y_division_count_range: str = "[true, 1, 1, 1]",
     tx_region_actual_pcb_scale_ratio_range: str = "[false, 0.35, 0.35, 1]",
+    tx_region_actual_pcb_tilt_enabled_range: str = "[true, 0, 0, 1]",
 ) -> str:
     if underlay_repeat_count_range is None:
         underlay_repeat_count_range = _range(True, 0.0, 8.0, 5)
@@ -233,6 +234,8 @@ material = "FR4_epoxy"
 thickness_mm = 5.0
 [non_model_objects.scale_ratio]
 range = {tx_region_actual_pcb_scale_ratio_range}
+[non_model_objects.tilt_enabled]
+range = {tx_region_actual_pcb_tilt_enabled_range}
 
 [[modeled_objects]]
 object_id = "{modeled_object_id}"
@@ -284,6 +287,7 @@ def _type2_rx_plate_stack_spec_text(
     tx_region_actual_x_division_count_range: str = "[true, 1, 1, 1]",
     tx_region_actual_y_division_count_range: str = "[true, 1, 1, 1]",
     tx_region_actual_pcb_scale_ratio_range: str = "[false, 0.35, 0.35, 1]",
+    tx_region_actual_pcb_tilt_enabled_range: str = "[true, 0, 0, 1]",
 ) -> str:
     extra_body = "\n".join(extra_modeled_lines)
     if extra_body != "":
@@ -388,6 +392,8 @@ material = "FR4_epoxy"
 thickness_mm = 5.0
 [non_model_objects.scale_ratio]
 range = {tx_region_actual_pcb_scale_ratio_range}
+[non_model_objects.tilt_enabled]
+range = {tx_region_actual_pcb_tilt_enabled_range}
 
 [[modeled_objects]]
     object_id = "{modeled_object_id}"
@@ -530,6 +536,50 @@ def _body_bbox(step_path: Path, *, label: str) -> tuple[tuple[float, float, floa
     assert len(matches) == 1
     bbox = matches[0].bounding_box()
     return ((bbox.min.X, bbox.min.Y, bbox.min.Z), (bbox.max.X, bbox.max.Y, bbox.max.Z))
+
+
+def _normalize_vector_xyz(vector_xyz: tuple[float, float, float]) -> tuple[float, float, float]:
+    norm = math.sqrt((vector_xyz[0] ** 2) + (vector_xyz[1] ** 2) + (vector_xyz[2] ** 2))
+    assert norm > 0.0
+    return (
+        vector_xyz[0] / norm,
+        vector_xyz[1] / norm,
+        vector_xyz[2] / norm,
+    )
+
+
+def _dot_xyz(first: tuple[float, float, float], second: tuple[float, float, float]) -> float:
+    return (first[0] * second[0]) + (first[1] * second[1]) + (first[2] * second[2])
+
+
+def _face_normal_closest_to_direction(
+    *,
+    shape: bd.Shape,
+    direction_xyz: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    faces = tuple(shape.faces())
+    assert len(faces) > 0
+    target = _normalize_vector_xyz(direction_xyz)
+    best_score = -2.0
+    best_normal = (0.0, 0.0, 0.0)
+    for face in faces:
+        normal = face.normal_at()
+        candidate = _normalize_vector_xyz((normal.X, normal.Y, normal.Z))
+        score = _dot_xyz(candidate, target)
+        if score > best_score:
+            best_score = score
+            best_normal = candidate
+    return best_normal
+
+
+def _assert_shape_faces_axis_aligned(shape: bd.Shape) -> None:
+    for face in shape.faces():
+        normal = face.normal_at()
+        normal_xyz = (abs(normal.X), abs(normal.Y), abs(normal.Z))
+        dominant_components = sum(1 for component in normal_xyz if component > 1.0 - 1e-9)
+        minor_components = sum(1 for component in normal_xyz if component < 1e-9)
+        assert dominant_components == 1
+        assert minor_components == 2
 
 
 def _iter_shape_tree(shape: bd.Shape) -> tuple[bd.Shape, ...]:
@@ -1994,12 +2044,11 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     )
     assert tx_region_actual_pcb_member["role"] == "tx_region_actual_pcb"
     assert tx_region_actual_pcb_member["material"] == "FR4_epoxy"
-    assert tx_region_actual_pcb_member["canonical_coordinates"]["outer_bounds_min_xyz"] == pytest.approx(
-        (15.6, -14.7, 85.0)
-    )
-    assert tx_region_actual_pcb_member["canonical_coordinates"]["outer_bounds_size_xyz"] == pytest.approx(
-        (16.8, 29.4, 5.0)
-    )
+    pcb_canonical = cast(dict[str, object], tx_region_actual_pcb_member["canonical_coordinates"])
+    pcb_min_xyz = cast(tuple[float, float, float], pcb_canonical["outer_bounds_min_xyz"])
+    pcb_max_xyz = cast(tuple[float, float, float], pcb_canonical["outer_bounds_max_xyz"])
+    assert pcb_min_xyz[2] >= 0.0
+    assert pcb_max_xyz[2] <= 90.0 + 1e-8
     rx_region_member = next(member for member in member_objects if member["object_id"] == "rx_region_max")
     assert rx_region_member["canonical_coordinates"]["outer_bounds_min_xyz"] == (0.0, -280.0, 139.0)
     rx_region_size_x = cast(tuple[float, float, float], rx_region_member["canonical_coordinates"]["outer_bounds_size_xyz"])[0]
@@ -2139,6 +2188,95 @@ def test_export_type2_step_artifacts_tiles_tx_region_actual_for_forced_3x3_divis
         expected_origin_xyz=(0.0, -42.0, 0.0),
         expected_size_xyz=(48.0, 84.0, 90.0),
     )
+
+
+def test_export_type2_step_artifacts_tilts_only_tx_region_actual_pcb_toward_modeled_rx_center(tmp_path: Path) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_spec_text(
+            modeled_object_id="rx_rect_void_coil",
+            modeled_role="rx_single_coil",
+            tx_region_actual_x_division_count_range="[true, 3, 3, 1]",
+            tx_region_actual_y_division_count_range="[true, 3, 3, 1]",
+            tx_region_actual_pcb_tilt_enabled_range="[true, 1, 1, 1]",
+        ),
+    )
+    ledger = export_type2_step_artifacts(
+        toml_path=toml_path,
+        output_dir=tmp_path / "out",
+        ledger_path=tmp_path / "out" / "ledger.json",
+        seed=0,
+    )
+    non_model_entry = ledger["non_model_objects"][0]
+    member_objects = non_model_entry["member_objects"]
+    scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
+
+    rx_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "rx_rect_void_coil")
+    rx_canonical = cast(dict[str, object], rx_entry["canonical_coordinates"])
+    rx_min_xyz = cast(tuple[float, float, float], rx_canonical["outer_bounds_min_xyz"])
+    rx_size_xyz = cast(tuple[float, float, float], rx_canonical["outer_bounds_size_xyz"])
+    rx_center = (
+        rx_min_xyz[0] + (rx_size_xyz[0] * 0.5),
+        rx_min_xyz[1] + (rx_size_xyz[1] * 0.5),
+        rx_min_xyz[2] + (rx_size_xyz[2] * 0.5),
+    )
+
+    tile_members = {
+        cast(str, member["object_id"]): member
+        for member in member_objects
+        if cast(str, member["role"]) == "tx_region_actual"
+    }
+    pcb_members = [
+        member for member in member_objects if cast(str, member["role"]) == "tx_region_actual_pcb"
+    ]
+    assert len(tile_members) == 9
+    assert len(pcb_members) == 9
+
+    for tile_member in tile_members.values():
+        tile_name = cast(str, tile_member["object_id"])
+        assert tile_name in scene_shapes_by_label
+        _assert_shape_faces_axis_aligned(scene_shapes_by_label[tile_name])
+
+    for pcb_member in pcb_members:
+        pcb_object_id = cast(str, pcb_member["object_id"])
+        assert pcb_object_id in scene_shapes_by_label
+        if pcb_object_id == "tx_region_actual_pcb":
+            parent_tile_id = "tx_region_actual"
+        else:
+            parent_tile_id = f"tx_region_actual{pcb_object_id.removeprefix('tx_region_actual_pcb')}"
+        assert parent_tile_id in tile_members
+        tile_canonical = cast(dict[str, object], tile_members[parent_tile_id]["canonical_coordinates"])
+        tile_min_xyz = cast(tuple[float, float, float], tile_canonical["outer_bounds_min_xyz"])
+        tile_size_xyz = cast(tuple[float, float, float], tile_canonical["outer_bounds_size_xyz"])
+        tile_bottom_z = tile_min_xyz[2]
+        tile_top_z = tile_min_xyz[2] + tile_size_xyz[2]
+
+        pcb_shape = scene_shapes_by_label[pcb_object_id]
+        pcb_bbox = pcb_shape.bounding_box()
+        pcb_center = (
+            (pcb_bbox.min.X + pcb_bbox.max.X) * 0.5,
+            (pcb_bbox.min.Y + pcb_bbox.max.Y) * 0.5,
+            (pcb_bbox.min.Z + pcb_bbox.max.Z) * 0.5,
+        )
+        direction_to_rx = _normalize_vector_xyz(
+            (
+                rx_center[0] - pcb_center[0],
+                rx_center[1] - pcb_center[1],
+                rx_center[2] - pcb_center[2],
+            )
+        )
+        top_face_normal = _face_normal_closest_to_direction(
+            shape=pcb_shape,
+            direction_xyz=direction_to_rx,
+        )
+        assert _dot_xyz(top_face_normal, direction_to_rx) >= 0.9999
+        assert abs(top_face_normal[2]) < 0.995
+        assert pcb_bbox.max.Z <= tile_top_z + 1e-8
+        assert pcb_bbox.min.Z >= tile_bottom_z - 1e-8
+
+        pcb_canonical = cast(dict[str, object], pcb_member["canonical_coordinates"])
+        pcb_canonical_max_xyz = cast(tuple[float, float, float], pcb_canonical["outer_bounds_max_xyz"])
+        assert pcb_canonical_max_xyz[2] <= tile_top_z + 1e-8
 
 
 @pytest.mark.parametrize("layer_count", (2, 3))

@@ -31,6 +31,7 @@ tags:
 - `tx_region_actual` anchors at `tx_region.min_x`, centers on `tx_region` Y, and preserves full `tx_region` Z.
 - `tx_region_actual_pcb` is a derived non-model sampled PCB template owned by realized concrete `tx_region_actual` tiles, using fixed `thickness_mm = 5.0` and sampled `scale_ratio`.
 - `tx_region_actual_pcb.scale_ratio` scales each realized concrete actual-region tile top-view rectangle uniformly and keeps each PCB centered in its tile.
+- `tx_region_actual_pcb.tilt_enabled` is a shared sampled integer boolean owner. `0` keeps axis-aligned bodies; `1` tilts PCB bodies toward the modeled RX center.
 - TX plate object/owner/plane은 `tx_plate_stack` / `tx_region` / `YZ`다.
 - RX plate object/owner/plane은 `rx_plate_stack` / `rx_region_max` / `YZ`다.
 - TX plate role public fields are `pcb_total_thickness_mm`, `copper_thickness_mm`, `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio`, `tx_coil_count`, `tx_array_x_usage_ratio`.
@@ -62,6 +63,7 @@ tags:
 - `tx_region_actual` division counts accept only canonical `[true, 1, 3, 3]` or fixed `[true, n, n, 1]` where `n in {1, 2, 3}`.
 - active type2 TOML must contain exactly one `tx_region_actual` and exactly one `tx_region_actual_pcb` derived non-model object.
 - `tx_region_actual_pcb` must source from `tx_region_actual`, require `thickness_mm = 5.0`, and accept only canonical `scale_ratio = [false, 0.35, 0.95, 25]` or fixed `[false, r, r, 1]` where `0.35 <= r <= 0.95`.
+- `tx_region_actual_pcb.tilt_enabled` accepts only canonical `[true, 0, 1, 2]` or fixed `[true, b, b, 1]` where `b in {0, 1}`.
 - This file exceeds 800 lines; narrow parser extensions may proceed under the documented ownership boundary, but broad parser changes should split first.
 
 ## Collaborators

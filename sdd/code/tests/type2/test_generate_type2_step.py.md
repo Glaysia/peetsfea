@@ -25,6 +25,7 @@ tags:
 - active fixed example also expects derived non-model `tx_region_actual` with fixed 0.3 X/Y usage ratios and 1x1 division.
 - export ledger coverage verifies `tx_region_actual` is min-X anchored, Y-centered, full-Z relative to `tx_region`, and can resolve to 3x3 concrete tiles.
 - export ledger coverage verifies `tx_region_actual_pcb` bodies are generated one-for-one with concrete `tx_region_actual` tiles, with fixed 5 mm thickness, top face on each tile top face, and scale-derived similar footprint.
+- export coverage verifies `tilt_enabled = 1` rotates only the PCB bodies toward the modeled RX center, keeps guide tiles axis-aligned, and clamps tilted PCB bounding boxes under owning tile tops.
 - RX single-coil public schema uses `outer_x_usage_ratio` / `outer_y_usage_ratio`; parser resolves owner-span-scaled `outer_x_mm` / `outer_y_mm` for core delegation.
 - single-coil public schema uses `void_usage_ratio` for centered equal X/Y void size; legacy type2 single-coil `outer_*_mm` and split/centered `void_*` public keys are unsupported.
 - `examples/type2_sweep.toml` is the mutable sampling SSOT and this test file must not pin its concrete sweep values.

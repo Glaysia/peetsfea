@@ -80,6 +80,116 @@ def _ferrite_group_name_for_modeled_role(*, role: Literal["tx_single_coil", "rx_
     raise RuntimeError(f"unsupported ferrite grouping role: {role}")
 
 
+def _normalize_vector(vector: Point3, *, context: str) -> Point3:
+    x, y, z = vector
+    norm = math.sqrt((x * x) + (y * y) + (z * z))
+    if not math.isfinite(norm):
+        raise RuntimeError(f"{context} vector norm must be finite (vector={vector})")
+    if norm <= 0.0:
+        raise RuntimeError(f"{context} vector norm must be positive (vector={vector})")
+    return (x / norm, y / norm, z / norm)
+
+
+def _cross_vector(a: Point3, b: Point3) -> Point3:
+    return (
+        (a[1] * b[2]) - (a[2] * b[1]),
+        (a[2] * b[0]) - (a[0] * b[2]),
+        (a[0] * b[1]) - (a[1] * b[0]),
+    )
+
+
+def _dot_vector(a: Point3, b: Point3) -> float:
+    return (a[0] * b[0]) + (a[1] * b[1]) + (a[2] * b[2])
+
+
+def _subtract_points(a: Point3, b: Point3) -> Point3:
+    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+
+def _canonical_from_shape(shape: bd.Shape) -> CanonicalCoordinates:
+    bbox = shape.bounding_box()
+    min_xyz = (bbox.min.X, bbox.min.Y, bbox.min.Z)
+    max_xyz = (bbox.max.X, bbox.max.Y, bbox.max.Z)
+    return {
+        "frame_origin_xyz": min_xyz,
+        "outer_bounds_min_xyz": min_xyz,
+        "outer_bounds_max_xyz": max_xyz,
+        "outer_bounds_size_xyz": (max_xyz[0] - min_xyz[0], max_xyz[1] - min_xyz[1], max_xyz[2] - min_xyz[2]),
+    }
+
+
+def resolve_tx_region_actual_pcb_tilt_enabled(
+    *,
+    derived_spec: NonModelTxRegionActualPcbSpec,
+    seed: int,
+) -> int:
+    return _selected_integer_candidate(
+        range_spec=derived_spec.tilt_enabled,
+        owner_path=f"non_model_objects.{derived_spec.object_id}.tilt_enabled",
+        seed=seed,
+    )
+
+
+def _parent_tx_region_actual_object_id_for_pcb_object_id(*, object_id: str) -> str:
+    if object_id == "tx_region_actual_pcb":
+        return "tx_region_actual"
+    if not object_id.startswith("tx_region_actual_pcb_x"):
+        raise RuntimeError(f"tx_region_actual_pcb object_id must be concrete for parent lookup (actual={object_id})")
+    if "_y" not in object_id:
+        raise RuntimeError(
+            f"tx_region_actual_pcb concrete object_id must include y-index (actual={object_id})"
+        )
+    x_fragment, y_fragment = object_id.split("_y", maxsplit=1)
+    if not x_fragment.startswith("tx_region_actual_pcb_x"):
+        raise RuntimeError(f"tx_region_actual_pcb object_id x fragment invalid (actual={object_id})")
+    if not x_fragment[len("tx_region_actual_pcb_x") :].isdigit() or not y_fragment.isdigit():
+        raise RuntimeError(f"tx_region_actual_pcb object_id tile indices must be integers (actual={object_id})")
+    return f"tx_region_actual{object_id.removeprefix('tx_region_actual_pcb')}"
+
+
+def _rotate_tx_region_actual_pcb_shape_toward_center(
+    *,
+    shape: bd.Shape,
+    final_body_center: Point3,
+    rx_center: Point3,
+    tile_bottom_z: float,
+    tile_top_z: float,
+) -> tuple[bd.Shape, CanonicalCoordinates]:
+    target_direction = _subtract_points(rx_center, final_body_center)
+    target_unit = _normalize_vector(target_direction, context="tx_region_actual_pcb tilt target direction")
+    source_unit = (0.0, 0.0, 1.0)
+    cos_angle = _dot_vector(source_unit, target_unit)
+    if cos_angle > 1.0 + 1e-12 or cos_angle < -1.0 - 1e-12:
+        raise RuntimeError(
+            f"non-model tx_region_actual_pcb tilt target has invalid cosine with +Z (value={cos_angle}, target={target_unit})"
+        )
+
+    if abs(1.0 - cos_angle) <= 1e-12:
+        rotated_shape = shape
+    elif abs(-1.0 - cos_angle) <= 1e-12:
+        rotated_shape = shape.rotate(bd.Axis(final_body_center, (1.0, 0.0, 0.0)), 180.0)
+    else:
+        rotation_axis = _normalize_vector(_cross_vector(source_unit, target_unit), context="tx_region_actual_pcb tilt axis")
+        angle_deg = math.degrees(math.acos(cos_angle))
+        rotated_shape = shape.rotate(bd.Axis(final_body_center, rotation_axis), angle_deg)
+    rotated_shape.label = shape.label
+
+    bbox = rotated_shape.bounding_box()
+    if bbox.max.Z > tile_top_z:
+        shift_delta = tile_top_z - bbox.max.Z
+        shifted_shape = rotated_shape.moved(bd.Location((0.0, 0.0, shift_delta)))
+        shifted_bbox = shifted_shape.bounding_box()
+        if shifted_bbox.min.Z < tile_bottom_z - 1e-9:
+            raise RuntimeError(
+                "tilted tx_region_actual_pcb must stay above its owning tx_region_actual tile bottom "
+                f"(shape_label={shape.label}, tile_bottom_z={tile_bottom_z}, shifted_min_z={shifted_bbox.min.Z})"
+            )
+        rotated_shape = shifted_shape
+        rotated_shape.label = shape.label
+
+    return rotated_shape, _canonical_from_shape(shape=rotated_shape)
+
+
 def _build_non_model_shape(spec: NonModelBoxSpec) -> bd.Shape:
     size_x, size_y, size_z = spec.size_xyz
     box = bd.Box(

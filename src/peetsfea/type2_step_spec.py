@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import hashlib
 import math
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
+import tomllib
 
 from peetsfea.spec.outputs import parse_outputs_table
 from peetsfea.types.manifest import OutputsSpec
 
 Point3 = tuple[float, float, float]
+
+
 ModeledSingleCoilRole = Literal["tx_single_coil", "rx_single_coil"]
 ModeledPlateStackRole = Literal["tx_plate_stack", "rx_plate_stack"]
 ModeledObjectRole = Literal["tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack"]
@@ -28,6 +30,10 @@ _TX_REGION_ACTUAL_DIVISION_COUNT_START = 1
 _TX_REGION_ACTUAL_DIVISION_COUNT_END = 3
 _TX_REGION_ACTUAL_DIVISION_COUNT_COUNT = 3
 _TX_REGION_ACTUAL_DIVISION_COUNT_VALUES = (1, 2, 3)
+_TX_REGION_ACTUAL_PCB_TILT_ENABLED_CANONICAL_START = 0
+_TX_REGION_ACTUAL_PCB_TILT_ENABLED_CANONICAL_END = 1
+_TX_REGION_ACTUAL_PCB_TILT_ENABLED_CANONICAL_COUNT = 2
+_TX_REGION_ACTUAL_PCB_TILT_ENABLED_VALUES = (0, 1)
 _TX_REGION_ACTUAL_PCB_SCALE_RATIO_START = 0.35
 _TX_REGION_ACTUAL_PCB_SCALE_RATIO_END = 0.95
 _TX_REGION_ACTUAL_PCB_SCALE_RATIO_COUNT = 25
@@ -74,6 +80,7 @@ class NonModelTxRegionActualPcbSpec:
     source_region_id: Literal["tx_region_actual"]
     material: str
     thickness_mm: float
+    tilt_enabled: RangeSpec
     scale_ratio: RangeSpec
 
 
@@ -488,6 +495,40 @@ def _require_tx_region_actual_pcb_scale_ratio_range(
     )
 
 
+def _is_canonical_tx_region_actual_pcb_tilt_enabled_range(range_spec: RangeSpec) -> bool:
+    return (
+        range_spec.is_integer is True
+        and math.isclose(range_spec.start, float(_TX_REGION_ACTUAL_PCB_TILT_ENABLED_CANONICAL_START), rel_tol=0.0, abs_tol=1e-12)
+        and math.isclose(range_spec.end, float(_TX_REGION_ACTUAL_PCB_TILT_ENABLED_CANONICAL_END), rel_tol=0.0, abs_tol=1e-12)
+        and range_spec.count == _TX_REGION_ACTUAL_PCB_TILT_ENABLED_CANONICAL_COUNT
+    )
+
+
+def _require_tx_region_actual_pcb_tilt_enabled_range(
+    table: dict[str, object],
+    *,
+    key: str,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, key, context, expect_integer=True)
+    candidates = _integer_range_candidates(range_spec)
+    if any(candidate not in _TX_REGION_ACTUAL_PCB_TILT_ENABLED_VALUES for candidate in candidates):
+        raise ValueError(
+            f"{context}.{key} must realize to values in "
+            f"{_TX_REGION_ACTUAL_PCB_TILT_ENABLED_VALUES} (actual={candidates})"
+        )
+    if _is_canonical_tx_region_actual_pcb_tilt_enabled_range(range_spec):
+        return range_spec
+    if range_spec.count == 1 and math.isclose(range_spec.start, range_spec.end, rel_tol=0.0, abs_tol=1e-12):
+        if int(range_spec.start) in _TX_REGION_ACTUAL_PCB_TILT_ENABLED_VALUES:
+            return range_spec
+    raise ValueError(
+        f"{context}.{key}.range must be canonical [true, 0, 1, 2] "
+        "or fixed [true, n, n, 1] for n in {0, 1} "
+        f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
+    )
+
+
 def _parse_non_model_tx_region_actual_pcb(
     raw_object: object,
     *,
@@ -520,6 +561,7 @@ def _parse_non_model_tx_region_actual_pcb(
         "source_region_id",
         "material",
         "thickness_mm",
+        "tilt_enabled",
         "scale_ratio",
     }
     extra_keys = sorted(set(table.keys()) - allowed_keys)
@@ -531,6 +573,7 @@ def _parse_non_model_tx_region_actual_pcb(
         source_region_id="tx_region_actual",
         material=_require_non_empty_str(table, "material", context),
         thickness_mm=thickness_mm,
+        tilt_enabled=_require_tx_region_actual_pcb_tilt_enabled_range(table, key="tilt_enabled", context=context),
         scale_ratio=_require_tx_region_actual_pcb_scale_ratio_range(table, key="scale_ratio", context=context),
     )
 
@@ -1144,6 +1187,23 @@ def resolve_modeled_wall_parallel_stack_present(spec: ModeledTxSingleCoilSpec, *
     return bool(candidates[index])
 
 
+def resolve_non_model_tx_region_actual_pcb_tilt_enabled(spec: NonModelTxRegionActualPcbSpec, *, seed: int) -> bool:
+    candidates = _integer_range_candidates(spec.tilt_enabled)
+    if candidates != _TX_REGION_ACTUAL_PCB_TILT_ENABLED_VALUES and not (
+        len(candidates) == 1 and candidates[0] in _TX_REGION_ACTUAL_PCB_TILT_ENABLED_VALUES
+    ):
+        raise ValueError(
+            f"{spec.kind}.tilt_enabled must realize to values in "
+            f"{_TX_REGION_ACTUAL_PCB_TILT_ENABLED_VALUES} "
+            f"(actual={candidates})"
+        )
+    if len(candidates) == 1:
+        return bool(candidates[0])
+    range_path = f"non_model_objects.{spec.object_id}.tilt_enabled"
+    index = _resolve_seeded_candidate_index(seed=seed, range_path=range_path, candidate_count=len(candidates))
+    return bool(candidates[index])
+
+
 def resolve_modeled_plate_stack_turn_count(spec: ModeledPlateStackSpec, *, seed: int) -> int:
     candidates = _integer_range_candidates(spec.turn_count)
     if any(candidate < 2 for candidate in candidates):
@@ -1428,5 +1488,6 @@ __all__ = [
     "resolve_modeled_underlay_gap_mm",
     "resolve_modeled_underlay_repeat_count",
     "resolve_modeled_wall_parallel_stack_present",
+    "resolve_non_model_tx_region_actual_pcb_tilt_enabled",
     "render_tx_rect_void_toml",
 ]
