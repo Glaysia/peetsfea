@@ -1,7 +1,7 @@
 ---
 title: type2_step_ledger.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 04:18
+updated: 2026-04-20 @ 23:59
 tags:
   - step-export
   - ledger
@@ -16,6 +16,7 @@ tags:
 - Primary plan: [[sdd/plans/0.2.22-type2-plate-stack-copper-unite-grouping]]
 - Related feature plan: [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]]
 - Related TX array plan: [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
+- Related TX rect/void columns plan: [[sdd/plans/0.2.22-type2-tx-rect-void-columns-geometry]]
 
 ## 역할
 - exported type2 scene metadata를 top-level step ledger와 per-modeled metadata JSON으로 고정한다.
@@ -25,12 +26,14 @@ tags:
 - 출력: `type2_step_ledger.json`, modeled metadata JSON files
 
 ## Canonical state
-- modeled role union에는 `tx_plate_stack`와 `rx_plate_stack`가 포함된다.
+- modeled role union에는 `tx_plate_stack`, `rx_plate_stack`, and geometry-only `tx_rect_void_columns`가 포함된다.
+- non-model member union allows material-bearing members and materialless reservation members; `tx_region_actual_stack_space` uses the materialless member shape.
 - active plate role canonical handoff는 `expected_exported_body_names`, `expected_exported_body_groups`,
   `expected_exported_body_count`, `canonical_coordinates`, `terminal_metadata.kind = "stub_port"`다.
 - `expected_exported_body_names`는 RX와 single-branch TX에서 role-local 6-body 정렬을 유지한다:
   `*_plate_copper`, `*_pcb_wall`, `*_stack_pet_psa`, `*_stack_ferrite`, `*_stack_air`, `*_pcb_coil`.
 - TX arrays expand branch-local non-copper exact names while keeping one united `tx_plate_copper` in the same TX modeled entry.
+- `tx_rect_void_columns` modeled entries are STEP-export-only geometry handoff entries with `terminal_metadata.kind = "geometry_only"` until a later connection/port contract.
 - plate role field ownership은 input TOML에 두고, ledger는 exact export contract만 보존한다.
 - final handoff expected_exported_body_count is the exact exported list length; RX and TX `tx_coil_count = 1` remain `6`.
 - expected_exported_body_groups는 다음을 반영한다:
@@ -46,6 +49,7 @@ tags:
 - plate role terminal metadata wire shape는 stub body names, plane endpoints, 4-vertex port sheet를 lossless로 유지해야 한다.
 - ledger shape mismatch와 missing retained `outputs`는 hard failure다.
 - active plate roles에서 exported/imported handoff body list는 pre-unite 라벨(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`)을 포함해선 안 된다.
+- materialless non-model members must omit the `material` key instead of carrying a fake material token.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_step_scene.py]]

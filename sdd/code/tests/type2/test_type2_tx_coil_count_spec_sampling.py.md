@@ -1,7 +1,7 @@
 ---
 title: test_type2_tx_coil_count_spec_sampling.py
 created: 2026-04-20 @ 04:35
-updated: 2026-04-20 @ 14:30
+updated: 2026-04-20 @ 21:05
 tags:
   - tests
   - sampling
@@ -33,7 +33,7 @@ tags:
 - RX plate-stack must reject `tx_coil_count` and `tx_array_x_usage_ratio`.
 - Noncanonical integer ranges and values outside `1..4` fail before generation.
 - Sampled metadata and replay exact-match guards must include the new owner when count is sampled.
-- Fixture TOML uses active type2 schema v6 and includes fixed `tx_region_actual` and `tx_region_actual_pcb` non-model owners, including fixed `tilt_enabled`, so this test can focus on TX plate-stack sampled owners.
+- Fixture TOML uses active type2 schema v6 and includes fixed `tx_region_actual` and `tx_region_actual_stack_space` non-model owners, including fixed `tilt_enabled`, so this test can focus on TX plate-stack sampled owners.
 
 ## 직접 의존
 - [[sdd/code/src/peetsfea/type2_step_spec.py]]

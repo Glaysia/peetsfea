@@ -40,6 +40,18 @@ class NonModelSceneMemberLedgerEntry(TypedDict):
     non_model: Literal[True]
 
 
+class MateriallessNonModelSceneMemberLedgerEntry(TypedDict):
+    object_id: str
+    role: str
+    model_state: Literal[False]
+    canonical_coordinates: CanonicalCoordinates
+    plane: Literal["XY", "YZ", "ZX", "mixed"]
+    non_model: Literal[True]
+
+
+NonModelSceneMemberEntry = NonModelSceneMemberLedgerEntry | MateriallessNonModelSceneMemberLedgerEntry
+
+
 class NonModelObjectLedgerEntry(TypedDict):
     object_id: str
     role: str
@@ -49,12 +61,12 @@ class NonModelObjectLedgerEntry(TypedDict):
     plane: Literal["XY", "YZ", "ZX", "mixed"]
     non_model: Literal[True]
     member_object_ids: tuple[str, ...]
-    member_objects: tuple[NonModelSceneMemberLedgerEntry, ...]
+    member_objects: tuple[NonModelSceneMemberEntry, ...]
 
 
 class ModeledObjectSceneData(TypedDict):
     object_id: str
-    role: Literal["tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack"]
+    role: Literal["tx_single_coil", "rx_single_coil", "tx_rect_void_columns", "tx_plate_stack", "rx_plate_stack"]
     plane: Literal["XY", "YZ"]
     placement_owner_id: str
     material: str
@@ -161,9 +173,11 @@ __all__ = [
     "CanonicalCoordinates",
     "ExportedBodyGroup",
     "ImportedBodyGroup",
+    "MateriallessNonModelSceneMemberLedgerEntry",
     "ModeledObjectLedgerEntry",
     "ModeledObjectSceneData",
     "NonModelObjectLedgerEntry",
+    "NonModelSceneMemberEntry",
     "NonModelSceneMemberLedgerEntry",
     "Point3",
     "Type2ImportEmPolicy",

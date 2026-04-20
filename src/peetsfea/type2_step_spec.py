@@ -15,7 +15,13 @@ Point3 = tuple[float, float, float]
 
 ModeledSingleCoilRole = Literal["tx_single_coil", "rx_single_coil"]
 ModeledPlateStackRole = Literal["tx_plate_stack", "rx_plate_stack"]
-ModeledObjectRole = Literal["tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack"]
+ModeledObjectRole = Literal[
+    "tx_single_coil",
+    "rx_single_coil",
+    "tx_rect_void_columns",
+    "tx_plate_stack",
+    "rx_plate_stack",
+]
 _UNDERLAY_REPEAT_COUNT_CANDIDATES = (0, 2, 4, 6, 8)
 _TX_UNDERLAY_GAP_MM_CANDIDATES = (1.0, 4.0, 7.0, 10.0)
 _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES = (0, 1)
@@ -30,11 +36,12 @@ _TX_REGION_ACTUAL_DIVISION_COUNT_START = 1
 _TX_REGION_ACTUAL_DIVISION_COUNT_END = 3
 _TX_REGION_ACTUAL_DIVISION_COUNT_COUNT = 3
 _TX_REGION_ACTUAL_DIVISION_COUNT_VALUES = (1, 2, 3)
-_TX_REGION_ACTUAL_PCB_TILT_ENABLED_VALUE = 1
-_TX_REGION_ACTUAL_PCB_SCALE_RATIO_START = 0.35
-_TX_REGION_ACTUAL_PCB_SCALE_RATIO_END = 0.95
-_TX_REGION_ACTUAL_PCB_SCALE_RATIO_COUNT = 25
-_TX_REGION_ACTUAL_PCB_THICKNESS_MM = 5.0
+_TX_REGION_ACTUAL_STACK_SPACE_TILT_ENABLED_VALUE = 1
+_TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_START = 0.35
+_TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_END = 0.95
+_TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_COUNT = 25
+_TX_REGION_ACTUAL_STACK_SPACE_TOTAL_THICKNESS_MM = 5.0
+_TX_RECT_VOID_COLUMNS_LAYER_COUNT_ALLOWED = (1, 2, 3)
 _TYPE2_SCHEMA_ID = "peetsfea.type2.step.v6"
 
 
@@ -71,17 +78,16 @@ class NonModelTxRegionActualSpec:
 
 
 @dataclass(frozen=True)
-class NonModelTxRegionActualPcbSpec:
-    object_id: Literal["tx_region_actual_pcb"]
-    kind: Literal["tx_region_actual_pcb"]
+class NonModelTxRegionActualStackSpaceSpec:
+    object_id: Literal["tx_region_actual_stack_space"]
+    kind: Literal["tx_region_actual_stack_space"]
     source_region_id: Literal["tx_region_actual"]
-    material: str
-    thickness_mm: float
+    total_thickness_mm: float
     tilt_enabled: RangeSpec
     scale_ratio: RangeSpec
 
 
-NonModelDerivedSpec = NonModelTxRegionActualSpec | NonModelTxRegionActualPcbSpec
+NonModelDerivedSpec = NonModelTxRegionActualSpec | NonModelTxRegionActualStackSpaceSpec
 
 
 @dataclass(frozen=True)
@@ -150,9 +156,30 @@ class ModeledRxPlateStackSpec(ModeledPlateStackCommonSpec):
     role: Literal["rx_plate_stack"]
 
 
+@dataclass(frozen=True)
+class ModeledTxRectVoidColumnsSpec:
+    object_id: str
+    role: Literal["tx_rect_void_columns"]
+    material: str
+    model_state: Literal[True]
+    pcb_thickness_mm: float
+    copper_thickness_mm: float
+    layer_count: RangeSpec
+    layer_gap_mm: RangeSpec
+    terminal_stub_length_mm: RangeSpec
+    void_usage_ratio: RangeSpec
+    margin_ratio: RangeSpec
+    metal_fill_factor: RangeSpec
+    terminal_path: str
+    turn_count_x0: RangeSpec
+    turn_count_x1: RangeSpec
+    turn_count_x2: RangeSpec
+
+
 ModeledSingleCoilSpec = ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec
 ModeledPlateStackSpec = ModeledTxPlateStackSpec | ModeledRxPlateStackSpec
-ModeledObjectSpec = ModeledSingleCoilSpec | ModeledPlateStackSpec
+ModeledTxColumnsSpec = ModeledTxRectVoidColumnsSpec
+ModeledObjectSpec = ModeledSingleCoilSpec | ModeledPlateStackSpec | ModeledTxRectVoidColumnsSpec
 
 
 @dataclass(frozen=True)
@@ -170,6 +197,8 @@ def modeled_object_id_for_role(role: ModeledObjectRole) -> str:
         return "tx_rect_void_coil"
     if role == "rx_single_coil":
         return "rx_rect_void_coil"
+    if role == "tx_rect_void_columns":
+        return "tx_rect_void_columns"
     if role == "tx_plate_stack":
         return "tx_plate_stack"
     if role == "rx_plate_stack":
@@ -178,7 +207,7 @@ def modeled_object_id_for_role(role: ModeledObjectRole) -> str:
 
 
 def placement_owner_id_for_role(role: ModeledObjectRole) -> str:
-    if role in ("tx_single_coil", "tx_plate_stack"):
+    if role in ("tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"):
         return "tx_region"
     if role in ("rx_single_coil", "rx_plate_stack"):
         return "rx_region_max"
@@ -187,6 +216,8 @@ def placement_owner_id_for_role(role: ModeledObjectRole) -> str:
 
 def modeled_plane_for_role(role: ModeledObjectRole) -> Literal["XY", "YZ"]:
     if role == "tx_single_coil":
+        return "XY"
+    if role == "tx_rect_void_columns":
         return "XY"
     if role == "tx_plate_stack":
         return "YZ"
@@ -454,16 +485,26 @@ def _parse_non_model_tx_region_actual(
     )
 
 
-def _is_canonical_tx_region_actual_pcb_scale_ratio_range(range_spec: RangeSpec) -> bool:
+def _is_canonical_tx_region_actual_stack_space_scale_ratio_range(range_spec: RangeSpec) -> bool:
     return (
         range_spec.is_integer is False
-        and math.isclose(range_spec.start, _TX_REGION_ACTUAL_PCB_SCALE_RATIO_START, rel_tol=0.0, abs_tol=1e-12)
-        and math.isclose(range_spec.end, _TX_REGION_ACTUAL_PCB_SCALE_RATIO_END, rel_tol=0.0, abs_tol=1e-12)
-        and range_spec.count == _TX_REGION_ACTUAL_PCB_SCALE_RATIO_COUNT
+        and math.isclose(
+            range_spec.start,
+            _TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_START,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        )
+        and math.isclose(
+            range_spec.end,
+            _TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_END,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        )
+        and range_spec.count == _TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_COUNT
     )
 
 
-def _require_tx_region_actual_pcb_scale_ratio_range(
+def _require_tx_region_actual_stack_space_scale_ratio_range(
     table: dict[str, object],
     *,
     key: str,
@@ -472,16 +513,16 @@ def _require_tx_region_actual_pcb_scale_ratio_range(
     range_spec = _require_range(table, key, context, expect_integer=False)
     candidates = _float_range_candidates(range_spec)
     if any(
-        candidate < _TX_REGION_ACTUAL_PCB_SCALE_RATIO_START
-        or candidate > _TX_REGION_ACTUAL_PCB_SCALE_RATIO_END
+        candidate < _TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_START
+        or candidate > _TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_END
         for candidate in candidates
     ):
         raise ValueError(
             f"{context}.{key} must realize to values in "
-            f"[{_TX_REGION_ACTUAL_PCB_SCALE_RATIO_START}, {_TX_REGION_ACTUAL_PCB_SCALE_RATIO_END}] "
+            f"[{_TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_START}, {_TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_END}] "
             f"(actual={candidates})"
         )
-    if _is_canonical_tx_region_actual_pcb_scale_ratio_range(range_spec):
+    if _is_canonical_tx_region_actual_stack_space_scale_ratio_range(range_spec):
         return range_spec
     if range_spec.count == 1 and math.isclose(range_spec.start, range_spec.end, rel_tol=0.0, abs_tol=1e-12):
         return range_spec
@@ -492,7 +533,7 @@ def _require_tx_region_actual_pcb_scale_ratio_range(
     )
 
 
-def _require_tx_region_actual_pcb_tilt_enabled_range(
+def _require_tx_region_actual_stack_space_tilt_enabled_range(
     table: dict[str, object],
     *,
     key: str,
@@ -501,7 +542,7 @@ def _require_tx_region_actual_pcb_tilt_enabled_range(
     range_spec = _require_range(table, key, context, expect_integer=True)
     candidates = _integer_range_candidates(range_spec)
     if (
-        candidates == (_TX_REGION_ACTUAL_PCB_TILT_ENABLED_VALUE,)
+        candidates == (_TX_REGION_ACTUAL_STACK_SPACE_TILT_ENABLED_VALUE,)
         and range_spec.count == 1
         and math.isclose(range_spec.start, range_spec.end, rel_tol=0.0, abs_tol=1e-12)
     ):
@@ -512,52 +553,57 @@ def _require_tx_region_actual_pcb_tilt_enabled_range(
     )
 
 
-def _parse_non_model_tx_region_actual_pcb(
+def _parse_non_model_tx_region_actual_stack_space(
     raw_object: object,
     *,
     index: int,
     seen_object_ids: set[str],
-) -> NonModelTxRegionActualPcbSpec:
+) -> NonModelTxRegionActualStackSpaceSpec:
     context = f"non_model_objects[{index}]"
     table = _require_table(raw_object, context)
     object_id = _require_non_empty_str(table, "id", context)
     if object_id in seen_object_ids:
         raise ValueError(f"duplicate object id: {object_id}")
     seen_object_ids.add(object_id)
-    if object_id != "tx_region_actual_pcb":
-        raise ValueError(f"{context}.id must be 'tx_region_actual_pcb' (actual={object_id!r})")
+    if object_id != "tx_region_actual_stack_space":
+        raise ValueError(f"{context}.id must be 'tx_region_actual_stack_space' (actual={object_id!r})")
     kind = _require_non_empty_str(table, "kind", context)
-    if kind != "tx_region_actual_pcb":
-        raise ValueError(f"{context}.kind must be 'tx_region_actual_pcb' (actual={kind!r})")
+    if kind != "tx_region_actual_stack_space":
+        raise ValueError(f"{context}.kind must be 'tx_region_actual_stack_space' (actual={kind!r})")
     source_region_id = _require_non_empty_str(table, "source_region_id", context)
     if source_region_id != "tx_region_actual":
         raise ValueError(f"{context}.source_region_id must be 'tx_region_actual' (actual={source_region_id!r})")
-    thickness_mm = _require_float_value(table, "thickness_mm", context)
-    if not math.isclose(thickness_mm, _TX_REGION_ACTUAL_PCB_THICKNESS_MM, rel_tol=0.0, abs_tol=1e-12):
+    total_thickness_mm = _require_float_value(table, "total_thickness_mm", context)
+    if not math.isclose(
+        total_thickness_mm,
+        _TX_REGION_ACTUAL_STACK_SPACE_TOTAL_THICKNESS_MM,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    ):
         raise ValueError(
-            f"{context}.thickness_mm must be {_TX_REGION_ACTUAL_PCB_THICKNESS_MM} "
-            f"(actual={thickness_mm})"
+            f"{context}.total_thickness_mm must be {_TX_REGION_ACTUAL_STACK_SPACE_TOTAL_THICKNESS_MM} "
+            f"(actual={total_thickness_mm})"
         )
     allowed_keys = {
         "id",
         "kind",
         "source_region_id",
-        "material",
-        "thickness_mm",
+        "total_thickness_mm",
         "tilt_enabled",
         "scale_ratio",
     }
     extra_keys = sorted(set(table.keys()) - allowed_keys)
     if extra_keys:
-        raise ValueError(f"{context} contains unsupported keys for tx_region_actual_pcb (actual={extra_keys})")
-    return NonModelTxRegionActualPcbSpec(
-        object_id="tx_region_actual_pcb",
-        kind="tx_region_actual_pcb",
+        raise ValueError(
+            f"{context} contains unsupported keys for tx_region_actual_stack_space (actual={extra_keys})"
+        )
+    return NonModelTxRegionActualStackSpaceSpec(
+        object_id="tx_region_actual_stack_space",
+        kind="tx_region_actual_stack_space",
         source_region_id="tx_region_actual",
-        material=_require_non_empty_str(table, "material", context),
-        thickness_mm=thickness_mm,
-        tilt_enabled=_require_tx_region_actual_pcb_tilt_enabled_range(table, key="tilt_enabled", context=context),
-        scale_ratio=_require_tx_region_actual_pcb_scale_ratio_range(table, key="scale_ratio", context=context),
+        total_thickness_mm=total_thickness_mm,
+        tilt_enabled=_require_tx_region_actual_stack_space_tilt_enabled_range(table, key="tilt_enabled", context=context),
+        scale_ratio=_require_tx_region_actual_stack_space_scale_ratio_range(table, key="scale_ratio", context=context),
     )
 
 
@@ -761,6 +807,160 @@ def _parse_modeled_single_coil(
         margin_ratio=margin_ratio,
         metal_fill_factor=metal_fill_factor,
         terminal_path=terminal_path,
+    )
+
+
+def _require_tx_rect_void_columns_turn_count_range(
+    table: dict[str, object],
+    *,
+    key: str,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, key, context, expect_integer=True)
+    candidates = _integer_range_candidates(range_spec)
+    if any(candidate < 1 or candidate > 6 for candidate in candidates):
+        raise ValueError(
+            f"{context}.{key} must realize to integer values in [1, 6] "
+            f"(actual={candidates})"
+        )
+    return range_spec
+
+
+def _parse_modeled_tx_rect_void_columns(
+    raw_object: object,
+    *,
+    index: int,
+    seen_object_ids: set[str],
+    non_model_specs_by_id: dict[str, NonModelBoxSpec],
+) -> ModeledTxRectVoidColumnsSpec:
+    context = f"modeled_objects[{index}]"
+    table = _require_table(raw_object, context)
+    object_id = _require_non_empty_str(table, "object_id", context)
+    if object_id in seen_object_ids:
+        raise ValueError(f"duplicate object id: {object_id}")
+    seen_object_ids.add(object_id)
+    expected_object_id = modeled_object_id_for_role("tx_rect_void_columns")
+    if object_id != expected_object_id:
+        raise ValueError(
+            f"prototype modeled object_id must be '{expected_object_id}' for role tx_rect_void_columns "
+            f"(actual={object_id})"
+        )
+
+    role = _require_non_empty_str(table, "role", context)
+    if role != "tx_rect_void_columns":
+        raise ValueError(f"{context}.role must be 'tx_rect_void_columns' (actual={role!r})")
+
+    raw_model_state = _require_key(table, "model_state", context)
+    if not isinstance(raw_model_state, bool):
+        raise TypeError(f"{context}.model_state must be bool")
+    if raw_model_state is not True:
+        raise ValueError(f"{context}.model_state must be true")
+
+    material = _require_non_empty_str(table, "material", context)
+    if material != "composite":
+        raise ValueError(f"{context}.material must be 'composite' (actual={material})")
+    pcb_thickness_mm = _require_float_value(table, "pcb_thickness_mm", context)
+    if pcb_thickness_mm <= 0.0:
+        raise ValueError(f"{context}.pcb_thickness_mm must be > 0")
+    copper_thickness_mm = _require_float_value(table, "copper_thickness_mm", context)
+    if copper_thickness_mm <= 0.0:
+        raise ValueError(f"{context}.copper_thickness_mm must be > 0")
+
+    terminal_node = _require_table(_require_key(table, "terminal_path", context), f"{context}.terminal_path")
+    if set(terminal_node.keys()) != {"value"}:
+        raise ValueError(f"{context}.terminal_path must contain only ['value']")
+    terminal_path = _require_non_empty_str(terminal_node, "value", f"{context}.terminal_path")
+
+    placement_owner_id = placement_owner_id_for_role("tx_rect_void_columns")
+    if placement_owner_id not in non_model_specs_by_id:
+        raise ValueError(
+            f"{context} requires non-model placement owner '{placement_owner_id}' for role tx_rect_void_columns"
+        )
+    layer_count = _require_range(table, "layer_count", context, expect_integer=True)
+    layer_count_candidates = _integer_range_candidates(layer_count)
+    if any(candidate not in _TX_RECT_VOID_COLUMNS_LAYER_COUNT_ALLOWED for candidate in layer_count_candidates):
+        raise ValueError(
+            f"{context}.layer_count must realize to values in {_TX_RECT_VOID_COLUMNS_LAYER_COUNT_ALLOWED} "
+            f"(actual={layer_count_candidates})"
+        )
+    layer_gap_mm = _require_range(table, "layer_gap_mm", context, expect_integer=False)
+    terminal_stub_length_mm = _require_range(table, "terminal_stub_length_mm", context, expect_integer=False)
+    void_usage_ratio = _require_range(table, "void_usage_ratio", context, expect_integer=False)
+    void_usage_ratio_candidates = _float_range_candidates(void_usage_ratio)
+    if any(candidate <= 0.0 or candidate >= 1.0 for candidate in void_usage_ratio_candidates):
+        raise ValueError(
+            f"{context}.void_usage_ratio must realize to values > 0 and < 1 "
+            f"(actual={void_usage_ratio_candidates})"
+        )
+    margin_ratio = _require_range(table, "margin_ratio", context, expect_integer=False)
+    metal_fill_factor = _require_range(table, "metal_fill_factor", context, expect_integer=False)
+    turn_count_x0 = _require_tx_rect_void_columns_turn_count_range(table, key="turn_count_x0", context=context)
+    turn_count_x1 = _require_tx_rect_void_columns_turn_count_range(table, key="turn_count_x1", context=context)
+    turn_count_x2 = _require_tx_rect_void_columns_turn_count_range(table, key="turn_count_x2", context=context)
+
+    disallowed_keys = sorted(
+        key
+        for key in (
+            "underlay_repeat_count",
+            "underlay_gap_mm",
+            "wall_parallel_stack_present",
+            "ferrite_set_count",
+            "ferrite_thickness_mm",
+            "ferrite_gap_mm",
+            "underlay_thickness_mm",
+            "outer_x_usage_ratio",
+            "outer_y_usage_ratio",
+            "outer_x_mm",
+            "outer_y_mm",
+        )
+        if key in table
+    )
+    if disallowed_keys:
+        raise ValueError(
+            f"{context} contains unsupported keys for tx_rect_void_columns "
+            f"(actual={disallowed_keys})"
+        )
+    allowed_keys = {
+        "object_id",
+        "role",
+        "material",
+        "model_state",
+        "pcb_thickness_mm",
+        "copper_thickness_mm",
+        "layer_count",
+        "layer_gap_mm",
+        "terminal_stub_length_mm",
+        "void_usage_ratio",
+        "margin_ratio",
+        "metal_fill_factor",
+        "terminal_path",
+        "turn_count_x0",
+        "turn_count_x1",
+        "turn_count_x2",
+    }
+    extra_keys = sorted(set(table.keys()) - allowed_keys)
+    if extra_keys:
+        raise ValueError(
+            f"{context} contains unsupported keys for tx_rect_void_columns "
+            f"(actual={extra_keys})"
+        )
+    return ModeledTxRectVoidColumnsSpec(
+        object_id=object_id,
+        role="tx_rect_void_columns",
+        material=material,
+        model_state=True,
+        pcb_thickness_mm=pcb_thickness_mm,
+        copper_thickness_mm=copper_thickness_mm,
+        layer_count=layer_count,
+        layer_gap_mm=layer_gap_mm,
+        terminal_stub_length_mm=terminal_stub_length_mm,
+        void_usage_ratio=void_usage_ratio,
+        margin_ratio=margin_ratio,
+        metal_fill_factor=metal_fill_factor,
+        terminal_path=terminal_path,
+        turn_count_x0=turn_count_x0,
+        turn_count_x1=turn_count_x1,
+        turn_count_x2=turn_count_x2,
     )
 
 
@@ -1170,12 +1370,16 @@ def resolve_modeled_wall_parallel_stack_present(spec: ModeledTxSingleCoilSpec, *
     return bool(candidates[index])
 
 
-def resolve_non_model_tx_region_actual_pcb_tilt_enabled(spec: NonModelTxRegionActualPcbSpec, *, seed: int) -> bool:
+def resolve_non_model_tx_region_actual_stack_space_tilt_enabled(
+    spec: NonModelTxRegionActualStackSpaceSpec,
+    *,
+    seed: int,
+) -> bool:
     _ = seed
     candidates = _integer_range_candidates(spec.tilt_enabled)
-    if candidates != (_TX_REGION_ACTUAL_PCB_TILT_ENABLED_VALUE,):
+    if candidates != (_TX_REGION_ACTUAL_STACK_SPACE_TILT_ENABLED_VALUE,):
         raise ValueError(
-            f"{spec.kind}.tilt_enabled must be fixed to {_TX_REGION_ACTUAL_PCB_TILT_ENABLED_VALUE} "
+            f"{spec.kind}.tilt_enabled must be fixed to {_TX_REGION_ACTUAL_STACK_SPACE_TILT_ENABLED_VALUE} "
             f"(actual={candidates})"
         )
     return True
@@ -1321,9 +1525,9 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
                 _parse_non_model_tx_region_actual(raw_object, index=index, seen_object_ids=seen_object_ids)
             )
             continue
-        if kind == "tx_region_actual_pcb":
+        if kind == "tx_region_actual_stack_space":
             non_model_derived_specs.append(
-                _parse_non_model_tx_region_actual_pcb(raw_object, index=index, seen_object_ids=seen_object_ids)
+                _parse_non_model_tx_region_actual_stack_space(raw_object, index=index, seen_object_ids=seen_object_ids)
             )
             continue
         non_model_box_specs.append(_parse_non_model_box(raw_object, index=index, seen_object_ids=seen_object_ids))
@@ -1338,16 +1542,16 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
             f"{toml_path.name} requires exactly one tx_region_actual derived non-model object "
             f"(actual={tx_region_actual_spec_count})"
         )
-    tx_region_actual_pcb_spec_count = sum(
-        1 for spec in non_model_derived_objects if isinstance(spec, NonModelTxRegionActualPcbSpec)
+    tx_region_actual_stack_space_spec_count = sum(
+        1 for spec in non_model_derived_objects if isinstance(spec, NonModelTxRegionActualStackSpaceSpec)
     )
-    if tx_region_actual_pcb_spec_count != 1:
+    if tx_region_actual_stack_space_spec_count != 1:
         raise ValueError(
-            f"{toml_path.name} requires exactly one tx_region_actual_pcb derived non-model object "
-            f"(actual={tx_region_actual_pcb_spec_count})"
+            f"{toml_path.name} requires exactly one tx_region_actual_stack_space derived non-model object "
+            f"(actual={tx_region_actual_stack_space_spec_count})"
         )
     for spec in non_model_derived_objects:
-        if isinstance(spec, NonModelTxRegionActualPcbSpec):
+        if isinstance(spec, NonModelTxRegionActualStackSpaceSpec):
             continue
         if spec.source_region_id not in non_model_specs_by_id:
             raise ValueError(
@@ -1367,6 +1571,16 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
         if role in ("tx_plate_stack", "rx_plate_stack"):
             modeled_objects_list.append(
                 _parse_modeled_plate_stack(raw_object, index=index, seen_object_ids=seen_object_ids)
+            )
+            continue
+        if role == "tx_rect_void_columns":
+            modeled_objects_list.append(
+                _parse_modeled_tx_rect_void_columns(
+                    raw_object,
+                    index=index,
+                    seen_object_ids=seen_object_ids,
+                    non_model_specs_by_id=non_model_specs_by_id,
+                )
             )
             continue
         modeled_objects_list.append(
@@ -1447,7 +1661,7 @@ __all__ = [
     "NonModelBoxSpec",
     "NonModelDerivedSpec",
     "NonModelTxRegionActualSpec",
-    "NonModelTxRegionActualPcbSpec",
+    "NonModelTxRegionActualStackSpaceSpec",
     "Point3",
     "RangeSpec",
     "Type2SimulationPolicy",
@@ -1465,6 +1679,6 @@ __all__ = [
     "resolve_modeled_underlay_gap_mm",
     "resolve_modeled_underlay_repeat_count",
     "resolve_modeled_wall_parallel_stack_present",
-    "resolve_non_model_tx_region_actual_pcb_tilt_enabled",
+    "resolve_non_model_tx_region_actual_stack_space_tilt_enabled",
     "render_tx_rect_void_toml",
 ]

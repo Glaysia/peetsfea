@@ -28,11 +28,12 @@ from peetsfea.type2_step_spec import ModeledObjectSpec
 from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
+from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import NonModelDerivedSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
-from peetsfea.type2_step_spec import NonModelTxRegionActualPcbSpec
+from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec import Point3
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
@@ -70,6 +71,14 @@ class _TxUnderlayPlacementDescriptor:
     wall_origin_z: float
     wall_size_y: float
     wall_size_z: float
+
+
+@dataclass(frozen=True)
+class TxRegionActualStackSpaceTiltTransform:
+    rotation_basis_center: Point3
+    rotation_axis: Point3
+    rotation_angle_deg: float
+    shift_delta_z: float
 
 
 def _ferrite_group_name_for_modeled_role(*, role: Literal["tx_single_coil", "rx_single_coil"]) -> str:
@@ -118,9 +127,9 @@ def _canonical_from_shape(shape: bd.Shape) -> CanonicalCoordinates:
     }
 
 
-def resolve_tx_region_actual_pcb_tilt_enabled(
+def resolve_tx_region_actual_stack_space_tilt_enabled(
     *,
-    derived_spec: NonModelTxRegionActualPcbSpec,
+    derived_spec: NonModelTxRegionActualStackSpaceSpec,
     seed: int,
 ) -> int:
     tilt_enabled = _selected_integer_candidate(
@@ -130,30 +139,114 @@ def resolve_tx_region_actual_pcb_tilt_enabled(
     )
     if tilt_enabled != 1:
         raise RuntimeError(
-            "tx_region_actual_pcb.tilt_enabled must be fixed on at runtime "
+            "tx_region_actual_stack_space.tilt_enabled must be fixed on at runtime "
             f"(actual={tilt_enabled})"
         )
     return tilt_enabled
 
 
-def _parent_tx_region_actual_object_id_for_pcb_object_id(*, object_id: str) -> str:
-    if object_id == "tx_region_actual_pcb":
+def _parent_tx_region_actual_object_id_for_stack_space_object_id(*, object_id: str) -> str:
+    if object_id == "tx_region_actual_stack_space":
         return "tx_region_actual"
-    if not object_id.startswith("tx_region_actual_pcb_x"):
-        raise RuntimeError(f"tx_region_actual_pcb object_id must be concrete for parent lookup (actual={object_id})")
+    if not object_id.startswith("tx_region_actual_stack_space_x"):
+        raise RuntimeError(
+            f"tx_region_actual_stack_space object_id must be concrete for parent lookup (actual={object_id})"
+        )
     if "_y" not in object_id:
         raise RuntimeError(
-            f"tx_region_actual_pcb concrete object_id must include y-index (actual={object_id})"
+            f"tx_region_actual_stack_space concrete object_id must include y-index (actual={object_id})"
         )
     x_fragment, y_fragment = object_id.split("_y", maxsplit=1)
-    if not x_fragment.startswith("tx_region_actual_pcb_x"):
-        raise RuntimeError(f"tx_region_actual_pcb object_id x fragment invalid (actual={object_id})")
-    if not x_fragment[len("tx_region_actual_pcb_x") :].isdigit() or not y_fragment.isdigit():
-        raise RuntimeError(f"tx_region_actual_pcb object_id tile indices must be integers (actual={object_id})")
-    return f"tx_region_actual{object_id.removeprefix('tx_region_actual_pcb')}"
+    if not x_fragment.startswith("tx_region_actual_stack_space_x"):
+        raise RuntimeError(f"tx_region_actual_stack_space object_id x fragment invalid (actual={object_id})")
+    if not x_fragment[len("tx_region_actual_stack_space_x") :].isdigit() or not y_fragment.isdigit():
+        raise RuntimeError(
+            f"tx_region_actual_stack_space object_id tile indices must be integers (actual={object_id})"
+        )
+    return f"tx_region_actual{object_id.removeprefix('tx_region_actual_stack_space')}"
 
 
-def _rotate_tx_region_actual_pcb_shape_toward_center(
+def _resolve_tx_region_actual_stack_space_tilt_transform(
+    *,
+    shape_for_shift: bd.Shape,
+    rotation_basis_center: Point3,
+    rx_center: Point3,
+    tile_bottom_z: float,
+    tile_top_z: float,
+) -> TxRegionActualStackSpaceTiltTransform:
+    target_direction = _subtract_points(rx_center, rotation_basis_center)
+    target_unit = _normalize_vector(target_direction, context="tx_region_actual_stack_space tilt target direction")
+    source_unit = (0.0, 0.0, 1.0)
+    cos_angle = _dot_vector(source_unit, target_unit)
+    if cos_angle > 1.0 + 1e-12 or cos_angle < -1.0 - 1e-12:
+        raise RuntimeError(
+            "non-model tx_region_actual_stack_space tilt target has invalid cosine with +Z "
+            f"(value={cos_angle}, target={target_unit})"
+        )
+    rotation_axis: Point3
+    rotation_angle_deg: float
+    if abs(1.0 - cos_angle) <= 1e-12:
+        rotation_axis = (1.0, 0.0, 0.0)
+        rotation_angle_deg = 0.0
+    elif abs(-1.0 - cos_angle) <= 1e-12:
+        rotation_axis = (1.0, 0.0, 0.0)
+        rotation_angle_deg = 180.0
+    else:
+        rotation_axis = _normalize_vector(
+            _cross_vector(source_unit, target_unit),
+            context="tx_region_actual_stack_space tilt axis",
+        )
+        rotation_angle_deg = math.degrees(math.acos(cos_angle))
+    rotated_shape = apply_tx_region_actual_stack_space_tilt_transform(
+        shape=shape_for_shift,
+        transform=TxRegionActualStackSpaceTiltTransform(
+            rotation_basis_center=rotation_basis_center,
+            rotation_axis=rotation_axis,
+            rotation_angle_deg=rotation_angle_deg,
+            shift_delta_z=0.0,
+        ),
+    )
+
+    bbox = rotated_shape.bounding_box()
+    shift_delta_z = 0.0
+    if bbox.max.Z > tile_top_z:
+        shift_delta_z = tile_top_z - bbox.max.Z
+        shifted_shape = rotated_shape.moved(bd.Location((0.0, 0.0, shift_delta_z)))
+        shifted_bbox = shifted_shape.bounding_box()
+        if shifted_bbox.min.Z < tile_bottom_z - 1e-9:
+            raise RuntimeError(
+                "tilted tx_region_actual_stack_space must stay above its owning tx_region_actual tile bottom "
+                f"(shape_label={shape_for_shift.label}, tile_bottom_z={tile_bottom_z}, shifted_min_z={shifted_bbox.min.Z})"
+            )
+    return TxRegionActualStackSpaceTiltTransform(
+        rotation_basis_center=rotation_basis_center,
+        rotation_axis=rotation_axis,
+        rotation_angle_deg=rotation_angle_deg,
+        shift_delta_z=shift_delta_z,
+    )
+
+
+def apply_tx_region_actual_stack_space_tilt_transform(
+    *,
+    shape: bd.Shape,
+    transform: TxRegionActualStackSpaceTiltTransform,
+) -> bd.Shape:
+    if abs(transform.rotation_angle_deg) <= 1e-12:
+        rotated_shape = shape
+    else:
+        rotated_shape = shape.rotate(
+            bd.Axis(transform.rotation_basis_center, transform.rotation_axis),
+            transform.rotation_angle_deg,
+        )
+    rotated_shape.label = shape.label
+    if abs(transform.shift_delta_z) <= 1e-12:
+        return rotated_shape
+    shifted_shape = rotated_shape.moved(bd.Location((0.0, 0.0, transform.shift_delta_z)))
+    shifted_shape.label = shape.label
+    return shifted_shape
+
+
+def _rotate_tx_region_actual_stack_space_shape_toward_center(
     *,
     shape: bd.Shape,
     final_body_center: Point3,
@@ -161,38 +254,17 @@ def _rotate_tx_region_actual_pcb_shape_toward_center(
     tile_bottom_z: float,
     tile_top_z: float,
 ) -> tuple[bd.Shape, CanonicalCoordinates]:
-    target_direction = _subtract_points(rx_center, final_body_center)
-    target_unit = _normalize_vector(target_direction, context="tx_region_actual_pcb tilt target direction")
-    source_unit = (0.0, 0.0, 1.0)
-    cos_angle = _dot_vector(source_unit, target_unit)
-    if cos_angle > 1.0 + 1e-12 or cos_angle < -1.0 - 1e-12:
-        raise RuntimeError(
-            f"non-model tx_region_actual_pcb tilt target has invalid cosine with +Z (value={cos_angle}, target={target_unit})"
-        )
-
-    if abs(1.0 - cos_angle) <= 1e-12:
-        rotated_shape = shape
-    elif abs(-1.0 - cos_angle) <= 1e-12:
-        rotated_shape = shape.rotate(bd.Axis(final_body_center, (1.0, 0.0, 0.0)), 180.0)
-    else:
-        rotation_axis = _normalize_vector(_cross_vector(source_unit, target_unit), context="tx_region_actual_pcb tilt axis")
-        angle_deg = math.degrees(math.acos(cos_angle))
-        rotated_shape = shape.rotate(bd.Axis(final_body_center, rotation_axis), angle_deg)
-    rotated_shape.label = shape.label
-
-    bbox = rotated_shape.bounding_box()
-    if bbox.max.Z > tile_top_z:
-        shift_delta = tile_top_z - bbox.max.Z
-        shifted_shape = rotated_shape.moved(bd.Location((0.0, 0.0, shift_delta)))
-        shifted_bbox = shifted_shape.bounding_box()
-        if shifted_bbox.min.Z < tile_bottom_z - 1e-9:
-            raise RuntimeError(
-                "tilted tx_region_actual_pcb must stay above its owning tx_region_actual tile bottom "
-                f"(shape_label={shape.label}, tile_bottom_z={tile_bottom_z}, shifted_min_z={shifted_bbox.min.Z})"
-            )
-        rotated_shape = shifted_shape
-        rotated_shape.label = shape.label
-
+    transform = _resolve_tx_region_actual_stack_space_tilt_transform(
+        shape_for_shift=shape,
+        rotation_basis_center=final_body_center,
+        rx_center=rx_center,
+        tile_bottom_z=tile_bottom_z,
+        tile_top_z=tile_top_z,
+    )
+    rotated_shape = apply_tx_region_actual_stack_space_tilt_transform(
+        shape=shape,
+        transform=transform,
+    )
     return rotated_shape, _canonical_from_shape(shape=rotated_shape)
 
 
@@ -260,21 +332,28 @@ def _non_model_group_specs(
     if len(tx_region_actual_specs) == 0:
         raise RuntimeError("type2 non-model registry must contain at least one tx_region_actual concrete object")
     tx_region_actual_sorted_specs = tuple(sorted(tx_region_actual_specs, key=lambda spec: spec.object_id))
-    tx_region_actual_pcb_specs = tuple(spec for spec in specs if spec.kind == "tx_region_actual_pcb")
-    if len(tx_region_actual_pcb_specs) == 0:
+    tx_region_actual_stack_space_specs = tuple(spec for spec in specs if spec.kind == "tx_region_actual_stack_space")
+    if len(tx_region_actual_stack_space_specs) == 0:
         raise RuntimeError(
-            "type2 non-model registry must contain at least one tx_region_actual_pcb concrete object "
-            f"(actual={len(tx_region_actual_pcb_specs)})"
+            "type2 non-model registry must contain at least one tx_region_actual_stack_space concrete object "
+            f"(actual={len(tx_region_actual_stack_space_specs)})"
         )
-    tx_region_actual_pcb_sorted_specs = tuple(
-        sorted(tx_region_actual_pcb_specs, key=lambda spec: spec.object_id)
+    tx_region_actual_stack_space_sorted_specs = tuple(
+        sorted(tx_region_actual_stack_space_specs, key=lambda spec: spec.object_id)
     )
     for object_id, role, plane, member_ids in _NON_MODEL_VISIBLE_GROUPS:
         group_specs = tuple(require_non_model_object_spec(specs, object_id=member_id) for member_id in member_ids)
         groups.append((object_id, role, plane, group_specs))
         if object_id == "tx_region":
             groups.append(("tx_region_actual", "tx_region_actual", "XY", tx_region_actual_sorted_specs))
-            groups.append(("tx_region_actual_pcb", "tx_region_actual_pcb", "XY", tx_region_actual_pcb_sorted_specs))
+            groups.append(
+                (
+                    "tx_region_actual_stack_space",
+                    "tx_region_actual_stack_space",
+                    "XY",
+                    tx_region_actual_stack_space_sorted_specs,
+                )
+            )
     return tuple(groups)
 
 
@@ -296,17 +375,17 @@ def _is_concrete_tx_region_actual_object_id(object_id: str) -> bool:
     return True
 
 
-def _is_concrete_tx_region_actual_pcb_object_id(object_id: str) -> bool:
-    if object_id == "tx_region_actual_pcb":
+def _is_concrete_tx_region_actual_stack_space_object_id(object_id: str) -> bool:
+    if object_id == "tx_region_actual_stack_space":
         return True
-    if not object_id.startswith("tx_region_actual_pcb_x"):
+    if not object_id.startswith("tx_region_actual_stack_space_x"):
         return False
     if "_y" not in object_id:
         return False
     x_fragment, y_fragment = object_id.split("_y", maxsplit=1)
-    if not x_fragment.startswith("tx_region_actual_pcb_x"):
+    if not x_fragment.startswith("tx_region_actual_stack_space_x"):
         return False
-    x_index_text = x_fragment[len("tx_region_actual_pcb_x") :]
+    x_index_text = x_fragment[len("tx_region_actual_stack_space_x") :]
     if x_index_text == "" or y_fragment == "":
         return False
     if not x_index_text.isdigit() or not y_fragment.isdigit():
@@ -314,16 +393,16 @@ def _is_concrete_tx_region_actual_pcb_object_id(object_id: str) -> bool:
     return True
 
 
-def _concrete_tx_region_actual_pcb_object_id(*, tx_region_actual_object_id: str) -> str:
+def _concrete_tx_region_actual_stack_space_object_id(*, tx_region_actual_object_id: str) -> str:
     if not _is_concrete_tx_region_actual_object_id(tx_region_actual_object_id):
         raise RuntimeError(
-            "tx_region_actual_pcb object id derivation requires concrete tx_region_actual object id "
+            "tx_region_actual_stack_space object id derivation requires concrete tx_region_actual object id "
             f"(actual={tx_region_actual_object_id})"
         )
     if tx_region_actual_object_id == "tx_region_actual":
-        return "tx_region_actual_pcb"
+        return "tx_region_actual_stack_space"
     suffix = tx_region_actual_object_id.removeprefix("tx_region_actual")
-    return f"tx_region_actual_pcb{suffix}"
+    return f"tx_region_actual_stack_space{suffix}"
 
 
 def _float_range_candidates(range_spec: RangeSpec) -> tuple[float, ...]:
@@ -391,7 +470,7 @@ def resolve_non_model_scene_specs(
     resolved_specs = list(base_specs)
     tx_region_actual_specs: tuple[NonModelBoxSpec, ...] = ()
     for derived_spec in derived_specs:
-        if isinstance(derived_spec, NonModelTxRegionActualPcbSpec):
+        if isinstance(derived_spec, NonModelTxRegionActualStackSpaceSpec):
             continue
         if not isinstance(derived_spec, NonModelTxRegionActualSpec):
             raise RuntimeError(f"unsupported non-model derived spec: {type(derived_spec).__name__}")
@@ -404,10 +483,10 @@ def resolve_non_model_scene_specs(
     for derived_spec in derived_specs:
         if isinstance(derived_spec, NonModelTxRegionActualSpec):
             continue
-        if not isinstance(derived_spec, NonModelTxRegionActualPcbSpec):
+        if not isinstance(derived_spec, NonModelTxRegionActualStackSpaceSpec):
             raise RuntimeError(f"unsupported non-model derived spec: {type(derived_spec).__name__}")
         resolved_specs.extend(
-            _resolved_tx_region_actual_pcb_specs(
+            _resolved_tx_region_actual_stack_space_specs(
                 derived_spec=derived_spec,
                 tx_region_actual_specs=tx_region_actual_specs,
                 seed=seed,
@@ -516,72 +595,75 @@ def _resolved_tx_region_actual_specs(
     return tuple(tile_specs)
 
 
-def _resolved_tx_region_actual_pcb_specs(
+def _resolved_tx_region_actual_stack_space_specs(
     *,
-    derived_spec: NonModelTxRegionActualPcbSpec,
+    derived_spec: NonModelTxRegionActualStackSpaceSpec,
     tx_region_actual_specs: tuple[NonModelBoxSpec, ...],
     seed: int,
 ) -> tuple[NonModelBoxSpec, ...]:
     if len(tx_region_actual_specs) == 0:
-        raise RuntimeError("tx_region_actual_pcb requires resolved tx_region_actual specs")
+        raise RuntimeError("tx_region_actual_stack_space requires resolved tx_region_actual specs")
     scale_ratio = _selected_float_candidate(
         range_spec=derived_spec.scale_ratio,
         owner_path=f"non_model_objects.{derived_spec.object_id}.scale_ratio",
         seed=seed,
     )
     if scale_ratio <= 0.0 or scale_ratio > 1.0:
-        raise RuntimeError(f"tx_region_actual_pcb scale_ratio must be > 0 and <= 1 (actual={scale_ratio})")
-    if derived_spec.thickness_mm <= 0.0:
+        raise RuntimeError(f"tx_region_actual_stack_space scale_ratio must be > 0 and <= 1 (actual={scale_ratio})")
+    if derived_spec.total_thickness_mm <= 0.0:
         raise RuntimeError(
-            f"tx_region_actual_pcb thickness_mm must be > 0 (actual={derived_spec.thickness_mm})"
+            "tx_region_actual_stack_space total_thickness_mm must be > 0 "
+            f"(actual={derived_spec.total_thickness_mm})"
         )
-    if not math.isclose(derived_spec.thickness_mm, 5.0, rel_tol=0.0, abs_tol=1e-12):
+    if not math.isclose(derived_spec.total_thickness_mm, 5.0, rel_tol=0.0, abs_tol=1e-12):
         raise RuntimeError(
-            "tx_region_actual_pcb thickness_mm must be exactly 5.0 in runtime scene resolution "
-            f"(actual={derived_spec.thickness_mm})"
+            "tx_region_actual_stack_space total_thickness_mm must be exactly 5.0 in runtime scene resolution "
+            f"(actual={derived_spec.total_thickness_mm})"
         )
-    pcb_size_z = derived_spec.thickness_mm
+    stack_space_size_z = derived_spec.total_thickness_mm
     tile_specs: list[NonModelBoxSpec] = []
     for tx_region_actual_spec in tx_region_actual_specs:
         if tx_region_actual_spec.kind != "tx_region_actual":
             raise RuntimeError(
-                "tx_region_actual_pcb source registry must contain only tx_region_actual objects "
+                "tx_region_actual_stack_space source registry must contain only tx_region_actual objects "
                 f"(object_id={tx_region_actual_spec.object_id}, kind={tx_region_actual_spec.kind})"
             )
         if not _is_concrete_tx_region_actual_object_id(tx_region_actual_spec.object_id):
             raise RuntimeError(
-                "tx_region_actual_pcb source registry must contain concrete tx_region_actual object ids "
+                "tx_region_actual_stack_space source registry must contain concrete tx_region_actual object ids "
                 f"(actual={tx_region_actual_spec.object_id})"
             )
         tile_size_x, tile_size_y, tile_size_z = tx_region_actual_spec.size_xyz
         tile_origin_x, tile_origin_y, tile_origin_z = tx_region_actual_spec.origin_xyz
-        pcb_size_x = tile_size_x * scale_ratio
-        pcb_size_y = tile_size_y * scale_ratio
-        pcb_origin_xyz: Point3 = (
-            tile_origin_x + ((tile_size_x - pcb_size_x) / 2.0),
-            tile_origin_y + ((tile_size_y - pcb_size_y) / 2.0),
-            tile_origin_z + tile_size_z - pcb_size_z,
+        stack_space_size_x = tile_size_x * scale_ratio
+        stack_space_size_y = tile_size_y * scale_ratio
+        stack_space_origin_xyz: Point3 = (
+            tile_origin_x + ((tile_size_x - stack_space_size_x) / 2.0),
+            tile_origin_y + ((tile_size_y - stack_space_size_y) / 2.0),
+            tile_origin_z + tile_size_z - stack_space_size_z,
         )
         tx_region_actual_top_z = tile_origin_z + tile_size_z
-        if abs((pcb_origin_xyz[2] + pcb_size_z) - tx_region_actual_top_z) > 1e-9:
+        if abs((stack_space_origin_xyz[2] + stack_space_size_z) - tx_region_actual_top_z) > 1e-9:
             raise RuntimeError(
-                "tx_region_actual_pcb top face must touch tx_region_actual top face "
-                f"(tx_region_actual_object_id={tx_region_actual_spec.object_id}, pcb_origin={pcb_origin_xyz}, "
-                f"pcb_size={(pcb_size_x, pcb_size_y, pcb_size_z)}, tx_region_actual_top_z={tx_region_actual_top_z})"
+                "tx_region_actual_stack_space top face must touch tx_region_actual top face "
+                f"(tx_region_actual_object_id={tx_region_actual_spec.object_id}, "
+                f"stack_space_origin={stack_space_origin_xyz}, "
+                f"stack_space_size={(stack_space_size_x, stack_space_size_y, stack_space_size_z)}, "
+                f"tx_region_actual_top_z={tx_region_actual_top_z})"
             )
         tile_specs.append(
             NonModelBoxSpec(
-                object_id=_concrete_tx_region_actual_pcb_object_id(
+                object_id=_concrete_tx_region_actual_stack_space_object_id(
                     tx_region_actual_object_id=tx_region_actual_spec.object_id
                 ),
                 kind=derived_spec.kind,
                 primitive="box",
                 present=True,
                 non_model=True,
-                material=derived_spec.material,
+                material="__materialless_tx_region_actual_stack_space",
                 plane="XY",
-                origin_xyz=pcb_origin_xyz,
-                size_xyz=(pcb_size_x, pcb_size_y, pcb_size_z),
+                origin_xyz=stack_space_origin_xyz,
+                size_xyz=(stack_space_size_x, stack_space_size_y, stack_space_size_z),
             )
         )
     return tuple(tile_specs)
@@ -607,8 +689,8 @@ def _build_non_model_group_shape(*, object_id: str, specs: tuple[NonModelBoxSpec
 def _non_model_scene_members(specs: tuple[NonModelBoxSpec, ...]) -> tuple[NonModelSceneMemberLedgerEntry, ...]:
     members: list[NonModelSceneMemberLedgerEntry] = []
     for object_id, role, plane, group_specs in _non_model_group_specs(specs):
-        if object_id in ("tx_region_actual", "tx_region_actual_pcb"):
-            expected_kind = "tx_region_actual" if object_id == "tx_region_actual" else "tx_region_actual_pcb"
+        if object_id in ("tx_region_actual", "tx_region_actual_stack_space"):
+            expected_kind = "tx_region_actual" if object_id == "tx_region_actual" else "tx_region_actual_stack_space"
             for tx_region_actual_spec in group_specs:
                 if tx_region_actual_spec.kind != expected_kind:
                     raise RuntimeError(
@@ -621,23 +703,23 @@ def _non_model_scene_members(specs: tuple[NonModelBoxSpec, ...]) -> tuple[NonMod
                             "tx_region_actual concrete scene member must use concrete object id contract "
                             f"(object_id={tx_region_actual_spec.object_id})"
                         )
-                if object_id == "tx_region_actual_pcb":
-                    if not _is_concrete_tx_region_actual_pcb_object_id(tx_region_actual_spec.object_id):
+                if object_id == "tx_region_actual_stack_space":
+                    if not _is_concrete_tx_region_actual_stack_space_object_id(tx_region_actual_spec.object_id):
                         raise RuntimeError(
-                            "tx_region_actual_pcb concrete scene member must use concrete object id contract "
+                            "tx_region_actual_stack_space concrete scene member must use concrete object id contract "
                             f"(object_id={tx_region_actual_spec.object_id})"
                         )
-                members.append(
-                    {
-                        "object_id": tx_region_actual_spec.object_id,
-                        "role": role,
-                        "material": tx_region_actual_spec.material,
-                        "model_state": False,
-                        "canonical_coordinates": _canonical_from_box(tx_region_actual_spec),
-                        "plane": tx_region_actual_spec.plane,
-                        "non_model": True,
-                    }
-                )
+                member_entry: dict[str, object] = {
+                    "object_id": tx_region_actual_spec.object_id,
+                    "role": role,
+                    "model_state": False,
+                    "canonical_coordinates": _canonical_from_box(tx_region_actual_spec),
+                    "plane": tx_region_actual_spec.plane,
+                    "non_model": True,
+                }
+                if role != "tx_region_actual_stack_space":
+                    member_entry["material"] = tx_region_actual_spec.material
+                members.append(cast(NonModelSceneMemberLedgerEntry, member_entry))
             continue
         resolved_plane = plane
         if object_id == "tx_region":
@@ -669,7 +751,7 @@ def _non_model_scene_members(specs: tuple[NonModelBoxSpec, ...]) -> tuple[NonMod
 def build_non_model_scene_shapes(specs: tuple[NonModelBoxSpec, ...]) -> tuple[bd.Shape, ...]:
     scene_shapes: list[bd.Shape] = []
     for object_id, _role, _plane, group_specs in _non_model_group_specs(specs):
-        if object_id in ("tx_region_actual", "tx_region_actual_pcb"):
+        if object_id in ("tx_region_actual", "tx_region_actual_stack_space"):
             for tx_region_actual_spec in group_specs:
                 scene_shapes.append(_build_non_model_shape(tx_region_actual_spec))
             continue
@@ -1669,6 +1751,11 @@ def build_modeled_scene_data(
     owner_spec: NonModelBoxSpec,
     seed: int,
 ) -> tuple[tuple[bd.Shape, ...], ModeledObjectSceneData]:
+    if isinstance(spec, ModeledTxRectVoidColumnsSpec):
+        raise RuntimeError(
+            "tx_rect_void_columns scene generation requires tilted tx_region_actual_stack_space placement "
+            "and must be built from type2_step_export"
+        )
     if isinstance(spec, (ModeledTxPlateStackSpec, ModeledRxPlateStackSpec)):
         return build_plate_stack_scene_data(spec, owner_spec=owner_spec, seed=seed)
     return build_modeled_single_coil_scene_data(

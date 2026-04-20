@@ -95,8 +95,8 @@ def _type2_spec_text(
     wall_parallel_stack_present_range: str | None = None,
     tx_region_actual_x_division_count_range: str = "[true, 1, 1, 1]",
     tx_region_actual_y_division_count_range: str = "[true, 1, 1, 1]",
-    tx_region_actual_pcb_scale_ratio_range: str = "[false, 0.35, 0.35, 1]",
-    tx_region_actual_pcb_tilt_enabled_range: str = "[true, 1, 1, 1]",
+    tx_region_actual_stack_space_scale_ratio_range: str = "[false, 0.8, 0.8, 1]",
+    tx_region_actual_stack_space_tilt_enabled_range: str = "[true, 1, 1, 1]",
 ) -> str:
     if underlay_repeat_count_range is None:
         underlay_repeat_count_range = _range(True, 0.0, 8.0, 5)
@@ -227,15 +227,14 @@ range = {tx_region_actual_x_division_count_range}
 range = {tx_region_actual_y_division_count_range}
 
 [[non_model_objects]]
-id = "tx_region_actual_pcb"
-kind = "tx_region_actual_pcb"
+id = "tx_region_actual_stack_space"
+kind = "tx_region_actual_stack_space"
 source_region_id = "tx_region_actual"
-material = "FR4_epoxy"
-thickness_mm = 5.0
+total_thickness_mm = 5.0
 [non_model_objects.scale_ratio]
-range = {tx_region_actual_pcb_scale_ratio_range}
+range = {tx_region_actual_stack_space_scale_ratio_range}
 [non_model_objects.tilt_enabled]
-range = {tx_region_actual_pcb_tilt_enabled_range}
+range = {tx_region_actual_stack_space_tilt_enabled_range}
 
 [[modeled_objects]]
 object_id = "{modeled_object_id}"
@@ -286,8 +285,8 @@ def _type2_rx_plate_stack_spec_text(
     extra_modeled_lines: tuple[str, ...] = (),
     tx_region_actual_x_division_count_range: str = "[true, 1, 1, 1]",
     tx_region_actual_y_division_count_range: str = "[true, 1, 1, 1]",
-    tx_region_actual_pcb_scale_ratio_range: str = "[false, 0.35, 0.35, 1]",
-    tx_region_actual_pcb_tilt_enabled_range: str = "[true, 1, 1, 1]",
+    tx_region_actual_stack_space_scale_ratio_range: str = "[false, 0.8, 0.8, 1]",
+    tx_region_actual_stack_space_tilt_enabled_range: str = "[true, 1, 1, 1]",
 ) -> str:
     extra_body = "\n".join(extra_modeled_lines)
     if extra_body != "":
@@ -385,15 +384,14 @@ range = {tx_region_actual_x_division_count_range}
 range = {tx_region_actual_y_division_count_range}
 
 [[non_model_objects]]
-id = "tx_region_actual_pcb"
-kind = "tx_region_actual_pcb"
+id = "tx_region_actual_stack_space"
+kind = "tx_region_actual_stack_space"
 source_region_id = "tx_region_actual"
-material = "FR4_epoxy"
-thickness_mm = 5.0
+total_thickness_mm = 5.0
 [non_model_objects.scale_ratio]
-range = {tx_region_actual_pcb_scale_ratio_range}
+range = {tx_region_actual_stack_space_scale_ratio_range}
 [non_model_objects.tilt_enabled]
-range = {tx_region_actual_pcb_tilt_enabled_range}
+range = {tx_region_actual_stack_space_tilt_enabled_range}
 
 [[modeled_objects]]
     object_id = "{modeled_object_id}"
@@ -473,6 +471,147 @@ def _type2_tx_plate_stack_spec_text(
 
 def _tx_rect_void_spec_text(*, terminal_path: str = "A_cw_to_a") -> str:
     return _tx_rect_void_spec_text_with_layer_count(terminal_path=terminal_path, layer_count=1)
+
+
+def _type2_tx_rect_void_columns_spec_text(
+    *,
+    tx_region_actual_x_division_count_range: str = "[true, 1, 1, 1]",
+    tx_region_actual_y_division_count_range: str = "[true, 1, 1, 1]",
+    layer_count_range: str = "[true, 1, 1, 1]",
+    turn_count_x0_range: str = "[true, 2, 2, 1]",
+    turn_count_x1_range: str = "[true, 3, 3, 1]",
+    turn_count_x2_range: str = "[true, 4, 4, 1]",
+) -> str:
+    return f"""
+spec_version = "0.2.22"
+schema_id = "peetsfea.type2.step.v6"
+runtime_compatible = false
+
+[design]
+units = "mm"
+
+[simulation]
+radiation_margin_mm = 3500.0
+
+{_outputs_spec_text()}
+
+[[non_model_objects]]
+id = "floor"
+kind = "floor"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "XY"
+origin_xyz = [0.0, -10.0, -1.0]
+size_xyz = [20.0, 20.0, 1.0]
+
+[[non_model_objects]]
+id = "shelf"
+kind = "shelf"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "XY"
+origin_xyz = [0.0, -10.0, 0.0]
+size_xyz = [10.0, 20.0, 4.0]
+
+[[non_model_objects]]
+id = "wall"
+kind = "wall"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [-1.0, -10.0, 0.0]
+size_xyz = [1.0, 20.0, 10.0]
+
+[[non_model_objects]]
+id = "tv"
+kind = "tv"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [0.0, -5.0, 5.0]
+size_xyz = [1.0, 10.0, 4.0]
+
+[[non_model_objects]]
+id = "tx_region"
+kind = "tx_region"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "XY"
+origin_xyz = [0.0, -140.0, 0.0]
+size_xyz = [160.0, 280.0, 90.0]
+
+[[non_model_objects]]
+id = "rx_region_max"
+kind = "rx_region_max"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [200.0, -100.0, 0.0]
+size_xyz = [10.0, 200.0, 200.0]
+
+[[non_model_objects]]
+id = "tx_region_actual"
+kind = "tx_region_actual"
+source_region_id = "tx_region"
+[non_model_objects.x_usage_ratio]
+range = [false, 0.3, 0.3, 1]
+[non_model_objects.y_usage_ratio]
+range = [false, 0.3, 0.3, 1]
+[non_model_objects.x_division_count]
+range = {tx_region_actual_x_division_count_range}
+[non_model_objects.y_division_count]
+range = {tx_region_actual_y_division_count_range}
+
+[[non_model_objects]]
+id = "tx_region_actual_stack_space"
+kind = "tx_region_actual_stack_space"
+source_region_id = "tx_region_actual"
+total_thickness_mm = 5.0
+[non_model_objects.scale_ratio]
+range = [false, 0.8, 0.8, 1]
+[non_model_objects.tilt_enabled]
+range = [true, 1, 1, 1]
+
+[[modeled_objects]]
+object_id = "tx_rect_void_columns"
+role = "tx_rect_void_columns"
+material = "composite"
+model_state = true
+pcb_thickness_mm = 0.3
+copper_thickness_mm = 0.1
+[modeled_objects.layer_count]
+range = {layer_count_range}
+[modeled_objects.layer_gap_mm]
+range = [false, 2.0, 2.0, 1]
+[modeled_objects.terminal_stub_length_mm]
+range = [false, 5.0, 5.0, 1]
+[modeled_objects.void_usage_ratio]
+range = [false, 0.2, 0.2, 1]
+[modeled_objects.margin_ratio]
+range = [false, 0.05, 0.05, 1]
+[modeled_objects.metal_fill_factor]
+range = [false, 0.5, 0.5, 1]
+[modeled_objects.turn_count_x0]
+range = {turn_count_x0_range}
+[modeled_objects.turn_count_x1]
+range = {turn_count_x1_range}
+[modeled_objects.turn_count_x2]
+range = {turn_count_x2_range}
+[modeled_objects.terminal_path]
+value = "A_cw_to_a"
+""".strip()
 
 
 def _tx_rect_void_spec_text_with_layer_count(
@@ -835,11 +974,11 @@ def _tx_region_actual_tile_names(*, x_division_count: int, y_division_count: int
     )
 
 
-def _tx_region_actual_pcb_tile_names(*, x_division_count: int, y_division_count: int) -> tuple[str, ...]:
+def _tx_region_actual_stack_space_tile_names(*, x_division_count: int, y_division_count: int) -> tuple[str, ...]:
     if x_division_count == 1 and y_division_count == 1:
-        return ("tx_region_actual_pcb",)
+        return ("tx_region_actual_stack_space",)
     return tuple(
-        f"tx_region_actual_pcb_x{x_index}_y{y_index}"
+        f"tx_region_actual_stack_space_x{x_index}_y{y_index}"
         for x_index in range(x_division_count)
         for y_index in range(y_division_count)
     )
@@ -869,6 +1008,63 @@ def _assert_tx_region_actual_tiles_contract(
             overlap_y = min(first_box.max.Y, second_box.max.Y) - max(first_box.min.Y, second_box.min.Y)
             overlap_z = min(first_box.max.Z, second_box.max.Z) - max(first_box.min.Z, second_box.min.Z)
             assert overlap_x <= 1e-9 or overlap_y <= 1e-9 or overlap_z <= 1e-9
+
+
+def _shape_volume(shape: bd.Shape) -> float:
+    return sum(solid.volume for solid in shape.solids())
+
+
+def _modeled_volume_signature(
+    *,
+    scene_shapes_by_label: dict[str, bd.Shape],
+    modeled_expected_names: Sequence[str],
+) -> tuple[tuple[str, float], ...]:
+    return tuple((name, _shape_volume(scene_shapes_by_label[name])) for name in modeled_expected_names)
+
+
+def _assert_modeled_bodies_within_tx_region_actual_stack_space(
+    *,
+    ledger: dict[str, object],
+    modeled_object_id: str,
+) -> None:
+    non_model_entry = cast(dict[str, object], cast(list[object], ledger["non_model_objects"])[0])
+    member_objects = cast(list[object], non_model_entry["member_objects"])
+    stack_space_members = [
+        cast(dict[str, object], member)
+        for member in member_objects
+        if cast(str, cast(dict[str, object], member)["role"]) == "tx_region_actual_stack_space"
+    ]
+    assert len(stack_space_members) > 0
+    stack_space_boxes = []
+    for member in stack_space_members:
+        canonical = cast(dict[str, object], member["canonical_coordinates"])
+        min_xyz = cast(tuple[float, float, float], canonical["outer_bounds_min_xyz"])
+        max_xyz = cast(tuple[float, float, float], canonical["outer_bounds_max_xyz"])
+        stack_space_boxes.append((min_xyz, max_xyz))
+    modeled_entry = next(
+        cast(dict[str, object], entry)
+        for entry in cast(list[object], ledger["modeled_objects"])
+        if cast(dict[str, object], entry)["object_id"] == modeled_object_id
+    )
+    expected_names = cast(tuple[str, ...], modeled_entry["expected_exported_body_names"])
+    scene_shapes_by_label = _step_shapes_by_label(Path(cast(str, ledger["scene_step_path"])))
+    containment_tolerance_mm = 5e-2
+    for body_name in expected_names:
+        body_shape = scene_shapes_by_label[body_name]
+        body_bbox = body_shape.bounding_box()
+        contained = False
+        for stack_space_min_xyz, stack_space_max_xyz in stack_space_boxes:
+            if (
+                body_bbox.min.X >= stack_space_min_xyz[0] - containment_tolerance_mm
+                and body_bbox.max.X <= stack_space_max_xyz[0] + containment_tolerance_mm
+                and body_bbox.min.Y >= stack_space_min_xyz[1] - containment_tolerance_mm
+                and body_bbox.max.Y <= stack_space_max_xyz[1] + containment_tolerance_mm
+                and body_bbox.min.Z >= stack_space_min_xyz[2] - containment_tolerance_mm
+                and body_bbox.max.Z <= stack_space_max_xyz[2] + containment_tolerance_mm
+            ):
+                contained = True
+                break
+        assert contained, f"modeled body must fit inside one stack-space tile (body={body_name})"
 
 
 def _assert_plate_stack_bridge_non_overlap(
@@ -1338,8 +1534,8 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     )
     assert tuple(variable["name"] for variable in spec.outputs["variables"]) == expected_output_variable_names
     assert len(spec.non_model_objects) == 6
-    assert len(spec.modeled_objects) == 1
-    rx_entry = spec.modeled_objects[0]
+    assert len(spec.modeled_objects) == 2
+    rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
     assert rx_entry.object_id == "rx_rect_void_coil"
     assert rx_entry.role == "rx_single_coil"
     assert rx_entry.pcb_thickness_mm == pytest.approx(0.3)
@@ -1357,6 +1553,11 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert rx_entry.void_usage_ratio.end == pytest.approx(0.2)
     assert rx_entry.void_usage_ratio.count == 1
     assert rx_entry.metal_fill_factor.start == pytest.approx(0.5)
+    tx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_rect_void_columns")
+    assert tx_entry.role == "tx_rect_void_columns"
+    assert tx_entry.pcb_thickness_mm == pytest.approx(0.4)
+    assert tx_entry.layer_count.start == pytest.approx(1.0)
+    assert tx_entry.turn_count_x0.start == pytest.approx(3.0)
 
 
 def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
@@ -1364,8 +1565,8 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     source_toml = repo_root / "examples" / "type2_fixed.toml"
     spec = load_type2_step_spec(source_toml)
 
-    assert len(spec.modeled_objects) == 1
-    rx_entry = spec.modeled_objects[0]
+    assert len(spec.modeled_objects) == 2
+    rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
     assert rx_entry.object_id == "rx_rect_void_coil"
     assert rx_entry.role == "rx_single_coil"
     assert rx_entry.layer_count.start == pytest.approx(1.0)
@@ -1396,9 +1597,9 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     source_toml = repo_root / "examples" / "type2_sweep.toml"
     spec = load_type2_step_spec(source_toml)
 
-    assert len(spec.modeled_objects) == 1
+    assert len(spec.modeled_objects) == 2
     assert len(spec.non_model_objects) >= 2
-    rx_entry = spec.modeled_objects[0]
+    rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
     assert rx_entry.object_id == "rx_rect_void_coil"
     assert rx_entry.role == "rx_single_coil"
     assert rx_entry.layer_count.start == pytest.approx(1.0)
@@ -2012,7 +2213,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     )
     assert tuple(variable["name"] for variable in ledger["outputs"]["variables"]) == expected_output_variable_names
     assert len(ledger["non_model_objects"]) == 1
-    assert len(ledger["modeled_objects"]) == 1
+    assert len(ledger["modeled_objects"]) == 2
     non_model_entry = ledger["non_model_objects"][0]
     assert non_model_entry["object_id"] == "type2_non_model_scene"
     assert non_model_entry["role"] == "non_model_scene"
@@ -2021,7 +2222,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
         "environment",
         "tx_region",
         "tx_region_actual",
-        "tx_region_actual_pcb",
+        "tx_region_actual_stack_space",
         "rx_region_max",
     )
     member_objects = non_model_entry["member_objects"]
@@ -2039,16 +2240,16 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert tx_region_actual_member["role"] == "tx_region_actual"
     assert tx_region_actual_member["canonical_coordinates"]["outer_bounds_min_xyz"] == (0.0, -42.0, 0.0)
     assert tx_region_actual_member["canonical_coordinates"]["outer_bounds_size_xyz"] == (48.0, 84.0, 90.0)
-    tx_region_actual_pcb_member = next(
-        member for member in member_objects if member["object_id"] == "tx_region_actual_pcb"
+    tx_region_actual_stack_space_member = next(
+        member for member in member_objects if member["object_id"] == "tx_region_actual_stack_space"
     )
-    assert tx_region_actual_pcb_member["role"] == "tx_region_actual_pcb"
-    assert tx_region_actual_pcb_member["material"] == "FR4_epoxy"
-    pcb_canonical = cast(dict[str, object], tx_region_actual_pcb_member["canonical_coordinates"])
-    pcb_min_xyz = cast(tuple[float, float, float], pcb_canonical["outer_bounds_min_xyz"])
-    pcb_max_xyz = cast(tuple[float, float, float], pcb_canonical["outer_bounds_max_xyz"])
-    assert pcb_min_xyz[2] >= 0.0
-    assert pcb_max_xyz[2] <= 90.0 + 1e-8
+    assert tx_region_actual_stack_space_member["role"] == "tx_region_actual_stack_space"
+    assert "material" not in tx_region_actual_stack_space_member
+    stack_space_canonical = cast(dict[str, object], tx_region_actual_stack_space_member["canonical_coordinates"])
+    stack_space_min_xyz = cast(tuple[float, float, float], stack_space_canonical["outer_bounds_min_xyz"])
+    stack_space_max_xyz = cast(tuple[float, float, float], stack_space_canonical["outer_bounds_max_xyz"])
+    assert stack_space_min_xyz[2] >= 0.0
+    assert stack_space_max_xyz[2] <= 90.0 + 1e-8
     rx_region_member = next(member for member in member_objects if member["object_id"] == "rx_region_max")
     assert rx_region_member["canonical_coordinates"]["outer_bounds_min_xyz"] == (0.0, -280.0, 139.0)
     rx_region_size_x = cast(tuple[float, float, float], rx_region_member["canonical_coordinates"]["outer_bounds_size_xyz"])[0]
@@ -2057,7 +2258,7 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
     assert payload["em_policy"] == {"radiation_margin_mm": 3500.0}
     assert tuple(variable["name"] for variable in payload["outputs"]["variables"]) == expected_output_variable_names
     modeled_by_id = {entry["object_id"]: entry for entry in payload["modeled_objects"]}
-    assert set(modeled_by_id) == {"rx_rect_void_coil"}
+    assert set(modeled_by_id) == {"rx_rect_void_coil", "tx_rect_void_columns"}
     for modeled_entry in ledger["modeled_objects"]:
         source_metadata_path = Path(modeled_entry["source_metadata_path"])
         assert source_metadata_path.is_file()
@@ -2074,16 +2275,17 @@ def test_export_type2_step_artifacts_writes_single_scene_step_and_ledger(tmp_pat
         "environment",
         "tx_region",
         "tx_region_actual",
-        "tx_region_actual_pcb",
+        "tx_region_actual_stack_space",
         "rx_region_max",
         *rx_expected_names,
         *rx_group_names,
+        *cast(tuple[str, ...], modeled_by_id["tx_rect_void_columns"]["expected_exported_body_names"]),
     }
     assert set(scene_shapes_by_label) == expected_scene_labels
     assert all(not label.startswith("tx_plate_") for label in scene_shapes_by_label)
     assert "g_copper_tx" not in scene_shapes_by_label
     assert "g_ferrite_tx" not in scene_shapes_by_label
-    for label in {"environment", "tx_region", "tx_region_actual", "tx_region_actual_pcb", "rx_region_max", *rx_expected_names}:
+    for label in {"environment", "tx_region", "tx_region_actual", "tx_region_actual_stack_space", "rx_region_max", *rx_expected_names}:
         assert type(scene_shapes_by_label[label]).__name__ == "Solid"
     for label in rx_group_names:
         assert type(scene_shapes_by_label[label]).__name__ == "Compound"
@@ -2136,12 +2338,12 @@ def test_export_type2_step_artifacts_tiles_tx_region_actual_for_forced_3x3_divis
 
     non_model_entry = ledger["non_model_objects"][0]
     tile_names = _tx_region_actual_tile_names(x_division_count=3, y_division_count=3)
-    pcb_tile_names = _tx_region_actual_pcb_tile_names(x_division_count=3, y_division_count=3)
+    stack_space_tile_names = _tx_region_actual_stack_space_tile_names(x_division_count=3, y_division_count=3)
     assert non_model_entry["member_object_ids"] == (
         "environment",
         "tx_region",
         *tile_names,
-        *pcb_tile_names,
+        *stack_space_tile_names,
         "rx_region_max",
     )
     member_objects = non_model_entry["member_objects"]
@@ -2149,42 +2351,42 @@ def test_export_type2_step_artifacts_tiles_tx_region_actual_for_forced_3x3_divis
     assert tuple(cast(str, member["object_id"]) for member in tx_region_actual_members) == tile_names
     for member in tx_region_actual_members:
         assert member["canonical_coordinates"]["outer_bounds_size_xyz"] == pytest.approx((16.0, 28.0, 90.0))
-    tx_region_actual_pcb_members = [
-        member for member in member_objects if cast(str, member["role"]) == "tx_region_actual_pcb"
+    tx_region_actual_stack_space_members = [
+        member for member in member_objects if cast(str, member["role"]) == "tx_region_actual_stack_space"
     ]
-    assert tuple(cast(str, member["object_id"]) for member in tx_region_actual_pcb_members) == pcb_tile_names
-    pcb_coordinates_by_name = {
+    assert tuple(cast(str, member["object_id"]) for member in tx_region_actual_stack_space_members) == stack_space_tile_names
+    stack_space_coordinates_by_name = {
         cast(str, member["object_id"]): cast(dict[str, object], member["canonical_coordinates"])
-        for member in tx_region_actual_pcb_members
+        for member in tx_region_actual_stack_space_members
     }
     tile_coordinates_by_name = {
         cast(str, member["object_id"]): cast(dict[str, object], member["canonical_coordinates"])
         for member in tx_region_actual_members
     }
-    for tile_name, pcb_name in zip(tile_names, pcb_tile_names, strict=True):
+    for tile_name, stack_space_name in zip(tile_names, stack_space_tile_names, strict=True):
         tile_bounds = tile_coordinates_by_name[tile_name]
-        pcb_bounds = pcb_coordinates_by_name[pcb_name]
+        stack_space_bounds = stack_space_coordinates_by_name[stack_space_name]
         assert isinstance(tile_bounds["outer_bounds_size_xyz"], tuple)
-        assert isinstance(pcb_bounds["outer_bounds_size_xyz"], tuple)
+        assert isinstance(stack_space_bounds["outer_bounds_size_xyz"], tuple)
         tile_size_xyz = cast(tuple[float, float, float], tile_bounds["outer_bounds_size_xyz"])
-        pcb_size_xyz = cast(tuple[float, float, float], pcb_bounds["outer_bounds_size_xyz"])
+        stack_space_size_xyz = cast(tuple[float, float, float], stack_space_bounds["outer_bounds_size_xyz"])
         tile_min_xyz = cast(tuple[float, float, float], tile_bounds["outer_bounds_min_xyz"])
-        pcb_min_xyz = cast(tuple[float, float, float], pcb_bounds["outer_bounds_min_xyz"])
+        stack_space_min_xyz = cast(tuple[float, float, float], stack_space_bounds["outer_bounds_min_xyz"])
         tile_max_z = tile_min_xyz[2] + tile_size_xyz[2]
-        assert pcb_size_xyz[0] > tile_size_xyz[0] * 0.35
-        assert pcb_size_xyz[1] >= (tile_size_xyz[1] * 0.35) - 1e-8
-        assert pcb_size_xyz[2] > 5.0
-        assert pcb_min_xyz[2] >= tile_min_xyz[2] - 1e-8
-        assert cast(tuple[float, float, float], pcb_bounds["outer_bounds_max_xyz"])[2] <= tile_max_z + 1e-8
+        assert stack_space_size_xyz[0] > tile_size_xyz[0] * 0.35
+        assert stack_space_size_xyz[1] >= (tile_size_xyz[1] * 0.35) - 1e-8
+        assert stack_space_size_xyz[2] > 5.0
+        assert stack_space_min_xyz[2] >= tile_min_xyz[2] - 1e-8
+        assert cast(tuple[float, float, float], stack_space_bounds["outer_bounds_max_xyz"])[2] <= tile_max_z + 1e-8
 
     scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
     for tile_name in tile_names:
         assert tile_name in scene_shapes_by_label
         assert type(scene_shapes_by_label[tile_name]).__name__ == "Solid"
-    for pcb_name in pcb_tile_names:
-        assert pcb_name in scene_shapes_by_label
-        assert type(scene_shapes_by_label[pcb_name]).__name__ == "Solid"
-    assert "tx_region_actual_pcb" not in scene_shapes_by_label
+    for stack_space_name in stack_space_tile_names:
+        assert stack_space_name in scene_shapes_by_label
+        assert type(scene_shapes_by_label[stack_space_name]).__name__ == "Solid"
+    assert "tx_region_actual_stack_space" not in scene_shapes_by_label
     _assert_tx_region_actual_tiles_contract(
         scene_shapes_by_label=scene_shapes_by_label,
         tile_names=tile_names,
@@ -2193,7 +2395,7 @@ def test_export_type2_step_artifacts_tiles_tx_region_actual_for_forced_3x3_divis
     )
 
 
-def test_export_type2_step_artifacts_tilts_only_tx_region_actual_pcb_toward_modeled_rx_center(tmp_path: Path) -> None:
+def test_export_type2_step_artifacts_tilts_only_tx_region_actual_stack_space_toward_modeled_rx_center(tmp_path: Path) -> None:
     toml_path = _write_spec(
         tmp_path,
         _type2_spec_text(
@@ -2201,7 +2403,7 @@ def test_export_type2_step_artifacts_tilts_only_tx_region_actual_pcb_toward_mode
             modeled_role="rx_single_coil",
             tx_region_actual_x_division_count_range="[true, 3, 3, 1]",
             tx_region_actual_y_division_count_range="[true, 3, 3, 1]",
-            tx_region_actual_pcb_tilt_enabled_range="[true, 1, 1, 1]",
+            tx_region_actual_stack_space_tilt_enabled_range="[true, 1, 1, 1]",
         ),
     )
     ledger = export_type2_step_artifacts(
@@ -2229,24 +2431,24 @@ def test_export_type2_step_artifacts_tilts_only_tx_region_actual_pcb_toward_mode
         for member in member_objects
         if cast(str, member["role"]) == "tx_region_actual"
     }
-    pcb_members = [
-        member for member in member_objects if cast(str, member["role"]) == "tx_region_actual_pcb"
+    stack_space_members = [
+        member for member in member_objects if cast(str, member["role"]) == "tx_region_actual_stack_space"
     ]
     assert len(tile_members) == 9
-    assert len(pcb_members) == 9
+    assert len(stack_space_members) == 9
 
     for tile_member in tile_members.values():
         tile_name = cast(str, tile_member["object_id"])
         assert tile_name in scene_shapes_by_label
         _assert_shape_faces_axis_aligned(scene_shapes_by_label[tile_name])
 
-    for pcb_member in pcb_members:
-        pcb_object_id = cast(str, pcb_member["object_id"])
-        assert pcb_object_id in scene_shapes_by_label
-        if pcb_object_id == "tx_region_actual_pcb":
+    for stack_space_member in stack_space_members:
+        stack_space_object_id = cast(str, stack_space_member["object_id"])
+        assert stack_space_object_id in scene_shapes_by_label
+        if stack_space_object_id == "tx_region_actual_stack_space":
             parent_tile_id = "tx_region_actual"
         else:
-            parent_tile_id = f"tx_region_actual{pcb_object_id.removeprefix('tx_region_actual_pcb')}"
+            parent_tile_id = f"tx_region_actual{stack_space_object_id.removeprefix('tx_region_actual_stack_space')}"
         assert parent_tile_id in tile_members
         tile_canonical = cast(dict[str, object], tile_members[parent_tile_id]["canonical_coordinates"])
         tile_min_xyz = cast(tuple[float, float, float], tile_canonical["outer_bounds_min_xyz"])
@@ -2254,32 +2456,230 @@ def test_export_type2_step_artifacts_tilts_only_tx_region_actual_pcb_toward_mode
         tile_bottom_z = tile_min_xyz[2]
         tile_top_z = tile_min_xyz[2] + tile_size_xyz[2]
 
-        pcb_shape = scene_shapes_by_label[pcb_object_id]
-        pcb_bbox = pcb_shape.bounding_box()
-        pcb_center = (
-            (pcb_bbox.min.X + pcb_bbox.max.X) * 0.5,
-            (pcb_bbox.min.Y + pcb_bbox.max.Y) * 0.5,
-            (pcb_bbox.min.Z + pcb_bbox.max.Z) * 0.5,
+        stack_space_shape = scene_shapes_by_label[stack_space_object_id]
+        stack_space_bbox = stack_space_shape.bounding_box()
+        stack_space_center = (
+            (stack_space_bbox.min.X + stack_space_bbox.max.X) * 0.5,
+            (stack_space_bbox.min.Y + stack_space_bbox.max.Y) * 0.5,
+            (stack_space_bbox.min.Z + stack_space_bbox.max.Z) * 0.5,
         )
         direction_to_rx = _normalize_vector_xyz(
             (
-                rx_center[0] - pcb_center[0],
-                rx_center[1] - pcb_center[1],
-                rx_center[2] - pcb_center[2],
+                rx_center[0] - stack_space_center[0],
+                rx_center[1] - stack_space_center[1],
+                rx_center[2] - stack_space_center[2],
             )
         )
         top_face_normal = _face_normal_closest_to_direction(
-            shape=pcb_shape,
+            shape=stack_space_shape,
             direction_xyz=direction_to_rx,
         )
-        assert _dot_xyz(top_face_normal, direction_to_rx) >= 0.9999
+        assert _dot_xyz(top_face_normal, direction_to_rx) >= 0.999
         assert abs(top_face_normal[2]) < 0.995
-        assert pcb_bbox.max.Z <= tile_top_z + 1e-8
-        assert pcb_bbox.min.Z >= tile_bottom_z - 1e-8
+        assert stack_space_bbox.max.Z <= tile_top_z + 1e-8
+        assert stack_space_bbox.min.Z >= tile_bottom_z - 1e-8
 
-        pcb_canonical = cast(dict[str, object], pcb_member["canonical_coordinates"])
-        pcb_canonical_max_xyz = cast(tuple[float, float, float], pcb_canonical["outer_bounds_max_xyz"])
-        assert pcb_canonical_max_xyz[2] <= tile_top_z + 1e-8
+        stack_space_canonical = cast(dict[str, object], stack_space_member["canonical_coordinates"])
+        stack_space_canonical_max_xyz = cast(tuple[float, float, float], stack_space_canonical["outer_bounds_max_xyz"])
+        assert stack_space_canonical_max_xyz[2] <= tile_top_z + 1e-8
+
+
+def _export_tx_rect_void_columns_ledger(
+    *,
+    tmp_path: Path,
+    x_division_count: int,
+    y_division_count: int,
+    layer_count: int,
+    turn_count_x0: int,
+    turn_count_x1: int,
+    turn_count_x2: int,
+) -> dict[str, object]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_tx_rect_void_columns_spec_text(
+            tx_region_actual_x_division_count_range=f"[true, {x_division_count}, {x_division_count}, 1]",
+            tx_region_actual_y_division_count_range=f"[true, {y_division_count}, {y_division_count}, 1]",
+            layer_count_range=f"[true, {layer_count}, {layer_count}, 1]",
+            turn_count_x0_range=f"[true, {turn_count_x0}, {turn_count_x0}, 1]",
+            turn_count_x1_range=f"[true, {turn_count_x1}, {turn_count_x1}, 1]",
+            turn_count_x2_range=f"[true, {turn_count_x2}, {turn_count_x2}, 1]",
+        ),
+    )
+    return cast(
+        dict[str, object],
+        export_type2_step_artifacts(
+            toml_path=toml_path,
+            output_dir=tmp_path / "out",
+            ledger_path=tmp_path / "out" / "ledger.json",
+            seed=0,
+        ),
+    )
+
+
+@pytest.mark.parametrize(("x_division_count", "y_division_count", "layer_count"), ((1, 1, 1), (2, 3, 2), (3, 2, 3)))
+def test_export_type2_step_artifacts_tx_rect_void_columns_exports_geometry_only_body_grid(
+    tmp_path: Path,
+    x_division_count: int,
+    y_division_count: int,
+    layer_count: int,
+) -> None:
+    ledger = _export_tx_rect_void_columns_ledger(
+        tmp_path=tmp_path,
+        x_division_count=x_division_count,
+        y_division_count=y_division_count,
+        layer_count=layer_count,
+        turn_count_x0=2,
+        turn_count_x1=3,
+        turn_count_x2=2,
+    )
+    modeled_entry = next(
+        cast(dict[str, object], entry)
+        for entry in cast(list[object], ledger["modeled_objects"])
+        if cast(dict[str, object], entry)["object_id"] == "tx_rect_void_columns"
+    )
+    expected_names = cast(tuple[str, ...], modeled_entry["expected_exported_body_names"])
+    expected_count = x_division_count * y_division_count * layer_count * 2
+    assert modeled_entry["expected_exported_body_count"] == expected_count
+    assert len(expected_names) == expected_count
+    assert tuple(cast(list[object], modeled_entry["expected_exported_body_groups"])) == ()
+
+    blocked_substrings = (
+        "tx_copper_stack",
+        "vertical_bus",
+        "tx_port_sheet",
+        "ferrite",
+        "underlay",
+        "stack_pet_psa",
+        "stack_air",
+    )
+    for body_name in expected_names:
+        assert all(blocked not in body_name for blocked in blocked_substrings)
+    scene_shapes_by_label = _step_shapes_by_label(Path(cast(str, ledger["scene_step_path"])))
+    assert "tx_copper_stack" not in scene_shapes_by_label
+    assert "tx_port_sheet" not in scene_shapes_by_label
+    assert all("vertical_bus" not in label for label in scene_shapes_by_label)
+    assert all("underlay" not in label for label in scene_shapes_by_label)
+    assert all("ferrite" not in label for label in scene_shapes_by_label)
+    _assert_modeled_bodies_within_tx_region_actual_stack_space(
+        ledger=ledger,
+        modeled_object_id="tx_rect_void_columns",
+    )
+
+
+def test_export_type2_step_artifacts_tx_rect_void_columns_unrealized_turn_counts_do_not_affect_geometry(tmp_path: Path) -> None:
+    ledger_x1_base = _export_tx_rect_void_columns_ledger(
+        tmp_path=tmp_path / "x1_base",
+        x_division_count=1,
+        y_division_count=2,
+        layer_count=2,
+        turn_count_x0=2,
+        turn_count_x1=3,
+        turn_count_x2=3,
+    )
+    ledger_x1_changed = _export_tx_rect_void_columns_ledger(
+        tmp_path=tmp_path / "x1_changed",
+        x_division_count=1,
+        y_division_count=2,
+        layer_count=2,
+        turn_count_x0=2,
+        turn_count_x1=5,
+        turn_count_x2=5,
+    )
+    modeled_x1_base = cast(dict[str, object], cast(list[object], ledger_x1_base["modeled_objects"])[0])
+    modeled_x1_changed = cast(dict[str, object], cast(list[object], ledger_x1_changed["modeled_objects"])[0])
+    expected_names_x1 = cast(tuple[str, ...], modeled_x1_base["expected_exported_body_names"])
+    assert cast(tuple[str, ...], modeled_x1_changed["expected_exported_body_names"]) == expected_names_x1
+    signature_x1_base = _modeled_volume_signature(
+        scene_shapes_by_label=_step_shapes_by_label(Path(cast(str, ledger_x1_base["scene_step_path"]))),
+        modeled_expected_names=expected_names_x1,
+    )
+    signature_x1_changed = _modeled_volume_signature(
+        scene_shapes_by_label=_step_shapes_by_label(Path(cast(str, ledger_x1_changed["scene_step_path"]))),
+        modeled_expected_names=expected_names_x1,
+    )
+    assert signature_x1_changed == signature_x1_base
+
+    ledger_x2_base = _export_tx_rect_void_columns_ledger(
+        tmp_path=tmp_path / "x2_base",
+        x_division_count=2,
+        y_division_count=1,
+        layer_count=2,
+        turn_count_x0=2,
+        turn_count_x1=3,
+        turn_count_x2=3,
+    )
+    ledger_x2_changed = _export_tx_rect_void_columns_ledger(
+        tmp_path=tmp_path / "x2_changed",
+        x_division_count=2,
+        y_division_count=1,
+        layer_count=2,
+        turn_count_x0=2,
+        turn_count_x1=3,
+        turn_count_x2=5,
+    )
+    modeled_x2_base = cast(dict[str, object], cast(list[object], ledger_x2_base["modeled_objects"])[0])
+    modeled_x2_changed = cast(dict[str, object], cast(list[object], ledger_x2_changed["modeled_objects"])[0])
+    expected_names_x2 = cast(tuple[str, ...], modeled_x2_base["expected_exported_body_names"])
+    assert cast(tuple[str, ...], modeled_x2_changed["expected_exported_body_names"]) == expected_names_x2
+    signature_x2_base = _modeled_volume_signature(
+        scene_shapes_by_label=_step_shapes_by_label(Path(cast(str, ledger_x2_base["scene_step_path"]))),
+        modeled_expected_names=expected_names_x2,
+    )
+    signature_x2_changed = _modeled_volume_signature(
+        scene_shapes_by_label=_step_shapes_by_label(Path(cast(str, ledger_x2_changed["scene_step_path"]))),
+        modeled_expected_names=expected_names_x2,
+    )
+    assert signature_x2_changed == signature_x2_base
+
+
+@pytest.mark.parametrize(
+    ("x_division_count", "turn_field"),
+    (
+        (2, "turn_count_x1"),
+        (3, "turn_count_x2"),
+    ),
+)
+def test_export_type2_step_artifacts_tx_rect_void_columns_realized_turn_counts_affect_geometry(
+    tmp_path: Path,
+    x_division_count: int,
+    turn_field: Literal["turn_count_x1", "turn_count_x2"],
+) -> None:
+    low_turn_count_x1 = 3
+    high_turn_count_x1 = 5 if turn_field == "turn_count_x1" else 3
+    low_turn_count_x2 = 2
+    high_turn_count_x2 = 3 if turn_field == "turn_count_x2" else 2
+    ledger_low = _export_tx_rect_void_columns_ledger(
+        tmp_path=tmp_path / f"{turn_field}_low",
+        x_division_count=x_division_count,
+        y_division_count=2,
+        layer_count=2,
+        turn_count_x0=2,
+        turn_count_x1=low_turn_count_x1,
+        turn_count_x2=low_turn_count_x2,
+    )
+    ledger_high = _export_tx_rect_void_columns_ledger(
+        tmp_path=tmp_path / f"{turn_field}_high",
+        x_division_count=x_division_count,
+        y_division_count=2,
+        layer_count=2,
+        turn_count_x0=2,
+        turn_count_x1=high_turn_count_x1,
+        turn_count_x2=high_turn_count_x2,
+    )
+    modeled_low = cast(dict[str, object], cast(list[object], ledger_low["modeled_objects"])[0])
+    modeled_high = cast(dict[str, object], cast(list[object], ledger_high["modeled_objects"])[0])
+    expected_names = cast(tuple[str, ...], modeled_low["expected_exported_body_names"])
+    assert cast(tuple[str, ...], modeled_high["expected_exported_body_names"]) == expected_names
+    signature_low = _modeled_volume_signature(
+        scene_shapes_by_label=_step_shapes_by_label(Path(cast(str, ledger_low["scene_step_path"]))),
+        modeled_expected_names=expected_names,
+    )
+    signature_high = _modeled_volume_signature(
+        scene_shapes_by_label=_step_shapes_by_label(Path(cast(str, ledger_high["scene_step_path"]))),
+        modeled_expected_names=expected_names,
+    )
+    assert signature_high != signature_low
 
 
 @pytest.mark.parametrize("layer_count", (2, 3))

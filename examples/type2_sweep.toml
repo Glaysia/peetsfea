@@ -134,22 +134,21 @@ id = "tx_region_actual"
 kind = "tx_region_actual"
 source_region_id = "tx_region"
 [non_model_objects.x_usage_ratio]
-range = [false, 0.3, 1.0, 27]
+range = [false, 1.0, 1.0, 1]
 [non_model_objects.y_usage_ratio]
-range = [false, 0.3, 1.0, 27]
+range = [false, 1.0, 1.0, 1]
 [non_model_objects.x_division_count]
 range = [true, 1, 3, 3]
 [non_model_objects.y_division_count]
 range = [true, 1, 3, 3]
 
 [[non_model_objects]]
-id = "tx_region_actual_pcb"
-kind = "tx_region_actual_pcb"
+id = "tx_region_actual_stack_space"
+kind = "tx_region_actual_stack_space"
 source_region_id = "tx_region_actual"
-material = "FR4_epoxy"
-thickness_mm = 5.0
+total_thickness_mm = 5.0
 [non_model_objects.scale_ratio]
-range = [false, 0.35, 0.95, 25]
+range = [false, 0.5, 0.5, 1]
 [non_model_objects.tilt_enabled]
 range = [true, 1, 1, 1]
 
@@ -184,5 +183,33 @@ range = [false, 0.2, 0.8, 10]
 range = [false, 0.05, 0.05, 1]
 [modeled_objects.metal_fill_factor]
 range = [false, 0.2, 0.6, 15]
+[modeled_objects.terminal_path]
+value = "A_cw_to_a"
+
+[[modeled_objects]]
+object_id = "tx_rect_void_columns"
+role = "tx_rect_void_columns"
+material = "composite"
+model_state = true
+pcb_thickness_mm = 0.4
+copper_thickness_mm = 0.1
+[modeled_objects.layer_count]
+range = [true, 1, 3, 3]
+[modeled_objects.layer_gap_mm]
+range = [false, 1.0, 1.8, 5]
+[modeled_objects.terminal_stub_length_mm]
+range = [false, 4.0, 8.0, 5]
+[modeled_objects.void_usage_ratio]
+range = [false, 0.2, 0.2, 1]
+[modeled_objects.margin_ratio]
+range = [false, 0.05, 0.05, 1]
+[modeled_objects.metal_fill_factor]
+range = [false, 0.6, 0.6, 1]
+[modeled_objects.turn_count_x0]
+range = [true, 1, 6, 6]
+[modeled_objects.turn_count_x1]
+range = [true, 1, 6, 6]
+[modeled_objects.turn_count_x2]
+range = [true, 1, 6, 6]
 [modeled_objects.terminal_path]
 value = "A_cw_to_a"

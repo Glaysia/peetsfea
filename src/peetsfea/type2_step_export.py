@@ -32,16 +32,19 @@ from peetsfea.type2_step_scene import build_modeled_scene_data
 from peetsfea.type2_step_scene import build_modeled_single_coil_scene_data
 from peetsfea.type2_step_scene import build_non_model_scene_entry
 from peetsfea.type2_step_scene import build_non_model_scene_shapes
+from peetsfea.type2_step_scene import TxRegionActualStackSpaceTiltTransform
 from peetsfea.type2_step_scene import _canonical_from_shape
-from peetsfea.type2_step_scene import _is_concrete_tx_region_actual_pcb_object_id
-from peetsfea.type2_step_scene import _parent_tx_region_actual_object_id_for_pcb_object_id
-from peetsfea.type2_step_scene import _rotate_tx_region_actual_pcb_shape_toward_center
+from peetsfea.type2_step_scene import _resolve_tx_region_actual_stack_space_tilt_transform
+from peetsfea.type2_step_scene import apply_tx_region_actual_stack_space_tilt_transform
+from peetsfea.type2_step_scene import _is_concrete_tx_region_actual_stack_space_object_id
+from peetsfea.type2_step_scene import _parent_tx_region_actual_object_id_for_stack_space_object_id
 from peetsfea.type2_step_scene import require_non_model_object_spec
 from peetsfea.type2_step_scene import resolve_non_model_scene_specs
-from peetsfea.type2_step_scene import resolve_tx_region_actual_pcb_tilt_enabled
+from peetsfea.type2_step_scene import resolve_tx_region_actual_stack_space_tilt_enabled
 from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
-from peetsfea.type2_step_spec import NonModelTxRegionActualPcbSpec
+from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
+from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
@@ -56,6 +59,8 @@ from peetsfea.type2_step_spec import resolve_modeled_plate_stack_turn_count
 from peetsfea.type2_step_spec import resolve_modeled_tx_coil_count
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
 from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
+from peetsfea.type2_tx_rect_void_columns import TxRectVoidColumnsBuildResult
+from peetsfea.type2_tx_rect_void_columns import build_tx_rect_void_columns_axis_aligned_tile_scenes
 from peetsfea.type2_tx_plate_stack_array import build_tx_plate_stack_array_scene_data
 from peetsfea.type2_tx_plate_stack_array import expected_tx_plate_stack_array_body_groups
 from peetsfea.type2_tx_plate_stack_array import expected_tx_plate_stack_array_body_names
@@ -312,7 +317,8 @@ def _resolve_modeled_rx_center_from_scene_data(
     rx_scene_data = tuple(scene_data for scene_data in modeled_scene_data if _is_modeled_rx_object(role=scene_data["role"]))
     if len(rx_scene_data) != 1:
         raise RuntimeError(
-            f"type2 tilt-enabled tx_region_actual_pcb requires exactly one modeled RX object (actual={len(rx_scene_data)})"
+            "type2 tilt-enabled tx_region_actual_stack_space requires exactly one modeled RX object "
+            f"(actual={len(rx_scene_data)})"
         )
     return _canonical_coordinates_center_xyz(
         canonical_coordinates=cast(
@@ -326,14 +332,12 @@ def _build_non_model_scene_entry_and_shapes(
     *,
     resolved_non_model_specs: tuple[NonModelBoxSpec, ...],
     tilt_enabled: int,
-    rx_center: Point3 | None,
-) -> tuple[NonModelObjectLedgerEntry, tuple[bd.Shape, ...]]:
+    rx_center: Point3,
+) -> tuple[NonModelObjectLedgerEntry, tuple[bd.Shape, ...], dict[str, dict[str, object]]]:
     non_model_entry = build_non_model_scene_entry(resolved_non_model_specs)
     shapes = list(build_non_model_scene_shapes(resolved_non_model_specs))
     if tilt_enabled != 1:
-        raise RuntimeError(f"tx_region_actual_pcb tilt_enabled must be fixed to 1 (actual={tilt_enabled})")
-    if rx_center is None:
-        raise RuntimeError("tilt-enabled tx_region_actual_pcb requires modeled RX center")
+        raise RuntimeError(f"tx_region_actual_stack_space tilt_enabled must be fixed to 1 (actual={tilt_enabled})")
 
     shape_by_object_id: dict[str, bd.Shape] = {}
     for shape in shapes:
@@ -345,43 +349,58 @@ def _build_non_model_scene_entry_and_shapes(
         if spec.kind == "tx_region_actual"
     }
     if not tx_region_actual_specs:
-        raise RuntimeError("type2 non-model registry must contain tx_region_actual tile specs when tilting tx_region_actual_pcb")
+        raise RuntimeError(
+            "type2 non-model registry must contain tx_region_actual tile specs when tilting tx_region_actual_stack_space"
+        )
 
     member_objects = list(non_model_entry["member_objects"])
+    stack_space_tilt_placements: dict[str, dict[str, object]] = {}
     for member_index, member_object in enumerate(member_objects):
         object_id = member_object["object_id"]
-        if not _is_concrete_tx_region_actual_pcb_object_id(object_id):
+        if not _is_concrete_tx_region_actual_stack_space_object_id(object_id):
             continue
         if object_id not in shape_by_object_id:
-            raise RuntimeError(f"type2 tilted tx_region_actual_pcb requires shape for object_id={object_id}")
-        parent_object_id = _parent_tx_region_actual_object_id_for_pcb_object_id(object_id=object_id)
+            raise RuntimeError(f"type2 tilted tx_region_actual_stack_space requires shape for object_id={object_id}")
+        parent_object_id = _parent_tx_region_actual_object_id_for_stack_space_object_id(object_id=object_id)
         if parent_object_id not in tx_region_actual_specs:
             raise RuntimeError(
-                "tx_region_actual_pcb object must have owning tx_region_actual tile "
+                "tx_region_actual_stack_space object must have owning tx_region_actual tile "
                 f"(object_id={object_id}, parent_object_id={parent_object_id})"
             )
         tile_spec = tx_region_actual_specs[parent_object_id]
         tile_top_z = tile_spec.origin_xyz[2] + tile_spec.size_xyz[2]
         tile_bottom_z = tile_spec.origin_xyz[2]
-        pcb_canonical = member_object["canonical_coordinates"]
-        pcb_min_xyz = cast(tuple[float, float, float], pcb_canonical["outer_bounds_min_xyz"])
-        pcb_size_xyz = cast(tuple[float, float, float], pcb_canonical["outer_bounds_size_xyz"])
-        pcb_center = (
-            pcb_min_xyz[0] + (pcb_size_xyz[0] * 0.5),
-            pcb_min_xyz[1] + (pcb_size_xyz[1] * 0.5),
-            pcb_min_xyz[2] + (pcb_size_xyz[2] * 0.5),
+        stack_space_canonical = member_object["canonical_coordinates"]
+        stack_space_min_xyz = cast(tuple[float, float, float], stack_space_canonical["outer_bounds_min_xyz"])
+        stack_space_size_xyz = cast(tuple[float, float, float], stack_space_canonical["outer_bounds_size_xyz"])
+        stack_space_center = (
+            stack_space_min_xyz[0] + (stack_space_size_xyz[0] * 0.5),
+            stack_space_min_xyz[1] + (stack_space_size_xyz[1] * 0.5),
+            stack_space_min_xyz[2] + (stack_space_size_xyz[2] * 0.5),
         )
-        rotated_shape, rotated_canonical = _rotate_tx_region_actual_pcb_shape_toward_center(
-            shape=shape_by_object_id[object_id],
-            final_body_center=pcb_center,
+        transform = _resolve_tx_region_actual_stack_space_tilt_transform(
+            shape_for_shift=shape_by_object_id[object_id],
+            rotation_basis_center=stack_space_center,
             rx_center=rx_center,
             tile_bottom_z=tile_bottom_z,
             tile_top_z=tile_top_z,
         )
+        rotated_shape = apply_tx_region_actual_stack_space_tilt_transform(
+            shape=shape_by_object_id[object_id],
+            transform=transform,
+        )
         rotated_shape.label = object_id
         shape_by_object_id[object_id] = rotated_shape
+        rotated_canonical = _canonical_from_shape(shape=rotated_shape)
         member_object["canonical_coordinates"] = rotated_canonical
         member_objects[member_index] = member_object
+        stack_space_tilt_placements[object_id] = {
+            "transform": transform,
+            "tile_bottom_z": tile_bottom_z,
+            "tile_top_z": tile_top_z,
+            "parent_tx_region_actual_object_id": parent_object_id,
+            "stack_space_canonical_coordinates": rotated_canonical,
+        }
 
     shape_labels = tuple(shape.label for shape in shapes)
     tilted_shapes = tuple(
@@ -391,7 +410,130 @@ def _build_non_model_scene_entry_and_shapes(
     non_model_entry["canonical_coordinates"] = _canonical_from_shape(
         bd.Compound(children=tilted_shapes, label=non_model_entry["object_id"])
     )
-    return non_model_entry, tilted_shapes
+    return non_model_entry, tilted_shapes, stack_space_tilt_placements
+
+
+def _build_tx_rect_void_columns_scene_data(
+    *,
+    modeled_spec: ModeledTxRectVoidColumnsSpec,
+    resolved_non_model_specs: tuple[NonModelBoxSpec, ...],
+    stack_space_tilt_placements: dict[str, dict[str, object]],
+    seed: int,
+) -> tuple[tuple[bd.Shape, ...], ModeledObjectSceneData]:
+    stack_space_specs = tuple(
+        spec for spec in resolved_non_model_specs if spec.kind == "tx_region_actual_stack_space"
+    )
+    if len(stack_space_specs) == 0:
+        raise RuntimeError("tx_rect_void_columns requires resolved tx_region_actual_stack_space members")
+    build_result: TxRectVoidColumnsBuildResult = build_tx_rect_void_columns_axis_aligned_tile_scenes(
+        spec=modeled_spec,
+        stack_space_specs=stack_space_specs,
+        seed=seed,
+    )
+    transformed_shapes: list[bd.Shape] = []
+    tile_metadata: list[dict[str, object]] = []
+    pcb_layer_positions: list[float] = []
+    copper_layer_positions: list[float] = []
+    for tile_scene in build_result.tile_scenes:
+        stack_space_object_id = tile_scene.stack_space_object_id
+        if stack_space_object_id not in stack_space_tilt_placements:
+            raise RuntimeError(
+                "tx_rect_void_columns requires tilt placement metadata for each stack-space tile "
+                f"(missing={stack_space_object_id})"
+            )
+        tilt_placement = stack_space_tilt_placements[stack_space_object_id]
+        transform = tilt_placement["transform"]
+        if not isinstance(transform, TxRegionActualStackSpaceTiltTransform):
+            raise RuntimeError(
+                "tx_rect_void_columns tilt placement transform is missing "
+                f"(stack_space_object_id={stack_space_object_id})"
+            )
+        transformed_tile_shapes: list[bd.Shape] = []
+        tile_body_names: list[str] = []
+        for shape in tile_scene.scene_shapes:
+            transformed_shape = apply_tx_region_actual_stack_space_tilt_transform(
+                shape=shape,
+                transform=transform,
+            )
+            transformed_shape.label = shape.label
+            transformed_shapes.append(transformed_shape)
+            transformed_tile_shapes.append(transformed_shape)
+            tile_body_names.append(transformed_shape.label)
+            bounds = transformed_shape.bounding_box()
+            if "_pcb_l" in transformed_shape.label:
+                pcb_layer_positions.append(bounds.min.Z)
+            if "_cu_l" in transformed_shape.label:
+                copper_layer_positions.append(bounds.min.Z)
+        stack_space_canonical = cast(dict[str, object], tilt_placement["stack_space_canonical_coordinates"])
+        stack_space_min_xyz = cast(tuple[float, float, float], stack_space_canonical["outer_bounds_min_xyz"])
+        stack_space_max_xyz = cast(tuple[float, float, float], stack_space_canonical["outer_bounds_max_xyz"])
+        containment_tolerance_mm = 5e-2
+        for transformed_shape in transformed_tile_shapes:
+            bbox = transformed_shape.bounding_box()
+            if (
+                bbox.min.X < stack_space_min_xyz[0] - containment_tolerance_mm
+                or bbox.min.Y < stack_space_min_xyz[1] - containment_tolerance_mm
+                or bbox.min.Z < stack_space_min_xyz[2] - containment_tolerance_mm
+                or bbox.max.X > stack_space_max_xyz[0] + containment_tolerance_mm
+                or bbox.max.Y > stack_space_max_xyz[1] + containment_tolerance_mm
+                or bbox.max.Z > stack_space_max_xyz[2] + containment_tolerance_mm
+            ):
+                raise RuntimeError(
+                    "tx_rect_void_columns body must remain inside its owning tilted stack-space member bbox "
+                    f"(stack_space_object_id={stack_space_object_id}, body_name={transformed_shape.label}, "
+                    f"body_min={(bbox.min.X, bbox.min.Y, bbox.min.Z)}, body_max={(bbox.max.X, bbox.max.Y, bbox.max.Z)}, "
+                    f"stack_space_min={stack_space_min_xyz}, stack_space_max={stack_space_max_xyz})"
+                )
+        tile_metadata.append(
+            {
+                "stack_space_object_id": tile_scene.stack_space_object_id,
+                "tx_region_actual_object_id": tile_scene.tx_region_actual_object_id,
+                "x_index": tile_scene.x_index,
+                "y_index": tile_scene.y_index,
+                "body_names": tuple(tile_body_names),
+            }
+        )
+    expected_names = build_result.expected_exported_body_names
+    actual_names = tuple(shape.label for shape in transformed_shapes)
+    if expected_names != actual_names:
+        raise RuntimeError(
+            "tx_rect_void_columns exported body-name order drifted from deterministic contract "
+            f"(expected={expected_names}, actual={actual_names})"
+        )
+    if len(expected_names) != len(set(expected_names)):
+        raise RuntimeError(
+            "tx_rect_void_columns exported body names must remain unique "
+            f"(count={len(expected_names)})"
+        )
+    compound = bd.Compound(children=tuple(transformed_shapes), label=modeled_spec.object_id)
+    canonical_coordinates: dict[str, object] = dict(_canonical_from_shape(cast(bd.Shape, compound)))
+    canonical_coordinates["pcb_layer_z_positions_mm"] = tuple(sorted(set(round(value, 10) for value in pcb_layer_positions)))
+    canonical_coordinates["copper_layer_z_positions_mm"] = tuple(
+        sorted(set(round(value, 10) for value in copper_layer_positions))
+    )
+    canonical_coordinates["stack_space_tile_members"] = tuple(tile_metadata)
+    scene_data = cast(
+        ModeledObjectSceneData,
+        {
+            "object_id": modeled_spec.object_id,
+            "role": "tx_rect_void_columns",
+            "plane": "XY",
+            "placement_owner_id": "tx_region_actual_stack_space",
+            "material": modeled_spec.material,
+            "model_state": True,
+            "expected_exported_body_names": expected_names,
+            "expected_exported_body_count": len(expected_names),
+            "expected_exported_body_groups": (),
+            "canonical_coordinates": canonical_coordinates,
+            "terminal_metadata": {
+                "kind": "geometry_only",
+                "x_column_count": len({tile["x_index"] for tile in tile_metadata}),
+                "y_tile_count": len({tile["y_index"] for tile in tile_metadata}),
+                "layer_count": build_result.layer_count,
+            },
+        },
+    )
+    return (tuple(transformed_shapes), scene_data)
 
 
 def _ferrite_group_name_for_modeled_role(
@@ -493,6 +635,23 @@ def _require_modeled_expected_body_contract(
                 spec=cast(ModeledTxPlateStackSpec | ModeledRxPlateStackSpec, modeled_spec),
                 seed=seed,
             )
+        elif role == "tx_rect_void_columns":
+            if not isinstance(modeled_spec, ModeledTxRectVoidColumnsSpec):
+                raise ValueError(
+                    "type2 modeled object spec registry must retain ModeledTxRectVoidColumnsSpec "
+                    f"for {object_id} (actual={type(modeled_spec).__name__})"
+                )
+            expected_names = list(expected_body_names)
+            if len(expected_names) == 0:
+                raise ValueError("tx_rect_void_columns must export at least one body")
+            forbidden_tokens = ("tx_copper_stack", "tx_port_sheet", "ferrite", "under_", "vertical_bus")
+            for body_name in expected_names:
+                if any(token in body_name for token in forbidden_tokens):
+                    raise ValueError(
+                        "tx_rect_void_columns must not export ferrite/underlay/stack/bus/port-sheet names "
+                        f"(body_name={body_name})"
+                    )
+            expected_groups = []
         else:
             raise ValueError(f"unsupported modeled object role in type2 ledger: {role}")
         if list(expected_body_names) != expected_names:
@@ -786,6 +945,24 @@ def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path:
                     f"(object_id={modeled_spec.object_id}, actual={terminal_metadata}, expected={expected_terminal_metadata})"
                 )
             continue
+        if isinstance(modeled_spec, ModeledTxRectVoidColumnsSpec):
+            if "kind" not in terminal_metadata:
+                raise RuntimeError(
+                    "tx_rect_void_columns terminal metadata must include geometry-only kind sentinel "
+                    f"(object_id={modeled_spec.object_id})"
+                )
+            raw_kind = terminal_metadata["kind"]
+            if not isinstance(raw_kind, str):
+                raise RuntimeError(
+                    "tx_rect_void_columns terminal metadata kind sentinel must be str "
+                    f"(object_id={modeled_spec.object_id}, actual={raw_kind!r})"
+                )
+            if raw_kind != "geometry_only":
+                raise RuntimeError(
+                    "tx_rect_void_columns terminal metadata kind sentinel must be geometry_only "
+                    f"(object_id={modeled_spec.object_id}, actual={raw_kind!r})"
+                )
+            continue
         if "kind" in terminal_metadata:
             raw_kind = terminal_metadata["kind"]
             if not isinstance(raw_kind, str):
@@ -885,14 +1062,14 @@ def export_type2_step_artifacts(
         seed=seed,
     )
     pcb_derived_specs = tuple(
-        derived_spec for derived_spec in spec.non_model_derived_objects if isinstance(derived_spec, NonModelTxRegionActualPcbSpec)
+        derived_spec for derived_spec in spec.non_model_derived_objects if isinstance(derived_spec, NonModelTxRegionActualStackSpaceSpec)
     )
     if len(pcb_derived_specs) != 1:
         raise RuntimeError(
-            "type2 export requires exactly one tx_region_actual_pcb derived spec "
+            "type2 export requires exactly one tx_region_actual_stack_space derived spec "
             f"(actual={len(pcb_derived_specs)})"
         )
-    tx_region_actual_pcb_tilt_enabled = resolve_tx_region_actual_pcb_tilt_enabled(
+    tx_region_actual_stack_space_tilt_enabled = resolve_tx_region_actual_stack_space_tilt_enabled(
         derived_spec=pcb_derived_specs[0],
         seed=seed,
     )
@@ -900,7 +1077,17 @@ def export_type2_step_artifacts(
     modeled_scene_data: list[ModeledObjectSceneData] = []
     modeled_scene_shapes: list[bd.Shape] = []
     modeled_entries = []
-    for modeled_spec in spec.modeled_objects:
+    tx_rect_void_columns_specs = tuple(
+        modeled_spec
+        for modeled_spec in spec.modeled_objects
+        if isinstance(modeled_spec, ModeledTxRectVoidColumnsSpec)
+    )
+    non_column_modeled_specs = tuple(
+        modeled_spec
+        for modeled_spec in spec.modeled_objects
+        if not isinstance(modeled_spec, ModeledTxRectVoidColumnsSpec)
+    )
+    for modeled_spec in non_column_modeled_specs:
         owner_spec = require_non_model_object_spec(
             spec.non_model_objects,
             object_id=placement_owner_id_for_role(modeled_spec.role),
@@ -934,16 +1121,56 @@ def export_type2_step_artifacts(
         modeled_scene_shapes.extend(current_modeled_scene_shapes)
         modeled_entries.append(modeled_entry)
 
-    rx_center: Point3 | None = None
-    if tx_region_actual_pcb_tilt_enabled == 1:
+    if tx_region_actual_stack_space_tilt_enabled != 1:
+        raise RuntimeError(
+            "type2 export requires tx_region_actual_stack_space.tilt_enabled fixed to 1 "
+            f"(actual={tx_region_actual_stack_space_tilt_enabled})"
+        )
+    rx_modeled_scene_data = tuple(scene_data for scene_data in modeled_scene_data if _is_modeled_rx_object(role=scene_data["role"]))
+    if len(rx_modeled_scene_data) == 1:
         rx_center = _resolve_modeled_rx_center_from_scene_data(
             modeled_scene_data=tuple(modeled_scene_data),
         )
-    non_model_entry, non_model_scene_shapes = _build_non_model_scene_entry_and_shapes(
+    elif len(rx_modeled_scene_data) == 0:
+        rx_region_max_spec = require_non_model_object_spec(resolved_non_model_specs, object_id="rx_region_max")
+        rx_center = (
+            rx_region_max_spec.origin_xyz[0] + (rx_region_max_spec.size_xyz[0] * 0.5),
+            rx_region_max_spec.origin_xyz[1] + (rx_region_max_spec.size_xyz[1] * 0.5),
+            rx_region_max_spec.origin_xyz[2] + (rx_region_max_spec.size_xyz[2] * 0.5),
+        )
+    else:
+        raise RuntimeError(
+            "type2 tilt-enabled tx_region_actual_stack_space requires exactly one modeled RX object when present "
+            f"(actual={len(rx_modeled_scene_data)})"
+        )
+    non_model_entry, non_model_scene_shapes, stack_space_tilt_placements = _build_non_model_scene_entry_and_shapes(
         resolved_non_model_specs=resolved_non_model_specs,
-        tilt_enabled=tx_region_actual_pcb_tilt_enabled,
+        tilt_enabled=tx_region_actual_stack_space_tilt_enabled,
         rx_center=rx_center,
     )
+
+    for modeled_spec in tx_rect_void_columns_specs:
+        current_modeled_scene_shapes, scene_data = _build_tx_rect_void_columns_scene_data(
+            modeled_spec=modeled_spec,
+            resolved_non_model_specs=resolved_non_model_specs,
+            stack_space_tilt_placements=stack_space_tilt_placements,
+            seed=seed,
+        )
+        metadata_path = object_metadata_dir / f"{modeled_spec.object_id}.metadata.json"
+        write_modeled_source_metadata(
+            metadata_path=metadata_path,
+            source_toml_path=toml_path,
+            scene_step_path=scene_step_path,
+            scene_data=scene_data,
+        )
+        modeled_entry = build_modeled_object_ledger_entry(
+            scene_data=scene_data,
+            source_metadata_path=metadata_path,
+        )
+        modeled_scene_data.append(scene_data)
+        modeled_scene_shapes.extend(current_modeled_scene_shapes)
+        modeled_entries.append(modeled_entry)
+
     non_model_entries = [non_model_entry]
     scene_shapes = [*non_model_scene_shapes, *modeled_scene_shapes]
 

@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 14:30
+updated: 2026-04-20 @ 21:05
 tags:
   - tests
   - type2
@@ -13,7 +13,7 @@ tags:
 ## Source
 - Path: `tests/type2/test_generate_type2_step.py`
 - Code note path: `sdd/code/tests/type2/test_generate_type2_step.py.md`
-- Direct owner: [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]], [[sdd/plans/0.2.22-type2-tx-actual-region-pcb-non-model]]
+- Direct owner: [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-actual-region-pcb-non-model]], [[sdd/plans/0.2.22-type2-tx-rect-void-columns-geometry]]
 - Direct verification target: [[sdd/code/entry/generate_type2_step.py]]
 
 ## 역할
@@ -24,8 +24,15 @@ tags:
 - active fixed example loader expects one modeled object: RX `rx_single_coil`
 - active fixed example also expects derived non-model `tx_region_actual` with fixed 0.3 X/Y usage ratios and 1x1 division.
 - export ledger coverage verifies `tx_region_actual` is min-X anchored, Y-centered, full-Z relative to `tx_region`, and can resolve to 3x3 concrete tiles.
-- export ledger coverage verifies `tx_region_actual_pcb` bodies are generated one-for-one with concrete `tx_region_actual` tiles, with fixed 5 mm thickness, top face on each tile top face, and scale-derived similar footprint.
-- export coverage verifies `tilt_enabled = 1` rotates only the PCB bodies toward the modeled RX center, keeps guide tiles axis-aligned, and clamps tilted PCB bounding boxes under owning tile tops.
+- export ledger coverage verifies `tx_region_actual_stack_space` bodies are generated one-for-one with concrete `tx_region_actual` tiles, with fixed `total_thickness_mm = 5.0`, top-face alignment before tilt, and scale-derived similar footprint.
+- export coverage verifies `tilt_enabled = 1` rotates only the stack-space bodies toward the modeled RX center, keeps guide tiles axis-aligned, and clamps tilted stack-space bounding boxes under owning tile tops.
+- `tx_rect_void_columns` geometry-only export tests verify:
+  - realized body count tracks `x_division_count * y_division_count * layer_count * 2` (PCB/copper per layer per realized tile),
+  - no `tx_copper_stack`, no vertical bus, no TX port sheet, no TX ferrite/underlay labels,
+  - unrealized column turn fields (`turn_count_x1/x2` when columns are not realized) do not perturb exported geometry,
+  - realized column turn fields perturb geometry for the corresponding realized X-column,
+  - TX column outer footprint is inherited from each realized `tx_region_actual_stack_space` tile instead of a modeled-object outer usage ratio,
+  - modeled TX bodies remain within realized `tx_region_actual_stack_space` bounds.
 - RX single-coil public schema uses `outer_x_usage_ratio` / `outer_y_usage_ratio`; parser resolves owner-span-scaled `outer_x_mm` / `outer_y_mm` for core delegation.
 - single-coil public schema uses `void_usage_ratio` for centered equal X/Y void size; legacy type2 single-coil `outer_*_mm` and split/centered `void_*` public keys are unsupported.
 - `examples/type2_sweep.toml` is the mutable sampling SSOT and this test file must not pin its concrete sweep values.
@@ -69,5 +76,5 @@ tags:
 ## 변경 시 주의점
 - fixed example role drift와 mixed-pair exact-name order drift를 같은 테스트 층에서 잡아야 한다.
 - sweep example TOML 값 변경은 authoring change로 취급하며, parser/export unit tests가 구체 range 값을 검사하지 않는다.
-- `tx_region_actual` fixture updates must keep backend non-model import fixture member names in sync, including multi-tile names.
+- `tx_region_actual` fixture updates must keep backend non-model import fixture member names in sync, including multi-tile names and `tx_region_actual_stack_space_*` companions.
 - exact name/order drift 검사는 pre-unite segment contracts와 final export-contract를 함께 검증해야 한다. RX and single-branch TX stay at `6`; TX arrays expand branch-local non-copper names.

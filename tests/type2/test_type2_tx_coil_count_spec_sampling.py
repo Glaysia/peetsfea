@@ -8,7 +8,7 @@ from peetsfea.type2_sampled import exportable_sampled_owner_paths
 from peetsfea.type2_sampled import sampled_owner_values
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
-from peetsfea.type2_step_spec import NonModelTxRegionActualPcbSpec
+from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec import resolve_modeled_tx_array_x_usage_ratio
 from peetsfea.type2_step_spec import resolve_modeled_tx_coil_count
 
@@ -17,7 +17,7 @@ def _type2_plate_stack_toml(
     *,
     tx_tx_coil_count_range: str,
     tx_array_x_usage_ratio_range: str = "[false, 1.0, 1.0, 1]",
-    tx_region_actual_pcb_tilt_enabled_range: str = "[true, 1, 1, 1]",
+    tx_region_actual_stack_space_tilt_enabled_range: str = "[true, 1, 1, 1]",
     rx_tx_only_block: str = "",
 ) -> str:
     return f"""
@@ -83,15 +83,14 @@ range = [true, 1, 1, 1]
 range = [true, 1, 1, 1]
 
 [[non_model_objects]]
-id = "tx_region_actual_pcb"
-kind = "tx_region_actual_pcb"
+id = "tx_region_actual_stack_space"
+kind = "tx_region_actual_stack_space"
 source_region_id = "tx_region_actual"
-material = "FR4_epoxy"
-thickness_mm = 5.0
+total_thickness_mm = 5.0
 [non_model_objects.scale_ratio]
 range = [false, 0.35, 0.35, 1]
 [non_model_objects.tilt_enabled]
-range = {tx_region_actual_pcb_tilt_enabled_range}
+range = {tx_region_actual_stack_space_tilt_enabled_range}
 
 [[modeled_objects]]
 object_id = "tx_plate_stack"
@@ -147,12 +146,16 @@ def _tx_spec_from_loaded_spec(toml_path: Path) -> ModeledTxPlateStackSpec:
     return tx_spec
 
 
-def _tx_region_actual_pcb_spec_from_loaded_spec(toml_path: Path) -> NonModelTxRegionActualPcbSpec:
+def _tx_region_actual_stack_space_spec_from_loaded_spec(toml_path: Path) -> NonModelTxRegionActualStackSpaceSpec:
     spec = load_type2_step_spec(toml_path)
-    pcb_specs = [derived_spec for derived_spec in spec.non_model_derived_objects if derived_spec.object_id == "tx_region_actual_pcb"]
+    pcb_specs = [
+        derived_spec
+        for derived_spec in spec.non_model_derived_objects
+        if derived_spec.object_id == "tx_region_actual_stack_space"
+    ]
     assert len(pcb_specs) == 1
     pcb_spec = pcb_specs[0]
-    assert isinstance(pcb_spec, NonModelTxRegionActualPcbSpec)
+    assert isinstance(pcb_spec, NonModelTxRegionActualStackSpaceSpec)
     return pcb_spec
 
 
@@ -224,23 +227,23 @@ def test_tx_array_x_usage_ratio_rejects_noncanonical_nonfixed_range(tmp_path: Pa
         load_type2_step_spec(toml_path)
 
 
-def test_tx_region_actual_pcb_tilt_enabled_accepts_only_fixed_on_range(tmp_path: Path) -> None:
+def test_tx_region_actual_stack_space_tilt_enabled_accepts_only_fixed_on_range(tmp_path: Path) -> None:
     fixed_path = _write_toml(
         tmp_path,
         text=_type2_plate_stack_toml(
             tx_tx_coil_count_range="[true, 2, 2, 1]",
             tx_array_x_usage_ratio_range="[false, 1.0, 1.0, 1]",
-            tx_region_actual_pcb_tilt_enabled_range="[true, 1, 1, 1]",
+            tx_region_actual_stack_space_tilt_enabled_range="[true, 1, 1, 1]",
         ),
     )
-    fixed_pcb_spec = _tx_region_actual_pcb_spec_from_loaded_spec(fixed_path)
+    fixed_pcb_spec = _tx_region_actual_stack_space_spec_from_loaded_spec(fixed_path)
 
     assert fixed_pcb_spec.tilt_enabled.start == 1.0
     assert fixed_pcb_spec.tilt_enabled.end == 1.0
     assert fixed_pcb_spec.tilt_enabled.count == 1
 
 
-def test_tx_region_actual_pcb_tilt_enabled_rejects_non_fixed_on_ranges(tmp_path: Path) -> None:
+def test_tx_region_actual_stack_space_tilt_enabled_rejects_non_fixed_on_ranges(tmp_path: Path) -> None:
     wrong_is_integer_toml = _type2_plate_stack_toml(tx_tx_coil_count_range="[true, 1, 4, 4]").replace(
         "[non_model_objects.tilt_enabled]\nrange = [true, 1, 1, 1]",
         "[non_model_objects.tilt_enabled]\nrange = [false, 0, 1, 2]",
@@ -264,7 +267,7 @@ def test_tx_region_actual_pcb_tilt_enabled_rejects_non_fixed_on_ranges(tmp_path:
 
     noncanonical_integer_toml = _type2_plate_stack_toml(
         tx_tx_coil_count_range="[true, 1, 4, 4]",
-        tx_region_actual_pcb_tilt_enabled_range="[true, 0, 1, 3]",
+        tx_region_actual_stack_space_tilt_enabled_range="[true, 0, 1, 3]",
     )
     with pytest.raises(
         ValueError,

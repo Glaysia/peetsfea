@@ -1,7 +1,7 @@
 ---
 title: type2_step_export.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 14:08
+updated: 2026-04-20 @ 23:55
 tags:
   - step-export
   - export
@@ -57,6 +57,8 @@ tags:
 - imported body handoff는 copper/ferrite role body names를 그대로 사용하며, copper 그룹은 `g_copper_tx`, `g_copper_rx`로, ferrite 그룹은 `g_ferrite_tx`, `g_ferrite_rx`로 복원해야 한다.
 - reporter phase surface는 `build_scene`, `export_scene_step`, `finalize_step_artifacts`로 제한한다.
 - Full-scene export must carry resolved `tx_region_actual` tile bodies as non-model members in the shared non-model scene ledger.
+- Full-scene export must carry resolved `tx_region_actual_stack_space` materialless tile members and apply deterministic tilt transforms shared with geometry-only TX column bodies.
+- `tx_rect_void_columns` modeled export is geometry-only: per realized X/Y tile and layer it emits PCB+copper bodies only, with no ferrite/underlay, no `tx_copper_stack`, no terminal bus/port sheet, and no source/connection metadata.
 
 ## Invariants / fail-fast
 - export body names/count는 role contract와 exact match여야 한다.
@@ -69,11 +71,13 @@ tags:
 - exported solid pair positive-volume overlap은 fail-fast failure다.
 - plate role body-order drift는 import-side exact-name contract drift다.
 - plate role `terminal_metadata.kind`는 `stub_port` 외 값을 허용하지 않는다.
+- `tx_rect_void_columns` must emit `terminal_metadata.kind = "geometry_only"` and skip single-coil/plate port-sheet validation flow.
 - reporter callback은 progress visibility only이며 exporter의 fail-fast contract를 완화하지 않는다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_plate_stack.py]]
 - [[sdd/code/src/peetsfea/type2_step_scene.py]]
+- [[sdd/code/src/peetsfea/type2_tx_rect_void_columns.py]]
 - [[sdd/code/src/peetsfea/type2_step_ledger.py]]
 - [[sdd/code/src/peetsfea/type2_sampled.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py]]

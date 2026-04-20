@@ -16,10 +16,11 @@ from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
+from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelDerivedSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
-from peetsfea.type2_step_spec import NonModelTxRegionActualPcbSpec
+from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
@@ -40,6 +41,7 @@ _INTEGER_RANGE_FIELD_NAMES = (
 _SAMPLED_METADATA_TABLE = "sampled"
 _SAMPLED_SINGLE_COIL_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
 _PLATE_STACK_ROLE_SUFFIX = "_plate_stack"
+_TX_REGION_ACTUAL_X_DIVISION_OWNER_PATH = "non_model_objects.tx_region_actual.x_division_count"
 
 
 class Type2SampleMetadata(TypedDict):
@@ -124,8 +126,8 @@ def _derived_non_model_range_owner_specs(
 ) -> tuple[tuple[str, RangeSpec], ...]:
     if isinstance(non_model_spec, NonModelTxRegionActualSpec):
         return _tx_region_actual_range_owner_specs(non_model_spec)
-    if isinstance(non_model_spec, NonModelTxRegionActualPcbSpec):
-        return _tx_region_actual_pcb_range_owner_specs(non_model_spec)
+    if isinstance(non_model_spec, NonModelTxRegionActualStackSpaceSpec):
+        return _tx_region_actual_stack_space_range_owner_specs(non_model_spec)
     raise RuntimeError(f"unsupported non-model derived spec: {type(non_model_spec).__name__}")
 
 
@@ -146,8 +148,8 @@ def _tx_region_actual_range_owner_specs(
     )
 
 
-def _tx_region_actual_pcb_range_owner_specs(
-    non_model_spec: NonModelTxRegionActualPcbSpec,
+def _tx_region_actual_stack_space_range_owner_specs(
+    non_model_spec: NonModelTxRegionActualStackSpaceSpec,
 ) -> tuple[tuple[str, RangeSpec], ...]:
     return (
         (f"non_model_objects.{non_model_spec.object_id}.scale_ratio", non_model_spec.scale_ratio),
@@ -166,12 +168,31 @@ def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpe
         if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
             owner_specs.extend(_plate_stack_range_owner_specs(cast(ModeledPlateStackSpec, modeled_spec)))
             continue
+        if role == "tx_rect_void_columns":
+            owner_specs.extend(_tx_rect_void_columns_all_range_owner_specs(cast(ModeledTxRectVoidColumnsSpec, modeled_spec)))
+            continue
         raise RuntimeError(f"unsupported modeled object role for sampled owner resolution: {role}")
     return tuple(owner_specs)
 
 
 def _all_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpec], ...]:
     return _non_model_range_owner_specs(spec) + _modeled_range_owner_specs(spec)
+
+
+def _tx_rect_void_columns_all_range_owner_specs(
+    modeled_spec: ModeledTxRectVoidColumnsSpec,
+) -> tuple[tuple[str, RangeSpec], ...]:
+    return (
+        (f"modeled_objects.{modeled_spec.object_id}.layer_count", modeled_spec.layer_count),
+        (f"modeled_objects.{modeled_spec.object_id}.layer_gap_mm", modeled_spec.layer_gap_mm),
+        (f"modeled_objects.{modeled_spec.object_id}.terminal_stub_length_mm", modeled_spec.terminal_stub_length_mm),
+        (f"modeled_objects.{modeled_spec.object_id}.void_usage_ratio", modeled_spec.void_usage_ratio),
+        (f"modeled_objects.{modeled_spec.object_id}.margin_ratio", modeled_spec.margin_ratio),
+        (f"modeled_objects.{modeled_spec.object_id}.metal_fill_factor", modeled_spec.metal_fill_factor),
+        (f"modeled_objects.{modeled_spec.object_id}.turn_count_x0", modeled_spec.turn_count_x0),
+        (f"modeled_objects.{modeled_spec.object_id}.turn_count_x1", modeled_spec.turn_count_x1),
+        (f"modeled_objects.{modeled_spec.object_id}.turn_count_x2", modeled_spec.turn_count_x2),
+    )
 
 
 def _single_coil_range_owner_specs(
@@ -230,8 +251,64 @@ def _plate_stack_range_owner_specs(
     return tuple(owner_specs)
 
 
+def _is_tx_rect_void_columns_turn_owner(owner_path: str) -> bool:
+    return owner_path in (
+        "modeled_objects.tx_rect_void_columns.turn_count_x0",
+        "modeled_objects.tx_rect_void_columns.turn_count_x1",
+        "modeled_objects.tx_rect_void_columns.turn_count_x2",
+    )
+
+
+def _resolved_tx_region_actual_x_division_count(spec: Type2StepSpec, *, seed: int) -> int:
+    tx_region_actual_specs = tuple(
+        non_model_spec for non_model_spec in spec.non_model_derived_objects if isinstance(non_model_spec, NonModelTxRegionActualSpec)
+    )
+    if len(tx_region_actual_specs) != 1:
+        raise RuntimeError("type2 sampled owner resolution requires tx_region_actual x_division_count range")
+    x_division_count_range_spec = tx_region_actual_specs[0].x_division_count
+    resolved_value = _selected_value_for_owner_path(
+        x_division_count_range_spec,
+        owner_path=_TX_REGION_ACTUAL_X_DIVISION_OWNER_PATH,
+        seed=seed,
+    )
+    if isinstance(resolved_value, bool) or not isinstance(resolved_value, int):
+        raise RuntimeError(
+            "resolved tx_region_actual.x_division_count must be int "
+            f"(actual_type={type(resolved_value).__name__})"
+        )
+    if resolved_value < 1 or resolved_value > 3:
+        raise ValueError(
+            "resolved tx_region_actual.x_division_count must be within [1, 3] "
+            f"(actual={resolved_value})"
+        )
+    return resolved_value
+
+
+def _effective_range_owner_specs(spec: Type2StepSpec, *, seed: int) -> tuple[tuple[str, RangeSpec], ...]:
+    resolved_x_division_count = _resolved_tx_region_actual_x_division_count(spec, seed=seed)
+    owner_specs: list[tuple[str, RangeSpec]] = []
+    for owner_path, range_spec in _all_range_owner_specs(spec):
+        if not _is_tx_rect_void_columns_turn_owner(owner_path):
+            owner_specs.append((owner_path, range_spec))
+            continue
+        if resolved_x_division_count >= 1 and owner_path.endswith(".turn_count_x0"):
+            owner_specs.append((owner_path, range_spec))
+            continue
+        if resolved_x_division_count >= 2 and owner_path.endswith(".turn_count_x1"):
+            owner_specs.append((owner_path, range_spec))
+            continue
+        if resolved_x_division_count >= 3 and owner_path.endswith(".turn_count_x2"):
+            owner_specs.append((owner_path, range_spec))
+            continue
+    return tuple(owner_specs)
+
+
 def exportable_sampled_owner_paths(spec: Type2StepSpec) -> tuple[str, ...]:
     return tuple(owner_path for owner_path, range_spec in _all_range_owner_specs(spec) if range_spec.count != 1)
+
+
+def exportable_sampled_owner_paths_for_seed(spec: Type2StepSpec, *, seed: int) -> tuple[str, ...]:
+    return tuple(owner_path for owner_path, range_spec in _effective_range_owner_specs(spec, seed=seed) if range_spec.count != 1)
 
 
 def _range_spec_for_owner_path(spec: Type2StepSpec, owner_path: str) -> RangeSpec:
@@ -286,7 +363,7 @@ def _selected_value_for_owner_path(range_spec: RangeSpec, *, owner_path: str, se
 
 def sampled_owner_values(spec: Type2StepSpec, *, seed: int) -> tuple[tuple[str, SampledScalar], ...]:
     sampled_values: list[tuple[str, SampledScalar]] = []
-    for owner_path, range_spec in _all_range_owner_specs(spec):
+    for owner_path, range_spec in _effective_range_owner_specs(spec, seed=seed):
         if range_spec.count == 1:
             continue
         sampled_values.append(
@@ -990,7 +1067,7 @@ def _design_variable_name(owner_path: str) -> str:
 
 def _design_variable_expression(owner_path: str, value: SampledScalar) -> str:
     field_name = owner_path.split(".")[-1]
-    if field_name in _INTEGER_RANGE_FIELD_NAMES:
+    if field_name in _INTEGER_RANGE_FIELD_NAMES or field_name.startswith("turn_count_x"):
         return str(int(value))
     if field_name.endswith("_ratio") or field_name.endswith("_factor") or "_over_" in field_name:
         return str(float(value))
@@ -1033,17 +1110,28 @@ def prepare_type2_build(sampled_toml_path: Path) -> PreparedType2Build:
             "type2 build input TOML modeled roles must match source TOML "
             f"(expected={source_modeled_roles}, actual={sampled_modeled_roles})"
         )
-    expected_sampled_owner_paths = exportable_sampled_owner_paths(source_spec)
+    expected_sampled_owner_paths = exportable_sampled_owner_paths_for_seed(source_spec, seed=metadata["seed"])
     if tuple(metadata["sampled_owner_paths"]) != expected_sampled_owner_paths:
         raise ValueError(
             "type2 sampled TOML metadata must exactly match source exportable sampled owners "
             f"(expected={expected_sampled_owner_paths}, actual={tuple(metadata['sampled_owner_paths'])})"
         )
+    expected_owner_path_set = set(expected_sampled_owner_paths)
     for owner_path, range_spec in _all_range_owner_specs(sampled_spec):
+        if owner_path in expected_owner_path_set:
+            if range_spec.count != 1:
+                raise ValueError(f"type2 build input TOML must freeze sampled owner to count=1: {owner_path}")
+            if range_spec.start != range_spec.end:
+                raise ValueError(f"type2 build input TOML must freeze sampled owner with identical bounds: {owner_path}")
+            continue
+        if _is_tx_rect_void_columns_turn_owner(owner_path):
+            continue
         if range_spec.count != 1:
-            raise ValueError(f"type2 build input TOML must freeze all range owners to count=1: {owner_path}")
+            raise ValueError(f"type2 build input TOML must freeze non-sampled range owners to count=1: {owner_path}")
         if range_spec.start != range_spec.end:
-            raise ValueError(f"type2 build input TOML must freeze range owners with identical bounds: {owner_path}")
+            raise ValueError(
+                f"type2 build input TOML must freeze non-sampled range owners with identical bounds: {owner_path}"
+            )
     design_variables = tuple(
         (
             _design_variable_name(owner_path),
@@ -1102,6 +1190,7 @@ __all__ = [
     "build_type2_sample_manifest_document",
     "build_sample_manifest_entry",
     "exportable_sampled_owner_paths",
+    "exportable_sampled_owner_paths_for_seed",
     "generate_sample_manifest_entries",
     "load_type2_sample_manifest",
     "load_type2_sample_metadata",

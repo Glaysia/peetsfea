@@ -1,7 +1,7 @@
 ---
 title: type2_sampled.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-20 @ 14:30
+updated: 2026-04-20 @ 20:35
 tags:
   - sampling
   - build
@@ -13,7 +13,7 @@ tags:
 - Path: `src/peetsfea/type2_sampled.py`
 - Code note path: `sdd/code/src/peetsfea/type2_sampled.py.md`
 - Status: active
-- Related feature plans: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]]
+- Related feature plans: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]], [[sdd/plans/0.2.22-type2-tx-rect-void-columns-geometry]]
 
 ## 역할
 - type2 sampled owner-path selection, frozen sampled TOML rendering, manifest/build planning을 담당한다.
@@ -26,8 +26,11 @@ tags:
 ## Canonical state
 - sampled owner canonical paths are `modeled_objects.<object_id>.<field>` and `non_model_objects.<object_id>.<field>`.
 - active TX actual-region non-model sampled owners are `non_model_objects.tx_region_actual.x_usage_ratio`, `y_usage_ratio`, `x_division_count`, and `y_division_count`.
-- active TX actual-region PCB non-model sampled owner is `non_model_objects.tx_region_actual_pcb.scale_ratio`.
-- active TX actual-region PCB tilt is fixed on and is not a sampled owner.
+- active TX actual-region stack-space non-model sampled owner is `non_model_objects.tx_region_actual_stack_space.scale_ratio`.
+- active TX actual-region stack-space tilt is fixed on and is not a sampled owner.
+- `tx_rect_void_columns` samples TX shared fields plus effective turn-column owners `turn_count_x*` according to realized `tx_region_actual.x_division_count`.
+- for `tx_rect_void_columns`, effective sampled owner paths are seed-resolved: only realized turn-column owners are exported in metadata/design-variable preparation.
+- `tx_rect_void_columns` has no sampled outer-envelope owner paths; its outer footprint is inherited from the resolved `tx_region_actual_stack_space` tile.
 - active RX single-coil sampled outer envelope owners use `outer_x_usage_ratio` and `outer_y_usage_ratio`.
 - active single-coil sampled void owner is `void_usage_ratio`; it is unitless and freezes into sampled TOML like other range owners.
 - removed legacy split/centered single-coil `void_*` fields are not sampled owners and must not appear in sampled metadata or build design variables.
@@ -56,6 +59,9 @@ tags:
 - `tx_array_x_usage_ratio` is a floating owner and design variable expression is unitless.
 - non-model usage-ratio design variables are unitless and must freeze into sampled TOML with count `1`, same as modeled usage ratios.
 - non-model division-count design variables are integer/unitless and must freeze into sampled TOML with count `1`.
+- `tx_rect_void_columns.turn_count_x*` owners must be frozen only when their column is realized by resolved `tx_region_actual.x_division_count`.
+- `tx_rect_void_columns.outer_x_usage_ratio` and `outer_y_usage_ratio` must not appear in sampled metadata, replay design variables, or frozen sampled TOML.
+- sampled metadata exact-match validation must use the source TOML and metadata seed to re-resolve effective owner paths before comparison.
 - This file exceeds 800 lines; this narrow extension is allowed, but future sampler restructuring should split ownership first.
 - stage reporting이 실패/지원 여부를 바꾸면 안 되며, exporter failure는 기존처럼 즉시 raise되어야 한다.
 

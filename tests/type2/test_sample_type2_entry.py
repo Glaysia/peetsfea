@@ -15,7 +15,7 @@ import peetsfea.type2_sampled as type2_sampled
 from entry.sample import sample_type2
 from peetsfea.type2_sampled import manifest_entry_for_sample_index
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
-from peetsfea.type2_step_spec import NonModelTxRegionActualPcbSpec
+from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
@@ -25,7 +25,7 @@ _EXPECTED_SAMPLED_OWNER_PATHS = [
     "non_model_objects.tx_region_actual.y_usage_ratio",
     "non_model_objects.tx_region_actual.x_division_count",
     "non_model_objects.tx_region_actual.y_division_count",
-    "non_model_objects.tx_region_actual_pcb.scale_ratio",
+    "non_model_objects.tx_region_actual_stack_space.scale_ratio",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
@@ -40,7 +40,7 @@ _RX_NON_SAMPLED_OWNER_PATHS = [
 
 @dataclass(frozen=True)
 class _FakeRxOnlyType2Spec:
-    non_model_derived_objects: tuple[NonModelTxRegionActualSpec | NonModelTxRegionActualPcbSpec, ...]
+    non_model_derived_objects: tuple[NonModelTxRegionActualSpec | NonModelTxRegionActualStackSpaceSpec, ...]
     modeled_objects: tuple[ModeledRxSingleCoilSpec, ...]
 
 
@@ -62,8 +62,8 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     tx_region_actual_y_usage_ratio = RangeSpec(is_integer=False, start=0.3, end=1.0, count=27)
     tx_region_actual_x_division_count = RangeSpec(is_integer=True, start=1, end=3, count=3)
     tx_region_actual_y_division_count = RangeSpec(is_integer=True, start=1, end=3, count=3)
-    tx_region_actual_pcb_scale_ratio = RangeSpec(is_integer=False, start=0.35, end=0.95, count=25)
-    tx_region_actual_pcb_tilt_enabled = RangeSpec(is_integer=True, start=1, end=1, count=1)
+    tx_region_actual_stack_space_scale_ratio = RangeSpec(is_integer=False, start=0.35, end=0.95, count=25)
+    tx_region_actual_stack_space_tilt_enabled = RangeSpec(is_integer=True, start=1, end=1, count=1)
 
     fake_spec = _FakeRxOnlyType2Spec(
         non_model_derived_objects=(
@@ -76,14 +76,13 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 x_division_count=tx_region_actual_x_division_count,
                 y_division_count=tx_region_actual_y_division_count,
             ),
-            NonModelTxRegionActualPcbSpec(
-                object_id="tx_region_actual_pcb",
-                kind="tx_region_actual_pcb",
+            NonModelTxRegionActualStackSpaceSpec(
+                object_id="tx_region_actual_stack_space",
+                kind="tx_region_actual_stack_space",
                 source_region_id="tx_region_actual",
-                material="FR4_epoxy",
-                thickness_mm=5.0,
-                scale_ratio=tx_region_actual_pcb_scale_ratio,
-                tilt_enabled=tx_region_actual_pcb_tilt_enabled,
+                total_thickness_mm=5.0,
+                scale_ratio=tx_region_actual_stack_space_scale_ratio,
+                tilt_enabled=tx_region_actual_stack_space_tilt_enabled,
             ),
         ),
         modeled_objects=(
@@ -227,11 +226,10 @@ range = [true, 1, 3, 3]
 range = [true, 1, 3, 3]
 
 [[non_model_objects]]
-id = "tx_region_actual_pcb"
-kind = "tx_region_actual_pcb"
+id = "tx_region_actual_stack_space"
+kind = "tx_region_actual_stack_space"
 source_region_id = "tx_region_actual"
-material = "FR4_epoxy"
-thickness_mm = 5.0
+total_thickness_mm = 5.0
 [non_model_objects.scale_ratio]
 range = [false, 0.35, 0.95, 25]
 [non_model_objects.tilt_enabled]
@@ -415,23 +413,23 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert tx_region_actual_y_division_count_range[3] == 1
     assert tx_region_actual_y_division_count_range[1] == tx_region_actual_y_division_count_range[2]
     assert cast(int, tx_region_actual_y_division_count_range[1]) in {1, 2, 3}
-    tx_region_actual_pcb = next(
-        non_model for non_model in non_model_objects if non_model["id"] == "tx_region_actual_pcb"
+    tx_region_actual_stack_space = next(
+        non_model for non_model in non_model_objects if non_model["id"] == "tx_region_actual_stack_space"
     )
-    tx_region_actual_pcb_scale_ratio_range = cast(
-        list[object], cast(dict[str, object], tx_region_actual_pcb["scale_ratio"])["range"]
+    tx_region_actual_stack_space_scale_ratio_range = cast(
+        list[object], cast(dict[str, object], tx_region_actual_stack_space["scale_ratio"])["range"]
     )
-    assert tx_region_actual_pcb_scale_ratio_range[0] is False
-    assert tx_region_actual_pcb_scale_ratio_range[3] == 1
-    assert tx_region_actual_pcb_scale_ratio_range[1] == tx_region_actual_pcb_scale_ratio_range[2]
-    assert 0.35 <= float(cast(int | float, tx_region_actual_pcb_scale_ratio_range[1])) <= 0.95
-    tx_region_actual_pcb_tilt_enabled_range = cast(
-        list[object], cast(dict[str, object], tx_region_actual_pcb["tilt_enabled"])["range"]
+    assert tx_region_actual_stack_space_scale_ratio_range[0] is False
+    assert tx_region_actual_stack_space_scale_ratio_range[3] == 1
+    assert tx_region_actual_stack_space_scale_ratio_range[1] == tx_region_actual_stack_space_scale_ratio_range[2]
+    assert 0.35 <= float(cast(int | float, tx_region_actual_stack_space_scale_ratio_range[1])) <= 0.95
+    tx_region_actual_stack_space_tilt_enabled_range = cast(
+        list[object], cast(dict[str, object], tx_region_actual_stack_space["tilt_enabled"])["range"]
     )
-    assert tx_region_actual_pcb_tilt_enabled_range[0] is True
-    assert tx_region_actual_pcb_tilt_enabled_range[3] == 1
-    assert tx_region_actual_pcb_tilt_enabled_range[1] == tx_region_actual_pcb_tilt_enabled_range[2]
-    assert tx_region_actual_pcb_tilt_enabled_range[1] == 1
+    assert tx_region_actual_stack_space_tilt_enabled_range[0] is True
+    assert tx_region_actual_stack_space_tilt_enabled_range[3] == 1
+    assert tx_region_actual_stack_space_tilt_enabled_range[1] == tx_region_actual_stack_space_tilt_enabled_range[2]
+    assert tx_region_actual_stack_space_tilt_enabled_range[1] == 1
 
     rx_modeled_object = sampled_payload["modeled_objects"][0]
     assert rx_modeled_object["object_id"] == "rx_rect_void_coil"
@@ -569,3 +567,248 @@ def test_sample_type2_can_write_manifest_without_step_artifacts(
         assert Path(entry["scene_step_path"]).exists() is False
         assert Path(entry["step_ledger_path"]).exists() is False
         assert Path(entry["aedt_path"]).exists() is False
+
+
+def _source_type2_toml_text_with_tx_rect_void_columns(
+    *,
+    tx_region_actual_x_division_count_range: str,
+    rx_outer_x_usage_ratio_range: str = "[false, 0.1, 0.6, 17]",
+) -> str:
+    return f"""
+spec_version = "0.2.22"
+schema_id = "peetsfea.type2.step.v6"
+runtime_compatible = false
+
+[design]
+units = "mm"
+
+[backend]
+authoring_tool = "build123d"
+solver_tool = "hfss"
+interchange_format = "step"
+
+[simulation]
+radiation_margin_mm = 3500.0
+
+[outputs]
+report_name = "Output Variables Table1"
+solution_name = "Setup1 : LastAdaptive"
+primary_sweep = "Freq"
+report_category = "Terminal Solution Data"
+plot_type = "Data Table"
+
+[[outputs.variables]]
+name = "Ltx_uH"
+expression = "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"
+
+[[non_model_objects]]
+id = "tx_region"
+kind = "tx_region"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [0.0, -140.0, 0.0]
+size_xyz = [160.0, 280.0, 90.0]
+
+[[non_model_objects]]
+id = "rx_region_max"
+kind = "rx_region_max"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [200.0, -100.0, 0.0]
+size_xyz = [10.0, 200.0, 200.0]
+
+[[non_model_objects]]
+id = "tx_region_actual"
+kind = "tx_region_actual"
+source_region_id = "tx_region"
+[non_model_objects.x_usage_ratio]
+range = [false, 0.3, 1.0, 27]
+[non_model_objects.y_usage_ratio]
+range = [false, 0.3, 1.0, 27]
+[non_model_objects.x_division_count]
+range = {tx_region_actual_x_division_count_range}
+[non_model_objects.y_division_count]
+range = [true, 1, 1, 1]
+
+[[non_model_objects]]
+id = "tx_region_actual_stack_space"
+kind = "tx_region_actual_stack_space"
+source_region_id = "tx_region_actual"
+total_thickness_mm = 5.0
+[non_model_objects.scale_ratio]
+range = [false, 0.35, 0.95, 25]
+[non_model_objects.tilt_enabled]
+range = [true, 1, 1, 1]
+
+[[modeled_objects]]
+object_id = "rx_rect_void_coil"
+role = "rx_single_coil"
+material = "composite"
+model_state = true
+pcb_thickness_mm = 0.3
+copper_thickness_mm = 0.1
+[modeled_objects.outer_x_usage_ratio]
+range = {rx_outer_x_usage_ratio_range}
+[modeled_objects.outer_y_usage_ratio]
+range = [false, 0.1, 0.6, 17]
+[modeled_objects.void_usage_ratio]
+range = [false, 0.1, 0.6, 17]
+[modeled_objects.turn_count]
+range = [true, 2, 6, 5]
+[modeled_objects.layer_count]
+range = [true, 1, 1, 1]
+[modeled_objects.underlay_repeat_count]
+range = [true, 8, 8, 1]
+[modeled_objects.layer_gap_mm]
+range = [false, 2, 2, 1]
+[modeled_objects.terminal_stub_length_mm]
+range = [false, 5, 5, 1]
+[modeled_objects.margin_ratio]
+range = [false, 0.05, 0.05, 1]
+[modeled_objects.metal_fill_factor]
+range = [false, 0.2, 0.6, 15]
+[modeled_objects.terminal_path]
+value = "A_cw_to_a"
+
+[[modeled_objects]]
+object_id = "tx_rect_void_columns"
+role = "tx_rect_void_columns"
+material = "composite"
+model_state = true
+pcb_thickness_mm = 0.3
+copper_thickness_mm = 0.1
+[modeled_objects.layer_count]
+range = [true, 1, 3, 3]
+[modeled_objects.layer_gap_mm]
+range = [false, 2, 2, 1]
+[modeled_objects.terminal_stub_length_mm]
+range = [false, 5, 5, 1]
+[modeled_objects.void_usage_ratio]
+range = [false, 0.1, 0.6, 17]
+[modeled_objects.margin_ratio]
+range = [false, 0.05, 0.05, 1]
+[modeled_objects.metal_fill_factor]
+range = [false, 0.2, 0.6, 15]
+[modeled_objects.terminal_path]
+value = "A_cw_to_a"
+[modeled_objects.turn_count_x0]
+range = [true, 2, 6, 5]
+[modeled_objects.turn_count_x1]
+range = [true, 2, 6, 5]
+[modeled_objects.turn_count_x2]
+range = [true, 2, 6, 5]
+""".strip()
+
+
+def test_tx_rect_void_columns_shared_sampling_is_independent_from_rx_sampling(tmp_path: Path) -> None:
+    x2_source_path = tmp_path / "type2_tx_rect_x2_source.toml"
+    x2_source_path.write_text(
+        _source_type2_toml_text_with_tx_rect_void_columns(
+            tx_region_actual_x_division_count_range="[true, 2, 2, 1]",
+            rx_outer_x_usage_ratio_range="[false, 0.1, 0.6, 17]",
+        ),
+        encoding="utf-8",
+    )
+    x2_shifted_rx_source_path = tmp_path / "type2_tx_rect_x2_shifted_rx_source.toml"
+    x2_shifted_rx_source_path.write_text(
+        _source_type2_toml_text_with_tx_rect_void_columns(
+            tx_region_actual_x_division_count_range="[true, 2, 2, 1]",
+            rx_outer_x_usage_ratio_range="[false, 0.2, 0.5, 7]",
+        ),
+        encoding="utf-8",
+    )
+
+    baseline_spec = load_type2_step_spec(x2_source_path)
+    shifted_rx_spec = load_type2_step_spec(x2_shifted_rx_source_path)
+
+    baseline_values = dict(type2_sampled.sampled_owner_values(baseline_spec, seed=17))
+    shifted_rx_values = dict(type2_sampled.sampled_owner_values(shifted_rx_spec, seed=17))
+
+    tx_shared_owner_paths = (
+        "modeled_objects.tx_rect_void_columns.void_usage_ratio",
+        "modeled_objects.tx_rect_void_columns.metal_fill_factor",
+    )
+    for owner_path in tx_shared_owner_paths:
+        assert baseline_values[owner_path] == shifted_rx_values[owner_path]
+    assert (
+        baseline_values["modeled_objects.rx_rect_void_coil.outer_x_usage_ratio"]
+        != shifted_rx_values["modeled_objects.rx_rect_void_coil.outer_x_usage_ratio"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("x_division_count_range", "expected_active_owner_paths", "expected_inactive_owner_paths"),
+    [
+        (
+            "[true, 1, 1, 1]",
+            ("modeled_objects.tx_rect_void_columns.turn_count_x0",),
+            (
+                "modeled_objects.tx_rect_void_columns.turn_count_x1",
+                "modeled_objects.tx_rect_void_columns.turn_count_x2",
+            ),
+        ),
+        (
+            "[true, 2, 2, 1]",
+            (
+                "modeled_objects.tx_rect_void_columns.turn_count_x0",
+                "modeled_objects.tx_rect_void_columns.turn_count_x1",
+            ),
+            ("modeled_objects.tx_rect_void_columns.turn_count_x2",),
+        ),
+        (
+            "[true, 3, 3, 1]",
+            (
+                "modeled_objects.tx_rect_void_columns.turn_count_x0",
+                "modeled_objects.tx_rect_void_columns.turn_count_x1",
+                "modeled_objects.tx_rect_void_columns.turn_count_x2",
+            ),
+            tuple(),
+        ),
+    ],
+)
+def test_sample_type2_tx_rect_void_columns_metadata_tracks_only_effective_turn_count_owners(
+    tmp_path: Path,
+    x_division_count_range: str,
+    expected_active_owner_paths: tuple[str, ...],
+    expected_inactive_owner_paths: tuple[str, ...],
+) -> None:
+    source_toml_path = tmp_path / "type2_tx_rect_source.toml"
+    source_toml_path.write_text(
+        _source_type2_toml_text_with_tx_rect_void_columns(
+            tx_region_actual_x_division_count_range=x_division_count_range,
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+
+    document = sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=11,
+        seed_n=1,
+        sampler_n=1,
+        aedt_builder_n=1,
+        make_step_on_sample=False,
+    )
+
+    manifest_entry = document["entries"][0]
+    owner_paths = cast(list[str], manifest_entry["sampled_owner_paths"])
+    assert "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio" in owner_paths
+    assert "modeled_objects.tx_rect_void_columns.outer_x_usage_ratio" not in owner_paths
+    assert "modeled_objects.tx_rect_void_columns.outer_y_usage_ratio" not in owner_paths
+    for owner_path in expected_active_owner_paths:
+        assert owner_path in owner_paths
+    for owner_path in expected_inactive_owner_paths:
+        assert owner_path not in owner_paths
+
+    sampled_payload = tomllib.loads(Path(manifest_entry["sampled_toml_path"]).read_text(encoding="utf-8"))
+    sampled_metadata_owner_paths = cast(list[str], sampled_payload["sampled"]["sampled_owner_paths"])
+    assert sampled_metadata_owner_paths == owner_paths

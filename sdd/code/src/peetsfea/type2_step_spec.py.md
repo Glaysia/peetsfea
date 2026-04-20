@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 14:30
+updated: 2026-04-20 @ 20:35
 tags:
   - step-export
   - spec
@@ -13,11 +13,11 @@ tags:
 - Path: `src/peetsfea/type2_step_spec.py`
 - Code note path: `sdd/code/src/peetsfea/type2_step_spec.py.md`
 - Status: active
-- Related feature plans: [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]], [[sdd/plans/0.2.22-type2-remove-plate-stack-shoe-contract]], [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]], [[sdd/plans/0.2.22-type2-tx-actual-region-pcb-non-model]]
+- Related feature plans: [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]], [[sdd/plans/0.2.22-type2-remove-plate-stack-shoe-contract]], [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]], [[sdd/plans/0.2.22-type2-tx-actual-region-pcb-non-model]], [[sdd/plans/0.2.22-type2-tx-rect-void-columns-geometry]]
 
 ## 역할
 - type2 TOML object registry를 typed non-model / modeled spec으로 정규화한다.
-- active modeled role set에 `tx_plate_stack`와 `rx_plate_stack`를 포함한 role-aware parser contract를 소유한다.
+- active modeled role set에 `tx_rect_void_columns`를 추가한다.
 
 ## 입력 / 출력
 - 입력: type2 TOML path
@@ -26,12 +26,18 @@ tags:
 ## Canonical state
 - active plate roles는 `tx_plate_stack`와 `rx_plate_stack`다.
 - active type2 schema id는 `peetsfea.type2.step.v6`다.
-- `tx_region` remains the maximum TX reservation non-model box.
+- `tx_region` remains the maximum TX guide box.
 - `tx_region_actual` is a derived non-model sampled box owned by `tx_region`, using `x_usage_ratio`, `y_usage_ratio`, `x_division_count`, and `y_division_count`.
 - `tx_region_actual` anchors at `tx_region.min_x`, centers on `tx_region` Y, and preserves full `tx_region` Z.
-- `tx_region_actual_pcb` is a derived non-model sampled PCB template owned by realized concrete `tx_region_actual` tiles, using fixed `thickness_mm = 5.0` and sampled `scale_ratio`.
-- `tx_region_actual_pcb.scale_ratio` scales each realized concrete actual-region tile top-view rectangle uniformly and keeps each PCB centered in its tile.
-- `tx_region_actual_pcb.tilt_enabled` is fixed to `1`; PCB bodies always tilt toward the modeled RX center.
+- `tx_region_actual_stack_space` is a derived materialless non-model sampled reservation volume owned by realized concrete `tx_region_actual` tiles, using fixed `total_thickness_mm = 5.0` and sampled `scale_ratio`.
+- `tx_region_actual_stack_space.scale_ratio` scales each realized concrete actual-region tile top-view rectangle uniformly and keeps each reservation volume centered in its tile.
+- `tx_region_actual_stack_space.tilt_enabled` is fixed to `1`; stack-space bodies always tilt toward the modeled RX center.
+- parser/public helper names use `*_tx_region_actual_stack_space_*` naming; the legacy `*_tx_region_actual_pcb_*` naming is removed from active type2 parser/spec ownership.
+- `tx_rect_void_columns` is a modeled TX role with object id `tx_rect_void_columns`.
+- `tx_rect_void_columns` mirrors RX rect/void public fields for shared TX fields and adds independent `turn_count_x0`, `turn_count_x1`, `turn_count_x2`.
+- `tx_rect_void_columns` does not own public `outer_x_usage_ratio` / `outer_y_usage_ratio`; its outer envelope is the owning `tx_region_actual_stack_space` footprint.
+- `tx_rect_void_columns` rejects `ferrite_*` and underlay fields (`underlay_repeat_count`, `underlay_gap_mm`, `wall_parallel_stack_present`).
+- `tx_rect_void_columns` `layer_count` resolves into `{1,2,3}`.
 - TX plate object/owner/plane은 `tx_plate_stack` / `tx_region` / `YZ`다.
 - RX plate object/owner/plane은 `rx_plate_stack` / `rx_region_max` / `YZ`다.
 - TX plate role public fields are `pcb_total_thickness_mm`, `copper_thickness_mm`, `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio`, `tx_coil_count`, `tx_array_x_usage_ratio`.
@@ -46,10 +52,18 @@ tags:
 - active plate roles는 terminal-path driven coil-only fields를 갖지 않는다.
 
 ## Invariants / fail-fast
+- `tx_region_actual_stack_space` is materialless and must not include `material`.
+- `tx_region_actual_stack_space` requires `total_thickness_mm == 5.0`.
+- `tx_region_actual_stack_space.scale_ratio` accepts only canonical sampled `[false, 0.35, 0.95, 25]` or fixed single candidate with `0.35 <= r <= 0.95`.
+- `tx_region_actual_stack_space.tilt_enabled` accepts only fixed `[true, 1, 1, 1]`.
+- source TOML must include exactly one `tx_region_actual` and exactly one `tx_region_actual_stack_space` derived object.
+- `tx_rect_void_columns.layer_count` must resolve to `{1,2,3}`.
+- `tx_rect_void_columns.turn_count_x*` are integer range fields compatible with TX rect/void turn counts.
+- `tx_rect_void_columns.outer_x_usage_ratio`, `outer_y_usage_ratio`, `outer_x_mm`, and `outer_y_mm` must fail as unsupported public input.
 - plate roles는 `pcb_total_thickness_mm > copper_thickness_mm > 0`
 - active plate roles do not accept `ferrite_set_count`; if present it is an unsupported key and must fail immediately.
 - plate `turn_count` realized value는 `>= 2`여야 한다.
-- plate `metal_fill_factor` realized value는 `> 0`, `<= 0.6`여야 한다.
+- plate `metal_fill_factor` realized value는 `> 0`, `<= 0.6`이어야 한다.
 - plate `z_usage_ratio` realized value는 `> 0`, `<= 1`이어야 한다.
 - plate `y_usage_ratio` realized value는 `> 0`, `<= 1`이어야 한다.
 - TX `tx_coil_count` accepts only canonical `[true, 1, 4, 4]` or fixed `[true, n, n, 1]` where `n in 1..4`.
@@ -61,10 +75,6 @@ tags:
 - active example drift는 role/object_id/owner/plane mismatch를 허용하지 않는다.
 - `tx_region_actual` ratio candidates must realize to `0 < ratio <= 1`; missing source `tx_region` or unsupported source id fails immediately.
 - `tx_region_actual` division counts accept only canonical `[true, 1, 3, 3]` or fixed `[true, n, n, 1]` where `n in {1, 2, 3}`.
-- active type2 TOML must contain exactly one `tx_region_actual` and exactly one `tx_region_actual_pcb` derived non-model object.
-- `tx_region_actual_pcb` must source from `tx_region_actual`, require `thickness_mm = 5.0`, and accept only canonical `scale_ratio = [false, 0.35, 0.95, 25]` or fixed `[false, r, r, 1]` where `0.35 <= r <= 0.95`.
-- `tx_region_actual_pcb.tilt_enabled` accepts only fixed `[true, 1, 1, 1]`.
-- This file exceeds 800 lines; narrow parser extensions may proceed under the documented ownership boundary, but broad parser changes should split first.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_plate_stack.py]]
