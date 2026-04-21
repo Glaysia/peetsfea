@@ -43,8 +43,14 @@ tags:
 - sampled TOML keeps non-sampled RX fields as fixed scalar ranges.
 - sampled TOML excludes removed split/centered `void_*` fields and keeps usage ratios, including `void_usage_ratio`, unitless.
 - manifest identity and hash contract remain unchanged
+- manifest includes `skipped`; no-skip cases assert an empty skipped list.
+- sample skips `ValueError`/`RuntimeError` validation/infeasible attempts, records skip metadata, and continues without replacing skipped seeds.
+- skipped STEP attempts remove partial design directories.
+- `manifest_entry_for_sample_index` returns entries by successful entry order when skipped attempt indices exist.
+- sample-step skip record includes `phase=step` and skips are surfaced in `[sample] skip ...` stdout output.
 - sampled metadata and manifest owner paths include the four `non_model_objects.tx_region_actual.*` owners plus `non_model_objects.tx_region_actual_stack_space.scale_ratio` before modeled RX owners.
 - `MAKE_STEP_ON_SAMPLE=True` path emits coarse STEP stage lines around export.
+- `MAKE_STEP_ON_SAMPLE=True` path emits skip lines for skipped attempts.
 - `MAKE_STEP_ON_SAMPLE=False` does not emit STEP stage lines and does not call the exporter.
 
 ## 변경 시 주의점

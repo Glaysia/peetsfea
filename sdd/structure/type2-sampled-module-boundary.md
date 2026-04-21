@@ -18,8 +18,12 @@ tags:
 - `src/peetsfea/type2_sampled.py`
   - manifest document/config I/O
   - sampled TOML 파일 생성 orchestration
+  - validation-failure skip ledger orchestration and partial artifact cleanup
   - build preparation (`prepare_type2_build`, `prepared_builds_from_manifest`)
   - runtime/entry에서 직접 참조하는 public facade
+- `src/peetsfea/type2_sampled_skip.py`
+  - skipped seed manifest entry type
+  - skip entry construction, copying, and manifest load validation helpers
 - `src/peetsfea/type2_sampled_sampling.py`
   - sampled owner path resolution
   - deterministic candidate selection
@@ -30,8 +34,11 @@ tags:
 - canonical public import surface는 계속 `peetsfea.type2_sampled`다.
 - `entry/sample.py`, `entry/build.py`, `src/peetsfea/type2_runtime.py`, `tests/type2/*`는 기본적으로 기존 import 경로를 유지한다.
 - 분리 모듈은 내부 ownership을 위한 구현 경계로 취급한다.
+- manifest `entries`는 successful design order, manifest `skipped`는 attempted seed failure ledger다.
+- notebook `VIEW_INDEX`는 `skipped`가 아니라 successful `entries` order만 대상으로 한다.
 
 ## 관련 문서
 - [[sdd/plans/0.2.22-type2-sampled-build-split]]
 - [[sdd/code/src/peetsfea/type2_sampled.py]]
+- [[sdd/code/src/peetsfea/type2_sampled_skip.py]]
 - [[sdd/code/src/peetsfea/type2_sampled_sampling.py]]

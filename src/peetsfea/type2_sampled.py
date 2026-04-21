@@ -6,9 +6,10 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import hashlib
 import json
 import subprocess
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal, TypedDict, cast
+from typing import Final, Literal, TypeGuard, TypedDict, cast
 
 from peetsfea.spec.loader import TOMLTable, TOMLValue, load_toml_bytes
 from peetsfea.spec.toml_render import toml_dumps
@@ -32,6 +33,10 @@ from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import load_type2_step_spec as _load_type2_step_spec
+from peetsfea.type2_sampled_skip import Type2SampleSkippedEntry
+from peetsfea.type2_sampled_skip import build_type2_sample_skipped_entry
+from peetsfea.type2_sampled_skip import copy_type2_sample_skipped_entries
+from peetsfea.type2_sampled_skip import load_type2_sample_skipped_entries
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SampledScalar = int | float
@@ -104,6 +109,7 @@ class Type2SampleManifestEntry(TypedDict):
 
 
 _SampleProgressReporter = Callable[[int, int, "Type2SampleManifestEntry"], None]
+_SampleSkippedProgressReporter = Callable[[int, int, Type2SampleSkippedEntry], None]
 _SampleStepStage = Literal["start", "build_scene", "export_scene_step", "finalize_step_artifacts", "done"]
 _SampleStepStageReporter = Callable[[_SampleStepStage, Type2SampleManifestEntry], None]
 
@@ -120,6 +126,12 @@ class Type2SampleManifestConfig(TypedDict):
 class Type2SampleManifestDocument(TypedDict):
     config: Type2SampleManifestConfig
     entries: list[Type2SampleManifestEntry]
+    skipped: list[Type2SampleSkippedEntry]
+
+
+class Type2SampleManifestGenerationResult(TypedDict):
+    entries: list[Type2SampleManifestEntry]
+    skipped: list[Type2SampleSkippedEntry]
 
 
 @dataclass(frozen=True)
@@ -389,6 +401,7 @@ def build_type2_sample_manifest_document(
     *,
     config: Type2SampleManifestConfig,
     entries: list[Type2SampleManifestEntry],
+    skipped: list[Type2SampleSkippedEntry],
 ) -> Type2SampleManifestDocument:
     config_copy: Type2SampleManifestConfig = {
         "source_toml_path": config["source_toml_path"],
@@ -419,6 +432,7 @@ def build_type2_sample_manifest_document(
     return {
         "config": config_copy,
         "entries": entry_copies,
+        "skipped": copy_type2_sample_skipped_entries(skipped),
     }
 
 
@@ -496,9 +510,30 @@ def _build_sample_manifest_entry_for_seed(
     )
 
 
+def _remove_failed_step_design_dir(*, design_dir: Path, output_dir: Path, sample_index: int) -> None:
+    output_root = output_dir.resolve(strict=False)
+    resolved_design_dir = design_dir.resolve(strict=False)
+    try:
+        resolved_design_dir.relative_to(output_root)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"unsafe step-failure cleanup path outside output_dir: sample_index={sample_index}, design_dir={resolved_design_dir}, output_dir={output_root}"
+        ) from exc
+    if resolved_design_dir.exists():
+        shutil.rmtree(resolved_design_dir)
+
+
 def _no_op_sample_step_stage_reporter(
     phase: _SampleStepStage,
     entry: Type2SampleManifestEntry,
+) -> None:
+    pass
+
+
+def _no_op_sample_skip_progress_reporter(
+    completed: int,
+    total: int,
+    skipped: Type2SampleSkippedEntry,
 ) -> None:
     pass
 
@@ -520,26 +555,53 @@ def _export_step_for_sample_entry(
     report_step_stage("done", entry)
 
 
+def _is_skipped_manifest_entry(
+    value: Type2SampleManifestEntry | Type2SampleSkippedEntry,
+) -> TypeGuard[Type2SampleSkippedEntry]:
+    return "phase" in value and "error_type" in value
+
+
 def _build_sample_manifest_entry_for_seed_task(
     task: tuple[str, str, int, int, str, bool],
-) -> Type2SampleManifestEntry:
+) -> Type2SampleManifestEntry | Type2SampleSkippedEntry:
     source_toml_path_text, output_dir_text, seed, sample_index, head_hash4, make_step_on_sample = task
     source_toml_path = Path(source_toml_path_text)
     output_dir = Path(output_dir_text)
     source_spec = _load_type2_step_spec(source_toml_path)
     raw_source_spec, _raw_source_bytes = load_toml_bytes(source_toml_path)
     _require_not_sampled_source(raw_source_spec, context=str(source_toml_path))
-    entry = _build_sample_manifest_entry_for_seed(
-        source_toml_path=source_toml_path,
-        output_dir=output_dir,
-        source_spec=source_spec,
-        raw_source_spec=raw_source_spec,
-        seed=seed,
-        sample_index=sample_index,
-        head_hash4=head_hash4,
-    )
+    try:
+        entry = _build_sample_manifest_entry_for_seed(
+            source_toml_path=source_toml_path,
+            output_dir=output_dir,
+            source_spec=source_spec,
+            raw_source_spec=raw_source_spec,
+            seed=seed,
+            sample_index=sample_index,
+            head_hash4=head_hash4,
+        )
+    except (ValueError, RuntimeError) as exc:
+        return build_type2_sample_skipped_entry(
+            seed=seed,
+            sample_index=sample_index,
+            phase="sample",
+            exc=exc,
+        )
     if make_step_on_sample:
-        _export_step_for_sample_entry(entry, exporter=export_type2_step_artifacts)
+        try:
+            _export_step_for_sample_entry(entry, exporter=export_type2_step_artifacts)
+        except (ValueError, RuntimeError) as exc:
+            _remove_failed_step_design_dir(
+                design_dir=Path(entry["design_dir"]),
+                output_dir=output_dir,
+                sample_index=sample_index,
+            )
+            return build_type2_sample_skipped_entry(
+                seed=seed,
+                sample_index=sample_index,
+                phase="step",
+                exc=exc,
+            )
     return entry
 
 
@@ -552,6 +614,41 @@ def _emit_sample_progress(
 ) -> None:
     if report_progress is not None:
         report_progress(completed, total, entry)
+
+
+def _emit_sample_skip_progress(
+    *,
+    report_skipped: _SampleSkippedProgressReporter,
+    completed: int,
+    total: int,
+    skipped: Type2SampleSkippedEntry,
+) -> None:
+    report_skipped(completed, total, skipped)
+
+
+def _emit_sample_phase_progress(
+    *,
+    completed: int,
+    total: int,
+    result: Type2SampleManifestEntry | Type2SampleSkippedEntry,
+    report_progress: _SampleProgressReporter | None,
+    report_skipped: _SampleSkippedProgressReporter,
+) -> None:
+    if _is_skipped_manifest_entry(result):
+        _emit_sample_skip_progress(
+            report_skipped=report_skipped,
+            completed=completed,
+            total=total,
+            skipped=result,
+        )
+        return
+    entry = cast(Type2SampleManifestEntry, result)
+    _emit_sample_progress(
+        report_progress=report_progress,
+        completed=completed,
+        total=total,
+        entry=entry,
+    )
 
 
 def generate_sample_manifest_entries(
@@ -567,6 +664,34 @@ def generate_sample_manifest_entries(
     report_step_stage: _SampleStepStageReporter = _no_op_sample_step_stage_reporter,
     load_type2_step_spec: Callable[[Path], Type2StepSpec] | None = None,
 ) -> list[Type2SampleManifestEntry]:
+    return generate_sample_manifest_attempts(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        seed_start=seed_start,
+        count=count,
+        jobs=jobs,
+        make_step_on_sample=make_step_on_sample,
+        exporter=exporter,
+        report_progress=report_progress,
+        report_step_stage=report_step_stage,
+        load_type2_step_spec=load_type2_step_spec,
+    )["entries"]
+
+
+def generate_sample_manifest_attempts(
+    *,
+    source_toml_path: Path,
+    output_dir: Path,
+    seed_start: int,
+    count: int,
+    jobs: int = 1,
+    make_step_on_sample: bool = True,
+    exporter: _SampleExporter = export_type2_step_artifacts,
+    report_progress: _SampleProgressReporter | None = None,
+    report_skipped: _SampleSkippedProgressReporter = _no_op_sample_skip_progress_reporter,
+    report_step_stage: _SampleStepStageReporter = _no_op_sample_step_stage_reporter,
+    load_type2_step_spec: Callable[[Path], Type2StepSpec] | None = None,
+) -> Type2SampleManifestGenerationResult:
     resolved_spec_loader = load_type2_step_spec
     if resolved_spec_loader is None:
         resolved_spec_loader = globals()["load_type2_step_spec"]
@@ -584,35 +709,80 @@ def generate_sample_manifest_entries(
         raw_source_spec, _raw_source_bytes = load_toml_bytes(source_toml_path)
         _require_not_sampled_source(raw_source_spec, context=str(source_toml_path))
         entries: list[Type2SampleManifestEntry] = []
+        skipped: list[Type2SampleSkippedEntry] = []
         for sample_index, seed in enumerate(seed_values):
-            entry = _build_sample_manifest_entry_for_seed(
-                source_toml_path=source_toml_path,
-                output_dir=output_dir,
-                source_spec=source_spec,
-                raw_source_spec=raw_source_spec,
-                seed=seed,
-                sample_index=sample_index,
-                head_hash4=head_hash4,
-            )
-            if make_step_on_sample:
-                _export_step_for_sample_entry(
-                    entry,
-                    exporter=exporter,
-                    report_step_stage=report_step_stage,
+            completed = sample_index + 1
+            try:
+                entry = _build_sample_manifest_entry_for_seed(
+                    source_toml_path=source_toml_path,
+                    output_dir=output_dir,
+                    source_spec=source_spec,
+                    raw_source_spec=raw_source_spec,
+                    seed=seed,
+                    sample_index=sample_index,
+                    head_hash4=head_hash4,
                 )
+            except (ValueError, RuntimeError) as exc:
+                skipped_entry = build_type2_sample_skipped_entry(
+                    seed=seed,
+                    sample_index=sample_index,
+                    phase="sample",
+                    exc=exc,
+                )
+                skipped.append(skipped_entry)
+                _emit_sample_phase_progress(
+                    completed=completed,
+                    total=count,
+                    result=skipped_entry,
+                    report_progress=report_progress,
+                    report_skipped=report_skipped,
+                )
+                continue
+            if make_step_on_sample:
+                try:
+                    _export_step_for_sample_entry(
+                        entry,
+                        exporter=exporter,
+                        report_step_stage=report_step_stage,
+                    )
+                except (ValueError, RuntimeError) as exc:
+                    _remove_failed_step_design_dir(
+                        design_dir=Path(entry["design_dir"]),
+                        output_dir=output_dir,
+                        sample_index=sample_index,
+                    )
+                    skipped_entry = build_type2_sample_skipped_entry(
+                        seed=seed,
+                        sample_index=sample_index,
+                        phase="step",
+                        exc=exc,
+                    )
+                    skipped.append(skipped_entry)
+                    _emit_sample_phase_progress(
+                        completed=completed,
+                        total=count,
+                        result=skipped_entry,
+                        report_progress=report_progress,
+                        report_skipped=report_skipped,
+                    )
+                    continue
             entries.append(entry)
             _emit_sample_progress(
                 report_progress=report_progress,
-                completed=sample_index + 1,
+                completed=completed,
                 total=count,
                 entry=entry,
             )
-        return entries
+        return {
+            "entries": entries,
+            "skipped": skipped,
+        }
+
     tasks = [
         (str(source_toml_path), str(output_dir), seed, sample_index, head_hash4, make_step_on_sample)
         for sample_index, seed in enumerate(seed_values)
     ]
-    entries_by_index: dict[int, Type2SampleManifestEntry] = {}
+    results_by_index: dict[int, Type2SampleManifestEntry | Type2SampleSkippedEntry] = {}
     with ProcessPoolExecutor(max_workers=jobs) as executor:
         future_by_index = {
             executor.submit(
@@ -623,16 +793,31 @@ def generate_sample_manifest_entries(
         }
         completed = 0
         for future in as_completed(future_by_index):
-            entry = future.result()
+            result = future.result()
             completed += 1
-            entries_by_index[entry["sample_index"]] = entry
-            _emit_sample_progress(
-                report_progress=report_progress,
+            sample_index = future_by_index[future]
+            if sample_index in results_by_index:
+                raise RuntimeError(f"duplicate sample result for sample_index={sample_index}")
+            results_by_index[sample_index] = result
+            _emit_sample_phase_progress(
                 completed=completed,
                 total=count,
-                entry=entry,
+                result=result,
+                report_progress=report_progress,
+                report_skipped=report_skipped,
             )
-    return [entries_by_index[sample_index] for sample_index in range(count)]
+    entries: list[Type2SampleManifestEntry] = []
+    skipped: list[Type2SampleSkippedEntry] = []
+    for sample_index in range(count):
+        result = results_by_index[sample_index]
+        if _is_skipped_manifest_entry(result):
+            skipped.append(result)
+        else:
+            entries.append(cast(Type2SampleManifestEntry, result))
+    return {
+        "entries": entries,
+        "skipped": skipped,
+    }
 
 
 def write_type2_sample_manifest(*, document: Type2SampleManifestDocument, manifest_path: Path) -> None:
@@ -747,11 +932,16 @@ def load_type2_sample_manifest(manifest_path: Path) -> Type2SampleManifestDocume
         raise ValueError("type2 sample manifest is missing required key 'config'")
     if "entries" not in raw_payload:
         raise ValueError("type2 sample manifest is missing required key 'entries'")
+    if "skipped" in raw_payload:
+        skipped = load_type2_sample_skipped_entries(raw_payload["skipped"])
+    else:
+        skipped = []
     config = _load_type2_sample_manifest_config(raw_payload["config"], manifest_path=manifest_path)
     entries = _load_type2_sample_manifest_entries(raw_payload["entries"])
     return {
         "config": config,
         "entries": entries,
+        "skipped": skipped,
     }
 
 
@@ -848,11 +1038,6 @@ def manifest_entry_for_sample_index(
             f"type2 sample manifest sample_index is out of range (index={sample_index}, count={len(entries)})"
         )
     entry = entries[sample_index]
-    if entry["sample_index"] != sample_index:
-        raise ValueError(
-            "type2 sample manifest entry order must match sample_index "
-            f"(index={sample_index}, entry_sample_index={entry['sample_index']})"
-        )
     return entry
 
 
@@ -1009,8 +1194,10 @@ __all__ = [
     "PreparedType2Build",
     "Type2SampleManifestConfig",
     "Type2SampleManifestDocument",
+    "Type2SampleManifestGenerationResult",
     "Type2SampleManifestEntry",
     "Type2SampleMetadata",
+    "Type2SampleSkippedEntry",
     "build_type2_design_id",
     "build_type2_sample_manifest_config",
     "build_type2_sample_manifest_document",
@@ -1018,6 +1205,7 @@ __all__ = [
     "exportable_sampled_owner_paths",
     "exportable_sampled_owner_paths_for_seed",
     "generate_sample_manifest_entries",
+    "generate_sample_manifest_attempts",
     "load_type2_sample_manifest",
     "load_type2_sample_metadata",
     "manifest_entry_for_sample_index",

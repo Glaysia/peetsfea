@@ -9,13 +9,14 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from peetsfea.console_log import info
+from peetsfea.type2_sampled_skip import Type2SampleSkippedEntry
 from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_sampled import (
     Type2SampleManifestEntry,
     Type2SampleManifestDocument,
     build_type2_sample_manifest_config,
     build_type2_sample_manifest_document,
-    generate_sample_manifest_entries,
+    generate_sample_manifest_attempts,
     write_type2_sample_manifest,
 )
 
@@ -126,6 +127,38 @@ def _report_sample_step_stage(
     )
 
 
+def _report_sample_skip(status_line: _SampleStatusLine, skip: Type2SampleSkippedEntry) -> None:
+    if "sample_index" not in skip:
+        raise ValueError("type2 sample skipped entry is missing required key 'sample_index'")
+    if "seed" not in skip:
+        raise ValueError("type2 sample skipped entry is missing required key 'seed'")
+    if "phase" not in skip:
+        raise ValueError("type2 sample skipped entry is missing required key 'phase'")
+    if "error_type" not in skip:
+        raise ValueError("type2 sample skipped entry is missing required key 'error_type'")
+    if "error_message" not in skip:
+        raise ValueError("type2 sample skipped entry is missing required key 'error_message'")
+    sample_index = skip["sample_index"]
+    seed = skip["seed"]
+    phase = skip["phase"]
+    error_type = skip["error_type"]
+    error_message = skip["error_message"]
+    if isinstance(sample_index, bool) or not isinstance(sample_index, int):
+        raise TypeError("skipped_entry.sample_index must be int")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise TypeError("skipped_entry.seed must be int")
+    if not isinstance(phase, str):
+        raise TypeError("skipped_entry.phase must be str")
+    if not isinstance(error_type, str):
+        raise TypeError("skipped_entry.error_type must be str")
+    if not isinstance(error_message, str):
+        raise TypeError("skipped_entry.error_message must be str")
+    status_line.log(
+        f"[sample] skip idx={sample_index} seed={seed} phase={phase} "
+        f"error={error_type}: {error_message}"
+    )
+
+
 def sample_type2(
     *,
     source_toml_path: Path = SOURCE_TOML_PATH,
@@ -158,7 +191,7 @@ def sample_type2(
         make_step_on_sample=make_step_on_sample,
         aedt_builder_n=aedt_builder_n,
     )
-    entries = generate_sample_manifest_entries(
+    attempts = generate_sample_manifest_attempts(
         source_toml_path=source_toml_path,
         output_dir=output_dir,
         seed_start=seed_first,
@@ -178,13 +211,37 @@ def sample_type2(
             entry,
         ),
     )
-    document = build_type2_sample_manifest_document(config=config, entries=entries)
+    if not isinstance(attempts, dict):
+        raise TypeError("generate_sample_manifest_attempts result must be a dict")
+    if "entries" not in attempts:
+        raise ValueError("generate_sample_manifest_attempts result is missing required key 'entries'")
+    if "skipped" not in attempts:
+        raise ValueError("generate_sample_manifest_attempts result is missing required key 'skipped'")
+    entries = attempts["entries"]
+    skipped = attempts["skipped"]
+    if not isinstance(entries, list):
+        raise TypeError("generate_sample_manifest_attempts result entries must be a list")
+    if not isinstance(skipped, list):
+        raise TypeError("generate_sample_manifest_attempts result skipped must be a list")
+    for entry in skipped:
+        _report_sample_skip(status_line, entry)
+    document = build_type2_sample_manifest_document(
+        config=config,
+        entries=entries,
+        skipped=skipped,
+    )
     status_line.finish()
-    status_line.log(f"[sample] stage=manifest write path={manifest_path} count={len(entries)}")
+    status_line.log(
+        f"[sample] stage=manifest write path={manifest_path} "
+        f"count={len(entries)} skipped={len(skipped)}"
+    )
     write_type2_sample_manifest(document=document, manifest_path=manifest_path)
     elapsed_s = perf_counter() - started_at
+    success_count = len(entries)
+    skipped_count = len(skipped)
     status_line.log(
-        f"[sample] done count={len(entries)} manifest={manifest_path} elapsed_s={elapsed_s:.3f}"
+        f"[sample] done count={success_count} skipped={skipped_count} attempted={seed_n} "
+        f"manifest={manifest_path} elapsed_s={elapsed_s:.3f}"
     )
     return document
 

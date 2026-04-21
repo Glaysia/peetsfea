@@ -59,6 +59,13 @@ tags:
 - build path planning은 여전히 `run/sampled/type2/<design_id>/` layout을 쓴다.
 - `retry_number` is no longer metadata-only; it records the first constraint-satisfying retry attempt and remains part of the `design_id`.
 - STEP stage reporter는 manifest entry나 sampled TOML에 기록되는 canonical state가 아니라 runtime notification surface다.
+- manifest `entries` contains only successful sampled designs; validation/infeasible `ValueError`/`RuntimeError` attempts are recorded in top-level `skipped`.
+- skipped entries preserve attempted `seed`, attempted `sample_index`, failure `phase`, `error_type`, and `error_message`.
+- `generate_sample_manifest_attempts` returns both successful `entries` and `skipped`.
+- `generate_sample_manifest_entries` stays available and returns successful entries only.
+- manifest document support requires both `entries` and `skipped`.
+- manifest load path uses explicit key presence for `skipped` and defaults to empty list when missing.
+- `seed_n` remains the attempted seed count, not the successful design count.
 
 ## Invariants / fail-fast
 - sampled metadata owner list는 source exportable sampled owner set과 exact match여야 한다.
@@ -70,17 +77,20 @@ tags:
 - non-model usage-ratio design variables are unitless and must freeze into sampled TOML with count `1`, same as modeled usage ratios.
 - non-model division-count design variables are integer/unitless and must freeze into sampled TOML with count `1`.
 - type2 constraints must be evaluated before sampled TOML is written, and failing candidates must retry until success or fail fast after the configured attempt budget.
-- constraint retry budget is fixed at 64 attempts (`retry_number` 0..63); if all fail, manifest generation raises with seed/sample_index context.
+- constraint retry budget is fixed at 64 attempts (`retry_number` 0..63); if all fail with `ValueError`/`RuntimeError`, the attempted seed is skipped and recorded.
 - comparison constraints support path operands, numeric literal operands, and `sum(...)` operands that can mix owner paths and numeric literals.
 - sampled metadata exact-match validation must use the source TOML and metadata seed to re-derive the sampled owner set before comparison.
 - tx-columns inactive mode-dependent turn owner is not part of sampled metadata owner paths even when frozen to keep sampled TOML replay-complete.
-- stage reporting이 실패/지원 여부를 바꾸면 안 되며, exporter failure는 기존처럼 즉시 raise되어야 한다.
+- stage reporting이 실패/지원 여부를 바꾸면 안 된다.
+- sampled TOML generation and STEP export `ValueError`/`RuntimeError` failures are skip-recorded; non-validation exceptions remain fail-fast.
+- a STEP-phase skip must remove the partial design directory after proving it is under the configured output root.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_step_spec.py]]
 - [[sdd/code/src/peetsfea/type2_runtime.py]]
 - [[sdd/code/entry/build.py]]
 - [[sdd/code/src/peetsfea/type2_step_export.py]]
+- [[sdd/code/src/peetsfea/type2_sampled_skip.py]]
 
 ## 관련 테스트
 - [[sdd/code/tests/type2/test_sample_type2_entry.py]]

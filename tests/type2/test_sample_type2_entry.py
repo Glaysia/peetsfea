@@ -326,7 +326,10 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     )
     captured = capsys.readouterr()
 
-    assert json.loads(manifest_path.read_text(encoding="utf-8")) == document
+    loaded_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert loaded_manifest == document
+    assert loaded_manifest["skipped"] == []
+    assert document["skipped"] == []
     assert document["config"] == {
         "source_toml_path": str(source_toml_path.resolve(strict=False)),
         "seed_first": 4,
@@ -493,6 +496,69 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert resolved_entry["design_id"] == first_entry["design_id"]
 
 
+def test_sample_type2_reports_step_skip_and_removes_partial_design_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _patch_rx_only_spec_loader(monkeypatch)
+    source_toml_path = _write_source_type2_toml(tmp_path)
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+    skipped_seed = 5
+    exporter_calls: list[int] = []
+
+    def _exporter(**kwargs: object) -> object:
+        seed = cast(int, kwargs["seed"])
+        output_dir_arg = cast(Path, kwargs["output_dir"])
+        stage_reporter = cast(Callable[[str], None], kwargs["stage_reporter"])
+        stage_reporter("build_scene")
+        exporter_calls.append(seed)
+        if seed == skipped_seed:
+            (output_dir_arg / "partial.txt").write_text("partial", encoding="utf-8")
+            raise RuntimeError("simulated step validation failure")
+        ledger_path = cast(Path, kwargs["ledger_path"])
+        stage_reporter("export_scene_step")
+        scene_step_path = output_dir_arg / "type2_scene.step"
+        scene_step_path.write_text("STEP", encoding="utf-8")
+        ledger_path.write_text(json.dumps({"scene_step_path": str(scene_step_path)}, indent=2), encoding="utf-8")
+        stage_reporter("finalize_step_artifacts")
+
+    document = sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=4,
+        seed_n=3,
+        sampler_n=1,
+        aedt_builder_n=6,
+        make_step_on_sample=True,
+        exporter=_exporter,
+    )
+    captured = capsys.readouterr()
+
+    assert document["skipped"] == [
+        {
+            "seed": skipped_seed,
+            "sample_index": 1,
+            "phase": "step",
+            "error_type": "RuntimeError",
+            "error_message": "simulated step validation failure",
+        }
+    ]
+    assert [entry["seed"] for entry in document["entries"]] == [4, 6]
+    assert "[sample] skip idx=1 seed=5 phase=step error=RuntimeError: simulated step validation failure" in captured.out
+    assert f"[sample] done count=2 skipped=1 attempted=3" in captured.out
+    assert exporter_calls == [4, 5, 6]
+
+    design_dir_paths = [Path(entry["design_dir"]) for entry in document["entries"]]
+    assert all(design_dir_path.is_dir() for design_dir_path in design_dir_paths)
+
+    on_disk_dirs = {entry.name for entry in output_dir.iterdir() if entry.is_dir()}
+    assert on_disk_dirs == {Path(entry["design_dir"]).name for entry in document["entries"]}
+    assert list(output_dir.rglob("partial.txt")) == []
+
+
 def test_sample_type2_load_type2_step_spec_hook_via_type2_sampled_module(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -514,6 +580,7 @@ def test_sample_type2_load_type2_step_spec_hook_via_type2_sampled_module(
         make_step_on_sample=False,
     )
 
+    assert document["skipped"] == []
     assert patched_calls == [source_toml_path]
     assert [entry["seed"] for entry in document["entries"]] == [101, 102]
     assert [entry["sample_index"] for entry in document["entries"]] == [0, 1]
@@ -557,6 +624,70 @@ def test_manifest_entry_for_sample_index_rejects_out_of_range(
         manifest_entry_for_sample_index(manifest_path, sample_index=2)
 
 
+def test_manifest_entry_for_sample_index_indexes_successful_entries_with_skipped_attempts(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    entry_by_success_order = {
+        "path_prefix": str(tmp_path / "run" / "sampled" / "type2"),
+    }
+    manifest_payload = {
+        "config": {
+            "source_toml_path": str((tmp_path / "source.toml").resolve(strict=False)),
+            "seed_first": 4,
+            "seed_n": 3,
+            "sampler_n": 1,
+            "make_step_on_sample": True,
+            "aedt_builder_n": 6,
+        },
+        "entries": [
+            {
+                "design_id": "s000000_0000_abcd_0",
+                "seed": 4,
+                "sample_index": 0,
+                "retry_number": 0,
+                "source_toml_path": str((tmp_path / "source.toml").resolve(strict=False)),
+                "sampled_toml_path": f"{entry_by_success_order['path_prefix']}/s000000_0000_abcd_0/sample_0.toml",
+                "design_dir": f"{entry_by_success_order['path_prefix']}/s000000_0000_abcd_0",
+                "scene_step_path": f"{entry_by_success_order['path_prefix']}/s000000_0000_abcd_0/type2_scene.step",
+                "step_ledger_path": f"{entry_by_success_order['path_prefix']}/s000000_0000_abcd_0/type2_step_ledger.json",
+                "imported_ledger_path": f"{entry_by_success_order['path_prefix']}/s000000_0000_abcd_0/type2_imported_ledger.json",
+                "aedt_path": f"{entry_by_success_order['path_prefix']}/s000000_0000_abcd_0/s000000_0000_abcd_0.aedt",
+                "sampled_owner_paths": ["non_model_objects.tx_region_actual.x_usage_ratio"],
+            },
+            {
+                "design_id": "s000002_0000_abcd_0",
+                "seed": 6,
+                "sample_index": 2,
+                "retry_number": 0,
+                "source_toml_path": str((tmp_path / "source.toml").resolve(strict=False)),
+                "sampled_toml_path": f"{entry_by_success_order['path_prefix']}/s000002_0000_abcd_0/sample_2.toml",
+                "design_dir": f"{entry_by_success_order['path_prefix']}/s000002_0000_abcd_0",
+                "scene_step_path": f"{entry_by_success_order['path_prefix']}/s000002_0000_abcd_0/type2_scene.step",
+                "step_ledger_path": f"{entry_by_success_order['path_prefix']}/s000002_0000_abcd_0/type2_step_ledger.json",
+                "imported_ledger_path": f"{entry_by_success_order['path_prefix']}/s000002_0000_abcd_0/type2_imported_ledger.json",
+                "aedt_path": f"{entry_by_success_order['path_prefix']}/s000002_0000_abcd_0/s000002_0000_abcd_0.aedt",
+                "sampled_owner_paths": ["non_model_objects.tx_region_actual.x_usage_ratio"],
+            },
+        ],
+        "skipped": [
+            {
+                "seed": 5,
+                "sample_index": 1,
+                "phase": "step",
+                "error_type": "ValueError",
+                "error_message": "simulated step failure",
+            }
+        ],
+    }
+    manifest_path.write_text(json.dumps(manifest_payload, indent=2), encoding="utf-8")
+
+    resolved_entry = manifest_entry_for_sample_index(manifest_path, sample_index=1)
+    assert resolved_entry == manifest_payload["entries"][1]
+    assert resolved_entry["seed"] == 6
+
+    with pytest.raises(IndexError, match=r"sample_index is out of range"):
+        manifest_entry_for_sample_index(manifest_path, sample_index=2)
+
+
 def test_sample_type2_can_write_manifest_without_step_artifacts(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -585,6 +716,7 @@ def test_sample_type2_can_write_manifest_without_step_artifacts(
     )
     captured = capsys.readouterr()
 
+    assert document["skipped"] == []
     assert document["config"] == {
         "source_toml_path": str(source_toml_path.resolve(strict=False)),
         "seed_first": 20,
@@ -806,6 +938,7 @@ def test_sample_type2_tx_rect_void_columns_sample_only_emits_manifest_and_sample
 
     assert manifest_path.is_file()
     assert json.loads(manifest_path.read_text(encoding="utf-8")) == document
+    assert json.loads(manifest_path.read_text(encoding="utf-8"))["skipped"] == []
     assert len(document["entries"]) == 4
     owner_prefix = "modeled_objects.tx_rect_void_columns"
     connection_mode_path = f"{owner_prefix}.connection_mode"
