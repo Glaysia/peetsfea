@@ -22,6 +22,8 @@ from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import Point3
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
+from peetsfea.type2_tx_turns import TxConnectionMode
+from peetsfea.type2_tx_turns import resolve_tx_turns
 
 _MAX_BODY_LABEL_LENGTH = 32
 _TX_RECT_VOID_COLUMNS_PROFILE = SingleCoilProfile(
@@ -32,6 +34,7 @@ _TX_RECT_VOID_COLUMNS_PROFILE = SingleCoilProfile(
     pcb_body_prefix="txrvpcb",
     copper_body_prefix="txrvcu",
     compound_label="tx_rect_void_columns_member",
+    max_turn_count=36,
 )
 
 
@@ -42,6 +45,7 @@ class TxRectVoidColumnsTileScene:
     x_index: int
     y_index: int
     stack_space_center_xyz: Point3
+    resolved_turn_count: int
     terminal_stub_body_names: tuple[tuple[str, str], ...]
     scene_shapes: tuple[bd.Shape, ...]
 
@@ -59,9 +63,11 @@ class TxRectVoidColumnsTileTerminalAnchors:
 class TxRectVoidColumnsBuildResult:
     tile_scenes: tuple[TxRectVoidColumnsTileScene, ...]
     tile_terminal_anchors: tuple[TxRectVoidColumnsTileTerminalAnchors, ...]
+    tile_resolved_turn_counts: tuple[int, ...]
     expected_exported_body_names: tuple[str, ...]
     terminal_stub_length_mm: float
     layer_count: int
+    connection_mode: TxConnectionMode
 
 
 @dataclass(frozen=True)
@@ -75,7 +81,9 @@ class _ResolvedSingleCoilRangeSpec:
     margin_ratio: float
     metal_fill_factor: float
     terminal_path: str
-    turn_count: int
+
+
+_TX_CONNECTION_MODES: tuple[TxConnectionMode, TxConnectionMode] = (0, 1)
 
 
 @dataclass(frozen=True)
@@ -148,6 +156,77 @@ def _selected_integer_candidate(*, range_spec: RangeSpec, owner_path: str, seed:
     digest = hashlib.blake2b(f"{seed}:{owner_path}".encode("utf-8"), digest_size=8).digest()
     index = int.from_bytes(digest, byteorder="big", signed=False) % len(candidates)
     return candidates[index]
+
+
+def _selected_feasible_layer_count_and_gap(
+    *,
+    layer_count_spec: RangeSpec,
+    layer_gap_mm_spec: RangeSpec,
+    owner_prefix: str,
+    stack_space_height_mm: float,
+    pcb_thickness_mm: float,
+    copper_thickness_mm: float,
+    seed: int,
+) -> tuple[int, float]:
+    if stack_space_height_mm <= 0.0:
+        raise RuntimeError(
+            "tx_rect_void_columns stack-space height must be positive "
+            f"(actual={stack_space_height_mm})"
+        )
+    layer_count_candidates = _integer_range_candidates(layer_count_spec)
+    layer_gap_candidates = _float_range_candidates(layer_gap_mm_spec)
+    base_height_mm = pcb_thickness_mm + copper_thickness_mm
+    feasible_pairs: list[tuple[int, float]] = []
+    for layer_count in layer_count_candidates:
+        if layer_count < 1 or layer_count > 4:
+            continue
+        for layer_gap_mm in layer_gap_candidates:
+            full_stack_height_mm = base_height_mm + (float(layer_count - 1) * (pcb_thickness_mm + layer_gap_mm))
+            if full_stack_height_mm <= stack_space_height_mm + 1e-9:
+                feasible_pairs.append((layer_count, layer_gap_mm))
+    if len(feasible_pairs) == 0:
+        raise RuntimeError(
+            "tx_rect_void_columns layer_count/layer_gap_mm ranges have no stack-height-feasible candidate "
+            f"(stack_space_height_mm={stack_space_height_mm}, base_height_mm={base_height_mm})"
+        )
+    owner_path = f"{owner_prefix}.layer_count+layer_gap_mm"
+    digest = hashlib.blake2b(f"{seed}:{owner_path}".encode("utf-8"), digest_size=8).digest()
+    index = int.from_bytes(digest, byteorder="big", signed=False) % len(feasible_pairs)
+    return feasible_pairs[index]
+
+
+def _selected_parallel_total_turn_count(
+    *, spec: ModeledTxRectVoidColumnsSpec, owner_path: str, seed: int
+) -> float:
+    if not hasattr(spec, "parallel_total_turn_count"):
+        raise RuntimeError(
+            "tx_rect_void_columns parallel_total_turn_count is not available in the resolved spec "
+            f"(owner={owner_path})"
+        )
+    parallel_total_turn_count = getattr(spec, "parallel_total_turn_count")
+    if isinstance(parallel_total_turn_count, bool) or not isinstance(parallel_total_turn_count, RangeSpec):
+        raise RuntimeError(
+            "tx_rect_void_columns parallel_total_turn_count must resolve as a RangeSpec "
+            f"(owner={owner_path}, actual={type(parallel_total_turn_count)!r})"
+        )
+    if parallel_total_turn_count.is_integer is True:
+        return float(
+            _selected_integer_candidate(
+                range_spec=parallel_total_turn_count,
+                owner_path=f"{owner_path}",
+                seed=seed,
+            )
+        )
+    if parallel_total_turn_count.is_integer is False:
+        return _selected_float_candidate(
+            range_spec=parallel_total_turn_count,
+            owner_path=f"{owner_path}",
+            seed=seed,
+        )
+    raise RuntimeError(
+        "tx_rect_void_columns parallel_total_turn_count owner must be integer-capable "
+        f"(owner={owner_path}, is_integer={parallel_total_turn_count.is_integer})"
+    )
 
 
 def _fixed_float_range(*, value: float) -> RangeSpec:
@@ -291,41 +370,26 @@ def _resolved_column_range_spec(
 def _resolved_single_coil_range_spec(
     *,
     spec: ModeledTxRectVoidColumnsSpec,
-    x_index: int,
+    stack_space_height_mm: float,
     seed: int,
 ) -> _ResolvedSingleCoilRangeSpec:
     owner_prefix = f"modeled_objects.{spec.object_id}"
-    layer_count = _selected_integer_candidate(
-        range_spec=spec.layer_count,
-        owner_path=f"{owner_prefix}.layer_count",
+    layer_count, layer_gap_mm = _selected_feasible_layer_count_and_gap(
+        layer_count_spec=spec.layer_count,
+        layer_gap_mm_spec=spec.layer_gap_mm,
+        owner_prefix=owner_prefix,
+        stack_space_height_mm=stack_space_height_mm,
+        pcb_thickness_mm=spec.pcb_thickness_mm,
+        copper_thickness_mm=spec.copper_thickness_mm,
         seed=seed,
     )
-    if layer_count < 1 or layer_count > 3:
-        raise RuntimeError(f"tx_rect_void_columns.layer_count must resolve to [1, 3] (actual={layer_count})")
-    if x_index == 0:
-        turn_count_spec = spec.turn_count_x0
-    elif x_index == 1:
-        turn_count_spec = spec.turn_count_x1
-    elif x_index == 2:
-        turn_count_spec = spec.turn_count_x2
-    else:
-        raise RuntimeError(f"tx_rect_void_columns x index must be in [0, 2] (actual={x_index})")
-    turn_count = _selected_integer_candidate(
-        range_spec=turn_count_spec,
-        owner_path=f"{owner_prefix}.turn_count_x{x_index}",
-        seed=seed,
-    )
-    if turn_count < 1:
-        raise RuntimeError(f"tx_rect_void_columns turn_count_x{x_index} must resolve to >= 1 (actual={turn_count})")
+    if layer_count < 1 or layer_count > 4:
+        raise RuntimeError(f"tx_rect_void_columns.layer_count must resolve to [1, 4] (actual={layer_count})")
     return _ResolvedSingleCoilRangeSpec(
         pcb_thickness_mm=spec.pcb_thickness_mm,
         copper_thickness_mm=spec.copper_thickness_mm,
         layer_count=layer_count,
-        layer_gap_mm=_selected_float_candidate(
-            range_spec=spec.layer_gap_mm,
-            owner_path=f"{owner_prefix}.layer_gap_mm",
-            seed=seed,
-        ),
+        layer_gap_mm=layer_gap_mm,
         terminal_stub_length_mm=_selected_float_candidate(
             range_spec=spec.terminal_stub_length_mm,
             owner_path=f"{owner_prefix}.terminal_stub_length_mm",
@@ -347,7 +411,6 @@ def _resolved_single_coil_range_spec(
             seed=seed,
         ),
         terminal_path=spec.terminal_path,
-        turn_count=turn_count,
     )
 
 
@@ -356,6 +419,7 @@ def _realized_boxes_for_column(
     spec: ModeledTxRectVoidColumnsSpec,
     resolved_ranges: _ResolvedSingleCoilRangeSpec,
     owner_spec: NonModelBoxSpec,
+    turn_count: int,
     seed: int,
 ) -> tuple[tuple[bd.Shape, ...], tuple[tuple[BoxSpec, BoxSpec], ...], int]:
     owner_size_x, owner_size_y, owner_size_z = owner_spec.size_xyz
@@ -374,7 +438,7 @@ def _realized_boxes_for_column(
     rendered_layer_gap_mm = max(resolved_ranges.layer_gap_mm, 2.0)
     rendered_spec = _resolved_column_range_spec(
         spec=spec,
-        turn_count=resolved_ranges.turn_count,
+        turn_count=turn_count,
         layer_count=1,
         outer_x_mm=target_outer_x_mm,
         outer_y_mm=target_outer_y_mm,
@@ -610,6 +674,7 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
     *,
     spec: ModeledTxRectVoidColumnsSpec,
     stack_space_specs: tuple[NonModelBoxSpec, ...],
+    rx_center_x: float = 0.0,
     seed: int,
 ) -> TxRectVoidColumnsBuildResult:
     if len(stack_space_specs) == 0:
@@ -631,32 +696,89 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
             "tx_rect_void_columns stack-space x indices must be contiguous and zero-based "
             f"(actual={x_indices})"
         )
-    resolved_ranges_by_x: dict[int, _ResolvedSingleCoilRangeSpec] = {}
-    for x_index in x_indices:
-        resolved_ranges_by_x[x_index] = _resolved_single_coil_range_spec(spec=spec, x_index=x_index, seed=seed)
-    shared_layer_count = resolved_ranges_by_x[x_indices[0]].layer_count
-    terminal_stub_length_mm = resolved_ranges_by_x[x_indices[0]].terminal_stub_length_mm
-    for x_index in x_indices[1:]:
-        layer_count = resolved_ranges_by_x[x_index].layer_count
-        if layer_count != shared_layer_count:
-            raise RuntimeError(
-                "tx_rect_void_columns layer_count must be shared across realized x columns "
-                f"(x0={shared_layer_count}, x{x_index}={layer_count})"
+    owner_prefix = f"modeled_objects.{spec.object_id}"
+    stack_space_height_mm = min(stack_space_spec.size_xyz[2] for _x_index, _y_index, stack_space_spec in sorted_indexed_specs)
+    resolved_ranges = _resolved_single_coil_range_spec(
+        spec=spec,
+        stack_space_height_mm=stack_space_height_mm,
+        seed=seed,
+    )
+    connection_mode = _selected_integer_candidate(
+        range_spec=spec.connection_mode,
+        owner_path=f"{owner_prefix}.connection_mode",
+        seed=seed,
+    )
+    if connection_mode not in _TX_CONNECTION_MODES:
+        raise RuntimeError(f"tx_rect_void_columns connection_mode must be 0 or 1 (actual={connection_mode})")
+    if connection_mode == 0:
+        relevant_turn_count = _selected_parallel_total_turn_count(
+            spec=spec,
+            owner_path=f"{owner_prefix}.parallel_total_turn_count",
+            seed=seed,
+        )
+    else:
+        relevant_turn_count = float(
+            _selected_integer_candidate(
+                range_spec=spec.series_total_turn_count,
+                owner_path=f"{owner_prefix}.series_total_turn_count",
+                seed=seed,
             )
+        )
+    turn_weight_a = _selected_float_candidate(
+        range_spec=spec.turn_weight_a,
+        owner_path=f"{owner_prefix}.turn_weight_a",
+        seed=seed,
+    )
+    turn_weight_b = _selected_float_candidate(
+        range_spec=spec.turn_weight_b,
+        owner_path=f"{owner_prefix}.turn_weight_b",
+        seed=seed,
+    )
+    turn_weight_c = _selected_float_candidate(
+        range_spec=spec.turn_weight_c,
+        owner_path=f"{owner_prefix}.turn_weight_c",
+        seed=seed,
+    )
+    stack_space_centers = tuple(
+        (
+            stack_space_spec.origin_xyz[0] + (stack_space_spec.size_xyz[0] * 0.5),
+            stack_space_spec.origin_xyz[1] + (stack_space_spec.size_xyz[1] * 0.5),
+            stack_space_spec.origin_xyz[2] + (stack_space_spec.size_xyz[2] * 0.5),
+        )
+        for _x_index, _y_index, stack_space_spec in sorted_indexed_specs
+    )
+    resolved_turn_counts = resolve_tx_turns(
+        stack_space_centers,
+        rx_center_x=rx_center_x,
+        connection_mode=connection_mode,
+        relevant_turn_count=relevant_turn_count,
+        turn_weight_a=turn_weight_a,
+        turn_weight_b=turn_weight_b,
+        turn_weight_c=turn_weight_c,
+        max_turn_count=_TX_RECT_VOID_COLUMNS_PROFILE.max_turn_count,
+    )
+    if len(resolved_turn_counts) == 0:
+        raise RuntimeError("tx_rect_void_columns turn allocator must produce at least one turn count")
     tile_scenes: list[TxRectVoidColumnsTileScene] = []
+    tile_turn_counts: list[int] = []
     tile_terminal_anchors: list[TxRectVoidColumnsTileTerminalAnchors] = []
     expected_body_names: list[str] = []
-    for x_index, y_index, stack_space_spec in sorted_indexed_specs:
+    for (x_index, y_index, stack_space_spec), turn_count in zip(
+        sorted_indexed_specs,
+        resolved_turn_counts,
+        strict=True,
+    ):
         scene_children, terminal_anchor_box_pairs, layer_count = _realized_boxes_for_column(
             spec=spec,
-            resolved_ranges=resolved_ranges_by_x[x_index],
+            resolved_ranges=resolved_ranges,
+            turn_count=turn_count,
             owner_spec=stack_space_spec,
             seed=seed,
         )
-        if layer_count != shared_layer_count:
+        if layer_count != resolved_ranges.layer_count:
             raise RuntimeError(
                 "tx_rect_void_columns resolved layer_count drifted across realized tiles "
-                f"(shared={shared_layer_count}, tile={stack_space_spec.object_id}, actual={layer_count})"
+                f"(resolved={resolved_ranges.layer_count}, tile={stack_space_spec.object_id}, actual={layer_count})"
             )
         shapes_by_label = {shape.label: shape for shape in scene_children}
         if len(shapes_by_label) != len(scene_children):
@@ -736,6 +858,11 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
         tx_region_actual_object_id = _parent_tx_region_actual_object_id_for_stack_space(
             object_id=stack_space_spec.object_id
         )
+        if turn_count < 1:
+            raise RuntimeError(
+                f"tx_rect_void_columns resolved per-tile turn count must be >= 1 (tile={stack_space_spec.object_id}, actual={turn_count})"
+            )
+        tile_turn_counts.append(turn_count)
         tile_terminal_names = terminal_stub_names
         tile_terminal_anchors.append(
             TxRectVoidColumnsTileTerminalAnchors(
@@ -758,6 +885,7 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
                 x_index=x_index,
                 y_index=y_index,
                 stack_space_center_xyz=stack_space_center_xyz,
+                resolved_turn_count=turn_count,
                 terminal_stub_body_names=tile_terminal_names,
                 scene_shapes=tuple(renamed_shapes),
             )
@@ -770,9 +898,11 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
     return TxRectVoidColumnsBuildResult(
         tile_scenes=tuple(tile_scenes),
         tile_terminal_anchors=tuple(tile_terminal_anchors),
+        tile_resolved_turn_counts=tuple(tile_turn_counts),
         expected_exported_body_names=tuple(expected_body_names),
-        terminal_stub_length_mm=terminal_stub_length_mm,
-        layer_count=shared_layer_count,
+        terminal_stub_length_mm=resolved_ranges.terminal_stub_length_mm,
+        layer_count=resolved_ranges.layer_count,
+        connection_mode=cast(TxConnectionMode, connection_mode),
     )
 
 

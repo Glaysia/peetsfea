@@ -186,7 +186,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
 def _source_type2_toml_text() -> str:
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v7"
+schema_id = "peetsfea.type2.step.v8"
 runtime_compatible = false
 
 [design]
@@ -344,7 +344,7 @@ def test_load_type2_step_spec_accepts_tx_rect_void_columns_for_parser_sampler_mi
     source_toml_path.write_text(
         """
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v7"
+schema_id = "peetsfea.type2.step.v8"
 runtime_compatible = false
 
 [design]
@@ -426,14 +426,14 @@ range = [false, 0.5, 0.5, 1]
 range = [true, 0, 1, 2]
 [modeled_objects.series_total_turn_count]
 range = [true, 1, 36, 36]
-[modeled_objects.parallel_equivalent_turn_count]
-range = [false, 0.1111111111, 36.0, 150]
+[modeled_objects.parallel_total_turn_count]
+range = [true, 1, 36, 36]
 [modeled_objects.turn_weight_a]
 range = [false, 0.5, 1.5, 5]
 [modeled_objects.turn_weight_b]
 range = [false, -0.5, 0.5, 21]
 [modeled_objects.turn_weight_c]
-range = [false, -0.5, 0.5, 21]
+range = [false, -0.3, 0.3, 21]
 [modeled_objects.terminal_path]
 value = "A_cw_to_a"
 """.strip(),
@@ -442,6 +442,18 @@ value = "A_cw_to_a"
     spec = load_type2_step_spec(source_toml_path)
     assert len(spec.modeled_objects) == 1
     assert spec.modeled_objects[0].role == "tx_rect_void_columns"
+
+
+def test_load_type2_step_spec_from_examples_has_two_modeled_objects() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    for example_name in ("type2_sweep.toml", "type2_fixed.toml"):
+        source_toml_path = repo_root / "examples" / example_name
+        spec = load_type2_step_spec(source_toml_path)
+        assert len(spec.modeled_objects) == 2
+        assert {modeled_object.role for modeled_object in spec.modeled_objects} == {
+            "rx_single_coil",
+            "tx_rect_void_columns",
+        }
 
 
 def test_build_type2_reads_aedt_builder_n_from_manifest(

@@ -17,6 +17,7 @@ tags:
 
 ## 역할
 - rect/void single-coil runtime dataclass, typed metadata shape, role profile registry를 한곳에 모은다.
+- Role profile별 geometry limit처럼 동일 core engine 안에서 caller별로 달라지는 authoring cap을 보관한다.
 
 ## 입력 / 출력
 - 입력: role/profile literals, dataclass field definitions, metadata typed dict definitions.
@@ -29,6 +30,7 @@ tags:
 
 ## Invariants / fail-fast
 - role별 `object_id`, `plane`, `placement_owner_id`, body-name prefix는 stable contract여야 한다.
+- `SingleCoilProfile.max_turn_count`는 core public single-coil path와 internal type2 TX columns 재사용 path의 turn cap을 분리한다.
 - runtime/state type는 nullable fallback 없이 required field를 유지해야 한다.
 - `SingleCoilRangeSpec`는 public TOML sampled fields만 소유하며 legacy split/centered `void_*` range ownership을 포함하지 않는다.
 - realized state may retain derived split void dimensions/bounds needed by geometry, but canonical input ownership is the single `void_usage_ratio` range.
@@ -46,7 +48,7 @@ tags:
 - [[sdd/code/tests/tx_rect_void/test_tx_rect_void.py]]
 
 ## 변경 시 주의점
-- profile registry를 바꾸면 type2 placement, expected body names, import ownership contract가 같이 바뀐다.
+- profile registry나 profile caps를 바꾸면 type2 placement, expected body names, import ownership contract가 같이 바뀐다.
 - typed metadata shape를 바꾸면 export/import ledger와 tests를 같이 갱신해야 한다.
 
 ## Links

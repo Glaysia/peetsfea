@@ -307,8 +307,13 @@ def realize_tx_rect_void_spec(
         raise ValueError(f"tx_coil.outer_x_mm must resolve to > 0 (actual={outer_x_mm})")
     if outer_y_mm <= 0.0:
         raise ValueError(f"tx_coil.outer_y_mm must resolve to > 0 (actual={outer_y_mm})")
-    if turn_count < 1 or turn_count > 6:
-        raise ValueError(f"tx_coil.turn_count must resolve to [1,6] (actual={turn_count})")
+    if profile.max_turn_count < 1:
+        raise ValueError(
+            "single-coil profile max_turn_count must be >= 1 "
+            f"(profile={profile.object_id}, actual={profile.max_turn_count})"
+        )
+    if turn_count < 1 or turn_count > profile.max_turn_count:
+        raise ValueError(f"tx_coil.turn_count must resolve to [1,{profile.max_turn_count}] (actual={turn_count})")
     if layer_count < 1:
         raise ValueError(f"tx_coil.layer_count must resolve to >= 1 (actual={layer_count})")
     if profile.role == "rx_single_coil" and layer_count != 1:

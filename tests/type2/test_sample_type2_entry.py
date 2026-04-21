@@ -121,7 +121,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
 def _source_type2_toml_text() -> str:
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v7"
+schema_id = "peetsfea.type2.step.v8"
 runtime_compatible = false
 
 [design]
@@ -573,7 +573,7 @@ def _source_type2_toml_text_with_tx_rect_void_columns(
 ) -> str:
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v7"
+schema_id = "peetsfea.type2.step.v8"
 runtime_compatible = false
 
 [design]
@@ -698,14 +698,14 @@ value = "A_cw_to_a"
 range = [true, 0, 1, 2]
 [modeled_objects.series_total_turn_count]
 range = [true, 1, 36, 36]
-[modeled_objects.parallel_equivalent_turn_count]
-range = [false, 0.1111111111, 36.0, 150]
+[modeled_objects.parallel_total_turn_count]
+range = [true, 1, 36, 36]
 [modeled_objects.turn_weight_a]
 range = [false, 0.5, 1.5, 5]
 [modeled_objects.turn_weight_b]
 range = [false, -0.5, 0.5, 21]
 [modeled_objects.turn_weight_c]
-range = [false, -0.5, 0.5, 21]
+range = [false, -0.3, 0.3, 21]
 """.strip()
 
 
@@ -719,7 +719,7 @@ def test_sampled_owner_values_tx_rect_void_columns_uses_mode_aware_effective_tur
     owner_prefix = "modeled_objects.tx_rect_void_columns"
     connection_mode_path = f"{owner_prefix}.connection_mode"
     series_owner_path = f"{owner_prefix}.series_total_turn_count"
-    parallel_owner_path = f"{owner_prefix}.parallel_equivalent_turn_count"
+    parallel_owner_path = f"{owner_prefix}.parallel_total_turn_count"
     turn_weight_paths = (
         f"{owner_prefix}.turn_weight_a",
         f"{owner_prefix}.turn_weight_b",
@@ -772,7 +772,7 @@ def test_sample_type2_tx_rect_void_columns_sample_only_emits_manifest_and_sample
     owner_prefix = "modeled_objects.tx_rect_void_columns"
     connection_mode_path = f"{owner_prefix}.connection_mode"
     series_owner_path = f"{owner_prefix}.series_total_turn_count"
-    parallel_owner_path = f"{owner_prefix}.parallel_equivalent_turn_count"
+    parallel_owner_path = f"{owner_prefix}.parallel_total_turn_count"
     turn_weight_paths = (
         f"{owner_prefix}.turn_weight_a",
         f"{owner_prefix}.turn_weight_b",
@@ -789,7 +789,11 @@ def test_sample_type2_sweep_ssot_emits_tx_columns_manifest_and_sampled_toml(tmp_
     repo_root = Path(__file__).resolve().parents[2]
     source_toml_path = repo_root / "examples" / "type2_sweep.toml"
     spec = load_type2_step_spec(source_toml_path)
-    assert any(modeled_object.role == "tx_rect_void_columns" for modeled_object in spec.modeled_objects)
+    assert len(spec.modeled_objects) == 2
+    assert {modeled_object.role for modeled_object in spec.modeled_objects} == {
+        "rx_single_coil",
+        "tx_rect_void_columns",
+    }
     output_dir = tmp_path / "run" / "sampled" / "type2"
     manifest_path = output_dir / "manifest.json"
 
@@ -808,7 +812,7 @@ def test_sample_type2_sweep_ssot_emits_tx_columns_manifest_and_sampled_toml(tmp_
     assert len(document["entries"]) == 2
     owner_prefix = "modeled_objects.tx_rect_void_columns"
     series_owner_path = f"{owner_prefix}.series_total_turn_count"
-    parallel_owner_path = f"{owner_prefix}.parallel_equivalent_turn_count"
+    parallel_owner_path = f"{owner_prefix}.parallel_total_turn_count"
     for entry in document["entries"]:
         sampled_owner_paths = cast(list[str], entry["sampled_owner_paths"])
         assert f"{owner_prefix}.connection_mode" in sampled_owner_paths
@@ -816,7 +820,7 @@ def test_sample_type2_sweep_ssot_emits_tx_columns_manifest_and_sampled_toml(tmp_
         assert f"{owner_prefix}.turn_weight_b" in sampled_owner_paths
         assert f"{owner_prefix}.turn_weight_c" in sampled_owner_paths
         assert (f"{owner_prefix}.series_total_turn_count" in sampled_owner_paths) is not (
-            f"{owner_prefix}.parallel_equivalent_turn_count" in sampled_owner_paths
+            f"{owner_prefix}.parallel_total_turn_count" in sampled_owner_paths
         )
         sampled_toml_path = Path(cast(str, entry["sampled_toml_path"]))
         assert sampled_toml_path.is_file()
@@ -870,9 +874,21 @@ def test_sample_type2_sweep_ssot_emits_tx_columns_manifest_and_sampled_toml(tmp_
         )
         parallel_range = cast(
             list[object],
-            cast(dict[str, object], tx_rect_columns_object["parallel_equivalent_turn_count"])["range"],
+            cast(dict[str, object], tx_rect_columns_object["parallel_total_turn_count"])["range"],
         )
         assert series_range[3] == 1
         assert series_range[1] == series_range[2]
         assert parallel_range[3] == 1
         assert parallel_range[1] == parallel_range[2]
+
+
+def test_sample_type2_fixed_ssot_keeps_two_modeled_objects() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    source_toml_path = repo_root / "examples" / "type2_fixed.toml"
+    spec = load_type2_step_spec(source_toml_path)
+
+    assert len(spec.modeled_objects) == 2
+    assert {modeled_object.role for modeled_object in spec.modeled_objects} == {
+        "rx_single_coil",
+        "tx_rect_void_columns",
+    }

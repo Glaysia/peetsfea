@@ -56,9 +56,9 @@ _TX_RECT_VOID_COLUMNS_CONNECTION_MODE_RANGE = (0, 1, 2)
 _TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_START = 1
 _TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_END = 36
 _TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_COUNT = 36
-_TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_START = 0.1111111111
-_TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_END = 36.0
-_TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_COUNT = 150
+_TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_START = 1
+_TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_END = 36
+_TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_COUNT = 36
 _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_START = 0.5
 _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_END = 1.5
 _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_COUNT = 5
@@ -68,7 +68,7 @@ _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_COUNT = 21
 _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_START = -0.3
 _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_END = 0.3
 _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_COUNT = 21
-_TYPE2_SCHEMA_ID = "peetsfea.type2.step.v7"
+_TYPE2_SCHEMA_ID = "peetsfea.type2.step.v8"
 
 
 @dataclass(frozen=True)
@@ -228,7 +228,7 @@ class ModeledTxRectVoidColumnsSpec:
     terminal_path: str
     connection_mode: RangeSpec
     series_total_turn_count: RangeSpec
-    parallel_equivalent_turn_count: RangeSpec
+    parallel_total_turn_count: RangeSpec
     turn_weight_a: RangeSpec
     turn_weight_b: RangeSpec
     turn_weight_c: RangeSpec
@@ -620,7 +620,7 @@ def _constraint_reference_paths(spec: Type2StepSpec) -> set[str]:
                     f"{base}.metal_fill_factor",
                     f"{base}.connection_mode",
                     f"{base}.series_total_turn_count",
-                    f"{base}.parallel_equivalent_turn_count",
+                    f"{base}.parallel_total_turn_count",
                     f"{base}.turn_weight_a",
                     f"{base}.turn_weight_b",
                     f"{base}.turn_weight_c",
@@ -1272,43 +1272,38 @@ def _require_tx_rect_void_columns_series_total_turn_count_range(
     return range_spec
 
 
-def _require_tx_rect_void_columns_parallel_equivalent_turn_count_range(
+def _require_tx_rect_void_columns_parallel_total_turn_count_range(
     table: dict[str, object],
     *,
     key: str,
     context: str,
 ) -> RangeSpec:
-    range_spec = _require_range(table, key, context, expect_integer=False)
+    range_spec = _require_range(table, key, context, expect_integer=True)
     if not (
         math.isclose(
             range_spec.start,
-            _TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_START,
+            _TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_START,
             rel_tol=0.0,
             abs_tol=1e-12,
         )
         and math.isclose(
             range_spec.end,
-            _TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_END,
+            _TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_END,
             rel_tol=0.0,
             abs_tol=1e-12,
         )
-        and range_spec.count == _TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_COUNT
+        and range_spec.count == _TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_COUNT
     ):
+        candidates = _integer_range_candidates(range_spec)
         if (
             range_spec.count == 1
-            and range_spec.start == range_spec.end
-            and _TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_START <= range_spec.start <= _TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_END
+            and len(candidates) == 1
+            and _TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_START <= candidates[0] <= _TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_END
         ):
             return range_spec
         raise ValueError(
-            f"{context}.{key} must be [false, 0.1111111111, 36.0, 150] "
+            f"{context}.{key} must be [true, 1, 36, 36] "
             f"(actual={range_spec})"
-        )
-    candidates = _float_range_candidates(range_spec)
-    if any(candidate <= 0.0 for candidate in candidates):
-        raise ValueError(
-            f"{context}.{key} must realize to positive values "
-            f"(actual={candidates})"
         )
     return range_spec
 
@@ -1400,6 +1395,7 @@ def _parse_modeled_tx_rect_void_columns(
             "turn_count_x0",
             "turn_count_x1",
             "turn_count_x2",
+            "parallel_equivalent_turn_count",
             "column_connection_mode",
             "row_connection_mode",
         )
@@ -1433,9 +1429,9 @@ def _parse_modeled_tx_rect_void_columns(
         key="series_total_turn_count",
         context=context,
     )
-    parallel_equivalent_turn_count = _require_tx_rect_void_columns_parallel_equivalent_turn_count_range(
+    parallel_total_turn_count = _require_tx_rect_void_columns_parallel_total_turn_count_range(
         table,
-        key="parallel_equivalent_turn_count",
+        key="parallel_total_turn_count",
         context=context,
     )
     turn_weight_a = _require_tx_rect_void_columns_turn_weight_range(
@@ -1503,7 +1499,7 @@ def _parse_modeled_tx_rect_void_columns(
         "terminal_path",
         "connection_mode",
         "series_total_turn_count",
-        "parallel_equivalent_turn_count",
+        "parallel_total_turn_count",
         "turn_weight_a",
         "turn_weight_b",
         "turn_weight_c",
@@ -1530,7 +1526,7 @@ def _parse_modeled_tx_rect_void_columns(
         terminal_path=terminal_path,
         connection_mode=connection_mode,
         series_total_turn_count=series_total_turn_count,
-        parallel_equivalent_turn_count=parallel_equivalent_turn_count,
+        parallel_total_turn_count=parallel_total_turn_count,
         turn_weight_a=turn_weight_a,
         turn_weight_b=turn_weight_b,
         turn_weight_c=turn_weight_c,

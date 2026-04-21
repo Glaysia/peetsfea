@@ -32,6 +32,7 @@ tags:
 - this suite keeps scope at build-entry wiring and runner handoff contracts, not setup-ready runtime internals
 - sampled owner replay drives non-empty RX `design_variables` with canonical owner-name order
 - sampled owner replay now also drives unitless `tx_region_actual` non-model usage-ratio, integer division-count, and `tx_region_actual_stack_space.scale_ratio` design variables. Fixed `tx_region_actual_stack_space.tilt_enabled` is excluded.
+- examples sweep/fixed SSOT loads (`examples/type2_sweep.toml`, `examples/type2_fixed.toml`) are validated as parser/sampler milestone surfaces with 2 modeled objects (`rx_single_coil`, `tx_rect_void_columns`).
 - build helper parser fixture that includes `tx_rect_void_columns` is expected to parse successfully (parser/sampler milestone), while runtime build/setup-ready still fails fast before export/runner execution.
 - setup-ready/build path fails fast for geometry-only `tx_rect_void_columns` modeled roles with parser/sampler-only milestone messaging before step-artifact export and before runner-side source/port setup.
 - geometry-only `tx_rect_void_columns` unsupported-role coverage does not expect TX outer-envelope design variables; that footprint is non-model stack-space state.

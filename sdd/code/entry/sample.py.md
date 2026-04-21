@@ -37,6 +37,7 @@ tags:
 ## Canonical state
 - module constants가 기본 sample/runtime contract를 이룬다.
 - canonical sampled design set은 `range(SEED_FIRST, SEED_FIRST + SEED_N)`다.
+- default operator task samples the configured `SEED_N` designs and writes STEP artifacts when `MAKE_STEP_ON_SAMPLE=True`.
 - manifest top-level `config`는 downstream build runtime contract를 보존한다.
 - `SAMPLER_N`은 sampled TOML owner worker count다. `MAKE_STEP_ON_SAMPLE=True`일 때만 same-worker STEP export까지 맡는다.
 - `MAKE_STEP_ON_SAMPLE`이 sample-side STEP ownership toggle이다.
@@ -48,6 +49,7 @@ tags:
 
 ## Invariants / fail-fast
 - `SEED_N`, `SAMPLER_N`, `AEDT_BUILDER_N`는 모두 양수여야 한다.
+- default constants should remain lightweight enough for the VS Code task to complete interactively under the active TOML surface.
 - `MAKE_STEP_ON_SAMPLE=True`면 sampled TOML generation과 STEP export는 같은 sample worker path 안에서 deterministic해야 한다.
 - `MAKE_STEP_ON_SAMPLE=False`면 sample 단계는 STEP export를 호출하지 않아야 한다.
 - STEP stage reporting은 manifest data contract가 아니라 operator-facing stdout contract다.

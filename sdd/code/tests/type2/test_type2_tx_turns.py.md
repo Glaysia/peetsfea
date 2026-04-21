@@ -20,16 +20,17 @@ tags:
 
 ## 입력 / 출력
 - `normalized_x_distances`, `turn_weights`, `allocate_series_turns`, `allocate_parallel_turns`, `resolve_tx_turns`의 입력-출력 불변성을 점검한다.
-- 패럴렐 greedy 결과와 tie-break 결정을 출력 턴 벡터로 검증한다.
-- 실패 케이스(비양수 가중치, series 합 부족, 패럴렐 타깃 과대/과소)도 커버한다.
+- 패럴렐/시리즈 모두 total-budget largest-remainder 결과를 출력 턴 벡터로 검증한다.
+- 실패 케이스(비양수 가중치, series 합 부족, `parallel_total_turn_count < coil_count`)를 커버한다.
+- geometry renderer가 넘기는 `max_turn_count` cap을 series/parallel allocator가 지키는지 검증한다.
 
 ## Canonical coverage
 - 가중치 음수/0 즉시 실패.
 - 시리즈 1턴 seed + largest-remainder 결과 정합성.
-- 패럴렐 greedy reciprocal-error 개선량 및 결정성 tie-break(aggregate error, share error, 가중치, 인덱스).
-- 개선량 동률에서 `가중치 우선`, 가중치까지 동률이면 `낮은 인덱스 우선`을 고정한다.
+- 패럴렐 total-budget largest-remainder 분배 정합성(3x3 total=36 -> 각 4턴, 1x1 total=36 -> 36턴).
 - 연결 모드별 래퍼 동작.
+- geometry turn cap: series/parallel 모두 overflow를 fail-fast로 처리한다.
 
 ## 변경 시 주의점
-- 패럴렐 분배는 현재 패턴의 tie-break 규칙을 전제한다.
-- 가중치/타깃 범위 조정 시 테스트 기대값이 직접 변경되어야 한다.
+- total-budget 계약(`sum(n_i) == *_total_turn_count`)이 바뀌면 기대 턴 벡터를 함께 갱신해야 한다.
+- `parallel_total_turn_count`의 정수/하한 제약이 바뀌면 fail-fast assertion 문구를 동기화해야 한다.

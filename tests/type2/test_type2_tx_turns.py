@@ -7,8 +7,6 @@ import pytest
 from peetsfea.type2_tx_turns import allocate_parallel_turns
 from peetsfea.type2_tx_turns import allocate_series_turns
 from peetsfea.type2_tx_turns import normalized_x_distances
-from peetsfea.type2_tx_turns import _parallel_error
-from peetsfea.type2_tx_turns import _select_parallel_increment
 from peetsfea.type2_tx_turns import resolve_tx_turns
 from peetsfea.type2_tx_turns import TxConnectionMode
 from peetsfea.type2_tx_turns import turn_weights
@@ -64,62 +62,94 @@ def test_allocate_series_turns_rejects_low_total() -> None:
         )
 
 
-def test_allocate_parallel_turns_rejects_too_large_reciprocal_target() -> None:
+def test_allocate_parallel_turns_3x3_total_budget_36_equal_weights_allocates_4_each() -> None:
+    centers = (
+        (-1.0, -1.0, 0.0),
+        (0.0, -1.0, 0.0),
+        (1.0, -1.0, 0.0),
+        (-1.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (-1.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (1.0, 1.0, 0.0),
+    )
+    turns = allocate_parallel_turns(
+        centers,
+        rx_center_x=0.0,
+        parallel_total_turn_count=36,
+        turn_weight_a=1.0,
+        turn_weight_b=0.0,
+        turn_weight_c=0.0,
+    )
+    assert turns == (4, 4, 4, 4, 4, 4, 4, 4, 4)
+
+
+def test_allocate_parallel_turns_1x1_total_budget_36_allocates_36() -> None:
     centers = ((0.0, 0.0, 0.0),)
-    with pytest.raises(ValueError, match="is too small for this coil count"):
+    turns = allocate_parallel_turns(
+        centers,
+        rx_center_x=0.0,
+        parallel_total_turn_count=36,
+        turn_weight_a=1.0,
+        turn_weight_b=0.0,
+        turn_weight_c=0.0,
+    )
+    assert turns == (36,)
+
+
+def test_allocate_parallel_turns_rejects_total_below_coil_count() -> None:
+    centers = ((-1.0, 0.0, 0.0), (0.0, 0.0, 0.0), (1.0, 0.0, 0.0))
+    with pytest.raises(ValueError, match="parallel_total_turn_count must be >= coil_count"):
         allocate_parallel_turns(
             centers,
             rx_center_x=0.0,
-            parallel_equivalent_turn_count=0.2,
+            parallel_total_turn_count=2,
             turn_weight_a=1.0,
             turn_weight_b=0.0,
             turn_weight_c=0.0,
         )
 
 
-def test_allocate_parallel_turns_greedy_with_weight_tie_break() -> None:
+def test_allocate_parallel_turns_largest_remainder_with_weight_tie_break() -> None:
     centers = ((-2.0, 0.0, 0.0), (0.0, 0.0, 0.0))
     turns = allocate_parallel_turns(
         centers,
         rx_center_x=0.0,
-        parallel_equivalent_turn_count=1.2,
+        parallel_total_turn_count=5,
         turn_weight_a=2.0,
         turn_weight_b=0.0,
         turn_weight_c=0.0,
     )
-    assert turns == (2, 2)
+    assert turns == (3, 2)
 
 
-def test_select_parallel_increment_prefers_larger_weight_on_tied_improvement() -> None:
-    weights = (1.0, 2.0)
-    reciprocal_sum_target = 1.0 / 2.7
-    reciprocal_targets = (
-        reciprocal_sum_target * (weights[0] / sum(weights)),
-        reciprocal_sum_target * (weights[1] / sum(weights)),
+def test_allocate_parallel_turns_respects_geometry_turn_cap() -> None:
+    centers = ((-2.0, 0.0, 0.0), (0.0, 0.0, 0.0), (2.0, 0.0, 0.0))
+    turns = allocate_parallel_turns(
+        centers,
+        rx_center_x=0.0,
+        parallel_total_turn_count=18,
+        turn_weight_a=1.0,
+        turn_weight_b=0.0,
+        turn_weight_c=0.0,
+        max_turn_count=8,
     )
-    turns = (2, 3)
-    current_error = _parallel_error(turns, weights, reciprocal_targets)
-    best_index, _, _ = _select_parallel_increment(
-        turns,
-        weights,
-        reciprocal_targets,
-        current_error,
-    )
-    assert best_index == 1
+    assert max(turns) <= 8
 
 
-def test_select_parallel_increment_prefers_lower_index_on_full_tie() -> None:
-    weights = (2.0, 2.0)
-    reciprocal_targets = (0.3, 0.3)
-    turns = (1, 1)
-    current_error = _parallel_error(turns, weights, reciprocal_targets)
-    best_index, _, _ = _select_parallel_increment(
-        turns,
-        weights,
-        reciprocal_targets,
-        current_error,
-    )
-    assert best_index == 0
+def test_allocate_series_turns_rejects_geometry_turn_cap_overflow() -> None:
+    centers = ((-2.0, 0.0, 0.0), (0.0, 0.0, 0.0), (2.0, 0.0, 0.0))
+    with pytest.raises(ValueError, match="exceeds geometry turn cap"):
+        allocate_series_turns(
+            centers,
+            rx_center_x=0.0,
+            series_total_turn_count=10,
+            turn_weight_a=1.0,
+            turn_weight_b=0.0,
+            turn_weight_c=0.0,
+            max_turn_count=3,
+        )
 
 
 def test_resolve_tx_turns_router_parallel_and_series_modes() -> None:
@@ -128,7 +158,7 @@ def test_resolve_tx_turns_router_parallel_and_series_modes() -> None:
         centers,
         rx_center_x=0.0,
         connection_mode=0,
-        relevant_turn_count=2.0,
+        relevant_turn_count=8.0,
         turn_weight_a=1.0,
         turn_weight_b=0.0,
         turn_weight_c=0.0,

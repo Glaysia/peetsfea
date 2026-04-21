@@ -24,6 +24,7 @@ class SingleCoilProfile:
     pcb_body_prefix: str
     copper_body_prefix: str
     compound_label: str
+    max_turn_count: int
 
     def world_delta(self, local_xyz: tuple[float, float, float]) -> tuple[float, float, float]:
         local_x, local_y, local_z = local_xyz
@@ -70,6 +71,7 @@ TX_SINGLE_COIL_PROFILE = SingleCoilProfile(
     pcb_body_prefix="tx_pcb",
     copper_body_prefix="tx_copper",
     compound_label="tx_rect_void_coil",
+    max_turn_count=6,
 )
 
 RX_SINGLE_COIL_PROFILE = SingleCoilProfile(
@@ -80,6 +82,7 @@ RX_SINGLE_COIL_PROFILE = SingleCoilProfile(
     pcb_body_prefix="rx_pcb",
     copper_body_prefix="rx_copper",
     compound_label="rx_rect_void_coil",
+    max_turn_count=6,
 )
 
 _PROFILE_BY_ROLE: dict[ModeledObjectRole, SingleCoilProfile] = {

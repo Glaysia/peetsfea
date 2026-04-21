@@ -36,7 +36,8 @@ tags:
   - `modeled_objects.tx_rect_void_columns.turn_weight_b`
   - `modeled_objects.tx_rect_void_columns.turn_weight_c`
   - `modeled_objects.tx_rect_void_columns.series_total_turn_count` only when realized `connection_mode == 1`
-  - `modeled_objects.tx_rect_void_columns.parallel_equivalent_turn_count` only when realized `connection_mode == 0`
+  - `modeled_objects.tx_rect_void_columns.parallel_total_turn_count` only when realized `connection_mode == 0`
+- active turn owner selection for both `series_total_turn_count` and `parallel_total_turn_count` is filtered by the realized TX columns coil count (`x_division_count * y_division_count`) so replay never freezes infeasible `*_total_turn_count < coil_count` candidates.
 - legacy `turn_count_x*` tx-columns owners remain removed and must not reappear in sampled-owner resolution.
 - active RX single-coil sampled outer envelope owners use `outer_x_usage_ratio` and `outer_y_usage_ratio`.
 - active single-coil sampled void owner is `void_usage_ratio`; it is unitless and freezes into sampled TOML like other range owners.
@@ -87,7 +88,8 @@ tags:
 
 ## 변경 시 주의점
 - sampled path ownership을 role-blind single-coil field enumeration으로 되돌리지 않는다.
-- tx-columns mode-aware owner filtering (`series_total_turn_count` vs `parallel_equivalent_turn_count`)을 role-agnostic 고정 목록으로 되돌리지 않는다.
+- tx-columns mode-aware owner filtering (`series_total_turn_count` vs `parallel_total_turn_count`)을 role-agnostic 고정 목록으로 되돌리지 않는다.
+- tx-columns series owner selection must keep the realized-grid feasibility filter; removing it can make ordinary sample+STEP runs fail for valid TOML ranges.
 - active example role 교체와 sampled owner list expectations를 같이 갱신해야 한다.
 - plate-stack sampled owner surface adds TX-only `tx_coil_count` and `tx_array_x_usage_ratio`; replay metadata exact-match guard must stay synchronized with this owner set.
 - multi-worker sample path는 completion progress ordering을 깨지 않도록 별도 process-event channel 없이 기존 completion-only progress를 유지한다.

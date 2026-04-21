@@ -33,7 +33,7 @@ tags:
 - `terminal_stub_length_mm` runtime ownership은 derived `layer_gap_mm * 0.8` 규칙을 따른다.
 - TOML legacy split/centered `void_*` keys are unsupported and fail immediately instead of changing geometry.
 - `void_usage_ratio` must realize to `0 < ratio < 1`; invalid candidates fail before geometry construction.
-- `turn_count` resolved value는 `1..6`이어야 하며 범위를 벗어나면 즉시 raise한다.
+- `turn_count` resolved value는 active `SingleCoilProfile.max_turn_count` 이하여야 하며 범위를 벗어나면 즉시 raise한다. Public single-coil profiles keep max 6; internal type2 TX columns profile may allow the TOML-owned allocation range up to 36.
 - `rx_single_coil.layer_count != 1`은 계속 fail-fast한다.
 
 ## 직접 의존
@@ -49,7 +49,7 @@ tags:
 
 ## 변경 시 주의점
 - parser shape를 바꾸면 `docs/tx-rect-void-step.md`와 type2 export path를 같이 갱신해야 한다.
-- realization formula를 바꾸면 centerline/export/import 계약이 모두 흔들린다.
+- realization formula나 profile-specific validation cap을 바꾸면 centerline/export/import 계약이 모두 흔들린다.
 
 ## Links
 - [[sdd/code/src/peetsfea/tx_rect_void_types.py]]

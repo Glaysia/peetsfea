@@ -36,6 +36,7 @@ _INTEGER_RANGE_FIELD_NAMES = (
     "wall_parallel_stack_present",
     "tx_coil_count",
     "series_total_turn_count",
+    "parallel_total_turn_count",
     "x_division_count",
     "y_division_count",
 )
@@ -555,8 +556,8 @@ def _tx_rect_void_columns_range_owner_specs(modeled_spec: object) -> tuple[tuple
             _tx_rect_void_columns_range_spec(modeled_spec, "series_total_turn_count"),
         ),
         (
-            f"{owner_root}.parallel_equivalent_turn_count",
-            _tx_rect_void_columns_range_spec(modeled_spec, "parallel_equivalent_turn_count"),
+            f"{owner_root}.parallel_total_turn_count",
+            _tx_rect_void_columns_range_spec(modeled_spec, "parallel_total_turn_count"),
         ),
     )
 
@@ -597,10 +598,13 @@ def _tx_rect_void_columns_sampled_owner_values(
     mode_spec: object,
     *,
     owner_prefix: str,
+    realized_coil_count: int,
     seed: int,
     retry_number: int,
     include_inactive_tx_rect_void_columns: bool,
 ) -> tuple[tuple[str, SampledScalar], ...]:
+    if realized_coil_count < 1:
+        raise ValueError(f"tx_rect_void_columns realized_coil_count must be >= 1 (actual={realized_coil_count})")
     sampled_owner_values: list[tuple[str, SampledScalar]] = []
     connection_mode_path = f"{owner_prefix}.connection_mode"
     connection_mode = _tx_rect_void_columns_sampled_connection_mode(
@@ -639,9 +643,9 @@ def _tx_rect_void_columns_sampled_owner_values(
             )
         )
     series_owner_path = f"{owner_prefix}.series_total_turn_count"
-    parallel_owner_path = f"{owner_prefix}.parallel_equivalent_turn_count"
+    parallel_owner_path = f"{owner_prefix}.parallel_total_turn_count"
     series_range = _tx_rect_void_columns_range_spec(mode_spec, "series_total_turn_count")
-    parallel_range = _tx_rect_void_columns_range_spec(mode_spec, "parallel_equivalent_turn_count")
+    parallel_range = _tx_rect_void_columns_range_spec(mode_spec, "parallel_total_turn_count")
     if include_inactive_tx_rect_void_columns:
         if series_range.count != 1:
             sampled_owner_values.append(
@@ -674,16 +678,43 @@ def _tx_rect_void_columns_sampled_owner_values(
             sampled_owner_values.append(
                 (
                     active_owner_path,
-                    _selected_value_for_owner_path(
+                    _selected_integer_value_for_owner_path_with_minimum(
                         active_range,
                         owner_path=active_owner_path,
                         seed=seed,
                         retry_number=retry_number,
+                        minimum_value=realized_coil_count,
                     ),
                 )
             )
 
     return tuple(sampled_owner_values)
+
+
+def _selected_integer_value_for_owner_path_with_minimum(
+    range_spec: RangeSpec,
+    *,
+    owner_path: str,
+    seed: int,
+    retry_number: int,
+    minimum_value: int,
+) -> int:
+    if minimum_value < 1:
+        raise ValueError(f"{owner_path} minimum candidate value must be >= 1 (actual={minimum_value})")
+    candidates = tuple(candidate for candidate in _integer_range_candidates(range_spec) if candidate >= minimum_value)
+    if len(candidates) == 0:
+        raise ValueError(
+            f"No candidates generated for sampled owner at or above minimum: {owner_path} "
+            f"(minimum_value={minimum_value})"
+        )
+    if len(candidates) == 1:
+        return candidates[0]
+    if retry_number < 0:
+        raise ValueError("retry_number must be >= 0")
+    hash_key = f"{seed}:{owner_path}" if retry_number == 0 else f"{seed}:{owner_path}:{retry_number}"
+    digest = hashlib.blake2b(hash_key.encode("utf-8"), digest_size=8).digest()
+    index = int.from_bytes(digest, byteorder="big", signed=False) % len(candidates)
+    return candidates[index]
 
 
 def exportable_sampled_owner_paths(spec: Type2StepSpec) -> tuple[str, ...]:
@@ -774,6 +805,12 @@ def sampled_owner_values(
                     ),
                 )
             )
+    tx_rect_void_columns_realized_coil_count = _tx_rect_void_columns_realized_coil_count(
+        spec=spec,
+        sampled_values=tuple(sampled_values),
+        seed=seed,
+        retry_number=retry_number,
+    )
     for modeled_spec in spec.modeled_objects:
         role = _modeled_spec_role(modeled_spec)
         if role in _SAMPLED_SINGLE_COIL_ROLES:
@@ -794,6 +831,7 @@ def sampled_owner_values(
                 _tx_rect_void_columns_sampled_owner_values(
                     modeled_spec,
                     owner_prefix=owner_prefix,
+                    realized_coil_count=tx_rect_void_columns_realized_coil_count,
                     seed=seed,
                     retry_number=retry_number,
                     include_inactive_tx_rect_void_columns=include_inactive_tx_rect_void_columns,
@@ -807,6 +845,62 @@ def sampled_owner_values(
             continue
         raise RuntimeError(f"unsupported modeled object role for sampled owner resolution: {role}")
     return tuple(sampled_values)
+
+
+def _tx_rect_void_columns_realized_coil_count(
+    *,
+    spec: Type2StepSpec,
+    sampled_values: tuple[tuple[str, SampledScalar], ...],
+    seed: int,
+    retry_number: int,
+) -> int:
+    x_division_count = _integer_sampled_or_fixed_owner_value(
+        spec=spec,
+        sampled_values=sampled_values,
+        owner_path="non_model_objects.tx_region_actual.x_division_count",
+        seed=seed,
+        retry_number=retry_number,
+    )
+    y_division_count = _integer_sampled_or_fixed_owner_value(
+        spec=spec,
+        sampled_values=sampled_values,
+        owner_path="non_model_objects.tx_region_actual.y_division_count",
+        seed=seed,
+        retry_number=retry_number,
+    )
+    realized_coil_count = x_division_count * y_division_count
+    if realized_coil_count < 1:
+        raise ValueError(
+            "tx_rect_void_columns realized coil count must be >= 1 "
+            f"(x_division_count={x_division_count}, y_division_count={y_division_count})"
+        )
+    return realized_coil_count
+
+
+def _integer_sampled_or_fixed_owner_value(
+    *,
+    spec: Type2StepSpec,
+    sampled_values: tuple[tuple[str, SampledScalar], ...],
+    owner_path: str,
+    seed: int,
+    retry_number: int,
+) -> int:
+    for candidate_owner_path, sampled_value in sampled_values:
+        if candidate_owner_path != owner_path:
+            continue
+        if isinstance(sampled_value, bool) or not isinstance(sampled_value, int):
+            raise ValueError(f"{owner_path} must resolve to integer value (actual={sampled_value!r})")
+        return sampled_value
+    range_spec = _range_spec_for_owner_path(spec, owner_path)
+    selected_value = _selected_value_for_owner_path(
+        range_spec,
+        owner_path=owner_path,
+        seed=seed,
+        retry_number=retry_number,
+    )
+    if isinstance(selected_value, bool) or not isinstance(selected_value, int):
+        raise ValueError(f"{owner_path} must resolve to integer value (actual={selected_value!r})")
+    return selected_value
 
 
 def _single_coil_range_owner_values(
@@ -895,13 +989,13 @@ def _tx_rect_void_columns_inactive_owner_values(
                 retry_number=retry_number,
             )
         series_path = f"{owner_prefix}.series_total_turn_count"
-        parallel_path = f"{owner_prefix}.parallel_equivalent_turn_count"
+        parallel_path = f"{owner_prefix}.parallel_total_turn_count"
         inactive_path = parallel_path if connection_mode == 1 else series_path
         if inactive_path in sampled_value_map:
             continue
         inactive_range_spec = _tx_rect_void_columns_range_spec(
             modeled_spec,
-            "series_total_turn_count" if connection_mode != 1 else "parallel_equivalent_turn_count",
+            "series_total_turn_count" if connection_mode != 1 else "parallel_total_turn_count",
         )
         if inactive_range_spec.count == 1:
             continue

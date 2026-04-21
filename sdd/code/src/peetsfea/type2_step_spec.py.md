@@ -25,7 +25,7 @@ tags:
 
 ## Canonical state
 - active plate roles는 `tx_plate_stack`와 `rx_plate_stack`다.
-- active type2 schema id는 `peetsfea.type2.step.v7`다.
+- active type2 schema id는 `peetsfea.type2.step.v8`다.
 - optional top-level `[constraints]` is part of the active type2 TOML schema and preserves declarative sampling feasibility rules for dataset/MOO consumers.
 - active type2 constraint support starts with `comparison` rules over sampled owner paths, literal values, and `sum(...)` expressions.
 - each comparison rule requires `id`, `message`, `enabled`, `lhs`, `op`, and `rhs`; parser-side validation enforces supported operators and required `path`/`value`/`func` payload forms.
@@ -37,8 +37,8 @@ tags:
 - `tx_region_actual_stack_space.tilt_enabled` is fixed to `1`; stack-space bodies always tilt toward the modeled RX center.
 - parser/public helper names use `*_tx_region_actual_stack_space_*` naming; the legacy `*_tx_region_actual_pcb_*` naming is removed from active type2 parser/spec ownership.
 - `tx_rect_void_columns`는 parser/sampler-only 마일스톤으로 parser surface를 재개한다.
-- `tx_rect_void_columns` active parser contract는 `connection_mode`, `series_total_turn_count`, `parallel_equivalent_turn_count`, `turn_weight_a`, `turn_weight_b`, `turn_weight_c`를 사용한다.
-- `tx_rect_void_columns` legacy fields `turn_count_x0/x1/x2`, `column_connection_mode`, `row_connection_mode`는 parser에서 즉시 실패한다.
+- `tx_rect_void_columns` active parser contract는 `connection_mode`, `series_total_turn_count`, `parallel_total_turn_count`, `turn_weight_a`, `turn_weight_b`, `turn_weight_c`를 사용한다.
+- `tx_rect_void_columns` legacy fields `turn_count_x0/x1/x2`, `column_connection_mode`, `row_connection_mode`, `parallel_equivalent_turn_count`는 parser에서 즉시 실패한다.
 - TX plate object/owner/plane은 `tx_plate_stack` / `tx_region` / `YZ`다.
 - RX plate object/owner/plane은 `rx_plate_stack` / `rx_region_max` / `YZ`다.
 - TX plate role public fields are `pcb_total_thickness_mm`, `copper_thickness_mm`, `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio`, `tx_coil_count`, `tx_array_x_usage_ratio`.
@@ -63,7 +63,7 @@ tags:
 - `tx_rect_void_columns.terminal_stub_length_mm`는 `[false, 10.0, 10.0, 1]`만 허용한다.
 - `tx_rect_void_columns.connection_mode`는 `[true, 0, 1, 2]`만 허용한다.
 - `tx_rect_void_columns.series_total_turn_count`는 `[true, 1, 36, 36]`만 허용한다.
-- `tx_rect_void_columns.parallel_equivalent_turn_count`는 `[false, 0.1111111111, 36.0, 150]`만 허용한다.
+- `tx_rect_void_columns.parallel_total_turn_count`는 `[true, 1, 36, 36]` 또는 고정 `[true, v, v, 1]`만 허용한다.
 - `tx_rect_void_columns.turn_weight_a/b/c`는 각각 `[false, 0.5, 1.5, 5]`, `[false, -0.5, 0.5, 21]`, `[false, -0.5, 0.5, 21]`만 허용한다.
 - malformed constraint rules, duplicate rule ids, unknown owner paths, unsupported functions, and unsupported operators fail during type2 source loading or sampling preflight.
 - plate roles는 `pcb_total_thickness_mm > copper_thickness_mm > 0`

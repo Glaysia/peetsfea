@@ -141,7 +141,7 @@ range = {wall_parallel_stack_present_range}
         outer_y_usage_ratio_range = _range(False, 60.0 / 280.0, 60.0 / 280.0, 1)
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v7"
+schema_id = "peetsfea.type2.step.v8"
 runtime_compatible = false
 
 [design]
@@ -298,7 +298,7 @@ def _type2_rx_plate_stack_spec_text(
         extra_body = f"\n{extra_body}"
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v7"
+schema_id = "peetsfea.type2.step.v8"
 runtime_compatible = false
 
 [design]
@@ -487,14 +487,14 @@ def _type2_tx_rect_void_columns_spec_text(
     terminal_stub_length_mm_range: str = "[false, 10.0, 10.0, 1]",
     connection_mode_range: str = "[true, 0, 1, 2]",
     series_total_turn_count_range: str = "[true, 1, 36, 36]",
-    parallel_equivalent_turn_count_range: str = "[false, 0.1111111111, 36.0, 150]",
+    parallel_total_turn_count_range: str = "[true, 1, 36, 36]",
     turn_weight_a_range: str = "[false, 0.5, 1.5, 5]",
     turn_weight_b_range: str = "[false, -0.5, 0.5, 21]",
-    turn_weight_c_range: str = "[false, -0.5, 0.5, 21]",
+    turn_weight_c_range: str = "[false, -0.3, 0.3, 21]",
 ) -> str:
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v7"
+schema_id = "peetsfea.type2.step.v8"
 runtime_compatible = false
 
 [design]
@@ -617,8 +617,8 @@ range = [false, 0.5, 0.5, 1]
 range = {connection_mode_range}
 [modeled_objects.series_total_turn_count]
 range = {series_total_turn_count_range}
-[modeled_objects.parallel_equivalent_turn_count]
-range = {parallel_equivalent_turn_count_range}
+[modeled_objects.parallel_total_turn_count]
+range = {parallel_total_turn_count_range}
 [modeled_objects.turn_weight_a]
 range = {turn_weight_a_range}
 [modeled_objects.turn_weight_b]
@@ -696,7 +696,7 @@ def _spec_with_deactivated_tx_rect_void_columns_for_export_dispatch() -> Type2St
         terminal_path="A_cw_to_a",
         connection_mode=RangeSpec(True, 0.0, 1.0, 2),
         series_total_turn_count=RangeSpec(True, 1.0, 36.0, 36),
-        parallel_equivalent_turn_count=RangeSpec(False, 0.1111111111, 36.0, 150),
+        parallel_total_turn_count=RangeSpec(True, 1.0, 36.0, 36),
         turn_weight_a=RangeSpec(False, 0.5, 1.5, 5),
         turn_weight_b=RangeSpec(False, -0.5, 0.5, 21),
         turn_weight_c=RangeSpec(False, -0.3, 0.3, 21),
@@ -1684,7 +1684,7 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert tx_columns_entry.role == "tx_rect_void_columns"
     assert tx_columns_entry.connection_mode == RangeSpec(True, 0.0, 0.0, 1)
     assert tx_columns_entry.series_total_turn_count == RangeSpec(True, 3.0, 3.0, 1)
-    assert tx_columns_entry.parallel_equivalent_turn_count == RangeSpec(False, 1.0, 1.0, 1)
+    assert tx_columns_entry.parallel_total_turn_count == RangeSpec(True, 1.0, 1.0, 1)
 
 
 def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
@@ -1742,7 +1742,8 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     assert tx_columns_entry.role == "tx_rect_void_columns"
     assert tx_columns_entry.connection_mode == RangeSpec(True, 0.0, 1.0, 2)
     assert tx_columns_entry.series_total_turn_count == RangeSpec(True, 1.0, 36.0, 36)
-    assert tx_columns_entry.parallel_equivalent_turn_count == RangeSpec(False, 0.1111111111, 36.0, 150)
+    assert tx_columns_entry.parallel_total_turn_count == RangeSpec(True, 1.0, 36.0, 36)
+    assert tx_columns_entry.turn_weight_c == RangeSpec(False, -0.3, 0.3, 21)
 
 
 def test_load_type2_step_spec_rejects_unsupported_modeled_role(tmp_path: Path) -> None:
@@ -1766,7 +1767,7 @@ def test_load_type2_step_spec_parses_tx_rect_void_columns_parser_surface(tmp_pat
     assert tx_columns_entry.terminal_stub_length_mm == RangeSpec(False, 10.0, 10.0, 1)
     assert tx_columns_entry.connection_mode == RangeSpec(True, 0.0, 1.0, 2)
     assert tx_columns_entry.series_total_turn_count == RangeSpec(True, 1.0, 36.0, 36)
-    assert tx_columns_entry.parallel_equivalent_turn_count == RangeSpec(False, 0.1111111111, 36.0, 150)
+    assert tx_columns_entry.parallel_total_turn_count == RangeSpec(True, 1.0, 36.0, 36)
     assert tx_columns_entry.turn_weight_a == RangeSpec(False, 0.5, 1.5, 5)
     assert tx_columns_entry.turn_weight_b == RangeSpec(False, -0.5, 0.5, 21)
     assert tx_columns_entry.turn_weight_c == RangeSpec(False, -0.3, 0.3, 21)
@@ -1778,6 +1779,7 @@ def test_load_type2_step_spec_parses_tx_rect_void_columns_parser_surface(tmp_pat
         "turn_count_x0",
         "turn_count_x1",
         "turn_count_x2",
+        "parallel_equivalent_turn_count",
         "column_connection_mode",
         "row_connection_mode",
     ),
@@ -1839,10 +1841,10 @@ def test_load_type2_step_spec_parses_tx_plate_stack_contract(tmp_path: Path) -> 
 
 
 def test_load_type2_step_spec_rejects_legacy_type2_schema_id(tmp_path: Path) -> None:
-    toml_text = _type2_rx_plate_stack_spec_text().replace("peetsfea.type2.step.v7", "peetsfea.type2.step.v1", 1)
+    toml_text = _type2_rx_plate_stack_spec_text().replace("peetsfea.type2.step.v8", "peetsfea.type2.step.v1", 1)
     toml_path = _write_spec(tmp_path, toml_text)
 
-    with pytest.raises(ValueError, match=r"schema_id must be 'peetsfea\.type2\.step\.v7'"):
+    with pytest.raises(ValueError, match=r"schema_id must be 'peetsfea\.type2\.step\.v8'"):
         load_type2_step_spec(toml_path)
 
 
@@ -2375,21 +2377,41 @@ def test_realize_tx_rect_void_spec_uses_single_void_usage_ratio_for_x_and_y(tmp_
     assert realized.void_center_y_over_outer_y == pytest.approx(0.0)
 
 
-def test_export_type2_step_artifacts_rejects_tx_rect_void_columns_modeled_role(tmp_path: Path) -> None:
+def test_export_type2_step_artifacts_supports_tx_rect_void_columns_modeled_role(tmp_path: Path) -> None:
     source_toml = _write_spec(tmp_path, _type2_tx_rect_void_columns_spec_text())
-    with pytest.raises(
-        ValueError,
-        match=r"parser/sampler-only milestone.*role is deactivated for active type2 inputs: tx_rect_void_columns",
-    ):
-        export_type2_step_artifacts(
-            toml_path=source_toml,
-            output_dir=tmp_path / "out",
-            ledger_path=tmp_path / "out" / "type2_ledger.json",
-            seed=0,
-        )
+    output_dir = tmp_path / "out"
+    output_ledger_path = output_dir / "type2_ledger.json"
+    ledger = export_type2_step_artifacts(
+        toml_path=source_toml,
+        output_dir=output_dir,
+        ledger_path=output_ledger_path,
+        seed=0,
+    )
+
+    assert output_ledger_path.exists()
+    scene_step_path = Path(cast(str, ledger["scene_step_path"]))
+    assert scene_step_path.is_file()
+    tx_entry = cast(
+        dict[str, object],
+        next(
+            entry for entry in cast(list[object], ledger["modeled_objects"])
+            if cast(dict[str, object], entry)["object_id"] == "tx_rect_void_columns"
+        ),
+    )
+    assert cast(int, tx_entry["expected_exported_body_count"]) == len(
+        cast(tuple[str, ...], tx_entry["expected_exported_body_names"])
+    )
+    assert cast(int, tx_entry["expected_exported_body_count"]) > 0
+    terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
+    assert terminal_metadata["kind"] == "geometry_only"
+    modeled_metadata_path = output_dir / "metadata" / "tx_rect_void_columns.metadata.json"
+    assert modeled_metadata_path.is_file()
+    scene_shapes_by_label = _step_shapes_by_label(scene_step_path)
+    for body_name in cast(tuple[str, ...], tx_entry["expected_exported_body_names"]):
+        assert body_name in scene_shapes_by_label
 
 
-def test_export_type2_step_artifacts_rejects_tx_rect_void_columns_when_preflight_bypassed(
+def test_export_type2_step_artifacts_supports_tx_rect_void_columns_when_preflight_bypassed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2405,16 +2427,36 @@ def test_export_type2_step_artifacts_rejects_tx_rect_void_columns_when_preflight
     monkeypatch.setattr(module_under_test, "_raise_if_tx_rect_void_columns_modeled_role_present", _no_raise_preflight)
     monkeypatch.setattr(module_under_test, "load_type2_step_spec", _load_fake_spec)
 
-    with pytest.raises(
-        ValueError,
-        match=r"parser/sampler-only milestone.*role is deactivated for active type2 inputs: tx_rect_void_columns",
-    ):
-        module_under_test.export_type2_step_artifacts(
-            toml_path=source_toml,
-            output_dir=tmp_path / "out",
-            ledger_path=tmp_path / "out" / "type2_ledger.json",
-            seed=0,
-        )
+    output_dir = tmp_path / "out"
+    output_ledger_path = output_dir / "type2_ledger.json"
+    ledger = module_under_test.export_type2_step_artifacts(
+        toml_path=source_toml,
+        output_dir=output_dir,
+        ledger_path=output_ledger_path,
+        seed=0,
+    )
+
+    assert output_ledger_path.exists()
+    scene_step_path = Path(cast(str, ledger["scene_step_path"]))
+    assert scene_step_path.is_file()
+    tx_entry = cast(
+        dict[str, object],
+        next(
+            entry for entry in cast(list[object], ledger["modeled_objects"])
+            if cast(dict[str, object], entry)["object_id"] == "tx_rect_void_columns"
+        ),
+    )
+    assert cast(int, tx_entry["expected_exported_body_count"]) == len(
+        cast(tuple[str, ...], tx_entry["expected_exported_body_names"])
+    )
+    assert cast(int, tx_entry["expected_exported_body_count"]) > 0
+    terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
+    assert terminal_metadata["kind"] == "geometry_only"
+    modeled_metadata_path = output_dir / "metadata" / "tx_rect_void_columns.metadata.json"
+    assert modeled_metadata_path.is_file()
+    scene_shapes_by_label = _step_shapes_by_label(scene_step_path)
+    for body_name in cast(tuple[str, ...], tx_entry["expected_exported_body_names"]):
+        assert body_name in scene_shapes_by_label
 
 
 def test_export_type2_tx_single_coil_artifact_rejects_tx_rect_void_columns_modeled_role(tmp_path: Path) -> None:
@@ -2624,50 +2666,83 @@ def test_export_type2_step_artifacts_tilts_only_tx_region_actual_stack_space_tow
         assert stack_space_canonical_max_xyz[2] <= tile_top_z + 1e-8
 
 
-def _export_tx_rect_void_columns_spec_and_expect_rejection(
+def _export_tx_rect_void_columns_spec_and_expect_success(
     *,
     tmp_path: Path,
     x_division_count: int,
     y_division_count: int,
+    force_safe_turn_allocation: bool = False,
 ) -> None:
     tmp_path.mkdir(parents=True, exist_ok=True)
+    turn_profile_kwargs: dict[str, str] = {}
+    if force_safe_turn_allocation:
+        turn_profile_kwargs = {
+            "connection_mode_range": "[true, 1, 1, 1]",
+            "series_total_turn_count_range": "[true, 6.0, 6.0, 1]",
+            "parallel_total_turn_count_range": "[true, 6, 6, 1]",
+            "turn_weight_a_range": "[false, 1.0, 1.0, 1]",
+            "turn_weight_b_range": "[false, 0.0, 0.0, 1]",
+            "turn_weight_c_range": "[false, -0.3, 0.3, 21]",
+        }
     toml_path = _write_spec(
         tmp_path,
         _type2_tx_rect_void_columns_spec_text(
             tx_region_actual_x_division_count_range=f"[true, {x_division_count}, {x_division_count}, 1]",
             tx_region_actual_y_division_count_range=f"[true, {y_division_count}, {y_division_count}, 1]",
+            **turn_profile_kwargs,
         ),
     )
-    with pytest.raises(
-        ValueError,
-        match=r"parser/sampler-only milestone.*role is deactivated for active type2 inputs: tx_rect_void_columns",
-    ):
-        export_type2_step_artifacts(
-            toml_path=toml_path,
-            output_dir=tmp_path / "out",
-            ledger_path=tmp_path / "out" / "ledger.json",
-            seed=0,
-        )
+    output_dir = tmp_path / "out"
+    output_ledger_path = output_dir / "ledger.json"
+    ledger = export_type2_step_artifacts(
+        toml_path=toml_path,
+        output_dir=output_dir,
+        ledger_path=output_ledger_path,
+        seed=0,
+    )
+    assert output_ledger_path.exists()
+    scene_step_path = Path(cast(str, ledger["scene_step_path"]))
+    assert scene_step_path.is_file()
+    tx_entry = cast(
+        dict[str, object],
+        next(
+            entry for entry in cast(list[object], ledger["modeled_objects"])
+            if cast(dict[str, object], entry)["object_id"] == "tx_rect_void_columns"
+        ),
+    )
+    assert cast(int, tx_entry["expected_exported_body_count"]) == len(
+        cast(tuple[str, ...], tx_entry["expected_exported_body_names"])
+    )
+    assert cast(int, tx_entry["expected_exported_body_count"]) > 0
+    terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
+    assert terminal_metadata["kind"] == "geometry_only"
+    modeled_metadata_path = output_dir / "metadata" / "tx_rect_void_columns.metadata.json"
+    assert modeled_metadata_path.is_file()
+    scene_shapes_by_label = _step_shapes_by_label(scene_step_path)
+    for body_name in cast(tuple[str, ...], tx_entry["expected_exported_body_names"]):
+        assert body_name in scene_shapes_by_label
 
 
 @pytest.mark.parametrize(("x_division_count", "y_division_count"), ((1, 1), (2, 3), (3, 2)))
-def test_export_type2_step_artifacts_tx_rect_void_columns_rejects_grid_variants(
+def test_export_type2_step_artifacts_tx_rect_void_columns_grid_variants(
     tmp_path: Path,
     x_division_count: int,
     y_division_count: int,
 ) -> None:
-    _export_tx_rect_void_columns_spec_and_expect_rejection(
+    _export_tx_rect_void_columns_spec_and_expect_success(
         tmp_path=tmp_path,
         x_division_count=x_division_count,
         y_division_count=y_division_count,
+        force_safe_turn_allocation=x_division_count * y_division_count > 1,
     )
 
 
-def test_export_type2_step_artifacts_tx_rect_void_columns_rejects_x1_division_variant(tmp_path: Path) -> None:
-    _export_tx_rect_void_columns_spec_and_expect_rejection(
+def test_export_type2_step_artifacts_tx_rect_void_columns_x1_division_variant(tmp_path: Path) -> None:
+    _export_tx_rect_void_columns_spec_and_expect_success(
         tmp_path=tmp_path / "x1_base",
         x_division_count=1,
         y_division_count=2,
+        force_safe_turn_allocation=True,
     )
 
 
@@ -2678,15 +2753,16 @@ def test_export_type2_step_artifacts_tx_rect_void_columns_rejects_x1_division_va
         (3, "x_division_3"),
     ),
 )
-def test_export_type2_step_artifacts_tx_rect_void_columns_rejects_multicolumn_grid_variants(
+def test_export_type2_step_artifacts_tx_rect_void_columns_multicolumn_grid_variants(
     tmp_path: Path,
     x_division_count: int,
     case_name: str,
 ) -> None:
-    _export_tx_rect_void_columns_spec_and_expect_rejection(
+    _export_tx_rect_void_columns_spec_and_expect_success(
         tmp_path=tmp_path / case_name,
         x_division_count=x_division_count,
         y_division_count=2,
+        force_safe_turn_allocation=True,
     )
 
 

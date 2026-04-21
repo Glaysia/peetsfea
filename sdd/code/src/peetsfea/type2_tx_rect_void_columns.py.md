@@ -18,19 +18,24 @@ tags:
 - Primary plan: [[sdd/plans/0.2.22-type2-tx-rect-void-columns-geometry]]
 
 ## Single responsibility
-- Build axis-aligned geometry-only `tx_rect_void_columns` tile coil bodies and terminal-anchor metadata from resolved stack-space members before export applies stack-space tilt transforms and appends the tile-level terminal stubs.
+- Build axis-aligned geometry-only `tx_rect_void_columns` tile coil bodies and terminal-anchor metadata from resolved stack-space members, resolving mode-aware per-tile turn counts from `connection_mode`, turn weights, and center-weighted contracts before export applies stack-space tilt transforms and appends the tile-level terminal stubs.
 
 ## Inputs / outputs
-- Inputs: `ModeledTxRectVoidColumnsSpec`, resolved `tx_region_actual_stack_space` `NonModelBoxSpec` members, seed.
-- Outputs: deterministic per-tile `bd.Shape` tuples, exactly two deterministic tile-level terminal body names (`_stub_s`, `_stub_e`) per tile, per-layer terminal-anchor BoxSpec groups for start/end, and flattened deterministic expected body-name order.
+- Inputs: `ModeledTxRectVoidColumnsSpec`, resolved `tx_region_actual_stack_space` `NonModelBoxSpec` members, `rx_center_x`, seed.
+- Outputs: deterministic per-tile `bd.Shape` tuples, mode-aware per-tile resolved turn counts, `connection_mode`, exactly two deterministic tile-level terminal body names (`_stub_s`, `_stub_e`) per tile, per-layer terminal-anchor BoxSpec groups for start/end, and flattened deterministic expected body-name order.
 
 ## Canonical state
 - Uses `tx_region_actual_stack_space` concrete members as canonical per-tile owners.
 - Uses the full stack-space footprint as the rect/void coil outer envelope; there are no TX columns outer usage-ratio owners.
-- Reuses one resolved X-column turn-count owner per realized X index across all Y tiles for that X.
+- Uses a single shared tx_columns owner plus deterministic per-tile resolved turn allocation from `resolve_tx_turns` with `connection_mode`-aware owners.
+- Uses a TX columns internal `SingleCoilProfile` with `max_turn_count = 36`, matching the public total-turn contract.
+- `connection_mode = 0` uses `parallel_total_turn_count`, `connection_mode = 1` uses `series_total_turn_count`.
+- Uses public total-turn owners directly in both modes; separate footprint-driven geometry-derived turn caps are removed.
+- Resolves `layer_count` and `layer_gap_mm` as a deterministic feasible pair constrained by the concrete stack-space height.
 - Produces exactly one PCB and one copper coil body per realized X/Y layer, then one tile-level start terminal body and one tile-level end terminal body per realized X/Y tile (total `layer_count * 2 + 2`).
 - Uses the TX columns `layer_gap_mm` only for geometry-only layer placement. The reusable rect/void core is called in single-layer mode with a core-compatible gap when needed, so the core's multilayer connection constraint does not define TX columns spacing.
 - Uses `terminal_stub_length_mm` as the requested floorward stub length. Multilayer start/end terminal anchors are grouped by terminal so export can create one parallel collector plus floorward stub body per terminal.
+- Exposes per-tile resolved turn counts and resolved `connection_mode` in `TxRectVoidColumnsBuildResult` metadata for downstream modeled export.
 
 ## Canonical naming
 - PCB names follow `txrvc_x{X}_y{Y}_pcb_l{L}`.
@@ -39,7 +44,8 @@ tags:
 
 ## Invariants / fail-fast
 - Stack-space tile IDs must follow concrete `tx_region_actual_stack_space_x{X}_y{Y}` contract (or root singleton).
-- Realized X indices must be contiguous zero-based and in `[0, 2]`; realized layer count must be in `[1, 3]`.
+- Realized X indices must be contiguous zero-based and in `[0, 2]`; resolved layer count must be in `[1, 4]`.
+- Resolved per-tile turns are bounded by the tx_rect_void_columns profile cap (36), while total-turn allocation contract is enforced against the caller's chosen total budget.
 - The resolved full layer stack height, including TX columns `layer_gap_mm`, must fit inside the owning stack-space height.
 - Body names are deterministic, globally unique, and length-capped for AEDT-friendly import.
 - No ferrite/underlay/stack/bus/port-sheet bodies are generated in this module; start/end terminal bodies are copper-only geometry and do not introduce cross-tile connection semantics.

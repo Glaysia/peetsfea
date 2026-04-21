@@ -5,7 +5,7 @@
 # TX columns fields are parser/sampler-only until the geometry/export milestone.
 
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v7"
+schema_id = "peetsfea.type2.step.v8"
 runtime_compatible = false
 
 [design]
@@ -210,8 +210,8 @@ range = [false, 0.6, 0.6, 1]
 range = [true, 0, 0, 1]
 [modeled_objects.series_total_turn_count]
 range = [true, 3, 3, 1]
-[modeled_objects.parallel_equivalent_turn_count]
-range = [false, 1.0, 1.0, 1]
+[modeled_objects.parallel_total_turn_count]
+range = [true, 1, 1, 1]
 [modeled_objects.turn_weight_a]
 range = [false, 1.0, 1.0, 1]
 [modeled_objects.turn_weight_b]

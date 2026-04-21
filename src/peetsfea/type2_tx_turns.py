@@ -8,7 +8,7 @@ from typing import Literal
 
 TxConnectionMode = Literal[0, 1]
 Point3 = tuple[float, float, float]
-_TIE_ABS_TOL = 1e-15
+_UNBOUNDED_MAX_TURN_COUNT = 1_000_000_000
 
 
 def _validated_real(name: str, value: float) -> float:
@@ -76,6 +76,7 @@ def allocate_series_turns(
     turn_weight_a: float,
     turn_weight_b: float,
     turn_weight_c: float,
+    max_turn_count: int = _UNBOUNDED_MAX_TURN_COUNT,
 ) -> tuple[int, ...]:
     """Allocate series turns with one-turn seed then largest-remainder fill."""
     if isinstance(series_total_turn_count, bool) or not isinstance(series_total_turn_count, int):
@@ -85,6 +86,10 @@ def allocate_series_turns(
         )
     if series_total_turn_count < 1:
         raise ValueError(f"series_total_turn_count must be >= 1 (actual={series_total_turn_count})")
+    if isinstance(max_turn_count, bool) or not isinstance(max_turn_count, int):
+        raise ValueError(f"max_turn_count must be an integer (actual={max_turn_count!r})")
+    if max_turn_count < 1:
+        raise ValueError(f"max_turn_count must be >= 1 (actual={max_turn_count})")
 
     weights = turn_weights(
         coil_centers_xyz,
@@ -98,6 +103,11 @@ def allocate_series_turns(
         raise ValueError(
             "series_total_turn_count must be >= coil_count "
             f"(series_total_turn_count={series_total_turn_count}, coil_count={coil_count})"
+        )
+    if series_total_turn_count > coil_count * max_turn_count:
+        raise ValueError(
+            "series_total_turn_count exceeds geometry turn cap "
+            f"(series_total_turn_count={series_total_turn_count}, coil_count={coil_count}, max_turn_count={max_turn_count})"
         )
 
     base_turns = [1] * coil_count
@@ -127,67 +137,40 @@ def allocate_series_turns(
     return tuple(base_turns)
 
 
-def _parallel_error(turns: Sequence[int], weights: Sequence[float], reciprocal_targets: Sequence[float]) -> float:
-    return float(
-        sum(
-            weights[index] * abs((1.0 / float(turns[index])) - reciprocal_targets[index])
-            for index in range(len(turns))
-        )
-    )
-
-
-def _select_parallel_increment(
-    turns: Sequence[int],
-    weights: Sequence[float],
-    reciprocal_targets: Sequence[float],
-    current_error: float,
-) -> tuple[int, float, float]:
-    best_index = -1
-    best_improvement = float("-inf")
-    best_weight = float("-inf")
-    best_next_error = float("inf")
-    for index in range(len(turns)):
-        current_turn = turns[index]
-        next_turn = current_turn + 1
-        current_term = weights[index] * abs((1.0 / float(current_turn)) - reciprocal_targets[index])
-        next_term = weights[index] * abs((1.0 / float(next_turn)) - reciprocal_targets[index])
-        next_error = current_error - current_term + next_term
-        improvement = current_error - next_error
-
-        better_improvement = improvement > (best_improvement + _TIE_ABS_TOL)
-        tied_improvement = math.isclose(improvement, best_improvement, rel_tol=0.0, abs_tol=_TIE_ABS_TOL)
-        better_weight = weights[index] > (best_weight + _TIE_ABS_TOL)
-        tied_weight = math.isclose(weights[index], best_weight, rel_tol=0.0, abs_tol=_TIE_ABS_TOL)
-        better_index = best_index < 0 or index < best_index
-
-        if better_improvement or (tied_improvement and (better_weight or (tied_weight and better_index))):
-            best_index = index
-            best_improvement = improvement
-            best_weight = weights[index]
-            best_next_error = next_error
-
-    if best_index < 0:
-        raise RuntimeError("parallel greedy allocation must choose a candidate increment")
-    return best_index, best_improvement, best_next_error
-
-
 def allocate_parallel_turns(
     coil_centers_xyz: Sequence[Point3],
     *,
     rx_center_x: float,
-    parallel_equivalent_turn_count: float,
+    parallel_total_turn_count: float,
     turn_weight_a: float,
     turn_weight_b: float,
     turn_weight_c: float,
+    max_turn_count: int = _UNBOUNDED_MAX_TURN_COUNT,
 ) -> tuple[int, ...]:
-    """Allocate parallel turns by weighted reciprocal-error greedy improvement."""
-    equivalent_turns = _validated_real("parallel_equivalent_turn_count", parallel_equivalent_turn_count)
-    if not (equivalent_turns > 0.0):
+    """Allocate parallel turns with one-turn seed then largest-remainder fill."""
+    if isinstance(parallel_total_turn_count, bool) or not isinstance(parallel_total_turn_count, int | float):
         raise ValueError(
-            "parallel_equivalent_turn_count must be > 0 "
-            f"(actual={parallel_equivalent_turn_count!r})"
+            "parallel_total_turn_count must be a real number "
+            f"(actual={parallel_total_turn_count!r})"
         )
-    target_reciprocal_sum = 1.0 / equivalent_turns
+    total_turn_count_float = float(parallel_total_turn_count)
+    if not (total_turn_count_float > 0.0):
+        raise ValueError(
+            "parallel_total_turn_count must be > 0 "
+            f"(actual={parallel_total_turn_count!r})"
+        )
+    total_turn_count = round(total_turn_count_float)
+    if not math.isclose(total_turn_count_float, float(total_turn_count), rel_tol=0.0, abs_tol=1e-12):
+        raise ValueError(
+            "parallel_total_turn_count must be an integer value "
+            f"(actual={parallel_total_turn_count!r})"
+        )
+    parallel_total_turn_count_i = int(total_turn_count)
+
+    if isinstance(max_turn_count, bool) or not isinstance(max_turn_count, int):
+        raise ValueError(f"max_turn_count must be an integer (actual={max_turn_count!r})")
+    if max_turn_count < 1:
+        raise ValueError(f"max_turn_count must be >= 1 (actual={max_turn_count})")
 
     weights = turn_weights(
         coil_centers_xyz,
@@ -197,31 +180,58 @@ def allocate_parallel_turns(
         c=turn_weight_c,
     )
     coil_count = len(weights)
-    max_reciprocal_sum = float(coil_count)
-    if target_reciprocal_sum > max_reciprocal_sum:
+    if parallel_total_turn_count_i < coil_count:
         raise ValueError(
-            "parallel_equivalent_turn_count is too small for this coil count "
-            f"(target_reciprocal_sum={target_reciprocal_sum}, coil_count={coil_count}, "
-            f"max_reciprocal_sum={max_reciprocal_sum})"
+            "parallel_total_turn_count must be >= coil_count "
+            f"(parallel_total_turn_count={parallel_total_turn_count_i}, coil_count={coil_count})"
         )
+    if parallel_total_turn_count_i > coil_count * max_turn_count:
+        raise ValueError(
+            "parallel_total_turn_count exceeds geometry turn cap "
+            f"(parallel_total_turn_count={parallel_total_turn_count_i}, coil_count={coil_count}, "
+            f"max_turn_count={max_turn_count})"
+        )
+
+    turns = [1] * coil_count
+    remaining_turn_count = parallel_total_turn_count_i - coil_count
+    if remaining_turn_count == 0:
+        return tuple(turns)
 
     total_weight = float(sum(weights))
-    reciprocal_targets = tuple((target_reciprocal_sum * (weight / total_weight)) for weight in weights)
-    turns = [1] * coil_count
-    current_error = _parallel_error(turns, weights, reciprocal_targets)
-
-    while True:
-        best_index, best_improvement, best_next_error = _select_parallel_increment(
-            turns,
-            weights,
-            reciprocal_targets,
-            current_error,
+    exact_extra_turns = tuple((remaining_turn_count * (weight / total_weight)) for weight in weights)
+    base_extra_turns = [int(math.floor(value)) for value in exact_extra_turns]
+    remainders = tuple(
+        value - float(floor_value) for value, floor_value in zip(exact_extra_turns, base_extra_turns, strict=True)
+    )
+    base_sum = sum(base_extra_turns)
+    for index, base_extra_turn in enumerate(base_extra_turns):
+        turns[index] += base_extra_turn
+    if base_sum > remaining_turn_count:
+        raise RuntimeError(
+            "parallel largest-remainder allocation overflow "
+            f"(base_sum={base_sum}, remaining_turns={remaining_turn_count})"
         )
-        if not (best_improvement > _TIE_ABS_TOL):
-            break
-        turns[best_index] += 1
-        current_error = best_next_error
+    undistributed_turns = remaining_turn_count - base_sum
+    order = sorted(
+        range(coil_count),
+        key=lambda index: (-remainders[index], -weights[index], index),
+    )
+    for rank in range(undistributed_turns):
+        target_index = order[rank]
+        turns[target_index] += 1
 
+    total_allocated = sum(turns)
+    if total_allocated != parallel_total_turn_count_i:
+        raise RuntimeError(
+            "parallel allocation sum mismatch "
+            f"(sum={total_allocated}, expected={parallel_total_turn_count_i})"
+        )
+    for index, turns_count in enumerate(turns):
+        if turns_count > max_turn_count:
+            raise ValueError(
+                "parallel_total_turn_count allocation exceeds per-coil max_turn_count "
+                f"(coil_index={index}, turns={turns_count}, max_turn_count={max_turn_count})"
+            )
     return tuple(turns)
 
 
@@ -234,16 +244,18 @@ def resolve_tx_turns(
     turn_weight_a: float,
     turn_weight_b: float,
     turn_weight_c: float,
+    max_turn_count: int = _UNBOUNDED_MAX_TURN_COUNT,
 ) -> tuple[int, ...]:
     """Resolve per-coil turns for parallel(0) or series(1) connection mode."""
     if connection_mode == 0:
         return allocate_parallel_turns(
             coil_centers_xyz,
             rx_center_x=rx_center_x,
-            parallel_equivalent_turn_count=relevant_turn_count,
+            parallel_total_turn_count=relevant_turn_count,
             turn_weight_a=turn_weight_a,
             turn_weight_b=turn_weight_b,
             turn_weight_c=turn_weight_c,
+            max_turn_count=max_turn_count,
         )
     if connection_mode == 1:
         finite_turn_count = _validated_real("series_total_turn_count", relevant_turn_count)
@@ -260,5 +272,6 @@ def resolve_tx_turns(
             turn_weight_a=turn_weight_a,
             turn_weight_b=turn_weight_b,
             turn_weight_c=turn_weight_c,
+            max_turn_count=max_turn_count,
         )
     raise ValueError(f"unsupported connection_mode (actual={connection_mode})")
