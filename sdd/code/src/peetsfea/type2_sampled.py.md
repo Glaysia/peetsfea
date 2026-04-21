@@ -1,7 +1,7 @@
 ---
 title: type2_sampled.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-21 @ 23:05
+updated: 2026-04-22 @ 00:05
 tags:
   - sampling
   - build
@@ -16,7 +16,8 @@ tags:
 - Related feature plans: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]], [[sdd/plans/0.2.22-type2-tx-rect-void-columns-geometry]]
 
 ## 역할
-- type2 sampled owner-path selection, frozen sampled TOML rendering, manifest/build planning을 담당한다.
+- `type2_sampled`는 공개 오케스트레이션/호환성 경계 역할을 수행한다.
+- 샘플 소유자 경로 선택, frozen sampled TOML 렌더링, 매니페스트 생성, 빌드 준비의 핵심 구현은 `type2_sampled_sampling` 모듈로 위임한다.
 - in-process STEP export path에서 entrypoint가 coarse stage 로그를 받을 수 있도록 optional reporter callback을 중계한다.
 
 ## 입력 / 출력
@@ -73,7 +74,6 @@ tags:
 - comparison constraints support path operands, numeric literal operands, and `sum(...)` operands that can mix owner paths and numeric literals.
 - sampled metadata exact-match validation must use the source TOML and metadata seed to re-derive the sampled owner set before comparison.
 - tx-columns inactive mode-dependent turn owner is not part of sampled metadata owner paths even when frozen to keep sampled TOML replay-complete.
-- This file exceeds 800 lines; this narrow extension is allowed, but future sampler restructuring should split ownership first.
 - stage reporting이 실패/지원 여부를 바꾸면 안 되며, exporter failure는 기존처럼 즉시 raise되어야 한다.
 
 ## Collaborators
@@ -93,3 +93,4 @@ tags:
 - active example role 교체와 sampled owner list expectations를 같이 갱신해야 한다.
 - plate-stack sampled owner surface adds TX-only `tx_coil_count` and `tx_array_x_usage_ratio`; replay metadata exact-match guard must stay synchronized with this owner set.
 - multi-worker sample path는 completion progress ordering을 깨지 않도록 별도 process-event channel 없이 기존 completion-only progress를 유지한다.
+- `type2_sampled` 모듈의 공개 API/시그니처는 유지되며, `load_type2_step_spec` monkeypatch가 동일 동작해야 한다.

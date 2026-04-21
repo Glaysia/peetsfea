@@ -12,6 +12,15 @@ from typing import Final, Literal, TypedDict, cast
 
 from peetsfea.spec.loader import TOMLTable, TOMLValue, load_toml_bytes
 from peetsfea.spec.toml_render import toml_dumps
+from peetsfea.type2_sampled_sampling import _all_range_owner_specs
+from peetsfea.type2_sampled_sampling import _modeled_roles
+from peetsfea.type2_sampled_sampling import _parse_constraints
+from peetsfea.type2_sampled_sampling import _range_spec_for_owner_path
+from peetsfea.type2_sampled_sampling import _require_constraints_satisfied
+from peetsfea.type2_sampled_sampling import _tx_rect_void_columns_inactive_owner_values
+from peetsfea.type2_sampled_sampling import exportable_sampled_owner_paths
+from peetsfea.type2_sampled_sampling import exportable_sampled_owner_paths_for_seed
+from peetsfea.type2_sampled_sampling import sampled_owner_values
 from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
@@ -22,7 +31,7 @@ from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import Type2StepSpec
-from peetsfea.type2_step_spec import load_type2_step_spec
+from peetsfea.type2_step_spec import load_type2_step_spec as _load_type2_step_spec
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SampledScalar = int | float
@@ -129,888 +138,7 @@ class PreparedType2Build:
     design_variables: tuple[DesignVariableEntry, ...]
 
 
-def _modeled_spec_role(modeled_spec: object) -> str:
-    assert hasattr(modeled_spec, "role"), "type2 modeled spec must expose role"
-    raw_role = getattr(modeled_spec, "role")
-    assert isinstance(raw_role, str), "type2 modeled spec role must be str"
-    return raw_role
-
-
-def _modeled_roles(spec: Type2StepSpec) -> tuple[str, ...]:
-    return tuple(_modeled_spec_role(modeled_spec) for modeled_spec in spec.modeled_objects)
-
-
-def _non_model_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpec], ...]:
-    owner_specs: list[tuple[str, RangeSpec]] = []
-    for non_model_spec in spec.non_model_derived_objects:
-        owner_specs.extend(_derived_non_model_range_owner_specs(non_model_spec))
-    return tuple(owner_specs)
-
-
-def _parse_constraint_table(raw_value: object, path: str) -> TOMLTable:
-    if not isinstance(raw_value, dict):
-        raise ValueError(f"{path} must be a table/object")
-    return cast(TOMLTable, raw_value)
-
-
-def _constraint_id_for_rule(index: int) -> str:
-    return f"constraints.rules[{index}]"
-
-
-def _parse_constraint_func(raw_text: str, context: str) -> tuple[str, tuple[str, ...]]:
-    text = raw_text.strip()
-    if not text.startswith("sum(") or not text.endswith(")"):
-        raise ValueError(f"{context}.func must be in the form sum(arg_1, arg_2, ...)")
-    body = text[4:-1].strip()
-    args = _split_function_args(body, context=f"{context}.func")
-    if len(args) == 0:
-        raise ValueError(f"{context}.func sum() must contain at least one argument")
-    return "sum", tuple(args)
-
-
-def _split_function_args(raw_text: str, context: str) -> tuple[str, ...]:
-    if raw_text == "":
-        return tuple()
-    args: list[str] = []
-    token: list[str] = []
-    depth = 0
-    for index, ch in enumerate(raw_text):
-        if ch == "(":
-            depth += 1
-            token.append(ch)
-            continue
-        if ch == ")":
-            depth -= 1
-            if depth < 0:
-                raise ValueError(f"{context} has unmatched ')' at index {index}")
-            token.append(ch)
-            continue
-        if ch == "," and depth == 0:
-            raw_arg = "".join(token).strip()
-            if raw_arg == "":
-                raise ValueError(f"{context} contains empty argument")
-            args.append(raw_arg)
-            token = []
-            continue
-        token.append(ch)
-    if depth != 0:
-        raise ValueError(f"{context} has unmatched '('")
-    if token:
-        raw_arg = "".join(token).strip()
-        if raw_arg == "":
-            raise ValueError(f"{context} contains empty argument")
-        args.append(raw_arg)
-    return tuple(args)
-
-
-def _parse_constraint_operand(
-    raw_operand: object,
-    path: str,
-) -> _ConstraintPathRef | _ConstraintFuncRef | _ConstraintValueRef:
-    if isinstance(raw_operand, dict):
-        if set(raw_operand.keys()) == {"path"}:
-            raw_path = raw_operand["path"]
-            if not isinstance(raw_path, str) or raw_path == "":
-                raise ValueError(f"{path} path must be a non-empty string")
-            return {"path": raw_path}
-        if set(raw_operand.keys()) == {"func"}:
-            raw_func = raw_operand["func"]
-            if not isinstance(raw_func, str) or raw_func == "":
-                raise ValueError(f"{path}.func must be a non-empty string")
-            return {"func": raw_func.strip()}
-        if set(raw_operand.keys()) == {"value"}:
-            raw_value = raw_operand["value"]
-            if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
-                raise ValueError(f"{path}.value must be a number")
-            return {"value": raw_value}
-    raise ValueError(f"{path} must be one of {{path|value|func}}")
-
-
-def _parse_constraints(source_spec: TOMLTable, source: Type2StepSpec) -> list[_Type2ConstraintRule]:
-    if "constraints" not in source_spec:
-        return []
-    raw_constraints = source_spec["constraints"]
-    if not isinstance(raw_constraints, dict):
-        raise ValueError("[constraints] must be a table/object")
-    raw_rules = cast(object, raw_constraints)
-    if "rules" not in cast(TOMLTable, raw_rules):
-        raise ValueError("[constraints] must contain rules")
-    constraints_table = _parse_constraint_table(raw_rules, "constraints")
-    raw_rule_list = constraints_table["rules"]
-    if not isinstance(raw_rule_list, list):
-        raise ValueError("constraints.rules must be a list of tables")
-    if len(raw_rule_list) == 0:
-        raise ValueError("constraints.rules must be a non-empty list")
-    parsed_rules: list[_Type2ConstraintRule] = []
-    rule_ids: set[str] = set()
-    for index, raw_rule in enumerate(raw_rule_list):
-        rule_path = _constraint_id_for_rule(index)
-        if not isinstance(raw_rule, dict):
-            raise ValueError(f"{rule_path} must be a table/object")
-        raw_rule_dict = cast(TOMLTable, raw_rule)
-        if set(raw_rule_dict.keys()) != {"id", "kind", "message", "enabled", "lhs", "op", "rhs"} and not {
-            "id",
-            "kind",
-            "message",
-            "lhs",
-            "op",
-            "rhs",
-        }.issubset(set(raw_rule_dict.keys())):
-            raise ValueError(f"{rule_path} must contain keys id, kind, message, lhs, op, rhs and optional enabled")
-        raw_id = raw_rule_dict["id"]
-        if not isinstance(raw_id, str) or raw_id == "":
-            raise ValueError(f"{rule_path}.id must be a non-empty string")
-        if raw_id in rule_ids:
-            raise ValueError(f"{rule_path} duplicate rule id: {raw_id}")
-        rule_ids.add(raw_id)
-        raw_kind = raw_rule_dict["kind"]
-        if raw_kind != "comparison":
-            raise ValueError(f"{rule_path}.kind must be 'comparison' for type2 constraints")
-        raw_message = raw_rule_dict["message"]
-        if not isinstance(raw_message, str) or raw_message == "":
-            raise ValueError(f"{rule_path}.message must be a non-empty string")
-        raw_enabled = raw_rule_dict["enabled"] if "enabled" in raw_rule_dict else True
-        if raw_enabled is not True and raw_enabled is not False:
-            raise ValueError(f"{rule_path}.enabled must be bool")
-        raw_lhs = _parse_constraint_operand(raw_rule_dict["lhs"], f"{rule_path}.lhs")
-        raw_rhs = _parse_constraint_operand(raw_rule_dict["rhs"], f"{rule_path}.rhs")
-        raw_op = raw_rule_dict["op"]
-        if raw_op not in _CONSTRAINT_COMPARISON_OPERATORS:
-            raise ValueError(
-                f"{rule_path}.op must be one of {sorted(_CONSTRAINT_COMPARISON_OPERATORS)} "
-                f"(actual={raw_op!r})"
-            )
-        parsed_rules.append(
-            {
-                "id": raw_id,
-                "kind": "comparison",
-                "message": raw_message,
-                "enabled": bool(raw_enabled),
-                "lhs": raw_lhs,
-                "op": raw_op,
-                "rhs": raw_rhs,
-            }
-        )
-    _validate_constraint_paths(sampled_source=source, constraints=parsed_rules)
-    return parsed_rules
-
-
-def _validate_constraint_path(sampled_source: Type2StepSpec, path: str, *, context: str) -> None:
-    try:
-        _ = _range_spec_for_owner_path(sampled_source, path)
-    except ValueError as exc:
-        raise ValueError(f"{context} references unknown owner path: {path}") from exc
-
-
-def _validate_constraint_paths(sampled_source: Type2StepSpec, *, constraints: list[_Type2ConstraintRule]) -> None:
-    for rule in constraints:
-        if not rule["enabled"]:
-            continue
-        for side_key in ("lhs", "rhs"):
-            raw_side = rule[side_key]
-            if "path" in raw_side:
-                _validate_constraint_path(sampled_source, raw_side["path"], context=f"constraints.rules[{rule['id']}]")
-            if "func" in raw_side:
-                func_name, args = _parse_constraint_func(raw_side["func"], f"constraints.rules[{rule['id']}]")
-                if func_name != "sum":
-                    raise ValueError(f"constraints.rules[{rule['id']}].func only supports sum()")
-                for arg in args:
-                    _validate_constraint_sum_arg(sampled_source, arg, context=f"constraints.rules[{rule['id']}]")
-
-
-def _validate_constraint_sum_arg(sampled_source: Type2StepSpec, arg: str, *, context: str) -> None:
-    if arg == "":
-        raise ValueError(f"{context}.func contains empty argument")
-    try:
-        float(arg)
-    except ValueError:
-        _validate_constraint_path(sampled_source, arg, context=f"{context}.func")
-
-
-def _resolve_constraint_path_value(
-    source: Type2StepSpec,
-    sampled_values: dict[str, SampledScalar],
-    path: str,
-    *,
-    context: str,
-) -> SampledScalar:
-    if path in sampled_values:
-        return sampled_values[path]
-    range_spec = _range_spec_for_owner_path(source, path)
-    if range_spec.count != 1:
-        raise ValueError(f"{context} references unsampled owner path: {path}")
-    if range_spec.is_integer:
-        value = int(range_spec.start)
-    else:
-        value = float(range_spec.start)
-    return value
-
-
-def _resolve_constraint_operand(
-    source: Type2StepSpec,
-    sampled_values: dict[str, SampledScalar],
-    operand: _ConstraintPathRef | _ConstraintFuncRef | _ConstraintValueRef,
-    *,
-    context: str,
-) -> int | float | str:
-    if "path" in operand:
-        return _resolve_constraint_path_value(
-            source,
-            sampled_values,
-            operand["path"],
-            context=context,
-        )
-    if "value" in operand:
-        return operand["value"]
-    function = _parse_constraint_func(cast(str, operand["func"]), context=f"{context}.func")
-    function_name, args = function
-    if function_name != "sum":
-        raise ValueError(f"{context}.func only supports sum()")
-    total = 0.0
-    for arg in args:
-        if " " in arg:
-            arg = arg.strip()
-        try:
-            total += float(arg)
-            continue
-        except ValueError:
-            pass
-        total += float(_resolve_constraint_path_value(source, sampled_values, arg, context=context))
-    return total
-
-
-def _evaluate_comparison(lhs: int | float | str, op: str, rhs: int | float | str) -> bool:
-    if op in {"<", "<=", ">", ">=", "!="}:
-        if isinstance(lhs, str) or isinstance(rhs, str):
-            raise ValueError(f"comparison operator {op} is not supported for string operands")
-    if op == "<":
-        return lhs < rhs  # type: ignore[operator]
-    if op == "<=":
-        return lhs <= rhs  # type: ignore[operator]
-    if op == ">":
-        return lhs > rhs  # type: ignore[operator]
-    if op == ">=":
-        return lhs >= rhs  # type: ignore[operator]
-    if op == "==":
-        return lhs == rhs
-    if op == "!=":
-        return lhs != rhs
-    raise ValueError(f"Unsupported comparison operator: {op}")
-
-
-def _require_constraints_satisfied(
-    source: Type2StepSpec,
-    sampled_values: dict[str, SampledScalar],
-    constraints: list[_Type2ConstraintRule],
-) -> None:
-    for rule in constraints:
-        if not rule["enabled"]:
-            continue
-        lhs_value = _resolve_constraint_operand(
-            source,
-            sampled_values,
-            cast(_ConstraintPathRef | _ConstraintFuncRef | _ConstraintValueRef, rule["lhs"]),
-            context=f"constraints.rules[{rule['id']}]",
-        )
-        rhs_value = _resolve_constraint_operand(
-            source,
-            sampled_values,
-            cast(_ConstraintPathRef | _ConstraintFuncRef | _ConstraintValueRef, rule["rhs"]),
-            context=f"constraints.rules[{rule['id']}]",
-        )
-        if not _evaluate_comparison(lhs_value, rule["op"], rhs_value):
-            raise ValueError(
-                f"constraint '{rule['id']}' failed: {rule['message']} "
-                f"(lhs={lhs_value!r} rhs={rhs_value!r} op={rule['op']})"
-            )
-
-
-def _derived_non_model_range_owner_specs(
-    non_model_spec: NonModelDerivedSpec,
-) -> tuple[tuple[str, RangeSpec], ...]:
-    if isinstance(non_model_spec, NonModelTxRegionActualSpec):
-        return _tx_region_actual_range_owner_specs(non_model_spec)
-    if isinstance(non_model_spec, NonModelTxRegionActualStackSpaceSpec):
-        return _tx_region_actual_stack_space_range_owner_specs(non_model_spec)
-    raise RuntimeError(f"unsupported non-model derived spec: {type(non_model_spec).__name__}")
-
-
-def _tx_region_actual_range_owner_specs(
-    non_model_spec: NonModelTxRegionActualSpec,
-) -> tuple[tuple[str, RangeSpec], ...]:
-    return (
-        (f"non_model_objects.{non_model_spec.object_id}.x_usage_ratio", non_model_spec.x_usage_ratio),
-        (f"non_model_objects.{non_model_spec.object_id}.y_usage_ratio", non_model_spec.y_usage_ratio),
-        (
-            f"non_model_objects.{non_model_spec.object_id}.x_division_count",
-            non_model_spec.x_division_count,
-        ),
-        (
-            f"non_model_objects.{non_model_spec.object_id}.y_division_count",
-            non_model_spec.y_division_count,
-        ),
-    )
-
-
-def _tx_region_actual_stack_space_range_owner_specs(
-    non_model_spec: NonModelTxRegionActualStackSpaceSpec,
-) -> tuple[tuple[str, RangeSpec], ...]:
-    return (
-        (f"non_model_objects.{non_model_spec.object_id}.scale_ratio", non_model_spec.scale_ratio),
-    )
-
-
-def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpec], ...]:
-    owner_specs: list[tuple[str, RangeSpec]] = []
-    for modeled_spec in spec.modeled_objects:
-        role = _modeled_spec_role(modeled_spec)
-        if role in _SAMPLED_SINGLE_COIL_ROLES:
-            owner_specs.extend(
-                _single_coil_range_owner_specs(cast(ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec, modeled_spec))
-            )
-            continue
-        if role == _TX_RECT_VOID_COLUMNS_ROLE:
-            owner_specs.extend(_tx_rect_void_columns_range_owner_specs(modeled_spec))
-            continue
-        if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
-            owner_specs.extend(_plate_stack_range_owner_specs(cast(ModeledPlateStackSpec, modeled_spec)))
-            continue
-        raise RuntimeError(f"unsupported modeled object role for sampled owner resolution: {role}")
-    return tuple(owner_specs)
-
-
-def _all_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpec], ...]:
-    return _non_model_range_owner_specs(spec) + _modeled_range_owner_specs(spec)
-
-
-def _single_coil_range_owner_specs(
-    modeled_spec: ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec,
-) -> tuple[tuple[str, RangeSpec], ...]:
-    owner_specs: list[tuple[str, RangeSpec]] = [
-        (f"modeled_objects.{modeled_spec.object_id}.outer_x_usage_ratio", modeled_spec.outer_x_usage_ratio),
-        (f"modeled_objects.{modeled_spec.object_id}.outer_y_usage_ratio", modeled_spec.outer_y_usage_ratio),
-        (f"modeled_objects.{modeled_spec.object_id}.void_usage_ratio", modeled_spec.void_usage_ratio),
-        (f"modeled_objects.{modeled_spec.object_id}.turn_count", modeled_spec.turn_count),
-        (f"modeled_objects.{modeled_spec.object_id}.layer_count", modeled_spec.layer_count),
-        (
-            f"modeled_objects.{modeled_spec.object_id}.underlay_repeat_count",
-            modeled_spec.underlay_repeat_count,
-        ),
-        (f"modeled_objects.{modeled_spec.object_id}.layer_gap_mm", modeled_spec.layer_gap_mm),
-        (
-            f"modeled_objects.{modeled_spec.object_id}.terminal_stub_length_mm",
-            modeled_spec.terminal_stub_length_mm,
-        ),
-        (f"modeled_objects.{modeled_spec.object_id}.margin_ratio", modeled_spec.margin_ratio),
-        (f"modeled_objects.{modeled_spec.object_id}.metal_fill_factor", modeled_spec.metal_fill_factor),
-    ]
-    if isinstance(modeled_spec, ModeledTxSingleCoilSpec):
-        owner_specs.extend(
-            (
-                (f"modeled_objects.{modeled_spec.object_id}.underlay_gap_mm", modeled_spec.underlay_gap_mm),
-                (
-                    f"modeled_objects.{modeled_spec.object_id}.wall_parallel_stack_present",
-                    modeled_spec.wall_parallel_stack_present,
-                ),
-            )
-        )
-    return tuple(owner_specs)
-
-
-def _plate_stack_range_owner_specs(
-    modeled_spec: ModeledPlateStackSpec,
-) -> tuple[tuple[str, RangeSpec], ...]:
-    owner_specs: list[tuple[str, RangeSpec]] = [
-        (f"modeled_objects.{modeled_spec.object_id}.turn_count", modeled_spec.turn_count),
-        (f"modeled_objects.{modeled_spec.object_id}.metal_fill_factor", modeled_spec.metal_fill_factor),
-        (f"modeled_objects.{modeled_spec.object_id}.z_usage_ratio", modeled_spec.z_usage_ratio),
-        (f"modeled_objects.{modeled_spec.object_id}.y_usage_ratio", modeled_spec.y_usage_ratio),
-    ]
-    if isinstance(modeled_spec, ModeledTxPlateStackSpec):
-        owner_specs.extend(
-            (
-                (f"modeled_objects.{modeled_spec.object_id}.tx_coil_count", modeled_spec.tx_coil_count),
-                (
-                    f"modeled_objects.{modeled_spec.object_id}.tx_array_x_usage_ratio",
-                    modeled_spec.tx_array_x_usage_ratio,
-                ),
-            )
-    )
-    return tuple(owner_specs)
-
-
-def _tx_rect_void_columns_range_owner_specs(modeled_spec: object) -> tuple[tuple[str, RangeSpec], ...]:
-    assert hasattr(modeled_spec, "object_id"), "tx_rect_void_columns modeled spec must expose object_id"
-    raw_object_id = cast(object, getattr(modeled_spec, "object_id"))
-    assert isinstance(raw_object_id, str), "tx_rect_void_columns object_id must be str"
-    object_id = raw_object_id
-    assert object_id != "", "tx_rect_void_columns object_id must be non-empty"
-    owner_root = f"modeled_objects.{object_id}"
-    return (
-        (f"{owner_root}.connection_mode", _tx_rect_void_columns_range_spec(modeled_spec, "connection_mode")),
-        (f"{owner_root}.turn_weight_a", _tx_rect_void_columns_range_spec(modeled_spec, "turn_weight_a")),
-        (f"{owner_root}.turn_weight_b", _tx_rect_void_columns_range_spec(modeled_spec, "turn_weight_b")),
-        (f"{owner_root}.turn_weight_c", _tx_rect_void_columns_range_spec(modeled_spec, "turn_weight_c")),
-        (
-            f"{owner_root}.series_total_turn_count",
-            _tx_rect_void_columns_range_spec(modeled_spec, "series_total_turn_count"),
-        ),
-        (
-            f"{owner_root}.parallel_total_turn_count",
-            _tx_rect_void_columns_range_spec(modeled_spec, "parallel_total_turn_count"),
-        ),
-    )
-
-
-def _tx_rect_void_columns_range_spec(modeled_spec: object, field_name: str) -> RangeSpec:
-    if not hasattr(modeled_spec, field_name):
-        raise RuntimeError(f"tx_rect_void_columns sampled owner missing field: {field_name}")
-    raw_range_spec = cast(object, getattr(modeled_spec, field_name))
-    assert isinstance(raw_range_spec, RangeSpec), f"tx_rect_void_columns field {field_name} must be a RangeSpec"
-    return raw_range_spec
-
-
-def _tx_rect_void_columns_sampled_connection_mode(
-    mode_spec: object,
-    *,
-    owner_path: str,
-    seed: int,
-    retry_number: int,
-) -> int:
-    mode_spec_value = _tx_rect_void_columns_range_spec(mode_spec, "connection_mode")
-    if mode_spec_value.count == 1:
-        raw_connection_mode = int(round(mode_spec_value.start))
-    else:
-        raw_connection_mode = _selected_value_for_owner_path(
-            mode_spec_value,
-            owner_path=owner_path,
-            seed=seed,
-            retry_number=retry_number,
-        )
-    if isinstance(raw_connection_mode, bool) or not isinstance(raw_connection_mode, int):
-        raise ValueError(f"{owner_path} must resolve to integer connection mode 0 or 1")
-    if raw_connection_mode not in {0, 1}:
-        raise ValueError(f"{owner_path} must resolve to integer connection mode 0 or 1, actual={raw_connection_mode}")
-    return raw_connection_mode
-
-
-def _tx_rect_void_columns_sampled_owner_values(
-    mode_spec: object,
-    *,
-    owner_prefix: str,
-    realized_coil_count: int,
-    seed: int,
-    retry_number: int,
-    include_inactive_tx_rect_void_columns: bool,
-) -> tuple[tuple[str, SampledScalar], ...]:
-    if realized_coil_count < 1:
-        raise ValueError(f"tx_rect_void_columns realized_coil_count must be >= 1 (actual={realized_coil_count})")
-    sampled_owner_values: list[tuple[str, SampledScalar]] = []
-    connection_mode_path = f"{owner_prefix}.connection_mode"
-    connection_mode = _tx_rect_void_columns_sampled_connection_mode(
-        mode_spec,
-        owner_path=connection_mode_path,
-        seed=seed,
-        retry_number=retry_number,
-    )
-    connection_mode_range = _tx_rect_void_columns_range_spec(mode_spec, "connection_mode")
-    if connection_mode_range.count != 1:
-        sampled_owner_values.append(
-            (
-                connection_mode_path,
-                _selected_value_for_owner_path(
-                    connection_mode_range,
-                    owner_path=connection_mode_path,
-                    seed=seed,
-                    retry_number=retry_number,
-                ),
-            )
-        )
-    for suffix in ("turn_weight_a", "turn_weight_b", "turn_weight_c"):
-        owner_path = f"{owner_prefix}.{suffix}"
-        range_spec = _tx_rect_void_columns_range_spec(mode_spec, suffix)
-        if range_spec.count == 1:
-            continue
-        sampled_owner_values.append(
-            (
-                owner_path,
-                _selected_value_for_owner_path(
-                    range_spec,
-                    owner_path=owner_path,
-                    seed=seed,
-                    retry_number=retry_number,
-                ),
-            )
-        )
-    series_owner_path = f"{owner_prefix}.series_total_turn_count"
-    parallel_owner_path = f"{owner_prefix}.parallel_total_turn_count"
-    series_range = _tx_rect_void_columns_range_spec(mode_spec, "series_total_turn_count")
-    parallel_range = _tx_rect_void_columns_range_spec(mode_spec, "parallel_total_turn_count")
-    if include_inactive_tx_rect_void_columns:
-        if series_range.count != 1:
-            sampled_owner_values.append(
-                (
-                    series_owner_path,
-                    _selected_value_for_owner_path(
-                        series_range,
-                        owner_path=series_owner_path,
-                        seed=seed,
-                        retry_number=retry_number,
-                    ),
-                )
-            )
-        if parallel_range.count != 1:
-            sampled_owner_values.append(
-                (
-                    parallel_owner_path,
-                    _selected_value_for_owner_path(
-                        parallel_range,
-                        owner_path=parallel_owner_path,
-                        seed=seed,
-                        retry_number=retry_number,
-                    ),
-                )
-            )
-    else:
-        active_owner_path = series_owner_path if connection_mode == 1 else parallel_owner_path
-        active_range = series_range if connection_mode == 1 else parallel_range
-        if active_range.count != 1:
-            sampled_owner_values.append(
-                (
-                    active_owner_path,
-                    _selected_integer_value_for_owner_path_with_minimum(
-                        active_range,
-                        owner_path=active_owner_path,
-                        seed=seed,
-                        retry_number=retry_number,
-                        minimum_value=realized_coil_count,
-                    ),
-                )
-            )
-
-    return tuple(sampled_owner_values)
-
-
-def _selected_integer_value_for_owner_path_with_minimum(
-    range_spec: RangeSpec,
-    *,
-    owner_path: str,
-    seed: int,
-    retry_number: int,
-    minimum_value: int,
-) -> int:
-    if minimum_value < 1:
-        raise ValueError(f"{owner_path} minimum candidate value must be >= 1 (actual={minimum_value})")
-    candidates = tuple(candidate for candidate in _integer_range_candidates(range_spec) if candidate >= minimum_value)
-    if len(candidates) == 0:
-        raise ValueError(
-            f"No candidates generated for sampled owner at or above minimum: {owner_path} "
-            f"(minimum_value={minimum_value})"
-        )
-    if len(candidates) == 1:
-        return candidates[0]
-    if retry_number < 0:
-        raise ValueError("retry_number must be >= 0")
-    hash_key = f"{seed}:{owner_path}" if retry_number == 0 else f"{seed}:{owner_path}:{retry_number}"
-    digest = hashlib.blake2b(hash_key.encode("utf-8"), digest_size=8).digest()
-    index = int.from_bytes(digest, byteorder="big", signed=False) % len(candidates)
-    return candidates[index]
-
-
-def exportable_sampled_owner_paths(spec: Type2StepSpec) -> tuple[str, ...]:
-    return exportable_sampled_owner_paths_for_seed(spec, seed=0)
-
-
-def exportable_sampled_owner_paths_for_seed(spec: Type2StepSpec, *, seed: int) -> tuple[str, ...]:
-    return tuple(owner_path for owner_path, _value in sampled_owner_values(spec, seed=seed))
-
-
-def _range_spec_for_owner_path(spec: Type2StepSpec, owner_path: str) -> RangeSpec:
-    for candidate_owner_path, range_spec in _all_range_owner_specs(spec):
-        if candidate_owner_path == owner_path:
-            return range_spec
-    raise ValueError(f"Unknown type2 sampled owner path: {owner_path}")
-
-
-def _integer_range_candidates(range_spec: RangeSpec) -> tuple[int, ...]:
-    if range_spec.is_integer is not True:
-        raise ValueError("integer range candidates require integer range spec")
-    if range_spec.count == 1:
-        raw_values = (range_spec.start,)
-    else:
-        step = (range_spec.end - range_spec.start) / float(range_spec.count - 1)
-        raw_values = tuple(range_spec.start + (step * index) for index in range(range_spec.count))
-    rounded_values = tuple(int(float(value) + 0.5) for value in raw_values)
-    deduped_values: list[int] = []
-    seen_values: set[int] = set()
-    for value in rounded_values:
-        if value in seen_values:
-            continue
-        seen_values.add(value)
-        deduped_values.append(value)
-    return tuple(deduped_values)
-
-
-def _float_range_candidates(range_spec: RangeSpec) -> tuple[float, ...]:
-    if range_spec.is_integer is not False:
-        raise ValueError("float range candidates require non-integer range spec")
-    if range_spec.count == 1:
-        return (range_spec.start,)
-    step = (range_spec.end - range_spec.start) / float(range_spec.count - 1)
-    return tuple(range_spec.start + (step * index) for index in range(range_spec.count))
-
-
-def _selected_value_for_owner_path(
-    range_spec: RangeSpec,
-    *,
-    owner_path: str,
-    seed: int,
-    retry_number: int = 0,
-) -> SampledScalar:
-    if retry_number < 0:
-        raise ValueError("retry_number must be >= 0")
-    candidates: tuple[SampledScalar, ...]
-    if range_spec.is_integer:
-        candidates = _integer_range_candidates(range_spec)
-    else:
-        candidates = _float_range_candidates(range_spec)
-    if len(candidates) == 0:
-        raise ValueError(f"No candidates generated for sampled owner: {owner_path}")
-    if len(candidates) == 1:
-        return candidates[0]
-    hash_key = f"{seed}:{owner_path}" if retry_number == 0 else f"{seed}:{owner_path}:{retry_number}"
-    digest = hashlib.blake2b(hash_key.encode("utf-8"), digest_size=8).digest()
-    index = int.from_bytes(digest, byteorder="big", signed=False) % len(candidates)
-    return candidates[index]
-
-
-def sampled_owner_values(
-    spec: Type2StepSpec,
-    *,
-    seed: int,
-    retry_number: int = 0,
-    include_inactive_tx_rect_void_columns: bool = False,
-) -> tuple[tuple[str, SampledScalar], ...]:
-    sampled_values: list[tuple[str, SampledScalar]] = []
-    for owner_path, range_spec in _non_model_range_owner_specs(spec):
-        if range_spec.count != 1:
-            sampled_values.append(
-                (
-                    owner_path,
-                    _selected_value_for_owner_path(
-                        range_spec,
-                        owner_path=owner_path,
-                        seed=seed,
-                        retry_number=retry_number,
-                    ),
-                )
-            )
-    tx_rect_void_columns_realized_coil_count = _tx_rect_void_columns_realized_coil_count(
-        spec=spec,
-        sampled_values=tuple(sampled_values),
-        seed=seed,
-        retry_number=retry_number,
-    )
-    for modeled_spec in spec.modeled_objects:
-        role = _modeled_spec_role(modeled_spec)
-        if role in _SAMPLED_SINGLE_COIL_ROLES:
-            sampled_values.extend(
-                _single_coil_range_owner_values(
-                    cast(ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec, modeled_spec),
-                    seed=seed,
-                    retry_number=retry_number,
-                )
-            )
-            continue
-        if role == _TX_RECT_VOID_COLUMNS_ROLE:
-            assert hasattr(modeled_spec, "object_id"), "tx_rect_void_columns modeled spec must expose object_id"
-            raw_object_id = cast(object, getattr(modeled_spec, "object_id"))
-            assert isinstance(raw_object_id, str), "tx_rect_void_columns object_id must be str"
-            owner_prefix = f"modeled_objects.{raw_object_id}"
-            sampled_values.extend(
-                _tx_rect_void_columns_sampled_owner_values(
-                    modeled_spec,
-                    owner_prefix=owner_prefix,
-                    realized_coil_count=tx_rect_void_columns_realized_coil_count,
-                    seed=seed,
-                    retry_number=retry_number,
-                    include_inactive_tx_rect_void_columns=include_inactive_tx_rect_void_columns,
-                )
-            )
-            continue
-        if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
-            sampled_values.extend(
-                _plate_stack_range_owner_values(cast(ModeledPlateStackSpec, modeled_spec), seed=seed, retry_number=retry_number)
-            )
-            continue
-        raise RuntimeError(f"unsupported modeled object role for sampled owner resolution: {role}")
-    return tuple(sampled_values)
-
-
-def _tx_rect_void_columns_realized_coil_count(
-    *,
-    spec: Type2StepSpec,
-    sampled_values: tuple[tuple[str, SampledScalar], ...],
-    seed: int,
-    retry_number: int,
-) -> int:
-    x_division_count = _integer_sampled_or_fixed_owner_value(
-        spec=spec,
-        sampled_values=sampled_values,
-        owner_path="non_model_objects.tx_region_actual.x_division_count",
-        seed=seed,
-        retry_number=retry_number,
-    )
-    y_division_count = _integer_sampled_or_fixed_owner_value(
-        spec=spec,
-        sampled_values=sampled_values,
-        owner_path="non_model_objects.tx_region_actual.y_division_count",
-        seed=seed,
-        retry_number=retry_number,
-    )
-    realized_coil_count = x_division_count * y_division_count
-    if realized_coil_count < 1:
-        raise ValueError(
-            "tx_rect_void_columns realized coil count must be >= 1 "
-            f"(x_division_count={x_division_count}, y_division_count={y_division_count})"
-        )
-    return realized_coil_count
-
-
-def _integer_sampled_or_fixed_owner_value(
-    *,
-    spec: Type2StepSpec,
-    sampled_values: tuple[tuple[str, SampledScalar], ...],
-    owner_path: str,
-    seed: int,
-    retry_number: int,
-) -> int:
-    for candidate_owner_path, sampled_value in sampled_values:
-        if candidate_owner_path != owner_path:
-            continue
-        if isinstance(sampled_value, bool) or not isinstance(sampled_value, int):
-            raise ValueError(f"{owner_path} must resolve to integer value (actual={sampled_value!r})")
-        return sampled_value
-    range_spec = _range_spec_for_owner_path(spec, owner_path)
-    selected_value = _selected_value_for_owner_path(
-        range_spec,
-        owner_path=owner_path,
-        seed=seed,
-        retry_number=retry_number,
-    )
-    if isinstance(selected_value, bool) or not isinstance(selected_value, int):
-        raise ValueError(f"{owner_path} must resolve to integer value (actual={selected_value!r})")
-    return selected_value
-
-
-def _single_coil_range_owner_values(
-    modeled_spec: ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec,
-    *,
-    seed: int,
-    retry_number: int,
-) -> tuple[tuple[str, SampledScalar], ...]:
-    sampled_values: list[tuple[str, SampledScalar]] = []
-    for owner_path, range_spec in _single_coil_range_owner_specs(modeled_spec):
-        if range_spec.count == 1:
-            continue
-        sampled_values.append(
-            (
-                owner_path,
-                _selected_value_for_owner_path(
-                    range_spec,
-                    owner_path=owner_path,
-                    seed=seed,
-                    retry_number=retry_number,
-                ),
-            )
-        )
-    return tuple(sampled_values)
-
-
-def _plate_stack_range_owner_values(
-    modeled_spec: ModeledPlateStackSpec,
-    *,
-    seed: int,
-    retry_number: int,
-) -> tuple[tuple[str, SampledScalar], ...]:
-    sampled_values: list[tuple[str, SampledScalar]] = []
-    for owner_path, range_spec in _plate_stack_range_owner_specs(modeled_spec):
-        if range_spec.count == 1:
-            continue
-        sampled_values.append(
-            (
-                owner_path,
-                _selected_value_for_owner_path(
-                    range_spec,
-                    owner_path=owner_path,
-                    seed=seed,
-                    retry_number=retry_number,
-                ),
-            )
-        )
-    return tuple(sampled_values)
-
-
-def _tx_rect_void_columns_inactive_owner_values(
-    *,
-    spec: Type2StepSpec,
-    sampled_values: tuple[tuple[str, SampledScalar], ...],
-    seed: int,
-    retry_number: int,
-) -> tuple[tuple[str, SampledScalar], ...]:
-    sampled_value_map = dict(sampled_values)
-    inactive_owner_values: list[tuple[str, SampledScalar]] = []
-    for modeled_spec in spec.modeled_objects:
-        role = _modeled_spec_role(modeled_spec)
-        if role != _TX_RECT_VOID_COLUMNS_ROLE:
-            continue
-        assert hasattr(modeled_spec, "object_id"), "tx_rect_void_columns modeled spec must expose object_id"
-        raw_object_id = cast(object, getattr(modeled_spec, "object_id"))
-        assert isinstance(raw_object_id, str), "tx_rect_void_columns object_id must be str"
-        object_id = raw_object_id
-        owner_prefix = f"modeled_objects.{object_id}"
-        connection_mode_path = f"{owner_prefix}.connection_mode"
-        connection_mode: int
-        if connection_mode_path in sampled_value_map:
-            raw_connection_mode = sampled_value_map[connection_mode_path]
-            if isinstance(raw_connection_mode, bool) or not isinstance(raw_connection_mode, int):
-                raise ValueError(f"{connection_mode_path} must resolve to integer connection mode 0 or 1")
-            if raw_connection_mode not in {0, 1}:
-                raise ValueError(
-                    f"{connection_mode_path} must resolve to integer connection mode 0 or 1, "
-                    f"actual={raw_connection_mode}"
-                )
-            connection_mode = raw_connection_mode
-        else:
-            connection_mode = _tx_rect_void_columns_sampled_connection_mode(
-                modeled_spec,
-                owner_path=connection_mode_path,
-                seed=seed,
-                retry_number=retry_number,
-            )
-        series_path = f"{owner_prefix}.series_total_turn_count"
-        parallel_path = f"{owner_prefix}.parallel_total_turn_count"
-        inactive_path = parallel_path if connection_mode == 1 else series_path
-        if inactive_path in sampled_value_map:
-            continue
-        inactive_range_spec = _tx_rect_void_columns_range_spec(
-            modeled_spec,
-            "series_total_turn_count" if connection_mode != 1 else "parallel_total_turn_count",
-        )
-        if inactive_range_spec.count == 1:
-            continue
-        inactive_owner_values.append(
-            (
-                inactive_path,
-                _selected_value_for_owner_path(
-                    inactive_range_spec,
-                    owner_path=inactive_path,
-                    seed=seed,
-                    retry_number=retry_number,
-                ),
-            )
-        )
-    return tuple(inactive_owner_values)
+load_type2_step_spec = _load_type2_step_spec
 
 
 def _hash4_from_bytes(payload: bytes) -> str:
@@ -1392,11 +520,13 @@ def _export_step_for_sample_entry(
     report_step_stage("done", entry)
 
 
-def _build_sample_manifest_entry_for_seed_task(task: tuple[str, str, int, int, str, bool]) -> Type2SampleManifestEntry:
+def _build_sample_manifest_entry_for_seed_task(
+    task: tuple[str, str, int, int, str, bool],
+) -> Type2SampleManifestEntry:
     source_toml_path_text, output_dir_text, seed, sample_index, head_hash4, make_step_on_sample = task
     source_toml_path = Path(source_toml_path_text)
     output_dir = Path(output_dir_text)
-    source_spec = load_type2_step_spec(source_toml_path)
+    source_spec = _load_type2_step_spec(source_toml_path)
     raw_source_spec, _raw_source_bytes = load_toml_bytes(source_toml_path)
     _require_not_sampled_source(raw_source_spec, context=str(source_toml_path))
     entry = _build_sample_manifest_entry_for_seed(
@@ -1435,7 +565,11 @@ def generate_sample_manifest_entries(
     exporter: _SampleExporter = export_type2_step_artifacts,
     report_progress: _SampleProgressReporter | None = None,
     report_step_stage: _SampleStepStageReporter = _no_op_sample_step_stage_reporter,
+    load_type2_step_spec: Callable[[Path], Type2StepSpec] | None = None,
 ) -> list[Type2SampleManifestEntry]:
+    resolved_spec_loader = load_type2_step_spec
+    if resolved_spec_loader is None:
+        resolved_spec_loader = globals()["load_type2_step_spec"]
     if count < 1:
         raise ValueError("count must be >= 1")
     if jobs < 1:
@@ -1446,7 +580,7 @@ def generate_sample_manifest_entries(
     seed_values = tuple(range(seed_start, seed_start + count))
     head_hash4 = _current_head_hash4()
     if jobs == 1 or count == 1 or (make_step_on_sample and exporter is not export_type2_step_artifacts):
-        source_spec = load_type2_step_spec(source_toml_path)
+        source_spec = resolved_spec_loader(source_toml_path)
         raw_source_spec, _raw_source_bytes = load_toml_bytes(source_toml_path)
         _require_not_sampled_source(raw_source_spec, context=str(source_toml_path))
         entries: list[Type2SampleManifestEntry] = []
@@ -1480,7 +614,13 @@ def generate_sample_manifest_entries(
     ]
     entries_by_index: dict[int, Type2SampleManifestEntry] = {}
     with ProcessPoolExecutor(max_workers=jobs) as executor:
-        future_by_index = {executor.submit(_build_sample_manifest_entry_for_seed_task, task): task[3] for task in tasks}
+        future_by_index = {
+            executor.submit(
+                _build_sample_manifest_entry_for_seed_task,
+                task,
+            ): task[3]
+            for task in tasks
+        }
         completed = 0
         for future in as_completed(future_by_index):
             entry = future.result()
@@ -1771,14 +911,21 @@ def _manifest_entry_from_sampled_toml(metadata: Type2SampleMetadata, sampled_tom
     }
 
 
-def prepare_type2_build(sampled_toml_path: Path) -> PreparedType2Build:
+def prepare_type2_build(
+    sampled_toml_path: Path,
+    *,
+    load_type2_step_spec: Callable[[Path], Type2StepSpec] | None = None,
+) -> PreparedType2Build:
+    resolved_spec_loader = load_type2_step_spec
+    if resolved_spec_loader is None:
+        resolved_spec_loader = globals()["load_type2_step_spec"]
     metadata = load_type2_sample_metadata(sampled_toml_path)
-    sampled_spec = load_type2_step_spec(sampled_toml_path)
+    sampled_spec = resolved_spec_loader(sampled_toml_path)
     sampled_modeled_roles = _modeled_roles(sampled_spec)
     source_toml_path = Path(metadata["source_toml_path"]).resolve(strict=False)
     if not source_toml_path.is_file():
         raise FileNotFoundError(f"type2 sampled TOML references missing source_toml_path: {source_toml_path}")
-    source_spec = load_type2_step_spec(source_toml_path)
+    source_spec = resolved_spec_loader(source_toml_path)
     source_modeled_roles = _modeled_roles(source_spec)
     if sampled_modeled_roles != source_modeled_roles:
         raise ValueError(
@@ -1833,7 +980,11 @@ def prepared_builds_from_manifest(
     manifest_path: Path,
     *,
     selected_design_ids: tuple[str, ...],
+    load_type2_step_spec: Callable[[Path], Type2StepSpec] | None = None,
 ) -> tuple[PreparedType2Build, ...]:
+    resolved_spec_loader = load_type2_step_spec
+    if resolved_spec_loader is None:
+        resolved_spec_loader = globals()["load_type2_step_spec"]
     document = load_type2_sample_manifest(manifest_path)
     entries = document["entries"]
     requested_design_ids = set(selected_design_ids)
@@ -1844,7 +995,9 @@ def prepared_builds_from_manifest(
         if requested_design_ids and design_id not in requested_design_ids:
             continue
         selected_found.add(design_id)
-        prepared_builds.append(prepare_type2_build(Path(entry["sampled_toml_path"])))
+        prepared_builds.append(
+            prepare_type2_build(Path(entry["sampled_toml_path"]), load_type2_step_spec=resolved_spec_loader)
+        )
     missing_design_ids = requested_design_ids - selected_found
     if missing_design_ids:
         raise ValueError(f"type2 sample manifest is missing requested design ids: {sorted(missing_design_ids)}")

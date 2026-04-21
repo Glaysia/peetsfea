@@ -1,7 +1,7 @@
 ---
 title: Structure Note Index
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 14:52
+updated: 2026-04-21 @ 23:40
 tags:
   - sdd
 ---
@@ -15,6 +15,7 @@ tags:
 - [[sdd/structure/obsidian-link-policy]]
 - [[sdd/structure/commit-policy]]
 - [[sdd/structure/sub-agent-spawn-policy]]
+- [[sdd/structure/type2-sampled-module-boundary]]
 
 ## Canonical Entrypoints
 - type2 STEP import/setup ownership path: [[sdd/architecture/type2-step-to-em-validate-pipeline]]

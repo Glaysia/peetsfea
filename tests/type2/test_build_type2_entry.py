@@ -517,6 +517,98 @@ def test_build_type2_reads_aedt_builder_n_from_manifest(
         assert all(name not in tuple(name for name, _ in design_variables) for name in _RX_NON_SAMPLED_VARIABLE_NAMES)
 
 
+def test_build_type2_forwards_manifest_path_and_selected_ids_to_prepared_builds_from_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "config": {
+                    "source_toml_path": "/tmp/type2_source.toml",
+                    "seed_first": 10,
+                    "seed_n": 1,
+                    "sampler_n": 1,
+                    "make_step_on_sample": True,
+                    "aedt_builder_n": 7,
+                },
+                "entries": [],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    source_toml_path = tmp_path / "source.toml"
+    source_toml_path.write_text("[design]\n", encoding="utf-8")
+    sampled_toml_path = tmp_path / "sampled.toml"
+    sampled_toml_path.write_text("[sampled]\n", encoding="utf-8")
+    design_dir = tmp_path / "design-compat"
+    design_dir.mkdir()
+    scene_step_path = design_dir / "type2_scene.step"
+    scene_step_path.write_text("STEP", encoding="utf-8")
+    step_ledger_path = design_dir / "type2_step_ledger.json"
+    step_ledger_path.write_text(json.dumps({"scene_step_path": str(scene_step_path)}, indent=2), encoding="utf-8")
+    imported_ledger_path = design_dir / "type2_imported_ledger.json"
+    prepared_build = PreparedType2Build(
+        design_id="design-compat",
+        seed=10,
+        source_toml_path=source_toml_path,
+        sampled_toml_path=sampled_toml_path,
+        design_dir=design_dir,
+        scene_step_path=scene_step_path,
+        step_ledger_path=step_ledger_path,
+        imported_ledger_path=imported_ledger_path,
+        aedt_path=design_dir / "design-compat.aedt",
+        sampled_owner_paths=("modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",),
+        modeled_roles=("rx_single_coil",),
+        design_variables=(("rx_outer_x_usage_ratio", "0.5"),),
+    )
+
+    calls: dict[str, object] = {}
+
+    def _fake_prepared_builds_from_manifest(
+        manifest_path_arg: Path,
+        selected_design_ids: tuple[str, ...],
+    ) -> tuple[PreparedType2Build, ...]:
+        calls["manifest_path"] = manifest_path_arg
+        calls["selected_design_ids"] = selected_design_ids
+        return (prepared_build,)
+
+    def _fake_build_prepared_type2_designs(
+        prepared_builds: tuple[PreparedType2Build, ...],
+        *,
+        jobs: int,
+        exporter: object,
+        runner: object,
+    ) -> list[Type2BuiltArtifact]:
+        calls["jobs"] = jobs
+        assert len(prepared_builds) == 1
+        prepared = prepared_builds[0]
+        return [
+            {
+                "design_id": prepared.design_id,
+                "sampled_toml_path": str(prepared.sampled_toml_path),
+                "aedt_path": str(prepared.aedt_path),
+                "source_step_ledger_path": str(prepared.step_ledger_path),
+                "imported_ledger_path": str(prepared.imported_ledger_path),
+            }
+        ]
+
+    monkeypatch.setattr(build_entry, "prepared_builds_from_manifest", _fake_prepared_builds_from_manifest)
+    monkeypatch.setattr(type2_sampled, "prepared_builds_from_manifest", _fake_prepared_builds_from_manifest)
+    monkeypatch.setattr(build_entry, "build_prepared_type2_designs", _fake_build_prepared_type2_designs)
+
+    results = build_type2(manifest_path=manifest_path)
+
+    assert calls["manifest_path"] == manifest_path
+    assert calls["selected_design_ids"] == tuple()
+    assert calls["jobs"] == 7
+    assert len(results) == 1
+    assert results[0]["design_id"] == prepared_build.design_id
+
+
 def test_build_type2_builds_plate_stack_manifest_with_setup_ready_runner(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

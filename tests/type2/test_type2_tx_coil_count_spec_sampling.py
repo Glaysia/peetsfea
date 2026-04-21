@@ -178,6 +178,18 @@ def test_tx_coil_count_accepts_canonical_and_fixed_ranges_and_resolves(tmp_path:
     assert fixed_value == 2
 
 
+def test_tx_coil_count_resolution_is_deterministic_for_seed(tmp_path: Path) -> None:
+    toml_path = _write_toml(
+        tmp_path,
+        text=_type2_plate_stack_toml(tx_tx_coil_count_range="[true, 1, 4, 4]"),
+    )
+    spec = load_type2_step_spec(toml_path)
+    tx_plate_stack_spec = _tx_spec_from_loaded_spec(toml_path)
+    assert resolve_modeled_tx_coil_count(tx_plate_stack_spec, seed=77) == 1
+    sampled_map = dict(sampled_owner_values(spec, seed=77))
+    assert sampled_map["modeled_objects.tx_plate_stack.tx_coil_count"] == 1
+
+
 def test_tx_array_x_usage_ratio_accepts_canonical_and_fixed_ranges_and_resolves(tmp_path: Path) -> None:
     canonical_path = _write_toml(
         tmp_path,

@@ -44,7 +44,11 @@ class _FakeRxOnlyType2Spec:
     modeled_objects: tuple[ModeledRxSingleCoilSpec, ...]
 
 
-def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
+def _patch_rx_only_spec_loader(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    loader_calls: list[Path] | None = None,
+) -> None:
     source_spec_loader = load_type2_step_spec
     rx_outer_x_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.6, count=17)
     rx_outer_y_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.6, count=17)
@@ -111,6 +115,8 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     def _patched_loader(toml_path: Path) -> object:
+        if loader_calls is not None:
+            loader_calls.append(toml_path)
         if toml_path.name == "type2_sweep.toml":
             return fake_spec
         return source_spec_loader(toml_path)
@@ -485,6 +491,38 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
 
     resolved_entry = manifest_entry_for_sample_index(manifest_path, sample_index=0)
     assert resolved_entry["design_id"] == first_entry["design_id"]
+
+
+def test_sample_type2_load_type2_step_spec_hook_via_type2_sampled_module(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    patched_calls: list[Path] = []
+    _patch_rx_only_spec_loader(monkeypatch, loader_calls=patched_calls)
+    source_toml_path = _write_source_type2_toml(tmp_path)
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+
+    document = sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=101,
+        seed_n=2,
+        sampler_n=1,
+        aedt_builder_n=1,
+        make_step_on_sample=False,
+    )
+
+    assert patched_calls == [source_toml_path]
+    assert [entry["seed"] for entry in document["entries"]] == [101, 102]
+    assert [entry["sample_index"] for entry in document["entries"]] == [0, 1]
+    assert [entry["retry_number"] for entry in document["entries"]] == [0, 0]
+    for entry in document["entries"]:
+        assert Path(entry["sampled_toml_path"]).is_file()
+        assert Path(entry["scene_step_path"]).exists() is False
+        assert Path(entry["step_ledger_path"]).exists() is False
+        assert Path(entry["aedt_path"]).exists() is False
 
 
 def test_manifest_entry_for_sample_index_rejects_out_of_range(
