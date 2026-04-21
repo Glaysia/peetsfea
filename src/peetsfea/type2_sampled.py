@@ -8,7 +8,7 @@ import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, TypedDict, cast
+from typing import Final, Literal, TypedDict, cast
 
 from peetsfea.spec.loader import TOMLTable, TOMLValue, load_toml_bytes
 from peetsfea.spec.toml_render import toml_dumps
@@ -16,7 +16,6 @@ from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
-from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelDerivedSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
@@ -41,7 +40,30 @@ _INTEGER_RANGE_FIELD_NAMES = (
 _SAMPLED_METADATA_TABLE = "sampled"
 _SAMPLED_SINGLE_COIL_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
 _PLATE_STACK_ROLE_SUFFIX = "_plate_stack"
-_TX_REGION_ACTUAL_X_DIVISION_OWNER_PATH = "non_model_objects.tx_region_actual.x_division_count"
+_TYPE2_CONSTRAINT_RETRY_LIMIT: Final[int] = 64
+_CONSTRAINT_COMPARISON_OPERATORS: Final[frozenset[str]] = frozenset({"<", "<=", ">", ">=", "==", "!="})
+
+
+class _ConstraintPathRef(TypedDict):
+    path: str
+
+
+class _ConstraintValueRef(TypedDict):
+    value: int | float
+
+
+class _ConstraintFuncRef(TypedDict):
+    func: str
+
+
+class _Type2ConstraintRule(TypedDict):
+    id: str
+    kind: str
+    message: str
+    enabled: bool
+    lhs: _ConstraintPathRef | _ConstraintFuncRef | _ConstraintValueRef
+    op: str
+    rhs: _ConstraintPathRef | _ConstraintFuncRef | _ConstraintValueRef
 
 
 class Type2SampleMetadata(TypedDict):
@@ -121,6 +143,284 @@ def _non_model_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeS
     return tuple(owner_specs)
 
 
+def _parse_constraint_table(raw_value: object, path: str) -> TOMLTable:
+    if not isinstance(raw_value, dict):
+        raise ValueError(f"{path} must be a table/object")
+    return cast(TOMLTable, raw_value)
+
+
+def _constraint_id_for_rule(index: int) -> str:
+    return f"constraints.rules[{index}]"
+
+
+def _parse_constraint_func(raw_text: str, context: str) -> tuple[str, tuple[str, ...]]:
+    text = raw_text.strip()
+    if not text.startswith("sum(") or not text.endswith(")"):
+        raise ValueError(f"{context}.func must be in the form sum(arg_1, arg_2, ...)")
+    body = text[4:-1].strip()
+    args = _split_function_args(body, context=f"{context}.func")
+    if len(args) == 0:
+        raise ValueError(f"{context}.func sum() must contain at least one argument")
+    return "sum", tuple(args)
+
+
+def _split_function_args(raw_text: str, context: str) -> tuple[str, ...]:
+    if raw_text == "":
+        return tuple()
+    args: list[str] = []
+    token: list[str] = []
+    depth = 0
+    for index, ch in enumerate(raw_text):
+        if ch == "(":
+            depth += 1
+            token.append(ch)
+            continue
+        if ch == ")":
+            depth -= 1
+            if depth < 0:
+                raise ValueError(f"{context} has unmatched ')' at index {index}")
+            token.append(ch)
+            continue
+        if ch == "," and depth == 0:
+            raw_arg = "".join(token).strip()
+            if raw_arg == "":
+                raise ValueError(f"{context} contains empty argument")
+            args.append(raw_arg)
+            token = []
+            continue
+        token.append(ch)
+    if depth != 0:
+        raise ValueError(f"{context} has unmatched '('")
+    if token:
+        raw_arg = "".join(token).strip()
+        if raw_arg == "":
+            raise ValueError(f"{context} contains empty argument")
+        args.append(raw_arg)
+    return tuple(args)
+
+
+def _parse_constraint_operand(
+    raw_operand: object,
+    path: str,
+) -> _ConstraintPathRef | _ConstraintFuncRef | _ConstraintValueRef:
+    if isinstance(raw_operand, dict):
+        if set(raw_operand.keys()) == {"path"}:
+            raw_path = raw_operand["path"]
+            if not isinstance(raw_path, str) or raw_path == "":
+                raise ValueError(f"{path} path must be a non-empty string")
+            return {"path": raw_path}
+        if set(raw_operand.keys()) == {"func"}:
+            raw_func = raw_operand["func"]
+            if not isinstance(raw_func, str) or raw_func == "":
+                raise ValueError(f"{path}.func must be a non-empty string")
+            return {"func": raw_func.strip()}
+        if set(raw_operand.keys()) == {"value"}:
+            raw_value = raw_operand["value"]
+            if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+                raise ValueError(f"{path}.value must be a number")
+            return {"value": raw_value}
+    raise ValueError(f"{path} must be one of {{path|value|func}}")
+
+
+def _parse_constraints(source_spec: TOMLTable, source: Type2StepSpec) -> list[_Type2ConstraintRule]:
+    if "constraints" not in source_spec:
+        return []
+    raw_constraints = source_spec["constraints"]
+    if not isinstance(raw_constraints, dict):
+        raise ValueError("[constraints] must be a table/object")
+    raw_rules = cast(object, raw_constraints)
+    if "rules" not in cast(TOMLTable, raw_rules):
+        raise ValueError("[constraints] must contain rules")
+    constraints_table = _parse_constraint_table(raw_rules, "constraints")
+    raw_rule_list = constraints_table["rules"]
+    if not isinstance(raw_rule_list, list):
+        raise ValueError("constraints.rules must be a list of tables")
+    if len(raw_rule_list) == 0:
+        raise ValueError("constraints.rules must be a non-empty list")
+    parsed_rules: list[_Type2ConstraintRule] = []
+    rule_ids: set[str] = set()
+    for index, raw_rule in enumerate(raw_rule_list):
+        rule_path = _constraint_id_for_rule(index)
+        if not isinstance(raw_rule, dict):
+            raise ValueError(f"{rule_path} must be a table/object")
+        raw_rule_dict = cast(TOMLTable, raw_rule)
+        if set(raw_rule_dict.keys()) != {"id", "kind", "message", "enabled", "lhs", "op", "rhs"} and not {
+            "id",
+            "kind",
+            "message",
+            "lhs",
+            "op",
+            "rhs",
+        }.issubset(set(raw_rule_dict.keys())):
+            raise ValueError(f"{rule_path} must contain keys id, kind, message, lhs, op, rhs and optional enabled")
+        raw_id = raw_rule_dict["id"]
+        if not isinstance(raw_id, str) or raw_id == "":
+            raise ValueError(f"{rule_path}.id must be a non-empty string")
+        if raw_id in rule_ids:
+            raise ValueError(f"{rule_path} duplicate rule id: {raw_id}")
+        rule_ids.add(raw_id)
+        raw_kind = raw_rule_dict["kind"]
+        if raw_kind != "comparison":
+            raise ValueError(f"{rule_path}.kind must be 'comparison' for type2 constraints")
+        raw_message = raw_rule_dict["message"]
+        if not isinstance(raw_message, str) or raw_message == "":
+            raise ValueError(f"{rule_path}.message must be a non-empty string")
+        raw_enabled = raw_rule_dict["enabled"] if "enabled" in raw_rule_dict else True
+        if raw_enabled is not True and raw_enabled is not False:
+            raise ValueError(f"{rule_path}.enabled must be bool")
+        raw_lhs = _parse_constraint_operand(raw_rule_dict["lhs"], f"{rule_path}.lhs")
+        raw_rhs = _parse_constraint_operand(raw_rule_dict["rhs"], f"{rule_path}.rhs")
+        raw_op = raw_rule_dict["op"]
+        if raw_op not in _CONSTRAINT_COMPARISON_OPERATORS:
+            raise ValueError(
+                f"{rule_path}.op must be one of {sorted(_CONSTRAINT_COMPARISON_OPERATORS)} "
+                f"(actual={raw_op!r})"
+            )
+        parsed_rules.append(
+            {
+                "id": raw_id,
+                "kind": "comparison",
+                "message": raw_message,
+                "enabled": bool(raw_enabled),
+                "lhs": raw_lhs,
+                "op": raw_op,
+                "rhs": raw_rhs,
+            }
+        )
+    _validate_constraint_paths(sampled_source=source, constraints=parsed_rules)
+    return parsed_rules
+
+
+def _validate_constraint_path(sampled_source: Type2StepSpec, path: str, *, context: str) -> None:
+    try:
+        _ = _range_spec_for_owner_path(sampled_source, path)
+    except ValueError as exc:
+        raise ValueError(f"{context} references unknown owner path: {path}") from exc
+
+
+def _validate_constraint_paths(sampled_source: Type2StepSpec, *, constraints: list[_Type2ConstraintRule]) -> None:
+    for rule in constraints:
+        if not rule["enabled"]:
+            continue
+        for side_key in ("lhs", "rhs"):
+            raw_side = rule[side_key]
+            if "path" in raw_side:
+                _validate_constraint_path(sampled_source, raw_side["path"], context=f"constraints.rules[{rule['id']}]")
+            if "func" in raw_side:
+                func_name, args = _parse_constraint_func(raw_side["func"], f"constraints.rules[{rule['id']}]")
+                if func_name != "sum":
+                    raise ValueError(f"constraints.rules[{rule['id']}].func only supports sum()")
+                for arg in args:
+                    _validate_constraint_sum_arg(sampled_source, arg, context=f"constraints.rules[{rule['id']}]")
+
+
+def _validate_constraint_sum_arg(sampled_source: Type2StepSpec, arg: str, *, context: str) -> None:
+    if arg == "":
+        raise ValueError(f"{context}.func contains empty argument")
+    try:
+        float(arg)
+    except ValueError:
+        _validate_constraint_path(sampled_source, arg, context=f"{context}.func")
+
+
+def _resolve_constraint_path_value(
+    source: Type2StepSpec,
+    sampled_values: dict[str, SampledScalar],
+    path: str,
+    *,
+    context: str,
+) -> SampledScalar:
+    if path in sampled_values:
+        return sampled_values[path]
+    range_spec = _range_spec_for_owner_path(source, path)
+    if range_spec.count != 1:
+        raise ValueError(f"{context} references unsampled owner path: {path}")
+    if range_spec.is_integer:
+        value = int(range_spec.start)
+    else:
+        value = float(range_spec.start)
+    return value
+
+
+def _resolve_constraint_operand(
+    source: Type2StepSpec,
+    sampled_values: dict[str, SampledScalar],
+    operand: _ConstraintPathRef | _ConstraintFuncRef | _ConstraintValueRef,
+    *,
+    context: str,
+) -> int | float | str:
+    if "path" in operand:
+        return _resolve_constraint_path_value(
+            source,
+            sampled_values,
+            operand["path"],
+            context=context,
+        )
+    if "value" in operand:
+        return operand["value"]
+    function = _parse_constraint_func(cast(str, operand["func"]), context=f"{context}.func")
+    function_name, args = function
+    if function_name != "sum":
+        raise ValueError(f"{context}.func only supports sum()")
+    total = 0.0
+    for arg in args:
+        if " " in arg:
+            arg = arg.strip()
+        try:
+            total += float(arg)
+            continue
+        except ValueError:
+            pass
+        total += float(_resolve_constraint_path_value(source, sampled_values, arg, context=context))
+    return total
+
+
+def _evaluate_comparison(lhs: int | float | str, op: str, rhs: int | float | str) -> bool:
+    if op in {"<", "<=", ">", ">=", "!="}:
+        if isinstance(lhs, str) or isinstance(rhs, str):
+            raise ValueError(f"comparison operator {op} is not supported for string operands")
+    if op == "<":
+        return lhs < rhs  # type: ignore[operator]
+    if op == "<=":
+        return lhs <= rhs  # type: ignore[operator]
+    if op == ">":
+        return lhs > rhs  # type: ignore[operator]
+    if op == ">=":
+        return lhs >= rhs  # type: ignore[operator]
+    if op == "==":
+        return lhs == rhs
+    if op == "!=":
+        return lhs != rhs
+    raise ValueError(f"Unsupported comparison operator: {op}")
+
+
+def _require_constraints_satisfied(
+    source: Type2StepSpec,
+    sampled_values: dict[str, SampledScalar],
+    constraints: list[_Type2ConstraintRule],
+) -> None:
+    for rule in constraints:
+        if not rule["enabled"]:
+            continue
+        lhs_value = _resolve_constraint_operand(
+            source,
+            sampled_values,
+            cast(_ConstraintPathRef | _ConstraintFuncRef | _ConstraintValueRef, rule["lhs"]),
+            context=f"constraints.rules[{rule['id']}]",
+        )
+        rhs_value = _resolve_constraint_operand(
+            source,
+            sampled_values,
+            cast(_ConstraintPathRef | _ConstraintFuncRef | _ConstraintValueRef, rule["rhs"]),
+            context=f"constraints.rules[{rule['id']}]",
+        )
+        if not _evaluate_comparison(lhs_value, rule["op"], rhs_value):
+            raise ValueError(
+                f"constraint '{rule['id']}' failed: {rule['message']} "
+                f"(lhs={lhs_value!r} rhs={rhs_value!r} op={rule['op']})"
+            )
+
+
 def _derived_non_model_range_owner_specs(
     non_model_spec: NonModelDerivedSpec,
 ) -> tuple[tuple[str, RangeSpec], ...]:
@@ -168,31 +468,12 @@ def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpe
         if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
             owner_specs.extend(_plate_stack_range_owner_specs(cast(ModeledPlateStackSpec, modeled_spec)))
             continue
-        if role == "tx_rect_void_columns":
-            owner_specs.extend(_tx_rect_void_columns_all_range_owner_specs(cast(ModeledTxRectVoidColumnsSpec, modeled_spec)))
-            continue
         raise RuntimeError(f"unsupported modeled object role for sampled owner resolution: {role}")
     return tuple(owner_specs)
 
 
 def _all_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpec], ...]:
     return _non_model_range_owner_specs(spec) + _modeled_range_owner_specs(spec)
-
-
-def _tx_rect_void_columns_all_range_owner_specs(
-    modeled_spec: ModeledTxRectVoidColumnsSpec,
-) -> tuple[tuple[str, RangeSpec], ...]:
-    return (
-        (f"modeled_objects.{modeled_spec.object_id}.layer_count", modeled_spec.layer_count),
-        (f"modeled_objects.{modeled_spec.object_id}.layer_gap_mm", modeled_spec.layer_gap_mm),
-        (f"modeled_objects.{modeled_spec.object_id}.terminal_stub_length_mm", modeled_spec.terminal_stub_length_mm),
-        (f"modeled_objects.{modeled_spec.object_id}.void_usage_ratio", modeled_spec.void_usage_ratio),
-        (f"modeled_objects.{modeled_spec.object_id}.margin_ratio", modeled_spec.margin_ratio),
-        (f"modeled_objects.{modeled_spec.object_id}.metal_fill_factor", modeled_spec.metal_fill_factor),
-        (f"modeled_objects.{modeled_spec.object_id}.turn_count_x0", modeled_spec.turn_count_x0),
-        (f"modeled_objects.{modeled_spec.object_id}.turn_count_x1", modeled_spec.turn_count_x1),
-        (f"modeled_objects.{modeled_spec.object_id}.turn_count_x2", modeled_spec.turn_count_x2),
-    )
 
 
 def _single_coil_range_owner_specs(
@@ -251,64 +532,12 @@ def _plate_stack_range_owner_specs(
     return tuple(owner_specs)
 
 
-def _is_tx_rect_void_columns_turn_owner(owner_path: str) -> bool:
-    return owner_path in (
-        "modeled_objects.tx_rect_void_columns.turn_count_x0",
-        "modeled_objects.tx_rect_void_columns.turn_count_x1",
-        "modeled_objects.tx_rect_void_columns.turn_count_x2",
-    )
-
-
-def _resolved_tx_region_actual_x_division_count(spec: Type2StepSpec, *, seed: int) -> int:
-    tx_region_actual_specs = tuple(
-        non_model_spec for non_model_spec in spec.non_model_derived_objects if isinstance(non_model_spec, NonModelTxRegionActualSpec)
-    )
-    if len(tx_region_actual_specs) != 1:
-        raise RuntimeError("type2 sampled owner resolution requires tx_region_actual x_division_count range")
-    x_division_count_range_spec = tx_region_actual_specs[0].x_division_count
-    resolved_value = _selected_value_for_owner_path(
-        x_division_count_range_spec,
-        owner_path=_TX_REGION_ACTUAL_X_DIVISION_OWNER_PATH,
-        seed=seed,
-    )
-    if isinstance(resolved_value, bool) or not isinstance(resolved_value, int):
-        raise RuntimeError(
-            "resolved tx_region_actual.x_division_count must be int "
-            f"(actual_type={type(resolved_value).__name__})"
-        )
-    if resolved_value < 1 or resolved_value > 3:
-        raise ValueError(
-            "resolved tx_region_actual.x_division_count must be within [1, 3] "
-            f"(actual={resolved_value})"
-        )
-    return resolved_value
-
-
-def _effective_range_owner_specs(spec: Type2StepSpec, *, seed: int) -> tuple[tuple[str, RangeSpec], ...]:
-    resolved_x_division_count = _resolved_tx_region_actual_x_division_count(spec, seed=seed)
-    owner_specs: list[tuple[str, RangeSpec]] = []
-    for owner_path, range_spec in _all_range_owner_specs(spec):
-        if not _is_tx_rect_void_columns_turn_owner(owner_path):
-            owner_specs.append((owner_path, range_spec))
-            continue
-        if resolved_x_division_count >= 1 and owner_path.endswith(".turn_count_x0"):
-            owner_specs.append((owner_path, range_spec))
-            continue
-        if resolved_x_division_count >= 2 and owner_path.endswith(".turn_count_x1"):
-            owner_specs.append((owner_path, range_spec))
-            continue
-        if resolved_x_division_count >= 3 and owner_path.endswith(".turn_count_x2"):
-            owner_specs.append((owner_path, range_spec))
-            continue
-    return tuple(owner_specs)
-
-
 def exportable_sampled_owner_paths(spec: Type2StepSpec) -> tuple[str, ...]:
     return tuple(owner_path for owner_path, range_spec in _all_range_owner_specs(spec) if range_spec.count != 1)
 
 
 def exportable_sampled_owner_paths_for_seed(spec: Type2StepSpec, *, seed: int) -> tuple[str, ...]:
-    return tuple(owner_path for owner_path, range_spec in _effective_range_owner_specs(spec, seed=seed) if range_spec.count != 1)
+    return tuple(owner_path for owner_path, range_spec in _all_range_owner_specs(spec) if range_spec.count != 1)
 
 
 def _range_spec_for_owner_path(spec: Type2StepSpec, owner_path: str) -> RangeSpec:
@@ -346,7 +575,15 @@ def _float_range_candidates(range_spec: RangeSpec) -> tuple[float, ...]:
     return tuple(range_spec.start + (step * index) for index in range(range_spec.count))
 
 
-def _selected_value_for_owner_path(range_spec: RangeSpec, *, owner_path: str, seed: int) -> SampledScalar:
+def _selected_value_for_owner_path(
+    range_spec: RangeSpec,
+    *,
+    owner_path: str,
+    seed: int,
+    retry_number: int = 0,
+) -> SampledScalar:
+    if retry_number < 0:
+        raise ValueError("retry_number must be >= 0")
     candidates: tuple[SampledScalar, ...]
     if range_spec.is_integer:
         candidates = _integer_range_candidates(range_spec)
@@ -356,18 +593,32 @@ def _selected_value_for_owner_path(range_spec: RangeSpec, *, owner_path: str, se
         raise ValueError(f"No candidates generated for sampled owner: {owner_path}")
     if len(candidates) == 1:
         return candidates[0]
-    digest = hashlib.blake2b(f"{seed}:{owner_path}".encode("utf-8"), digest_size=8).digest()
+    hash_key = f"{seed}:{owner_path}" if retry_number == 0 else f"{seed}:{owner_path}:{retry_number}"
+    digest = hashlib.blake2b(hash_key.encode("utf-8"), digest_size=8).digest()
     index = int.from_bytes(digest, byteorder="big", signed=False) % len(candidates)
     return candidates[index]
 
 
-def sampled_owner_values(spec: Type2StepSpec, *, seed: int) -> tuple[tuple[str, SampledScalar], ...]:
+def sampled_owner_values(
+    spec: Type2StepSpec,
+    *,
+    seed: int,
+    retry_number: int = 0,
+) -> tuple[tuple[str, SampledScalar], ...]:
     sampled_values: list[tuple[str, SampledScalar]] = []
-    for owner_path, range_spec in _effective_range_owner_specs(spec, seed=seed):
+    for owner_path, range_spec in _all_range_owner_specs(spec):
         if range_spec.count == 1:
             continue
         sampled_values.append(
-            (owner_path, _selected_value_for_owner_path(range_spec, owner_path=owner_path, seed=seed))
+            (
+                owner_path,
+                _selected_value_for_owner_path(
+                    range_spec,
+                    owner_path=owner_path,
+                    seed=seed,
+                    retry_number=retry_number,
+                )
+            )
         )
     return tuple(sampled_values)
 
@@ -654,9 +905,28 @@ def _build_sample_manifest_entry_for_seed(
     seed: int,
     sample_index: int,
     head_hash4: str,
-    retry_number: int,
 ) -> Type2SampleManifestEntry:
-    sampled_values = sampled_owner_values(source_spec, seed=seed)
+    constraints = _parse_constraints(raw_source_spec, source_spec)
+    sampled_values: tuple[tuple[str, SampledScalar], ...] | None = None
+    retry_number: int | None = None
+    last_constraint_failure: ValueError | None = None
+    for attempt in range(_TYPE2_CONSTRAINT_RETRY_LIMIT):
+        candidate_values = sampled_owner_values(source_spec, seed=seed, retry_number=attempt)
+        try:
+            _require_constraints_satisfied(source_spec, dict(candidate_values), constraints)
+        except ValueError as exc:
+            last_constraint_failure = exc
+            continue
+        sampled_values = candidate_values
+        retry_number = attempt
+        break
+    if sampled_values is None or retry_number is None:
+        if last_constraint_failure is None:
+            raise RuntimeError("type2 constraint retry failed without a captured constraint error")
+        raise ValueError(
+            "type2 constraints could not be satisfied within retry limit "
+            f"(seed={seed}, sample_index={sample_index}, retry_limit={_TYPE2_CONSTRAINT_RETRY_LIMIT})"
+        ) from last_constraint_failure
     sampled_table = _sampled_toml_table(
         raw_source_spec,
         source_spec,
@@ -714,8 +984,8 @@ def _export_step_for_sample_entry(
     report_step_stage("done", entry)
 
 
-def _build_sample_manifest_entry_for_seed_task(task: tuple[str, str, int, int, str, int, bool]) -> Type2SampleManifestEntry:
-    source_toml_path_text, output_dir_text, seed, sample_index, head_hash4, retry_number, make_step_on_sample = task
+def _build_sample_manifest_entry_for_seed_task(task: tuple[str, str, int, int, str, bool]) -> Type2SampleManifestEntry:
+    source_toml_path_text, output_dir_text, seed, sample_index, head_hash4, make_step_on_sample = task
     source_toml_path = Path(source_toml_path_text)
     output_dir = Path(output_dir_text)
     source_spec = load_type2_step_spec(source_toml_path)
@@ -729,7 +999,6 @@ def _build_sample_manifest_entry_for_seed_task(task: tuple[str, str, int, int, s
         seed=seed,
         sample_index=sample_index,
         head_hash4=head_hash4,
-        retry_number=retry_number,
     )
     if make_step_on_sample:
         _export_step_for_sample_entry(entry, exporter=export_type2_step_artifacts)
@@ -768,7 +1037,6 @@ def generate_sample_manifest_entries(
     output_dir.mkdir(parents=True, exist_ok=True)
     seed_values = tuple(range(seed_start, seed_start + count))
     head_hash4 = _current_head_hash4()
-    retry_number = 0
     if jobs == 1 or count == 1 or (make_step_on_sample and exporter is not export_type2_step_artifacts):
         source_spec = load_type2_step_spec(source_toml_path)
         raw_source_spec, _raw_source_bytes = load_toml_bytes(source_toml_path)
@@ -783,7 +1051,6 @@ def generate_sample_manifest_entries(
                 seed=seed,
                 sample_index=sample_index,
                 head_hash4=head_hash4,
-                retry_number=retry_number,
             )
             if make_step_on_sample:
                 _export_step_for_sample_entry(
@@ -800,7 +1067,7 @@ def generate_sample_manifest_entries(
             )
         return entries
     tasks = [
-        (str(source_toml_path), str(output_dir), seed, sample_index, head_hash4, retry_number, make_step_on_sample)
+        (str(source_toml_path), str(output_dir), seed, sample_index, head_hash4, make_step_on_sample)
         for sample_index, seed in enumerate(seed_values)
     ]
     entries_by_index: dict[int, Type2SampleManifestEntry] = {}
@@ -1123,8 +1390,6 @@ def prepare_type2_build(sampled_toml_path: Path) -> PreparedType2Build:
                 raise ValueError(f"type2 build input TOML must freeze sampled owner to count=1: {owner_path}")
             if range_spec.start != range_spec.end:
                 raise ValueError(f"type2 build input TOML must freeze sampled owner with identical bounds: {owner_path}")
-            continue
-        if _is_tx_rect_void_columns_turn_owner(owner_path):
             continue
         if range_spec.count != 1:
             raise ValueError(f"type2 build input TOML must freeze non-sampled range owners to count=1: {owner_path}")

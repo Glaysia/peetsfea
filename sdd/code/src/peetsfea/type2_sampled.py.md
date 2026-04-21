@@ -1,7 +1,7 @@
 ---
 title: type2_sampled.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-20 @ 20:35
+updated: 2026-04-21 @ 21:40
 tags:
   - sampling
   - build
@@ -25,12 +25,12 @@ tags:
 
 ## Canonical state
 - sampled owner canonical paths are `modeled_objects.<object_id>.<field>` and `non_model_objects.<object_id>.<field>`.
+- source `[constraints]` rules are preserved in sampled TOML and evaluated as deterministic sampling feasibility filters.
+- constraint retry attempts reuse the same source seed and sample index but select sampled candidates with the retry number included in the deterministic owner hash input (`retry_number=0` keeps the legacy hash input shape).
 - active TX actual-region non-model sampled owners are `non_model_objects.tx_region_actual.x_usage_ratio`, `y_usage_ratio`, `x_division_count`, and `y_division_count`.
 - active TX actual-region stack-space non-model sampled owner is `non_model_objects.tx_region_actual_stack_space.scale_ratio`.
 - active TX actual-region stack-space tilt is fixed on and is not a sampled owner.
-- `tx_rect_void_columns` samples TX shared fields plus effective turn-column owners `turn_count_x*` according to realized `tx_region_actual.x_division_count`.
-- for `tx_rect_void_columns`, effective sampled owner paths are seed-resolved: only realized turn-column owners are exported in metadata/design-variable preparation.
-- `tx_rect_void_columns` has no sampled outer-envelope owner paths; its outer footprint is inherited from the resolved `tx_region_actual_stack_space` tile.
+- `tx_rect_void_columns` is deactivated for active type2 inputs; sampled-owner resolution treats that role as unsupported and raises immediately if it appears.
 - active RX single-coil sampled outer envelope owners use `outer_x_usage_ratio` and `outer_y_usage_ratio`.
 - active single-coil sampled void owner is `void_usage_ratio`; it is unitless and freezes into sampled TOML like other range owners.
 - removed legacy split/centered single-coil `void_*` fields are not sampled owners and must not appear in sampled metadata or build design variables.
@@ -48,6 +48,7 @@ tags:
   - `modeled_objects.rx_plate_stack.y_usage_ratio`
   이다.
 - build path planning은 여전히 `run/sampled/type2/<design_id>/` layout을 쓴다.
+- `retry_number` is no longer metadata-only; it records the first constraint-satisfying retry attempt and remains part of the `design_id`.
 - STEP stage reporter는 manifest entry나 sampled TOML에 기록되는 canonical state가 아니라 runtime notification surface다.
 
 ## Invariants / fail-fast
@@ -59,9 +60,11 @@ tags:
 - `tx_array_x_usage_ratio` is a floating owner and design variable expression is unitless.
 - non-model usage-ratio design variables are unitless and must freeze into sampled TOML with count `1`, same as modeled usage ratios.
 - non-model division-count design variables are integer/unitless and must freeze into sampled TOML with count `1`.
-- `tx_rect_void_columns.turn_count_x*` owners must be frozen only when their column is realized by resolved `tx_region_actual.x_division_count`.
-- `tx_rect_void_columns.outer_x_usage_ratio` and `outer_y_usage_ratio` must not appear in sampled metadata, replay design variables, or frozen sampled TOML.
-- sampled metadata exact-match validation must use the source TOML and metadata seed to re-resolve effective owner paths before comparison.
+- type2 constraints must be evaluated before sampled TOML is written, and failing candidates must retry until success or fail fast after the configured attempt budget.
+- constraint retry budget is fixed at 64 attempts (`retry_number` 0..63); if all fail, manifest generation raises with seed/sample_index context.
+- comparison constraints support path operands, numeric literal operands, and `sum(...)` operands that can mix owner paths and numeric literals.
+- sampled metadata exact-match validation must use the source TOML and metadata seed to re-derive the sampled owner set before comparison.
+- parser-side deactivation remains authoritative; sampling side must not retain ownership assumptions for `tx_rect_void_columns`.
 - This file exceeds 800 lines; this narrow extension is allowed, but future sampler restructuring should split ownership first.
 - stage reporting이 실패/지원 여부를 바꾸면 안 되며, exporter failure는 기존처럼 즉시 raise되어야 한다.
 

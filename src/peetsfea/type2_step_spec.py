@@ -4,7 +4,7 @@ import hashlib
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, TypedDict, cast
 import tomllib
 
 from peetsfea.spec.outputs import parse_outputs_table
@@ -42,7 +42,8 @@ _TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_END = 0.95
 _TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_COUNT = 25
 _TX_REGION_ACTUAL_STACK_SPACE_TOTAL_THICKNESS_MM = 5.0
 _TX_RECT_VOID_COLUMNS_LAYER_COUNT_ALLOWED = (1, 2, 3)
-_TYPE2_SCHEMA_ID = "peetsfea.type2.step.v6"
+_TX_RECT_VOID_COLUMNS_CONNECTION_MODE_CANDIDATES = (0, 1, 2)
+_TYPE2_SCHEMA_ID = "peetsfea.type2.step.v7"
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,35 @@ NonModelDerivedSpec = NonModelTxRegionActualSpec | NonModelTxRegionActualStackSp
 @dataclass(frozen=True)
 class Type2SimulationPolicy:
     radiation_margin_mm: float
+
+
+Type2ConstraintComparisonOperator = Literal["<", "<=", ">", ">=", "=="]
+
+
+class Type2ConstraintPathRef(TypedDict):
+    path: str
+
+
+class Type2ConstraintValueRef(TypedDict):
+    value: str | float
+
+
+class Type2ConstraintFuncRef(TypedDict):
+    func: str
+
+
+Type2ConstraintComparableRef = Type2ConstraintPathRef | Type2ConstraintFuncRef
+Type2ConstraintOperandRef = Type2ConstraintPathRef | Type2ConstraintValueRef | Type2ConstraintFuncRef
+
+
+@dataclass(frozen=True)
+class Type2ConstraintRule:
+    id: str
+    message: str
+    enabled: bool
+    lhs: Type2ConstraintComparableRef
+    op: Type2ConstraintComparisonOperator
+    rhs: Type2ConstraintOperandRef
 
 
 @dataclass(frozen=True)
@@ -171,6 +201,8 @@ class ModeledTxRectVoidColumnsSpec:
     margin_ratio: RangeSpec
     metal_fill_factor: RangeSpec
     terminal_path: str
+    column_connection_mode: RangeSpec
+    row_connection_mode: RangeSpec
     turn_count_x0: RangeSpec
     turn_count_x1: RangeSpec
     turn_count_x2: RangeSpec
@@ -190,6 +222,7 @@ class Type2StepSpec:
     non_model_objects: tuple[NonModelBoxSpec, ...]
     non_model_derived_objects: tuple[NonModelDerivedSpec, ...]
     modeled_objects: tuple[ModeledObjectSpec, ...]
+    constraints: tuple[Type2ConstraintRule, ...]
 
 
 def modeled_object_id_for_role(role: ModeledObjectRole) -> str:
@@ -324,6 +357,265 @@ def _require_range(
     if end < start:
         raise ValueError(f"{context}.{key}.range end must be >= start")
     return RangeSpec(is_integer=raw_is_integer, start=start, end=end, count=raw_count)
+
+
+def _require_constraint_path(value: object, *, dotted_path: str) -> str:
+    table = _require_table(value, dotted_path)
+    if set(table.keys()) != {"path"}:
+        raise ValueError(f"{dotted_path} must contain only ['path']")
+    raw_path = _require_non_empty_str(table, "path", dotted_path)
+    return raw_path
+
+
+def _require_constraint_value(value: object, *, dotted_path: str) -> str | float:
+    table = _require_table(value, dotted_path)
+    if set(table.keys()) != {"value"}:
+        raise ValueError(f"{dotted_path} must contain only ['value']")
+    raw_value = _require_key(table, "value", dotted_path)
+    if isinstance(raw_value, bool):
+        raise ValueError(f"{dotted_path}.value must be number|string")
+    if isinstance(raw_value, int | float):
+        return float(raw_value)
+    if isinstance(raw_value, str):
+        if raw_value == "":
+            raise ValueError(f"{dotted_path}.value must be number|string")
+        return raw_value
+    raise ValueError(f"{dotted_path}.value must be number|string")
+
+
+def _split_constraint_func_args(text: str) -> tuple[str, ...]:
+    parts: list[str] = []
+    token: list[str] = []
+    depth = 0
+    for char in text:
+        if char == "(":
+            depth += 1
+            token.append(char)
+            continue
+        if char == ")":
+            depth -= 1
+            if depth < 0:
+                raise ValueError("constraint function expression has unmatched ')'")
+            token.append(char)
+            continue
+        if char == "," and depth == 0:
+            piece = "".join(token).strip()
+            if piece == "":
+                raise ValueError("constraint function argument cannot be empty")
+            parts.append(piece)
+            token = []
+            continue
+        token.append(char)
+    if depth != 0:
+        raise ValueError("constraint function expression has unmatched '('")
+    tail = "".join(token).strip()
+    if tail:
+        parts.append(tail)
+    return tuple(parts)
+
+
+def _parse_constraint_func(value: object, *, dotted_path: str) -> str:
+    table = _require_table(value, dotted_path)
+    if set(table.keys()) != {"func"}:
+        raise ValueError(f"{dotted_path} must contain only ['func']")
+    raw_func = _require_non_empty_str(table, "func", dotted_path)
+    text = raw_func.strip()
+    if not text.endswith(")") or "(" not in text:
+        raise ValueError(f"{dotted_path}.func must be a call expression like sum(...)")
+    open_index = text.find("(")
+    name = text[:open_index].strip()
+    if name == "":
+        raise ValueError(f"{dotted_path}.func name must be non-empty")
+    if name != "sum":
+        raise ValueError(f"{dotted_path}.func must be 'sum(...)' (actual={name!r})")
+    body = text[open_index + 1 : -1].strip()
+    if body == "":
+        raise ValueError(f"{dotted_path}.func must include at least one argument")
+    try:
+        _split_constraint_func_args(body)
+    except ValueError as exc:
+        raise ValueError(f"{dotted_path}.func {exc}") from exc
+    return raw_func
+
+
+def _parse_constraint_comparable_ref(value: object, *, dotted_path: str) -> Type2ConstraintComparableRef:
+    if not isinstance(value, dict):
+        raise TypeError(f"{dotted_path} must be a table")
+    if set(value.keys()) == {"path"}:
+        return Type2ConstraintPathRef(path=_require_constraint_path(value, dotted_path=dotted_path))
+    if set(value.keys()) == {"func"}:
+        return Type2ConstraintFuncRef(func=_parse_constraint_func(value, dotted_path=dotted_path))
+    raise ValueError(f"{dotted_path} must contain exactly one of ['path'], ['func']")
+
+
+def _parse_constraint_rhs_ref(value: object, *, dotted_path: str) -> Type2ConstraintOperandRef:
+    if not isinstance(value, dict):
+        raise TypeError(f"{dotted_path} must be a table")
+    if set(value.keys()) == {"path"}:
+        return Type2ConstraintPathRef(path=_require_constraint_path(value, dotted_path=dotted_path))
+    if set(value.keys()) == {"value"}:
+        return Type2ConstraintValueRef(value=_require_constraint_value(value, dotted_path=dotted_path))
+    if set(value.keys()) == {"func"}:
+        return Type2ConstraintFuncRef(func=_parse_constraint_func(value, dotted_path=dotted_path))
+    raise ValueError(f"{dotted_path} must contain exactly one of ['path'], ['value'], ['func']")
+
+
+def _parse_constraint_rule(raw_rule: object, *, index: int, context: str) -> Type2ConstraintRule:
+    dotted = f"{context}.constraints.rules[{index}]"
+    table = _require_table(raw_rule, dotted)
+    required_keys = {"id", "kind", "message", "lhs", "op", "rhs"}
+    optional_keys = {"enabled"}
+    if not required_keys.issubset(table.keys()):
+        raise ValueError(f"{dotted} must contain required keys {sorted(required_keys)}")
+    extra_keys = set(table.keys()) - (required_keys | optional_keys)
+    if extra_keys:
+        raise ValueError(f"{dotted} contains unsupported keys (actual={sorted(extra_keys)})")
+
+    raw_id = _require_non_empty_str(table, "id", dotted)
+    raw_message = _require_non_empty_str(table, "message", dotted)
+    raw_kind = _require_non_empty_str(table, "kind", dotted)
+    raw_enabled = table.get("enabled", True)
+    if raw_kind != "comparison":
+        raise ValueError(f"{dotted}.kind must be 'comparison' (actual={raw_kind!r})")
+    if not isinstance(raw_enabled, bool):
+        raise ValueError(f"{dotted}.enabled must be bool")
+    op = _require_non_empty_str(table, "op", dotted)
+    if op not in ("<", "<=", ">", ">=", "=="):
+        raise ValueError(f"{dotted}.op must be one of ['<', '<=', '>', '>=', '==']")
+    return Type2ConstraintRule(
+        id=raw_id,
+        message=raw_message,
+        enabled=raw_enabled,
+        lhs=_parse_constraint_comparable_ref(table["lhs"], dotted_path=f"{dotted}.lhs"),
+        op=cast(Type2ConstraintComparisonOperator, op),
+        rhs=_parse_constraint_rhs_ref(table["rhs"], dotted_path=f"{dotted}.rhs"),
+    )
+
+
+def _parse_constraints(constraints: object, *, context: str) -> tuple[Type2ConstraintRule, ...]:
+    constraints_table = _require_table(constraints, context)
+    raw_rules = _require_key(constraints_table, "rules", context)
+    if not isinstance(raw_rules, list):
+        raise TypeError(f"{context}.rules must be an array of tables")
+    if len(raw_rules) == 0:
+        raise ValueError(f"{context}.rules must be a non-empty array of tables")
+    seen_rule_ids: set[str] = set()
+    parsed_rules: list[Type2ConstraintRule] = []
+    for index, raw_rule in enumerate(raw_rules):
+        parsed = _parse_constraint_rule(raw_rule, index=index, context=context)
+        if parsed.id in seen_rule_ids:
+            raise ValueError(f"Duplicate constraints.rules id: {parsed.id}")
+        seen_rule_ids.add(parsed.id)
+        parsed_rules.append(parsed)
+    return tuple(parsed_rules)
+
+
+def _constraint_reference_paths(spec: Type2StepSpec) -> set[str]:
+    paths: set[str] = set()
+    for non_model_spec in spec.non_model_derived_objects:
+        base = f"non_model_objects.{non_model_spec.object_id}"
+        if isinstance(non_model_spec, NonModelTxRegionActualSpec):
+            paths.update(
+                (
+                    f"{base}.x_usage_ratio",
+                    f"{base}.y_usage_ratio",
+                    f"{base}.x_division_count",
+                    f"{base}.y_division_count",
+                )
+            )
+        else:
+            paths.update((f"{base}.scale_ratio", f"{base}.tilt_enabled"))
+    for modeled_spec in spec.modeled_objects:
+        base = f"modeled_objects.{modeled_spec.object_id}"
+        if isinstance(modeled_spec, ModeledTxSingleCoilSpec):
+            paths.update(
+                (
+                    f"{base}.outer_x_usage_ratio",
+                    f"{base}.outer_y_usage_ratio",
+                    f"{base}.turn_count",
+                    f"{base}.layer_count",
+                    f"{base}.underlay_repeat_count",
+                    f"{base}.layer_gap_mm",
+                    f"{base}.terminal_stub_length_mm",
+                    f"{base}.void_usage_ratio",
+                    f"{base}.margin_ratio",
+                    f"{base}.metal_fill_factor",
+                    f"{base}.underlay_gap_mm",
+                    f"{base}.wall_parallel_stack_present",
+                )
+            )
+            continue
+        if isinstance(modeled_spec, ModeledRxSingleCoilSpec):
+            paths.update(
+                (
+                    f"{base}.outer_x_usage_ratio",
+                    f"{base}.outer_y_usage_ratio",
+                    f"{base}.turn_count",
+                    f"{base}.layer_count",
+                    f"{base}.underlay_repeat_count",
+                    f"{base}.layer_gap_mm",
+                    f"{base}.terminal_stub_length_mm",
+                    f"{base}.void_usage_ratio",
+                    f"{base}.margin_ratio",
+                    f"{base}.metal_fill_factor",
+                )
+            )
+            continue
+        if isinstance(modeled_spec, ModeledTxPlateStackSpec):
+            paths.update(
+                (
+                    f"{base}.turn_count",
+                    f"{base}.metal_fill_factor",
+                    f"{base}.z_usage_ratio",
+                    f"{base}.y_usage_ratio",
+                    f"{base}.tx_coil_count",
+                    f"{base}.tx_array_x_usage_ratio",
+                )
+            )
+            continue
+        if isinstance(modeled_spec, ModeledRxPlateStackSpec):
+            paths.update(
+                (
+                    f"{base}.turn_count",
+                    f"{base}.metal_fill_factor",
+                    f"{base}.z_usage_ratio",
+                    f"{base}.y_usage_ratio",
+                )
+            )
+            continue
+        if isinstance(modeled_spec, ModeledTxRectVoidColumnsSpec):
+            paths.update(
+                (
+                    f"{base}.layer_count",
+                    f"{base}.layer_gap_mm",
+                    f"{base}.terminal_stub_length_mm",
+                    f"{base}.void_usage_ratio",
+                    f"{base}.margin_ratio",
+                    f"{base}.metal_fill_factor",
+                    f"{base}.turn_count_x0",
+                    f"{base}.turn_count_x1",
+                    f"{base}.turn_count_x2",
+                    f"{base}.column_connection_mode",
+                    f"{base}.row_connection_mode",
+                )
+            )
+            continue
+        raise RuntimeError(f"unsupported modeled object for constraint owner-path collection: {modeled_spec.object_id}")
+    return paths
+
+
+def _validate_constraints_for_spec(constraints: tuple[Type2ConstraintRule, ...], *, spec: Type2StepSpec, context: str) -> None:
+    valid_paths = _constraint_reference_paths(spec)
+    for index, rule in enumerate(constraints):
+        dotted = f"{context}.constraints.rules[{index}]"
+        if "path" in rule.lhs:
+            path = rule.lhs["path"]
+            if path not in valid_paths:
+                raise ValueError(f"{dotted}.lhs.path references unknown owner path: {path!r}")
+        if "path" in rule.rhs:
+            path = rule.rhs["path"]
+            if path not in valid_paths:
+                raise ValueError(f"{dotted}.rhs.path references unknown owner path: {path!r}")
 
 
 def _parse_simulation_policy(root: dict[str, object], *, context: str) -> Type2SimulationPolicy:
@@ -822,8 +1114,27 @@ def _require_tx_rect_void_columns_turn_count_range(
         raise ValueError(
             f"{context}.{key} must realize to integer values in [1, 6] "
             f"(actual={candidates})"
-        )
+    )
     return range_spec
+
+
+def _require_tx_rect_void_columns_connection_mode_range(
+    table: dict[str, object],
+    *,
+    key: str,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, key, context, expect_integer=True)
+    candidates = _integer_range_candidates(range_spec)
+    if candidates == _TX_RECT_VOID_COLUMNS_CONNECTION_MODE_CANDIDATES:
+        return range_spec
+    if len(candidates) == 1 and candidates[0] in (0, 1):
+        return range_spec
+    raise ValueError(
+        f"{context}.{key} must be [true, 0, 1, 2] or fixed [true, n, n, 1] for n in { (0, 1) } "
+        f"for tx_rect_void_columns connection modes "
+        f"(actual={range_spec})"
+    )
 
 
 def _parse_modeled_tx_rect_void_columns(
@@ -897,6 +1208,16 @@ def _parse_modeled_tx_rect_void_columns(
     turn_count_x0 = _require_tx_rect_void_columns_turn_count_range(table, key="turn_count_x0", context=context)
     turn_count_x1 = _require_tx_rect_void_columns_turn_count_range(table, key="turn_count_x1", context=context)
     turn_count_x2 = _require_tx_rect_void_columns_turn_count_range(table, key="turn_count_x2", context=context)
+    column_connection_mode = _require_tx_rect_void_columns_connection_mode_range(
+        table,
+        key="column_connection_mode",
+        context=context,
+    )
+    row_connection_mode = _require_tx_rect_void_columns_connection_mode_range(
+        table,
+        key="row_connection_mode",
+        context=context,
+    )
 
     disallowed_keys = sorted(
         key
@@ -937,6 +1258,8 @@ def _parse_modeled_tx_rect_void_columns(
         "turn_count_x0",
         "turn_count_x1",
         "turn_count_x2",
+        "column_connection_mode",
+        "row_connection_mode",
     }
     extra_keys = sorted(set(table.keys()) - allowed_keys)
     if extra_keys:
@@ -961,6 +1284,8 @@ def _parse_modeled_tx_rect_void_columns(
         turn_count_x0=turn_count_x0,
         turn_count_x1=turn_count_x1,
         turn_count_x2=turn_count_x2,
+        column_connection_mode=column_connection_mode,
+        row_connection_mode=row_connection_mode,
     )
 
 
@@ -1512,6 +1837,9 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
         raise TypeError("modeled_objects must be an array of tables")
     if len(raw_modeled_objects) == 0:
         raise ValueError("modeled_objects must not be empty")
+    constraints: tuple[Type2ConstraintRule, ...] = ()
+    if "constraints" in root:
+        constraints = _parse_constraints(root["constraints"], context=f"{toml_path.name}.constraints")
 
     seen_object_ids: set[str] = set()
     non_model_box_specs: list[NonModelBoxSpec] = []
@@ -1568,19 +1896,14 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
         context = f"{toml_path.name}.modeled_objects[{index}]"
         table = _require_table(raw_object, context)
         role = _require_non_empty_str(table, "role", context)
+        if role == "tx_rect_void_columns":
+            raise ValueError(
+                f"{context}.role is deactivated for active type2 inputs: tx_rect_void_columns. "
+                "See tmp/tx개편.md for the TX reset direction before re-enabling this role."
+            )
         if role in ("tx_plate_stack", "rx_plate_stack"):
             modeled_objects_list.append(
                 _parse_modeled_plate_stack(raw_object, index=index, seen_object_ids=seen_object_ids)
-            )
-            continue
-        if role == "tx_rect_void_columns":
-            modeled_objects_list.append(
-                _parse_modeled_tx_rect_void_columns(
-                    raw_object,
-                    index=index,
-                    seen_object_ids=seen_object_ids,
-                    non_model_specs_by_id=non_model_specs_by_id,
-                )
             )
             continue
         modeled_objects_list.append(
@@ -1592,14 +1915,17 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
             )
         )
     modeled_objects = tuple(modeled_objects_list)
-    return Type2StepSpec(
+    type2_step_spec = Type2StepSpec(
         source_toml_path=str(toml_path),
         simulation=_parse_simulation_policy(root, context=toml_path.name),
         outputs=parse_outputs_table(_require_key(root, "outputs", toml_path.name), context=f"{toml_path.name}.outputs"),
         non_model_objects=non_model_objects,
         non_model_derived_objects=non_model_derived_objects,
         modeled_objects=modeled_objects,
+        constraints=constraints,
     )
+    _validate_constraints_for_spec(constraints, spec=type2_step_spec, context=toml_path.name)
+    return type2_step_spec
 
 
 def _format_range(range_spec: RangeSpec) -> str:
@@ -1658,6 +1984,12 @@ __all__ = [
     "ModeledSingleCoilSpec",
     "ModeledTxPlateStackSpec",
     "ModeledTxSingleCoilSpec",
+    "ModeledTxRectVoidColumnsSpec",
+    "Type2ConstraintComparisonOperator",
+    "Type2ConstraintFuncRef",
+    "Type2ConstraintPathRef",
+    "Type2ConstraintRule",
+    "Type2ConstraintValueRef",
     "NonModelBoxSpec",
     "NonModelDerivedSpec",
     "NonModelTxRegionActualSpec",

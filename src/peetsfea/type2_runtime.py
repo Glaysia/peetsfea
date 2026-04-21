@@ -53,8 +53,8 @@ def _assert_setup_ready_supported(prepared_build: PreparedType2Build) -> None:
         return
     formatted_supported_sets = ", ".join(str(list(role_set)) for role_set in _SUPPORTED_MODELED_ROLE_SETS)
     raise ValueError(
-        "type2 build/setup-ready supports only exact modeled role sets "
-        f"{formatted_supported_sets} "
+        "type2 build/setup-ready rejects unsupported modeled roles for active path: "
+        f"{actual_roles}. Supported modeled role sets are {formatted_supported_sets}. "
         f"(actual={list(prepared_build.modeled_roles)})"
     )
 
@@ -144,8 +144,8 @@ def build_prepared_type2_design(
     exporter: _Exporter = export_type2_step_artifacts,
     runner: _Runner = setup_type2_step_ledger,
 ) -> Type2BuiltArtifact:
-    ensure_prepared_type2_step_ledger(prepared_build, exporter=exporter)
     _assert_setup_ready_supported(prepared_build)
+    ensure_prepared_type2_step_ledger(prepared_build, exporter=exporter)
     result = runner(
         step_ledger_path=prepared_build.step_ledger_path,
         output_aedt_path=prepared_build.aedt_path,

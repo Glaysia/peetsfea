@@ -1,7 +1,7 @@
 ---
 title: type2_step_export.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 23:55
+updated: 2026-04-21 @ 14:42
 tags:
   - step-export
   - export
@@ -60,8 +60,9 @@ tags:
 - Full-scene export must carry resolved `tx_region_actual` tile bodies as non-model members in the shared non-model scene ledger.
 - Full-scene export must carry resolved `tx_region_actual_stack_space` materialless tile members and apply deterministic tilt transforms shared with geometry-only TX column bodies.
 - Shared non-model tilt helpers and canonical shape extraction are imported from split scene helper modules, not private helpers on `type2_step_scene.py`.
-- `tx_rect_void_columns` modeled export is geometry-only: per realized X/Y tile and layer it emits PCB+copper coil bodies, and per tile it emits exactly two start/end copper terminal bodies using tile-level labels (`txrvc_x{X}_y{Y}_stub_s`, `txrvc_x{X}_y{Y}_stub_e`). Each terminal body joins all same-terminal per-layer anchors via one ruled loft and then descends in world `-Z`, with no ferrite/underlay, no `tx_copper_stack`, no separate terminal bus/port sheet, and no source/connection metadata.
-- `tx_rect_void_columns` terminal-anchor resolution prefers terminal metadata payloads (for example BoxSpec-derived anchors from producer metadata) and uses explicit stub-labeled tile-scene anchors as compatibility input only.
+- `tx_rect_void_columns` is currently deactivated in this export path. Specs containing this role are rejected before geometry construction in both full-step export and tx-single-coil direct export.
+- Defensive fail-fast is also required in internal direct/export-contract paths so deactivated `tx_rect_void_columns` cannot proceed even if a caller bypasses public preflight guards.
+- Full export modeled-scene dispatch and tx-single-coil direct dispatch both include explicit deactivation checks so guard bypass cannot silently skip or reinterpret this role.
 
 ## Invariants / fail-fast
 - export body names/count는 role contract와 exact match여야 한다.
@@ -70,13 +71,13 @@ tags:
 - active plate roles에서 old `*_stack_*_uN` contract는 허용하지 않는다.
 - active plate roles에서 `ferrite_set_count`를 public input 또는 ledger/export 계산 dependency로 되살리면 안 된다.
 - final export body list에서는 `*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`가 없어야 한다.
-- active plate roles는 `tx_rect_void` direct-export bridge를 통과하면 안 된다.
+- full-step export과 tx_single_coil direct export는 `tx_rect_void_columns` modeled role을 fail-fast로 거부한다.
+- internal `tx_rect_void_columns` scene builder and modeled export-contract validation paths must also fail-fast on this role (no geometry contract fallback).
+- preflight guard bypass(예: monkeypatch/no-op) 상황에서도 modeled dispatch 단계에서 동일 deactivation error를 즉시 raise해야 한다.
 - exported solid pair positive-volume overlap은 fail-fast failure다.
 - plate role body-order drift는 import-side exact-name contract drift다.
 - plate role `terminal_metadata.kind`는 `stub_port` 외 값을 허용하지 않는다.
-- `tx_rect_void_columns` must emit `terminal_metadata.kind = "geometry_only"` and skip single-coil/plate port-sheet validation flow.
-- `tx_rect_void_columns` terminal metadata must expose exactly one tile-level start/end terminal pair and `layer_count` per-layer anchor-box pairs. Export maps start/end anchors by pair position, not by per-layer suffix parsing.
-- `tx_rect_void_columns` terminal bodies must use `terminal_stub_length_mm`, overlap every same-terminal transformed layer anchor, descend toward world `-Z`, and are allowed to protrude below the tilted stack-space owner. Their contact/top face must follow the tilted anchor/collector plane rather than a horizontal box face, and stack-space containment checks apply only to non-terminal tile bodies.
+- `tx_rect_void_columns` export behavior is gated by deactivation rejection logic; terminal metadata contracts below are no longer exercised by active generation.
 - reporter callback은 progress visibility only이며 exporter의 fail-fast contract를 완화하지 않는다.
 
 ## Collaborators

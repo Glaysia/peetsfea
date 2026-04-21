@@ -5,7 +5,7 @@ import shutil
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, NoReturn, cast
 
 import build123d as bd
 
@@ -88,6 +88,33 @@ _Type2StepExportStage = Literal["build_scene", "export_scene_step", "finalize_st
 
 def _no_op_type2_step_export_stage_reporter(stage: _Type2StepExportStage) -> None:
     pass
+
+
+def _raise_if_tx_rect_void_columns_modeled_role_present(
+    *,
+    spec: Type2StepSpec,
+    context: str,
+) -> None:
+    tx_rect_void_columns_ids = tuple(
+        modeled_spec.object_id
+        for modeled_spec in spec.modeled_objects
+        if isinstance(modeled_spec, ModeledTxRectVoidColumnsSpec)
+    )
+    if tx_rect_void_columns_ids:
+        _raise_tx_rect_void_columns_deactivated(
+            context=context,
+            object_ids=tx_rect_void_columns_ids,
+        )
+
+
+def _raise_tx_rect_void_columns_deactivated(
+    *,
+    context: str,
+    object_ids: tuple[str, ...],
+) -> NoReturn:
+    raise ValueError(
+        f"{context} no longer supports modeled role tx_rect_void_columns; disabled role ids={object_ids}"
+    )
 
 
 def _validate_top_level_scene_child(shape: bd.Shape) -> None:
@@ -282,6 +309,20 @@ def export_type2_tx_single_coil_artifact(
     seed: int,
 ) -> Type2DirectModeledArtifact:
     spec = load_type2_step_spec(toml_path)
+    _raise_if_tx_rect_void_columns_modeled_role_present(
+        spec=spec,
+        context="tx_single_coil direct export",
+    )
+    tx_rect_void_columns_ids = tuple(
+        modeled_spec.object_id
+        for modeled_spec in spec.modeled_objects
+        if isinstance(modeled_spec, ModeledTxRectVoidColumnsSpec)
+    )
+    if tx_rect_void_columns_ids:
+        _raise_tx_rect_void_columns_deactivated(
+            context="tx_single_coil direct export modeled dispatch",
+            object_ids=tx_rect_void_columns_ids,
+        )
     tx_specs = [modeled_spec for modeled_spec in spec.modeled_objects if modeled_spec.role == "tx_single_coil"]
     if len(tx_specs) != 1:
         raise RuntimeError(
@@ -479,6 +520,10 @@ def _build_tx_rect_void_columns_scene_data(
     stack_space_tilt_placements: dict[str, dict[str, object]],
     seed: int,
 ) -> tuple[tuple[bd.Shape, ...], ModeledObjectSceneData]:
+    _raise_tx_rect_void_columns_deactivated(
+        context="type2 tx_rect_void_columns scene build",
+        object_ids=(modeled_spec.object_id,),
+    )
     stack_space_specs = tuple(
         spec for spec in resolved_non_model_specs if spec.kind == "tx_region_actual_stack_space"
     )
@@ -870,22 +915,10 @@ def _require_modeled_expected_body_contract(
                 seed=seed,
             )
         elif role == "tx_rect_void_columns":
-            if not isinstance(modeled_spec, ModeledTxRectVoidColumnsSpec):
-                raise ValueError(
-                    "type2 modeled object spec registry must retain ModeledTxRectVoidColumnsSpec "
-                    f"for {object_id} (actual={type(modeled_spec).__name__})"
-                )
-            expected_names = list(expected_body_names)
-            if len(expected_names) == 0:
-                raise ValueError("tx_rect_void_columns must export at least one body")
-            forbidden_tokens = ("tx_copper_stack", "tx_port_sheet", "ferrite", "under_", "vertical_bus")
-            for body_name in expected_names:
-                if any(token in body_name for token in forbidden_tokens):
-                    raise ValueError(
-                        "tx_rect_void_columns must not export ferrite/underlay/stack/bus/port-sheet names "
-                        f"(body_name={body_name})"
-                    )
-            expected_groups = []
+            _raise_tx_rect_void_columns_deactivated(
+                context="type2 modeled export contract validation",
+                object_ids=(object_id,),
+            )
         else:
             raise ValueError(f"unsupported modeled object role in type2 ledger: {role}")
         if list(expected_body_names) != expected_names:
@@ -1281,6 +1314,10 @@ def export_type2_step_artifacts(
     stage_reporter: Callable[[_Type2StepExportStage], None] = _no_op_type2_step_export_stage_reporter,
 ) -> Type2StepLedger:
     spec = load_type2_step_spec(toml_path)
+    _raise_if_tx_rect_void_columns_modeled_role_present(
+        spec=spec,
+        context="type2 full-step export",
+    )
     em_policy: Type2ImportEmPolicy = {
         "radiation_margin_mm": spec.simulation.radiation_margin_mm,
     }
@@ -1311,17 +1348,12 @@ def export_type2_step_artifacts(
     modeled_scene_data: list[ModeledObjectSceneData] = []
     modeled_scene_shapes: list[bd.Shape] = []
     modeled_entries = []
-    tx_rect_void_columns_specs = tuple(
-        modeled_spec
-        for modeled_spec in spec.modeled_objects
-        if isinstance(modeled_spec, ModeledTxRectVoidColumnsSpec)
-    )
-    non_column_modeled_specs = tuple(
-        modeled_spec
-        for modeled_spec in spec.modeled_objects
-        if not isinstance(modeled_spec, ModeledTxRectVoidColumnsSpec)
-    )
-    for modeled_spec in non_column_modeled_specs:
+    for modeled_spec in spec.modeled_objects:
+        if isinstance(modeled_spec, ModeledTxRectVoidColumnsSpec):
+            _raise_tx_rect_void_columns_deactivated(
+                context="type2 full-step export modeled scene dispatch",
+                object_ids=(modeled_spec.object_id,),
+            )
         owner_spec = require_non_model_object_spec(
             spec.non_model_objects,
             object_id=placement_owner_id_for_role(modeled_spec.role),
@@ -1382,28 +1414,6 @@ def export_type2_step_artifacts(
         tilt_enabled=tx_region_actual_stack_space_tilt_enabled,
         rx_center=rx_center,
     )
-
-    for modeled_spec in tx_rect_void_columns_specs:
-        current_modeled_scene_shapes, scene_data = _build_tx_rect_void_columns_scene_data(
-            modeled_spec=modeled_spec,
-            resolved_non_model_specs=resolved_non_model_specs,
-            stack_space_tilt_placements=stack_space_tilt_placements,
-            seed=seed,
-        )
-        metadata_path = object_metadata_dir / f"{modeled_spec.object_id}.metadata.json"
-        write_modeled_source_metadata(
-            metadata_path=metadata_path,
-            source_toml_path=toml_path,
-            scene_step_path=scene_step_path,
-            scene_data=scene_data,
-        )
-        modeled_entry = build_modeled_object_ledger_entry(
-            scene_data=scene_data,
-            source_metadata_path=metadata_path,
-        )
-        modeled_scene_data.append(scene_data)
-        modeled_scene_shapes.extend(current_modeled_scene_shapes)
-        modeled_entries.append(modeled_entry)
 
     non_model_entries = [non_model_entry]
     scene_shapes = [*non_model_scene_shapes, *modeled_scene_shapes]

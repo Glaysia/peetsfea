@@ -17,7 +17,6 @@ from peetsfea.type2_sampled import manifest_entry_for_sample_index
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
-from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 
@@ -43,6 +42,18 @@ _RX_NON_SAMPLED_OWNER_PATHS = [
 class _FakeRxOnlyType2Spec:
     non_model_derived_objects: tuple[NonModelTxRegionActualSpec | NonModelTxRegionActualStackSpaceSpec, ...]
     modeled_objects: tuple[ModeledRxSingleCoilSpec, ...]
+
+
+@dataclass(frozen=True)
+class _FakeUnsupportedModeledObject:
+    object_id: str
+    role: str
+
+
+@dataclass(frozen=True)
+class _FakeUnsupportedRoleType2Spec:
+    non_model_derived_objects: tuple[NonModelTxRegionActualSpec | NonModelTxRegionActualStackSpaceSpec, ...]
+    modeled_objects: tuple[ModeledRxSingleCoilSpec | _FakeUnsupportedModeledObject, ...]
 
 
 def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -115,14 +126,80 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
         if toml_path.name == "type2_sweep.toml":
             return fake_spec
         return source_spec_loader(toml_path)
-
+    
     monkeypatch.setattr(type2_sampled, "load_type2_step_spec", _patched_loader)
+
+
+def _fake_unsupported_role_spec(
+    *,
+    tx_region_actual_x_division_count: tuple[float, float, int],
+    rx_outer_x_usage_ratio: tuple[float, float, int],
+) -> _FakeUnsupportedRoleType2Spec:
+    tx_actual_x_division_count_range = RangeSpec(
+        is_integer=True,
+        start=tx_region_actual_x_division_count[0],
+        end=tx_region_actual_x_division_count[1],
+        count=tx_region_actual_x_division_count[2],
+    )
+    return _FakeUnsupportedRoleType2Spec(
+        non_model_derived_objects=(
+            NonModelTxRegionActualSpec(
+                object_id="tx_region_actual",
+                kind="tx_region_actual",
+                source_region_id="tx_region",
+                x_usage_ratio=RangeSpec(is_integer=False, start=0.3, end=1.0, count=27),
+                y_usage_ratio=RangeSpec(is_integer=False, start=0.3, end=1.0, count=27),
+                x_division_count=tx_actual_x_division_count_range,
+                y_division_count=RangeSpec(is_integer=True, start=1, end=1, count=1),
+            ),
+            NonModelTxRegionActualStackSpaceSpec(
+                object_id="tx_region_actual_stack_space",
+                kind="tx_region_actual_stack_space",
+                source_region_id="tx_region_actual",
+                total_thickness_mm=5.0,
+                scale_ratio=RangeSpec(is_integer=False, start=0.35, end=0.95, count=25),
+                tilt_enabled=RangeSpec(is_integer=True, start=1, end=1, count=1),
+            ),
+        ),
+        modeled_objects=(
+            ModeledRxSingleCoilSpec(
+                object_id="rx_rect_void_coil",
+                role="rx_single_coil",
+                material="composite",
+                model_state=True,
+                pcb_thickness_mm=0.3,
+                copper_thickness_mm=0.1,
+                outer_x_usage_ratio=RangeSpec(
+                    is_integer=False,
+                    start=rx_outer_x_usage_ratio[0],
+                    end=rx_outer_x_usage_ratio[1],
+                    count=rx_outer_x_usage_ratio[2],
+                ),
+                outer_y_usage_ratio=RangeSpec(is_integer=False, start=0.1, end=0.6, count=17),
+                void_usage_ratio=RangeSpec(is_integer=False, start=0.1, end=0.6, count=17),
+                outer_x_mm=RangeSpec(is_integer=False, start=20.0, end=120.0, count=17),
+                outer_y_mm=RangeSpec(is_integer=False, start=20.0, end=120.0, count=17),
+                turn_count=RangeSpec(is_integer=True, start=2, end=6, count=5),
+                layer_count=RangeSpec(is_integer=True, start=1, end=1, count=1),
+                underlay_repeat_count=RangeSpec(is_integer=True, start=8, end=8, count=1),
+                layer_gap_mm=RangeSpec(is_integer=False, start=2, end=2, count=1),
+                terminal_stub_length_mm=RangeSpec(is_integer=False, start=5, end=5, count=1),
+                margin_ratio=RangeSpec(is_integer=False, start=0.05, end=0.05, count=1),
+                metal_fill_factor=RangeSpec(is_integer=False, start=0.2, end=0.6, count=15),
+                terminal_path="A_cw_to_a",
+            ),
+            _FakeUnsupportedModeledObject(
+                object_id="tx_rect_void_columns",
+                role="tx_rect_void_columns",
+            ),
+        ),
+    )
 
 
 def _source_type2_toml_text() -> str:
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v6"
+schema_id = "peetsfea.type2.step.v7"
 runtime_compatible = false
 
 [design]
@@ -577,7 +654,7 @@ def _source_type2_toml_text_with_tx_rect_void_columns(
 ) -> str:
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v6"
+schema_id = "peetsfea.type2.step.v7"
 runtime_compatible = false
 
 [design]
@@ -707,128 +784,45 @@ range = [true, 2, 6, 5]
 """.strip()
 
 
-def test_tx_rect_void_columns_shared_sampling_is_independent_from_rx_sampling(tmp_path: Path) -> None:
-    x2_source_path = tmp_path / "type2_tx_rect_x2_source.toml"
-    x2_source_path.write_text(
-        _source_type2_toml_text_with_tx_rect_void_columns(
-            tx_region_actual_x_division_count_range="[true, 2, 2, 1]",
-            rx_outer_x_usage_ratio_range="[false, 0.1, 0.6, 17]",
-        ),
-        encoding="utf-8",
-    )
-    x2_shifted_rx_source_path = tmp_path / "type2_tx_rect_x2_shifted_rx_source.toml"
-    x2_shifted_rx_source_path.write_text(
-        _source_type2_toml_text_with_tx_rect_void_columns(
-            tx_region_actual_x_division_count_range="[true, 2, 2, 1]",
-            rx_outer_x_usage_ratio_range="[false, 0.2, 0.5, 7]",
-        ),
-        encoding="utf-8",
+def test_sampled_owner_values_rejects_deactivated_tx_rect_void_columns_role_in_active_surface() -> None:
+    source_with_deactivated_role = _fake_unsupported_role_spec(
+        tx_region_actual_x_division_count=(2.0, 2.0, 1),
+        rx_outer_x_usage_ratio=(0.1, 0.6, 17),
     )
 
-    baseline_spec = load_type2_step_spec(x2_source_path)
-    shifted_rx_spec = load_type2_step_spec(x2_shifted_rx_source_path)
-
-    baseline_values = dict(type2_sampled.sampled_owner_values(baseline_spec, seed=17))
-    shifted_rx_values = dict(type2_sampled.sampled_owner_values(shifted_rx_spec, seed=17))
-    baseline_tx_spec = next(
-        modeled_object
-        for modeled_object in baseline_spec.modeled_objects
-        if modeled_object.object_id == "tx_rect_void_columns"
-    )
-    assert isinstance(baseline_tx_spec, ModeledTxRectVoidColumnsSpec)
-    assert baseline_tx_spec.terminal_stub_length_mm.start == 10.0
-    assert baseline_tx_spec.terminal_stub_length_mm.end == 10.0
-    assert baseline_tx_spec.terminal_stub_length_mm.count == 1
-    assert baseline_tx_spec.terminal_stub_length_mm.is_integer is False
-
-    tx_shared_owner_paths = (
-        "modeled_objects.tx_rect_void_columns.void_usage_ratio",
-        "modeled_objects.tx_rect_void_columns.metal_fill_factor",
-    )
-    for owner_path in tx_shared_owner_paths:
-        assert baseline_values[owner_path] == shifted_rx_values[owner_path]
-    assert (
-        baseline_values["modeled_objects.rx_rect_void_coil.outer_x_usage_ratio"]
-        != shifted_rx_values["modeled_objects.rx_rect_void_coil.outer_x_usage_ratio"]
-    )
+    with pytest.raises(
+        RuntimeError,
+        match=r"unsupported modeled object role for sampled owner resolution: tx_rect_void_columns",
+    ):
+        type2_sampled.sampled_owner_values(source_with_deactivated_role, seed=17)
 
 
-@pytest.mark.parametrize(
-    ("x_division_count_range", "expected_active_owner_paths", "expected_inactive_owner_paths"),
-    [
-        (
-            "[true, 1, 1, 1]",
-            ("modeled_objects.tx_rect_void_columns.turn_count_x0",),
-            (
-                "modeled_objects.tx_rect_void_columns.turn_count_x1",
-                "modeled_objects.tx_rect_void_columns.turn_count_x2",
-            ),
-        ),
-        (
-            "[true, 2, 2, 1]",
-            (
-                "modeled_objects.tx_rect_void_columns.turn_count_x0",
-                "modeled_objects.tx_rect_void_columns.turn_count_x1",
-            ),
-            ("modeled_objects.tx_rect_void_columns.turn_count_x2",),
-        ),
-        (
-            "[true, 3, 3, 1]",
-            (
-                "modeled_objects.tx_rect_void_columns.turn_count_x0",
-                "modeled_objects.tx_rect_void_columns.turn_count_x1",
-                "modeled_objects.tx_rect_void_columns.turn_count_x2",
-            ),
-            tuple(),
-        ),
-    ],
-)
-def test_sample_type2_tx_rect_void_columns_metadata_tracks_only_effective_turn_count_owners(
+def test_sample_type2_tx_rect_void_columns_role_is_deactivated_for_active_type2_inputs(
     tmp_path: Path,
-    x_division_count_range: str,
-    expected_active_owner_paths: tuple[str, ...],
-    expected_inactive_owner_paths: tuple[str, ...],
 ) -> None:
     source_toml_path = tmp_path / "type2_tx_rect_source.toml"
     source_toml_path.write_text(
         _source_type2_toml_text_with_tx_rect_void_columns(
-            tx_region_actual_x_division_count_range=x_division_count_range,
+            tx_region_actual_x_division_count_range="[true, 2, 2, 1]",
         ),
         encoding="utf-8",
     )
     output_dir = tmp_path / "run" / "sampled" / "type2"
     manifest_path = output_dir / "manifest.json"
 
-    document = sample_type2(
-        source_toml_path=source_toml_path,
-        output_dir=output_dir,
-        manifest_path=manifest_path,
-        seed_first=11,
-        seed_n=1,
-        sampler_n=1,
-        aedt_builder_n=1,
-        make_step_on_sample=False,
-    )
-
-    manifest_entry = document["entries"][0]
-    owner_paths = cast(list[str], manifest_entry["sampled_owner_paths"])
-    assert "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio" in owner_paths
-    assert "modeled_objects.tx_rect_void_columns.outer_x_usage_ratio" not in owner_paths
-    assert "modeled_objects.tx_rect_void_columns.outer_y_usage_ratio" not in owner_paths
-    for owner_path in expected_active_owner_paths:
-        assert owner_path in owner_paths
-    for owner_path in expected_inactive_owner_paths:
-        assert owner_path not in owner_paths
-
-    sampled_payload = tomllib.loads(Path(manifest_entry["sampled_toml_path"]).read_text(encoding="utf-8"))
-    sampled_metadata_owner_paths = cast(list[str], sampled_payload["sampled"]["sampled_owner_paths"])
-    assert sampled_metadata_owner_paths == owner_paths
-    tx_rect_modeled_object = next(
-        modeled_object
-        for modeled_object in cast(list[dict[str, object]], sampled_payload["modeled_objects"])
-        if modeled_object["object_id"] == "tx_rect_void_columns"
-    )
-    terminal_stub_payload = cast(dict[str, object], tx_rect_modeled_object["terminal_stub_length_mm"])
-    assert terminal_stub_payload["range"] == [False, 10.0, 10.0, 1]
-    assert "modeled_objects.tx_rect_void_columns.terminal_stub_length_mm" not in owner_paths
-    assert "modeled_objects.tx_rect_void_columns.terminal_stub_length_mm" not in sampled_metadata_owner_paths
+    with pytest.raises(
+        ValueError,
+        match=r"role is deactivated for active type2 inputs: tx_rect_void_columns",
+    ):
+        sample_type2(
+            source_toml_path=source_toml_path,
+            output_dir=output_dir,
+            manifest_path=manifest_path,
+            seed_first=11,
+            seed_n=1,
+            sampler_n=1,
+            aedt_builder_n=1,
+            make_step_on_sample=False,
+        )
+    assert manifest_path.exists() is False
+    assert not any(output_dir.rglob("sampled.toml"))

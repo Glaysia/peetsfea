@@ -22,7 +22,7 @@ def _type2_plate_stack_toml(
 ) -> str:
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v6"
+schema_id = "peetsfea.type2.step.v7"
 runtime_compatible = false
 
 [design]

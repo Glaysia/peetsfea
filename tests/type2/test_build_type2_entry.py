@@ -25,7 +25,6 @@ from peetsfea.type2_sampled import PreparedType2Build
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
-from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 
@@ -187,7 +186,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
 def _source_type2_toml_text() -> str:
     return f"""
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v6"
+schema_id = "peetsfea.type2.step.v7"
 runtime_compatible = false
 
 [design]
@@ -340,10 +339,12 @@ def _write_source_type2_toml(tmp_path: Path) -> Path:
     return path
 
 
-def _source_type2_toml_text_with_tx_rect_void_columns() -> str:
-    return """
+def test_load_type2_step_spec_rejects_tx_rect_void_columns_runtime_reset(tmp_path: Path) -> None:
+    source_toml_path = tmp_path / "type2_tx_rect_source.toml"
+    source_toml_path.write_text(
+        """
 spec_version = "0.2.22"
-schema_id = "peetsfea.type2.step.v6"
+schema_id = "peetsfea.type2.step.v7"
 runtime_compatible = false
 
 [design]
@@ -429,23 +430,11 @@ range = [true, 2, 6, 5]
 range = [true, 2, 6, 5]
 [modeled_objects.turn_count_x2]
 range = [true, 2, 6, 5]
-""".strip()
-
-
-def test_build_type2_source_toml_keeps_tx_rect_void_columns_terminal_stub_fixed(tmp_path: Path) -> None:
-    source_toml_path = tmp_path / "type2_tx_rect_source.toml"
-    source_toml_path.write_text(_source_type2_toml_text_with_tx_rect_void_columns(), encoding="utf-8")
-    source_spec = load_type2_step_spec(source_toml_path)
-    tx_rect_spec = next(
-        modeled_object
-        for modeled_object in source_spec.modeled_objects
-        if modeled_object.object_id == "tx_rect_void_columns"
+""".strip(),
+        encoding="utf-8",
     )
-    assert isinstance(tx_rect_spec, ModeledTxRectVoidColumnsSpec)
-    assert tx_rect_spec.terminal_stub_length_mm.start == 10.0
-    assert tx_rect_spec.terminal_stub_length_mm.end == 10.0
-    assert tx_rect_spec.terminal_stub_length_mm.count == 1
-    assert tx_rect_spec.terminal_stub_length_mm.is_integer is False
+    with pytest.raises(ValueError):
+        load_type2_step_spec(source_toml_path)
 
 
 def test_build_type2_reads_aedt_builder_n_from_manifest(
@@ -815,7 +804,7 @@ def test_build_prepared_type2_design_rejects_tx_only_modeled_role_before_runner(
             "imported_ledger_path": str(cast(Path, kwargs["imported_ledger_path"])),
         }
 
-    with pytest.raises(ValueError, match=r"type2 build/setup-ready supports only exact modeled role sets"):
+    with pytest.raises(ValueError, match=r"type2 build/setup-ready rejects unsupported modeled roles"):
         type2_runtime.build_prepared_type2_design(prepared_build, runner=_fake_runner)
 
     assert runner_calls == []
@@ -859,6 +848,11 @@ def test_build_prepared_type2_design_rejects_tx_rect_void_columns_modeled_role_w
     )
 
     runner_calls: list[dict[str, object]] = []
+    exporter_calls: list[dict[str, object]] = []
+
+    def _fake_exporter(**kwargs: object) -> object:
+        exporter_calls.append(dict(kwargs))
+        return {"ok": True}
 
     def _fake_runner(**kwargs: object) -> _Type2BuildRunnerResult:
         runner_calls.append(dict(kwargs))
@@ -870,11 +864,16 @@ def test_build_prepared_type2_design_rejects_tx_rect_void_columns_modeled_role_w
 
     with pytest.raises(
         ValueError,
-        match=r"type2 build/setup-ready supports only exact modeled role sets.*tx_rect_void_columns",
+        match=r"type2 build/setup-ready rejects unsupported modeled roles",
     ):
-        type2_runtime.build_prepared_type2_design(prepared_build, runner=_fake_runner)
+        type2_runtime.build_prepared_type2_design(
+            prepared_build,
+            exporter=_fake_exporter,
+            runner=_fake_runner,
+        )
 
     assert runner_calls == []
+    assert exporter_calls == []
 
 
 def test_build_type2_rejects_list_manifest_payload(tmp_path: Path) -> None:

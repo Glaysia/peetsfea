@@ -43,6 +43,7 @@ tags:
 - `sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio.md`
 - `sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio.md`
 - `sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array.md`
+- `sdd/plans/0.2.22-type2-tx-columns-reset.md`
 - `sdd/plans/0.2.22-type2-rx-only-baseline.md`
 - `sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling.md`
 

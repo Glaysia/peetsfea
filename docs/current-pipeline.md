@@ -1,7 +1,7 @@
 ---
 title: current pipeline
 created: 2026-04-17 @ 15:55
-updated: 2026-04-20 @ 14:08
+updated: 2026-04-21 @ 21:45
 tags:
   - type2
   - pipeline
@@ -17,14 +17,16 @@ tags:
 - The active default modeled set is RX-only: `rx_single_coil`.
 - This is a reset point for future TX modeled work, not a TX disable mode. Active type2 does not emit TX modeled
   geometry, TX ports, TX sources, or TX output expressions.
+- The previously exposed `tx_rect_void_columns` modeled surface is now deactivated from the active public schema.
+- Future TX redesign planning is tracked in `tmp/tx개편.md` and `sdd/plans/0.2.22-type2-tx-columns-reset.md`.
 - Active type2 includes a sampled non-modeled `tx_region_actual` box inside maximum `tx_region`; its X/Y usage ratios
   reserve the future actual TX footprint while preserving full `tx_region` Z.
 - `tx_region_actual` can also be sampled into equal X/Y divisions, producing up to 9 concrete non-modeled tile bodies.
-- Active type2 also includes sampled non-modeled `tx_region_actual_pcb` bodies, one per realized
-  `tx_region_actual` concrete tile. Each PCB top face touches its tile top face, thickness is fixed at `5.0 mm`,
+- Active type2 also includes sampled non-modeled `tx_region_actual_stack_space` bodies, one per realized
+  `tx_region_actual` concrete tile. Each stack-space body keeps fixed thickness `5.0 mm`,
   and the shared `scale_ratio` samples each tile's similar rectangle over `0.35..0.95` with `count=25`.
-- `tx_region_actual_pcb.tilt_enabled` is fixed on. It tilts only those PCB bodies toward the modeled RX center;
-  guide tiles remain axis-aligned, and tilted PCB bodies are shifted down if needed so their bbox stays under the owning tile top.
+- `tx_region_actual_stack_space.tilt_enabled` is fixed on. It tilts only those reservation bodies toward the modeled RX center;
+  guide tiles remain axis-aligned, and tilted bodies are shifted down if needed so their bbox stays under the owning tile top.
 - RX single-coil geometry uses the rect/void coil contract in [`docs/tx-rect-void-step.md`](tx-rect-void-step.md).
 - The active runtime flow is:
   1. `entry/sample.py`

@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 20:35
+updated: 2026-04-21 @ 20:35
 tags:
   - step-export
   - spec
@@ -17,15 +17,18 @@ tags:
 
 ## 역할
 - type2 TOML object registry를 typed non-model / modeled spec으로 정규화한다.
-- active modeled role set에 `tx_rect_void_columns`를 추가한다.
+- active role set는 `tx_single_coil`, `rx_single_coil`, `tx_plate_stack`, `rx_plate_stack`로 제한된다.
 
 ## 입력 / 출력
 - 입력: type2 TOML path
-- 출력: parsed type2 step spec, parsed modeled/non-model objects, parsed `outputs`
+- 출력: parsed type2 step spec, parsed modeled/non-model objects, parsed `outputs`, parsed optional `constraints`
 
 ## Canonical state
 - active plate roles는 `tx_plate_stack`와 `rx_plate_stack`다.
-- active type2 schema id는 `peetsfea.type2.step.v6`다.
+- active type2 schema id는 `peetsfea.type2.step.v7`다.
+- optional top-level `[constraints]` is part of the active type2 TOML schema and preserves declarative sampling feasibility rules for dataset/MOO consumers.
+- active type2 constraint support starts with `comparison` rules over sampled owner paths, literal values, and `sum(...)` expressions.
+- each comparison rule requires `id`, `message`, `enabled`, `lhs`, `op`, and `rhs`; parser-side validation enforces supported operators and required `path`/`value`/`func` payload forms.
 - `tx_region` remains the maximum TX guide box.
 - `tx_region_actual` is a derived non-model sampled box owned by `tx_region`, using `x_usage_ratio`, `y_usage_ratio`, `x_division_count`, and `y_division_count`.
 - `tx_region_actual` anchors at `tx_region.min_x`, centers on `tx_region` Y, and preserves full `tx_region` Z.
@@ -33,11 +36,8 @@ tags:
 - `tx_region_actual_stack_space.scale_ratio` scales each realized concrete actual-region tile top-view rectangle uniformly and keeps each reservation volume centered in its tile.
 - `tx_region_actual_stack_space.tilt_enabled` is fixed to `1`; stack-space bodies always tilt toward the modeled RX center.
 - parser/public helper names use `*_tx_region_actual_stack_space_*` naming; the legacy `*_tx_region_actual_pcb_*` naming is removed from active type2 parser/spec ownership.
-- `tx_rect_void_columns` is a modeled TX role with object id `tx_rect_void_columns`.
-- `tx_rect_void_columns` mirrors RX rect/void public fields for shared TX fields and adds independent `turn_count_x0`, `turn_count_x1`, `turn_count_x2`.
-- `tx_rect_void_columns` does not own public `outer_x_usage_ratio` / `outer_y_usage_ratio`; its outer envelope is the owning `tx_region_actual_stack_space` footprint.
-- `tx_rect_void_columns` rejects `ferrite_*` and underlay fields (`underlay_repeat_count`, `underlay_gap_mm`, `wall_parallel_stack_present`).
-- `tx_rect_void_columns` `layer_count` resolves into `{1,2,3}`.
+- `tx_rect_void_columns`는 active type2 parser boundary에서 비활성화한다.
+- 기존 `tx_rect_void_columns` 입력은 더 이상 파싱되지 않고, `tmp/tx개편.md`의 TX reset direction을 따라 재설계되기 전까지 실패한다.
 - TX plate object/owner/plane은 `tx_plate_stack` / `tx_region` / `YZ`다.
 - RX plate object/owner/plane은 `rx_plate_stack` / `rx_region_max` / `YZ`다.
 - TX plate role public fields are `pcb_total_thickness_mm`, `copper_thickness_mm`, `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio`, `tx_coil_count`, `tx_array_x_usage_ratio`.
@@ -57,9 +57,9 @@ tags:
 - `tx_region_actual_stack_space.scale_ratio` accepts only canonical sampled `[false, 0.35, 0.95, 25]` or fixed single candidate with `0.35 <= r <= 0.95`.
 - `tx_region_actual_stack_space.tilt_enabled` accepts only fixed `[true, 1, 1, 1]`.
 - source TOML must include exactly one `tx_region_actual` and exactly one `tx_region_actual_stack_space` derived object.
-- `tx_rect_void_columns.layer_count` must resolve to `{1,2,3}`.
-- `tx_rect_void_columns.turn_count_x*` are integer range fields compatible with TX rect/void turn counts.
-- `tx_rect_void_columns.outer_x_usage_ratio`, `outer_y_usage_ratio`, `outer_x_mm`, and `outer_y_mm` must fail as unsupported public input.
+- `modeled_objects` entry with `role = "tx_rect_void_columns"` fails during parser load with message:
+  `See tmp/tx개편.md for the TX reset direction`.
+- malformed constraint rules, duplicate rule ids, unknown owner paths, unsupported functions, and unsupported operators fail during type2 source loading or sampling preflight.
 - plate roles는 `pcb_total_thickness_mm > copper_thickness_mm > 0`
 - active plate roles do not accept `ferrite_set_count`; if present it is an unsupported key and must fail immediately.
 - plate `turn_count` realized value는 `>= 2`여야 한다.
@@ -70,6 +70,7 @@ tags:
 - TX `tx_array_x_usage_ratio` accepts canonical `[false, 0.1, 0.6, 14]` or fixed `[false, r, r, 1]` where `0 < r <= 1`.
 - RX `tx_coil_count` and `tx_array_x_usage_ratio` must fail as unsupported.
 - old type2 schema id와 removed plate field `shoe_depth_mm`는 즉시 실패한다.
+- `tx_rect_void_columns` 역할은 active type2 parser에서 즉시 실패하며, 재활성화는 TX reset direction 완료 후에만 가능하다.
 - plate roles에 coil-only keys가 나타나면 즉시 실패한다.
 - single-coil outer usage ratios must realize to `0 < ratio <= 1`; single-coil `void_usage_ratio` must realize to `0 < ratio < 1`; legacy `outer_x_mm`, `outer_y_mm`, and split/centered legacy `void_*` fields fail as unsupported public type2 input.
 - active example drift는 role/object_id/owner/plane mismatch를 허용하지 않는다.
