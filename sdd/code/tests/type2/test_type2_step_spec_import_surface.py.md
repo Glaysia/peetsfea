@@ -1,0 +1,46 @@
+---
+title: test_type2_step_spec_import_surface.py
+created: 2026-04-21 @ 17:45
+updated: 2026-04-21 @ 17:45
+tags:
+  - tests
+  - type2
+  - import-surface
+---
+
+# test_type2_step_spec_import_surface.py
+
+## Source
+- Path: `tests/type2/test_type2_step_spec_import_surface.py`
+- Code note path: `sdd/code/tests/type2/test_type2_step_spec_import_surface.py.md`
+- Direct owner: [[sdd/code/src/peetsfea/type2_step_spec.py]]
+
+## 역할
+- verify `peetsfea.type2_step_spec` exposes the expected split-facing import surface via `__all__`
+- verify chosen façade symbols still resolve to their owning split modules for role/object mapping, resolvers, and rendering helper paths
+
+## 입력 / 출력
+- 입력: runtime import of `peetsfea.type2_step_spec`
+- 출력: assertions that `__all__` matches the expected symbol contract and selected symbols resolve from expected module origins
+
+## Canonical state
+- expected surface is frozen as a set of 40 canonical public names (including parser, modeled/non-modeled types, resolvers, and helpers)
+- import-path coverage includes `type2_step_spec_modeled` and `type2_step_spec_sampling` owner paths for split-owned functions
+- failures should be fail-fast when the facade cannot import
+
+## 불변식 / 실패-즉시
+- `type2_step_spec.__all__` must exist and equal `test_type2_step_spec_import_surface._EXPECTED_PUBLIC_SURFACE`
+- selected split-owned symbols must have deterministic `__module__` paths
+- facade import errors are surfaced as hard assertion failures
+
+## 협력 모듈
+- [[sdd/code/src/peetsfea/type2_step_spec.py]]
+- [[sdd/code/src/peetsfea/type2_step_spec_modeled.py]]
+- [[sdd/code/src/peetsfea/type2_step_spec_sampling.py]]
+- [[sdd/code/src/peetsfea/type2_step_spec_types.py]]
+- [[sdd/code/src/peetsfea/type2_step_spec_constraints.py]]
+- [[sdd/code/src/peetsfea/type2_step_spec_non_model.py]]
+
+## 변경 시 주의점
+- keep the expected surface list synchronized if split ownership intentionally changes
+- do not relax to fallback assertions; missing or renamed public symbols must fail this test immediately

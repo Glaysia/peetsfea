@@ -17,7 +17,7 @@ tags:
 
 ## 역할
 - type2 modeled-object TOML parsing ownership을 가진다.
-- single-coil, plate-stack, and `tx_rect_void_columns` modeled role validation, role/owner/plane helpers, and `tx_rect_void` TOML rendering bridge를 제공한다.
+- single-coil, plate-stack, and `tx_rect_void_columns` modeled role validation, role/owner/plane helpers delegation, and `tx_rect_void` TOML rendering bridge를 제공한다.
 - shared dataclasses and role constants come from [[sdd/code/src/peetsfea/type2_step_spec_types.py]].
 - generic table and range validators come from [[sdd/code/src/peetsfea/type2_step_spec_non_model.py]].
 
@@ -27,7 +27,8 @@ tags:
 
 ## Canonical state
 - canonical modeled roles remain `tx_single_coil`, `rx_single_coil`, `tx_rect_void_columns`, `tx_plate_stack`, and `rx_plate_stack`.
-- canonical object/owner/plane resolution stays role-driven and deterministic.
+- role→object/owner/plane 해석은 `type2_step_spec_types.py`의 canonical 함수를 그대로 재사용해 drift-free로 유지한다.
+- parsing은 `parse_modeled_object` 중심으로 단일 진입점을 가지며 facade 중복 분기를 제거한다.
 - `tx_rect_void` rendering preserves the canonical `void_usage_ratio` bridge contract.
 
 ## Invariants / fail-fast

@@ -2834,6 +2834,52 @@ def test_export_type2_step_artifacts_tx_rect_void_columns_x1_division_variant(tm
     )
 
 
+def test_export_type2_step_artifacts_tx_rect_void_columns_aligns_stub_bottoms_to_lowest_stub(
+    tmp_path: Path,
+) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_tx_rect_void_columns_spec_text(
+            tx_region_actual_x_division_count_range="[true, 2, 2, 1]",
+            tx_region_actual_y_division_count_range="[true, 3, 3, 1]",
+            connection_mode_range="[true, 1, 1, 1]",
+            series_total_turn_count_range="[true, 6.0, 6.0, 1]",
+            parallel_total_turn_count_range="[true, 6, 6, 1]",
+            turn_weight_a_range="[false, 1.0, 1.0, 1]",
+            turn_weight_b_range="[false, 0.0, 0.0, 1]",
+            turn_weight_c_range="[false, 0.0, 0.0, 1]",
+        ),
+    )
+    ledger = export_type2_step_artifacts(
+        toml_path=toml_path,
+        output_dir=tmp_path / "out",
+        ledger_path=tmp_path / "out" / "ledger.json",
+        seed=0,
+    )
+    tx_entry = cast(
+        dict[str, object],
+        next(
+            entry for entry in cast(list[object], ledger["modeled_objects"])
+            if cast(dict[str, object], entry)["object_id"] == "tx_rect_void_columns"
+        ),
+    )
+    terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
+    vertical_stub_names = cast(tuple[str, ...], terminal_metadata["vertical_stub_body_names"])
+    assert len(vertical_stub_names) == 12
+    scene_shapes_by_label = _step_shapes_by_label(Path(cast(str, ledger["scene_step_path"])))
+
+    bottom_z_values = tuple(
+        round(scene_shapes_by_label[stub_name].bounding_box().min.Z, 6)
+        for stub_name in vertical_stub_names
+    )
+    top_z_values = tuple(
+        round(scene_shapes_by_label[stub_name].bounding_box().max.Z, 6)
+        for stub_name in vertical_stub_names
+    )
+    assert len(set(bottom_z_values)) == 1
+    assert len(set(top_z_values)) > 1
+
+
 @pytest.mark.parametrize(
     ("x_division_count", "case_name"),
     (

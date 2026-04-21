@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Literal, cast
+from typing import cast
 
 from peetsfea.tx_rect_void import profile_for_modeled_role
 from peetsfea.type2_step_spec_types import ModeledObjectRole
@@ -16,89 +16,50 @@ from peetsfea.type2_step_spec_types import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec_types import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec_types import ModeledTxSingleCoilSpec
+from peetsfea.type2_step_spec_types import modeled_object_id_for_role
+from peetsfea.type2_step_spec_types import modeled_plane_for_role
+from peetsfea.type2_step_spec_types import placement_owner_id_for_role
 from peetsfea.type2_step_spec_types import NonModelBoxSpec
 from peetsfea.type2_step_spec_types import RangeSpec
-from peetsfea.type2_step_spec_types import Point3
+from peetsfea.type2_step_spec_types import _UNDERLAY_REPEAT_COUNT_CANDIDATES
+from peetsfea.type2_step_spec_types import _TX_PLATE_STACK_COIL_COUNT_CANDIDATES
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_CONNECTION_MODE_EXPECTED
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_CONNECTION_MODE_RANGE
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_LAYER_COUNT_ALLOWED
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_UNDERLAY_GAP_MM_CANDIDATES
+from peetsfea.type2_step_spec_types import _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES
 from peetsfea.type2_step_spec_non_model import _float_range_candidates
 from peetsfea.type2_step_spec_non_model import _integer_range_candidates
 from peetsfea.type2_step_spec_non_model import _require_float_value
 from peetsfea.type2_step_spec_non_model import _require_key
 from peetsfea.type2_step_spec_non_model import _require_non_empty_str
-from peetsfea.type2_step_spec_non_model import _require_plane
-from peetsfea.type2_step_spec_non_model import _require_point3
 from peetsfea.type2_step_spec_non_model import _require_range
 from peetsfea.type2_step_spec_non_model import _require_table
-from peetsfea.type2_step_spec_non_model import _require_true
 from peetsfea.type2_step_spec_sampling import _is_canonical_tx_plate_stack_array_x_usage_ratio_range
-
-_UNDERLAY_REPEAT_COUNT_CANDIDATES = (0, 2, 4, 6, 8)
-_TX_UNDERLAY_GAP_MM_CANDIDATES = (1.0, 4.0, 7.0, 10.0)
-_TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES = (0, 1)
-_TX_PLATE_STACK_COIL_COUNT_CANDIDATES = (1, 2, 3, 4)
-_TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_START = 0.1
-_TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_END = 0.6
-_TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_COUNT = 14
-_TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_START = 1
-_TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_END = 4
-_TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_COUNT = 4
-_TX_RECT_VOID_COLUMNS_LAYER_COUNT_ALLOWED = (1, 2, 3, 4)
-_TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_START = 1.0
-_TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_END = 1.8
-_TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_COUNT = 5
-_TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_START = 10.0
-_TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_END = 10.0
-_TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_COUNT = 1
-_TX_RECT_VOID_COLUMNS_CONNECTION_MODE_EXPECTED = (0, 1)
-_TX_RECT_VOID_COLUMNS_CONNECTION_MODE_RANGE = (0, 1, 2)
-_TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_START = 1
-_TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_END = 36
-_TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_COUNT = 36
-_TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_START = 1
-_TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_END = 36
-_TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_COUNT = 36
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_START = 0.5
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_END = 1.5
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_COUNT = 5
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_START = -0.5
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_END = 0.5
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_COUNT = 21
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_START = -0.3
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_END = 0.3
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_COUNT = 21
-
-
-def modeled_object_id_for_role(role: ModeledObjectRole) -> str:
-    if role == "tx_single_coil":
-        return "tx_rect_void_coil"
-    if role == "rx_single_coil":
-        return "rx_rect_void_coil"
-    if role == "tx_rect_void_columns":
-        return "tx_rect_void_columns"
-    if role == "tx_plate_stack":
-        return "tx_plate_stack"
-    if role == "rx_plate_stack":
-        return "rx_plate_stack"
-    raise RuntimeError(f"unsupported modeled object role for object_id resolution: {role}")
-
-
-def placement_owner_id_for_role(role: ModeledObjectRole) -> str:
-    if role in ("tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"):
-        return "tx_region"
-    if role in ("rx_single_coil", "rx_plate_stack"):
-        return "rx_region_max"
-    raise RuntimeError(f"unsupported modeled object role for placement owner resolution: {role}")
-
-
-def modeled_plane_for_role(role: ModeledObjectRole) -> Literal["XY", "YZ"]:
-    if role == "tx_single_coil":
-        return "XY"
-    if role == "tx_rect_void_columns":
-        return "XY"
-    if role == "tx_plate_stack":
-        return "YZ"
-    if role in ("rx_single_coil", "rx_plate_stack"):
-        return "YZ"
-    raise RuntimeError(f"unsupported modeled object role for plane resolution: {role}")
 
 
 def _require_tx_plate_stack_array_x_usage_ratio_range(

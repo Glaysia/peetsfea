@@ -601,13 +601,13 @@ def _build_tx_rect_void_columns_scene_data(
             terminal_box_specs_by_body[end_terminal_body_name].append(end_anchor_box_spec)
         return {name: tuple(specs) for name, specs in terminal_box_specs_by_body.items()}
 
-    def _build_slanted_terminal_body(
+    def _transformed_terminal_top_faces_by_z(
         *,
-        terminal_body_name: str,
         terminal_anchor_box_specs: tuple[BoxSpec, ...],
         transform: TxRegionActualStackSpaceTiltTransform,
         stack_space_object_id: str,
-    ) -> bd.Shape:
+        terminal_body_name: str,
+    ) -> tuple[tuple[float, bd.Face], ...]:
         if len(terminal_anchor_box_specs) != build_result.layer_count:
             raise RuntimeError(
                 "tx_rect_void_columns terminal anchor metadata must provide one box spec per layer for each terminal "
@@ -630,6 +630,80 @@ def _build_tx_rect_void_columns_scene_data(
                 "tx_rect_void_columns terminal body requires at least one transformed top contact face "
                 f"(stack_space_object_id={stack_space_object_id}, terminal_body_name={terminal_body_name})"
             )
+        return tuple(transformed_top_faces_by_z)
+
+    def _natural_floorward_terminal_bottom_z(
+        *,
+        transformed_top_faces_by_z: tuple[tuple[float, bd.Face], ...],
+        stack_space_object_id: str,
+        terminal_body_name: str,
+    ) -> float:
+        if len(transformed_top_faces_by_z) == 0:
+            raise RuntimeError(
+                "tx_rect_void_columns terminal body requires at least one transformed top contact face "
+                f"(stack_space_object_id={stack_space_object_id}, terminal_body_name={terminal_body_name})"
+            )
+        lowest_top_face_avg_z = min(top_face_avg_z for top_face_avg_z, _face in transformed_top_faces_by_z)
+        return lowest_top_face_avg_z - build_result.terminal_stub_length_mm
+
+    natural_terminal_bottom_z_values: list[float] = []
+    for tile_scene in build_result.tile_scenes:
+        stack_space_object_id = tile_scene.stack_space_object_id
+        if stack_space_object_id not in stack_space_tilt_placements:
+            raise RuntimeError(
+                "tx_rect_void_columns requires tilt placement metadata for each stack-space tile "
+                f"(missing={stack_space_object_id})"
+            )
+        tilt_placement = stack_space_tilt_placements[stack_space_object_id]
+        transform = tilt_placement["transform"]
+        if not isinstance(transform, TxRegionActualStackSpaceTiltTransform):
+            raise RuntimeError(
+                "tx_rect_void_columns tilt placement transform is missing "
+                f"(stack_space_object_id={stack_space_object_id})"
+            )
+        if stack_space_object_id not in tile_terminal_anchors_by_stack_space:
+            raise RuntimeError(
+                "tx_rect_void_columns terminal anchor metadata is missing for tile "
+                f"(stack_space_object_id={stack_space_object_id})"
+            )
+        tile_anchor_metadata = tile_terminal_anchors_by_stack_space[stack_space_object_id]
+        terminal_stub_label_pairs = tile_anchor_metadata.terminal_stub_body_names
+        terminal_box_specs_by_terminal = _collect_terminal_anchor_box_specs_from_metadata(
+            tile_anchor_metadata=tile_anchor_metadata,
+            terminal_stub_label_pairs=terminal_stub_label_pairs,
+        )
+        for terminal_body_name, terminal_anchor_box_specs in terminal_box_specs_by_terminal.items():
+            transformed_top_faces_by_z = _transformed_terminal_top_faces_by_z(
+                terminal_anchor_box_specs=terminal_anchor_box_specs,
+                transform=transform,
+                stack_space_object_id=stack_space_object_id,
+                terminal_body_name=terminal_body_name,
+            )
+            natural_terminal_bottom_z_values.append(
+                _natural_floorward_terminal_bottom_z(
+                    transformed_top_faces_by_z=transformed_top_faces_by_z,
+                    stack_space_object_id=stack_space_object_id,
+                    terminal_body_name=terminal_body_name,
+                )
+            )
+    if len(natural_terminal_bottom_z_values) == 0:
+        raise RuntimeError("tx_rect_void_columns terminal body generation requires at least one terminal bottom")
+    shared_terminal_bottom_z = min(natural_terminal_bottom_z_values)
+
+    def _build_slanted_terminal_body(
+        *,
+        terminal_body_name: str,
+        terminal_anchor_box_specs: tuple[BoxSpec, ...],
+        transform: TxRegionActualStackSpaceTiltTransform,
+        stack_space_object_id: str,
+        bottom_z: float,
+    ) -> bd.Shape:
+        transformed_top_faces_by_z = _transformed_terminal_top_faces_by_z(
+            terminal_anchor_box_specs=terminal_anchor_box_specs,
+            transform=transform,
+            stack_space_object_id=stack_space_object_id,
+            terminal_body_name=terminal_body_name,
+        )
         sorted_top_faces = tuple(
             transformed_top_face
             for _z, transformed_top_face in sorted(
@@ -640,8 +714,6 @@ def _build_tx_rect_void_columns_scene_data(
         )
         lowest_top_face = sorted_top_faces[-1]
         lowest_top_face_vertices = _face_xy_vertices(face=lowest_top_face)
-        lowest_top_face_avg_z = sum(vertex[2] for vertex in lowest_top_face_vertices) / 4.0
-        bottom_z = lowest_top_face_avg_z - build_result.terminal_stub_length_mm
         bottom_face = _face_from_xy_polygon(
             points_xy=tuple((vertex[0], vertex[1]) for vertex in lowest_top_face_vertices)
         ).moved(bd.Location((0.0, 0.0, bottom_z)))
@@ -744,6 +816,7 @@ def _build_tx_rect_void_columns_scene_data(
                 terminal_anchor_box_specs=terminal_anchor_box_specs,
                 transform=transform,
                 stack_space_object_id=stack_space_object_id,
+                bottom_z=shared_terminal_bottom_z,
             )
             transformed_shapes.append(terminal_shape)
             transformed_tile_shapes.append(terminal_shape)

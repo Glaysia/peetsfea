@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-21 @ 23:58
+updated: 2026-04-21 @ 23:59
 tags:
   - tests
   - type2
@@ -32,6 +32,7 @@ tags:
   - parser-bypass simulations (mocked loader + preflight no-op) still execute through full export and keep the same success contract,
   - generated specs using `tx_rect_void_columns` with varied tiling/turn matrices produce expected body metadata counts and scene bodies.
   - grid contract regression explicitly covers `1x1`, `2x3`, `3x3` and validates `txrvc_x*_y*_pcb_l*`, `txrvc_x*_y*_cu_l*`, `txrvc_x*_y*_stub_*` naming/body-count 계약.
+  - tilted `2x3` export verifies every generated `txrvc_x*_y*_stub_*` terminal body shares the same bottom Z, using the lowest natural stub as the common floorward height.
   - safe-turn grid variant fixtures keep TOML truth ranges for allocation surface, including `parallel_total_turn_count = [true, 1, 36, 36]` and `turn_weight_c = [false, -0.3, 0.3, 21]`.
   - fixed-weight symmetry diagnostics now cover `1x3` and `2x3` layouts: Y-mirrored tiles at equal RX distance must realize equal per-tile turn counts, body naming/count contract remains valid, and resolved total turns are asserted with `sum >= target` (not exact-equality pinning).
 - `export_type2_tx_single_coil_artifact` continues to reject `tx_rect_void_columns` role at dispatch.

@@ -1,7 +1,7 @@
 ---
 title: type2_step_export.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-21 @ 21:08
+updated: 2026-04-21 @ 21:32
 tags:
   - step-export
   - export
@@ -63,6 +63,9 @@ tags:
 - `tx_rect_void_columns` now participates in active full-scene STEP geometry export as a geometry-only modeled role.
 - Full-scene modeled dispatch routes `tx_rect_void_columns` through `_build_tx_rect_void_columns_scene_data`, computes
   `rx_center_xyz` from `rx_region_max`, and passes it through to the column builder for deterministic TX-plane 2D distance turn allocation.
+- `tx_rect_void_columns` terminal stub bodies use a shared floorward bottom Z: export computes every terminal's natural
+  bottom candidate from its transformed lowest contact face and requested `terminal_stub_length_mm`, then lofts all
+  terminal stubs down to the lowest candidate so tilted columns terminate at one common height.
 - Full-scene export preflight deactivation is removed for `tx_rect_void_columns`; direct `export_type2_tx_single_coil_artifact` continues to reject this role with the parser/sampler milestone message.
 - Internal modeled export-contract validation now checks `tx_rect_void_columns` using scene-metadata expected names/count and requires empty body groups for geometry-only phase.
 
@@ -74,6 +77,8 @@ tags:
 - active plate roles에서 `ferrite_set_count`를 public input 또는 ledger/export 계산 dependency로 되살리면 안 된다.
 - final export body list에서는 `*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`가 없어야 한다.
 - full-scene export은 `tx_rect_void_columns`를 생성 경로로 허용한다.
+- `tx_rect_void_columns` floorward terminal stub bottoms must share one Z coordinate after tilt transform; per-tile fixed-length
+  bottom drift is contract drift.
 - tx_single_coil direct export는 parser/sampler milestone rejection 메시지로 `tx_rect_void_columns`를 거부한다.
 - preflight guard bypass(예: monkeypatch/no-op) 상황에서는 tx-single-coil direct export 경계에서 parser/sampler milestone 메시지로 즉시 오류를 raise해야 한다.
 - exported solid pair positive-volume overlap은 fail-fast failure다.

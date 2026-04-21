@@ -16,10 +16,11 @@ tags:
 - Related feature plans: [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]], [[sdd/plans/0.2.22-type2-remove-plate-stack-shoe-contract]], [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]], [[sdd/plans/0.2.22-type2-tx-actual-region-pcb-non-model]], [[sdd/plans/0.2.22-type2-tx-rect-void-columns-geometry]]
 
 ## 역할
-- active type2 TOML object registry를 typed non-model / modeled spec으로 정규화하는 parser facade다.
+- active type2 TOML 입력을 통합 타입으로 조합하는 thin compatibility facade다.
+- 파서/검증/샘플링의 실질 구현은 각각 [[sdd/code/src/peetsfea/type2_step_spec_non_model.py]], [[sdd/code/src/peetsfea/type2_step_spec_modeled.py]], [[sdd/code/src/peetsfea/type2_step_spec_sampling.py]]에 위임하고, facade는 `load_type2_step_spec`/`render_tx_rect_void_toml`와 공개 심벌 재노출만 유지한다.
 - shared constants, type aliases, dataclasses, and role/object/plane helpers are owned by [[sdd/code/src/peetsfea/type2_step_spec_types.py]].
-- non-model TOML validation and load checks now delegate to [[sdd/code/src/peetsfea/type2_step_spec_non_model.py]].
 - active role set는 `tx_single_coil`, `rx_single_coil`, `tx_plate_stack`, `rx_plate_stack`로 제한된다.
+- modeled-object 테이블 파싱은 타입별 디스패치를 수행하는 `parse_modeled_object`로 한 번에 위임되며, facade는 분기 로직을 보유하지 않는다.
 
 ## 입력 / 출력
 - 입력: type2 TOML path
@@ -41,6 +42,7 @@ tags:
 - `tx_region_actual_stack_space.tilt_enabled` is fixed to `1`; stack-space bodies always tilt toward the modeled RX center.
 - parser/public helper names use `*_tx_region_actual_stack_space_*` naming; the legacy `*_tx_region_actual_pcb_*` naming is removed from active type2 parser/spec ownership.
 - `tx_rect_void_columns`는 parser/sampler-only 마일스톤으로 parser surface를 재개한다.
+- 이 모듈은 구현 소유권을 분기 모듈로 이동한 thin facade이므로, 파서/샘플러 동작은 변경 없이 재노출 경로를 유지한다.
 - `tx_rect_void_columns` active parser contract는 `connection_mode`, `series_total_turn_count`, `parallel_total_turn_count`, `turn_weight_a`, `turn_weight_b`, `turn_weight_c`를 사용한다.
 - `tx_rect_void_columns` legacy fields `turn_count_x0/x1/x2`, `column_connection_mode`, `row_connection_mode`, `parallel_equivalent_turn_count`는 parser에서 즉시 실패한다.
 - TX plate object/owner/plane은 `tx_plate_stack` / `tx_region` / `YZ`다.
@@ -89,6 +91,8 @@ tags:
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_step_spec_non_model.py]]
+- [[sdd/code/src/peetsfea/type2_step_spec_modeled.py]]
+- [[sdd/code/src/peetsfea/type2_step_spec_sampling.py]]
 - [[sdd/code/src/peetsfea/type2_step_spec_types.py]]
 - [[sdd/code/src/peetsfea/type2_plate_stack.py]]
 - [[sdd/code/src/peetsfea/type2_step_scene.py]]
