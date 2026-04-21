@@ -2411,7 +2411,11 @@ def test_export_type2_step_artifacts_supports_tx_rect_void_columns_modeled_role(
     )
     assert cast(int, tx_entry["expected_exported_body_count"]) > 0
     terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
-    assert terminal_metadata["kind"] == "geometry_only"
+    _assert_tx_rect_void_columns_terminal_metadata_contract(
+        terminal_metadata=terminal_metadata,
+        x_division_count=1,
+        y_division_count=1,
+    )
     modeled_metadata_path = output_dir / "metadata" / "tx_rect_void_columns.metadata.json"
     assert modeled_metadata_path.is_file()
     scene_shapes_by_label = _step_shapes_by_label(scene_step_path)
@@ -2459,7 +2463,11 @@ def test_export_type2_step_artifacts_supports_tx_rect_void_columns_when_prefligh
     )
     assert cast(int, tx_entry["expected_exported_body_count"]) > 0
     terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
-    assert terminal_metadata["kind"] == "geometry_only"
+    _assert_tx_rect_void_columns_terminal_metadata_contract(
+        terminal_metadata=terminal_metadata,
+        x_division_count=1,
+        y_division_count=1,
+    )
     modeled_metadata_path = output_dir / "metadata" / "tx_rect_void_columns.metadata.json"
     assert modeled_metadata_path.is_file()
     scene_shapes_by_label = _step_shapes_by_label(scene_step_path)
@@ -2692,8 +2700,12 @@ def _assert_tx_rect_void_columns_expected_body_contract(
     copper_layers_by_tile: dict[tuple[int, int], set[int]] = {}
     stub_hints_by_tile: dict[tuple[int, int], set[str]] = {}
     body_count_by_tile: dict[tuple[int, int], int] = {}
+    fused_copper_body_name = "tx_rect_void_columns_copper"
+    parallel_mode = fused_copper_body_name in expected_names
 
     for body_name in expected_names:
+        if body_name == fused_copper_body_name:
+            continue
         pcb_match = pcb_pattern.match(body_name)
         if pcb_match is not None:
             tile_index = (int(pcb_match.group(1)), int(pcb_match.group(2)))
@@ -2722,6 +2734,19 @@ def _assert_tx_rect_void_columns_expected_body_contract(
         raise AssertionError(f"unexpected tx_rect_void_columns body label contract drift: {body_name}")
 
     assert set(pcb_layers_by_tile) == tile_indices
+    if parallel_mode:
+        assert copper_layers_by_tile == {}
+        assert stub_hints_by_tile == {}
+        assert expected_names.count(fused_copper_body_name) == 1
+        expected_total_count = 1
+        for tile_index in tile_indices:
+            pcb_layers = pcb_layers_by_tile[tile_index]
+            assert len(pcb_layers) > 0
+            assert body_count_by_tile[tile_index] == len(pcb_layers)
+            expected_total_count += len(pcb_layers)
+        assert len(expected_names) == expected_total_count
+        return
+
     assert set(copper_layers_by_tile) == tile_indices
     assert set(stub_hints_by_tile) == tile_indices
 
@@ -2737,6 +2762,56 @@ def _assert_tx_rect_void_columns_expected_body_contract(
         assert body_count_by_tile[tile_index] == tile_expected_count
         expected_total_count += tile_expected_count
     assert len(expected_names) == expected_total_count
+
+
+def _assert_tx_rect_void_columns_terminal_metadata_contract(
+    *,
+    terminal_metadata: dict[str, object],
+    x_division_count: int,
+    y_division_count: int,
+) -> None:
+    kind = terminal_metadata["kind"]
+    if kind == "geometry_only":
+        assert terminal_metadata["connection_status"] == "skipped_series"
+        assert "source_label_metadata" not in terminal_metadata
+        assert "tab_face_vertices_xyz" not in terminal_metadata
+        return
+    assert kind == "parallel_collector_tabs"
+    assert terminal_metadata["connection_mode"] == 0
+    source_label_metadata = cast(dict[str, object], terminal_metadata["source_label_metadata"])
+    assert "start_row_rails" not in source_label_metadata
+    assert "end_row_rails" not in source_label_metadata
+    assert "start_spines" not in source_label_metadata
+    assert "end_spines" not in source_label_metadata
+    assert "start_feeders" not in source_label_metadata
+    assert "end_feeders" not in source_label_metadata
+    branch_count = x_division_count * y_division_count
+    start_pours = cast(tuple[str, ...], source_label_metadata["start_pours"])
+    end_pours = cast(tuple[str, ...], source_label_metadata["end_pours"])
+    assert len(start_pours) == branch_count + 1
+    assert len(end_pours) == branch_count + 1
+    assert start_pours[0] == "txrvc_pour_s_bus"
+    assert end_pours[0] == "txrvc_pour_e_bus"
+    assert all(label.startswith("txrvc_pour_s_") for label in start_pours)
+    assert all(label.startswith("txrvc_pour_e_") for label in end_pours)
+    assert len(cast(tuple[str, ...], source_label_metadata["end_layer_drops"])) == branch_count
+    assert len(cast(tuple[str, ...], source_label_metadata["start_external_tabs"])) == 1
+    assert len(cast(tuple[str, ...], source_label_metadata["end_external_tabs"])) == 1
+    tab_face_vertices = cast(tuple[dict[str, object], ...], terminal_metadata["tab_face_vertices_xyz"])
+    assert len(tab_face_vertices) == 2
+    assert {cast(str, entry["terminal"]) for entry in tab_face_vertices} == {"start", "end"}
+    for tab_face_entry in tab_face_vertices:
+        vertices = cast(tuple[tuple[float, float, float], ...], tab_face_entry["vertices_xyz"])
+        assert len(vertices) == 4
+    branch_balance_audit = cast(dict[str, object], terminal_metadata["branch_balance_audit"])
+    assert cast(float, branch_balance_audit["balance_delta_mm"]) <= cast(float, branch_balance_audit["tolerance_mm"])
+    assert cast(float, branch_balance_audit["max_branch_total_delta_mm"]) <= cast(
+        float,
+        branch_balance_audit["branch_spread_limit_mm"],
+    )
+    overlap_audit = cast(dict[str, object], terminal_metadata["overlap_audit"])
+    assert overlap_audit["positive_volume_pair_count"] == 0
+    assert cast(float, overlap_audit["max_intersection_volume_mm3"]) <= cast(float, overlap_audit["tolerance_mm3"])
 
 
 # Manual performance probe only (excluded from default pytest):
@@ -2802,7 +2877,11 @@ def _export_tx_rect_void_columns_spec_and_expect_success(
     )
     assert cast(int, tx_entry["expected_exported_body_count"]) > 0
     terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
-    assert terminal_metadata["kind"] == "geometry_only"
+    _assert_tx_rect_void_columns_terminal_metadata_contract(
+        terminal_metadata=terminal_metadata,
+        x_division_count=x_division_count,
+        y_division_count=y_division_count,
+    )
     modeled_metadata_path = output_dir / "metadata" / "tx_rect_void_columns.metadata.json"
     assert modeled_metadata_path.is_file()
     scene_shapes_by_label = _step_shapes_by_label(scene_step_path)
@@ -2822,6 +2901,39 @@ def test_export_type2_step_artifacts_tx_rect_void_columns_grid_variants(
         x_division_count=x_division_count,
         y_division_count=y_division_count,
         force_safe_turn_allocation=x_division_count * y_division_count > 1,
+    )
+
+
+@pytest.mark.parametrize(("x_division_count", "y_division_count"), ((1, 1), (1, 3), (2, 2), (3, 3)))
+def test_export_type2_step_artifacts_tx_rect_void_columns_parallel_collector_variants(
+    tmp_path: Path,
+    x_division_count: int,
+    y_division_count: int,
+) -> None:
+    safe_turn_total = max(6, x_division_count * y_division_count)
+    tx_entry = _export_tx_rect_void_columns_spec_and_expect_success(
+        tmp_path=tmp_path,
+        x_division_count=x_division_count,
+        y_division_count=y_division_count,
+        turn_profile_overrides={
+            "connection_mode_range": "[true, 0, 0, 1]",
+            "series_total_turn_count_range": f"[true, {float(safe_turn_total)}, {float(safe_turn_total)}, 1]",
+            "parallel_total_turn_count_range": f"[true, {safe_turn_total}, {safe_turn_total}, 1]",
+            "turn_weight_a_range": "[false, 1.0, 1.0, 1]",
+            "turn_weight_b_range": "[false, 0.0, 0.0, 1]",
+            "turn_weight_c_range": "[false, 0.0, 0.0, 1]",
+        },
+    )
+    expected_names = cast(tuple[str, ...], tx_entry["expected_exported_body_names"])
+    assert expected_names.count("tx_rect_void_columns_copper") == 1
+    assert not any("_cu_l" in body_name for body_name in expected_names)
+    assert not any("_stub_" in body_name for body_name in expected_names)
+    terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
+    assert terminal_metadata["kind"] == "parallel_collector_tabs"
+    _assert_tx_rect_void_columns_terminal_metadata_contract(
+        terminal_metadata=terminal_metadata,
+        x_division_count=x_division_count,
+        y_division_count=y_division_count,
     )
 
 

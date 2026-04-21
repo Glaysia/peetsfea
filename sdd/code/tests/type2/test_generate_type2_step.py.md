@@ -26,13 +26,13 @@ tags:
 - export ledger coverage verifies `tx_region_actual` is min-X anchored, Y-centered, full-Z relative to `tx_region`, and can resolve to 3x3 concrete tiles.
 - export ledger coverage verifies `tx_region_actual_stack_space` bodies are generated one-for-one with concrete `tx_region_actual` tiles, with fixed `total_thickness_mm = 5.0`, top-face alignment before tilt, and scale-derived similar footprint.
 - export coverage verifies `tilt_enabled = 1` rotates only the stack-space bodies toward the modeled RX center, keeps guide tiles axis-aligned, and clamps tilted stack-space bounding boxes under owning tile tops.
-- `tx_rect_void_columns` generation/export behavior is now validated as geometry milestone success for full STEP export:
-  - temporary source specs that include `tx_rect_void_columns` succeed in `export_type2_step_artifacts`,
-  - success assertions verify scene STEP output, ledger output, modeled metadata file existence, and `terminal_metadata.kind == 'geometry_only'`,
+- `tx_rect_void_columns` generation/export behavior is now validated as STEP handoff success for full STEP export:
+  - series specs keep geometry-only tile/stub output with `connection_status = "skipped_series"`,
+  - parallel specs export one fused `tx_rect_void_columns_copper` body, per-tile PCBs, balanced collector pour bus/patch metadata, and exactly two future tab faces,
   - parser-bypass simulations (mocked loader + preflight no-op) still execute through full export and keep the same success contract,
   - generated specs using `tx_rect_void_columns` with varied tiling/turn matrices produce expected body metadata counts and scene bodies.
-  - grid contract regression explicitly covers `1x1`, `2x3`, `3x3` and validates `txrvc_x*_y*_pcb_l*`, `txrvc_x*_y*_cu_l*`, `txrvc_x*_y*_stub_*` naming/body-count 계약.
-  - tilted `2x3` export verifies every generated `txrvc_x*_y*_stub_*` terminal body shares the same bottom Z, using the lowest natural stub as the common floorward height.
+  - grid contract regression explicitly covers `1x1`, `2x3`, `3x3` and validates `txrvc_x*_y*_pcb_l*`, series `txrvc_x*_y*_cu_l*`, series `txrvc_x*_y*_stub_*`, and parallel fused-copper naming/body-count 계약.
+  - tilted series export verifies every generated `txrvc_x*_y*_stub_*` terminal body shares the same bottom Z, using the lowest natural stub as the common floorward height.
   - safe-turn grid variant fixtures keep TOML truth ranges for allocation surface, including `parallel_total_turn_count = [true, 1, 36, 36]` and `turn_weight_c = [false, -0.3, 0.3, 21]`.
   - fixed-weight symmetry diagnostics now cover `1x3` and `2x3` layouts: Y-mirrored tiles at equal RX distance must realize equal per-tile turn counts, body naming/count contract remains valid, and resolved total turns are asserted with `sum >= target` (not exact-equality pinning).
 - `export_type2_tx_single_coil_artifact` continues to reject `tx_rect_void_columns` role at dispatch.

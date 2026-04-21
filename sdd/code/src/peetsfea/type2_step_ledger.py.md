@@ -33,7 +33,7 @@ tags:
 - `expected_exported_body_names`는 RX와 single-branch TX에서 role-local 6-body 정렬을 유지한다:
   `*_plate_copper`, `*_pcb_wall`, `*_stack_pet_psa`, `*_stack_ferrite`, `*_stack_air`, `*_pcb_coil`.
 - TX arrays expand branch-local non-copper exact names while keeping one united `tx_plate_copper` in the same TX modeled entry.
-- `tx_rect_void_columns` modeled entries are STEP-export-only geometry handoff entries with `terminal_metadata.kind = "geometry_only"` until a later connection/port contract.
+- `tx_rect_void_columns` modeled entries are STEP-export-only handoff entries. Series mode remains `terminal_metadata.kind = "geometry_only"`; parallel mode records `kind = "parallel_collector_tabs"` and exactly two metadata-owned future terminal-tab faces.
 - plate role field ownership은 input TOML에 두고, ledger는 exact export contract만 보존한다.
 - final handoff expected_exported_body_count is the exact exported list length; RX and TX `tx_coil_count = 1` remain `6`.
 - expected_exported_body_groups는 다음을 반영한다:

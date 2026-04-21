@@ -1,7 +1,7 @@
 ---
 title: Sub-Agent Spawn Policy
 created: 2026-04-19 @ 14:50
-updated: 2026-04-20 @ 00:00
+updated: 2026-04-21 @ 23:55
 tags:
   - governance
   - agents
@@ -17,19 +17,20 @@ tags:
 - 생성 시 문맥과 모델 지정 방식을 항상 명시적으로 유지한다.
 
 ## Model Allowlist
+- 사용자가 이 문서를 읽고 분배 작업을 요청하면서 `5.4mini` 또는 `gpt-5.4-mini`를 명시하면, 분배 모드의 1차 생성은 `gpt-5.4-mini`와 `reasoning_effort="medium"` 조합 4개를 허용한다.
 - 기본 단일 서브에이전트 생성의 1차 생성은 `gpt-5.3-codex-spark`와 `reasoning_effort="medium"` 조합만 허용한다.
 - 기본 단일 서브에이전트 생성의 1차 생성이 실패했을 때만 2차 생성으로 `gpt-5.3-codex`와 `reasoning_effort="medium"` 조합을 허용한다.
 - 분배 모드의 1차 생성은 `gpt-5.3-codex-spark` `medium` 에이전트 4개만 동시에 작업에 투입한다.
 - 분배 모드의 1차 생성 중 실패한 슬롯에 한해서만 2차 생성으로 `gpt-5.3-codex` `medium` 에이전트를 투입한다.
 - 분배 모드에서 Spark 에이전트와 non-Spark 에이전트를 섞는 것은 실패 슬롯 보충 목적일 때만 허용한다.
-- 위 두 조합 외의 모델 또는 reasoning effort는 사용하지 않는다.
+- 위 조합 외의 모델 또는 reasoning effort는 사용하지 않는다.
 
 ## Default Retry Order
 1. 먼저 `gpt-5.3-codex-spark` `medium`으로 생성한다.
 2. 생성 호출 또는 초기 시작이 실패하면 같은 작업을 `gpt-5.3-codex` `medium`으로 다시 생성한다.
 3. 2차도 실패하면 다른 모델로 우회하지 않는다. 상위 에이전트가 직접 처리하거나, 막힌 이유를 사용자에게 보고하고 다음 결정을 받는다.
 
-분배 모드에서는 먼저 `gpt-5.3-codex-spark` `medium` 4개를 생성한다. 이 1차 생성 중 일부 슬롯만 실패하면 성공적으로 생성되어 작업 중인 Spark 에이전트는 유지하고, 실패한 슬롯의 같은 작업만 `gpt-5.3-codex` `medium`으로 다시 생성한다. 실패 슬롯의 2차 non-Spark 생성도 실패하면 다른 모델로 우회하지 않는다.
+분배 모드에서는 먼저 `gpt-5.3-codex-spark` `medium` 4개를 생성한다. 사용자가 `5.4mini` 또는 `gpt-5.4-mini`를 명시한 분배 모드에서는 대신 `gpt-5.4-mini` `medium` 4개를 생성한다. 이 1차 생성 중 일부 슬롯만 실패하면 성공적으로 생성되어 작업 중인 1차 에이전트는 유지하고, 실패한 슬롯의 같은 작업만 `gpt-5.3-codex` `medium`으로 다시 생성한다. 실패 슬롯의 2차 non-Spark 생성도 실패하면 다른 모델로 우회하지 않는다.
 
 ## Distribution Trigger
 사용자가 `서브에이전트규칙을 읽고 일을 분배해`라고 요청하면 분배 모드로 처리한다.
@@ -37,6 +38,7 @@ tags:
 분배 모드에서는 상위제어에이전트가 먼저 이 문서를 읽고 작업을 나눈 뒤, 구현 전에 필요한 계획/구조/경계 SDD 문서 수정을 완료하고 나서 아래 네 서브에이전트를 생성한다. 작업 분배에 필요한 SDD 문서 수정이 남아 있으면 서브에이전트 스폰을 시작하지 않는다.
 
 - `gpt-5.3-codex-spark` `medium` 에이전트 4개
+- 사용자가 `5.4mini` 또는 `gpt-5.4-mini`를 명시한 경우: `gpt-5.4-mini` `medium` 에이전트 4개
 
 위 Spark 생성 중 일부 슬롯만 실패하면 실패한 작업만 `gpt-5.3-codex` `medium` 에이전트로 다시 생성한다. 분배 모드에서는 성공한 Spark 에이전트를 종료하지 않으며, Spark 에이전트와 non-Spark 에이전트가 섞인 조합은 실패 슬롯을 보충한 결과일 때만 완료 조합으로 사용할 수 있다.
 
@@ -81,6 +83,8 @@ tags:
 실패 시에는 같은 형태를 유지하고 `model`만 `gpt-5.3-codex`로 바꾼다.
 
 분배 모드 1차 생성:
+
+사용자가 `5.4mini` 또는 `gpt-5.4-mini`를 명시한 경우 아래 예시의 `model`은 `gpt-5.4-mini`로 고정한다.
 
 ```json
 {
