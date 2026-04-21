@@ -30,16 +30,19 @@ DesignVariableEntry = tuple[str, str]
 _SampleExporter = Callable[..., object]
 _INTEGER_RANGE_FIELD_NAMES = (
     "turn_count",
+    "connection_mode",
     "layer_count",
     "underlay_repeat_count",
     "wall_parallel_stack_present",
     "tx_coil_count",
+    "series_total_turn_count",
     "x_division_count",
     "y_division_count",
 )
 _SAMPLED_METADATA_TABLE = "sampled"
 _SAMPLED_SINGLE_COIL_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
 _PLATE_STACK_ROLE_SUFFIX = "_plate_stack"
+_TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
 _TYPE2_CONSTRAINT_RETRY_LIMIT: Final[int] = 64
 _CONSTRAINT_COMPARISON_OPERATORS: Final[frozenset[str]] = frozenset({"<", "<=", ">", ">=", "==", "!="})
 
@@ -465,6 +468,9 @@ def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpe
                 _single_coil_range_owner_specs(cast(ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec, modeled_spec))
             )
             continue
+        if role == _TX_RECT_VOID_COLUMNS_ROLE:
+            owner_specs.extend(_tx_rect_void_columns_range_owner_specs(modeled_spec))
+            continue
         if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
             owner_specs.extend(_plate_stack_range_owner_specs(cast(ModeledPlateStackSpec, modeled_spec)))
             continue
@@ -528,16 +534,164 @@ def _plate_stack_range_owner_specs(
                     modeled_spec.tx_array_x_usage_ratio,
                 ),
             )
-        )
+    )
     return tuple(owner_specs)
 
 
+def _tx_rect_void_columns_range_owner_specs(modeled_spec: object) -> tuple[tuple[str, RangeSpec], ...]:
+    assert hasattr(modeled_spec, "object_id"), "tx_rect_void_columns modeled spec must expose object_id"
+    raw_object_id = cast(object, getattr(modeled_spec, "object_id"))
+    assert isinstance(raw_object_id, str), "tx_rect_void_columns object_id must be str"
+    object_id = raw_object_id
+    assert object_id != "", "tx_rect_void_columns object_id must be non-empty"
+    owner_root = f"modeled_objects.{object_id}"
+    return (
+        (f"{owner_root}.connection_mode", _tx_rect_void_columns_range_spec(modeled_spec, "connection_mode")),
+        (f"{owner_root}.turn_weight_a", _tx_rect_void_columns_range_spec(modeled_spec, "turn_weight_a")),
+        (f"{owner_root}.turn_weight_b", _tx_rect_void_columns_range_spec(modeled_spec, "turn_weight_b")),
+        (f"{owner_root}.turn_weight_c", _tx_rect_void_columns_range_spec(modeled_spec, "turn_weight_c")),
+        (
+            f"{owner_root}.series_total_turn_count",
+            _tx_rect_void_columns_range_spec(modeled_spec, "series_total_turn_count"),
+        ),
+        (
+            f"{owner_root}.parallel_equivalent_turn_count",
+            _tx_rect_void_columns_range_spec(modeled_spec, "parallel_equivalent_turn_count"),
+        ),
+    )
+
+
+def _tx_rect_void_columns_range_spec(modeled_spec: object, field_name: str) -> RangeSpec:
+    if not hasattr(modeled_spec, field_name):
+        raise RuntimeError(f"tx_rect_void_columns sampled owner missing field: {field_name}")
+    raw_range_spec = cast(object, getattr(modeled_spec, field_name))
+    assert isinstance(raw_range_spec, RangeSpec), f"tx_rect_void_columns field {field_name} must be a RangeSpec"
+    return raw_range_spec
+
+
+def _tx_rect_void_columns_sampled_connection_mode(
+    mode_spec: object,
+    *,
+    owner_path: str,
+    seed: int,
+    retry_number: int,
+) -> int:
+    mode_spec_value = _tx_rect_void_columns_range_spec(mode_spec, "connection_mode")
+    if mode_spec_value.count == 1:
+        raw_connection_mode = int(round(mode_spec_value.start))
+    else:
+        raw_connection_mode = _selected_value_for_owner_path(
+            mode_spec_value,
+            owner_path=owner_path,
+            seed=seed,
+            retry_number=retry_number,
+        )
+    if isinstance(raw_connection_mode, bool) or not isinstance(raw_connection_mode, int):
+        raise ValueError(f"{owner_path} must resolve to integer connection mode 0 or 1")
+    if raw_connection_mode not in {0, 1}:
+        raise ValueError(f"{owner_path} must resolve to integer connection mode 0 or 1, actual={raw_connection_mode}")
+    return raw_connection_mode
+
+
+def _tx_rect_void_columns_sampled_owner_values(
+    mode_spec: object,
+    *,
+    owner_prefix: str,
+    seed: int,
+    retry_number: int,
+    include_inactive_tx_rect_void_columns: bool,
+) -> tuple[tuple[str, SampledScalar], ...]:
+    sampled_owner_values: list[tuple[str, SampledScalar]] = []
+    connection_mode_path = f"{owner_prefix}.connection_mode"
+    connection_mode = _tx_rect_void_columns_sampled_connection_mode(
+        mode_spec,
+        owner_path=connection_mode_path,
+        seed=seed,
+        retry_number=retry_number,
+    )
+    connection_mode_range = _tx_rect_void_columns_range_spec(mode_spec, "connection_mode")
+    if connection_mode_range.count != 1:
+        sampled_owner_values.append(
+            (
+                connection_mode_path,
+                _selected_value_for_owner_path(
+                    connection_mode_range,
+                    owner_path=connection_mode_path,
+                    seed=seed,
+                    retry_number=retry_number,
+                ),
+            )
+        )
+    for suffix in ("turn_weight_a", "turn_weight_b", "turn_weight_c"):
+        owner_path = f"{owner_prefix}.{suffix}"
+        range_spec = _tx_rect_void_columns_range_spec(mode_spec, suffix)
+        if range_spec.count == 1:
+            continue
+        sampled_owner_values.append(
+            (
+                owner_path,
+                _selected_value_for_owner_path(
+                    range_spec,
+                    owner_path=owner_path,
+                    seed=seed,
+                    retry_number=retry_number,
+                ),
+            )
+        )
+    series_owner_path = f"{owner_prefix}.series_total_turn_count"
+    parallel_owner_path = f"{owner_prefix}.parallel_equivalent_turn_count"
+    series_range = _tx_rect_void_columns_range_spec(mode_spec, "series_total_turn_count")
+    parallel_range = _tx_rect_void_columns_range_spec(mode_spec, "parallel_equivalent_turn_count")
+    if include_inactive_tx_rect_void_columns:
+        if series_range.count != 1:
+            sampled_owner_values.append(
+                (
+                    series_owner_path,
+                    _selected_value_for_owner_path(
+                        series_range,
+                        owner_path=series_owner_path,
+                        seed=seed,
+                        retry_number=retry_number,
+                    ),
+                )
+            )
+        if parallel_range.count != 1:
+            sampled_owner_values.append(
+                (
+                    parallel_owner_path,
+                    _selected_value_for_owner_path(
+                        parallel_range,
+                        owner_path=parallel_owner_path,
+                        seed=seed,
+                        retry_number=retry_number,
+                    ),
+                )
+            )
+    else:
+        active_owner_path = series_owner_path if connection_mode == 1 else parallel_owner_path
+        active_range = series_range if connection_mode == 1 else parallel_range
+        if active_range.count != 1:
+            sampled_owner_values.append(
+                (
+                    active_owner_path,
+                    _selected_value_for_owner_path(
+                        active_range,
+                        owner_path=active_owner_path,
+                        seed=seed,
+                        retry_number=retry_number,
+                    ),
+                )
+            )
+
+    return tuple(sampled_owner_values)
+
+
 def exportable_sampled_owner_paths(spec: Type2StepSpec) -> tuple[str, ...]:
-    return tuple(owner_path for owner_path, range_spec in _all_range_owner_specs(spec) if range_spec.count != 1)
+    return exportable_sampled_owner_paths_for_seed(spec, seed=0)
 
 
 def exportable_sampled_owner_paths_for_seed(spec: Type2StepSpec, *, seed: int) -> tuple[str, ...]:
-    return tuple(owner_path for owner_path, range_spec in _all_range_owner_specs(spec) if range_spec.count != 1)
+    return tuple(owner_path for owner_path, _value in sampled_owner_values(spec, seed=seed))
 
 
 def _range_spec_for_owner_path(spec: Type2StepSpec, owner_path: str) -> RangeSpec:
@@ -604,9 +758,65 @@ def sampled_owner_values(
     *,
     seed: int,
     retry_number: int = 0,
+    include_inactive_tx_rect_void_columns: bool = False,
 ) -> tuple[tuple[str, SampledScalar], ...]:
     sampled_values: list[tuple[str, SampledScalar]] = []
-    for owner_path, range_spec in _all_range_owner_specs(spec):
+    for owner_path, range_spec in _non_model_range_owner_specs(spec):
+        if range_spec.count != 1:
+            sampled_values.append(
+                (
+                    owner_path,
+                    _selected_value_for_owner_path(
+                        range_spec,
+                        owner_path=owner_path,
+                        seed=seed,
+                        retry_number=retry_number,
+                    ),
+                )
+            )
+    for modeled_spec in spec.modeled_objects:
+        role = _modeled_spec_role(modeled_spec)
+        if role in _SAMPLED_SINGLE_COIL_ROLES:
+            sampled_values.extend(
+                _single_coil_range_owner_values(
+                    cast(ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec, modeled_spec),
+                    seed=seed,
+                    retry_number=retry_number,
+                )
+            )
+            continue
+        if role == _TX_RECT_VOID_COLUMNS_ROLE:
+            assert hasattr(modeled_spec, "object_id"), "tx_rect_void_columns modeled spec must expose object_id"
+            raw_object_id = cast(object, getattr(modeled_spec, "object_id"))
+            assert isinstance(raw_object_id, str), "tx_rect_void_columns object_id must be str"
+            owner_prefix = f"modeled_objects.{raw_object_id}"
+            sampled_values.extend(
+                _tx_rect_void_columns_sampled_owner_values(
+                    modeled_spec,
+                    owner_prefix=owner_prefix,
+                    seed=seed,
+                    retry_number=retry_number,
+                    include_inactive_tx_rect_void_columns=include_inactive_tx_rect_void_columns,
+                )
+            )
+            continue
+        if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
+            sampled_values.extend(
+                _plate_stack_range_owner_values(cast(ModeledPlateStackSpec, modeled_spec), seed=seed, retry_number=retry_number)
+            )
+            continue
+        raise RuntimeError(f"unsupported modeled object role for sampled owner resolution: {role}")
+    return tuple(sampled_values)
+
+
+def _single_coil_range_owner_values(
+    modeled_spec: ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec,
+    *,
+    seed: int,
+    retry_number: int,
+) -> tuple[tuple[str, SampledScalar], ...]:
+    sampled_values: list[tuple[str, SampledScalar]] = []
+    for owner_path, range_spec in _single_coil_range_owner_specs(modeled_spec):
         if range_spec.count == 1:
             continue
         sampled_values.append(
@@ -617,10 +827,96 @@ def sampled_owner_values(
                     owner_path=owner_path,
                     seed=seed,
                     retry_number=retry_number,
-                )
+                ),
             )
         )
     return tuple(sampled_values)
+
+
+def _plate_stack_range_owner_values(
+    modeled_spec: ModeledPlateStackSpec,
+    *,
+    seed: int,
+    retry_number: int,
+) -> tuple[tuple[str, SampledScalar], ...]:
+    sampled_values: list[tuple[str, SampledScalar]] = []
+    for owner_path, range_spec in _plate_stack_range_owner_specs(modeled_spec):
+        if range_spec.count == 1:
+            continue
+        sampled_values.append(
+            (
+                owner_path,
+                _selected_value_for_owner_path(
+                    range_spec,
+                    owner_path=owner_path,
+                    seed=seed,
+                    retry_number=retry_number,
+                ),
+            )
+        )
+    return tuple(sampled_values)
+
+
+def _tx_rect_void_columns_inactive_owner_values(
+    *,
+    spec: Type2StepSpec,
+    sampled_values: tuple[tuple[str, SampledScalar], ...],
+    seed: int,
+    retry_number: int,
+) -> tuple[tuple[str, SampledScalar], ...]:
+    sampled_value_map = dict(sampled_values)
+    inactive_owner_values: list[tuple[str, SampledScalar]] = []
+    for modeled_spec in spec.modeled_objects:
+        role = _modeled_spec_role(modeled_spec)
+        if role != _TX_RECT_VOID_COLUMNS_ROLE:
+            continue
+        assert hasattr(modeled_spec, "object_id"), "tx_rect_void_columns modeled spec must expose object_id"
+        raw_object_id = cast(object, getattr(modeled_spec, "object_id"))
+        assert isinstance(raw_object_id, str), "tx_rect_void_columns object_id must be str"
+        object_id = raw_object_id
+        owner_prefix = f"modeled_objects.{object_id}"
+        connection_mode_path = f"{owner_prefix}.connection_mode"
+        connection_mode: int
+        if connection_mode_path in sampled_value_map:
+            raw_connection_mode = sampled_value_map[connection_mode_path]
+            if isinstance(raw_connection_mode, bool) or not isinstance(raw_connection_mode, int):
+                raise ValueError(f"{connection_mode_path} must resolve to integer connection mode 0 or 1")
+            if raw_connection_mode not in {0, 1}:
+                raise ValueError(
+                    f"{connection_mode_path} must resolve to integer connection mode 0 or 1, "
+                    f"actual={raw_connection_mode}"
+                )
+            connection_mode = raw_connection_mode
+        else:
+            connection_mode = _tx_rect_void_columns_sampled_connection_mode(
+                modeled_spec,
+                owner_path=connection_mode_path,
+                seed=seed,
+                retry_number=retry_number,
+            )
+        series_path = f"{owner_prefix}.series_total_turn_count"
+        parallel_path = f"{owner_prefix}.parallel_equivalent_turn_count"
+        inactive_path = parallel_path if connection_mode == 1 else series_path
+        if inactive_path in sampled_value_map:
+            continue
+        inactive_range_spec = _tx_rect_void_columns_range_spec(
+            modeled_spec,
+            "series_total_turn_count" if connection_mode != 1 else "parallel_equivalent_turn_count",
+        )
+        if inactive_range_spec.count == 1:
+            continue
+        inactive_owner_values.append(
+            (
+                inactive_path,
+                _selected_value_for_owner_path(
+                    inactive_range_spec,
+                    owner_path=inactive_path,
+                    seed=seed,
+                    retry_number=retry_number,
+                ),
+            )
+        )
+    return tuple(inactive_owner_values)
 
 
 def _hash4_from_bytes(payload: bytes) -> str:
@@ -770,6 +1066,14 @@ def _sampled_toml_table(
     for owner_path, value in sampled_values:
         range_spec = _range_spec_for_owner_path(source_spec, owner_path)
         _freeze_owner_range_in_raw_spec(sampled_spec, owner_path=owner_path, value=value, range_spec=range_spec)
+    for owner_path, value in _tx_rect_void_columns_inactive_owner_values(
+        spec=source_spec,
+        sampled_values=sampled_values,
+        seed=seed,
+        retry_number=retry_number,
+    ):
+        range_spec = _range_spec_for_owner_path(source_spec, owner_path)
+        _freeze_owner_range_in_raw_spec(sampled_spec, owner_path=owner_path, value=value, range_spec=range_spec)
     sampled_metadata = _sampled_metadata(
         source_toml_path,
         seed=seed,
@@ -911,13 +1215,23 @@ def _build_sample_manifest_entry_for_seed(
     retry_number: int | None = None
     last_constraint_failure: ValueError | None = None
     for attempt in range(_TYPE2_CONSTRAINT_RETRY_LIMIT):
-        candidate_values = sampled_owner_values(source_spec, seed=seed, retry_number=attempt)
+        candidate_values = sampled_owner_values(
+            source_spec,
+            seed=seed,
+            retry_number=attempt,
+            include_inactive_tx_rect_void_columns=True,
+        )
         try:
             _require_constraints_satisfied(source_spec, dict(candidate_values), constraints)
         except ValueError as exc:
             last_constraint_failure = exc
             continue
-        sampled_values = candidate_values
+        sampled_values = sampled_owner_values(
+            source_spec,
+            seed=seed,
+            retry_number=attempt,
+            include_inactive_tx_rect_void_columns=False,
+        )
         retry_number = attempt
         break
     if sampled_values is None or retry_number is None:
@@ -1334,7 +1648,7 @@ def _design_variable_name(owner_path: str) -> str:
 
 def _design_variable_expression(owner_path: str, value: SampledScalar) -> str:
     field_name = owner_path.split(".")[-1]
-    if field_name in _INTEGER_RANGE_FIELD_NAMES or field_name.startswith("turn_count_x"):
+    if field_name in _INTEGER_RANGE_FIELD_NAMES:
         return str(int(value))
     if field_name.endswith("_ratio") or field_name.endswith("_factor") or "_over_" in field_name:
         return str(float(value))

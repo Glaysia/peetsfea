@@ -95,16 +95,20 @@ def _raise_if_tx_rect_void_columns_modeled_role_present(
     spec: Type2StepSpec,
     context: str,
 ) -> None:
-    tx_rect_void_columns_ids = tuple(
-        modeled_spec.object_id
-        for modeled_spec in spec.modeled_objects
-        if isinstance(modeled_spec, ModeledTxRectVoidColumnsSpec)
-    )
+    tx_rect_void_columns_ids = _tx_rect_void_columns_object_ids(spec=spec)
     if tx_rect_void_columns_ids:
         _raise_tx_rect_void_columns_deactivated(
             context=context,
             object_ids=tx_rect_void_columns_ids,
         )
+
+
+def _tx_rect_void_columns_object_ids(*, spec: Type2StepSpec) -> tuple[str, ...]:
+    return tuple(
+        modeled_spec.object_id
+        for modeled_spec in spec.modeled_objects
+        if modeled_spec.role == "tx_rect_void_columns"
+    )
 
 
 def _raise_tx_rect_void_columns_deactivated(
@@ -113,7 +117,8 @@ def _raise_tx_rect_void_columns_deactivated(
     object_ids: tuple[str, ...],
 ) -> NoReturn:
     raise ValueError(
-        f"{context} no longer supports modeled role tx_rect_void_columns; disabled role ids={object_ids}"
+        f"{context} failed at parser/sampler-only milestone: role is deactivated for active type2 inputs: "
+        f"tx_rect_void_columns. object_ids={object_ids}"
     )
 
 
@@ -313,11 +318,7 @@ def export_type2_tx_single_coil_artifact(
         spec=spec,
         context="tx_single_coil direct export",
     )
-    tx_rect_void_columns_ids = tuple(
-        modeled_spec.object_id
-        for modeled_spec in spec.modeled_objects
-        if isinstance(modeled_spec, ModeledTxRectVoidColumnsSpec)
-    )
+    tx_rect_void_columns_ids = _tx_rect_void_columns_object_ids(spec=spec)
     if tx_rect_void_columns_ids:
         _raise_tx_rect_void_columns_deactivated(
             context="tx_single_coil direct export modeled dispatch",
@@ -1349,7 +1350,7 @@ def export_type2_step_artifacts(
     modeled_scene_shapes: list[bd.Shape] = []
     modeled_entries = []
     for modeled_spec in spec.modeled_objects:
-        if isinstance(modeled_spec, ModeledTxRectVoidColumnsSpec):
+        if modeled_spec.role == "tx_rect_void_columns":
             _raise_tx_rect_void_columns_deactivated(
                 context="type2 full-step export modeled scene dispatch",
                 object_ids=(modeled_spec.object_id,),

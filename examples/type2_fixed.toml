@@ -1,7 +1,8 @@
-# Unified type2 STEP authoring input.
+# Unified type2 fixed authoring input.
 # ----------------------------------------------------------------------------
-# This is the single public type2 authoring TOML for build123d STEP export.
-# Non-model guide objects and modeled objects are declared together.
+# This file is one frozen realization of examples/type2_sweep.toml.
+# It must keep the same public field surface as the sweep SSOT.
+# TX columns fields are parser/sampler-only until the geometry/export milestone.
 
 spec_version = "0.2.22"
 schema_id = "peetsfea.type2.step.v7"
@@ -183,5 +184,39 @@ range = [false, 0.2, 0.2, 1]
 range = [false, 0.05, 0.05, 1]
 [modeled_objects.metal_fill_factor]
 range = [false, 0.5, 0.5, 1]
+[modeled_objects.terminal_path]
+value = "A_cw_to_a"
+
+[[modeled_objects]]
+object_id = "tx_rect_void_columns"
+role = "tx_rect_void_columns"
+material = "composite"
+model_state = true
+pcb_thickness_mm = 0.3
+copper_thickness_mm = 0.1
+[modeled_objects.layer_count]
+range = [true, 1, 1, 1]
+[modeled_objects.layer_gap_mm]
+range = [false, 1.0, 1.0, 1]
+[modeled_objects.terminal_stub_length_mm]
+range = [false, 10.0, 10.0, 1]
+[modeled_objects.void_usage_ratio]
+range = [false, 0.2, 0.2, 1]
+[modeled_objects.margin_ratio]
+range = [false, 0.05, 0.05, 1]
+[modeled_objects.metal_fill_factor]
+range = [false, 0.6, 0.6, 1]
+[modeled_objects.connection_mode]
+range = [true, 0, 0, 1]
+[modeled_objects.series_total_turn_count]
+range = [true, 3, 3, 1]
+[modeled_objects.parallel_equivalent_turn_count]
+range = [false, 1.0, 1.0, 1]
+[modeled_objects.turn_weight_a]
+range = [false, 1.0, 1.0, 1]
+[modeled_objects.turn_weight_b]
+range = [false, 0.0, 0.0, 1]
+[modeled_objects.turn_weight_c]
+range = [false, 0.0, 0.0, 1]
 [modeled_objects.terminal_path]
 value = "A_cw_to_a"

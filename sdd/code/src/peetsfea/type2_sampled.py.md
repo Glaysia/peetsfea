@@ -1,7 +1,7 @@
 ---
 title: type2_sampled.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-21 @ 21:40
+updated: 2026-04-21 @ 23:05
 tags:
   - sampling
   - build
@@ -30,7 +30,14 @@ tags:
 - active TX actual-region non-model sampled owners are `non_model_objects.tx_region_actual.x_usage_ratio`, `y_usage_ratio`, `x_division_count`, and `y_division_count`.
 - active TX actual-region stack-space non-model sampled owner is `non_model_objects.tx_region_actual_stack_space.scale_ratio`.
 - active TX actual-region stack-space tilt is fixed on and is not a sampled owner.
-- `tx_rect_void_columns` is deactivated for active type2 inputs; sampled-owner resolution treats that role as unsupported and raises immediately if it appears.
+- active `tx_rect_void_columns` sampled-owner surface is mode-aware:
+  - `modeled_objects.tx_rect_void_columns.connection_mode`
+  - `modeled_objects.tx_rect_void_columns.turn_weight_a`
+  - `modeled_objects.tx_rect_void_columns.turn_weight_b`
+  - `modeled_objects.tx_rect_void_columns.turn_weight_c`
+  - `modeled_objects.tx_rect_void_columns.series_total_turn_count` only when realized `connection_mode == 1`
+  - `modeled_objects.tx_rect_void_columns.parallel_equivalent_turn_count` only when realized `connection_mode == 0`
+- legacy `turn_count_x*` tx-columns owners remain removed and must not reappear in sampled-owner resolution.
 - active RX single-coil sampled outer envelope owners use `outer_x_usage_ratio` and `outer_y_usage_ratio`.
 - active single-coil sampled void owner is `void_usage_ratio`; it is unitless and freezes into sampled TOML like other range owners.
 - removed legacy split/centered single-coil `void_*` fields are not sampled owners and must not appear in sampled metadata or build design variables.
@@ -64,7 +71,7 @@ tags:
 - constraint retry budget is fixed at 64 attempts (`retry_number` 0..63); if all fail, manifest generation raises with seed/sample_index context.
 - comparison constraints support path operands, numeric literal operands, and `sum(...)` operands that can mix owner paths and numeric literals.
 - sampled metadata exact-match validation must use the source TOML and metadata seed to re-derive the sampled owner set before comparison.
-- parser-side deactivation remains authoritative; sampling side must not retain ownership assumptions for `tx_rect_void_columns`.
+- tx-columns inactive mode-dependent turn owner is not part of sampled metadata owner paths even when frozen to keep sampled TOML replay-complete.
 - This file exceeds 800 lines; this narrow extension is allowed, but future sampler restructuring should split ownership first.
 - stage reporting이 실패/지원 여부를 바꾸면 안 되며, exporter failure는 기존처럼 즉시 raise되어야 한다.
 
@@ -80,6 +87,7 @@ tags:
 
 ## 변경 시 주의점
 - sampled path ownership을 role-blind single-coil field enumeration으로 되돌리지 않는다.
+- tx-columns mode-aware owner filtering (`series_total_turn_count` vs `parallel_equivalent_turn_count`)을 role-agnostic 고정 목록으로 되돌리지 않는다.
 - active example role 교체와 sampled owner list expectations를 같이 갱신해야 한다.
 - plate-stack sampled owner surface adds TX-only `tx_coil_count` and `tx_array_x_usage_ratio`; replay metadata exact-match guard must stay synchronized with this owner set.
 - multi-worker sample path는 completion progress ordering을 깨지 않도록 별도 process-event channel 없이 기존 completion-only progress를 유지한다.

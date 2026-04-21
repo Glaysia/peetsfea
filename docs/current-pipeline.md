@@ -12,12 +12,13 @@ tags:
 ## Active Path
 - The active/default product path is `type2`.
 - The canonical sampled authoring input is `examples/type2_sweep.toml`.
-- `examples/type2_fixed.toml` remains the fixed single-design reference.
+- `examples/type2_fixed.toml` is one fixed realization of `examples/type2_sweep.toml` and must keep the same public field surface.
 - Type2 TOML owns both the STEP authoring registry and the EM report/output-variable contract.
-- The active default modeled set is RX-only: `rx_single_coil`.
-- This is a reset point for future TX modeled work, not a TX disable mode. Active type2 does not emit TX modeled
-  geometry, TX ports, TX sources, or TX output expressions.
-- The previously exposed `tx_rect_void_columns` modeled surface is now deactivated from the active public schema.
+- `examples/type2_sweep.toml` is the SSOT and includes RX single-coil plus parser/sampler-only TX columns variables.
+- `examples/type2_fixed.toml` includes the same RX/TX modeled surface with fixed single-candidate ranges.
+- This is a reset point for TX modeled geometry/runtime, not a TX sampling disable mode. Active type2 may sample TX columns
+  variables, but it does not emit TX modeled geometry, TX ports, TX sources, or TX output expressions yet.
+- The TX columns surface in `examples/type2_sweep.toml` is not STEP/export/build-ready yet.
 - Future TX redesign planning is tracked in `tmp/tx개편.md` and `sdd/plans/0.2.22-type2-tx-columns-reset.md`.
 - Active type2 includes a sampled non-modeled `tx_region_actual` box inside maximum `tx_region`; its X/Y usage ratios
   reserve the future actual TX footprint while preserving full `tx_region` Z.

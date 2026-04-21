@@ -482,11 +482,15 @@ def _type2_tx_rect_void_columns_spec_text(
     *,
     tx_region_actual_x_division_count_range: str = "[true, 1, 1, 1]",
     tx_region_actual_y_division_count_range: str = "[true, 1, 1, 1]",
-    layer_count_range: str = "[true, 1, 1, 1]",
-    turn_count_x0_range: str = "[true, 2, 2, 1]",
-    turn_count_x1_range: str = "[true, 3, 3, 1]",
-    turn_count_x2_range: str = "[true, 4, 4, 1]",
-    terminal_stub_length_mm: float = 10.0,
+    layer_count_range: str = "[true, 1, 4, 4]",
+    layer_gap_mm_range: str = "[false, 1.0, 1.8, 5]",
+    terminal_stub_length_mm_range: str = "[false, 10.0, 10.0, 1]",
+    connection_mode_range: str = "[true, 0, 1, 2]",
+    series_total_turn_count_range: str = "[true, 1, 36, 36]",
+    parallel_equivalent_turn_count_range: str = "[false, 0.1111111111, 36.0, 150]",
+    turn_weight_a_range: str = "[false, 0.5, 1.5, 5]",
+    turn_weight_b_range: str = "[false, -0.5, 0.5, 21]",
+    turn_weight_c_range: str = "[false, -0.5, 0.5, 21]",
 ) -> str:
     return f"""
 spec_version = "0.2.22"
@@ -600,21 +604,27 @@ copper_thickness_mm = 0.1
 [modeled_objects.layer_count]
 range = {layer_count_range}
 [modeled_objects.layer_gap_mm]
-range = [false, 2.0, 2.0, 1]
+range = {layer_gap_mm_range}
 [modeled_objects.terminal_stub_length_mm]
-range = [false, {terminal_stub_length_mm}, {terminal_stub_length_mm}, 1]
+range = {terminal_stub_length_mm_range}
 [modeled_objects.void_usage_ratio]
 range = [false, 0.2, 0.2, 1]
 [modeled_objects.margin_ratio]
 range = [false, 0.05, 0.05, 1]
 [modeled_objects.metal_fill_factor]
 range = [false, 0.5, 0.5, 1]
-[modeled_objects.turn_count_x0]
-range = {turn_count_x0_range}
-[modeled_objects.turn_count_x1]
-range = {turn_count_x1_range}
-[modeled_objects.turn_count_x2]
-range = {turn_count_x2_range}
+[modeled_objects.connection_mode]
+range = {connection_mode_range}
+[modeled_objects.series_total_turn_count]
+range = {series_total_turn_count_range}
+[modeled_objects.parallel_equivalent_turn_count]
+range = {parallel_equivalent_turn_count_range}
+[modeled_objects.turn_weight_a]
+range = {turn_weight_a_range}
+[modeled_objects.turn_weight_b]
+range = {turn_weight_b_range}
+[modeled_objects.turn_weight_c]
+range = {turn_weight_c_range}
 [modeled_objects.terminal_path]
 value = "A_cw_to_a"
 """.strip()
@@ -677,18 +687,19 @@ def _spec_with_deactivated_tx_rect_void_columns_for_export_dispatch() -> Type2St
         model_state=True,
         pcb_thickness_mm=0.3,
         copper_thickness_mm=0.1,
-        layer_count=RangeSpec(True, 1.0, 1.0, 1),
-        layer_gap_mm=RangeSpec(False, 2.0, 2.0, 1),
+        layer_count=RangeSpec(True, 1.0, 4.0, 4),
+        layer_gap_mm=RangeSpec(False, 1.0, 1.8, 5),
         terminal_stub_length_mm=RangeSpec(False, 10.0, 10.0, 1),
         void_usage_ratio=RangeSpec(False, 0.2, 0.2, 1),
         margin_ratio=RangeSpec(False, 0.05, 0.05, 1),
         metal_fill_factor=RangeSpec(False, 0.5, 0.5, 1),
         terminal_path="A_cw_to_a",
-        column_connection_mode=RangeSpec(True, 0.0, 0.0, 1),
-        row_connection_mode=RangeSpec(True, 0.0, 0.0, 1),
-        turn_count_x0=RangeSpec(True, 2.0, 2.0, 1),
-        turn_count_x1=RangeSpec(True, 3.0, 3.0, 1),
-        turn_count_x2=RangeSpec(True, 4.0, 4.0, 1),
+        connection_mode=RangeSpec(True, 0.0, 1.0, 2),
+        series_total_turn_count=RangeSpec(True, 1.0, 36.0, 36),
+        parallel_equivalent_turn_count=RangeSpec(False, 0.1111111111, 36.0, 150),
+        turn_weight_a=RangeSpec(False, 0.5, 1.5, 5),
+        turn_weight_b=RangeSpec(False, -0.5, 0.5, 21),
+        turn_weight_c=RangeSpec(False, -0.3, 0.3, 21),
     )
     return Type2StepSpec(
         source_toml_path=baseline.source_toml_path,
@@ -1650,7 +1661,7 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     )
     assert tuple(variable["name"] for variable in spec.outputs["variables"]) == expected_output_variable_names
     assert len(spec.non_model_objects) == 6
-    assert len(spec.modeled_objects) == 1
+    assert len(spec.modeled_objects) == 2
     rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
     assert rx_entry.object_id == "rx_rect_void_coil"
     assert rx_entry.role == "rx_single_coil"
@@ -1669,7 +1680,11 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert rx_entry.void_usage_ratio.end == pytest.approx(0.2)
     assert rx_entry.void_usage_ratio.count == 1
     assert rx_entry.metal_fill_factor.start == pytest.approx(0.5)
-    assert all(entry.object_id != "tx_rect_void_columns" for entry in spec.modeled_objects)
+    tx_columns_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_rect_void_columns")
+    assert tx_columns_entry.role == "tx_rect_void_columns"
+    assert tx_columns_entry.connection_mode == RangeSpec(True, 0.0, 0.0, 1)
+    assert tx_columns_entry.series_total_turn_count == RangeSpec(True, 3.0, 3.0, 1)
+    assert tx_columns_entry.parallel_equivalent_turn_count == RangeSpec(False, 1.0, 1.0, 1)
 
 
 def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
@@ -1677,7 +1692,7 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     source_toml = repo_root / "examples" / "type2_fixed.toml"
     spec = load_type2_step_spec(source_toml)
 
-    assert len(spec.modeled_objects) == 1
+    assert len(spec.modeled_objects) == 2
     rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
     assert rx_entry.object_id == "rx_rect_void_coil"
     assert rx_entry.role == "rx_single_coil"
@@ -1695,6 +1710,8 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     assert rx_profile.plane == "YZ"
     assert rx_profile.object_id == "rx_rect_void_coil"
     assert rx_profile.placement_owner_id == "rx_region_max"
+    tx_columns_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_rect_void_columns")
+    assert tx_columns_entry.role == "tx_rect_void_columns"
 
 
 def test_load_type2_step_spec_rejects_duplicate_object_id(tmp_path: Path) -> None:
@@ -1709,7 +1726,7 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     source_toml = repo_root / "examples" / "type2_sweep.toml"
     spec = load_type2_step_spec(source_toml)
 
-    assert len(spec.modeled_objects) == 1
+    assert len(spec.modeled_objects) == 2
     assert len(spec.non_model_objects) >= 2
     rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
     assert rx_entry.object_id == "rx_rect_void_coil"
@@ -1721,12 +1738,85 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     assert rx_entry.underlay_repeat_count.end == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.count == 1
     assert rx_entry.terminal_path == "A_cw_to_a"
+    tx_columns_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_rect_void_columns")
+    assert tx_columns_entry.role == "tx_rect_void_columns"
+    assert tx_columns_entry.connection_mode == RangeSpec(True, 0.0, 1.0, 2)
+    assert tx_columns_entry.series_total_turn_count == RangeSpec(True, 1.0, 36.0, 36)
+    assert tx_columns_entry.parallel_equivalent_turn_count == RangeSpec(False, 0.1111111111, 36.0, 150)
 
 
 def test_load_type2_step_spec_rejects_unsupported_modeled_role(tmp_path: Path) -> None:
     toml_path = _write_spec(tmp_path, _type2_spec_text(modeled_role="bad_single_coil"))
 
     with pytest.raises(ValueError, match=r"unsupported modeled object role: bad_single_coil"):
+        load_type2_step_spec(toml_path)
+
+
+def test_load_type2_step_spec_parses_tx_rect_void_columns_parser_surface(tmp_path: Path) -> None:
+    toml_path = _write_spec(tmp_path, _type2_tx_rect_void_columns_spec_text())
+
+    spec = load_type2_step_spec(toml_path)
+
+    assert len(spec.modeled_objects) == 1
+    tx_columns_entry = spec.modeled_objects[0]
+    assert tx_columns_entry.object_id == "tx_rect_void_columns"
+    assert tx_columns_entry.role == "tx_rect_void_columns"
+    assert tx_columns_entry.layer_count == RangeSpec(True, 1.0, 4.0, 4)
+    assert tx_columns_entry.layer_gap_mm == RangeSpec(False, 1.0, 1.8, 5)
+    assert tx_columns_entry.terminal_stub_length_mm == RangeSpec(False, 10.0, 10.0, 1)
+    assert tx_columns_entry.connection_mode == RangeSpec(True, 0.0, 1.0, 2)
+    assert tx_columns_entry.series_total_turn_count == RangeSpec(True, 1.0, 36.0, 36)
+    assert tx_columns_entry.parallel_equivalent_turn_count == RangeSpec(False, 0.1111111111, 36.0, 150)
+    assert tx_columns_entry.turn_weight_a == RangeSpec(False, 0.5, 1.5, 5)
+    assert tx_columns_entry.turn_weight_b == RangeSpec(False, -0.5, 0.5, 21)
+    assert tx_columns_entry.turn_weight_c == RangeSpec(False, -0.3, 0.3, 21)
+
+
+@pytest.mark.parametrize(
+    "legacy_key",
+    (
+        "turn_count_x0",
+        "turn_count_x1",
+        "turn_count_x2",
+        "column_connection_mode",
+        "row_connection_mode",
+    ),
+)
+def test_load_type2_step_spec_rejects_tx_rect_void_columns_legacy_public_keys(
+    tmp_path: Path,
+    legacy_key: str,
+) -> None:
+    legacy_section = f"[modeled_objects.{legacy_key}]\nrange = [true, 1, 6, 6]"
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_tx_rect_void_columns_spec_text().replace(
+            "[modeled_objects.terminal_path]",
+            f"{legacy_section}\n[modeled_objects.terminal_path]",
+            1,
+        ),
+    )
+
+    with pytest.raises(ValueError, match=rf"unsupported legacy keys.*{legacy_key}"):
+        load_type2_step_spec(toml_path)
+
+
+def test_load_type2_step_spec_rejects_tx_rect_void_columns_noncanonical_connection_mode_range(tmp_path: Path) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_tx_rect_void_columns_spec_text(connection_mode_range="[true, 0, 2, 3]"),
+    )
+
+    with pytest.raises(ValueError, match=r"connection_mode must be \[true, 0, 1, 2\]"):
+        load_type2_step_spec(toml_path)
+
+
+def test_load_type2_step_spec_rejects_tx_rect_void_columns_noncanonical_layer_count_range(tmp_path: Path) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_tx_rect_void_columns_spec_text(layer_count_range="[true, 1, 3, 3]"),
+    )
+
+    with pytest.raises(ValueError, match=r"layer_count must be \[true, 1, 4, 4\]"):
         load_type2_step_spec(toml_path)
 
 
@@ -2289,7 +2379,7 @@ def test_export_type2_step_artifacts_rejects_tx_rect_void_columns_modeled_role(t
     source_toml = _write_spec(tmp_path, _type2_tx_rect_void_columns_spec_text())
     with pytest.raises(
         ValueError,
-        match=r"role is deactivated for active type2 inputs: tx_rect_void_columns",
+        match=r"parser/sampler-only milestone.*role is deactivated for active type2 inputs: tx_rect_void_columns",
     ):
         export_type2_step_artifacts(
             toml_path=source_toml,
@@ -2317,7 +2407,7 @@ def test_export_type2_step_artifacts_rejects_tx_rect_void_columns_when_preflight
 
     with pytest.raises(
         ValueError,
-        match=r"type2 full-step export modeled scene dispatch no longer supports modeled role tx_rect_void_columns",
+        match=r"parser/sampler-only milestone.*role is deactivated for active type2 inputs: tx_rect_void_columns",
     ):
         module_under_test.export_type2_step_artifacts(
             toml_path=source_toml,
@@ -2331,7 +2421,7 @@ def test_export_type2_tx_single_coil_artifact_rejects_tx_rect_void_columns_model
     source_toml = _write_spec(tmp_path, _type2_tx_rect_void_columns_spec_text())
     with pytest.raises(
         ValueError,
-        match=r"role is deactivated for active type2 inputs: tx_rect_void_columns",
+        match=r"parser/sampler-only milestone.*role is deactivated for active type2 inputs: tx_rect_void_columns",
     ):
         export_type2_tx_single_coil_artifact(
             toml_path=source_toml,
@@ -2359,7 +2449,7 @@ def test_export_type2_tx_single_coil_artifact_rejects_tx_rect_void_columns_when_
 
     with pytest.raises(
         ValueError,
-        match=r"tx_single_coil direct export modeled dispatch no longer supports modeled role tx_rect_void_columns",
+        match=r"parser/sampler-only milestone.*role is deactivated for active type2 inputs: tx_rect_void_columns",
     ):
         module_under_test.export_type2_tx_single_coil_artifact(
             toml_path=source_toml,
@@ -2539,10 +2629,6 @@ def _export_tx_rect_void_columns_spec_and_expect_rejection(
     tmp_path: Path,
     x_division_count: int,
     y_division_count: int,
-    layer_count: int,
-    turn_count_x0: int,
-    turn_count_x1: int,
-    turn_count_x2: int,
 ) -> None:
     tmp_path.mkdir(parents=True, exist_ok=True)
     toml_path = _write_spec(
@@ -2550,15 +2636,11 @@ def _export_tx_rect_void_columns_spec_and_expect_rejection(
         _type2_tx_rect_void_columns_spec_text(
             tx_region_actual_x_division_count_range=f"[true, {x_division_count}, {x_division_count}, 1]",
             tx_region_actual_y_division_count_range=f"[true, {y_division_count}, {y_division_count}, 1]",
-            layer_count_range=f"[true, {layer_count}, {layer_count}, 1]",
-            turn_count_x0_range=f"[true, {turn_count_x0}, {turn_count_x0}, 1]",
-            turn_count_x1_range=f"[true, {turn_count_x1}, {turn_count_x1}, 1]",
-            turn_count_x2_range=f"[true, {turn_count_x2}, {turn_count_x2}, 1]",
         ),
     )
     with pytest.raises(
         ValueError,
-        match=r"role is deactivated for active type2 inputs: tx_rect_void_columns",
+        match=r"parser/sampler-only milestone.*role is deactivated for active type2 inputs: tx_rect_void_columns",
     ):
         export_type2_step_artifacts(
             toml_path=toml_path,
@@ -2568,58 +2650,43 @@ def _export_tx_rect_void_columns_spec_and_expect_rejection(
         )
 
 
-@pytest.mark.parametrize(("x_division_count", "y_division_count", "layer_count"), ((1, 1, 1), (2, 3, 2), (3, 2, 3)))
+@pytest.mark.parametrize(("x_division_count", "y_division_count"), ((1, 1), (2, 3), (3, 2)))
 def test_export_type2_step_artifacts_tx_rect_void_columns_rejects_grid_variants(
     tmp_path: Path,
     x_division_count: int,
     y_division_count: int,
-    layer_count: int,
 ) -> None:
     _export_tx_rect_void_columns_spec_and_expect_rejection(
         tmp_path=tmp_path,
         x_division_count=x_division_count,
         y_division_count=y_division_count,
-        layer_count=layer_count,
-        turn_count_x0=2,
-        turn_count_x1=3,
-        turn_count_x2=2,
     )
 
 
-def test_export_type2_step_artifacts_tx_rect_void_columns_rejects_x1_turn_matrix(tmp_path: Path) -> None:
+def test_export_type2_step_artifacts_tx_rect_void_columns_rejects_x1_division_variant(tmp_path: Path) -> None:
     _export_tx_rect_void_columns_spec_and_expect_rejection(
         tmp_path=tmp_path / "x1_base",
         x_division_count=1,
         y_division_count=2,
-        layer_count=2,
-        turn_count_x0=2,
-        turn_count_x1=3,
-        turn_count_x2=3,
     )
 
 
 @pytest.mark.parametrize(
-    ("x_division_count", "turn_field"),
+    ("x_division_count", "case_name"),
     (
-        (2, "turn_count_x1"),
-        (3, "turn_count_x2"),
+        (2, "x_division_2"),
+        (3, "x_division_3"),
     ),
 )
-def test_export_type2_step_artifacts_tx_rect_void_columns_rejects_multicolumn_turn_matrix(
+def test_export_type2_step_artifacts_tx_rect_void_columns_rejects_multicolumn_grid_variants(
     tmp_path: Path,
     x_division_count: int,
-    turn_field: Literal["turn_count_x1", "turn_count_x2"],
+    case_name: str,
 ) -> None:
-    low_turn_count_x1 = 3
-    low_turn_count_x2 = 2
     _export_tx_rect_void_columns_spec_and_expect_rejection(
-        tmp_path=tmp_path / f"{turn_field}_low",
+        tmp_path=tmp_path / case_name,
         x_division_count=x_division_count,
         y_division_count=2,
-        layer_count=2,
-        turn_count_x0=2,
-        turn_count_x1=low_turn_count_x1,
-        turn_count_x2=low_turn_count_x2,
     )
 
 
@@ -3037,8 +3104,14 @@ def test_export_type2_step_artifacts_places_tx_plate_stack_on_tx_region_min_x_an
 
 
 def test_export_type2_step_artifacts_places_rx_single_coil_on_rx_region_max_min_x_anchor(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    source_toml = repo_root / "examples" / "type2_fixed.toml"
+    source_toml = _write_spec(
+        tmp_path,
+        _type2_spec_text(
+            modeled_object_id="rx_rect_void_coil",
+            modeled_role="rx_single_coil",
+            underlay_repeat_count_range="[true, 8, 8, 1]",
+        ),
+    )
     type2_spec = load_type2_step_spec(source_toml)
     rx_modeled_spec = next(entry for entry in type2_spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
     assert rx_modeled_spec.role == "rx_single_coil"

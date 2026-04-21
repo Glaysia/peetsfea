@@ -48,6 +48,12 @@ class Type2BuiltArtifact(TypedDict):
 
 
 def _assert_setup_ready_supported(prepared_build: PreparedType2Build) -> None:
+    if "tx_rect_void_columns" in prepared_build.modeled_roles:
+        raise ValueError(
+            "type2 build/setup-ready failed at parser/sampler-only milestone: "
+            "role is deactivated for active type2 inputs: tx_rect_void_columns. "
+            f"actual_roles={prepared_build.modeled_roles}"
+        )
     actual_roles = tuple(sorted(prepared_build.modeled_roles))
     if actual_roles in _SUPPORTED_MODELED_ROLE_SETS:
         return

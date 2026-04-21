@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-21 @ 14:47
+updated: 2026-04-21 @ 15:20
 tags:
   - tests
   - type2
@@ -26,12 +26,17 @@ tags:
 - export ledger coverage verifies `tx_region_actual` is min-X anchored, Y-centered, full-Z relative to `tx_region`, and can resolve to 3x3 concrete tiles.
 - export ledger coverage verifies `tx_region_actual_stack_space` bodies are generated one-for-one with concrete `tx_region_actual` tiles, with fixed `total_thickness_mm = 5.0`, top-face alignment before tilt, and scale-derived similar footprint.
 - export coverage verifies `tilt_enabled = 1` rotates only the stack-space bodies toward the modeled RX center, keeps guide tiles axis-aligned, and clamps tilted stack-space bounding boxes under owning tile tops.
-- `tx_rect_void_columns` generation/export behavior is validated as deactivation-reject coverage:
+- `tx_rect_void_columns` generation/export behavior is validated as parser/sampler milestone reject coverage:
   - temporary source specs that include `tx_rect_void_columns` fail fast,
   - both full-step export and direct `tx_single_coil` export reject this role,
-  - parser-bypass simulations (mocked loader + preflight no-op) still fail at export dispatch-level deactivation guards,
+  - parser-bypass simulations (mocked loader + preflight no-op) still fail at export dispatch-level parser/sampler milestone checks,
   - generated specs using `tx_rect_void_columns` with varied tiling/turn matrices are rejected,
-  - failures are asserted either on parser-side role deactivation messages or on dispatch-level `no longer supports modeled role tx_rect_void_columns` messages.
+  - failures are asserted as parser/sampler-only milestone messaging.
+- `tx_rect_void_columns` parser contract coverage validates parser-only acceptance and exact schema ranges for:
+  - `layer_count`, `layer_gap_mm`, `terminal_stub_length_mm`,
+  - `connection_mode`, `series_total_turn_count`, `parallel_equivalent_turn_count`,
+  - `turn_weight_a/b/c`.
+- `tx_rect_void_columns` parser contract rejects legacy keys `turn_count_x0/x1/x2`, `column_connection_mode`, and `row_connection_mode`.
 - RX single-coil public schema uses `outer_x_usage_ratio` / `outer_y_usage_ratio`; parser resolves owner-span-scaled `outer_x_mm` / `outer_y_mm` for core delegation.
 - single-coil public schema uses `void_usage_ratio` for centered equal X/Y void size; legacy type2 single-coil `outer_*_mm` and split/centered `void_*` public keys are unsupported.
 - `examples/type2_sweep.toml` is the mutable sampling SSOT and this test file must not pin its concrete sweep values.

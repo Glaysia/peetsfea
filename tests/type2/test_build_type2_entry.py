@@ -339,7 +339,7 @@ def _write_source_type2_toml(tmp_path: Path) -> Path:
     return path
 
 
-def test_load_type2_step_spec_rejects_tx_rect_void_columns_runtime_reset(tmp_path: Path) -> None:
+def test_load_type2_step_spec_accepts_tx_rect_void_columns_for_parser_sampler_milestone(tmp_path: Path) -> None:
     source_toml_path = tmp_path / "type2_tx_rect_source.toml"
     source_toml_path.write_text(
         """
@@ -411,30 +411,37 @@ model_state = true
 pcb_thickness_mm = 0.3
 copper_thickness_mm = 0.1
 [modeled_objects.layer_count]
-range = [true, 1, 3, 3]
+range = [true, 1, 4, 4]
 [modeled_objects.layer_gap_mm]
-range = [false, 2, 2, 1]
+range = [false, 1.0, 1.8, 5]
 [modeled_objects.terminal_stub_length_mm]
 range = [false, 10.0, 10.0, 1]
 [modeled_objects.void_usage_ratio]
-range = [false, 0.2, 0.6, 15]
+range = [false, 0.2, 0.2, 1]
 [modeled_objects.margin_ratio]
 range = [false, 0.05, 0.05, 1]
 [modeled_objects.metal_fill_factor]
-range = [false, 0.2, 0.6, 15]
+range = [false, 0.5, 0.5, 1]
+[modeled_objects.connection_mode]
+range = [true, 0, 1, 2]
+[modeled_objects.series_total_turn_count]
+range = [true, 1, 36, 36]
+[modeled_objects.parallel_equivalent_turn_count]
+range = [false, 0.1111111111, 36.0, 150]
+[modeled_objects.turn_weight_a]
+range = [false, 0.5, 1.5, 5]
+[modeled_objects.turn_weight_b]
+range = [false, -0.5, 0.5, 21]
+[modeled_objects.turn_weight_c]
+range = [false, -0.5, 0.5, 21]
 [modeled_objects.terminal_path]
 value = "A_cw_to_a"
-[modeled_objects.turn_count_x0]
-range = [true, 2, 6, 5]
-[modeled_objects.turn_count_x1]
-range = [true, 2, 6, 5]
-[modeled_objects.turn_count_x2]
-range = [true, 2, 6, 5]
 """.strip(),
         encoding="utf-8",
     )
-    with pytest.raises(ValueError):
-        load_type2_step_spec(source_toml_path)
+    spec = load_type2_step_spec(source_toml_path)
+    assert len(spec.modeled_objects) == 1
+    assert spec.modeled_objects[0].role == "tx_rect_void_columns"
 
 
 def test_build_type2_reads_aedt_builder_n_from_manifest(
@@ -838,12 +845,12 @@ def test_build_prepared_type2_design_rejects_tx_rect_void_columns_modeled_role_w
         imported_ledger_path=imported_ledger_path,
         aedt_path=output_aedt_path,
         sampled_owner_paths=(
-            "modeled_objects.tx_rect_void_columns.turn_count_x0",
+            "modeled_objects.tx_rect_void_columns.series_total_turn_count",
         ),
         modeled_roles=("tx_rect_void_columns",),
         design_variables=(
             ("non_model_objects_tx_region_actual_stack_space_scale_ratio", "0.6"),
-            ("modeled_objects_tx_rect_void_columns_turn_count_x0", "3"),
+            ("modeled_objects_tx_rect_void_columns_series_total_turn_count", "3"),
         ),
     )
 
@@ -864,7 +871,7 @@ def test_build_prepared_type2_design_rejects_tx_rect_void_columns_modeled_role_w
 
     with pytest.raises(
         ValueError,
-        match=r"type2 build/setup-ready rejects unsupported modeled roles",
+        match=r"parser/sampler-only milestone.*role is deactivated for active type2 inputs: tx_rect_void_columns",
     ):
         type2_runtime.build_prepared_type2_design(
             prepared_build,

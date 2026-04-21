@@ -1,7 +1,7 @@
 ---
 title: type2_runtime.py
 created: 2026-04-18 @ 23:10
-updated: 2026-04-20 @ 23:59
+updated: 2026-04-21 @ 15:20
 tags:
   - build
   - runtime
@@ -34,6 +34,7 @@ tags:
 - existing broken ledger는 rebuild fallback 없이 실패한다.
 - sampled metadata-derived design variables는 setup facade 호출 인자로 전달한다.
 - 지원되는 setup-ready role set이 아니면 build는 fail-fast 하며 다른 경로로 fallback하지 않는다.
+- `tx_rect_void_columns`는 parser/sampler-only milestone 경계 역할로 간주되며, setup-ready 경계에서 parser/sampler 메시지로 즉시 실패해야 한다.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_sampled.py]]

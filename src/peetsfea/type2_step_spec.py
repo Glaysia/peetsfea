@@ -41,8 +41,33 @@ _TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_START = 0.35
 _TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_END = 0.95
 _TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_COUNT = 25
 _TX_REGION_ACTUAL_STACK_SPACE_TOTAL_THICKNESS_MM = 5.0
-_TX_RECT_VOID_COLUMNS_LAYER_COUNT_ALLOWED = (1, 2, 3)
-_TX_RECT_VOID_COLUMNS_CONNECTION_MODE_CANDIDATES = (0, 1, 2)
+_TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_START = 1
+_TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_END = 4
+_TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_COUNT = 4
+_TX_RECT_VOID_COLUMNS_LAYER_COUNT_ALLOWED = (1, 2, 3, 4)
+_TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_START = 1.0
+_TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_END = 1.8
+_TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_COUNT = 5
+_TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_START = 10.0
+_TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_END = 10.0
+_TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_COUNT = 1
+_TX_RECT_VOID_COLUMNS_CONNECTION_MODE_EXPECTED = (0, 1)
+_TX_RECT_VOID_COLUMNS_CONNECTION_MODE_RANGE = (0, 1, 2)
+_TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_START = 1
+_TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_END = 36
+_TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_COUNT = 36
+_TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_START = 0.1111111111
+_TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_END = 36.0
+_TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_COUNT = 150
+_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_START = 0.5
+_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_END = 1.5
+_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_COUNT = 5
+_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_START = -0.5
+_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_END = 0.5
+_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_COUNT = 21
+_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_START = -0.3
+_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_END = 0.3
+_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_COUNT = 21
 _TYPE2_SCHEMA_ID = "peetsfea.type2.step.v7"
 
 
@@ -201,11 +226,12 @@ class ModeledTxRectVoidColumnsSpec:
     margin_ratio: RangeSpec
     metal_fill_factor: RangeSpec
     terminal_path: str
-    column_connection_mode: RangeSpec
-    row_connection_mode: RangeSpec
-    turn_count_x0: RangeSpec
-    turn_count_x1: RangeSpec
-    turn_count_x2: RangeSpec
+    connection_mode: RangeSpec
+    series_total_turn_count: RangeSpec
+    parallel_equivalent_turn_count: RangeSpec
+    turn_weight_a: RangeSpec
+    turn_weight_b: RangeSpec
+    turn_weight_c: RangeSpec
 
 
 ModeledSingleCoilSpec = ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec
@@ -592,11 +618,12 @@ def _constraint_reference_paths(spec: Type2StepSpec) -> set[str]:
                     f"{base}.void_usage_ratio",
                     f"{base}.margin_ratio",
                     f"{base}.metal_fill_factor",
-                    f"{base}.turn_count_x0",
-                    f"{base}.turn_count_x1",
-                    f"{base}.turn_count_x2",
-                    f"{base}.column_connection_mode",
-                    f"{base}.row_connection_mode",
+                    f"{base}.connection_mode",
+                    f"{base}.series_total_turn_count",
+                    f"{base}.parallel_equivalent_turn_count",
+                    f"{base}.turn_weight_a",
+                    f"{base}.turn_weight_b",
+                    f"{base}.turn_weight_c",
                 )
             )
             continue
@@ -1102,22 +1129,6 @@ def _parse_modeled_single_coil(
     )
 
 
-def _require_tx_rect_void_columns_turn_count_range(
-    table: dict[str, object],
-    *,
-    key: str,
-    context: str,
-) -> RangeSpec:
-    range_spec = _require_range(table, key, context, expect_integer=True)
-    candidates = _integer_range_candidates(range_spec)
-    if any(candidate < 1 or candidate > 6 for candidate in candidates):
-        raise ValueError(
-            f"{context}.{key} must realize to integer values in [1, 6] "
-            f"(actual={candidates})"
-    )
-    return range_spec
-
-
 def _require_tx_rect_void_columns_connection_mode_range(
     table: dict[str, object],
     *,
@@ -1125,16 +1136,211 @@ def _require_tx_rect_void_columns_connection_mode_range(
     context: str,
 ) -> RangeSpec:
     range_spec = _require_range(table, key, context, expect_integer=True)
-    candidates = _integer_range_candidates(range_spec)
-    if candidates == _TX_RECT_VOID_COLUMNS_CONNECTION_MODE_CANDIDATES:
+    if (
+        math.isclose(range_spec.start, float(_TX_RECT_VOID_COLUMNS_CONNECTION_MODE_EXPECTED[0]), rel_tol=0.0, abs_tol=1e-12)
+        and math.isclose(range_spec.end, float(_TX_RECT_VOID_COLUMNS_CONNECTION_MODE_EXPECTED[1]), rel_tol=0.0, abs_tol=1e-12)
+        and range_spec.count == _TX_RECT_VOID_COLUMNS_CONNECTION_MODE_RANGE[2]
+    ):
         return range_spec
-    if len(candidates) == 1 and candidates[0] in (0, 1):
+    candidates = _integer_range_candidates(range_spec)
+    if range_spec.count == 1 and len(candidates) == 1 and candidates[0] in _TX_RECT_VOID_COLUMNS_CONNECTION_MODE_EXPECTED:
         return range_spec
     raise ValueError(
-        f"{context}.{key} must be [true, 0, 1, 2] or fixed [true, n, n, 1] for n in { (0, 1) } "
+        f"{context}.{key} must be [true, 0, 1, 2] "
         f"for tx_rect_void_columns connection modes "
         f"(actual={range_spec})"
     )
+
+
+def _require_tx_rect_void_columns_layer_count_range(
+    table: dict[str, object],
+    *,
+    key: str,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, key, context, expect_integer=True)
+    if not (
+        math.isclose(range_spec.start, _TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_START, rel_tol=0.0, abs_tol=1e-12)
+        and math.isclose(range_spec.end, _TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_END, rel_tol=0.0, abs_tol=1e-12)
+        and range_spec.count == _TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_COUNT
+    ):
+        candidates = _integer_range_candidates(range_spec)
+        if range_spec.count == 1 and len(candidates) == 1 and candidates[0] in _TX_RECT_VOID_COLUMNS_LAYER_COUNT_ALLOWED:
+            return range_spec
+        raise ValueError(
+            f"{context}.{key} must be [true, 1, 4, 4] "
+            f"(actual={range_spec})"
+        )
+    candidates = _integer_range_candidates(range_spec)
+    if tuple(candidates) != _TX_RECT_VOID_COLUMNS_LAYER_COUNT_ALLOWED:
+        raise ValueError(
+            f"{context}.{key} must realize to values {_TX_RECT_VOID_COLUMNS_LAYER_COUNT_ALLOWED} "
+            f"(actual={candidates})"
+        )
+    return range_spec
+
+
+def _require_tx_rect_void_columns_layer_gap_mm_range(
+    table: dict[str, object],
+    *,
+    key: str,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, key, context, expect_integer=False)
+    if not (
+        math.isclose(range_spec.start, _TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_START, rel_tol=0.0, abs_tol=1e-12)
+        and math.isclose(range_spec.end, _TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_END, rel_tol=0.0, abs_tol=1e-12)
+        and range_spec.count == _TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_COUNT
+    ):
+        if (
+            range_spec.count == 1
+            and range_spec.start == range_spec.end
+            and _TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_START <= range_spec.start <= _TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_END
+        ):
+            return range_spec
+        raise ValueError(
+            f"{context}.{key} must be [false, 1.0, 1.8, 5] "
+            f"(actual={range_spec})"
+        )
+    return range_spec
+
+
+def _require_tx_rect_void_columns_terminal_stub_length_mm_range(
+    table: dict[str, object],
+    *,
+    key: str,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, key, context, expect_integer=False)
+    if not (
+        math.isclose(
+            range_spec.start,
+            _TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_START,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        )
+        and math.isclose(
+            range_spec.end,
+            _TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_END,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        )
+        and range_spec.count == _TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_COUNT
+    ):
+        if (
+            range_spec.count == 1
+            and math.isclose(range_spec.start, _TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_START, rel_tol=0.0, abs_tol=1e-12)
+            and math.isclose(range_spec.end, _TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_END, rel_tol=0.0, abs_tol=1e-12)
+        ):
+            return range_spec
+        raise ValueError(
+            f"{context}.{key} must be [false, 10.0, 10.0, 1] "
+            f"(actual={range_spec})"
+        )
+    return range_spec
+
+
+def _require_tx_rect_void_columns_series_total_turn_count_range(
+    table: dict[str, object],
+    *,
+    key: str,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, key, context, expect_integer=True)
+    if not (
+        math.isclose(range_spec.start, _TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_START, rel_tol=0.0, abs_tol=1e-12)
+        and math.isclose(range_spec.end, _TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_END, rel_tol=0.0, abs_tol=1e-12)
+        and range_spec.count == _TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_COUNT
+    ):
+        candidates = _integer_range_candidates(range_spec)
+        if (
+            range_spec.count == 1
+            and len(candidates) == 1
+            and _TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_START <= candidates[0] <= _TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_END
+        ):
+            return range_spec
+        raise ValueError(
+            f"{context}.{key} must be [true, 1, 36, 36] "
+            f"(actual={range_spec})"
+        )
+    candidates = _integer_range_candidates(range_spec)
+    if candidates[0] < 1 or candidates[-1] > _TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_END:
+        raise ValueError(
+            f"{context}.{key} must realize to integers in [1, 36] "
+            f"(actual={candidates})"
+        )
+    return range_spec
+
+
+def _require_tx_rect_void_columns_parallel_equivalent_turn_count_range(
+    table: dict[str, object],
+    *,
+    key: str,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, key, context, expect_integer=False)
+    if not (
+        math.isclose(
+            range_spec.start,
+            _TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_START,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        )
+        and math.isclose(
+            range_spec.end,
+            _TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_END,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        )
+        and range_spec.count == _TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_COUNT
+    ):
+        if (
+            range_spec.count == 1
+            and range_spec.start == range_spec.end
+            and _TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_START <= range_spec.start <= _TX_RECT_VOID_COLUMNS_PARALLEL_EQUIVALENT_TURN_COUNT_RANGE_END
+        ):
+            return range_spec
+        raise ValueError(
+            f"{context}.{key} must be [false, 0.1111111111, 36.0, 150] "
+            f"(actual={range_spec})"
+        )
+    candidates = _float_range_candidates(range_spec)
+    if any(candidate <= 0.0 for candidate in candidates):
+        raise ValueError(
+            f"{context}.{key} must realize to positive values "
+            f"(actual={candidates})"
+        )
+    return range_spec
+
+
+def _require_tx_rect_void_columns_turn_weight_range(
+    table: dict[str, object],
+    *,
+    key: str,
+    context: str,
+    expect_integer: bool,
+    expected_start: float,
+    expected_end: float,
+    expected_count: int,
+) -> RangeSpec:
+    range_spec = _require_range(table, key, context, expect_integer=expect_integer)
+    if not (
+        math.isclose(range_spec.start, expected_start, rel_tol=0.0, abs_tol=1e-12)
+        and math.isclose(range_spec.end, expected_end, rel_tol=0.0, abs_tol=1e-12)
+        and range_spec.count == expected_count
+    ):
+        if (
+            range_spec.count == 1
+            and range_spec.start == range_spec.end
+            and expected_start <= range_spec.start <= expected_end
+        ):
+            return range_spec
+        raise ValueError(
+            f"{context}.{key} must be "
+            f"[{str(expect_integer).lower()}, {expected_start}, {expected_end}, {expected_count}] "
+            f"(actual={range_spec})"
+        )
+    return range_spec
 
 
 def _parse_modeled_tx_rect_void_columns(
@@ -1187,15 +1393,31 @@ def _parse_modeled_tx_rect_void_columns(
         raise ValueError(
             f"{context} requires non-model placement owner '{placement_owner_id}' for role tx_rect_void_columns"
         )
-    layer_count = _require_range(table, "layer_count", context, expect_integer=True)
-    layer_count_candidates = _integer_range_candidates(layer_count)
-    if any(candidate not in _TX_RECT_VOID_COLUMNS_LAYER_COUNT_ALLOWED for candidate in layer_count_candidates):
-        raise ValueError(
-            f"{context}.layer_count must realize to values in {_TX_RECT_VOID_COLUMNS_LAYER_COUNT_ALLOWED} "
-            f"(actual={layer_count_candidates})"
+
+    legacy_rejected_keys = sorted(
+        key
+        for key in (
+            "turn_count_x0",
+            "turn_count_x1",
+            "turn_count_x2",
+            "column_connection_mode",
+            "row_connection_mode",
         )
-    layer_gap_mm = _require_range(table, "layer_gap_mm", context, expect_integer=False)
-    terminal_stub_length_mm = _require_range(table, "terminal_stub_length_mm", context, expect_integer=False)
+        if key in table
+    )
+    if legacy_rejected_keys:
+        raise ValueError(
+            f"{context} contains unsupported legacy keys for tx_rect_void_columns "
+            f"(actual={legacy_rejected_keys})"
+        )
+
+    layer_count = _require_tx_rect_void_columns_layer_count_range(table, key="layer_count", context=context)
+    layer_gap_mm = _require_tx_rect_void_columns_layer_gap_mm_range(table, key="layer_gap_mm", context=context)
+    terminal_stub_length_mm = _require_tx_rect_void_columns_terminal_stub_length_mm_range(
+        table,
+        key="terminal_stub_length_mm",
+        context=context,
+    )
     void_usage_ratio = _require_range(table, "void_usage_ratio", context, expect_integer=False)
     void_usage_ratio_candidates = _float_range_candidates(void_usage_ratio)
     if any(candidate <= 0.0 or candidate >= 1.0 for candidate in void_usage_ratio_candidates):
@@ -1205,20 +1427,44 @@ def _parse_modeled_tx_rect_void_columns(
         )
     margin_ratio = _require_range(table, "margin_ratio", context, expect_integer=False)
     metal_fill_factor = _require_range(table, "metal_fill_factor", context, expect_integer=False)
-    turn_count_x0 = _require_tx_rect_void_columns_turn_count_range(table, key="turn_count_x0", context=context)
-    turn_count_x1 = _require_tx_rect_void_columns_turn_count_range(table, key="turn_count_x1", context=context)
-    turn_count_x2 = _require_tx_rect_void_columns_turn_count_range(table, key="turn_count_x2", context=context)
-    column_connection_mode = _require_tx_rect_void_columns_connection_mode_range(
+    connection_mode = _require_tx_rect_void_columns_connection_mode_range(table, key="connection_mode", context=context)
+    series_total_turn_count = _require_tx_rect_void_columns_series_total_turn_count_range(
         table,
-        key="column_connection_mode",
+        key="series_total_turn_count",
         context=context,
     )
-    row_connection_mode = _require_tx_rect_void_columns_connection_mode_range(
+    parallel_equivalent_turn_count = _require_tx_rect_void_columns_parallel_equivalent_turn_count_range(
         table,
-        key="row_connection_mode",
+        key="parallel_equivalent_turn_count",
         context=context,
     )
-
+    turn_weight_a = _require_tx_rect_void_columns_turn_weight_range(
+        table,
+        key="turn_weight_a",
+        context=context,
+        expect_integer=False,
+        expected_start=_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_START,
+        expected_end=_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_END,
+        expected_count=_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_COUNT,
+    )
+    turn_weight_b = _require_tx_rect_void_columns_turn_weight_range(
+        table,
+        key="turn_weight_b",
+        context=context,
+        expect_integer=False,
+        expected_start=_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_START,
+        expected_end=_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_END,
+        expected_count=_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_COUNT,
+    )
+    turn_weight_c = _require_tx_rect_void_columns_turn_weight_range(
+        table,
+        key="turn_weight_c",
+        context=context,
+        expect_integer=False,
+        expected_start=_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_START,
+        expected_end=_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_END,
+        expected_count=_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_COUNT,
+    )
     disallowed_keys = sorted(
         key
         for key in (
@@ -1255,11 +1501,12 @@ def _parse_modeled_tx_rect_void_columns(
         "margin_ratio",
         "metal_fill_factor",
         "terminal_path",
-        "turn_count_x0",
-        "turn_count_x1",
-        "turn_count_x2",
-        "column_connection_mode",
-        "row_connection_mode",
+        "connection_mode",
+        "series_total_turn_count",
+        "parallel_equivalent_turn_count",
+        "turn_weight_a",
+        "turn_weight_b",
+        "turn_weight_c",
     }
     extra_keys = sorted(set(table.keys()) - allowed_keys)
     if extra_keys:
@@ -1281,11 +1528,12 @@ def _parse_modeled_tx_rect_void_columns(
         margin_ratio=margin_ratio,
         metal_fill_factor=metal_fill_factor,
         terminal_path=terminal_path,
-        turn_count_x0=turn_count_x0,
-        turn_count_x1=turn_count_x1,
-        turn_count_x2=turn_count_x2,
-        column_connection_mode=column_connection_mode,
-        row_connection_mode=row_connection_mode,
+        connection_mode=connection_mode,
+        series_total_turn_count=series_total_turn_count,
+        parallel_equivalent_turn_count=parallel_equivalent_turn_count,
+        turn_weight_a=turn_weight_a,
+        turn_weight_b=turn_weight_b,
+        turn_weight_c=turn_weight_c,
     )
 
 
@@ -1897,10 +2145,15 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
         table = _require_table(raw_object, context)
         role = _require_non_empty_str(table, "role", context)
         if role == "tx_rect_void_columns":
-            raise ValueError(
-                f"{context}.role is deactivated for active type2 inputs: tx_rect_void_columns. "
-                "See tmp/tx개편.md for the TX reset direction before re-enabling this role."
+            modeled_objects_list.append(
+                _parse_modeled_tx_rect_void_columns(
+                    raw_object,
+                    index=index,
+                    seen_object_ids=seen_object_ids,
+                    non_model_specs_by_id=non_model_specs_by_id,
+                )
             )
+            continue
         if role in ("tx_plate_stack", "rx_plate_stack"):
             modeled_objects_list.append(
                 _parse_modeled_plate_stack(raw_object, index=index, seen_object_ids=seen_object_ids)

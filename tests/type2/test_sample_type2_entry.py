@@ -44,18 +44,6 @@ class _FakeRxOnlyType2Spec:
     modeled_objects: tuple[ModeledRxSingleCoilSpec, ...]
 
 
-@dataclass(frozen=True)
-class _FakeUnsupportedModeledObject:
-    object_id: str
-    role: str
-
-
-@dataclass(frozen=True)
-class _FakeUnsupportedRoleType2Spec:
-    non_model_derived_objects: tuple[NonModelTxRegionActualSpec | NonModelTxRegionActualStackSpaceSpec, ...]
-    modeled_objects: tuple[ModeledRxSingleCoilSpec | _FakeUnsupportedModeledObject, ...]
-
-
 def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     source_spec_loader = load_type2_step_spec
     rx_outer_x_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.6, count=17)
@@ -128,72 +116,6 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
         return source_spec_loader(toml_path)
     
     monkeypatch.setattr(type2_sampled, "load_type2_step_spec", _patched_loader)
-
-
-def _fake_unsupported_role_spec(
-    *,
-    tx_region_actual_x_division_count: tuple[float, float, int],
-    rx_outer_x_usage_ratio: tuple[float, float, int],
-) -> _FakeUnsupportedRoleType2Spec:
-    tx_actual_x_division_count_range = RangeSpec(
-        is_integer=True,
-        start=tx_region_actual_x_division_count[0],
-        end=tx_region_actual_x_division_count[1],
-        count=tx_region_actual_x_division_count[2],
-    )
-    return _FakeUnsupportedRoleType2Spec(
-        non_model_derived_objects=(
-            NonModelTxRegionActualSpec(
-                object_id="tx_region_actual",
-                kind="tx_region_actual",
-                source_region_id="tx_region",
-                x_usage_ratio=RangeSpec(is_integer=False, start=0.3, end=1.0, count=27),
-                y_usage_ratio=RangeSpec(is_integer=False, start=0.3, end=1.0, count=27),
-                x_division_count=tx_actual_x_division_count_range,
-                y_division_count=RangeSpec(is_integer=True, start=1, end=1, count=1),
-            ),
-            NonModelTxRegionActualStackSpaceSpec(
-                object_id="tx_region_actual_stack_space",
-                kind="tx_region_actual_stack_space",
-                source_region_id="tx_region_actual",
-                total_thickness_mm=5.0,
-                scale_ratio=RangeSpec(is_integer=False, start=0.35, end=0.95, count=25),
-                tilt_enabled=RangeSpec(is_integer=True, start=1, end=1, count=1),
-            ),
-        ),
-        modeled_objects=(
-            ModeledRxSingleCoilSpec(
-                object_id="rx_rect_void_coil",
-                role="rx_single_coil",
-                material="composite",
-                model_state=True,
-                pcb_thickness_mm=0.3,
-                copper_thickness_mm=0.1,
-                outer_x_usage_ratio=RangeSpec(
-                    is_integer=False,
-                    start=rx_outer_x_usage_ratio[0],
-                    end=rx_outer_x_usage_ratio[1],
-                    count=rx_outer_x_usage_ratio[2],
-                ),
-                outer_y_usage_ratio=RangeSpec(is_integer=False, start=0.1, end=0.6, count=17),
-                void_usage_ratio=RangeSpec(is_integer=False, start=0.1, end=0.6, count=17),
-                outer_x_mm=RangeSpec(is_integer=False, start=20.0, end=120.0, count=17),
-                outer_y_mm=RangeSpec(is_integer=False, start=20.0, end=120.0, count=17),
-                turn_count=RangeSpec(is_integer=True, start=2, end=6, count=5),
-                layer_count=RangeSpec(is_integer=True, start=1, end=1, count=1),
-                underlay_repeat_count=RangeSpec(is_integer=True, start=8, end=8, count=1),
-                layer_gap_mm=RangeSpec(is_integer=False, start=2, end=2, count=1),
-                terminal_stub_length_mm=RangeSpec(is_integer=False, start=5, end=5, count=1),
-                margin_ratio=RangeSpec(is_integer=False, start=0.05, end=0.05, count=1),
-                metal_fill_factor=RangeSpec(is_integer=False, start=0.2, end=0.6, count=15),
-                terminal_path="A_cw_to_a",
-            ),
-            _FakeUnsupportedModeledObject(
-                object_id="tx_rect_void_columns",
-                role="tx_rect_void_columns",
-            ),
-        ),
-    )
 
 
 def _source_type2_toml_text() -> str:
@@ -648,9 +570,6 @@ def test_sample_type2_can_write_manifest_without_step_artifacts(
 
 
 def _source_type2_toml_text_with_tx_rect_void_columns(
-    *,
-    tx_region_actual_x_division_count_range: str,
-    rx_outer_x_usage_ratio_range: str = "[false, 0.1, 0.6, 17]",
 ) -> str:
     return f"""
 spec_version = "0.2.22"
@@ -710,9 +629,9 @@ range = [false, 0.3, 1.0, 27]
 [non_model_objects.y_usage_ratio]
 range = [false, 0.3, 1.0, 27]
 [non_model_objects.x_division_count]
-range = {tx_region_actual_x_division_count_range}
+range = [true, 1, 3, 3]
 [non_model_objects.y_division_count]
-range = [true, 1, 1, 1]
+range = [true, 1, 3, 3]
 
 [[non_model_objects]]
 id = "tx_region_actual_stack_space"
@@ -732,7 +651,7 @@ model_state = true
 pcb_thickness_mm = 0.3
 copper_thickness_mm = 0.1
 [modeled_objects.outer_x_usage_ratio]
-range = {rx_outer_x_usage_ratio_range}
+range = [false, 0.1, 0.6, 17]
 [modeled_objects.outer_y_usage_ratio]
 range = [false, 0.1, 0.6, 17]
 [modeled_objects.void_usage_ratio]
@@ -762,9 +681,9 @@ model_state = true
 pcb_thickness_mm = 0.3
 copper_thickness_mm = 0.1
 [modeled_objects.layer_count]
-range = [true, 1, 3, 3]
+range = [true, 1, 4, 4]
 [modeled_objects.layer_gap_mm]
-range = [false, 2, 2, 1]
+range = [false, 1.0, 1.8, 5]
 [modeled_objects.terminal_stub_length_mm]
 range = [false, 10.0, 10.0, 1]
 [modeled_objects.void_usage_ratio]
@@ -775,54 +694,185 @@ range = [false, 0.05, 0.05, 1]
 range = [false, 0.2, 0.6, 15]
 [modeled_objects.terminal_path]
 value = "A_cw_to_a"
-[modeled_objects.turn_count_x0]
-range = [true, 2, 6, 5]
-[modeled_objects.turn_count_x1]
-range = [true, 2, 6, 5]
-[modeled_objects.turn_count_x2]
-range = [true, 2, 6, 5]
+[modeled_objects.connection_mode]
+range = [true, 0, 1, 2]
+[modeled_objects.series_total_turn_count]
+range = [true, 1, 36, 36]
+[modeled_objects.parallel_equivalent_turn_count]
+range = [false, 0.1111111111, 36.0, 150]
+[modeled_objects.turn_weight_a]
+range = [false, 0.5, 1.5, 5]
+[modeled_objects.turn_weight_b]
+range = [false, -0.5, 0.5, 21]
+[modeled_objects.turn_weight_c]
+range = [false, -0.5, 0.5, 21]
 """.strip()
 
 
-def test_sampled_owner_values_rejects_deactivated_tx_rect_void_columns_role_in_active_surface() -> None:
-    source_with_deactivated_role = _fake_unsupported_role_spec(
-        tx_region_actual_x_division_count=(2.0, 2.0, 1),
-        rx_outer_x_usage_ratio=(0.1, 0.6, 17),
-    )
-
-    with pytest.raises(
-        RuntimeError,
-        match=r"unsupported modeled object role for sampled owner resolution: tx_rect_void_columns",
-    ):
-        type2_sampled.sampled_owner_values(source_with_deactivated_role, seed=17)
-
-
-def test_sample_type2_tx_rect_void_columns_role_is_deactivated_for_active_type2_inputs(
+def test_sampled_owner_values_tx_rect_void_columns_uses_mode_aware_effective_turn_owner(
     tmp_path: Path,
 ) -> None:
     source_toml_path = tmp_path / "type2_tx_rect_source.toml"
-    source_toml_path.write_text(
-        _source_type2_toml_text_with_tx_rect_void_columns(
-            tx_region_actual_x_division_count_range="[true, 2, 2, 1]",
-        ),
-        encoding="utf-8",
+    source_toml_path.write_text(_source_type2_toml_text_with_tx_rect_void_columns(), encoding="utf-8")
+    spec = load_type2_step_spec(source_toml_path)
+
+    owner_prefix = "modeled_objects.tx_rect_void_columns"
+    connection_mode_path = f"{owner_prefix}.connection_mode"
+    series_owner_path = f"{owner_prefix}.series_total_turn_count"
+    parallel_owner_path = f"{owner_prefix}.parallel_equivalent_turn_count"
+    turn_weight_paths = (
+        f"{owner_prefix}.turn_weight_a",
+        f"{owner_prefix}.turn_weight_b",
+        f"{owner_prefix}.turn_weight_c",
     )
+    observed_modes: set[int] = set()
+    for seed in range(32):
+        sampled_owner_values = dict(type2_sampled.sampled_owner_values(spec, seed=seed))
+        assert connection_mode_path in sampled_owner_values
+        for turn_weight_path in turn_weight_paths:
+            assert turn_weight_path in sampled_owner_values
+        assert all("turn_count_x" not in owner_path for owner_path in sampled_owner_values)
+        raw_connection_mode = sampled_owner_values[connection_mode_path]
+        assert isinstance(raw_connection_mode, int)
+        assert raw_connection_mode in {0, 1}
+        observed_modes.add(raw_connection_mode)
+        has_series_owner = series_owner_path in sampled_owner_values
+        has_parallel_owner = parallel_owner_path in sampled_owner_values
+        assert has_series_owner is not has_parallel_owner
+        if raw_connection_mode == 1:
+            assert has_series_owner
+            assert has_parallel_owner is False
+        else:
+            assert has_series_owner is False
+            assert has_parallel_owner
+    assert observed_modes == {0, 1}
+
+
+def test_sample_type2_tx_rect_void_columns_sample_only_emits_manifest_and_sampled_toml(
+    tmp_path: Path,
+) -> None:
+    source_toml_path = tmp_path / "type2_tx_rect_source.toml"
+    source_toml_path.write_text(_source_type2_toml_text_with_tx_rect_void_columns(), encoding="utf-8")
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+    document = sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=11,
+        seed_n=4,
+        sampler_n=1,
+        aedt_builder_n=1,
+        make_step_on_sample=False,
+    )
+
+    assert manifest_path.is_file()
+    assert json.loads(manifest_path.read_text(encoding="utf-8")) == document
+    assert len(document["entries"]) == 4
+    owner_prefix = "modeled_objects.tx_rect_void_columns"
+    connection_mode_path = f"{owner_prefix}.connection_mode"
+    series_owner_path = f"{owner_prefix}.series_total_turn_count"
+    parallel_owner_path = f"{owner_prefix}.parallel_equivalent_turn_count"
+    turn_weight_paths = (
+        f"{owner_prefix}.turn_weight_a",
+        f"{owner_prefix}.turn_weight_b",
+        f"{owner_prefix}.turn_weight_c",
+    )
+    for entry in document["entries"]:
+        sampled_owner_paths = cast(list[str], entry["sampled_owner_paths"])
+        assert connection_mode_path in sampled_owner_paths
+        assert all(turn_weight_path in sampled_owner_paths for turn_weight_path in turn_weight_paths)
+        assert (series_owner_path in sampled_owner_paths) is not (parallel_owner_path in sampled_owner_paths)
+
+
+def test_sample_type2_sweep_ssot_emits_tx_columns_manifest_and_sampled_toml(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    source_toml_path = repo_root / "examples" / "type2_sweep.toml"
+    spec = load_type2_step_spec(source_toml_path)
+    assert any(modeled_object.role == "tx_rect_void_columns" for modeled_object in spec.modeled_objects)
     output_dir = tmp_path / "run" / "sampled" / "type2"
     manifest_path = output_dir / "manifest.json"
 
-    with pytest.raises(
-        ValueError,
-        match=r"role is deactivated for active type2 inputs: tx_rect_void_columns",
-    ):
-        sample_type2(
-            source_toml_path=source_toml_path,
-            output_dir=output_dir,
-            manifest_path=manifest_path,
-            seed_first=11,
-            seed_n=1,
-            sampler_n=1,
-            aedt_builder_n=1,
-            make_step_on_sample=False,
+    document = sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=21,
+        seed_n=2,
+        sampler_n=1,
+        aedt_builder_n=1,
+        make_step_on_sample=False,
+    )
+
+    assert manifest_path.is_file()
+    assert len(document["entries"]) == 2
+    owner_prefix = "modeled_objects.tx_rect_void_columns"
+    series_owner_path = f"{owner_prefix}.series_total_turn_count"
+    parallel_owner_path = f"{owner_prefix}.parallel_equivalent_turn_count"
+    for entry in document["entries"]:
+        sampled_owner_paths = cast(list[str], entry["sampled_owner_paths"])
+        assert f"{owner_prefix}.connection_mode" in sampled_owner_paths
+        assert f"{owner_prefix}.turn_weight_a" in sampled_owner_paths
+        assert f"{owner_prefix}.turn_weight_b" in sampled_owner_paths
+        assert f"{owner_prefix}.turn_weight_c" in sampled_owner_paths
+        assert (f"{owner_prefix}.series_total_turn_count" in sampled_owner_paths) is not (
+            f"{owner_prefix}.parallel_equivalent_turn_count" in sampled_owner_paths
         )
-    assert manifest_path.exists() is False
-    assert not any(output_dir.rglob("sampled.toml"))
+        sampled_toml_path = Path(cast(str, entry["sampled_toml_path"]))
+        assert sampled_toml_path.is_file()
+        sampled_payload = tomllib.loads(sampled_toml_path.read_text(encoding="utf-8"))
+        modeled_objects = cast(list[dict[str, object]], sampled_payload["modeled_objects"])
+        tx_columns = next(
+            modeled_object
+            for modeled_object in modeled_objects
+            if modeled_object["object_id"] == "tx_rect_void_columns"
+        )
+        assert "turn_count_x0" not in tx_columns
+        assert "column_connection_mode" not in tx_columns
+        assert all("turn_count_x" not in owner_path for owner_path in sampled_owner_paths)
+        sampled_toml_path = Path(cast(str, entry["sampled_toml_path"]))
+        assert sampled_toml_path.is_file()
+        assert Path(entry["scene_step_path"]).exists() is False
+        assert Path(entry["step_ledger_path"]).exists() is False
+        assert Path(entry["aedt_path"]).exists() is False
+
+        sampled_payload = tomllib.loads(sampled_toml_path.read_text(encoding="utf-8"))
+        sampled_metadata = cast(dict[str, object], sampled_payload["sampled"])
+        assert cast(list[str], sampled_metadata["sampled_owner_paths"]) == sampled_owner_paths
+        modeled_objects = cast(list[dict[str, object]], sampled_payload["modeled_objects"])
+        tx_rect_columns_object = next(
+            modeled_object
+            for modeled_object in modeled_objects
+            if modeled_object["object_id"] == "tx_rect_void_columns"
+        )
+        assert "turn_count_x0" not in tx_rect_columns_object
+        assert "turn_count_x1" not in tx_rect_columns_object
+        assert "turn_count_x2" not in tx_rect_columns_object
+        connection_mode_range = cast(
+            list[object],
+            cast(dict[str, object], tx_rect_columns_object["connection_mode"])["range"],
+        )
+        assert connection_mode_range[0] is True
+        assert connection_mode_range[3] == 1
+        assert connection_mode_range[1] == connection_mode_range[2]
+        sampled_connection_mode = cast(int, connection_mode_range[1])
+        assert sampled_connection_mode in {0, 1}
+        if sampled_connection_mode == 1:
+            assert series_owner_path in sampled_owner_paths
+            assert parallel_owner_path not in sampled_owner_paths
+        else:
+            assert series_owner_path not in sampled_owner_paths
+            assert parallel_owner_path in sampled_owner_paths
+
+        series_range = cast(
+            list[object],
+            cast(dict[str, object], tx_rect_columns_object["series_total_turn_count"])["range"],
+        )
+        parallel_range = cast(
+            list[object],
+            cast(dict[str, object], tx_rect_columns_object["parallel_equivalent_turn_count"])["range"],
+        )
+        assert series_range[3] == 1
+        assert series_range[1] == series_range[2]
+        assert parallel_range[3] == 1
+        assert parallel_range[1] == parallel_range[2]

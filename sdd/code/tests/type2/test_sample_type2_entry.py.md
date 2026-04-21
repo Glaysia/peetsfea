@@ -1,7 +1,7 @@
 ---
 title: test_sample_type2_entry.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-21 @ 12:00
+updated: 2026-04-21 @ 23:05
 tags:
   - tests
   - type2
@@ -22,11 +22,15 @@ tags:
 - sample entrypoint의 operator-facing progress/stage stdout contract를 검증한다.
 
 ## Canonical coverage
-- active example uses RX single-coil source only
-- active RX-only example keeps RX single-coil as the only modeled object and adds sampled non-model `tx_region_actual` X/Y usage, X/Y division owners, and `tx_region_actual_stack_space.scale_ratio`; `tx_region_actual_stack_space.tilt_enabled` remains fixed on.
-- tx-rect-void-columns role presence in active type2 sample tests is treated as rejection/removal coverage.
-- parser-side deactivation (`role is deactivated for active type2 inputs`) must fail before manifest/sampled TOML emission; tests assert that no `manifest.json` and no `sampled.toml` artifacts are written.
-- sampler-side owner resolution rejects the role as unsupported when parser validation is bypassed in unit-level fake-spec coverage.
+- active fixed example is a fixed realization of the sweep field surface
+- `examples/type2_sweep.toml` is the sample SSOT and includes parser/sampler-only `tx_rect_void_columns` variables.
+- active fixed example keeps the same RX/TX modeled field surface as sweep, with fixed single-candidate ranges.
+- tx-rect-void-columns role presence in active type2 sample tests is accepted on parser/sampler-only surface.
+- `make_step_on_sample=false` path emits `manifest.json` and sampled TOML entries for tx-columns source without invoking exporter.
+- tx-columns sampled owner list is mode-aware:
+  - sampled `connection_mode`, `turn_weight_a/b/c` owners are included.
+  - exactly one effective turn owner is included per sample (`series_total_turn_count` when mode 1, `parallel_equivalent_turn_count` when mode 0).
+  - legacy `turn_count_x*` owners remain absent from manifest metadata and sampled metadata.
 - sampled owner paths cover only `rx_rect_void_coil` effective sampled degrees:
   - `outer_x_usage_ratio`
   - `outer_y_usage_ratio`
@@ -44,5 +48,6 @@ tags:
 
 ## 변경 시 주의점
 - sampled owner assertions를 role-blind로 환원하지 않는다.
+- tx-columns sample-only coverage를 parser-deactivation failure assertion으로 되돌리지 않는다.
 - non-model owner freezing must update the `[[non_model_objects]]` table, not synthesize modeled placeholders.
 - stage-log assertions는 manifest JSON shape나 design identity contract를 대체하지 않는다.
