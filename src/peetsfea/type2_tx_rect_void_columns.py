@@ -870,7 +870,7 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
     *,
     spec: ModeledTxRectVoidColumnsSpec,
     stack_space_specs: tuple[NonModelBoxSpec, ...],
-    rx_center_x: float = 0.0,
+    rx_center_xyz: Point3,
     seed: int,
 ) -> TxRectVoidColumnsBuildResult:
     if len(stack_space_specs) == 0:
@@ -945,7 +945,7 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
     )
     resolved_turn_counts = resolve_tx_turns(
         stack_space_centers,
-        rx_center_x=rx_center_x,
+        rx_center_xyz=rx_center_xyz,
         connection_mode=connection_mode,
         relevant_turn_count=relevant_turn_count,
         turn_weight_a=turn_weight_a,

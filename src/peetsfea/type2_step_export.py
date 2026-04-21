@@ -530,11 +530,15 @@ def _build_tx_rect_void_columns_scene_data(
         resolved_non_model_specs,
         object_id="rx_region_max",
     )
-    rx_center_x = rx_region_max_spec.origin_xyz[0] + (rx_region_max_spec.size_xyz[0] * 0.5)
+    rx_center_xyz: tuple[float, float, float] = (
+        rx_region_max_spec.origin_xyz[0] + (rx_region_max_spec.size_xyz[0] * 0.5),
+        rx_region_max_spec.origin_xyz[1] + (rx_region_max_spec.size_xyz[1] * 0.5),
+        rx_region_max_spec.origin_xyz[2] + (rx_region_max_spec.size_xyz[2] * 0.5),
+    )
     build_result: TxRectVoidColumnsBuildResult = build_tx_rect_void_columns_axis_aligned_tile_scenes(
         spec=modeled_spec,
         stack_space_specs=stack_space_specs,
-        rx_center_x=rx_center_x,
+        rx_center_xyz=rx_center_xyz,
         seed=seed,
     )
     tile_terminal_anchors_by_stack_space: dict[str, TxRectVoidColumnsTileTerminalAnchors] = {}

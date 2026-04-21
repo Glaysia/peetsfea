@@ -1,7 +1,7 @@
 ---
 title: type2_step_export.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-21 @ 15:20
+updated: 2026-04-21 @ 21:08
 tags:
   - step-export
   - export
@@ -61,7 +61,8 @@ tags:
 - Full-scene export must carry resolved `tx_region_actual_stack_space` materialless tile members and apply deterministic tilt transforms shared with geometry-only TX column bodies.
 - Shared non-model tilt helpers and canonical shape extraction are imported from split scene helper modules, not private helpers on `type2_step_scene.py`.
 - `tx_rect_void_columns` now participates in active full-scene STEP geometry export as a geometry-only modeled role.
-- Full-scene modeled dispatch routes `tx_rect_void_columns` through `_build_tx_rect_void_columns_scene_data` and passes `rx_region_max` X-center for deterministic tilted stack-space allocation.
+- Full-scene modeled dispatch routes `tx_rect_void_columns` through `_build_tx_rect_void_columns_scene_data`, computes
+  `rx_center_xyz` from `rx_region_max`, and passes it through to the column builder for deterministic TX-plane 2D distance turn allocation.
 - Full-scene export preflight deactivation is removed for `tx_rect_void_columns`; direct `export_type2_tx_single_coil_artifact` continues to reject this role with the parser/sampler milestone message.
 - Internal modeled export-contract validation now checks `tx_rect_void_columns` using scene-metadata expected names/count and requires empty body groups for geometry-only phase.
 

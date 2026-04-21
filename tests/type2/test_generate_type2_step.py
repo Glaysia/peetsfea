@@ -23,6 +23,7 @@ from peetsfea.tx_rect_void import load_tx_rect_void_spec
 from peetsfea.tx_rect_void import modeled_body_bounds_from_boxes
 from peetsfea.tx_rect_void import profile_for_modeled_role
 from peetsfea.tx_rect_void import realize_tx_rect_void_spec
+from peetsfea.type2_non_model_scene import resolve_non_model_scene_specs
 from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_step_export import export_type2_tx_single_coil_artifact
 from peetsfea.type2_step_spec import ModeledPlateStackSpec
@@ -40,6 +41,7 @@ from peetsfea.type2_step_spec import resolve_modeled_underlay_gap_mm
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
 from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
 from tests.fixtures.legacy.type1_spec import TYPE1_OUTPUT_VARIABLES, type1_outputs_spec
+from peetsfea.type2_tx_rect_void_columns import build_tx_rect_void_columns_axis_aligned_tile_scenes
 
 _TX_UNDERLAY_FERRITE_THICKNESS_MM = 0.20
 _TX_UNDERLAY_PET_PSA_THICKNESS_MM = 0.15
@@ -2745,10 +2747,15 @@ def _export_tx_rect_void_columns_spec_and_expect_success(
     x_division_count: int,
     y_division_count: int,
     force_safe_turn_allocation: bool = False,
-) -> None:
+    turn_profile_overrides: dict[str, str] | None = None,
+) -> dict[str, object]:
     tmp_path.mkdir(parents=True, exist_ok=True)
     turn_profile_kwargs: dict[str, str] = {}
-    if force_safe_turn_allocation:
+    if turn_profile_overrides is not None:
+        if force_safe_turn_allocation:
+            raise RuntimeError("turn_profile_overrides and force_safe_turn_allocation are mutually exclusive")
+        turn_profile_kwargs = dict(turn_profile_overrides)
+    elif force_safe_turn_allocation:
         safe_turn_total = max(6, x_division_count * y_division_count)
         turn_profile_kwargs = {
             "connection_mode_range": "[true, 1, 1, 1]",
@@ -2801,6 +2808,7 @@ def _export_tx_rect_void_columns_spec_and_expect_success(
     scene_shapes_by_label = _step_shapes_by_label(scene_step_path)
     for body_name in expected_names:
         assert body_name in scene_shapes_by_label
+    return tx_entry
 
 
 @pytest.mark.parametrize(("x_division_count", "y_division_count"), ((1, 1), (2, 3), (3, 3)))
@@ -2844,6 +2852,80 @@ def test_export_type2_step_artifacts_tx_rect_void_columns_multicolumn_grid_varia
         y_division_count=2,
         force_safe_turn_allocation=True,
     )
+
+
+@pytest.mark.parametrize("x_division_count", (1, 2))
+def test_export_type2_step_artifacts_tx_rect_void_columns_keeps_y_symmetric_turn_counts(
+    tmp_path: Path,
+    x_division_count: int,
+) -> None:
+    y_division_count = 3
+    target_total_turn_count = (x_division_count * y_division_count) + 3
+    turn_profile_overrides = {
+        "connection_mode_range": "[true, 1, 1, 1]",
+        "series_total_turn_count_range": f"[true, {float(target_total_turn_count)}, {float(target_total_turn_count)}, 1]",
+        "parallel_total_turn_count_range": f"[true, {target_total_turn_count}, {target_total_turn_count}, 1]",
+        "turn_weight_a_range": "[false, 1.0, 1.0, 1]",
+        "turn_weight_b_range": "[false, 0.0, 0.0, 1]",
+        "turn_weight_c_range": "[false, 0.0, 0.0, 1]",
+    }
+    _export_tx_rect_void_columns_spec_and_expect_success(
+        tmp_path=tmp_path / "export",
+        x_division_count=x_division_count,
+        y_division_count=y_division_count,
+        turn_profile_overrides=turn_profile_overrides,
+    )
+
+    diag_dir = tmp_path / "diag"
+    diag_dir.mkdir()
+    toml_path = _write_spec(
+        diag_dir,
+        _type2_tx_rect_void_columns_spec_text(
+            tx_region_actual_x_division_count_range=f"[true, {x_division_count}, {x_division_count}, 1]",
+            tx_region_actual_y_division_count_range=f"[true, {y_division_count}, {y_division_count}, 1]",
+            **turn_profile_overrides,
+        ),
+    )
+    spec = load_type2_step_spec(toml_path)
+    tx_columns_spec = cast(
+        ModeledTxRectVoidColumnsSpec,
+        next(modeled for modeled in spec.modeled_objects if modeled.object_id == "tx_rect_void_columns"),
+    )
+    resolved_non_model_specs = resolve_non_model_scene_specs(
+        base_specs=spec.non_model_objects,
+        derived_specs=spec.non_model_derived_objects,
+        seed=0,
+    )
+    stack_space_specs = tuple(
+        non_model_spec
+        for non_model_spec in resolved_non_model_specs
+        if non_model_spec.kind == "tx_region_actual_stack_space"
+    )
+    assert len(stack_space_specs) == x_division_count * y_division_count
+    rx_region_max_spec = next(non_model_spec for non_model_spec in resolved_non_model_specs if non_model_spec.object_id == "rx_region_max")
+    rx_center_xyz = (
+        rx_region_max_spec.origin_xyz[0] + (rx_region_max_spec.size_xyz[0] * 0.5),
+        rx_region_max_spec.origin_xyz[1] + (rx_region_max_spec.size_xyz[1] * 0.5),
+        rx_region_max_spec.origin_xyz[2] + (rx_region_max_spec.size_xyz[2] * 0.5),
+    )
+    build_result = build_tx_rect_void_columns_axis_aligned_tile_scenes(
+        spec=tx_columns_spec,
+        stack_space_specs=stack_space_specs,
+        rx_center_xyz=rx_center_xyz,
+        seed=0,
+    )
+    _assert_tx_rect_void_columns_expected_body_contract(
+        expected_names=build_result.expected_exported_body_names,
+        x_division_count=x_division_count,
+        y_division_count=y_division_count,
+    )
+    turn_count_by_tile = {
+        (tile_scene.x_index, tile_scene.y_index): tile_scene.resolved_turn_count for tile_scene in build_result.tile_scenes
+    }
+    for x_index in range(x_division_count):
+        assert turn_count_by_tile[(x_index, 0)] == turn_count_by_tile[(x_index, 2)]
+    resolved_total_turn_count = sum(turn_count_by_tile.values())
+    assert resolved_total_turn_count >= target_total_turn_count
 
 
 @pytest.mark.parametrize("layer_count", (2, 3))

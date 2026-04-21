@@ -1,7 +1,7 @@
 ---
 title: type2_tx_rect_void_columns.py
 created: 2026-04-20 @ 23:55
-updated: 2026-04-21 @ 17:20
+updated: 2026-04-21 @ 21:08
 tags:
   - type2
   - tx
@@ -22,13 +22,14 @@ tags:
 - Build axis-aligned geometry-only `tx_rect_void_columns` tile coil bodies and terminal-anchor metadata from resolved stack-space members, resolving mode-aware per-tile turn counts from `connection_mode`, turn weights, and center-weighted contracts before export applies stack-space tilt transforms and appends the tile-level terminal stubs.
 
 ## Inputs / outputs
-- Inputs: `ModeledTxRectVoidColumnsSpec`, resolved `tx_region_actual_stack_space` `NonModelBoxSpec` members, `rx_center_x`, seed.
+- Inputs: `ModeledTxRectVoidColumnsSpec`, resolved `tx_region_actual_stack_space` `NonModelBoxSpec` members, explicit `rx_center_xyz`, seed.
 - Outputs: deterministic per-tile `bd.Shape` tuples, mode-aware per-tile resolved turn counts, `connection_mode`, exactly two deterministic tile-level terminal body names (`_stub_s`, `_stub_e`) per tile, per-layer terminal-anchor BoxSpec groups for start/end, and flattened deterministic expected body-name order.
 
 ## Canonical state
 - Uses `tx_region_actual_stack_space` concrete members as canonical per-tile owners.
 - Uses the full stack-space footprint as the rect/void coil outer envelope; there are no TX columns outer usage-ratio owners.
 - Uses a single shared tx_columns owner plus deterministic per-tile resolved turn allocation from `resolve_tx_turns` with `connection_mode`-aware owners.
+- Turn allocation uses normalized TX-plane 2D distance to the RX center projection from `rx_center_xyz`; equal-distance tiles must resolve to equal turn counts.
 - Uses a TX columns internal `SingleCoilProfile` with `max_turn_count = 36`, matching the public total-turn contract.
 - `connection_mode = 0` uses `parallel_total_turn_count`, `connection_mode = 1` uses `series_total_turn_count`.
 - Uses public total-turn owners directly in both modes; separate footprint-driven geometry-derived turn caps are removed.
@@ -47,7 +48,7 @@ tags:
 ## Invariants / fail-fast
 - Stack-space tile IDs must follow concrete `tx_region_actual_stack_space_x{X}_y{Y}` contract (or root singleton).
 - Realized X indices must be contiguous zero-based and in `[0, 2]`; resolved layer count must be in `[1, 4]`.
-- Resolved per-tile turns are bounded by the tx_rect_void_columns profile cap (36), while total-turn allocation contract is enforced against the caller's chosen total budget.
+- Resolved per-tile turns are bounded by the tx_rect_void_columns profile cap (36), while total-turn allocation treats the caller's chosen total as a target budget that may be exceeded to preserve equal-distance symmetry.
 - The resolved full layer stack height, including TX columns `layer_gap_mm`, must fit inside the owning stack-space height.
 - Body names are deterministic, globally unique, and length-capped for AEDT-friendly import.
 - No ferrite/underlay/stack/bus/port-sheet bodies are generated in this module; start/end terminal bodies are copper-only geometry and do not introduce cross-tile connection semantics.

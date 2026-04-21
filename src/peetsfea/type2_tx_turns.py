@@ -9,6 +9,7 @@ from typing import Literal
 TxConnectionMode = Literal[0, 1]
 Point3 = tuple[float, float, float]
 _UNBOUNDED_MAX_TURN_COUNT = 1_000_000_000
+_DISTANCE_GROUP_DECIMALS = 12
 
 
 def _validated_real(name: str, value: float) -> float:
@@ -18,6 +19,16 @@ def _validated_real(name: str, value: float) -> float:
     if not math.isfinite(numeric_value):
         raise ValueError(f"{name} must be finite (actual={value!r})")
     return numeric_value
+
+
+def _validated_point3(name: str, value: Sequence[float]) -> Point3:
+    if len(value) != 3:
+        raise ValueError(f"{name} must contain 3 values (actual={value!r})")
+    return (
+        _validated_real(f"{name}[0]", value[0]),
+        _validated_real(f"{name}[1]", value[1]),
+        _validated_real(f"{name}[2]", value[2]),
+    )
 
 
 def _validated_coil_centers(coil_centers_xyz: Sequence[Point3]) -> tuple[Point3, ...]:
@@ -34,31 +45,169 @@ def _validated_coil_centers(coil_centers_xyz: Sequence[Point3]) -> tuple[Point3,
     return tuple(centers)
 
 
-def normalized_x_distances(coil_centers_xyz: Sequence[Point3], *, rx_center_x: float) -> tuple[float, ...]:
-    """Return normalized |x - rx_center_x| distances preserving input coil order."""
+def normalized_tx_plane_distances(coil_centers_xyz: Sequence[Point3], *, rx_center_xyz: Sequence[float]) -> tuple[float, ...]:
+    """Return normalized TX-plane (XY) distances preserving input coil order."""
     centers = _validated_coil_centers(coil_centers_xyz)
-    rx_x = _validated_real("rx_center_x", rx_center_x)
-    distances = tuple(abs(center[0] - rx_x) for center in centers)
+    rx_center = _validated_point3("rx_center_xyz", rx_center_xyz)
+    distances = tuple(math.hypot(center[0] - rx_center[0], center[1] - rx_center[1]) for center in centers)
     max_distance = max(distances)
     if max_distance == 0.0:
         return tuple(0.0 for _ in centers)
     return tuple(distance / max_distance for distance in distances)
 
 
+def _distance_group_key(distance: float) -> float:
+    return round(distance, _DISTANCE_GROUP_DECIMALS)
+
+
+def _group_indices_by_distance(distances: tuple[float, ...]) -> tuple[tuple[float, tuple[int, ...]], ...]:
+    grouped: dict[float, list[int]] = {}
+    for index, distance in enumerate(distances):
+        group_key = _distance_group_key(distance)
+        if group_key in grouped:
+            grouped[group_key].append(index)
+        else:
+            grouped[group_key] = [index]
+    grouped_items = sorted(grouped.items(), key=lambda item: (item[0], item[1][0]))
+    return tuple((distance, tuple(indices)) for distance, indices in grouped_items)
+
+
+def _allocate_turns(
+    *,
+    coil_count: int,
+    distances: tuple[float, ...],
+    weights: tuple[float, ...],
+    target_turn_count: int,
+    base_turn_count: int,
+    max_turn_count: int,
+) -> tuple[int, ...]:
+    if len(distances) != coil_count:
+        raise RuntimeError(f"distance length mismatch (coil_count={coil_count}, distances={len(distances)})")
+    if len(weights) != coil_count:
+        raise RuntimeError(f"weights length mismatch (coil_count={coil_count}, weights={len(weights)})")
+    if target_turn_count < coil_count:
+        raise RuntimeError(
+            f"target_turn_count must be >= coil_count (target_turn_count={target_turn_count}, coil_count={coil_count})"
+        )
+
+    turns = [base_turn_count] * coil_count
+    target_extra_turns = target_turn_count - coil_count
+    if target_extra_turns == 0:
+        return tuple(turns)
+
+    group_definitions = _group_indices_by_distance(distances)
+    group_count = len(group_definitions)
+    assert group_count >= 1
+
+    group_distances: list[float] = []
+    group_indices: list[tuple[int, ...]] = []
+    group_sizes: list[int] = []
+    group_weight_totals: list[float] = []
+    for distance, indices in group_definitions:
+        group_distances.append(distance)
+        group_indices.append(indices)
+        group_sizes.append(len(indices))
+        group_weight = weights[indices[0]] * float(len(indices))
+        group_weight_totals.append(group_weight)
+
+    total_weight = sum(group_weight_totals)
+    if total_weight <= 0.0:
+        raise ValueError("sum(turn_weights) must be > 0 for any valid allocation")
+
+    exact_group_extra_totals = tuple(
+        (target_extra_turns * (group_weight / total_weight)) for group_weight in group_weight_totals
+    )
+    base_group_extra = tuple(
+        int(math.floor(value / float(group_size)))
+        for value, group_size in zip(exact_group_extra_totals, group_sizes, strict=True)
+    )
+    next_increment_errors = tuple(
+        (float(base_value + 1) * float(group_size)) - exact_value
+        for exact_value, base_value, group_size in zip(
+            exact_group_extra_totals,
+            base_group_extra,
+            group_sizes,
+            strict=True,
+        )
+    )
+
+    turns_added_by_group = 0
+    for group_index, extra in enumerate(base_group_extra):
+        assigned_turn = base_turn_count + extra
+        if assigned_turn > max_turn_count:
+            raise ValueError(
+                "distance group allocation exceeds geometry turn cap "
+                f"(group_index={group_index}, distance={group_distances[group_index]}, "
+                f"turns={assigned_turn}, max_turn_count={max_turn_count})"
+            )
+        turns_added_by_group += extra * group_sizes[group_index]
+        for index in group_indices[group_index]:
+            turns[index] = assigned_turn
+
+    remaining_turns = target_extra_turns - turns_added_by_group
+    if remaining_turns <= 0:
+        return tuple(turns)
+
+    order = sorted(
+        range(group_count),
+        key=lambda index: (
+            next_increment_errors[index],
+            -group_weight_totals[index],
+            group_distances[index],
+            group_indices[index][0],
+        ),
+    )
+    while remaining_turns > 0:
+        made_progress = False
+        for group_index in order:
+            indices = group_indices[group_index]
+            next_turn = turns[indices[0]] + 1
+            if next_turn > max_turn_count:
+                continue
+            made_progress = True
+            for index in indices:
+                turns[index] = next_turn
+            remaining_turns -= group_sizes[group_index]
+            if remaining_turns <= 0:
+                break
+        if not made_progress:
+            raise ValueError(
+                "cannot satisfy target_turn_count without cap overflow "
+                f"(target_turn_count={target_turn_count}, max_turn_count={max_turn_count})"
+            )
+
+    total_allocated = sum(turns)
+    if total_allocated < target_turn_count:
+        raise RuntimeError(
+            "turn allocation underflow "
+            f"(sum={total_allocated}, target_turn_count={target_turn_count})"
+        )
+    for coil_index, turn_count in enumerate(turns):
+        if turn_count > max_turn_count:
+            raise ValueError(
+                "distance-group allocation exceeds per-coil max_turn_count "
+                f"(coil_index={coil_index}, turns={turn_count}, max_turn_count={max_turn_count})"
+            )
+    return tuple(turns)
+
+
 def turn_weights(
     coil_centers_xyz: Sequence[Point3],
     *,
-    rx_center_x: float,
+    rx_center_xyz: Sequence[float],
     a: float,
     b: float,
     c: float,
 ) -> tuple[float, ...]:
-    """Return polynomial weights w_i = a + b*x_i + c*x_i^2 for normalized |x|."""
+    """Return polynomial weights w_i = a + b*d_i + c*d_i^2 for normalized TX-plane distance."""
     coeff_a = _validated_real("turn_weight_a", a)
     coeff_b = _validated_real("turn_weight_b", b)
     coeff_c = _validated_real("turn_weight_c", c)
-    x_values = normalized_x_distances(coil_centers_xyz, rx_center_x=rx_center_x)
-    weights = tuple(coeff_a + (coeff_b * x_value) + (coeff_c * x_value * x_value) for x_value in x_values)
+    distance_values = normalized_tx_plane_distances(coil_centers_xyz, rx_center_xyz=rx_center_xyz)
+    for value in distance_values:
+        if value < 0.0:
+            raise ValueError("normalized TX-plane distances must be non-negative")
+    weights = tuple(coeff_a + (coeff_b * x_value) + (coeff_c * x_value * x_value) for x_value in distance_values)
     for index, weight in enumerate(weights):
         if not (weight > 0.0):
             raise ValueError(
@@ -71,14 +220,14 @@ def turn_weights(
 def allocate_series_turns(
     coil_centers_xyz: Sequence[Point3],
     *,
-    rx_center_x: float,
+    rx_center_xyz: Sequence[float],
     series_total_turn_count: int,
     turn_weight_a: float,
     turn_weight_b: float,
     turn_weight_c: float,
     max_turn_count: int = _UNBOUNDED_MAX_TURN_COUNT,
 ) -> tuple[int, ...]:
-    """Allocate series turns with one-turn seed then largest-remainder fill."""
+    """Allocate series turns with distance-group allocation."""
     if isinstance(series_total_turn_count, bool) or not isinstance(series_total_turn_count, int):
         raise ValueError(
             "series_total_turn_count must be an integer "
@@ -91,9 +240,10 @@ def allocate_series_turns(
     if max_turn_count < 1:
         raise ValueError(f"max_turn_count must be >= 1 (actual={max_turn_count})")
 
+    distances = normalized_tx_plane_distances(coil_centers_xyz, rx_center_xyz=rx_center_xyz)
     weights = turn_weights(
         coil_centers_xyz,
-        rx_center_x=rx_center_x,
+        rx_center_xyz=rx_center_xyz,
         a=turn_weight_a,
         b=turn_weight_b,
         c=turn_weight_c,
@@ -110,44 +260,27 @@ def allocate_series_turns(
             f"(series_total_turn_count={series_total_turn_count}, coil_count={coil_count}, max_turn_count={max_turn_count})"
         )
 
-    base_turns = [1] * coil_count
-    remaining_turns = series_total_turn_count - coil_count
-    if remaining_turns == 0:
-        return tuple(base_turns)
-
-    total_weight = float(sum(weights))
-    exact_extra = tuple((remaining_turns * (weight / total_weight)) for weight in weights)
-    floored_extra = [int(math.floor(value)) for value in exact_extra]
-    remainders = tuple(value - float(floor_value) for value, floor_value in zip(exact_extra, floored_extra, strict=True))
-    floored_sum = sum(floored_extra)
-    if floored_sum > remaining_turns:
-        raise RuntimeError(
-            "series largest-remainder allocation overflow "
-            f"(floored_sum={floored_sum}, remaining_turns={remaining_turns})"
-        )
-    undistributed = remaining_turns - floored_sum
-    order = sorted(
-        range(coil_count),
-        key=lambda index: (-remainders[index], -weights[index], index),
+    return _allocate_turns(
+        coil_count=coil_count,
+        distances=distances,
+        weights=weights,
+        target_turn_count=series_total_turn_count,
+        base_turn_count=1,
+        max_turn_count=max_turn_count,
     )
-    for rank in range(undistributed):
-        base_turns[order[rank]] += 1
-    for index in range(coil_count):
-        base_turns[index] += floored_extra[index]
-    return tuple(base_turns)
 
 
 def allocate_parallel_turns(
     coil_centers_xyz: Sequence[Point3],
     *,
-    rx_center_x: float,
+    rx_center_xyz: Sequence[float],
     parallel_total_turn_count: float,
     turn_weight_a: float,
     turn_weight_b: float,
     turn_weight_c: float,
     max_turn_count: int = _UNBOUNDED_MAX_TURN_COUNT,
 ) -> tuple[int, ...]:
-    """Allocate parallel turns with one-turn seed then largest-remainder fill."""
+    """Allocate parallel turns with distance-group allocation."""
     if isinstance(parallel_total_turn_count, bool) or not isinstance(parallel_total_turn_count, int | float):
         raise ValueError(
             "parallel_total_turn_count must be a real number "
@@ -172,9 +305,10 @@ def allocate_parallel_turns(
     if max_turn_count < 1:
         raise ValueError(f"max_turn_count must be >= 1 (actual={max_turn_count})")
 
+    distances = normalized_tx_plane_distances(coil_centers_xyz, rx_center_xyz=rx_center_xyz)
     weights = turn_weights(
         coil_centers_xyz,
-        rx_center_x=rx_center_x,
+        rx_center_xyz=rx_center_xyz,
         a=turn_weight_a,
         b=turn_weight_b,
         c=turn_weight_c,
@@ -192,53 +326,20 @@ def allocate_parallel_turns(
             f"max_turn_count={max_turn_count})"
         )
 
-    turns = [1] * coil_count
-    remaining_turn_count = parallel_total_turn_count_i - coil_count
-    if remaining_turn_count == 0:
-        return tuple(turns)
-
-    total_weight = float(sum(weights))
-    exact_extra_turns = tuple((remaining_turn_count * (weight / total_weight)) for weight in weights)
-    base_extra_turns = [int(math.floor(value)) for value in exact_extra_turns]
-    remainders = tuple(
-        value - float(floor_value) for value, floor_value in zip(exact_extra_turns, base_extra_turns, strict=True)
+    return _allocate_turns(
+        coil_count=coil_count,
+        distances=distances,
+        weights=weights,
+        target_turn_count=parallel_total_turn_count_i,
+        base_turn_count=1,
+        max_turn_count=max_turn_count,
     )
-    base_sum = sum(base_extra_turns)
-    for index, base_extra_turn in enumerate(base_extra_turns):
-        turns[index] += base_extra_turn
-    if base_sum > remaining_turn_count:
-        raise RuntimeError(
-            "parallel largest-remainder allocation overflow "
-            f"(base_sum={base_sum}, remaining_turns={remaining_turn_count})"
-        )
-    undistributed_turns = remaining_turn_count - base_sum
-    order = sorted(
-        range(coil_count),
-        key=lambda index: (-remainders[index], -weights[index], index),
-    )
-    for rank in range(undistributed_turns):
-        target_index = order[rank]
-        turns[target_index] += 1
-
-    total_allocated = sum(turns)
-    if total_allocated != parallel_total_turn_count_i:
-        raise RuntimeError(
-            "parallel allocation sum mismatch "
-            f"(sum={total_allocated}, expected={parallel_total_turn_count_i})"
-        )
-    for index, turns_count in enumerate(turns):
-        if turns_count > max_turn_count:
-            raise ValueError(
-                "parallel_total_turn_count allocation exceeds per-coil max_turn_count "
-                f"(coil_index={index}, turns={turns_count}, max_turn_count={max_turn_count})"
-            )
-    return tuple(turns)
 
 
 def resolve_tx_turns(
     coil_centers_xyz: Sequence[Point3],
     *,
-    rx_center_x: float,
+    rx_center_xyz: Sequence[float],
     connection_mode: TxConnectionMode,
     relevant_turn_count: float,
     turn_weight_a: float,
@@ -250,7 +351,7 @@ def resolve_tx_turns(
     if connection_mode == 0:
         return allocate_parallel_turns(
             coil_centers_xyz,
-            rx_center_x=rx_center_x,
+            rx_center_xyz=rx_center_xyz,
             parallel_total_turn_count=relevant_turn_count,
             turn_weight_a=turn_weight_a,
             turn_weight_b=turn_weight_b,
@@ -267,7 +368,7 @@ def resolve_tx_turns(
             )
         return allocate_series_turns(
             coil_centers_xyz,
-            rx_center_x=rx_center_x,
+            rx_center_xyz=rx_center_xyz,
             series_total_turn_count=int(rounded_turn_count),
             turn_weight_a=turn_weight_a,
             turn_weight_b=turn_weight_b,
