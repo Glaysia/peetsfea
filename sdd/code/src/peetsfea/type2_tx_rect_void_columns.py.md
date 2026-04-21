@@ -1,7 +1,7 @@
 ---
 title: type2_tx_rect_void_columns.py
 created: 2026-04-20 @ 23:55
-updated: 2026-04-20 @ 23:55
+updated: 2026-04-21 @ 17:20
 tags:
   - type2
   - tx
@@ -16,6 +16,7 @@ tags:
 - Code note path: `sdd/code/src/peetsfea/type2_tx_rect_void_columns.py.md`
 - Status: active
 - Primary plan: [[sdd/plans/0.2.22-type2-tx-rect-void-columns-geometry]]
+- Performance plan: [[sdd/plans/0.2.23-rect-void-fast-face-export]]
 
 ## Single responsibility
 - Build axis-aligned geometry-only `tx_rect_void_columns` tile coil bodies and terminal-anchor metadata from resolved stack-space members, resolving mode-aware per-tile turn counts from `connection_mode`, turn weights, and center-weighted contracts before export applies stack-space tilt transforms and appends the tile-level terminal stubs.
@@ -32,6 +33,7 @@ tags:
 - `connection_mode = 0` uses `parallel_total_turn_count`, `connection_mode = 1` uses `series_total_turn_count`.
 - Uses public total-turn owners directly in both modes; separate footprint-driven geometry-derived turn caps are removed.
 - Resolves `layer_count` and `layer_gap_mm` as a deterministic feasible pair constrained by the concrete stack-space height.
+- Fast export scales/translates the local segment-face footprint and terminal-stub BoxSpec anchors first, then creates one base-layer copper/PCB solid pair directly (without `build_tx_rect_void_step_scene`) and replicates it by Z-shift for multilayer tiles.
 - Produces exactly one PCB and one copper coil body per realized X/Y layer, then one tile-level start terminal body and one tile-level end terminal body per realized X/Y tile (total `layer_count * 2 + 2`).
 - Uses the TX columns `layer_gap_mm` only for geometry-only layer placement. The reusable rect/void core is called in single-layer mode with a core-compatible gap when needed, so the core's multilayer connection constraint does not define TX columns spacing.
 - Uses `terminal_stub_length_mm` as the requested floorward stub length. Multilayer start/end terminal anchors are grouped by terminal so export can create one parallel collector plus floorward stub body per terminal.
@@ -49,6 +51,7 @@ tags:
 - The resolved full layer stack height, including TX columns `layer_gap_mm`, must fit inside the owning stack-space height.
 - Body names are deterministic, globally unique, and length-capped for AEDT-friendly import.
 - No ferrite/underlay/stack/bus/port-sheet bodies are generated in this module; start/end terminal bodies are copper-only geometry and do not introduce cross-tile connection semantics.
+- Fast geometry path does not pre-build any build123d scene for bounds/anchors; bounds/anchors come from scaled/translated `BoxSpec` state, and base solids come from 2D segment-face union extrusion + cut/fuse.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_step_spec.py]]

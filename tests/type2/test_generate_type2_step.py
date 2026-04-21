@@ -2398,8 +2398,14 @@ def test_export_type2_step_artifacts_supports_tx_rect_void_columns_modeled_role(
             if cast(dict[str, object], entry)["object_id"] == "tx_rect_void_columns"
         ),
     )
+    expected_names = cast(tuple[str, ...], tx_entry["expected_exported_body_names"])
+    _assert_tx_rect_void_columns_expected_body_contract(
+        expected_names=expected_names,
+        x_division_count=1,
+        y_division_count=1,
+    )
     assert cast(int, tx_entry["expected_exported_body_count"]) == len(
-        cast(tuple[str, ...], tx_entry["expected_exported_body_names"])
+        expected_names
     )
     assert cast(int, tx_entry["expected_exported_body_count"]) > 0
     terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
@@ -2666,6 +2672,73 @@ def test_export_type2_step_artifacts_tilts_only_tx_region_actual_stack_space_tow
         assert stack_space_canonical_max_xyz[2] <= tile_top_z + 1e-8
 
 
+def _assert_tx_rect_void_columns_expected_body_contract(
+    *,
+    expected_names: tuple[str, ...],
+    x_division_count: int,
+    y_division_count: int,
+) -> None:
+    tile_indices = {
+        (x_index, y_index)
+        for x_index in range(x_division_count)
+        for y_index in range(y_division_count)
+    }
+    pcb_pattern = re.compile(r"^txrvc_x(\d+)_y(\d+)_pcb_l(\d+)$")
+    copper_pattern = re.compile(r"^txrvc_x(\d+)_y(\d+)_cu_l(\d+)$")
+    stub_pattern = re.compile(r"^txrvc_x(\d+)_y(\d+)_stub_(start|end|s|e)$")
+    pcb_layers_by_tile: dict[tuple[int, int], set[int]] = {}
+    copper_layers_by_tile: dict[tuple[int, int], set[int]] = {}
+    stub_hints_by_tile: dict[tuple[int, int], set[str]] = {}
+    body_count_by_tile: dict[tuple[int, int], int] = {}
+
+    for body_name in expected_names:
+        pcb_match = pcb_pattern.match(body_name)
+        if pcb_match is not None:
+            tile_index = (int(pcb_match.group(1)), int(pcb_match.group(2)))
+            layer_index = int(pcb_match.group(3))
+            assert tile_index in tile_indices
+            pcb_layers_by_tile.setdefault(tile_index, set()).add(layer_index)
+            body_count_by_tile[tile_index] = body_count_by_tile.get(tile_index, 0) + 1
+            continue
+        copper_match = copper_pattern.match(body_name)
+        if copper_match is not None:
+            tile_index = (int(copper_match.group(1)), int(copper_match.group(2)))
+            layer_index = int(copper_match.group(3))
+            assert tile_index in tile_indices
+            copper_layers_by_tile.setdefault(tile_index, set()).add(layer_index)
+            body_count_by_tile[tile_index] = body_count_by_tile.get(tile_index, 0) + 1
+            continue
+        stub_match = stub_pattern.match(body_name)
+        if stub_match is not None:
+            tile_index = (int(stub_match.group(1)), int(stub_match.group(2)))
+            terminal_hint_raw = stub_match.group(3)
+            terminal_hint = "start" if terminal_hint_raw in ("start", "s") else "end"
+            assert tile_index in tile_indices
+            stub_hints_by_tile.setdefault(tile_index, set()).add(terminal_hint)
+            body_count_by_tile[tile_index] = body_count_by_tile.get(tile_index, 0) + 1
+            continue
+        raise AssertionError(f"unexpected tx_rect_void_columns body label contract drift: {body_name}")
+
+    assert set(pcb_layers_by_tile) == tile_indices
+    assert set(copper_layers_by_tile) == tile_indices
+    assert set(stub_hints_by_tile) == tile_indices
+
+    expected_total_count = 0
+    for tile_index in tile_indices:
+        pcb_layers = pcb_layers_by_tile[tile_index]
+        copper_layers = copper_layers_by_tile[tile_index]
+        stub_hints = stub_hints_by_tile[tile_index]
+        assert pcb_layers == copper_layers
+        assert len(pcb_layers) > 0
+        assert stub_hints == {"start", "end"}
+        tile_expected_count = (len(pcb_layers) * 2) + 2
+        assert body_count_by_tile[tile_index] == tile_expected_count
+        expected_total_count += tile_expected_count
+    assert len(expected_names) == expected_total_count
+
+
+# Manual performance probe only (excluded from default pytest):
+# cd run && ../.venv/bin/python -m pytest ../tests/type2/test_generate_type2_step.py -k "tx_rect_void_columns_grid_variants" --durations=10 -q
 def _export_tx_rect_void_columns_spec_and_expect_success(
     *,
     tmp_path: Path,
@@ -2676,10 +2749,11 @@ def _export_tx_rect_void_columns_spec_and_expect_success(
     tmp_path.mkdir(parents=True, exist_ok=True)
     turn_profile_kwargs: dict[str, str] = {}
     if force_safe_turn_allocation:
+        safe_turn_total = max(6, x_division_count * y_division_count)
         turn_profile_kwargs = {
             "connection_mode_range": "[true, 1, 1, 1]",
-            "series_total_turn_count_range": "[true, 6.0, 6.0, 1]",
-            "parallel_total_turn_count_range": "[true, 6, 6, 1]",
+            "series_total_turn_count_range": f"[true, {float(safe_turn_total)}, {float(safe_turn_total)}, 1]",
+            "parallel_total_turn_count_range": f"[true, {safe_turn_total}, {safe_turn_total}, 1]",
             "turn_weight_a_range": "[false, 1.0, 1.0, 1]",
             "turn_weight_b_range": "[false, 0.0, 0.0, 1]",
             "turn_weight_c_range": "[false, -0.3, 0.3, 21]",
@@ -2710,8 +2784,14 @@ def _export_tx_rect_void_columns_spec_and_expect_success(
             if cast(dict[str, object], entry)["object_id"] == "tx_rect_void_columns"
         ),
     )
+    expected_names = cast(tuple[str, ...], tx_entry["expected_exported_body_names"])
+    _assert_tx_rect_void_columns_expected_body_contract(
+        expected_names=expected_names,
+        x_division_count=x_division_count,
+        y_division_count=y_division_count,
+    )
     assert cast(int, tx_entry["expected_exported_body_count"]) == len(
-        cast(tuple[str, ...], tx_entry["expected_exported_body_names"])
+        expected_names
     )
     assert cast(int, tx_entry["expected_exported_body_count"]) > 0
     terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
@@ -2719,11 +2799,11 @@ def _export_tx_rect_void_columns_spec_and_expect_success(
     modeled_metadata_path = output_dir / "metadata" / "tx_rect_void_columns.metadata.json"
     assert modeled_metadata_path.is_file()
     scene_shapes_by_label = _step_shapes_by_label(scene_step_path)
-    for body_name in cast(tuple[str, ...], tx_entry["expected_exported_body_names"]):
+    for body_name in expected_names:
         assert body_name in scene_shapes_by_label
 
 
-@pytest.mark.parametrize(("x_division_count", "y_division_count"), ((1, 1), (2, 3), (3, 2)))
+@pytest.mark.parametrize(("x_division_count", "y_division_count"), ((1, 1), (2, 3), (3, 3)))
 def test_export_type2_step_artifacts_tx_rect_void_columns_grid_variants(
     tmp_path: Path,
     x_division_count: int,

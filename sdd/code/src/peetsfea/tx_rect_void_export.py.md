@@ -1,7 +1,7 @@
 ---
 title: tx_rect_void_export.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-21 @ 17:35
 tags:
   - tx-rect-void
   - step-export
@@ -14,19 +14,22 @@ tags:
 - Code note path: `sdd/code/src/peetsfea/tx_rect_void_export.py.md`
 - Status: planned split target; source file is not created yet.
 - Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
-- Related feature plan: [[sdd/plans/0.2.22-type2-tx-underlay-mull12060ferrite]]
+- Related feature plan: [[sdd/plans/0.2.22-type2-tx-underlay-mull12060ferrite]], [[sdd/plans/0.2.23-rect-void-fast-face-export]]
 - Parent note: [[sdd/code/src/peetsfea/tx_rect_void.py]]
 
 ## 역할
-- copper primitive assembly, box decomposition, STEP scene generation, metadata writing, export orchestration을 담당한다.
+- copper footprint assembly, debug box decomposition, STEP scene generation, metadata writing, export orchestration을 담당한다.
 
 ## 입력 / 출력
 - 입력: realized single-coil state, centerline, placement offset, output paths, role profile.
 - 출력: `build_tx_rect_void_box_specs()`, `build_tx_rect_void_step_scene()`, `export_tx_rect_void_step_from_spec()`, metadata payload.
 
 ## Canonical state
-- canonical geometry owner는 validated copper primitive set과 exported body set이다.
+- canonical geometry owner는 validated 2D copper footprint/face와 exported body set이다.
 - debug `BoxSpec`은 derived decomposition이며 live geometry owner가 아니다.
+- segment-level `CopperPrimitive` remains available for debug/metadata validation, but fast STEP scene generation must not extrude and fuse one solid per planar segment.
+- fast scene planar copper owner is a fused 2D footprint face (segment-face union) extruded exactly once per layer; per-segment primitives are not extruded in scene export.
+- layer planar copper in fast scene export is built by a fused 2D segment-face footprint extruded once; terminal stubs and TX buses are fused on top of that base solid.
 - exported PCB body는 debug `BoxSpec` box를 그대로 쓰지 않고, corresponding exported copper body로 boolean cut된 solid다.
 - core `tx_rect_void` export owns PCB/copper bodies only. Port-sheet geometry leaves this layer as metadata vertices, not as STEP face bodies.
 - explicit TX underlay solids are not owned here either; they belong to the type2 scene/export wrapper layer above this module.
@@ -46,6 +49,9 @@ tags:
 - RX `rx_single_coil` terminal stubs stay within the modeled PCB+copper stack thickness so type2 can use the remaining `rx_region_max` X span as full backing material. TX terminal stubs keep the legacy below-PCB extension.
 - when the resolved owner pair does not expose exactly one `start` owner and one `end` owner, two valid bottom-face squares, a shared bottom-face plane, distinct owner centers, or two non-degenerate widened diagonals, export must raise immediately with owner context.
 - polygon-to-face conversion must produce exactly one wire before build123d face construction; ambiguous or empty builder output is a hard geometry failure.
+- trace footprint face union must resolve to one face/outer wire; multi-result face fuse is a hard geometry failure.
+- TX multilayer stack construction fuses bus solids first, then layer copper solids, so non-touching layer fuses cannot produce intermediate `ShapeList` dead-ends.
+- per-layer planar primitives must share one `origin_z` and one `size_z`; mixed-Z planar segments are hard failures.
 
 ## 직접 의존
 - [[sdd/code/src/peetsfea/tx_rect_void_types.py]]

@@ -2,253 +2,112 @@ from __future__ import annotations
 
 import hashlib
 import math
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, TypedDict, cast
+from typing import Literal, cast
 import tomllib
 
 from peetsfea.spec.outputs import parse_outputs_table
-from peetsfea.types.manifest import OutputsSpec
-
-Point3 = tuple[float, float, float]
-
-
-ModeledSingleCoilRole = Literal["tx_single_coil", "rx_single_coil"]
-ModeledPlateStackRole = Literal["tx_plate_stack", "rx_plate_stack"]
-ModeledObjectRole = Literal[
-    "tx_single_coil",
-    "rx_single_coil",
-    "tx_rect_void_columns",
-    "tx_plate_stack",
-    "rx_plate_stack",
-]
-_UNDERLAY_REPEAT_COUNT_CANDIDATES = (0, 2, 4, 6, 8)
-_TX_UNDERLAY_GAP_MM_CANDIDATES = (1.0, 4.0, 7.0, 10.0)
-_TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES = (0, 1)
-_TX_PLATE_STACK_COIL_COUNT_CANDIDATES = (1, 2, 3, 4)
-_TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_START = 0.1
-_TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_END = 0.6
-_TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_COUNT = 14
-_TX_REGION_ACTUAL_USAGE_RATIO_START = 0.3
-_TX_REGION_ACTUAL_USAGE_RATIO_END = 1.0
-_TX_REGION_ACTUAL_USAGE_RATIO_COUNT = 27
-_TX_REGION_ACTUAL_DIVISION_COUNT_START = 1
-_TX_REGION_ACTUAL_DIVISION_COUNT_END = 3
-_TX_REGION_ACTUAL_DIVISION_COUNT_COUNT = 3
-_TX_REGION_ACTUAL_DIVISION_COUNT_VALUES = (1, 2, 3)
-_TX_REGION_ACTUAL_STACK_SPACE_TILT_ENABLED_VALUE = 1
-_TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_START = 0.35
-_TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_END = 0.95
-_TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_COUNT = 25
-_TX_REGION_ACTUAL_STACK_SPACE_TOTAL_THICKNESS_MM = 5.0
-_TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_START = 1
-_TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_END = 4
-_TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_COUNT = 4
-_TX_RECT_VOID_COLUMNS_LAYER_COUNT_ALLOWED = (1, 2, 3, 4)
-_TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_START = 1.0
-_TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_END = 1.8
-_TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_COUNT = 5
-_TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_START = 10.0
-_TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_END = 10.0
-_TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_COUNT = 1
-_TX_RECT_VOID_COLUMNS_CONNECTION_MODE_EXPECTED = (0, 1)
-_TX_RECT_VOID_COLUMNS_CONNECTION_MODE_RANGE = (0, 1, 2)
-_TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_START = 1
-_TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_END = 36
-_TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_COUNT = 36
-_TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_START = 1
-_TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_END = 36
-_TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_COUNT = 36
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_START = 0.5
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_END = 1.5
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_COUNT = 5
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_START = -0.5
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_END = 0.5
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_COUNT = 21
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_START = -0.3
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_END = 0.3
-_TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_COUNT = 21
-_TYPE2_SCHEMA_ID = "peetsfea.type2.step.v8"
-
-
-@dataclass(frozen=True)
-class RangeSpec:
-    is_integer: bool
-    start: float
-    end: float
-    count: int
-
-
-@dataclass(frozen=True)
-class NonModelBoxSpec:
-    object_id: str
-    kind: str
-    primitive: Literal["box"]
-    present: Literal[True]
-    non_model: Literal[True]
-    material: str
-    plane: Literal["XY", "YZ", "ZX"]
-    origin_xyz: Point3
-    size_xyz: Point3
-
-
-@dataclass(frozen=True)
-class NonModelTxRegionActualSpec:
-    object_id: Literal["tx_region_actual"]
-    kind: Literal["tx_region_actual"]
-    source_region_id: Literal["tx_region"]
-    x_usage_ratio: RangeSpec
-    y_usage_ratio: RangeSpec
-    x_division_count: RangeSpec
-    y_division_count: RangeSpec
-
-
-@dataclass(frozen=True)
-class NonModelTxRegionActualStackSpaceSpec:
-    object_id: Literal["tx_region_actual_stack_space"]
-    kind: Literal["tx_region_actual_stack_space"]
-    source_region_id: Literal["tx_region_actual"]
-    total_thickness_mm: float
-    tilt_enabled: RangeSpec
-    scale_ratio: RangeSpec
-
-
-NonModelDerivedSpec = NonModelTxRegionActualSpec | NonModelTxRegionActualStackSpaceSpec
-
-
-@dataclass(frozen=True)
-class Type2SimulationPolicy:
-    radiation_margin_mm: float
-
-
-Type2ConstraintComparisonOperator = Literal["<", "<=", ">", ">=", "=="]
-
-
-class Type2ConstraintPathRef(TypedDict):
-    path: str
-
-
-class Type2ConstraintValueRef(TypedDict):
-    value: str | float
-
-
-class Type2ConstraintFuncRef(TypedDict):
-    func: str
-
-
-Type2ConstraintComparableRef = Type2ConstraintPathRef | Type2ConstraintFuncRef
-Type2ConstraintOperandRef = Type2ConstraintPathRef | Type2ConstraintValueRef | Type2ConstraintFuncRef
-
-
-@dataclass(frozen=True)
-class Type2ConstraintRule:
-    id: str
-    message: str
-    enabled: bool
-    lhs: Type2ConstraintComparableRef
-    op: Type2ConstraintComparisonOperator
-    rhs: Type2ConstraintOperandRef
-
-
-@dataclass(frozen=True)
-class ModeledSingleCoilCommonSpec:
-    object_id: str
-    role: ModeledSingleCoilRole
-    material: str
-    model_state: Literal[True]
-    pcb_thickness_mm: float
-    copper_thickness_mm: float
-    outer_x_usage_ratio: RangeSpec
-    outer_y_usage_ratio: RangeSpec
-    outer_x_mm: RangeSpec
-    outer_y_mm: RangeSpec
-    turn_count: RangeSpec
-    layer_count: RangeSpec
-    underlay_repeat_count: RangeSpec
-    layer_gap_mm: RangeSpec
-    terminal_stub_length_mm: RangeSpec
-    void_usage_ratio: RangeSpec
-    margin_ratio: RangeSpec
-    metal_fill_factor: RangeSpec
-    terminal_path: str
-
-
-@dataclass(frozen=True)
-class ModeledTxSingleCoilSpec(ModeledSingleCoilCommonSpec):
-    role: Literal["tx_single_coil"]
-    underlay_gap_mm: RangeSpec
-    wall_parallel_stack_present: RangeSpec
-
-
-@dataclass(frozen=True)
-class ModeledRxSingleCoilSpec(ModeledSingleCoilCommonSpec):
-    role: Literal["rx_single_coil"]
-
-
-@dataclass(frozen=True)
-class ModeledPlateStackCommonSpec:
-    object_id: str
-    role: ModeledPlateStackRole
-    material: str
-    model_state: Literal[True]
-    pcb_total_thickness_mm: float
-    copper_thickness_mm: float
-    turn_count: RangeSpec
-    metal_fill_factor: RangeSpec
-    z_usage_ratio: RangeSpec
-    y_usage_ratio: RangeSpec
-
-
-@dataclass(frozen=True)
-class ModeledTxPlateStackSpec(ModeledPlateStackCommonSpec):
-    role: Literal["tx_plate_stack"]
-    tx_coil_count: RangeSpec
-    tx_array_x_usage_ratio: RangeSpec
-
-
-@dataclass(frozen=True)
-class ModeledRxPlateStackSpec(ModeledPlateStackCommonSpec):
-    role: Literal["rx_plate_stack"]
-
-
-@dataclass(frozen=True)
-class ModeledTxRectVoidColumnsSpec:
-    object_id: str
-    role: Literal["tx_rect_void_columns"]
-    material: str
-    model_state: Literal[True]
-    pcb_thickness_mm: float
-    copper_thickness_mm: float
-    layer_count: RangeSpec
-    layer_gap_mm: RangeSpec
-    terminal_stub_length_mm: RangeSpec
-    void_usage_ratio: RangeSpec
-    margin_ratio: RangeSpec
-    metal_fill_factor: RangeSpec
-    terminal_path: str
-    connection_mode: RangeSpec
-    series_total_turn_count: RangeSpec
-    parallel_total_turn_count: RangeSpec
-    turn_weight_a: RangeSpec
-    turn_weight_b: RangeSpec
-    turn_weight_c: RangeSpec
-
-
-ModeledSingleCoilSpec = ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec
-ModeledPlateStackSpec = ModeledTxPlateStackSpec | ModeledRxPlateStackSpec
-ModeledTxColumnsSpec = ModeledTxRectVoidColumnsSpec
-ModeledObjectSpec = ModeledSingleCoilSpec | ModeledPlateStackSpec | ModeledTxRectVoidColumnsSpec
-
-
-@dataclass(frozen=True)
-class Type2StepSpec:
-    source_toml_path: str
-    simulation: Type2SimulationPolicy
-    outputs: OutputsSpec
-    non_model_objects: tuple[NonModelBoxSpec, ...]
-    non_model_derived_objects: tuple[NonModelDerivedSpec, ...]
-    modeled_objects: tuple[ModeledObjectSpec, ...]
-    constraints: tuple[Type2ConstraintRule, ...]
+from peetsfea.type2_step_spec_types import ModeledObjectRole
+from peetsfea.type2_step_spec_types import ModeledObjectSpec
+from peetsfea.type2_step_spec_types import ModeledPlateStackRole
+from peetsfea.type2_step_spec_types import ModeledPlateStackSpec
+from peetsfea.type2_step_spec_types import ModeledRxPlateStackSpec
+from peetsfea.type2_step_spec_types import ModeledRxSingleCoilSpec
+from peetsfea.type2_step_spec_types import ModeledSingleCoilCommonSpec
+from peetsfea.type2_step_spec_types import ModeledSingleCoilRole
+from peetsfea.type2_step_spec_types import ModeledSingleCoilSpec
+from peetsfea.type2_step_spec_types import ModeledTxPlateStackSpec
+from peetsfea.type2_step_spec_types import ModeledTxRectVoidColumnsSpec
+from peetsfea.type2_step_spec_types import ModeledTxSingleCoilSpec
+from peetsfea.type2_step_spec_types import NonModelBoxSpec
+from peetsfea.type2_step_spec_types import NonModelDerivedSpec
+from peetsfea.type2_step_spec_types import NonModelTxRegionActualSpec
+from peetsfea.type2_step_spec_types import NonModelTxRegionActualStackSpaceSpec
+from peetsfea.type2_step_spec_types import Point3
+from peetsfea.type2_step_spec_types import RangeSpec
+from peetsfea.type2_step_spec_constraints import Type2ConstraintComparableRef
+from peetsfea.type2_step_spec_constraints import Type2ConstraintComparisonOperator
+from peetsfea.type2_step_spec_constraints import Type2ConstraintFuncRef
+from peetsfea.type2_step_spec_constraints import Type2ConstraintOperandRef
+from peetsfea.type2_step_spec_constraints import Type2ConstraintPathRef
+from peetsfea.type2_step_spec_constraints import Type2ConstraintRule
+from peetsfea.type2_step_spec_constraints import Type2ConstraintValueRef
+from peetsfea.type2_step_spec_constraints import _parse_constraints
+from peetsfea.type2_step_spec_constraints import _validate_constraints_for_spec
+from peetsfea.type2_step_spec_types import Type2SimulationPolicy
+from peetsfea.type2_step_spec_types import Type2StepSpec
+from peetsfea.type2_step_spec_types import modeled_object_id_for_role
+from peetsfea.type2_step_spec_types import modeled_plane_for_role
+from peetsfea.type2_step_spec_types import placement_owner_id_for_role
+from peetsfea.type2_step_spec_types import _TYPE2_SCHEMA_ID
+from peetsfea.type2_step_spec_types import _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_COUNT
+from peetsfea.type2_step_spec_types import _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_END
+from peetsfea.type2_step_spec_types import _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_START
+from peetsfea.type2_step_spec_types import _TX_PLATE_STACK_COIL_COUNT_CANDIDATES
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_CONNECTION_MODE_EXPECTED
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_CONNECTION_MODE_RANGE
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_LAYER_COUNT_ALLOWED
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_LAYER_COUNT_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_LAYER_GAP_MM_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_PARALLEL_TOTAL_TURN_COUNT_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_SERIES_TOTAL_TURN_COUNT_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TERMINAL_STUB_LENGTH_MM_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_A_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_COUNT
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_END
+from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_START
+from peetsfea.type2_step_spec_types import _TX_REGION_ACTUAL_DIVISION_COUNT_COUNT
+from peetsfea.type2_step_spec_types import _TX_REGION_ACTUAL_DIVISION_COUNT_END
+from peetsfea.type2_step_spec_types import _TX_REGION_ACTUAL_DIVISION_COUNT_START
+from peetsfea.type2_step_spec_types import _TX_REGION_ACTUAL_DIVISION_COUNT_VALUES
+from peetsfea.type2_step_spec_types import _TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_COUNT
+from peetsfea.type2_step_spec_types import _TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_END
+from peetsfea.type2_step_spec_types import _TX_REGION_ACTUAL_STACK_SPACE_SCALE_RATIO_START
+from peetsfea.type2_step_spec_types import _TX_REGION_ACTUAL_STACK_SPACE_TILT_ENABLED_VALUE
+from peetsfea.type2_step_spec_types import _TX_REGION_ACTUAL_STACK_SPACE_TOTAL_THICKNESS_MM
+from peetsfea.type2_step_spec_types import _TX_REGION_ACTUAL_USAGE_RATIO_COUNT
+from peetsfea.type2_step_spec_types import _TX_REGION_ACTUAL_USAGE_RATIO_END
+from peetsfea.type2_step_spec_types import _TX_REGION_ACTUAL_USAGE_RATIO_START
+from peetsfea.type2_step_spec_types import _TX_UNDERLAY_GAP_MM_CANDIDATES
+from peetsfea.type2_step_spec_types import _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES
+from peetsfea.type2_step_spec_types import _UNDERLAY_REPEAT_COUNT_CANDIDATES
+from peetsfea.type2_step_spec_non_model import NonModelBoxSpec
+from peetsfea.type2_step_spec_non_model import NonModelDerivedSpec
+from peetsfea.type2_step_spec_non_model import NonModelTxRegionActualSpec
+from peetsfea.type2_step_spec_non_model import NonModelTxRegionActualStackSpaceSpec
+from peetsfea.type2_step_spec_non_model import Point3
+from peetsfea.type2_step_spec_non_model import RangeSpec
+from peetsfea.type2_step_spec_non_model import Type2SimulationPolicy
+from peetsfea.type2_step_spec_non_model import _float_range_candidates
+from peetsfea.type2_step_spec_non_model import _integer_range_candidates
+from peetsfea.type2_step_spec_non_model import _parse_non_model_box
+from peetsfea.type2_step_spec_non_model import _parse_non_model_tx_region_actual
+from peetsfea.type2_step_spec_non_model import _parse_non_model_tx_region_actual_stack_space
+from peetsfea.type2_step_spec_non_model import _parse_simulation_policy
+from peetsfea.type2_step_spec_non_model import _require_float_value
+from peetsfea.type2_step_spec_non_model import _require_key
+from peetsfea.type2_step_spec_non_model import _require_non_empty_str
+from peetsfea.type2_step_spec_non_model import _require_plane
+from peetsfea.type2_step_spec_non_model import _require_point3
+from peetsfea.type2_step_spec_non_model import _require_range
+from peetsfea.type2_step_spec_non_model import _require_table
+from peetsfea.type2_step_spec_non_model import _require_true
+from peetsfea.type2_step_spec_non_model import _require_type2_schema_id
 
 
 def modeled_object_id_for_role(role: ModeledObjectRole) -> str:
@@ -383,266 +242,6 @@ def _require_range(
     if end < start:
         raise ValueError(f"{context}.{key}.range end must be >= start")
     return RangeSpec(is_integer=raw_is_integer, start=start, end=end, count=raw_count)
-
-
-def _require_constraint_path(value: object, *, dotted_path: str) -> str:
-    table = _require_table(value, dotted_path)
-    if set(table.keys()) != {"path"}:
-        raise ValueError(f"{dotted_path} must contain only ['path']")
-    raw_path = _require_non_empty_str(table, "path", dotted_path)
-    return raw_path
-
-
-def _require_constraint_value(value: object, *, dotted_path: str) -> str | float:
-    table = _require_table(value, dotted_path)
-    if set(table.keys()) != {"value"}:
-        raise ValueError(f"{dotted_path} must contain only ['value']")
-    raw_value = _require_key(table, "value", dotted_path)
-    if isinstance(raw_value, bool):
-        raise ValueError(f"{dotted_path}.value must be number|string")
-    if isinstance(raw_value, int | float):
-        return float(raw_value)
-    if isinstance(raw_value, str):
-        if raw_value == "":
-            raise ValueError(f"{dotted_path}.value must be number|string")
-        return raw_value
-    raise ValueError(f"{dotted_path}.value must be number|string")
-
-
-def _split_constraint_func_args(text: str) -> tuple[str, ...]:
-    parts: list[str] = []
-    token: list[str] = []
-    depth = 0
-    for char in text:
-        if char == "(":
-            depth += 1
-            token.append(char)
-            continue
-        if char == ")":
-            depth -= 1
-            if depth < 0:
-                raise ValueError("constraint function expression has unmatched ')'")
-            token.append(char)
-            continue
-        if char == "," and depth == 0:
-            piece = "".join(token).strip()
-            if piece == "":
-                raise ValueError("constraint function argument cannot be empty")
-            parts.append(piece)
-            token = []
-            continue
-        token.append(char)
-    if depth != 0:
-        raise ValueError("constraint function expression has unmatched '('")
-    tail = "".join(token).strip()
-    if tail:
-        parts.append(tail)
-    return tuple(parts)
-
-
-def _parse_constraint_func(value: object, *, dotted_path: str) -> str:
-    table = _require_table(value, dotted_path)
-    if set(table.keys()) != {"func"}:
-        raise ValueError(f"{dotted_path} must contain only ['func']")
-    raw_func = _require_non_empty_str(table, "func", dotted_path)
-    text = raw_func.strip()
-    if not text.endswith(")") or "(" not in text:
-        raise ValueError(f"{dotted_path}.func must be a call expression like sum(...)")
-    open_index = text.find("(")
-    name = text[:open_index].strip()
-    if name == "":
-        raise ValueError(f"{dotted_path}.func name must be non-empty")
-    if name != "sum":
-        raise ValueError(f"{dotted_path}.func must be 'sum(...)' (actual={name!r})")
-    body = text[open_index + 1 : -1].strip()
-    if body == "":
-        raise ValueError(f"{dotted_path}.func must include at least one argument")
-    try:
-        _split_constraint_func_args(body)
-    except ValueError as exc:
-        raise ValueError(f"{dotted_path}.func {exc}") from exc
-    return raw_func
-
-
-def _parse_constraint_comparable_ref(value: object, *, dotted_path: str) -> Type2ConstraintComparableRef:
-    if not isinstance(value, dict):
-        raise TypeError(f"{dotted_path} must be a table")
-    if set(value.keys()) == {"path"}:
-        return Type2ConstraintPathRef(path=_require_constraint_path(value, dotted_path=dotted_path))
-    if set(value.keys()) == {"func"}:
-        return Type2ConstraintFuncRef(func=_parse_constraint_func(value, dotted_path=dotted_path))
-    raise ValueError(f"{dotted_path} must contain exactly one of ['path'], ['func']")
-
-
-def _parse_constraint_rhs_ref(value: object, *, dotted_path: str) -> Type2ConstraintOperandRef:
-    if not isinstance(value, dict):
-        raise TypeError(f"{dotted_path} must be a table")
-    if set(value.keys()) == {"path"}:
-        return Type2ConstraintPathRef(path=_require_constraint_path(value, dotted_path=dotted_path))
-    if set(value.keys()) == {"value"}:
-        return Type2ConstraintValueRef(value=_require_constraint_value(value, dotted_path=dotted_path))
-    if set(value.keys()) == {"func"}:
-        return Type2ConstraintFuncRef(func=_parse_constraint_func(value, dotted_path=dotted_path))
-    raise ValueError(f"{dotted_path} must contain exactly one of ['path'], ['value'], ['func']")
-
-
-def _parse_constraint_rule(raw_rule: object, *, index: int, context: str) -> Type2ConstraintRule:
-    dotted = f"{context}.constraints.rules[{index}]"
-    table = _require_table(raw_rule, dotted)
-    required_keys = {"id", "kind", "message", "lhs", "op", "rhs"}
-    optional_keys = {"enabled"}
-    if not required_keys.issubset(table.keys()):
-        raise ValueError(f"{dotted} must contain required keys {sorted(required_keys)}")
-    extra_keys = set(table.keys()) - (required_keys | optional_keys)
-    if extra_keys:
-        raise ValueError(f"{dotted} contains unsupported keys (actual={sorted(extra_keys)})")
-
-    raw_id = _require_non_empty_str(table, "id", dotted)
-    raw_message = _require_non_empty_str(table, "message", dotted)
-    raw_kind = _require_non_empty_str(table, "kind", dotted)
-    raw_enabled = table.get("enabled", True)
-    if raw_kind != "comparison":
-        raise ValueError(f"{dotted}.kind must be 'comparison' (actual={raw_kind!r})")
-    if not isinstance(raw_enabled, bool):
-        raise ValueError(f"{dotted}.enabled must be bool")
-    op = _require_non_empty_str(table, "op", dotted)
-    if op not in ("<", "<=", ">", ">=", "=="):
-        raise ValueError(f"{dotted}.op must be one of ['<', '<=', '>', '>=', '==']")
-    return Type2ConstraintRule(
-        id=raw_id,
-        message=raw_message,
-        enabled=raw_enabled,
-        lhs=_parse_constraint_comparable_ref(table["lhs"], dotted_path=f"{dotted}.lhs"),
-        op=cast(Type2ConstraintComparisonOperator, op),
-        rhs=_parse_constraint_rhs_ref(table["rhs"], dotted_path=f"{dotted}.rhs"),
-    )
-
-
-def _parse_constraints(constraints: object, *, context: str) -> tuple[Type2ConstraintRule, ...]:
-    constraints_table = _require_table(constraints, context)
-    raw_rules = _require_key(constraints_table, "rules", context)
-    if not isinstance(raw_rules, list):
-        raise TypeError(f"{context}.rules must be an array of tables")
-    if len(raw_rules) == 0:
-        raise ValueError(f"{context}.rules must be a non-empty array of tables")
-    seen_rule_ids: set[str] = set()
-    parsed_rules: list[Type2ConstraintRule] = []
-    for index, raw_rule in enumerate(raw_rules):
-        parsed = _parse_constraint_rule(raw_rule, index=index, context=context)
-        if parsed.id in seen_rule_ids:
-            raise ValueError(f"Duplicate constraints.rules id: {parsed.id}")
-        seen_rule_ids.add(parsed.id)
-        parsed_rules.append(parsed)
-    return tuple(parsed_rules)
-
-
-def _constraint_reference_paths(spec: Type2StepSpec) -> set[str]:
-    paths: set[str] = set()
-    for non_model_spec in spec.non_model_derived_objects:
-        base = f"non_model_objects.{non_model_spec.object_id}"
-        if isinstance(non_model_spec, NonModelTxRegionActualSpec):
-            paths.update(
-                (
-                    f"{base}.x_usage_ratio",
-                    f"{base}.y_usage_ratio",
-                    f"{base}.x_division_count",
-                    f"{base}.y_division_count",
-                )
-            )
-        else:
-            paths.update((f"{base}.scale_ratio", f"{base}.tilt_enabled"))
-    for modeled_spec in spec.modeled_objects:
-        base = f"modeled_objects.{modeled_spec.object_id}"
-        if isinstance(modeled_spec, ModeledTxSingleCoilSpec):
-            paths.update(
-                (
-                    f"{base}.outer_x_usage_ratio",
-                    f"{base}.outer_y_usage_ratio",
-                    f"{base}.turn_count",
-                    f"{base}.layer_count",
-                    f"{base}.underlay_repeat_count",
-                    f"{base}.layer_gap_mm",
-                    f"{base}.terminal_stub_length_mm",
-                    f"{base}.void_usage_ratio",
-                    f"{base}.margin_ratio",
-                    f"{base}.metal_fill_factor",
-                    f"{base}.underlay_gap_mm",
-                    f"{base}.wall_parallel_stack_present",
-                )
-            )
-            continue
-        if isinstance(modeled_spec, ModeledRxSingleCoilSpec):
-            paths.update(
-                (
-                    f"{base}.outer_x_usage_ratio",
-                    f"{base}.outer_y_usage_ratio",
-                    f"{base}.turn_count",
-                    f"{base}.layer_count",
-                    f"{base}.underlay_repeat_count",
-                    f"{base}.layer_gap_mm",
-                    f"{base}.terminal_stub_length_mm",
-                    f"{base}.void_usage_ratio",
-                    f"{base}.margin_ratio",
-                    f"{base}.metal_fill_factor",
-                )
-            )
-            continue
-        if isinstance(modeled_spec, ModeledTxPlateStackSpec):
-            paths.update(
-                (
-                    f"{base}.turn_count",
-                    f"{base}.metal_fill_factor",
-                    f"{base}.z_usage_ratio",
-                    f"{base}.y_usage_ratio",
-                    f"{base}.tx_coil_count",
-                    f"{base}.tx_array_x_usage_ratio",
-                )
-            )
-            continue
-        if isinstance(modeled_spec, ModeledRxPlateStackSpec):
-            paths.update(
-                (
-                    f"{base}.turn_count",
-                    f"{base}.metal_fill_factor",
-                    f"{base}.z_usage_ratio",
-                    f"{base}.y_usage_ratio",
-                )
-            )
-            continue
-        if isinstance(modeled_spec, ModeledTxRectVoidColumnsSpec):
-            paths.update(
-                (
-                    f"{base}.layer_count",
-                    f"{base}.layer_gap_mm",
-                    f"{base}.terminal_stub_length_mm",
-                    f"{base}.void_usage_ratio",
-                    f"{base}.margin_ratio",
-                    f"{base}.metal_fill_factor",
-                    f"{base}.connection_mode",
-                    f"{base}.series_total_turn_count",
-                    f"{base}.parallel_total_turn_count",
-                    f"{base}.turn_weight_a",
-                    f"{base}.turn_weight_b",
-                    f"{base}.turn_weight_c",
-                )
-            )
-            continue
-        raise RuntimeError(f"unsupported modeled object for constraint owner-path collection: {modeled_spec.object_id}")
-    return paths
-
-
-def _validate_constraints_for_spec(constraints: tuple[Type2ConstraintRule, ...], *, spec: Type2StepSpec, context: str) -> None:
-    valid_paths = _constraint_reference_paths(spec)
-    for index, rule in enumerate(constraints):
-        dotted = f"{context}.constraints.rules[{index}]"
-        if "path" in rule.lhs:
-            path = rule.lhs["path"]
-            if path not in valid_paths:
-                raise ValueError(f"{dotted}.lhs.path references unknown owner path: {path!r}")
-        if "path" in rule.rhs:
-            path = rule.rhs["path"]
-            if path not in valid_paths:
-                raise ValueError(f"{dotted}.rhs.path references unknown owner path: {path!r}")
 
 
 def _parse_simulation_policy(root: dict[str, object], *, context: str) -> Type2SimulationPolicy:
@@ -924,6 +523,33 @@ def _parse_non_model_tx_region_actual_stack_space(
         tilt_enabled=_require_tx_region_actual_stack_space_tilt_enabled_range(table, key="tilt_enabled", context=context),
         scale_ratio=_require_tx_region_actual_stack_space_scale_ratio_range(table, key="scale_ratio", context=context),
     )
+
+from peetsfea.type2_step_spec_non_model import NonModelBoxSpec as NonModelBoxSpec
+from peetsfea.type2_step_spec_non_model import NonModelDerivedSpec as NonModelDerivedSpec
+from peetsfea.type2_step_spec_non_model import NonModelTxRegionActualSpec as NonModelTxRegionActualSpec
+from peetsfea.type2_step_spec_non_model import (
+    NonModelTxRegionActualStackSpaceSpec as NonModelTxRegionActualStackSpaceSpec,
+)
+from peetsfea.type2_step_spec_non_model import Point3 as Point3
+from peetsfea.type2_step_spec_non_model import RangeSpec as RangeSpec
+from peetsfea.type2_step_spec_non_model import Type2SimulationPolicy as Type2SimulationPolicy
+from peetsfea.type2_step_spec_non_model import _float_range_candidates as _float_range_candidates
+from peetsfea.type2_step_spec_non_model import _integer_range_candidates as _integer_range_candidates
+from peetsfea.type2_step_spec_non_model import _parse_non_model_box as _parse_non_model_box
+from peetsfea.type2_step_spec_non_model import _parse_non_model_tx_region_actual as _parse_non_model_tx_region_actual
+from peetsfea.type2_step_spec_non_model import (
+    _parse_non_model_tx_region_actual_stack_space as _parse_non_model_tx_region_actual_stack_space,
+)
+from peetsfea.type2_step_spec_non_model import _parse_simulation_policy as _parse_simulation_policy
+from peetsfea.type2_step_spec_non_model import _require_float_value as _require_float_value
+from peetsfea.type2_step_spec_non_model import _require_key as _require_key
+from peetsfea.type2_step_spec_non_model import _require_non_empty_str as _require_non_empty_str
+from peetsfea.type2_step_spec_non_model import _require_plane as _require_plane
+from peetsfea.type2_step_spec_non_model import _require_point3 as _require_point3
+from peetsfea.type2_step_spec_non_model import _require_range as _require_range
+from peetsfea.type2_step_spec_non_model import _require_table as _require_table
+from peetsfea.type2_step_spec_non_model import _require_true as _require_true
+from peetsfea.type2_step_spec_non_model import _require_type2_schema_id as _require_type2_schema_id
 
 
 def _parse_modeled_single_coil(
@@ -2219,6 +1845,42 @@ def render_tx_rect_void_toml(spec: ModeledSingleCoilCommonSpec) -> str:
             "",
         )
     )
+
+
+from peetsfea.type2_step_spec_modeled import _format_range
+from peetsfea.type2_step_spec_modeled import _parse_modeled_plate_stack
+from peetsfea.type2_step_spec_modeled import _parse_modeled_single_coil
+from peetsfea.type2_step_spec_modeled import _parse_modeled_tx_rect_void_columns
+from peetsfea.type2_step_spec_modeled import _resolve_single_coil_outer_mm_ranges
+from peetsfea.type2_step_spec_modeled import _require_tx_plate_stack_array_x_usage_ratio_range
+from peetsfea.type2_step_spec_modeled import _require_tx_plate_stack_coil_count_range
+from peetsfea.type2_step_spec_modeled import _require_tx_rect_void_columns_connection_mode_range
+from peetsfea.type2_step_spec_modeled import _require_tx_rect_void_columns_layer_count_range
+from peetsfea.type2_step_spec_modeled import _require_tx_rect_void_columns_layer_gap_mm_range
+from peetsfea.type2_step_spec_modeled import _require_tx_rect_void_columns_parallel_total_turn_count_range
+from peetsfea.type2_step_spec_modeled import _require_tx_rect_void_columns_series_total_turn_count_range
+from peetsfea.type2_step_spec_modeled import _require_tx_rect_void_columns_terminal_stub_length_mm_range
+from peetsfea.type2_step_spec_modeled import _require_tx_rect_void_columns_turn_weight_range
+from peetsfea.type2_step_spec_modeled import _require_underlay_gap_range
+from peetsfea.type2_step_spec_modeled import _require_underlay_repeat_count_range
+from peetsfea.type2_step_spec_modeled import _require_wall_parallel_stack_present_range
+from peetsfea.type2_step_spec_modeled import _resolve_single_coil_outer_mm_ranges
+from peetsfea.type2_step_spec_modeled import render_tx_rect_void_toml
+from peetsfea.type2_step_spec_modeled import _scaled_mm_range_from_usage_ratio
+from peetsfea.type2_step_spec_sampling import resolve_modeled_plate_stack_metal_fill_factor
+from peetsfea.type2_step_spec_sampling import resolve_modeled_plate_stack_turn_count
+from peetsfea.type2_step_spec_sampling import resolve_modeled_plate_stack_y_usage_ratio
+from peetsfea.type2_step_spec_sampling import resolve_modeled_plate_stack_z_usage_ratio
+from peetsfea.type2_step_spec_sampling import resolve_modeled_tx_array_x_usage_ratio
+from peetsfea.type2_step_spec_sampling import resolve_modeled_tx_coil_count
+from peetsfea.type2_step_spec_sampling import resolve_modeled_underlay_gap_mm
+from peetsfea.type2_step_spec_sampling import resolve_modeled_underlay_repeat_count
+from peetsfea.type2_step_spec_sampling import resolve_modeled_wall_parallel_stack_present
+from peetsfea.type2_step_spec_sampling import resolve_non_model_tx_region_actual_stack_space_tilt_enabled
+from peetsfea.type2_step_spec_sampling import _float_range_candidates
+from peetsfea.type2_step_spec_sampling import _integer_range_candidates
+from peetsfea.type2_step_spec_sampling import _is_canonical_tx_plate_stack_array_x_usage_ratio_range
+from peetsfea.type2_step_spec_sampling import _resolve_seeded_candidate_index
 
 
 __all__ = [

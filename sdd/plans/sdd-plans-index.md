@@ -23,6 +23,7 @@ tags:
 - `sdd/plans/0.2.22-type2-step-to-em-validate-pipeline.md`
 - `sdd/plans/0.2.22-type2-toml-unification.md`
 - `sdd/plans/0.2.22-type2-build123d-non-model-step.md`
+- `sdd/plans/0.2.22-type2-step-spec-non-model-split.md`
 - `sdd/plans/0.2.22-type2-pyaedt-step-import.md`
 - `sdd/plans/0.2.22-type2-import-ledger-pipeline.md`
 - `sdd/plans/0.2.22-type2-rx-single-coil.md`

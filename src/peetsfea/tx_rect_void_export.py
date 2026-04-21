@@ -720,21 +720,95 @@ def _extrude_copper_primitive(
     )
 
 
+def _trace_outline_face_from_centerline(
+    *,
+    centerline: tuple[Point2, ...],
+    trace_width_mm: float,
+) -> bd.Face:
+    segment_count = len(centerline) - 1
+    if segment_count < 1:
+        raise ValueError(
+            "trace outline face requires at least one segment "
+            f"(centerline_count={len(centerline)})"
+        )
+    if trace_width_mm <= 0.0:
+        raise ValueError(f"trace outline face requires positive trace width (actual={trace_width_mm})")
+    segment_faces = tuple(
+        _face_from_polygon_xy(
+            _segment_joined_polygon(
+                centerline,
+                trace_width_mm=trace_width_mm,
+                segment_index=segment_index,
+            )
+        )
+        for segment_index in range(segment_count)
+    )
+    fused_face: object = segment_faces[0]
+    for segment_face in segment_faces[1:]:
+        fused_face = cast(bd.Face, fused_face).fuse(segment_face)
+    if isinstance(fused_face, bd.ShapeList):
+        raise RuntimeError(
+            "trace outline face fuse returned multiple shapes "
+            f"(centerline_count={len(centerline)}, segment_count={segment_count}, result_count={len(fused_face)})"
+        )
+    if not isinstance(fused_face, bd.Face):
+        raise TypeError(
+            "trace outline face fuse returned unsupported type "
+            f"(type={type(fused_face).__name__})"
+        )
+    if len(tuple(fused_face.wires())) != 1:
+        raise RuntimeError(
+            "trace outline face fuse must produce one wire "
+            f"(centerline_count={len(centerline)}, wire_count={len(tuple(fused_face.wires()))})"
+        )
+    return fused_face
+
+
 def _fused_copper_shape_from_primitives(
     *,
     copper_primitives: tuple[CopperPrimitive, ...],
+    centerline: tuple[Point2, ...],
+    trace_width_mm: float,
     label: str,
     profile: SingleCoilProfile,
     frame_origin_xyz: tuple[float, float, float],
 ) -> bd.Shape:
     if len(copper_primitives) == 0:
         raise ValueError(f"tx rect/void copper shape requires at least one primitive (label={label})")
-    fuse_result: object = _extrude_copper_primitive(
-        primitive=copper_primitives[0],
+    planar_primitives = tuple(
+        primitive
+        for primitive in copper_primitives
+        if primitive.feature == "planar_segment"
+    )
+    if len(planar_primitives) == 0:
+        raise ValueError(f"tx rect/void copper shape requires planar primitives (label={label})")
+    planar_origin_z = planar_primitives[0].origin_z
+    planar_size_z = planar_primitives[0].size_z
+    if any(abs(primitive.origin_z - planar_origin_z) > 1e-9 for primitive in planar_primitives[1:]):
+        raise ValueError(
+            "planar primitives in one layer must share one origin_z "
+            f"(label={label}, origin_z_values={tuple(primitive.origin_z for primitive in planar_primitives)})"
+        )
+    if any(abs(primitive.size_z - planar_size_z) > 1e-9 for primitive in planar_primitives[1:]):
+        raise ValueError(
+            "planar primitives in one layer must share one size_z "
+            f"(label={label}, size_z_values={tuple(primitive.size_z for primitive in planar_primitives)})"
+        )
+
+    fuse_result: object = _extrude_face_on_plane(
+        face_xy=_trace_outline_face_from_centerline(
+            centerline=centerline,
+            trace_width_mm=trace_width_mm,
+        ),
         profile=profile,
         frame_origin_xyz=frame_origin_xyz,
+        local_z=planar_origin_z,
+        amount=planar_size_z,
     )
-    for primitive in copper_primitives[1:]:
+
+    for primitive in tuple(
+        primitive for primitive in copper_primitives if primitive.feature != "planar_segment"
+    ):
         fuse_result = cast(bd.Shape, fuse_result).fuse(
             _extrude_copper_primitive(
                 primitive=primitive,
@@ -771,6 +845,8 @@ def _build_copper_layer_shape(
     _validate_copper_primitives_do_not_short(copper_primitives)
     return _fused_copper_shape_from_primitives(
         copper_primitives=copper_primitives,
+        centerline=centerline,
+        trace_width_mm=realized.trace_width_mm,
         label=f"{profile.copper_body_prefix}_l{layer_index}",
         profile=profile,
         frame_origin_xyz=frame_origin_xyz,
@@ -786,19 +862,31 @@ def _build_tx_multilayer_copper_stack_shape(
 ) -> bd.Shape:
     if not _is_tx_multilayer_parallel_stack(realized, profile=profile):
         raise ValueError("tx multilayer copper stack shape requires tx_single_coil multilayer realized state")
+    layer_copper_shapes: list[bd.Shape] = []
+    for layer_index in range(realized.layer_count):
+        layer_copper_shapes.append(
+            _build_copper_layer_shape(
+                realized=realized,
+                boxes=(),
+                centerline=centerline,
+                layer_index=layer_index,
+                profile=profile,
+                frame_origin_xyz=frame_origin_xyz,
+            )
+        )
+
     all_layer_copper_primitives: list[CopperPrimitive] = []
     for layer_index in range(realized.layer_count):
         pcb_z = float(layer_index) * (realized.pcb_thickness_mm + realized.layer_gap_mm)
-        copper_primitives = _copper_primitives_for_layer(
-            realized=realized,
-            centerline=centerline,
-            layer_index=layer_index,
-            pcb_z=pcb_z,
-            profile=profile,
+        all_layer_copper_primitives.extend(
+            _copper_primitives_for_layer(
+                realized=realized,
+                centerline=centerline,
+                layer_index=layer_index,
+                pcb_z=pcb_z,
+                profile=profile,
+            )
         )
-        _validate_copper_primitives_do_not_touch_void(realized, copper_primitives)
-        _validate_copper_primitives_do_not_short(copper_primitives)
-        all_layer_copper_primitives.extend(copper_primitives)
     bus_primitives = (
         _vertical_bus_primitive_from_stub_column(
             realized=realized,
@@ -813,11 +901,25 @@ def _build_tx_multilayer_copper_stack_shape(
             terminal_column="end",
         ),
     )
-    return _fused_copper_shape_from_primitives(
-        copper_primitives=tuple(all_layer_copper_primitives) + bus_primitives,
-        label=f"{profile.copper_body_prefix}_stack",
+
+    fused_stack_shape: object = _extrude_copper_primitive(
+        primitive=bus_primitives[0],
         profile=profile,
         frame_origin_xyz=frame_origin_xyz,
+    ).fuse(
+        _extrude_copper_primitive(
+            primitive=bus_primitives[1],
+            profile=profile,
+            frame_origin_xyz=frame_origin_xyz,
+        )
+    )
+    for layer_shape in layer_copper_shapes:
+        fused_stack_shape = cast(bd.Shape, fused_stack_shape).fuse(layer_shape)
+
+    return _single_shape_from_fuse_result(
+        fused_stack_shape,
+        label=f"{profile.copper_body_prefix}_stack",
+        source_count=realized.layer_count + 2,
     )
 
 

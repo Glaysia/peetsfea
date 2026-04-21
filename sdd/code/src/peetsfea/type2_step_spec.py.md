@@ -16,7 +16,9 @@ tags:
 - Related feature plans: [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]], [[sdd/plans/0.2.22-type2-remove-plate-stack-shoe-contract]], [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]], [[sdd/plans/0.2.22-type2-tx-actual-region-pcb-non-model]], [[sdd/plans/0.2.22-type2-tx-rect-void-columns-geometry]]
 
 ## 역할
-- type2 TOML object registry를 typed non-model / modeled spec으로 정규화한다.
+- active type2 TOML object registry를 typed non-model / modeled spec으로 정규화하는 parser facade다.
+- shared constants, type aliases, dataclasses, and role/object/plane helpers are owned by [[sdd/code/src/peetsfea/type2_step_spec_types.py]].
+- non-model TOML validation and load checks now delegate to [[sdd/code/src/peetsfea/type2_step_spec_non_model.py]].
 - active role set는 `tx_single_coil`, `rx_single_coil`, `tx_plate_stack`, `rx_plate_stack`로 제한된다.
 
 ## 입력 / 출력
@@ -26,9 +28,11 @@ tags:
 ## Canonical state
 - active plate roles는 `tx_plate_stack`와 `rx_plate_stack`다.
 - active type2 schema id는 `peetsfea.type2.step.v8`다.
+- `type2_step_spec.py` remains the parsing and validation facade; shared type ownership is delegated to `type2_step_spec_types.py`.
 - optional top-level `[constraints]` is part of the active type2 TOML schema and preserves declarative sampling feasibility rules for dataset/MOO consumers.
 - active type2 constraint support starts with `comparison` rules over sampled owner paths, literal values, and `sum(...)` expressions.
 - each comparison rule requires `id`, `message`, `enabled`, `lhs`, `op`, and `rhs`; parser-side validation enforces supported operators and required `path`/`value`/`func` payload forms.
+- constraint AST parsing and owner-path validation live in [[sdd/code/src/peetsfea/type2_step_spec_constraints.py]].
 - `tx_region` remains the maximum TX guide box.
 - `tx_region_actual` is a derived non-model sampled box owned by `tx_region`, using `x_usage_ratio`, `y_usage_ratio`, `x_division_count`, and `y_division_count`.
 - `tx_region_actual` anchors at `tx_region.min_x`, centers on `tx_region` Y, and preserves full `tx_region` Z.
@@ -84,9 +88,12 @@ tags:
 - `tx_region_actual` division counts accept only canonical `[true, 1, 3, 3]` or fixed `[true, n, n, 1]` where `n in {1, 2, 3}`.
 
 ## Collaborators
+- [[sdd/code/src/peetsfea/type2_step_spec_non_model.py]]
+- [[sdd/code/src/peetsfea/type2_step_spec_types.py]]
 - [[sdd/code/src/peetsfea/type2_plate_stack.py]]
 - [[sdd/code/src/peetsfea/type2_step_scene.py]]
 - [[sdd/code/src/peetsfea/type2_step_export.py]]
+- [[sdd/code/src/peetsfea/type2_step_spec_constraints.py]]
 - [[sdd/code/src/peetsfea/type2_sampled.py]]
 
 ## 관련 테스트

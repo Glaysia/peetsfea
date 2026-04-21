@@ -261,6 +261,53 @@ def _polyline_segments(centerline: tuple[Point2, ...]) -> tuple[_PolylineSegment
     return tuple(_polyline_segment(start, end) for start, end in zip(centerline[:-1], centerline[1:]))
 
 
+def trace_outline_polygon(
+    centerline: tuple[Point2, ...],
+    trace_width_mm: float,
+) -> Polygon2:
+    if trace_width_mm <= 0.0:
+        raise ValueError(f"trace outline polygon requires trace width > 0 (actual={trace_width_mm})")
+    segments = _polyline_segments(centerline)
+    segment_count = len(segments)
+    half_trace = trace_width_mm / 2.0
+
+    left_chain: list[Point2] = []
+    right_chain: list[Point2] = []
+
+    first_segment = segments[0]
+    last_segment = segments[segment_count - 1]
+    _append_point(left_chain, _add_point2(first_segment.start, _scale_point2(first_segment.left_normal, half_trace)))
+    for vertex_index in range(1, len(centerline) - 1):
+        _append_point(
+            left_chain,
+            _offset_join_point(
+                centerline,
+                trace_width_mm=trace_width_mm,
+                vertex_index=vertex_index,
+                side="left",
+            ),
+        )
+    _append_point(left_chain, _add_point2(last_segment.end, _scale_point2(last_segment.left_normal, half_trace)))
+
+    _append_point(right_chain, _add_point2(last_segment.end, _scale_point2(last_segment.left_normal, -half_trace)))
+    for vertex_index in range(len(centerline) - 2, 0, -1):
+        _append_point(
+            right_chain,
+            _offset_join_point(
+                centerline,
+                trace_width_mm=trace_width_mm,
+                vertex_index=vertex_index,
+                side="right",
+            ),
+        )
+    _append_point(right_chain, _add_point2(first_segment.start, _scale_point2(first_segment.left_normal, -half_trace)))
+
+    outline_polygon = tuple(left_chain + right_chain)
+    if not _polygon_is_simple(outline_polygon):
+        raise ValueError(f"trace outline polygon must remain simple (polygon={outline_polygon})")
+    return outline_polygon
+
+
 def _offset_join_point(
     centerline: tuple[Point2, ...],
     *,

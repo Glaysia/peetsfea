@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-21 @ 22:05
+updated: 2026-04-21 @ 23:35
 tags:
   - tests
   - type2
@@ -31,6 +31,7 @@ tags:
   - success assertions verify scene STEP output, ledger output, modeled metadata file existence, and `terminal_metadata.kind == 'geometry_only'`,
   - parser-bypass simulations (mocked loader + preflight no-op) still execute through full export and keep the same success contract,
   - generated specs using `tx_rect_void_columns` with varied tiling/turn matrices produce expected body metadata counts and scene bodies.
+  - grid contract regression explicitly covers `1x1`, `2x3`, `3x3` and validates `txrvc_x*_y*_pcb_l*`, `txrvc_x*_y*_cu_l*`, `txrvc_x*_y*_stub_*` naming/body-count 계약.
   - safe-turn grid variant fixtures keep TOML truth ranges for allocation surface, including `parallel_total_turn_count = [true, 1, 36, 36]` and `turn_weight_c = [false, -0.3, 0.3, 21]`.
 - `export_type2_tx_single_coil_artifact` continues to reject `tx_rect_void_columns` role at dispatch.
 - `tx_rect_void_columns` parser contract coverage validates parser-only acceptance and exact schema ranges for:
@@ -83,3 +84,5 @@ tags:
 - sweep example TOML 값 변경은 authoring change로 취급하며, parser/export unit tests가 구체 range 값을 검사하지 않는다.
 - `tx_region_actual` fixture updates must keep backend non-model import fixture member names in sync, including multi-tile names and `tx_region_actual_stack_space_*` companions.
 - exact name/order drift 검사는 pre-unite segment contracts와 final export-contract를 함께 검증해야 한다. RX and single-branch TX stay at `6`; TX arrays expand branch-local non-copper names.
+- `tx_rect_void_columns` 성능 점검은 default pytest에 포함하지 않고 수동으로만 운영한다.
+  - 권장 수동 명령: `cd run && ../.venv/bin/python -m pytest ../tests/type2/test_generate_type2_step.py -k "tx_rect_void_columns_grid_variants" --durations=10 -q`

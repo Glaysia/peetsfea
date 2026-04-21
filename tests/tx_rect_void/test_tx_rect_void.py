@@ -7,6 +7,7 @@ from pathlib import Path
 import build123d as bd
 import pytest
 
+import peetsfea.tx_rect_void_geometry as tx_rect_void_geometry_module
 from peetsfea.tx_rect_void import (
     BoxSpec,
     RealizedSingleCoilRectVoid,
@@ -28,6 +29,10 @@ from peetsfea.tx_rect_void import (
     realize_tx_rect_void_spec,
 )
 from peetsfea.tx_rect_void_geometry import CopperPrimitive
+from peetsfea.tx_rect_void_geometry import trace_outline_polygon
+
+# Manual performance probe only (excluded from default pytest):
+# cd run && ../.venv/bin/python -m pytest ../tests/tx_rect_void/test_tx_rect_void.py -k "step_scene_exports_single_fused_copper_body" --durations=5 -q
 
 
 def _range(is_integer: bool, start: float, end: float, count: int) -> str:
@@ -588,6 +593,81 @@ def test_outline_box_matches_planar_outline_bounds(tmp_path: Path) -> None:
     assert first_bounds.max_x == pytest.approx(expected_bounds.max_x)
     assert first_bounds.min_y == pytest.approx(expected_bounds.min_y)
     assert first_bounds.max_y == pytest.approx(expected_bounds.max_y)
+
+
+def test_trace_outline_polygon_returns_simple_polygon_for_single_segment() -> None:
+    polygon_xy = trace_outline_polygon(
+        centerline=((0.0, 0.0), (10.0, 0.0)),
+        trace_width_mm=2.0,
+    )
+
+    expected_polygon = (
+        (0.0, 1.0),
+        (10.0, 1.0),
+        (10.0, -1.0),
+        (0.0, -1.0),
+    )
+    assert len(polygon_xy) == len(expected_polygon)
+    for actual_point, expected_point in zip(polygon_xy, expected_polygon, strict=True):
+        assert actual_point[0] == pytest.approx(expected_point[0])
+        assert actual_point[1] == pytest.approx(expected_point[1])
+
+
+def test_trace_outline_polygon_preserves_expected_bounds_for_simple_segment() -> None:
+    polygon_xy = trace_outline_polygon(
+        centerline=((0.0, 0.0), (10.0, 0.0)),
+        trace_width_mm=2.0,
+    )
+    bounds = _polygon_bounds(polygon_xy)
+
+    assert bounds.min_x == pytest.approx(0.0)
+    assert bounds.max_x == pytest.approx(10.0)
+    assert bounds.min_y == pytest.approx(-1.0)
+    assert bounds.max_y == pytest.approx(1.0)
+
+
+def test_trace_outline_polygon_contains_representative_offset_join_vertex(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tx_rect_void_geometry_module, "_polygon_is_simple", lambda _polygon: True)
+    toml_path = _write_spec(tmp_path, _spec_text(turn_count=3, terminal_path="D_ccw_to_d"))
+    realized = realize_tx_rect_void_spec(load_tx_rect_void_spec(toml_path), seed=0)
+    centerline = build_tx_rect_void_centerline(realized)
+    outline_polygon = trace_outline_polygon(
+        centerline=centerline,
+        trace_width_mm=realized.trace_width_mm,
+    )
+    incoming_dx = centerline[1][0] - centerline[0][0]
+    incoming_dy = centerline[1][1] - centerline[0][1]
+    outgoing_dx = centerline[2][0] - centerline[1][0]
+    outgoing_dy = centerline[2][1] - centerline[1][1]
+    turn_cross = (incoming_dx * outgoing_dy) - (incoming_dy * outgoing_dx)
+    convex_side = "right" if turn_cross > 0.0 else "left"
+    join_point = _offset_join_point(
+        centerline,
+        trace_width_mm=realized.trace_width_mm,
+        vertex_index=1,
+        side=convex_side,
+    )
+    naive_in = _naive_offset_vertex(
+        centerline,
+        trace_width_mm=realized.trace_width_mm,
+        vertex_index=1,
+        incoming=True,
+        side=convex_side,
+    )
+    naive_out = _naive_offset_vertex(
+        centerline,
+        trace_width_mm=realized.trace_width_mm,
+        vertex_index=1,
+        incoming=False,
+        side=convex_side,
+    )
+
+    assert _polygon_has_vertex(outline_polygon, join_point)
+    assert _point_distance_2d(join_point, naive_in) > 1e-6
+    assert _point_distance_2d(join_point, naive_out) > 1e-6
 
 
 @pytest.mark.parametrize("profile_name", ("tx", "rx"))

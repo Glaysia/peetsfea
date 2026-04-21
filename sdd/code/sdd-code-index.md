@@ -51,6 +51,7 @@ Src note inventory:
 - `sdd/code/src/peetsfea/spec/toml_render.py.md`
 - `sdd/code/src/peetsfea/type2_runtime.py.md`
 - `sdd/code/src/peetsfea/type2_sampled.py.md`
+- `sdd/code/src/peetsfea/type2_step_spec_non_model.py.md`
 - `sdd/code/src/peetsfea/tx_rect_void.py.md`
 
 Test note inventory:

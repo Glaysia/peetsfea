@@ -12,10 +12,11 @@ import build123d as bd
 from peetsfea.tx_rect_void import BoxSpec
 from peetsfea.tx_rect_void import SingleCoilProfile
 from peetsfea.tx_rect_void import build_tx_rect_void_box_specs
-from peetsfea.tx_rect_void import build_tx_rect_void_step_scene
+from peetsfea.tx_rect_void import build_tx_rect_void_centerline
 from peetsfea.tx_rect_void import load_tx_rect_void_spec
 from peetsfea.tx_rect_void import modeled_body_bounds_from_boxes
 from peetsfea.tx_rect_void import realize_tx_rect_void_spec
+from peetsfea.tx_rect_void_geometry import _segment_joined_polygon
 from peetsfea.type2_step_spec import ModeledSingleCoilCommonSpec
 from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
@@ -84,6 +85,8 @@ class _ResolvedSingleCoilRangeSpec:
 
 
 _TX_CONNECTION_MODES: tuple[TxConnectionMode, TxConnectionMode] = (0, 1)
+Point2 = tuple[float, float]
+Polygon2 = tuple[Point2, ...]
 
 
 @dataclass(frozen=True)
@@ -318,6 +321,77 @@ def _transform_modeled_box_spec(
     )
 
 
+def _single_solid_shape(*, shape: bd.Shape, label: str, context: str) -> bd.Shape:
+    solids = tuple(shape.solids())
+    if len(solids) != 1:
+        raise RuntimeError(
+            "tx_rect_void_columns shape operation must yield exactly one solid "
+            f"(label={label}, context={context}, solid_count={len(solids)})"
+        )
+    solid = solids[0]
+    solid.label = label
+    return solid
+
+
+def _box_shape_from_spec(box_spec: BoxSpec) -> bd.Shape:
+    size_x, size_y, size_z = box_spec.size_xyz
+    if size_x <= 0.0 or size_y <= 0.0 or size_z <= 0.0:
+        raise RuntimeError(
+            "tx_rect_void_columns box shape requires positive size "
+            f"(label={box_spec.label}, size_xyz={box_spec.size_xyz})"
+        )
+    shape = bd.Box(
+        size_x,
+        size_y,
+        size_z,
+        align=(bd.Align.MIN, bd.Align.MIN, bd.Align.MIN),
+    ).moved(bd.Location(box_spec.origin_xyz))
+    return _single_solid_shape(
+        shape=shape,
+        label=box_spec.label,
+        context="box",
+    )
+
+
+def _face_from_polygon_xy(polygon_xy: Polygon2) -> bd.Face:
+    with bd.BuildLine() as builder:
+        bd.Polyline(*polygon_xy, close=True)
+    line = builder.line
+    if line is None:
+        raise RuntimeError("tx_rect_void_columns polygon face builder produced no line")
+    wires = tuple(line.wires())
+    if len(wires) != 1:
+        raise RuntimeError(
+            "tx_rect_void_columns polygon face builder must produce exactly one wire "
+            f"(actual={len(wires)})"
+        )
+    return cast(bd.Face, bd.make_face(edges=tuple(wires[0].edges())))
+
+
+def _extrude_face_xy(
+    *,
+    face_xy: bd.Face,
+    origin_z: float,
+    size_z: float,
+    label: str,
+) -> bd.Shape:
+    if size_z <= 0.0:
+        raise RuntimeError(
+            "tx_rect_void_columns face extrusion requires positive height "
+            f"(label={label}, size_z={size_z})"
+        )
+    with bd.BuildPart() as builder:
+        bd.add(face_xy.moved(bd.Location((0.0, 0.0, origin_z))))
+        bd.extrude(amount=size_z, dir=(0.0, 0.0, 1.0))
+    part = builder.part
+    if part is None:
+        raise RuntimeError(
+            "tx_rect_void_columns face extrusion produced no part "
+            f"(label={label})"
+        )
+    return _single_solid_shape(shape=part, label=label, context="extrude")
+
+
 def _translated_box_spec(
     box_spec: BoxSpec,
     *,
@@ -336,6 +410,77 @@ def _translated_box_spec(
         ),
         size_xyz=box_spec.size_xyz,
     )
+
+
+def _scale_translate_polygon_xy(
+    polygon_xy: Polygon2,
+    *,
+    local_min_xy: tuple[float, float],
+    fit_scale_x: float,
+    fit_scale_y: float,
+    translation_xy: tuple[float, float],
+) -> Polygon2:
+    local_min_x, local_min_y = local_min_xy
+    translation_x, translation_y = translation_xy
+    return tuple(
+        (
+            local_min_x + ((point_x - local_min_x) * fit_scale_x) + translation_x,
+            local_min_y + ((point_y - local_min_y) * fit_scale_y) + translation_y,
+        )
+        for point_x, point_y in polygon_xy
+    )
+
+
+def _transformed_trace_face_from_centerline(
+    *,
+    centerline: tuple[Point2, ...],
+    trace_width_mm: float,
+    local_min_xy: tuple[float, float],
+    fit_scale_x: float,
+    fit_scale_y: float,
+    translation_xy: tuple[float, float],
+) -> bd.Face:
+    segment_count = len(centerline) - 1
+    if segment_count < 1:
+        raise RuntimeError(
+            "tx_rect_void_columns trace face requires at least one segment "
+            f"(centerline_count={len(centerline)})"
+        )
+    segment_faces = tuple(
+        _face_from_polygon_xy(
+            _scale_translate_polygon_xy(
+                _segment_joined_polygon(
+                    centerline,
+                    trace_width_mm=trace_width_mm,
+                    segment_index=segment_index,
+                ),
+                local_min_xy=local_min_xy,
+                fit_scale_x=fit_scale_x,
+                fit_scale_y=fit_scale_y,
+                translation_xy=translation_xy,
+            )
+        )
+        for segment_index in range(segment_count)
+    )
+    fused_face: object = segment_faces[0]
+    for segment_face in segment_faces[1:]:
+        fused_face = cast(bd.Face, fused_face).fuse(segment_face)
+    if isinstance(fused_face, bd.ShapeList):
+        raise RuntimeError(
+            "tx_rect_void_columns trace face fuse returned multiple shapes "
+            f"(centerline_count={len(centerline)}, segment_count={segment_count}, result_count={len(fused_face)})"
+        )
+    if not isinstance(fused_face, bd.Face):
+        raise TypeError(
+            "tx_rect_void_columns trace face fuse returned unsupported type "
+            f"(type={type(fused_face).__name__})"
+        )
+    if len(tuple(fused_face.wires())) != 1:
+        raise RuntimeError(
+            "tx_rect_void_columns trace face fuse must produce one wire "
+            f"(centerline_count={len(centerline)}, wire_count={len(tuple(fused_face.wires()))})"
+        )
+    return fused_face
 
 
 def _resolved_column_range_spec(
@@ -460,50 +605,46 @@ def _realized_boxes_for_column(
             seed=seed,
             profile=_TX_RECT_VOID_COLUMNS_PROFILE,
         )
+    local_centerline = build_tx_rect_void_centerline(realized)
     local_boxes = build_tx_rect_void_box_specs(realized, profile=_TX_RECT_VOID_COLUMNS_PROFILE)
-    modeled_scene = build_tx_rect_void_step_scene(
-        realized,
-        local_boxes,
-        profile=_TX_RECT_VOID_COLUMNS_PROFILE,
-        frame_origin_xyz=(0.0, 0.0, 0.0),
+    local_reference_boxes = tuple(
+        box
+        for box in local_boxes
+        if box.role == "pcb" or (box.role == "copper" and box.feature == "planar_outline")
     )
-    base_children_raw = tuple(modeled_scene.children)
-    if len(base_children_raw) == 0:
-        raise RuntimeError("tx_rect_void_columns base single-layer scene must contain bodies")
-    base_compound = bd.Compound(children=base_children_raw, label="tx_rect_void_columns_base")
-    base_bbox = base_compound.bounding_box()
-    base_min_xyz, _base_max_xyz, base_size_xyz = modeled_body_bounds_from_boxes(local_boxes)
-    base_size_x, base_size_y, base_size_z = base_size_xyz
-    if base_size_x <= 0.0 or base_size_y <= 0.0:
+    if len(local_reference_boxes) == 0:
         raise RuntimeError(
-            "tx_rect_void_columns base scene must have positive XY size "
-            f"(owner={owner_spec.object_id}, base_size_x={base_size_x}, base_size_y={base_size_y})"
+            "tx_rect_void_columns realized single-layer geometry must expose at least one exported base box "
+            f"(owner={owner_spec.object_id}, role={ _TX_RECT_VOID_COLUMNS_PROFILE.role})"
         )
-    if not math.isclose(base_bbox.max.X - base_bbox.min.X, base_size_x, rel_tol=0.0, abs_tol=1e-9) or not math.isclose(
-        base_bbox.max.Y - base_bbox.min.Y,
-        base_size_y,
-        rel_tol=0.0,
-        abs_tol=1e-9,
-    ):
+    local_min_xyz, _local_max_xyz, local_size_xyz = modeled_body_bounds_from_boxes(local_reference_boxes)
+    _all_local_min_xyz, _all_local_max_xyz, all_local_size_xyz = modeled_body_bounds_from_boxes(local_boxes)
+    _all_local_size_x, _all_local_size_y, all_local_size_z = all_local_size_xyz
+    local_size_x, local_size_y, local_size_z = local_size_xyz
+    if local_size_x <= 0.0 or local_size_y <= 0.0:
         raise RuntimeError(
-            "tx_rect_void_columns derived box bounds and scene bounds must agree on X/Y "
-            f"(owner={owner_spec.object_id}, box_sizes=({base_size_x}, {base_size_y}), "
-            f"scene_sizes=({base_bbox.max.X - base_bbox.min.X}, {base_bbox.max.Y - base_bbox.min.Y}))"
+            "tx_rect_void_columns realized base bounds must have positive XY size "
+            f"(owner={owner_spec.object_id}, local_size_x={local_size_x}, local_size_y={local_size_y})"
         )
-    if base_size_z <= 0.0:
+    if local_size_z <= 0.0:
         raise RuntimeError(
-            "tx_rect_void_columns base scene must have positive Z size "
-            f"(owner={owner_spec.object_id}, base_size_z={base_size_z})"
+            "tx_rect_void_columns realized base bounds must have positive Z size "
+            f"(owner={owner_spec.object_id}, local_size_z={local_size_z})"
+        )
+    if all_local_size_z <= 0.0:
+        raise RuntimeError(
+            "tx_rect_void_columns realized full local bounds must have positive Z size "
+            f"(owner={owner_spec.object_id}, local_size_z={all_local_size_z})"
         )
     layer_step_mm = resolved_ranges.pcb_thickness_mm + resolved_ranges.layer_gap_mm
-    full_stack_height_mm = base_size_z + (float(resolved_ranges.layer_count - 1) * layer_step_mm)
+    full_stack_height_mm = all_local_size_z + (float(resolved_ranges.layer_count - 1) * layer_step_mm)
     if full_stack_height_mm > owner_size_z + 1e-9:
         raise RuntimeError(
             "tx_rect_void_columns resolved full stack height must fit stack-space owner height "
             f"(owner={owner_spec.object_id}, stack_height={full_stack_height_mm}, owner_height={owner_size_z})"
         )
-    fit_scale_x = target_outer_x_mm / base_size_x
-    fit_scale_y = target_outer_y_mm / base_size_y
+    fit_scale_x = target_outer_x_mm / local_size_x
+    fit_scale_y = target_outer_y_mm / local_size_y
     if fit_scale_x <= 0.0:
         raise RuntimeError(
             "tx_rect_void_columns fit scale X must be positive "
@@ -525,8 +666,8 @@ def _realized_boxes_for_column(
                 feature=local_box.feature,
                 layer_index=local_box.layer_index,
                 origin_xyz=(
-                    base_min_xyz[0] + ((local_origin_x - base_min_xyz[0]) * fit_scale_x),
-                    base_min_xyz[1] + ((local_origin_y - base_min_xyz[1]) * fit_scale_y),
+                    local_min_xyz[0] + ((local_origin_x - local_min_xyz[0]) * fit_scale_x),
+                    local_min_xyz[1] + ((local_origin_y - local_min_xyz[1]) * fit_scale_y),
                     local_origin_z,
                 ),
                 size_xyz=(
@@ -536,18 +677,28 @@ def _realized_boxes_for_column(
                 ),
             )
         )
-    scaled_scene = build_tx_rect_void_step_scene(
-        realized,
-        tuple(scaled_local_boxes),
-        profile=_TX_RECT_VOID_COLUMNS_PROFILE,
-        frame_origin_xyz=(0.0, 0.0, 0.0),
+    scaled_reference_boxes = tuple(
+        box
+        for box in scaled_local_boxes
+        if box.role == "pcb" or (box.role == "copper" and box.feature == "planar_outline")
     )
-    scaled_children_raw = tuple(scaled_scene.children)
-    scaled_compound = bd.Compound(children=scaled_children_raw, label="tx_rect_void_columns_scaled")
-    scaled_bbox = scaled_compound.bounding_box()
-    scaled_size_x = scaled_bbox.max.X - scaled_bbox.min.X
-    scaled_size_y = scaled_bbox.max.Y - scaled_bbox.min.Y
-    scaled_size_z = scaled_bbox.max.Z - scaled_bbox.min.Z
+    if len(scaled_reference_boxes) == 0:
+        raise RuntimeError(
+            "tx_rect_void_columns scaled single-layer geometry must expose at least one exported base box "
+            f"(owner={owner_spec.object_id}, role={_TX_RECT_VOID_COLUMNS_PROFILE.role})"
+        )
+    scaled_min_xyz, _scaled_max_xyz, scaled_size_xyz = modeled_body_bounds_from_boxes(scaled_reference_boxes)
+    scaled_size_x, scaled_size_y, scaled_size_z = scaled_size_xyz
+    if scaled_size_x <= 0.0 or scaled_size_y <= 0.0:
+        raise RuntimeError(
+            "tx_rect_void_columns scaled local box specs must have positive XY size "
+            f"(owner={owner_spec.object_id}, scaled_size_x={scaled_size_x}, scaled_size_y={scaled_size_y})"
+        )
+    if scaled_size_z <= 0.0:
+        raise RuntimeError(
+            "tx_rect_void_columns scaled local box specs must have positive Z size "
+            f"(owner={owner_spec.object_id}, scaled_size_z={scaled_size_z})"
+        )
     owner_origin_x, owner_origin_y, owner_origin_z = owner_spec.origin_xyz
     target_min_xyz = (
         owner_origin_x,
@@ -555,35 +706,80 @@ def _realized_boxes_for_column(
         owner_origin_z + owner_size_z - scaled_size_z,
     )
     translation_xyz = (
-        target_min_xyz[0] - scaled_bbox.min.X,
-        target_min_xyz[1] - scaled_bbox.min.Y,
-        target_min_xyz[2] - scaled_bbox.min.Z,
+        target_min_xyz[0] - scaled_min_xyz[0],
+        target_min_xyz[1] - scaled_min_xyz[1],
+        target_min_xyz[2] - scaled_min_xyz[2],
     )
-    translated_base_children = tuple(
-        shape.moved(bd.Location(translation_xyz))
-        for shape in scaled_children_raw
+    translated_local_boxes = tuple(
+        _translated_box_spec(
+            box_spec,
+            translation_xyz=translation_xyz,
+            label=box_spec.label,
+        )
+        for box_spec in scaled_local_boxes
     )
-    translated_anchor_boxes_by_label = {
-        box.label: _translated_box_spec(box, translation_xyz=translation_xyz, label=box.label)
-        for box in scaled_local_boxes
-        if box.feature == "terminal_stub"
-    }
     base_pcb_label = f"{_TX_RECT_VOID_COLUMNS_PROFILE.pcb_body_prefix}_l0"
     base_copper_label = f"{_TX_RECT_VOID_COLUMNS_PROFILE.copper_body_prefix}_l0"
     base_stub_start_label = f"{_TX_RECT_VOID_COLUMNS_PROFILE.copper_body_prefix}_l0_stub_start"
     base_stub_end_label = f"{_TX_RECT_VOID_COLUMNS_PROFILE.copper_body_prefix}_l0_stub_end"
-    base_shapes_by_label = {shape.label: shape for shape in translated_base_children}
-    if base_pcb_label not in base_shapes_by_label or base_copper_label not in base_shapes_by_label:
+    translated_boxes_by_label = {box.label: box for box in translated_local_boxes}
+    translated_outline_candidates = tuple(
+        box
+        for box in translated_local_boxes
+        if box.role == "copper" and box.feature == "planar_outline" and box.layer_index == 0
+    )
+    if base_pcb_label not in translated_boxes_by_label or len(translated_outline_candidates) != 1:
         raise RuntimeError(
-            "tx_rect_void_columns single-layer base geometry must expose one PCB and one copper body "
-            f"(owner={owner_spec.object_id}, labels={tuple(base_shapes_by_label.keys())})"
+            "tx_rect_void_columns single-layer translated box specs must expose one PCB and one copper outline "
+            f"(owner={owner_spec.object_id}, pcb_label={base_pcb_label}, "
+            f"outline_count={len(translated_outline_candidates)}, labels={tuple(translated_boxes_by_label.keys())})"
         )
     for expected_label in (base_stub_start_label, base_stub_end_label):
-        if expected_label not in translated_anchor_boxes_by_label:
+        if expected_label not in tuple(box.label for box in translated_local_boxes if box.feature == "terminal_stub"):
             raise RuntimeError(
                 f"tx_rect_void_columns single-layer base geometry must expose {expected_label} anchor metadata "
                 f"(owner={owner_spec.object_id})"
             )
+    translated_copper_outline_box = translated_outline_candidates[0]
+    transformed_trace_face = _transformed_trace_face_from_centerline(
+        centerline=local_centerline,
+        trace_width_mm=realized.trace_width_mm,
+        local_min_xy=(local_min_xyz[0], local_min_xyz[1]),
+        fit_scale_x=fit_scale_x,
+        fit_scale_y=fit_scale_y,
+        translation_xy=(translation_xyz[0], translation_xyz[1]),
+    )
+    base_trace_copper_shape = _extrude_face_xy(
+        face_xy=transformed_trace_face,
+        origin_z=translated_copper_outline_box.origin_xyz[2],
+        size_z=translated_copper_outline_box.size_xyz[2],
+        label=f"{base_copper_label}_trace",
+    )
+    translated_anchor_boxes_by_label = {
+        box.label: box
+        for box in translated_local_boxes
+        if box.feature == "terminal_stub"
+    }
+    base_stub_start_shape = _box_shape_from_spec(translated_anchor_boxes_by_label[base_stub_start_label])
+    base_stub_end_shape = _box_shape_from_spec(translated_anchor_boxes_by_label[base_stub_end_label])
+    copper_with_start_stub = cast(bd.Shape, base_trace_copper_shape.fuse(base_stub_start_shape))
+    copper_with_all_stubs = cast(bd.Shape, copper_with_start_stub.fuse(base_stub_end_shape))
+    base_copper_shape = _single_solid_shape(
+        shape=copper_with_all_stubs,
+        label=base_copper_label,
+        context="copper_fuse",
+    )
+    uncut_pcb_shape = _box_shape_from_spec(translated_boxes_by_label[base_pcb_label])
+    cut_pcb_shape = cast(bd.Shape, uncut_pcb_shape.cut(base_copper_shape))
+    base_pcb_shape = _single_solid_shape(
+        shape=cut_pcb_shape,
+        label=base_pcb_label,
+        context="pcb_cut",
+    )
+    base_shapes_by_label = {
+        base_pcb_label: base_pcb_shape,
+        base_copper_label: base_copper_shape,
+    }
     layer_shapes: list[bd.Shape] = []
     layer_anchor_box_pairs: list[tuple[BoxSpec, BoxSpec]] = []
     for layer_index in range(resolved_ranges.layer_count):
