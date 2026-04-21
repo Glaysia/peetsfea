@@ -1,7 +1,7 @@
 ---
 title: type2_sampled_sampling.py
 created: 2026-04-21 @ 23:40
-updated: 2026-04-21 @ 23:40
+updated: 2026-04-22 @ 01:10
 tags:
   - sampling
   - sdd
@@ -18,7 +18,7 @@ tags:
 ## 역할
 - `type2_sampled`가 import해 사용하는 샘플링 코어를 소유한다.
 - type2 sampled owner path 해석, deterministic sampled scalar 선택, constraint 파싱/평가를 담당한다.
-- `tx_rect_void_columns` mode-aware sampled owner 계산과 inactive owner freeze 값을 제공한다.
+- `tx_rect_void_columns` mode-aware `equivalent_turn_count` sampled owner 계산과 replay freeze 값을 제공한다.
 
 ## 입력 / 출력
 - 입력: `Type2StepSpec`, source TOML table 일부, seed/retry/sampled owner path
@@ -31,7 +31,7 @@ tags:
 ## Invariants / fail-fast
 - unknown owner path, malformed constraint operand/function/operator는 즉시 raise한다.
 - count==1 owner는 sampled owner set에서 제외하고 fixed scalar로만 해석한다.
-- mode-aware tx columns owner 선택은 `connection_mode`와 realized coil count 제약을 유지한다.
+- mode-aware tx columns equivalent-turn candidate selection은 `connection_mode`와 realized coil count 제약을 유지한다. Series는 `round(candidate)`가 `[realized_coil_count, 31]` 안에 들어가는 후보만 허용하고, parallel은 realized branch count `N`에 대해 harmonic range `[1/N, 10/N]` 안의 후보만 허용한다. Candidate selection does not require exact harmonic representability.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_sampled.py]]

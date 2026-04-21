@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec_modeled.py
 created: 2026-04-21 @ 23:50
-updated: 2026-04-21 @ 23:50
+updated: 2026-04-22 @ 00:35
 tags:
   - step-export
   - spec
@@ -33,7 +33,7 @@ tags:
 
 ## Invariants / fail-fast
 - Unsupported modeled role, role/object_id mismatch, unsupported legacy keys, or invalid range tables fail immediately with context.
-- `tx_rect_void_columns` parsing preserves the current supported field surface and rejects legacy column fields without fallback.
+- `tx_rect_void_columns` parsing accepts the single `equivalent_turn_count` public owner, including the canonical sweep range `[false, 0.1111111111111111, 31.0, 100]`, and rejects legacy column fields plus removed `series_total_turn_count` / `parallel_total_turn_count` without fallback.
 - rendering keeps the current canonical text layout and does not infer alternate TOML shapes.
 
 ## Collaborators

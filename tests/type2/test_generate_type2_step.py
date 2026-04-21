@@ -488,8 +488,7 @@ def _type2_tx_rect_void_columns_spec_text(
     layer_gap_mm_range: str = "[false, 1.0, 1.8, 5]",
     terminal_stub_length_mm_range: str = "[false, 10.0, 10.0, 1]",
     connection_mode_range: str = "[true, 0, 1, 2]",
-    series_total_turn_count_range: str = "[true, 1, 36, 36]",
-    parallel_total_turn_count_range: str = "[true, 1, 36, 36]",
+    equivalent_turn_count_range: str = "[false, 0.1111111111111111, 31.0, 100]",
     turn_weight_a_range: str = "[false, 0.5, 1.5, 5]",
     turn_weight_b_range: str = "[false, -0.5, 0.5, 21]",
     turn_weight_c_range: str = "[false, -0.3, 0.3, 21]",
@@ -617,10 +616,8 @@ range = [false, 0.05, 0.05, 1]
 range = [false, 0.5, 0.5, 1]
 [modeled_objects.connection_mode]
 range = {connection_mode_range}
-[modeled_objects.series_total_turn_count]
-range = {series_total_turn_count_range}
-[modeled_objects.parallel_total_turn_count]
-range = {parallel_total_turn_count_range}
+[modeled_objects.equivalent_turn_count]
+range = {equivalent_turn_count_range}
 [modeled_objects.turn_weight_a]
 range = {turn_weight_a_range}
 [modeled_objects.turn_weight_b]
@@ -696,9 +693,8 @@ def _spec_with_deactivated_tx_rect_void_columns_for_export_dispatch() -> Type2St
         margin_ratio=RangeSpec(False, 0.05, 0.05, 1),
         metal_fill_factor=RangeSpec(False, 0.5, 0.5, 1),
         terminal_path="A_cw_to_a",
-        connection_mode=RangeSpec(True, 0.0, 1.0, 2),
-        series_total_turn_count=RangeSpec(True, 1.0, 36.0, 36),
-        parallel_total_turn_count=RangeSpec(True, 1.0, 36.0, 36),
+        connection_mode=RangeSpec(True, 1.0, 1.0, 1),
+        equivalent_turn_count=RangeSpec(False, 1.0, 1.0, 1),
         turn_weight_a=RangeSpec(False, 0.5, 1.5, 5),
         turn_weight_b=RangeSpec(False, -0.5, 0.5, 21),
         turn_weight_c=RangeSpec(False, -0.3, 0.3, 21),
@@ -1685,8 +1681,7 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     tx_columns_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_rect_void_columns")
     assert tx_columns_entry.role == "tx_rect_void_columns"
     assert tx_columns_entry.connection_mode == RangeSpec(True, 0.0, 0.0, 1)
-    assert tx_columns_entry.series_total_turn_count == RangeSpec(True, 3.0, 3.0, 1)
-    assert tx_columns_entry.parallel_total_turn_count == RangeSpec(True, 1.0, 1.0, 1)
+    assert tx_columns_entry.equivalent_turn_count == RangeSpec(False, 3.0, 3.0, 1)
 
 
 def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
@@ -1743,8 +1738,7 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     tx_columns_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_rect_void_columns")
     assert tx_columns_entry.role == "tx_rect_void_columns"
     assert tx_columns_entry.connection_mode == RangeSpec(True, 0.0, 1.0, 2)
-    assert tx_columns_entry.series_total_turn_count == RangeSpec(True, 1.0, 36.0, 36)
-    assert tx_columns_entry.parallel_total_turn_count == RangeSpec(True, 1.0, 36.0, 36)
+    assert tx_columns_entry.equivalent_turn_count == RangeSpec(False, 0.1111111111111111, 31.0, 100)
     assert tx_columns_entry.turn_weight_c == RangeSpec(False, -0.3, 0.3, 21)
 
 
@@ -1768,8 +1762,7 @@ def test_load_type2_step_spec_parses_tx_rect_void_columns_parser_surface(tmp_pat
     assert tx_columns_entry.layer_gap_mm == RangeSpec(False, 1.0, 1.8, 5)
     assert tx_columns_entry.terminal_stub_length_mm == RangeSpec(False, 10.0, 10.0, 1)
     assert tx_columns_entry.connection_mode == RangeSpec(True, 0.0, 1.0, 2)
-    assert tx_columns_entry.series_total_turn_count == RangeSpec(True, 1.0, 36.0, 36)
-    assert tx_columns_entry.parallel_total_turn_count == RangeSpec(True, 1.0, 36.0, 36)
+    assert tx_columns_entry.equivalent_turn_count == RangeSpec(False, 0.1111111111111111, 31.0, 100)
     assert tx_columns_entry.turn_weight_a == RangeSpec(False, 0.5, 1.5, 5)
     assert tx_columns_entry.turn_weight_b == RangeSpec(False, -0.5, 0.5, 21)
     assert tx_columns_entry.turn_weight_c == RangeSpec(False, -0.3, 0.3, 21)
@@ -1784,6 +1777,8 @@ def test_load_type2_step_spec_parses_tx_rect_void_columns_parser_surface(tmp_pat
         "parallel_equivalent_turn_count",
         "column_connection_mode",
         "row_connection_mode",
+        "series_total_turn_count",
+        "parallel_total_turn_count",
     ),
 )
 def test_load_type2_step_spec_rejects_tx_rect_void_columns_legacy_public_keys(
@@ -2380,7 +2375,10 @@ def test_realize_tx_rect_void_spec_uses_single_void_usage_ratio_for_x_and_y(tmp_
 
 
 def test_export_type2_step_artifacts_supports_tx_rect_void_columns_modeled_role(tmp_path: Path) -> None:
-    source_toml = _write_spec(tmp_path, _type2_tx_rect_void_columns_spec_text())
+    source_toml = _write_spec(
+        tmp_path,
+        _type2_tx_rect_void_columns_spec_text(equivalent_turn_count_range="[false, 1.0, 1.0, 1]"),
+    )
     output_dir = tmp_path / "out"
     output_ledger_path = output_dir / "type2_ledger.json"
     ledger = export_type2_step_artifacts(
@@ -2834,8 +2832,7 @@ def _export_tx_rect_void_columns_spec_and_expect_success(
         safe_turn_total = max(6, x_division_count * y_division_count)
         turn_profile_kwargs = {
             "connection_mode_range": "[true, 1, 1, 1]",
-            "series_total_turn_count_range": f"[true, {float(safe_turn_total)}, {float(safe_turn_total)}, 1]",
-            "parallel_total_turn_count_range": f"[true, {safe_turn_total}, {safe_turn_total}, 1]",
+            "equivalent_turn_count_range": f"[false, {float(safe_turn_total)}, {float(safe_turn_total)}, 1]",
             "turn_weight_a_range": "[false, 1.0, 1.0, 1]",
             "turn_weight_b_range": "[false, 0.0, 0.0, 1]",
             "turn_weight_c_range": "[false, -0.3, 0.3, 21]",
@@ -2900,7 +2897,7 @@ def test_export_type2_step_artifacts_tx_rect_void_columns_grid_variants(
         tmp_path=tmp_path,
         x_division_count=x_division_count,
         y_division_count=y_division_count,
-        force_safe_turn_allocation=x_division_count * y_division_count > 1,
+        force_safe_turn_allocation=True,
     )
 
 
@@ -2910,15 +2907,16 @@ def test_export_type2_step_artifacts_tx_rect_void_columns_parallel_collector_var
     x_division_count: int,
     y_division_count: int,
 ) -> None:
-    safe_turn_total = max(6, x_division_count * y_division_count)
+    safe_parallel_equivalent_turn_count = 1.0 / float(x_division_count * y_division_count)
     tx_entry = _export_tx_rect_void_columns_spec_and_expect_success(
         tmp_path=tmp_path,
         x_division_count=x_division_count,
         y_division_count=y_division_count,
         turn_profile_overrides={
             "connection_mode_range": "[true, 0, 0, 1]",
-            "series_total_turn_count_range": f"[true, {float(safe_turn_total)}, {float(safe_turn_total)}, 1]",
-            "parallel_total_turn_count_range": f"[true, {safe_turn_total}, {safe_turn_total}, 1]",
+            "equivalent_turn_count_range": (
+                f"[false, {safe_parallel_equivalent_turn_count}, {safe_parallel_equivalent_turn_count}, 1]"
+            ),
             "turn_weight_a_range": "[false, 1.0, 1.0, 1]",
             "turn_weight_b_range": "[false, 0.0, 0.0, 1]",
             "turn_weight_c_range": "[false, 0.0, 0.0, 1]",
@@ -2955,8 +2953,7 @@ def test_export_type2_step_artifacts_tx_rect_void_columns_aligns_stub_bottoms_to
             tx_region_actual_x_division_count_range="[true, 2, 2, 1]",
             tx_region_actual_y_division_count_range="[true, 3, 3, 1]",
             connection_mode_range="[true, 1, 1, 1]",
-            series_total_turn_count_range="[true, 6.0, 6.0, 1]",
-            parallel_total_turn_count_range="[true, 6, 6, 1]",
+            equivalent_turn_count_range="[false, 6.0, 6.0, 1]",
             turn_weight_a_range="[false, 1.0, 1.0, 1]",
             turn_weight_b_range="[false, 0.0, 0.0, 1]",
             turn_weight_c_range="[false, 0.0, 0.0, 1]",
@@ -3021,8 +3018,7 @@ def test_export_type2_step_artifacts_tx_rect_void_columns_keeps_y_symmetric_turn
     target_total_turn_count = (x_division_count * y_division_count) + 3
     turn_profile_overrides = {
         "connection_mode_range": "[true, 1, 1, 1]",
-        "series_total_turn_count_range": f"[true, {float(target_total_turn_count)}, {float(target_total_turn_count)}, 1]",
-        "parallel_total_turn_count_range": f"[true, {target_total_turn_count}, {target_total_turn_count}, 1]",
+        "equivalent_turn_count_range": f"[false, {float(target_total_turn_count)}, {float(target_total_turn_count)}, 1]",
         "turn_weight_a_range": "[false, 1.0, 1.0, 1]",
         "turn_weight_b_range": "[false, 0.0, 0.0, 1]",
         "turn_weight_c_range": "[false, 0.0, 0.0, 1]",
@@ -3049,6 +3045,7 @@ def test_export_type2_step_artifacts_tx_rect_void_columns_keeps_y_symmetric_turn
         ModeledTxRectVoidColumnsSpec,
         next(modeled for modeled in spec.modeled_objects if modeled.object_id == "tx_rect_void_columns"),
     )
+    assert tx_columns_spec.equivalent_turn_count == RangeSpec(False, float(target_total_turn_count), float(target_total_turn_count), 1)
     resolved_non_model_specs = resolve_non_model_scene_specs(
         base_specs=spec.non_model_objects,
         derived_specs=spec.non_model_derived_objects,
@@ -3082,8 +3079,6 @@ def test_export_type2_step_artifacts_tx_rect_void_columns_keeps_y_symmetric_turn
     }
     for x_index in range(x_division_count):
         assert turn_count_by_tile[(x_index, 0)] == turn_count_by_tile[(x_index, 2)]
-    resolved_total_turn_count = sum(turn_count_by_tile.values())
-    assert resolved_total_turn_count >= target_total_turn_count
 
 
 @pytest.mark.parametrize("layer_count", (2, 3))

@@ -424,10 +424,8 @@ range = [false, 0.05, 0.05, 1]
 range = [false, 0.5, 0.5, 1]
 [modeled_objects.connection_mode]
 range = [true, 0, 1, 2]
-[modeled_objects.series_total_turn_count]
-range = [true, 1, 36, 36]
-[modeled_objects.parallel_total_turn_count]
-range = [true, 1, 36, 36]
+[modeled_objects.equivalent_turn_count]
+range = [false, 0.1111111111111111, 31.0, 100]
 [modeled_objects.turn_weight_a]
 range = [false, 0.5, 1.5, 5]
 [modeled_objects.turn_weight_b]
@@ -949,12 +947,12 @@ def test_build_prepared_type2_design_rejects_tx_rect_void_columns_modeled_role_w
         imported_ledger_path=imported_ledger_path,
         aedt_path=output_aedt_path,
         sampled_owner_paths=(
-            "modeled_objects.tx_rect_void_columns.series_total_turn_count",
+            "modeled_objects.tx_rect_void_columns.equivalent_turn_count",
         ),
         modeled_roles=("tx_rect_void_columns",),
         design_variables=(
             ("non_model_objects_tx_region_actual_stack_space_scale_ratio", "0.6"),
-            ("modeled_objects_tx_rect_void_columns_series_total_turn_count", "3"),
+            ("modeled_objects_tx_rect_void_columns_equivalent_turn_count", "3.0"),
         ),
     )
 

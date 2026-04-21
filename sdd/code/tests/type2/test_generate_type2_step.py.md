@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-21 @ 23:59
+updated: 2026-04-22 @ 01:10
 tags:
   - tests
   - type2
@@ -33,14 +33,15 @@ tags:
   - generated specs using `tx_rect_void_columns` with varied tiling/turn matrices produce expected body metadata counts and scene bodies.
   - grid contract regression explicitly covers `1x1`, `2x3`, `3x3` and validates `txrvc_x*_y*_pcb_l*`, series `txrvc_x*_y*_cu_l*`, series `txrvc_x*_y*_stub_*`, and parallel fused-copper naming/body-count 계약.
   - tilted series export verifies every generated `txrvc_x*_y*_stub_*` terminal body shares the same bottom Z, using the lowest natural stub as the common floorward height.
-  - safe-turn grid variant fixtures keep TOML truth ranges for allocation surface, including `parallel_total_turn_count = [true, 1, 36, 36]` and `turn_weight_c = [false, -0.3, 0.3, 21]`.
-  - fixed-weight symmetry diagnostics now cover `1x3` and `2x3` layouts: Y-mirrored tiles at equal RX distance must realize equal per-tile turn counts, body naming/count contract remains valid, and resolved total turns are asserted with `sum >= target` (not exact-equality pinning).
+  - safe-turn grid variant fixtures keep TOML truth ranges for allocation surface, including canonical `equivalent_turn_count = [false, 0.1111111111111111, 31.0, 100]` and `turn_weight_c = [false, -0.3, 0.3, 21]`.
+  - fixed-weight symmetry diagnostics now cover `1x3` and `2x3` layouts: Y-mirrored tiles at equal RX distance must realize equal per-tile turn counts and the body naming/count contract remains valid.
 - `export_type2_tx_single_coil_artifact` continues to reject `tx_rect_void_columns` role at dispatch.
 - `tx_rect_void_columns` parser contract coverage validates parser-only acceptance and exact schema ranges for:
   - `layer_count`, `layer_gap_mm`, `terminal_stub_length_mm`,
-  - `connection_mode`, `series_total_turn_count`, `parallel_total_turn_count`,
+  - `connection_mode`, `equivalent_turn_count`,
   - `turn_weight_a/b/c`.
-- `tx_rect_void_columns` parser contract rejects legacy keys `turn_count_x0/x1/x2`, `parallel_equivalent_turn_count`, `column_connection_mode`, and `row_connection_mode`.
+- canonical `equivalent_turn_count` sweep coverage uses `[false, 0.1111111111111111, 31.0, 100]`, while fixed single-candidate values within `[0.1111111111111111, 31.0]` remain valid.
+- `tx_rect_void_columns` parser contract rejects legacy keys `turn_count_x0/x1/x2`, `parallel_equivalent_turn_count`, `column_connection_mode`, `row_connection_mode`, `series_total_turn_count`, and `parallel_total_turn_count`.
 - RX single-coil public schema uses `outer_x_usage_ratio` / `outer_y_usage_ratio`; parser resolves owner-span-scaled `outer_x_mm` / `outer_y_mm` for core delegation.
 - single-coil public schema uses `void_usage_ratio` for centered equal X/Y void size; legacy type2 single-coil `outer_*_mm` and split/centered `void_*` public keys are unsupported.
 - `examples/type2_sweep.toml` is the mutable sampling SSOT and this test file must not pin its concrete sweep values.

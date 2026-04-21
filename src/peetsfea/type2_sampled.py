@@ -18,7 +18,6 @@ from peetsfea.type2_sampled_sampling import _modeled_roles
 from peetsfea.type2_sampled_sampling import _parse_constraints
 from peetsfea.type2_sampled_sampling import _range_spec_for_owner_path
 from peetsfea.type2_sampled_sampling import _require_constraints_satisfied
-from peetsfea.type2_sampled_sampling import _tx_rect_void_columns_inactive_owner_values
 from peetsfea.type2_sampled_sampling import exportable_sampled_owner_paths
 from peetsfea.type2_sampled_sampling import exportable_sampled_owner_paths_for_seed
 from peetsfea.type2_sampled_sampling import sampled_owner_values
@@ -49,8 +48,6 @@ _INTEGER_RANGE_FIELD_NAMES = (
     "underlay_repeat_count",
     "wall_parallel_stack_present",
     "tx_coil_count",
-    "series_total_turn_count",
-    "parallel_total_turn_count",
     "x_division_count",
     "y_division_count",
 )
@@ -300,14 +297,6 @@ def _sampled_toml_table(
     for owner_path, value in sampled_values:
         range_spec = _range_spec_for_owner_path(source_spec, owner_path)
         _freeze_owner_range_in_raw_spec(sampled_spec, owner_path=owner_path, value=value, range_spec=range_spec)
-    for owner_path, value in _tx_rect_void_columns_inactive_owner_values(
-        spec=source_spec,
-        sampled_values=sampled_values,
-        seed=seed,
-        retry_number=retry_number,
-    ):
-        range_spec = _range_spec_for_owner_path(source_spec, owner_path)
-        _freeze_owner_range_in_raw_spec(sampled_spec, owner_path=owner_path, value=value, range_spec=range_spec)
     sampled_metadata = _sampled_metadata(
         source_toml_path,
         seed=seed,
@@ -455,7 +444,6 @@ def _build_sample_manifest_entry_for_seed(
             source_spec,
             seed=seed,
             retry_number=attempt,
-            include_inactive_tx_rect_void_columns=True,
         )
         try:
             _require_constraints_satisfied(source_spec, dict(candidate_values), constraints)
@@ -466,7 +454,6 @@ def _build_sample_manifest_entry_for_seed(
             source_spec,
             seed=seed,
             retry_number=attempt,
-            include_inactive_tx_rect_void_columns=False,
         )
         retry_number = attempt
         break
@@ -1067,6 +1054,8 @@ def _design_variable_name(owner_path: str) -> str:
 
 def _design_variable_expression(owner_path: str, value: SampledScalar) -> str:
     field_name = owner_path.split(".")[-1]
+    if field_name == "equivalent_turn_count":
+        return str(float(value))
     if field_name in _INTEGER_RANGE_FIELD_NAMES:
         return str(int(value))
     if field_name.endswith("_ratio") or field_name.endswith("_factor") or "_over_" in field_name:

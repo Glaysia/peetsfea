@@ -4,6 +4,7 @@ import copy
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import hashlib
+import math
 import json
 import subprocess
 from dataclasses import dataclass
@@ -35,8 +36,6 @@ _INTEGER_RANGE_FIELD_NAMES = (
     "underlay_repeat_count",
     "wall_parallel_stack_present",
     "tx_coil_count",
-    "series_total_turn_count",
-    "parallel_total_turn_count",
     "x_division_count",
     "y_division_count",
 )
@@ -552,12 +551,8 @@ def _tx_rect_void_columns_range_owner_specs(modeled_spec: object) -> tuple[tuple
         (f"{owner_root}.turn_weight_b", _tx_rect_void_columns_range_spec(modeled_spec, "turn_weight_b")),
         (f"{owner_root}.turn_weight_c", _tx_rect_void_columns_range_spec(modeled_spec, "turn_weight_c")),
         (
-            f"{owner_root}.series_total_turn_count",
-            _tx_rect_void_columns_range_spec(modeled_spec, "series_total_turn_count"),
-        ),
-        (
-            f"{owner_root}.parallel_total_turn_count",
-            _tx_rect_void_columns_range_spec(modeled_spec, "parallel_total_turn_count"),
+            f"{owner_root}.equivalent_turn_count",
+            _tx_rect_void_columns_range_spec(modeled_spec, "equivalent_turn_count"),
         ),
     )
 
@@ -601,7 +596,6 @@ def _tx_rect_void_columns_sampled_owner_values(
     realized_coil_count: int,
     seed: int,
     retry_number: int,
-    include_inactive_tx_rect_void_columns: bool,
 ) -> tuple[tuple[str, SampledScalar], ...]:
     if realized_coil_count < 1:
         raise ValueError(f"tx_rect_void_columns realized_coil_count must be >= 1 (actual={realized_coil_count})")
@@ -642,71 +636,41 @@ def _tx_rect_void_columns_sampled_owner_values(
                 ),
             )
         )
-    series_owner_path = f"{owner_prefix}.series_total_turn_count"
-    parallel_owner_path = f"{owner_prefix}.parallel_total_turn_count"
-    series_range = _tx_rect_void_columns_range_spec(mode_spec, "series_total_turn_count")
-    parallel_range = _tx_rect_void_columns_range_spec(mode_spec, "parallel_total_turn_count")
-    if include_inactive_tx_rect_void_columns:
-        if series_range.count != 1:
-            sampled_owner_values.append(
-                (
-                    series_owner_path,
-                    _selected_value_for_owner_path(
-                        series_range,
-                        owner_path=series_owner_path,
-                        seed=seed,
-                        retry_number=retry_number,
-                    ),
-                )
-            )
-        if parallel_range.count != 1:
-            sampled_owner_values.append(
-                (
-                    parallel_owner_path,
-                    _selected_value_for_owner_path(
-                        parallel_range,
-                        owner_path=parallel_owner_path,
-                        seed=seed,
-                        retry_number=retry_number,
-                    ),
-                )
-            )
+    equivalent_owner_path = f"{owner_prefix}.equivalent_turn_count"
+    equivalent_range = _tx_rect_void_columns_range_spec(mode_spec, "equivalent_turn_count")
+    feasible_candidates = _tx_rect_void_columns_equivalent_turn_count_candidates(
+        equivalent_range,
+        owner_path=equivalent_owner_path,
+        connection_mode=connection_mode,
+        realized_coil_count=realized_coil_count,
+    )
+    if len(feasible_candidates) == 1:
+        sampled_owner_values.append((equivalent_owner_path, feasible_candidates[0]))
     else:
-        active_owner_path = series_owner_path if connection_mode == 1 else parallel_owner_path
-        active_range = series_range if connection_mode == 1 else parallel_range
-        if active_range.count != 1:
-            sampled_owner_values.append(
-                (
-                    active_owner_path,
-                    _selected_integer_value_for_owner_path_with_minimum(
-                        active_range,
-                        owner_path=active_owner_path,
-                        seed=seed,
-                        retry_number=retry_number,
-                        minimum_value=realized_coil_count,
-                    ),
-                )
+        sampled_owner_values.append(
+            (
+                equivalent_owner_path,
+                _selected_value_from_candidates(
+                    feasible_candidates,
+                    owner_path=equivalent_owner_path,
+                    seed=seed,
+                    retry_number=retry_number,
+                ),
             )
+        )
 
     return tuple(sampled_owner_values)
 
 
-def _selected_integer_value_for_owner_path_with_minimum(
-    range_spec: RangeSpec,
+def _selected_value_from_candidates(
+    candidates: tuple[SampledScalar, ...],
     *,
     owner_path: str,
     seed: int,
     retry_number: int,
-    minimum_value: int,
-) -> int:
-    if minimum_value < 1:
-        raise ValueError(f"{owner_path} minimum candidate value must be >= 1 (actual={minimum_value})")
-    candidates = tuple(candidate for candidate in _integer_range_candidates(range_spec) if candidate >= minimum_value)
+) -> SampledScalar:
     if len(candidates) == 0:
-        raise ValueError(
-            f"No candidates generated for sampled owner at or above minimum: {owner_path} "
-            f"(minimum_value={minimum_value})"
-        )
+        raise ValueError(f"No candidates generated for sampled owner: {owner_path}")
     if len(candidates) == 1:
         return candidates[0]
     if retry_number < 0:
@@ -715,6 +679,48 @@ def _selected_integer_value_for_owner_path_with_minimum(
     digest = hashlib.blake2b(hash_key.encode("utf-8"), digest_size=8).digest()
     index = int.from_bytes(digest, byteorder="big", signed=False) % len(candidates)
     return candidates[index]
+
+
+def _tx_rect_void_columns_equivalent_turn_count_candidates(
+    range_spec: RangeSpec,
+    *,
+    owner_path: str,
+    connection_mode: int,
+    realized_coil_count: int,
+) -> tuple[SampledScalar, ...]:
+    raw_candidates = _float_range_candidates(range_spec)
+    if connection_mode == 1:
+        feasible_candidates = tuple(
+            candidate
+            for candidate in raw_candidates
+            if realized_coil_count <= round(candidate) <= 31
+        )
+    elif connection_mode == 0:
+        lower_bound = 1.0 / float(realized_coil_count)
+        upper_bound = 10.0 / float(realized_coil_count)
+        feasible_candidates = tuple(
+            candidate
+            for candidate in raw_candidates
+            if _value_within_inclusive_bounds(candidate, lower_bound, upper_bound)
+        )
+    else:
+        raise ValueError(f"{owner_path} must resolve to connection mode 0 or 1 (actual={connection_mode})")
+    if len(feasible_candidates) == 0:
+        raise ValueError(
+            f"no feasible equivalent_turn_count candidates for {owner_path} "
+            f"(connection_mode={connection_mode}, realized_coil_count={realized_coil_count})"
+    )
+    return feasible_candidates
+
+
+def _value_within_inclusive_bounds(value: float, lower_bound: float, upper_bound: float) -> bool:
+    return (
+        value > lower_bound
+        or math.isclose(value, lower_bound, rel_tol=0.0, abs_tol=1e-12)
+    ) and (
+        value < upper_bound
+        or math.isclose(value, upper_bound, rel_tol=0.0, abs_tol=1e-12)
+    )
 
 
 def exportable_sampled_owner_paths(spec: Type2StepSpec) -> tuple[str, ...]:
@@ -789,7 +795,6 @@ def sampled_owner_values(
     *,
     seed: int,
     retry_number: int = 0,
-    include_inactive_tx_rect_void_columns: bool = False,
 ) -> tuple[tuple[str, SampledScalar], ...]:
     sampled_values: list[tuple[str, SampledScalar]] = []
     for owner_path, range_spec in _non_model_range_owner_specs(spec):
@@ -834,7 +839,6 @@ def sampled_owner_values(
                     realized_coil_count=tx_rect_void_columns_realized_coil_count,
                     seed=seed,
                     retry_number=retry_number,
-                    include_inactive_tx_rect_void_columns=include_inactive_tx_rect_void_columns,
                 )
             )
             continue
@@ -951,68 +955,6 @@ def _plate_stack_range_owner_values(
     return tuple(sampled_values)
 
 
-def _tx_rect_void_columns_inactive_owner_values(
-    *,
-    spec: Type2StepSpec,
-    sampled_values: tuple[tuple[str, SampledScalar], ...],
-    seed: int,
-    retry_number: int,
-) -> tuple[tuple[str, SampledScalar], ...]:
-    sampled_value_map = dict(sampled_values)
-    inactive_owner_values: list[tuple[str, SampledScalar]] = []
-    for modeled_spec in spec.modeled_objects:
-        role = _modeled_spec_role(modeled_spec)
-        if role != _TX_RECT_VOID_COLUMNS_ROLE:
-            continue
-        assert hasattr(modeled_spec, "object_id"), "tx_rect_void_columns modeled spec must expose object_id"
-        raw_object_id = cast(object, getattr(modeled_spec, "object_id"))
-        assert isinstance(raw_object_id, str), "tx_rect_void_columns object_id must be str"
-        object_id = raw_object_id
-        owner_prefix = f"modeled_objects.{object_id}"
-        connection_mode_path = f"{owner_prefix}.connection_mode"
-        connection_mode: int
-        if connection_mode_path in sampled_value_map:
-            raw_connection_mode = sampled_value_map[connection_mode_path]
-            if isinstance(raw_connection_mode, bool) or not isinstance(raw_connection_mode, int):
-                raise ValueError(f"{connection_mode_path} must resolve to integer connection mode 0 or 1")
-            if raw_connection_mode not in {0, 1}:
-                raise ValueError(
-                    f"{connection_mode_path} must resolve to integer connection mode 0 or 1, "
-                    f"actual={raw_connection_mode}"
-                )
-            connection_mode = raw_connection_mode
-        else:
-            connection_mode = _tx_rect_void_columns_sampled_connection_mode(
-                modeled_spec,
-                owner_path=connection_mode_path,
-                seed=seed,
-                retry_number=retry_number,
-            )
-        series_path = f"{owner_prefix}.series_total_turn_count"
-        parallel_path = f"{owner_prefix}.parallel_total_turn_count"
-        inactive_path = parallel_path if connection_mode == 1 else series_path
-        if inactive_path in sampled_value_map:
-            continue
-        inactive_range_spec = _tx_rect_void_columns_range_spec(
-            modeled_spec,
-            "series_total_turn_count" if connection_mode != 1 else "parallel_total_turn_count",
-        )
-        if inactive_range_spec.count == 1:
-            continue
-        inactive_owner_values.append(
-            (
-                inactive_path,
-                _selected_value_for_owner_path(
-                    inactive_range_spec,
-                    owner_path=inactive_path,
-                    seed=seed,
-                    retry_number=retry_number,
-                ),
-            )
-        )
-    return tuple(inactive_owner_values)
-
-
 __all__ = [
     "SampledScalar",
     "exportable_sampled_owner_paths",
@@ -1023,6 +965,4 @@ __all__ = [
     "_parse_constraints",
     "_range_spec_for_owner_path",
     "_require_constraints_satisfied",
-    "_tx_rect_void_columns_inactive_owner_values",
 ]
-

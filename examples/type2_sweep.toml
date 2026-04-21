@@ -267,14 +267,10 @@ range = [false, 0.6, 0.6, 1]
 # 0 = 모든 realized coil 병렬, 1 = 모든 realized coil 직렬.
 # 이 값에 따라 effective sampled turn owner가 하나만 선택된다.
 range = [true, 0, 1, 2]
-[modeled_objects.series_total_turn_count]
-# connection_mode=1(series)일 때만 effective sampled owner가 된다.
-# 의미: 모든 realized coil의 자연수 turn 수 합.
-range = [true, 1, 36, 36]
-[modeled_objects.parallel_total_turn_count]
-# connection_mode=0(parallel)일 때만 effective sampled owner가 된다.
-# 의미: 병렬 연결에서 모든 realized coil의 physical turn 합.
-range = [true, 1, 36, 36]
+[modeled_objects.equivalent_turn_count]
+# connection_mode에 따라 series/parallel 양쪽에서 같은 public owner를 사용한다.
+# canonical sweep range: [false, 0.1111111111111111, 31.0, 100]
+range = [false, 0.1111111111111111, 31.0, 100]
 [modeled_objects.turn_weight_a]
 # per-coil turn 분배 weight 다항식 w_i = a + b*x_i + c*x_i^2 의 상수항.
 # x_i는 RX 중심 대비 각 TX coil 중심의 normalized |x| 거리다.

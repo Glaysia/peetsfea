@@ -198,38 +198,69 @@ def _selected_feasible_layer_count_and_gap(
     return feasible_pairs[index]
 
 
-def _selected_parallel_total_turn_count(
-    *, spec: ModeledTxRectVoidColumnsSpec, owner_path: str, seed: int
+def _selected_equivalent_turn_count(
+    *,
+    spec: ModeledTxRectVoidColumnsSpec,
+    owner_path: str,
+    seed: int,
+    connection_mode: int,
+    realized_coil_count: int,
 ) -> float:
-    if not hasattr(spec, "parallel_total_turn_count"):
+    if realized_coil_count < 1:
         raise RuntimeError(
-            "tx_rect_void_columns parallel_total_turn_count is not available in the resolved spec "
+            "tx_rect_void_columns realized coil count must be >= 1 "
+            f"(owner={owner_path}, actual={realized_coil_count})"
+        )
+    if not hasattr(spec, "equivalent_turn_count"):
+        raise RuntimeError(
+            "tx_rect_void_columns equivalent_turn_count is not available in the resolved spec "
             f"(owner={owner_path})"
         )
-    parallel_total_turn_count = getattr(spec, "parallel_total_turn_count")
-    if isinstance(parallel_total_turn_count, bool) or not isinstance(parallel_total_turn_count, RangeSpec):
+    equivalent_turn_count = getattr(spec, "equivalent_turn_count")
+    if isinstance(equivalent_turn_count, bool) or not isinstance(equivalent_turn_count, RangeSpec):
         raise RuntimeError(
-            "tx_rect_void_columns parallel_total_turn_count must resolve as a RangeSpec "
-            f"(owner={owner_path}, actual={type(parallel_total_turn_count)!r})"
+            "tx_rect_void_columns equivalent_turn_count must resolve as a RangeSpec "
+            f"(owner={owner_path}, actual={type(equivalent_turn_count)!r})"
         )
-    if parallel_total_turn_count.is_integer is True:
-        return float(
-            _selected_integer_candidate(
-                range_spec=parallel_total_turn_count,
-                owner_path=f"{owner_path}",
-                seed=seed,
-            )
+    if equivalent_turn_count.is_integer is True:
+        candidates = tuple(float(candidate) for candidate in _integer_range_candidates(equivalent_turn_count))
+    elif equivalent_turn_count.is_integer is False:
+        candidates = _float_range_candidates(equivalent_turn_count)
+    else:
+        raise RuntimeError(
+            "tx_rect_void_columns equivalent_turn_count owner must be a float or integer range "
+            f"(owner={owner_path}, is_integer={equivalent_turn_count.is_integer})"
         )
-    if parallel_total_turn_count.is_integer is False:
-        return _selected_float_candidate(
-            range_spec=parallel_total_turn_count,
-            owner_path=f"{owner_path}",
-            seed=seed,
+    feasible_candidates: list[float] = []
+    if connection_mode == 0:
+        lower_bound = 1.0 / float(realized_coil_count)
+        upper_bound = 10.0 / float(realized_coil_count)
+        for candidate in candidates:
+            if (
+                candidate > lower_bound
+                or math.isclose(candidate, lower_bound, rel_tol=0.0, abs_tol=1e-12)
+            ) and (
+                candidate < upper_bound
+                or math.isclose(candidate, upper_bound, rel_tol=0.0, abs_tol=1e-12)
+            ):
+                feasible_candidates.append(candidate)
+    elif connection_mode == 1:
+        for candidate in candidates:
+            rounded_candidate = round(candidate)
+            if realized_coil_count <= rounded_candidate <= 31:
+                feasible_candidates.append(candidate)
+    else:
+        raise RuntimeError(f"tx_rect_void_columns connection_mode must be 0 or 1 (actual={connection_mode})")
+    if len(feasible_candidates) == 0:
+        raise ValueError(
+            "tx_rect_void_columns equivalent_turn_count range has no mode/grid-feasible candidates "
+            f"(owner={owner_path}, connection_mode={connection_mode}, realized_coil_count={realized_coil_count})"
         )
-    raise RuntimeError(
-        "tx_rect_void_columns parallel_total_turn_count owner must be integer-capable "
-        f"(owner={owner_path}, is_integer={parallel_total_turn_count.is_integer})"
-    )
+    if len(feasible_candidates) == 1:
+        return feasible_candidates[0]
+    digest = hashlib.blake2b(f"{seed}:{owner_path}".encode("utf-8"), digest_size=8).digest()
+    index = int.from_bytes(digest, byteorder="big", signed=False) % len(feasible_candidates)
+    return feasible_candidates[index]
 
 
 def _fixed_float_range(*, value: float) -> RangeSpec:
@@ -906,20 +937,13 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
     )
     if connection_mode not in _TX_CONNECTION_MODES:
         raise RuntimeError(f"tx_rect_void_columns connection_mode must be 0 or 1 (actual={connection_mode})")
-    if connection_mode == 0:
-        relevant_turn_count = _selected_parallel_total_turn_count(
-            spec=spec,
-            owner_path=f"{owner_prefix}.parallel_total_turn_count",
-            seed=seed,
-        )
-    else:
-        relevant_turn_count = float(
-            _selected_integer_candidate(
-                range_spec=spec.series_total_turn_count,
-                owner_path=f"{owner_prefix}.series_total_turn_count",
-                seed=seed,
-            )
-        )
+    equivalent_turn_count = _selected_equivalent_turn_count(
+        spec=spec,
+        owner_path=f"{owner_prefix}.equivalent_turn_count",
+        seed=seed,
+        connection_mode=connection_mode,
+        realized_coil_count=len(sorted_indexed_specs),
+    )
     turn_weight_a = _selected_float_candidate(
         range_spec=spec.turn_weight_a,
         owner_path=f"{owner_prefix}.turn_weight_a",
@@ -947,7 +971,7 @@ def build_tx_rect_void_columns_axis_aligned_tile_scenes(
         stack_space_centers,
         rx_center_xyz=rx_center_xyz,
         connection_mode=connection_mode,
-        relevant_turn_count=relevant_turn_count,
+        equivalent_turn_count=equivalent_turn_count,
         turn_weight_a=turn_weight_a,
         turn_weight_b=turn_weight_b,
         turn_weight_c=turn_weight_c,

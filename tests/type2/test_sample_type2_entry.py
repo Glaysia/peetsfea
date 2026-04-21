@@ -866,10 +866,8 @@ range = [false, 0.2, 0.6, 15]
 value = "A_cw_to_a"
 [modeled_objects.connection_mode]
 range = [true, 0, 1, 2]
-[modeled_objects.series_total_turn_count]
-range = [true, 1, 36, 36]
-[modeled_objects.parallel_total_turn_count]
-range = [true, 1, 36, 36]
+[modeled_objects.equivalent_turn_count]
+range = [false, 0.1111111111111111, 31.0, 100]
 [modeled_objects.turn_weight_a]
 range = [false, 0.5, 1.5, 5]
 [modeled_objects.turn_weight_b]
@@ -888,34 +886,22 @@ def test_sampled_owner_values_tx_rect_void_columns_uses_mode_aware_effective_tur
 
     owner_prefix = "modeled_objects.tx_rect_void_columns"
     connection_mode_path = f"{owner_prefix}.connection_mode"
-    series_owner_path = f"{owner_prefix}.series_total_turn_count"
-    parallel_owner_path = f"{owner_prefix}.parallel_total_turn_count"
+    equivalent_owner_path = f"{owner_prefix}.equivalent_turn_count"
     turn_weight_paths = (
         f"{owner_prefix}.turn_weight_a",
         f"{owner_prefix}.turn_weight_b",
         f"{owner_prefix}.turn_weight_c",
     )
-    observed_modes: set[int] = set()
     for seed in range(32):
         sampled_owner_values = dict(type2_sampled.sampled_owner_values(spec, seed=seed))
         assert connection_mode_path in sampled_owner_values
+        assert equivalent_owner_path in sampled_owner_values
         for turn_weight_path in turn_weight_paths:
             assert turn_weight_path in sampled_owner_values
         assert all("turn_count_x" not in owner_path for owner_path in sampled_owner_values)
-        raw_connection_mode = sampled_owner_values[connection_mode_path]
-        assert isinstance(raw_connection_mode, int)
-        assert raw_connection_mode in {0, 1}
-        observed_modes.add(raw_connection_mode)
-        has_series_owner = series_owner_path in sampled_owner_values
-        has_parallel_owner = parallel_owner_path in sampled_owner_values
-        assert has_series_owner is not has_parallel_owner
-        if raw_connection_mode == 1:
-            assert has_series_owner
-            assert has_parallel_owner is False
-        else:
-            assert has_series_owner is False
-            assert has_parallel_owner
-    assert observed_modes == {0, 1}
+        assert all("series_total_turn_count" not in owner_path for owner_path in sampled_owner_values)
+        assert all("parallel_total_turn_count" not in owner_path for owner_path in sampled_owner_values)
+        assert isinstance(sampled_owner_values[equivalent_owner_path], float)
 
 
 def test_sample_type2_tx_rect_void_columns_sample_only_emits_manifest_and_sampled_toml(
@@ -942,8 +928,7 @@ def test_sample_type2_tx_rect_void_columns_sample_only_emits_manifest_and_sample
     assert len(document["entries"]) == 4
     owner_prefix = "modeled_objects.tx_rect_void_columns"
     connection_mode_path = f"{owner_prefix}.connection_mode"
-    series_owner_path = f"{owner_prefix}.series_total_turn_count"
-    parallel_owner_path = f"{owner_prefix}.parallel_total_turn_count"
+    equivalent_owner_path = f"{owner_prefix}.equivalent_turn_count"
     turn_weight_paths = (
         f"{owner_prefix}.turn_weight_a",
         f"{owner_prefix}.turn_weight_b",
@@ -952,8 +937,10 @@ def test_sample_type2_tx_rect_void_columns_sample_only_emits_manifest_and_sample
     for entry in document["entries"]:
         sampled_owner_paths = cast(list[str], entry["sampled_owner_paths"])
         assert connection_mode_path in sampled_owner_paths
+        assert equivalent_owner_path in sampled_owner_paths
         assert all(turn_weight_path in sampled_owner_paths for turn_weight_path in turn_weight_paths)
-        assert (series_owner_path in sampled_owner_paths) is not (parallel_owner_path in sampled_owner_paths)
+        assert all("series_total_turn_count" not in owner_path for owner_path in sampled_owner_paths)
+        assert all("parallel_total_turn_count" not in owner_path for owner_path in sampled_owner_paths)
 
 
 def test_sample_type2_sweep_ssot_emits_tx_columns_manifest_and_sampled_toml(tmp_path: Path) -> None:
@@ -982,17 +969,20 @@ def test_sample_type2_sweep_ssot_emits_tx_columns_manifest_and_sampled_toml(tmp_
     assert manifest_path.is_file()
     assert len(document["entries"]) == 2
     owner_prefix = "modeled_objects.tx_rect_void_columns"
-    series_owner_path = f"{owner_prefix}.series_total_turn_count"
-    parallel_owner_path = f"{owner_prefix}.parallel_total_turn_count"
+    connection_mode_path = f"{owner_prefix}.connection_mode"
+    equivalent_owner_path = f"{owner_prefix}.equivalent_turn_count"
+    turn_weight_paths = (
+        f"{owner_prefix}.turn_weight_a",
+        f"{owner_prefix}.turn_weight_b",
+        f"{owner_prefix}.turn_weight_c",
+    )
     for entry in document["entries"]:
         sampled_owner_paths = cast(list[str], entry["sampled_owner_paths"])
-        assert f"{owner_prefix}.connection_mode" in sampled_owner_paths
-        assert f"{owner_prefix}.turn_weight_a" in sampled_owner_paths
-        assert f"{owner_prefix}.turn_weight_b" in sampled_owner_paths
-        assert f"{owner_prefix}.turn_weight_c" in sampled_owner_paths
-        assert (f"{owner_prefix}.series_total_turn_count" in sampled_owner_paths) is not (
-            f"{owner_prefix}.parallel_total_turn_count" in sampled_owner_paths
-        )
+        assert connection_mode_path in sampled_owner_paths
+        assert equivalent_owner_path in sampled_owner_paths
+        assert all(turn_weight_path in sampled_owner_paths for turn_weight_path in turn_weight_paths)
+        assert all("series_total_turn_count" not in owner_path for owner_path in sampled_owner_paths)
+        assert all("parallel_total_turn_count" not in owner_path for owner_path in sampled_owner_paths)
         sampled_toml_path = Path(cast(str, entry["sampled_toml_path"]))
         assert sampled_toml_path.is_file()
         sampled_payload = tomllib.loads(sampled_toml_path.read_text(encoding="utf-8"))
@@ -1023,34 +1013,17 @@ def test_sample_type2_sweep_ssot_emits_tx_columns_manifest_and_sampled_toml(tmp_
         assert "turn_count_x0" not in tx_rect_columns_object
         assert "turn_count_x1" not in tx_rect_columns_object
         assert "turn_count_x2" not in tx_rect_columns_object
-        connection_mode_range = cast(
-            list[object],
-            cast(dict[str, object], tx_rect_columns_object["connection_mode"])["range"],
-        )
-        assert connection_mode_range[0] is True
-        assert connection_mode_range[3] == 1
-        assert connection_mode_range[1] == connection_mode_range[2]
-        sampled_connection_mode = cast(int, connection_mode_range[1])
-        assert sampled_connection_mode in {0, 1}
-        if sampled_connection_mode == 1:
-            assert series_owner_path in sampled_owner_paths
-            assert parallel_owner_path not in sampled_owner_paths
-        else:
-            assert series_owner_path not in sampled_owner_paths
-            assert parallel_owner_path in sampled_owner_paths
+        assert equivalent_owner_path in sampled_owner_paths
+        assert connection_mode_path in sampled_owner_paths
+        assert all(turn_weight_path in sampled_owner_paths for turn_weight_path in turn_weight_paths)
 
-        series_range = cast(
+        equivalent_range = cast(
             list[object],
-            cast(dict[str, object], tx_rect_columns_object["series_total_turn_count"])["range"],
+            cast(dict[str, object], tx_rect_columns_object["equivalent_turn_count"])["range"],
         )
-        parallel_range = cast(
-            list[object],
-            cast(dict[str, object], tx_rect_columns_object["parallel_total_turn_count"])["range"],
-        )
-        assert series_range[3] == 1
-        assert series_range[1] == series_range[2]
-        assert parallel_range[3] == 1
-        assert parallel_range[1] == parallel_range[2]
+        assert equivalent_range[0] is False
+        assert equivalent_range[3] == 1
+        assert equivalent_range[1] == equivalent_range[2]
 
 
 def test_sample_type2_fixed_ssot_keeps_two_modeled_objects() -> None:

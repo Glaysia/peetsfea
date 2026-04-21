@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec_types.py
 created: 2026-04-21 @ 20:35
-updated: 2026-04-21 @ 20:35
+updated: 2026-04-22 @ 00:35
 tags:
   - step-export
   - spec
@@ -28,6 +28,7 @@ tags:
 - `tx_single_coil`, `rx_single_coil`, `tx_rect_void_columns`, `tx_plate_stack`, `rx_plate_stack` role mappings are canonical here.
 - `tx_region`, `rx_region_max`, `XY`, and `YZ` resolution rules are centralized here and must stay aligned with the parser facade.
 - `ModeledTxRectVoidColumnsSpec` is the only modeled-columns dataclass; no extra alias is owned here.
+- `ModeledTxRectVoidColumnsSpec` owns one turn-count range field, `equivalent_turn_count`; its canonical active sweep range is `[false, 0.1111111111111111, 31.0, 100]`, and legacy `series_total_turn_count` and `parallel_total_turn_count` fields are not part of the active dataclass.
 
 ## Invariants / fail-fast
 - unsupported modeled roles raise immediately.

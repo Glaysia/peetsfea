@@ -1,7 +1,7 @@
 ---
 title: test_sample_type2_entry.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-21 @ 23:05
+updated: 2026-04-22 @ 01:10
 tags:
   - tests
   - type2
@@ -29,8 +29,9 @@ tags:
 - tx-rect-void-columns role presence in active type2 sample tests is accepted on parser/sampler-only surface.
 - `make_step_on_sample=false` path emits `manifest.json` and sampled TOML entries for tx-columns source without invoking exporter.
 - tx-columns sampled owner list is mode-aware:
-  - sampled `connection_mode`, `turn_weight_a/b/c` owners are included.
-  - exactly one effective turn owner is included per sample (`series_total_turn_count` when mode 1, `parallel_total_turn_count` when mode 0).
+  - sampled `connection_mode`, `equivalent_turn_count`, and `turn_weight_a/b/c` owners are included when their source ranges have more than one candidate.
+  - tx-columns sampling contract no longer exposes separate public turn owners for `series_total_turn_count` or `parallel_total_turn_count`.
+  - `equivalent_turn_count` candidate selection is filtered by the realized connection mode and coil count before replay freezes the chosen value.
   - legacy `turn_count_x*` owners remain absent from manifest metadata and sampled metadata.
 - sampled owner paths cover only `rx_rect_void_coil` effective sampled degrees:
   - `outer_x_usage_ratio`
@@ -54,7 +55,7 @@ tags:
 - `MAKE_STEP_ON_SAMPLE=False` does not emit STEP stage lines and does not call the exporter.
 
 ## 변경 시 주의점
-- sampled owner assertions를 role-blind로 환원하지 않는다.
+- sampled owner assertions를 role-blind로 환원하지 않되 canonical equivalent-turn owner surface로 고정한다.
 - tx-columns sample-only coverage를 parser-deactivation failure assertion으로 되돌리지 않는다.
 - non-model owner freezing must update the `[[non_model_objects]]` table, not synthesize modeled placeholders.
 - stage-log assertions는 manifest JSON shape나 design identity contract를 대체하지 않는다.

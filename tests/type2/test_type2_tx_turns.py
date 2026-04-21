@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from typing import cast
 
 import pytest
@@ -36,63 +35,55 @@ def test_turn_weights_polynomial_and_max1_scaling() -> None:
     assert weights == (1.0, 2.0)
 
 
-def test_allocate_series_turns_symmetric_group_may_exceed_target_budget() -> None:
-    centers = ((-1.0, 0.0, 0.0), (1.0, 0.0, 0.0))
+def test_allocate_series_turns_3x3_equivalent_turn_count_31_is_valid_only_with_sum_at_most_31() -> None:
+    centers = (
+        (-1.0, -1.0, 0.0),
+        (0.0, -1.0, 0.0),
+        (1.0, -1.0, 0.0),
+        (-1.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (-1.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (1.0, 1.0, 0.0),
+    )
     turns = allocate_series_turns(
         centers,
         rx_center_xyz=(0.0, 0.0, 0.0),
-        series_total_turn_count=5,
+        equivalent_turn_count=31,
         turn_weight_a=2.0,
         turn_weight_b=0.0,
         turn_weight_c=0.0,
     )
-    assert turns[0] == turns[1]
-    assert sum(turns) >= 5
+    assert sum(turns) <= 31
     assert min(turns) >= 1
+    assert min(turns) < max(turns)
 
 
-def test_allocate_series_turns_rejects_low_total() -> None:
-    centers = ((-1.0, 0.0, 0.0), (1.0, 0.0, 0.0), (3.0, 0.0, 0.0))
-    with pytest.raises(ValueError, match="series_total_turn_count must be >= coil_count"):
+def test_allocate_series_turns_rejects_equivalent_turn_count_below_coil_count() -> None:
+    centers = (
+        (-1.0, -1.0, 0.0),
+        (0.0, -1.0, 0.0),
+        (1.0, -1.0, 0.0),
+        (-1.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (-1.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (1.0, 1.0, 0.0),
+    )
+    with pytest.raises(ValueError):
         allocate_series_turns(
             centers,
             rx_center_xyz=(0.0, 0.0, 0.0),
-            series_total_turn_count=2,
+            equivalent_turn_count=8,
             turn_weight_a=1.0,
             turn_weight_b=0.0,
             turn_weight_c=0.0,
         )
 
 
-def test_allocate_parallel_turns_1x3_center_favored_weights_target5() -> None:
-    centers = ((-1.0, 0.0, 0.0), (0.0, 0.0, 0.0), (1.0, 0.0, 0.0))
-    turns = allocate_parallel_turns(
-        centers,
-        rx_center_xyz=(0.0, 0.0, 0.0),
-        parallel_total_turn_count=5,
-        turn_weight_a=1.0,
-        turn_weight_b=-0.9,
-        turn_weight_c=0.0,
-    )
-    assert turns == (1, 3, 1)
-    assert sum(turns) >= 5
-
-
-def test_allocate_parallel_turns_1x3_edge_favored_weights_target5() -> None:
-    centers = ((-1.0, 0.0, 0.0), (0.0, 0.0, 0.0), (1.0, 0.0, 0.0))
-    turns = allocate_parallel_turns(
-        centers,
-        rx_center_xyz=(0.0, 0.0, 0.0),
-        parallel_total_turn_count=5,
-        turn_weight_a=1.0,
-        turn_weight_b=1.0,
-        turn_weight_c=0.0,
-    )
-    assert turns == (2, 1, 2)
-    assert sum(turns) >= 5
-
-
-def test_allocate_parallel_turns_3x3_equal_2d_distance_pairs_have_equal_counts() -> None:
+def test_allocate_parallel_turns_3x3_equivalent_turn_count_1_over_9_allocates_one_turn_each() -> None:
     centers = (
         (-1.0, -1.0, 0.0),
         (0.0, -1.0, 0.0),
@@ -107,53 +98,15 @@ def test_allocate_parallel_turns_3x3_equal_2d_distance_pairs_have_equal_counts()
     turns = allocate_parallel_turns(
         centers,
         rx_center_xyz=(0.0, 0.0, 0.0),
-        parallel_total_turn_count=11,
+        equivalent_turn_count=1.0 / 9.0,
         turn_weight_a=1.0,
         turn_weight_b=0.0,
         turn_weight_c=0.0,
     )
-    rx_xy = (0.0, 0.0)
-    groups: dict[float, list[int]] = {}
-    for index, (x_value, y_value, _z_value) in enumerate(centers):
-        distance = math.hypot(x_value - rx_xy[0], y_value - rx_xy[1])
-        if distance in groups:
-            groups[distance].append(index)
-        else:
-            groups[distance] = [index]
-    for indices in groups.values():
-        first_turn = turns[indices[0]]
-        for index in indices[1:]:
-            assert turns[index] == first_turn
-    assert sum(turns) >= 11
+    assert turns == (1, 1, 1, 1, 1, 1, 1, 1, 1)
 
 
-def test_allocate_parallel_turns_1x1_total_budget_36_allocates_36() -> None:
-    centers = ((0.0, 0.0, 0.0),)
-    turns = allocate_parallel_turns(
-        centers,
-        rx_center_xyz=(0.0, 0.0, 0.0),
-        parallel_total_turn_count=36,
-        turn_weight_a=1.0,
-        turn_weight_b=0.0,
-        turn_weight_c=0.0,
-    )
-    assert turns == (36,)
-
-
-def test_allocate_parallel_turns_rejects_total_below_coil_count() -> None:
-    centers = ((-1.0, 0.0, 0.0), (0.0, 0.0, 0.0), (1.0, 0.0, 0.0))
-    with pytest.raises(ValueError, match="parallel_total_turn_count must be >= coil_count"):
-        allocate_parallel_turns(
-            centers,
-            rx_center_xyz=(0.0, 0.0, 0.0),
-            parallel_total_turn_count=2,
-            turn_weight_a=1.0,
-            turn_weight_b=0.0,
-            turn_weight_c=0.0,
-        )
-
-
-def test_allocate_parallel_turns_2x3_equal_2d_distance_pairs_have_equal_counts() -> None:
+def test_allocate_parallel_turns_3x3_equivalent_turn_count_10_over_9_allocates_ten_turns_each() -> None:
     centers = (
         (-1.0, -1.0, 0.0),
         (0.0, -1.0, 0.0),
@@ -161,42 +114,65 @@ def test_allocate_parallel_turns_2x3_equal_2d_distance_pairs_have_equal_counts()
         (-1.0, 0.0, 0.0),
         (0.0, 0.0, 0.0),
         (1.0, 0.0, 0.0),
+        (-1.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (1.0, 1.0, 0.0),
     )
     turns = allocate_parallel_turns(
         centers,
         rx_center_xyz=(0.0, 0.0, 0.0),
-        parallel_total_turn_count=7,
+        equivalent_turn_count=10.0 / 9.0,
         turn_weight_a=1.0,
         turn_weight_b=0.0,
         turn_weight_c=0.0,
     )
-    rx_xy = (0.0, 0.0)
-    groups: dict[float, list[int]] = {}
-    for index, (x_value, y_value, _z_value) in enumerate(centers):
-        distance = math.hypot(x_value - rx_xy[0], y_value - rx_xy[1])
-        if distance in groups:
-            groups[distance].append(index)
-        else:
-            groups[distance] = [index]
-    for indices in groups.values():
-        first_turn = turns[indices[0]]
-        for index in indices[1:]:
-            assert turns[index] == first_turn
-    assert sum(turns) >= 7
+    assert turns == (10, 10, 10, 10, 10, 10, 10, 10, 10)
 
 
-def test_allocate_parallel_turns_respects_geometry_turn_cap() -> None:
-    centers = ((-2.0, 0.0, 0.0), (0.0, 0.0, 0.0), (2.0, 0.0, 0.0))
-    turns = allocate_parallel_turns(
-        centers,
-        rx_center_xyz=(0.0, 0.0, 0.0),
-        parallel_total_turn_count=14,
-        turn_weight_a=1.0,
-        turn_weight_b=0.0,
-        turn_weight_c=0.0,
-        max_turn_count=8,
+def test_allocate_parallel_turns_3x3_equivalent_turn_count_4_is_infeasible() -> None:
+    centers = (
+        (-1.0, -1.0, 0.0),
+        (0.0, -1.0, 0.0),
+        (1.0, -1.0, 0.0),
+        (-1.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (-1.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (1.0, 1.0, 0.0),
     )
-    assert max(turns) <= 8
+    with pytest.raises(ValueError):
+        allocate_parallel_turns(
+            centers,
+            rx_center_xyz=(0.0, 0.0, 0.0),
+            equivalent_turn_count=4.0,
+            turn_weight_a=1.0,
+            turn_weight_b=0.0,
+            turn_weight_c=0.0,
+        )
+
+
+def test_allocate_series_turns_rejects_equivalent_turn_count_above_31() -> None:
+    centers = (
+        (-1.0, -1.0, 0.0),
+        (0.0, -1.0, 0.0),
+        (1.0, -1.0, 0.0),
+        (-1.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (-1.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (1.0, 1.0, 0.0),
+    )
+    with pytest.raises(ValueError):
+        allocate_series_turns(
+            centers,
+            rx_center_xyz=(0.0, 0.0, 0.0),
+            equivalent_turn_count=32,
+            turn_weight_a=1.0,
+            turn_weight_b=0.0,
+            turn_weight_c=0.0,
+        )
 
 
 def test_allocate_series_turns_rejects_geometry_turn_cap_overflow() -> None:
@@ -205,7 +181,7 @@ def test_allocate_series_turns_rejects_geometry_turn_cap_overflow() -> None:
         allocate_series_turns(
             centers,
             rx_center_xyz=(0.0, 0.0, 0.0),
-            series_total_turn_count=10,
+            equivalent_turn_count=10,
             turn_weight_a=1.0,
             turn_weight_b=0.0,
             turn_weight_c=0.0,
@@ -219,7 +195,7 @@ def test_resolve_tx_turns_router_parallel_and_series_modes() -> None:
         centers,
         rx_center_xyz=(0.0, 0.0, 0.0),
         connection_mode=0,
-        relevant_turn_count=8.0,
+        equivalent_turn_count=1.0,
         turn_weight_a=1.0,
         turn_weight_b=0.0,
         turn_weight_c=0.0,
@@ -228,15 +204,13 @@ def test_resolve_tx_turns_router_parallel_and_series_modes() -> None:
         centers,
         rx_center_xyz=(0.0, 0.0, 0.0),
         connection_mode=1,
-        relevant_turn_count=4.0,
+        equivalent_turn_count=4.0,
         turn_weight_a=1.0,
         turn_weight_b=0.0,
         turn_weight_c=0.0,
     )
     assert parallel_turns[0] == parallel_turns[1]
     assert series_turns[0] == series_turns[1]
-    assert sum(parallel_turns) >= 8
-    assert sum(series_turns) >= 4
 
 
 def test_resolve_tx_turns_rejects_invalid_mode() -> None:
@@ -245,7 +219,7 @@ def test_resolve_tx_turns_rejects_invalid_mode() -> None:
             ((0.0, 0.0, 0.0),),
             rx_center_xyz=(0.0, 0.0, 0.0),
             connection_mode=cast(TxConnectionMode, 99),
-            relevant_turn_count=1.0,
+            equivalent_turn_count=1.0,
             turn_weight_a=1.0,
             turn_weight_b=0.0,
             turn_weight_c=0.0,
