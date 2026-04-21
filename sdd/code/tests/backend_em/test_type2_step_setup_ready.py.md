@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_setup_ready.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-21 @ 20:35
+updated: 2026-04-22 @ 00:00
 tags:
   - tests
   - backend-em
@@ -35,7 +35,7 @@ tags:
 - fake imported non-model batches include concrete `tx_region_actual` member names so setup-ready sees the same non-model scene member set as export/import.
 - TX array port-sheet coverage must use branch 0 terminal metadata as one `tx_plate_port_sheet`.
 - `tx_rect_void_columns` remains unsupported for setup-ready even when a modeled entry carries
-  `terminal_metadata.kind = "parallel_collector_tabs"`; the role gate must fail before any HFSS attach or port setup.
+  `terminal_metadata.kind = "parallel_collector_tabs"` or `terminal_metadata.kind = "series_collector_tabs"`; the role gate must fail before any HFSS attach or port setup, and coverage keeps both rejection cases explicit.
 - plate-stack setup-ready failure coverage는 missing concrete conductor,
   missing copper group, missing ferrite group, legacy segment name leakage, SOLID* drift, group-member mismatch를 fail-fast로 요구한다.
 - legacy coil full setup path expectations remain intact where still supported

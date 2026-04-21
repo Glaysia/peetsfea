@@ -1,7 +1,7 @@
 ---
 title: type2_step_ledger.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 23:59
+updated: 2026-04-22 @ 00:00
 tags:
   - step-export
   - ledger
@@ -33,7 +33,7 @@ tags:
 - `expected_exported_body_names`는 RX와 single-branch TX에서 role-local 6-body 정렬을 유지한다:
   `*_plate_copper`, `*_pcb_wall`, `*_stack_pet_psa`, `*_stack_ferrite`, `*_stack_air`, `*_pcb_coil`.
 - TX arrays expand branch-local non-copper exact names while keeping one united `tx_plate_copper` in the same TX modeled entry.
-- `tx_rect_void_columns` modeled entries are STEP-export-only handoff entries. Series mode remains `terminal_metadata.kind = "geometry_only"`; parallel mode records `kind = "parallel_collector_tabs"` and exactly two metadata-owned future terminal-tab faces.
+- `tx_rect_void_columns` modeled entries are STEP-export-only handoff entries. Parallel mode records `kind = "parallel_collector_tabs"` and series mode records `kind = "series_collector_tabs"`; both expose exactly two metadata-owned future terminal-tab faces and remain unsupported for setup-ready attach/port setup as well as import handoff.
 - plate role field ownership은 input TOML에 두고, ledger는 exact export contract만 보존한다.
 - final handoff expected_exported_body_count is the exact exported list length; RX and TX `tx_coil_count = 1` remain `6`.
 - expected_exported_body_groups는 다음을 반영한다:

@@ -1601,3 +1601,43 @@ def test_setup_type2_step_ledger_rejects_tx_rect_void_columns_parallel_collector
             imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
             hfss_factory=lambda _design_name: (_ for _ in ()).throw(AssertionError("hfss_factory must not run")),
         )
+
+
+def test_setup_type2_step_ledger_rejects_tx_rect_void_columns_series_collector_tabs_before_hfss(
+    tmp_path: Path,
+) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    modeled_object = _modeled_entry(
+        object_id="tx_rect_void_columns",
+        role="tx_rect_void_columns",
+        plane="XY",
+        placement_owner_id="tx_region_actual_stack_space",
+        source_metadata_path=str(tmp_path / "tx_rect_void_columns.metadata.json"),
+    )
+    modeled_object["terminal_metadata"] = {
+        "kind": "series_collector_tabs",
+        "input_stub_body_name": "tx_rect_void_columns_stub_in",
+        "output_stub_body_name": "tx_rect_void_columns_stub_out",
+        "start_point_plane_mm": [55.0, 15.0],
+        "end_point_plane_mm": [70.0, 5.0],
+        "port_sheet_vertices_xyz": [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ],
+    }
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=[modeled_object],
+    )
+
+    with pytest.raises(ValueError, match=r"modeled_objects\[0\]\.role must be one of .*actual='tx_rect_void_columns'"):
+        setup_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_setup_ready.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            hfss_factory=lambda _design_name: (_ for _ in ()).throw(AssertionError("hfss_factory must not run")),
+        )

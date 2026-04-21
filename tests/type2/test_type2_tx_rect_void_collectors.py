@@ -150,9 +150,35 @@ def test_tx_rect_void_collectors_build_3x3_balanced_non_intersecting_route() -> 
     assert result.overlap_audit.max_intersection_volume_mm3 <= result.overlap_audit.tolerance_mm3
 
 
-def test_tx_rect_void_collectors_reject_series_mode() -> None:
-    with pytest.raises(RuntimeError, match=r"only support connection_mode=0"):
-        build_tx_rect_void_columns_collectors(
-            connection_mode=1,
-            tile_inputs=_synthetic_tile_inputs(x_count=1, y_count=1),
+@pytest.mark.parametrize(("x_count", "y_count"), ((1, 1), (1, 3), (2, 2), (3, 3)))
+def test_tx_rect_void_collectors_series_mode_future_contract(
+    x_count: int,
+    y_count: int,
+) -> None:
+    branch_count = x_count * y_count
+    result = build_tx_rect_void_columns_collectors(
+        connection_mode=1,
+        tile_inputs=_synthetic_tile_inputs(x_count=x_count, y_count=y_count),
+    )
+
+    assert result.expected_exported_body_name == "tx_rect_void_columns_copper"
+    assert result.fused_copper_shape.label == "tx_rect_void_columns_copper"
+    assert len(tuple(result.fused_copper_shape.solids())) == 1
+    assert result.branch_balance_audit.branch_count == branch_count
+    assert result.series_tile_order == tuple(
+        (x_index, y_index)
+        for y_index in range(y_count)
+        for x_index in (
+            range(x_count)
+            if y_index % 2 == 0
+            else range(x_count - 1, -1, -1)
         )
+    )
+    assert len(result.series_link_labels) == branch_count - 1
+    assert len(result.source_labels_grouped_by_role.series_links) == branch_count - 1
+    assert len(result.source_labels_grouped_by_role.start_external_tabs) == 1
+    assert len(result.source_labels_grouped_by_role.end_external_tabs) == 1
+    assert result.path_length_audit.branch_count == branch_count
+    assert result.path_length_audit.series_link_count == branch_count - 1
+    assert result.overlap_audit.positive_volume_pair_count == 0
+    _assert_coplanar_tab_faces(result=result)

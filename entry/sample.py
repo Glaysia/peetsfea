@@ -25,9 +25,9 @@ SOURCE_TOML_PATH = REPO_ROOT / "examples" / "type2_sweep.toml"
 OUTPUT_DIR = REPO_ROOT / "run" / "sampled" / "type2"
 MANIFEST_PATH = OUTPUT_DIR / "manifest.json"
 SEED_FIRST = 0
-SEED_N = 20
+SEED_N = 50
 SAMPLER_N = 12
-AEDT_BUILDER_N = 1
+AEDT_BUILDER_N = 6
 MAKE_STEP_ON_SAMPLE = True
 
 _Exporter = Callable[..., object]

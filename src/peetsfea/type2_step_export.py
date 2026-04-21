@@ -62,6 +62,7 @@ from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
 from peetsfea.type2_tx_rect_void_collectors import TxRectVoidCollectorBranchBalanceAudit
 from peetsfea.type2_tx_rect_void_collectors import TxRectVoidCollectorExternalTabFaceVertices
 from peetsfea.type2_tx_rect_void_collectors import TxRectVoidCollectorOverlapAudit
+from peetsfea.type2_tx_rect_void_collectors import TxRectVoidCollectorPathLengthAudit
 from peetsfea.type2_tx_rect_void_collectors import TxRectVoidCollectorSourceLabelGroups
 from peetsfea.type2_tx_rect_void_collectors import TxRectVoidCollectorTileInput
 from peetsfea.type2_tx_rect_void_collectors import TxRectVoidColumnsCollectorBuildResult
@@ -239,6 +240,7 @@ def _collector_source_label_metadata(
         "start_pours": label_groups.start_pours,
         "end_pours": label_groups.end_pours,
         "end_layer_drops": label_groups.end_layer_drops,
+        "series_links": label_groups.series_links,
         "start_external_tabs": label_groups.start_external_tabs,
         "end_external_tabs": label_groups.end_external_tabs,
     }
@@ -278,6 +280,19 @@ def _collector_overlap_audit_metadata(
         "positive_volume_pair_count": audit.positive_volume_pair_count,
         "max_intersection_volume_mm3": audit.max_intersection_volume_mm3,
         "tolerance_mm3": audit.tolerance_mm3,
+    }
+
+
+def _collector_path_length_metadata(
+    *,
+    audit: TxRectVoidCollectorPathLengthAudit,
+) -> dict[str, object]:
+    return {
+        "branch_count": audit.branch_count,
+        "series_link_count": audit.series_link_count,
+        "total_link_length_mm": audit.total_link_length_mm,
+        "path_length_delta_mm": audit.path_length_delta_mm,
+        "tolerance_mm": audit.tolerance_mm,
     }
 
 
@@ -861,11 +876,7 @@ def _build_tx_rect_void_columns_scene_data(
                 tile_body_names.append(transformed_shape.label)
             elif "_cu_l" in transformed_shape.label:
                 copper_layer_positions.append(bounds.min.Z)
-                if build_result.connection_mode == 1:
-                    transformed_shapes.append(transformed_shape)
-                    tile_body_names.append(transformed_shape.label)
-                else:
-                    tile_parallel_copper_shapes.append(transformed_shape)
+                tile_parallel_copper_shapes.append(transformed_shape)
             else:
                 raise RuntimeError(
                     "tx_rect_void_columns tile scene must expose only PCB or copper bodies "
@@ -896,18 +907,12 @@ def _build_tx_rect_void_columns_scene_data(
                 stack_space_object_id=stack_space_object_id,
                 bottom_z=shared_terminal_bottom_z,
             )
-            if build_result.connection_mode == 1:
-                transformed_shapes.append(terminal_shape)
-                transformed_tile_shapes.append(terminal_shape)
-                tile_body_names.append(terminal_body_name)
-                vertical_stub_body_names.append(terminal_body_name)
-            else:
-                parallel_terminal_shapes_by_name[terminal_body_name] = (terminal_shape, pickup_vertices)
+            parallel_terminal_shapes_by_name[terminal_body_name] = (terminal_shape, pickup_vertices)
 
-        if build_result.connection_mode == 0:
+        if build_result.connection_mode in (0, 1):
             if len(tile_parallel_copper_shapes) == 0:
                 raise RuntimeError(
-                    "tx_rect_void_columns parallel collector tile input requires at least one copper body "
+                    "tx_rect_void_columns collector tile input requires at least one copper body "
                     f"(tile={stack_space_object_id})"
                 )
             start_stub_name, end_stub_name = terminal_stub_label_pairs[0]
@@ -961,10 +966,10 @@ def _build_tx_rect_void_columns_scene_data(
             }
         )
 
-    if build_result.connection_mode == 0:
+    if build_result.connection_mode in (0, 1):
         if len(parallel_tile_inputs) != len(build_result.tile_scenes):
             raise RuntimeError(
-                "tx_rect_void_columns parallel collector input count must match tile scene count "
+                "tx_rect_void_columns collector input count must match tile scene count "
                 f"(inputs={len(parallel_tile_inputs)}, tiles={len(build_result.tile_scenes)})"
             )
         collector_handoff = _build_tx_rect_void_parallel_collector_handoff(
@@ -994,17 +999,33 @@ def _build_tx_rect_void_columns_scene_data(
             *tuple(shape for shape in transformed_shapes if "_pcb_l" in shape.label),
             fused_copper_body,
         ]
-        terminal_metadata = {
-            "kind": "parallel_collector_tabs",
-            "connection_mode": 0,
-            "source_label_metadata": source_label_metadata,
-            "tab_face_vertices_xyz": tab_face_vertices_xyz,
-            "branch_balance_audit": branch_balance_audit,
-            "overlap_audit": overlap_audit,
-            "layer_count": build_result.layer_count,
-            "x_column_count": len({tile["x_index"] for tile in tile_metadata}),
-            "y_tile_count": len({tile["y_index"] for tile in tile_metadata}),
-        }
+        if build_result.connection_mode == 0:
+            terminal_metadata = {
+                "kind": "parallel_collector_tabs",
+                "connection_mode": 0,
+                "source_label_metadata": source_label_metadata,
+                "tab_face_vertices_xyz": tab_face_vertices_xyz,
+                "branch_balance_audit": branch_balance_audit,
+                "overlap_audit": overlap_audit,
+                "layer_count": build_result.layer_count,
+                "x_column_count": len({tile["x_index"] for tile in tile_metadata}),
+                "y_tile_count": len({tile["y_index"] for tile in tile_metadata}),
+            }
+        else:
+            terminal_metadata = {
+                "kind": "series_collector_tabs",
+                "connection_mode": 1,
+                "source_label_metadata": source_label_metadata,
+                "tab_face_vertices_xyz": tab_face_vertices_xyz,
+                "tile_order": collector_handoff.series_tile_order,
+                "link_labels": collector_handoff.series_link_labels,
+                "path_length_audit": _collector_path_length_metadata(audit=collector_handoff.path_length_audit),
+                "overlap_audit": overlap_audit,
+                "branch_count": len(tile_metadata),
+                "layer_count": build_result.layer_count,
+                "x_column_count": len({tile["x_index"] for tile in tile_metadata}),
+                "y_tile_count": len({tile["y_index"] for tile in tile_metadata}),
+            }
     else:
         terminal_metadata = {
             "kind": "geometry_only",
@@ -1545,8 +1566,55 @@ def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path:
                         f"(object_id={modeled_spec.object_id})"
                     )
                 continue
+            if raw_kind == "series_collector_tabs":
+                if "connection_mode" not in terminal_metadata:
+                    raise RuntimeError(
+                        "tx_rect_void_columns series terminal metadata must include connection_mode "
+                        f"(object_id={modeled_spec.object_id})"
+                    )
+                raw_connection_mode = terminal_metadata["connection_mode"]
+                if isinstance(raw_connection_mode, bool) or not isinstance(raw_connection_mode, int):
+                    raise RuntimeError(
+                        "tx_rect_void_columns series terminal metadata connection_mode must be int "
+                        f"(object_id={modeled_spec.object_id}, actual={raw_connection_mode!r})"
+                    )
+                if raw_connection_mode != 1:
+                    raise RuntimeError(
+                        "tx_rect_void_columns series terminal metadata connection_mode must be 1 "
+                        f"(object_id={modeled_spec.object_id}, actual={raw_connection_mode!r})"
+                    )
+                for required_key in (
+                    "source_label_metadata",
+                    "tab_face_vertices_xyz",
+                    "tile_order",
+                    "link_labels",
+                    "path_length_audit",
+                    "overlap_audit",
+                ):
+                    if required_key not in terminal_metadata:
+                        raise RuntimeError(
+                            "tx_rect_void_columns series terminal metadata missing required key "
+                            f"(object_id={modeled_spec.object_id}, key={required_key})"
+                        )
+                raw_tab_face_vertices = terminal_metadata["tab_face_vertices_xyz"]
+                if not isinstance(raw_tab_face_vertices, tuple):
+                    raise RuntimeError(
+                        "tx_rect_void_columns series terminal metadata tab_face_vertices_xyz must be tuple "
+                        f"(object_id={modeled_spec.object_id}, actual={raw_tab_face_vertices!r})"
+                    )
+                if len(raw_tab_face_vertices) != 2:
+                    raise RuntimeError(
+                        "tx_rect_void_columns series terminal metadata must include exactly two tab face entries "
+                        f"(object_id={modeled_spec.object_id}, actual={len(raw_tab_face_vertices)})"
+                    )
+                if "port_sheet_vertices_xyz" in terminal_metadata:
+                    raise RuntimeError(
+                        "tx_rect_void_columns series terminal metadata must not include reconstructed port sheet vertices "
+                        f"(object_id={modeled_spec.object_id})"
+                    )
+                continue
             raise RuntimeError(
-                "tx_rect_void_columns terminal metadata kind sentinel must be geometry_only or parallel_collector_tabs "
+                "tx_rect_void_columns terminal metadata kind sentinel must be geometry_only, parallel_collector_tabs, or series_collector_tabs "
                 f"(object_id={modeled_spec.object_id}, actual={raw_kind!r})"
             )
         if "kind" in terminal_metadata:

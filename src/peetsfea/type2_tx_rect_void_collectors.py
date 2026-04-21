@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import cast
 
 import build123d as bd
@@ -9,6 +10,7 @@ Point3 = tuple[float, float, float]
 
 _COLLECTOR_CLEARANCE_MM = 0.5
 _COLLECTOR_ROW_RAIL_WIDTH_MM = 0.75
+_SERIES_LINK_WIDTH_MM = 0.2
 _COLLECTOR_TAB_WIDTH_MM = 0.75
 _BALANCE_TOLERANCE_MM = 1e-6
 _BRANCH_SPREAD_LIMIT_MM = 5.0
@@ -34,6 +36,7 @@ class TxRectVoidCollectorSourceLabelGroups:
     start_pours: tuple[str, ...]
     end_pours: tuple[str, ...]
     end_layer_drops: tuple[str, ...]
+    series_links: tuple[str, ...]
     start_external_tabs: tuple[str, ...]
     end_external_tabs: tuple[str, ...]
 
@@ -58,6 +61,15 @@ class TxRectVoidCollectorOverlapAudit:
 
 
 @dataclass(frozen=True)
+class TxRectVoidCollectorPathLengthAudit:
+    branch_count: int
+    series_link_count: int
+    total_link_length_mm: float
+    path_length_delta_mm: float
+    tolerance_mm: float
+
+
+@dataclass(frozen=True)
 class TxRectVoidCollectorExternalTabFaceVertices:
     start: tuple[Point3, ...]
     end: tuple[Point3, ...]
@@ -72,6 +84,9 @@ class TxRectVoidColumnsCollectorBuildResult:
     external_tab_face_vertices: TxRectVoidCollectorExternalTabFaceVertices
     branch_balance_audit: TxRectVoidCollectorBranchBalanceAudit
     overlap_audit: TxRectVoidCollectorOverlapAudit
+    series_tile_order: tuple[tuple[int, int], ...]
+    series_link_labels: tuple[str, ...]
+    path_length_audit: TxRectVoidCollectorPathLengthAudit
 
 
 @dataclass(frozen=True)
@@ -504,6 +519,7 @@ def _build_collector_boxes(
         start_pours=tuple(start_pour_labels),
         end_pours=tuple(end_pour_labels),
         end_layer_drops=tuple(end_layer_drop_labels),
+        series_links=tuple(),
         start_external_tabs=("txrvc_tab_start",),
         end_external_tabs=("txrvc_tab_end",),
     )
@@ -574,6 +590,377 @@ def build_tx_rect_void_columns_parallel_collectors(
         external_tab_face_vertices=external_tab_face_vertices,
         branch_balance_audit=branch_balance_audit,
         overlap_audit=overlap_audit,
+        series_tile_order=tuple(),
+        series_link_labels=tuple(),
+        path_length_audit=TxRectVoidCollectorPathLengthAudit(
+            branch_count=len(tile_inputs),
+            series_link_count=0,
+            total_link_length_mm=0.0,
+            path_length_delta_mm=0.0,
+            tolerance_mm=_BALANCE_TOLERANCE_MM,
+        ),
+    )
+
+
+def _series_order(
+    *,
+    tile_inputs: tuple[TxRectVoidCollectorTileInput, ...],
+) -> tuple[TxRectVoidCollectorTileInput, ...]:
+    _ = _unique_sorted_indices(tile_inputs=tile_inputs)
+    rows = tuple(sorted({tile_input.y_index for tile_input in tile_inputs}))
+    ordered: list[TxRectVoidCollectorTileInput] = []
+    for row_ordinal, y_index in enumerate(rows):
+        row_inputs = tuple(tile_input for tile_input in tile_inputs if tile_input.y_index == y_index)
+        sorted_row = tuple(sorted(row_inputs, key=lambda tile_input: tile_input.x_index))
+        ordered.extend(sorted_row if row_ordinal % 2 == 0 else tuple(reversed(sorted_row)))
+    if len(ordered) != len(tile_inputs):
+        raise RuntimeError(
+            "tx_rect_void_columns series order must include every collector tile exactly once "
+            f"(ordered={len(ordered)}, input={len(tile_inputs)})"
+        )
+    return tuple(ordered)
+
+
+def _strap_box_between_pickups(
+    *,
+    first: _PickupRect2D,
+    second: _PickupRect2D,
+    layer_min_z: float,
+    layer_max_z: float,
+    label: str,
+) -> bd.Shape:
+    half_width = _SERIES_LINK_WIDTH_MM / 2.0
+    min_x = min(first.center_x, second.center_x) - half_width
+    max_x = max(first.center_x, second.center_x) + half_width
+    min_y = min(first.center_y, second.center_y) - half_width
+    max_y = max(first.center_y, second.center_y) + half_width
+    return _box_shape_from_bounds(
+        min_x=min_x,
+        max_x=max_x,
+        min_y=min_y,
+        max_y=max_y,
+        min_z=layer_min_z,
+        max_z=layer_max_z,
+        label=label,
+    )
+
+
+def _series_link_boxes_between_pickups(
+    *,
+    first: _PickupRect2D,
+    second: _PickupRect2D,
+    layer_min_z: float,
+    layer_max_z: float,
+    label_prefix: str,
+    vertical_first: bool,
+) -> tuple[bd.Shape, ...]:
+    half_width = _SERIES_LINK_WIDTH_MM / 2.0
+    boxes: list[bd.Shape] = []
+    if vertical_first and not math.isclose(first.center_y, second.center_y, rel_tol=0.0, abs_tol=1e-12):
+        boxes.append(
+            _box_shape_from_bounds(
+                min_x=first.center_x - half_width,
+                max_x=first.center_x + half_width,
+                min_y=min(first.center_y, second.center_y) - half_width,
+                max_y=max(first.center_y, second.center_y) + half_width,
+                min_z=layer_min_z,
+                max_z=layer_max_z,
+                label=f"{label_prefix}_v",
+            )
+        )
+    if not math.isclose(first.center_x, second.center_x, rel_tol=0.0, abs_tol=1e-12):
+        y_center = second.center_y if vertical_first else first.center_y
+        boxes.append(
+            _box_shape_from_bounds(
+                min_x=min(first.center_x, second.center_x) - half_width,
+                max_x=max(first.center_x, second.center_x) + half_width,
+                min_y=y_center - half_width,
+                max_y=y_center + half_width,
+                min_z=layer_min_z,
+                max_z=layer_max_z,
+                label=f"{label_prefix}_h",
+            )
+        )
+    if (not vertical_first) and not math.isclose(first.center_y, second.center_y, rel_tol=0.0, abs_tol=1e-12):
+        boxes.append(
+            _box_shape_from_bounds(
+                min_x=second.center_x - half_width,
+                max_x=second.center_x + half_width,
+                min_y=min(first.center_y, second.center_y) - half_width,
+                max_y=max(first.center_y, second.center_y) + half_width,
+                min_z=layer_min_z,
+                max_z=layer_max_z,
+                label=f"{label_prefix}_v",
+            )
+        )
+    if len(boxes) == 0:
+        boxes.append(
+            _box_shape_from_bounds(
+                min_x=first.center_x - half_width,
+                max_x=first.center_x + half_width,
+                min_y=first.center_y - half_width,
+                max_y=first.center_y + half_width,
+                min_z=layer_min_z,
+                max_z=layer_max_z,
+                label=f"{label_prefix}_pad",
+            )
+        )
+    return tuple(boxes)
+
+
+def _drop_box_to_layer(
+    *,
+    pickup: _PickupRect2D,
+    layer_min_z: float,
+    label: str,
+) -> bd.Shape:
+    half_width = _SERIES_LINK_WIDTH_MM / 2.0
+    return _box_shape_from_bounds(
+        min_x=pickup.center_x - half_width,
+        max_x=pickup.center_x + half_width,
+        min_y=pickup.center_y - half_width,
+        max_y=pickup.center_y + half_width,
+        min_z=layer_min_z,
+        max_z=pickup.min_z + _CONTACT_OVERLAP_MM,
+        label=label,
+    )
+
+
+def _series_source_group(*, label: str) -> str:
+    if label == "txrvc_series_tab_start_feed":
+        return "txrvc_tab_start"
+    if label == "txrvc_series_tab_end_feed":
+        return "txrvc_tab_end"
+    if label.startswith("txrvc_series_link_"):
+        parts = label.split("_")
+        if len(parts) < 4:
+            raise RuntimeError(f"malformed series link label: {label}")
+        return "_".join(parts[:4])
+    return label
+
+
+def _series_link_index_from_group(*, group: str) -> int:
+    if not group.startswith("txrvc_series_link_"):
+        return -1
+    raw_index = group.removeprefix("txrvc_series_link_")
+    if not raw_index.isdigit():
+        raise RuntimeError(f"malformed series link group: {group}")
+    return int(raw_index)
+
+
+def _series_overlap_audit(*, source_shapes: tuple[bd.Shape, ...]) -> TxRectVoidCollectorOverlapAudit:
+    positive_volume_pair_count = 0
+    max_intersection_volume_mm3 = 0.0
+    checked_pair_count = 0
+    for first_index, first_shape in enumerate(source_shapes):
+        for second_shape in source_shapes[first_index + 1 :]:
+            first_group = _series_source_group(label=first_shape.label)
+            second_group = _series_source_group(label=second_shape.label)
+            if first_group == second_group:
+                continue
+            first_link_index = _series_link_index_from_group(group=first_group)
+            second_link_index = _series_link_index_from_group(group=second_group)
+            if first_link_index >= 0 and second_link_index >= 0 and abs(first_link_index - second_link_index) <= 1:
+                continue
+            checked_pair_count += 1
+            intersection_volume_mm3 = _shape_intersection_volume_mm3(first=first_shape, second=second_shape)
+            if intersection_volume_mm3 > max_intersection_volume_mm3:
+                max_intersection_volume_mm3 = intersection_volume_mm3
+            if intersection_volume_mm3 > _OVERLAP_TOLERANCE_MM3:
+                positive_volume_pair_count += 1
+                raise RuntimeError(
+                    "tx_rect_void_columns series collector source shapes must not have positive-volume shortcut intersection "
+                    f"(first_label={first_shape.label}, second_label={second_shape.label}, "
+                    f"intersection_volume_mm3={intersection_volume_mm3}, tolerance={_OVERLAP_TOLERANCE_MM3})"
+                )
+    return TxRectVoidCollectorOverlapAudit(
+        checked_pair_count=checked_pair_count,
+        positive_volume_pair_count=positive_volume_pair_count,
+        max_intersection_volume_mm3=max_intersection_volume_mm3,
+        tolerance_mm3=_OVERLAP_TOLERANCE_MM3,
+    )
+
+
+def build_tx_rect_void_columns_series_collectors(
+    *,
+    tile_inputs: tuple[TxRectVoidCollectorTileInput, ...],
+) -> TxRectVoidColumnsCollectorBuildResult:
+    if len(tile_inputs) == 0:
+        raise RuntimeError("tx_rect_void_columns series collector build requires at least one tile input")
+    ordered_inputs = _series_order(tile_inputs=tile_inputs)
+    copper_thickness_mm = ordered_inputs[0].copper_thickness_mm
+    for tile_input in ordered_inputs:
+        if tile_input.copper_thickness_mm != copper_thickness_mm:
+            raise RuntimeError(
+                "tx_rect_void_columns series collector build requires shared copper thickness "
+                f"(expected={copper_thickness_mm}, actual={tile_input.copper_thickness_mm}, "
+                f"tile={tile_input.x_index},{tile_input.y_index})"
+            )
+
+    start_pickups_by_tile = {
+        (tile_input.x_index, tile_input.y_index): _pickup_rect_from_vertices(
+            vertices=tile_input.start_pickup_vertices,
+            context=f"tile[{tile_input.x_index},{tile_input.y_index}].start",
+        )
+        for tile_input in ordered_inputs
+    }
+    end_pickups_by_tile = {
+        (tile_input.x_index, tile_input.y_index): _pickup_rect_from_vertices(
+            vertices=tile_input.end_pickup_vertices,
+            context=f"tile[{tile_input.x_index},{tile_input.y_index}].end",
+        )
+        for tile_input in ordered_inputs
+    }
+    all_pickups = tuple(start_pickups_by_tile.values()) + tuple(end_pickups_by_tile.values())
+    min_pickup_z = min(pickup.min_z for pickup in all_pickups)
+    top_z = min_pickup_z + _CONTACT_OVERLAP_MM
+    base_layer_min_z = top_z - copper_thickness_mm
+    source_shapes: list[bd.Shape] = []
+    series_link_labels: list[str] = []
+    total_link_length_mm = 0.0
+
+    first_tile = ordered_inputs[0]
+    final_tile = ordered_inputs[-1]
+    first_start = start_pickups_by_tile[(first_tile.x_index, first_tile.y_index)]
+    final_end = end_pickups_by_tile[(final_tile.x_index, final_tile.y_index)]
+    start_tab_min_x = first_start.min_x - _COLLECTOR_CLEARANCE_MM - _COLLECTOR_TAB_WIDTH_MM
+    start_tab_max_x = start_tab_min_x + _COLLECTOR_TAB_WIDTH_MM
+    end_tab_max_x = final_end.max_x + _COLLECTOR_CLEARANCE_MM + _COLLECTOR_TAB_WIDTH_MM
+    end_tab_min_x = end_tab_max_x - _COLLECTOR_TAB_WIDTH_MM
+    start_tab = _box_shape_from_bounds(
+        min_x=start_tab_min_x,
+        max_x=start_tab_max_x,
+        min_y=first_start.min_y,
+        max_y=first_start.max_y,
+        min_z=base_layer_min_z,
+        max_z=top_z,
+        label="txrvc_tab_start",
+    )
+    end_tab = _box_shape_from_bounds(
+        min_x=end_tab_min_x,
+        max_x=end_tab_max_x,
+        min_y=final_end.min_y,
+        max_y=final_end.max_y,
+        min_z=base_layer_min_z,
+        max_z=top_z,
+        label="txrvc_tab_end",
+    )
+    start_tab_patch = _strap_box_between_pickups(
+        first=_PickupRect2D(
+            center_x=(start_tab_min_x + start_tab_max_x) / 2.0,
+            center_y=first_start.center_y,
+            min_x=start_tab_min_x,
+            max_x=start_tab_max_x,
+            min_y=first_start.min_y,
+            max_y=first_start.max_y,
+            min_z=base_layer_min_z,
+            max_z=top_z,
+        ),
+        second=first_start,
+        layer_min_z=base_layer_min_z,
+        layer_max_z=top_z,
+        label="txrvc_series_tab_start_feed",
+    )
+    end_tab_patch = _strap_box_between_pickups(
+        first=final_end,
+        second=_PickupRect2D(
+            center_x=(end_tab_min_x + end_tab_max_x) / 2.0,
+            center_y=final_end.center_y,
+            min_x=end_tab_min_x,
+            max_x=end_tab_max_x,
+            min_y=final_end.min_y,
+            max_y=final_end.max_y,
+            min_z=base_layer_min_z,
+            max_z=top_z,
+        ),
+        layer_min_z=base_layer_min_z,
+        layer_max_z=top_z,
+        label="txrvc_series_tab_end_feed",
+    )
+    source_shapes.extend((start_tab, end_tab, start_tab_patch, end_tab_patch))
+
+    for link_index, (left_tile, right_tile) in enumerate(zip(ordered_inputs, ordered_inputs[1:], strict=False)):
+        left_end = end_pickups_by_tile[(left_tile.x_index, left_tile.y_index)]
+        right_start = start_pickups_by_tile[(right_tile.x_index, right_tile.y_index)]
+        layer_top_z = top_z - (float(link_index + 1) * (copper_thickness_mm + _COLLECTOR_CLEARANCE_MM))
+        layer_min_z = layer_top_z - copper_thickness_mm
+        link_label = f"txrvc_series_link_{link_index}"
+        series_link_labels.append(link_label)
+        source_shapes.extend(
+            _series_link_boxes_between_pickups(
+                first=left_end,
+                second=right_start,
+                layer_min_z=layer_min_z,
+                layer_max_z=layer_top_z,
+                label_prefix=link_label,
+                vertical_first=link_index % 2 == 1,
+            )
+        )
+        source_shapes.append(_drop_box_to_layer(pickup=left_end, layer_min_z=layer_min_z, label=f"{link_label}_drop_e"))
+        source_shapes.append(_drop_box_to_layer(pickup=right_start, layer_min_z=layer_min_z, label=f"{link_label}_drop_s"))
+        total_link_length_mm += abs(left_end.center_x - right_start.center_x) + abs(left_end.center_y - right_start.center_y)
+
+    overlap_audit = _series_overlap_audit(source_shapes=tuple(source_shapes))
+    source_labels_grouped_by_role = TxRectVoidCollectorSourceLabelGroups(
+        start_pours=tuple(),
+        end_pours=tuple(),
+        end_layer_drops=tuple(),
+        series_links=tuple(series_link_labels),
+        start_external_tabs=("txrvc_tab_start",),
+        end_external_tabs=("txrvc_tab_end",),
+    )
+    path_length_audit = TxRectVoidCollectorPathLengthAudit(
+        branch_count=len(ordered_inputs),
+        series_link_count=len(series_link_labels),
+        total_link_length_mm=total_link_length_mm,
+        path_length_delta_mm=0.0,
+        tolerance_mm=_BALANCE_TOLERANCE_MM,
+    )
+    branch_balance_audit = TxRectVoidCollectorBranchBalanceAudit(
+        branch_count=len(ordered_inputs),
+        start_total_feed_length_mm=0.0,
+        end_total_feed_length_mm=0.0,
+        balance_delta_mm=0.0,
+        max_branch_total_delta_mm=0.0,
+        branch_spread_limit_mm=_BRANCH_SPREAD_LIMIT_MM,
+        tolerance_mm=_BALANCE_TOLERANCE_MM,
+    )
+    return TxRectVoidColumnsCollectorBuildResult(
+        fused_copper_shape=_fuse_shapes(
+            shapes=tuple(
+                tile_copper_shape
+                for tile_input in ordered_inputs
+                for tile_copper_shape in tile_input.tile_copper_shapes
+            )
+            + tuple(tile_input.start_terminal_stub_shape for tile_input in ordered_inputs)
+            + tuple(tile_input.end_terminal_stub_shape for tile_input in ordered_inputs)
+            + tuple(source_shapes),
+            label=_EXPECTED_EXPORT_BODY_NAME,
+        ),
+        collector_source_shapes=tuple(source_shapes),
+        expected_exported_body_name=_EXPECTED_EXPORT_BODY_NAME,
+        source_labels_grouped_by_role=source_labels_grouped_by_role,
+        external_tab_face_vertices=TxRectVoidCollectorExternalTabFaceVertices(
+            start=_box_top_face_vertices(
+                min_x=start_tab_min_x,
+                max_x=start_tab_max_x,
+                min_y=first_start.min_y,
+                max_y=first_start.max_y,
+                max_z=top_z,
+            ),
+            end=_box_top_face_vertices(
+                min_x=end_tab_min_x,
+                max_x=end_tab_max_x,
+                min_y=final_end.min_y,
+                max_y=final_end.max_y,
+                max_z=top_z,
+            ),
+        ),
+        branch_balance_audit=branch_balance_audit,
+        overlap_audit=overlap_audit,
+        series_tile_order=tuple((tile_input.x_index, tile_input.y_index) for tile_input in ordered_inputs),
+        series_link_labels=tuple(series_link_labels),
+        path_length_audit=path_length_audit,
     )
 
 
@@ -582,12 +969,11 @@ def build_tx_rect_void_columns_collectors(
     connection_mode: int,
     tile_inputs: tuple[TxRectVoidCollectorTileInput, ...],
 ) -> TxRectVoidColumnsCollectorBuildResult:
-    if connection_mode != 0:
-        raise RuntimeError(
-            "tx_rect_void_columns collectors only support connection_mode=0 "
-            f"(actual={connection_mode})"
-        )
-    return build_tx_rect_void_columns_parallel_collectors(tile_inputs=tile_inputs)
+    if connection_mode == 0:
+        return build_tx_rect_void_columns_parallel_collectors(tile_inputs=tile_inputs)
+    if connection_mode == 1:
+        return build_tx_rect_void_columns_series_collectors(tile_inputs=tile_inputs)
+    raise RuntimeError(f"unsupported tx_rect_void_columns collector connection_mode (actual={connection_mode})")
 
 
 __all__ = [
@@ -595,9 +981,11 @@ __all__ = [
     "TxRectVoidCollectorBranchBalanceAudit",
     "TxRectVoidCollectorExternalTabFaceVertices",
     "TxRectVoidCollectorOverlapAudit",
+    "TxRectVoidCollectorPathLengthAudit",
     "TxRectVoidCollectorSourceLabelGroups",
     "TxRectVoidCollectorTileInput",
     "TxRectVoidColumnsCollectorBuildResult",
     "build_tx_rect_void_columns_collectors",
     "build_tx_rect_void_columns_parallel_collectors",
+    "build_tx_rect_void_columns_series_collectors",
 ]

@@ -71,8 +71,9 @@ tags:
   tabs into one `tx_rect_void_columns_copper` body, and records the two future port-tab faces in terminal metadata.
 - Pour source label metadata for the parallel collector branch is now strictly pour-centric: `start_pours`, `end_pours`,
   `end_layer_drops`, `start_external_tabs`, and `end_external_tabs`.
-- For realized `tx_rect_void_columns.connection_mode = 1`, export emits the existing geometry-only tile/stub bodies and records
-  `connection_status = "skipped_series"` without collector labels or port-tab metadata.
+- For realized `tx_rect_void_columns.connection_mode = 1`, export delegates underside series straps to
+  `type2_tx_rect_void_collectors.py`, fuses all branch copper, vertical stubs, series straps, and external
+  tabs into one `tx_rect_void_columns_copper` body, and records the two future port-tab faces in terminal metadata.
 - Full-scene export preflight deactivation is removed for `tx_rect_void_columns`; direct `export_type2_tx_single_coil_artifact` continues to reject this role with the parser/sampler milestone message.
 - Internal modeled export-contract validation now checks `tx_rect_void_columns` using scene-metadata expected names/count and requires empty body groups for geometry-only phase.
 
@@ -86,7 +87,7 @@ tags:
 - full-scene export은 `tx_rect_void_columns`를 생성 경로로 허용한다.
 - `tx_rect_void_columns` floorward terminal stub bottoms must share one Z coordinate after tilt transform; per-tile fixed-length
   bottom drift is contract drift.
-- Parallel `tx_rect_void_columns` collector metadata must expose exactly two future terminal-tab faces and no per-branch port-sheet contract.
+- Parallel and series `tx_rect_void_columns` collector metadata must expose exactly two future terminal-tab faces and no per-branch port-sheet contract.
 - Parallel `tx_rect_void_columns` collector source labels must expose only pour-centric groups and must not emit deprecated row rail/spine/feeder labels.
 - Parallel `tx_rect_void_columns` collector pour routing must fail fast on positive-volume start/end collector intersection, aggregate start/end reach imbalance, or per-branch spread beyond the internal limit.
 - tx_single_coil direct export는 parser/sampler milestone rejection 메시지로 `tx_rect_void_columns`를 거부한다.

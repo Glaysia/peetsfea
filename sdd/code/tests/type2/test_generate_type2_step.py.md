@@ -27,7 +27,7 @@ tags:
 - export ledger coverage verifies `tx_region_actual_stack_space` bodies are generated one-for-one with concrete `tx_region_actual` tiles, with fixed `total_thickness_mm = 5.0`, top-face alignment before tilt, and scale-derived similar footprint.
 - export coverage verifies `tilt_enabled = 1` rotates only the stack-space bodies toward the modeled RX center, keeps guide tiles axis-aligned, and clamps tilted stack-space bounding boxes under owning tile tops.
 - `tx_rect_void_columns` generation/export behavior is now validated as STEP handoff success for full STEP export:
-  - series specs keep geometry-only tile/stub output with `connection_status = "skipped_series"`,
+  - series specs export one fused `tx_rect_void_columns_copper` body, per-tile PCBs, ordered series link metadata, and exactly two future tab faces,
   - parallel specs export one fused `tx_rect_void_columns_copper` body, per-tile PCBs, balanced collector pour bus/patch metadata, and exactly two future tab faces,
   - parser-bypass simulations (mocked loader + preflight no-op) still execute through full export and keep the same success contract,
   - generated specs using `tx_rect_void_columns` with varied tiling/turn matrices produce expected body metadata counts and scene bodies.
