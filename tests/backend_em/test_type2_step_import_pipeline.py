@@ -254,6 +254,86 @@ def _modeled_entry(
     }
 
 
+def _tx_rect_void_columns_terminal_metadata_for_import() -> dict[str, object]:
+    return {
+        "kind": "parallel_collector_tabs",
+        "tab_face_vertices_xyz": [
+            {
+                "terminal": "start",
+                "vertices_xyz": [
+                    [12.0, 5.0, 70.0],
+                    [13.0, 5.0, 70.0],
+                    [13.0, 6.0, 70.0],
+                    [12.0, 6.0, 70.0],
+                ],
+            },
+            {
+                "terminal": "end",
+                "vertices_xyz": [
+                    [20.0, 5.0, 69.0],
+                    [21.0, 5.0, 69.0],
+                    [21.0, 6.0, 69.0],
+                    [20.0, 6.0, 69.0],
+                ],
+            },
+        ],
+    }
+
+
+def _tx_rect_void_columns_entry_for_import(tmp_path: Path) -> dict[str, object]:
+    modeled_object = _modeled_entry(
+        object_id="tx_rect_void_columns",
+        role="tx_rect_void_columns",
+        plane="XY",
+        placement_owner_id="tx_region_actual_stack_space",
+        origin_xyz=(10.0, -10.0, 65.0),
+        size_xyz=(20.0, 20.0, 25.0),
+        source_metadata_path=str(tmp_path / "tx_rect_void_columns.metadata.json"),
+        expected_names=["txrvc_x0_y0_pcb_l0", "tx_rect_void_columns_copper"],
+        expected_groups=[],
+    )
+    modeled_object["terminal_metadata"] = _tx_rect_void_columns_terminal_metadata_for_import()
+    return modeled_object
+
+
+def _tx_rect_void_columns_non_model_entry_for_import() -> dict[str, object]:
+    non_model_object = _non_model_entry()
+    stack_space_member = {
+        "object_id": "tx_region_actual_stack_space",
+        "role": "tx_region_actual_stack_space",
+        "material": "vacuum",
+        "model_state": False,
+        "non_model": True,
+        "plane": "XY",
+        "canonical_coordinates": {
+            "frame_origin_xyz": [0.0, -20.0, 60.0],
+            "outer_bounds_min_xyz": [0.0, -20.0, 60.0],
+            "outer_bounds_max_xyz": [40.0, 20.0, 95.0],
+            "outer_bounds_size_xyz": [40.0, 40.0, 35.0],
+        },
+    }
+    member_object_ids = list(cast(tuple[str, ...], non_model_object["member_object_ids"]))
+    member_object_ids.append("tx_region_actual_stack_space")
+    non_model_object["member_object_ids"] = tuple(member_object_ids)
+    member_objects = list(cast(list[dict[str, object]], non_model_object["member_objects"]))
+    member_objects.append(stack_space_member)
+    non_model_object["member_objects"] = member_objects
+    return non_model_object
+
+
+def _tx_rect_void_columns_imported_name_batch_for_import() -> tuple[str, ...]:
+    tx_region_actual_member_names = _tx_region_actual_member_names()
+    return (
+        "environment",
+        "tx_region",
+        *tx_region_actual_member_names,
+        "rx_region_max",
+        "tx_region_actual_stack_space",
+        "txrvc_x0_y0_pcb_l0",
+        "tx_rect_void_columns_copper",
+    )
+
+
 def _write_ledger(
     path: Path,
     *,
@@ -533,10 +613,14 @@ class _FakeModeler:
 class _FakeDesktop:
     def __init__(self) -> None:
         self.release_calls: list[tuple[bool, bool]] = []
+        self.messages: list[str] = []
 
     def release_desktop(self, close_projects: bool, close_on_exit: bool) -> object:
         self.release_calls.append((close_projects, close_on_exit))
         return True
+
+    def GetMessages(self, project_name: str, design_name: str, level: int) -> list[str]:
+        return list(self.messages)
 
 
 class _FakeHfss:
@@ -1176,6 +1260,39 @@ def test_import_type2_step_ledger_allows_missing_optional_port_sheet_bodies(tmp_
     assert session.radiation_boundary_calls == []
     assert "mesh" not in result
     assert "boundary" not in result
+
+
+def test_import_type2_step_ledger_leaves_tx_rect_void_columns_port_sheet_to_setup_ready(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_tx_rect_void_columns_non_model_entry_for_import()],
+        modeled_objects=[_tx_rect_void_columns_entry_for_import(tmp_path)],
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _FakeHfss(
+        modeler=_FakeModeler(
+            imported_name_batches=[_tx_rect_void_columns_imported_name_batch_for_import()]
+        )
+    )
+
+    result = import_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        design_name="fake_type2_import",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    assert session.modeler.create_polyline_calls == []
+    assert session.modeler.cover_lines_calls == []
+    modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    assert modeled_by_id["tx_rect_void_columns"]["imported_object_names"] == [
+        "txrvc_x0_y0_pcb_l0",
+        "tx_rect_void_columns_copper",
+    ]
 
 
 def test_import_type2_step_ledger_styles_role_aware_underlay_and_keeps_mesh_conductor_only(tmp_path: Path) -> None:

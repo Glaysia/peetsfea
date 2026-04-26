@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_import_pipeline.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 14:08
+updated: 2026-04-22 @ 04:05
 tags:
   - tests
   - backend-em
@@ -34,6 +34,9 @@ tags:
 - plate-stack export contract 실패 회귀로 `g_copper_tx`/`g_copper_rx` 또는 `g_ferrite_tx`/`g_ferrite_rx` 하나라도 누락될 경우
   import가 즉시 실패해야 함을 보장한다.
 - plate roles reconstruct `tx_plate_port_sheet` / `rx_plate_port_sheet`
+- tx_rect_void_columns import-only coverage verifies that `tab_face_vertices_xyz` metadata is preserved but
+  `tx_rect_void_columns_port_sheet` is not reconstructed during import-only styling; setup-ready port assignment owns
+  the single TX columns sheet.
 - plate-stack `stub_port` fixture metadata uses the left-side `-Y` sheet plane, matching generated STEP ledger coordinates.
 - role-aware owner-fit validation catches bad TX/RX anchors
 - imported ledger preserves plate-stack `stub_port` metadata
@@ -52,6 +55,7 @@ tags:
 - active plate-stack import rejects Y bounds that fit inside the owner but are off the global centered active-window contract.
 - TX array import must not create extra modeled entries or per-branch port sheets.
 - Non-model import fixtures include concrete `tx_region_actual` member names between `tx_region` and `rx_region_max`; multi-tile tests use `tx_region_actual_x{xi}_y{yi}` names.
+- The shared fake desktop exposes `GetMessages()` so setup-ready validation failures can assert AEDT message context.
 
 ## 변경 시 주의점
 - import-only success와 setup-ready failure를 같은 assertion으로 묶지 않는다.

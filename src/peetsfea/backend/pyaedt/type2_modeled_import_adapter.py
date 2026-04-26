@@ -3,9 +3,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal, TypedDict, cast
 
-_SUPPORTED_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack"})
+_SUPPORTED_ROLES: frozenset[str] = frozenset(
+    {"tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack", "tx_rect_void_columns"}
+)
 _SUPPORTED_PLANES: frozenset[str] = frozenset({"XY", "YZ"})
 _PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
+_TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
 _OUTER_CORNERS: frozenset[str] = frozenset({"A", "B", "C", "D"})
 _INNER_CORNERS: frozenset[str] = frozenset({"a", "b", "c", "d"})
 _PATH_DIRECTIONS: frozenset[str] = frozenset({"cw", "ccw"})
@@ -42,15 +45,36 @@ class ImportedPlateStackTerminalMetadata(TypedDict):
     port_sheet_vertices_xyz: tuple[tuple[float, float, float], ...]
 
 
+class ImportedTxRectVoidColumnsTabFace(TypedDict):
+    terminal: Literal["start", "end"]
+    vertices_xyz: tuple[tuple[float, float, float], ...]
+
+
+class ImportedTxRectVoidColumnsTerminalMetadata(TypedDict, total=False):
+    kind: Literal["parallel_collector_tabs", "series_collector_tabs"]
+    connection_mode: int
+    tab_face_vertices_xyz: tuple[ImportedTxRectVoidColumnsTabFace, ...]
+    source_label_metadata: dict[str, object]
+    branch_balance_audit: dict[str, object]
+    overlap_audit: dict[str, object]
+    layer_count: int
+    x_column_count: int
+    y_tile_count: int
+    tile_order: tuple[tuple[int, int], ...]
+    link_labels: tuple[str, ...]
+    path_length_audit: dict[str, object]
+    branch_count: int
+
+
 class ImportedModeledObjectEntry(TypedDict):
     object_id: str
-    role: Literal["tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack"]
+    role: Literal["tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack", "tx_rect_void_columns"]
     plane: Literal["XY", "YZ"]
     placement_owner_id: str
     material: str
     model_state: Literal[True]
     canonical_coordinates: ImportedModeledObjectCanonicalCoordinates
-    terminal_metadata: ImportedSingleCoilTerminalMetadata | ImportedPlateStackTerminalMetadata
+    terminal_metadata: ImportedSingleCoilTerminalMetadata | ImportedPlateStackTerminalMetadata | ImportedTxRectVoidColumnsTerminalMetadata
     imported_object_names: tuple[str, ...]
 
 
@@ -303,6 +327,58 @@ def _parse_plate_stack_terminal_metadata(value: object, *, role: str) -> Importe
     }
 
 
+def _parse_tx_rect_void_columns_terminal_metadata(value: object) -> ImportedTxRectVoidColumnsTerminalMetadata:
+    node = _require_table(value, context="modeled_object.terminal_metadata")
+    kind = _require_non_empty_str(
+        _require_key(node, key="kind", context="modeled_object.terminal_metadata"),
+        context="modeled_object.terminal_metadata.kind",
+    )
+    if kind not in ("parallel_collector_tabs", "series_collector_tabs"):
+        raise ValueError(
+            "modeled_object.terminal_metadata.kind must be 'parallel_collector_tabs' or 'series_collector_tabs' "
+            f"for tx_rect_void_columns (actual={kind!r})"
+        )
+    raw_tab_faces = _require_key(
+        node,
+        key="tab_face_vertices_xyz",
+        context="modeled_object.terminal_metadata",
+    )
+    if isinstance(raw_tab_faces, (str, bytes)) or not isinstance(raw_tab_faces, Sequence):
+        raise TypeError("modeled_object.terminal_metadata.tab_face_vertices_xyz must be a sequence")
+    tab_faces: list[ImportedTxRectVoidColumnsTabFace] = []
+    seen_terminals: set[str] = set()
+    for index, raw_tab_face in enumerate(raw_tab_faces):
+        face_context = f"modeled_object.terminal_metadata.tab_face_vertices_xyz[{index}]"
+        tab_face = _require_table(raw_tab_face, context=face_context)
+        terminal = _require_non_empty_str(
+            _require_key(tab_face, key="terminal", context=face_context),
+            context=f"{face_context}.terminal",
+        )
+        if terminal not in ("start", "end"):
+            raise ValueError(f"{face_context}.terminal must be 'start' or 'end' (actual={terminal!r})")
+        if terminal in seen_terminals:
+            raise ValueError(f"modeled_object.terminal_metadata.tab_face_vertices_xyz contains duplicate terminal {terminal!r}")
+        seen_terminals.add(terminal)
+        tab_faces.append(
+            {
+                "terminal": cast(Literal["start", "end"], terminal),
+                "vertices_xyz": _require_float_triplet_sequence(
+                    _require_key(tab_face, key="vertices_xyz", context=face_context),
+                    context=f"{face_context}.vertices_xyz",
+                ),
+            }
+        )
+    if seen_terminals != {"start", "end"}:
+        raise ValueError(
+            "modeled_object.terminal_metadata.tab_face_vertices_xyz must contain start and end terminals "
+            f"(actual={sorted(seen_terminals)})"
+        )
+    parsed = dict(node)
+    parsed["kind"] = kind
+    parsed["tab_face_vertices_xyz"] = tuple(tab_faces)
+    return cast(ImportedTxRectVoidColumnsTerminalMetadata, parsed)
+
+
 def build_single_imported_modeled_object_entry(
     *,
     modeled_object: dict[str, object],
@@ -314,7 +390,7 @@ def build_single_imported_modeled_object_entry(
     )
     if role not in _SUPPORTED_ROLES:
         raise ValueError(
-            "modeled_object.role must be one of ['tx_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack'] "
+            "modeled_object.role must be one of ['tx_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack', 'tx_rect_void_columns'] "
             f"(actual={role!r})"
         )
     plane = _require_non_empty_str(
@@ -348,13 +424,15 @@ def build_single_imported_modeled_object_entry(
     raw_terminal_metadata = _require_key(modeled_object, key="terminal_metadata", context="modeled_object")
     if role in _PLATE_STACK_ROLES:
         terminal_metadata = _parse_plate_stack_terminal_metadata(raw_terminal_metadata, role=role)
+    elif role == _TX_RECT_VOID_COLUMNS_ROLE:
+        terminal_metadata = _parse_tx_rect_void_columns_terminal_metadata(raw_terminal_metadata)
     else:
         terminal_metadata = _parse_single_coil_terminal_metadata(raw_terminal_metadata)
     validated_object_names = _require_imported_object_names(imported_object_names)
 
     return {
         "object_id": object_id,
-        "role": cast(Literal["tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack"], role),
+        "role": cast(Literal["tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack", "tx_rect_void_columns"], role),
         "plane": cast(Literal["XY", "YZ"], plane),
         "placement_owner_id": placement_owner_id,
         "material": material,

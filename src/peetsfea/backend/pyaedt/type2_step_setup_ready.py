@@ -44,11 +44,17 @@ _PLATE_STACK_ROLE_PAIR: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_
 _MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset(
     {"tx_plate_stack", "rx_single_coil"}
 )
-_ALL_SUPPORTED_ROLE_PAIRS: frozenset[str] = frozenset({*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR})
+_TX_RECT_VOID_COLUMNS_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset(
+    {"tx_rect_void_columns", "rx_single_coil"}
+)
+_ALL_SUPPORTED_ROLE_PAIRS: frozenset[str] = frozenset(
+    {*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR, *_TX_RECT_VOID_COLUMNS_RX_SINGLE_ROLE_PAIR}
+)
 _RX_SINGLE_COIL_ROLE: str = "rx_single_coil"
 _SETUP_BRANCH_COIL_FULL_READY = "coil_full_setup_ready"
 _SETUP_BRANCH_PLATE_STACK_FULL_READY = "plate_stack_full_setup_ready"
 _SETUP_BRANCH_MIXED_TX_PLATE_STACK_RX_SINGLE_READY = "mixed_tx_plate_stack_rx_single_ready"
+_SETUP_BRANCH_TX_RECT_VOID_COLUMNS_RX_SINGLE_READY = "tx_rect_void_columns_rx_single_ready"
 _SETUP_BRANCH_RX_SINGLE_READY = "rx_single_ready"
 
 HfssFactory = Callable[[str], HfssSession]
@@ -83,9 +89,17 @@ def _validate_design(hfss: HfssSession) -> None:
     assert (_ := hfss.odesign)
     assert isinstance(_, DesignSession)
     design: DesignSession = _
+    desktop = hfss.desktop_class
+    messages = list(desktop.GetMessages("", "", 0))
+    try:
+        validation_result = design.ValidateDesign()
+    except RuntimeError as exc:
+        post_validate_messages = list(desktop.GetMessages("", "", 0))
+        raise RuntimeError(f"{exc} (desktop_messages={post_validate_messages!r})") from exc
     raise_on_false(
-        design.ValidateDesign(),
+        validation_result,
         operation="ValidateDesign",
+        context={"desktop_messages": messages},
     )
 
 
@@ -154,10 +168,12 @@ def _resolve_setup_branch(ledger: ValidatedStepLedger) -> str:
         return _SETUP_BRANCH_PLATE_STACK_FULL_READY
     if role_set == _MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR:
         return _SETUP_BRANCH_MIXED_TX_PLATE_STACK_RX_SINGLE_READY
+    if role_set == _TX_RECT_VOID_COLUMNS_RX_SINGLE_ROLE_PAIR:
+        return _SETUP_BRANCH_TX_RECT_VOID_COLUMNS_RX_SINGLE_READY
     raise ValueError(
         "type2 setup facade rejects mixed modeled role families; expected exact pair "
         "['tx_single_coil', 'rx_single_coil'] or ['tx_plate_stack', 'rx_plate_stack'] "
-        "or ['tx_plate_stack', 'rx_single_coil'] "
+        "or ['tx_plate_stack', 'rx_single_coil'] or ['tx_rect_void_columns', 'rx_single_coil'] "
         f"(roles={modeled_roles})"
     )
 
@@ -201,6 +217,19 @@ def _setup_ready_from_loaded_ledger_full(
     sources = apply_sources_phase(hfss, ports)
     analysis = build_analysis(hfss, em_policy)
     post_templates = build_post_templates(hfss, ledger["outputs"], ports)
+    raise_on_false(
+        hfss.change_validation_settings(
+            entity_check_level="None",
+            ignore_unclassified=False,
+            skip_intersections=False,
+        ),
+        operation="change_validation_settings",
+        context={
+            "entity_check_level": "None",
+            "ignore_unclassified": False,
+            "skip_intersections": False,
+        },
+    )
     validation_result: EmPipelineResult = {
         "groups": groups,
         "series": series,
@@ -262,6 +291,15 @@ def _setup_ready_from_loaded_ledger_by_branch(
             design_variables=design_variables,
         )
     if setup_branch == _SETUP_BRANCH_MIXED_TX_PLATE_STACK_RX_SINGLE_READY:
+        return _setup_ready_from_loaded_ledger_full(
+            hfss=hfss,
+            step_ledger_path=step_ledger_path,
+            output_aedt_path=output_aedt_path,
+            imported_ledger_path=imported_ledger_path,
+            ledger=ledger,
+            design_variables=design_variables,
+        )
+    if setup_branch == _SETUP_BRANCH_TX_RECT_VOID_COLUMNS_RX_SINGLE_READY:
         return _setup_ready_from_loaded_ledger_full(
             hfss=hfss,
             step_ledger_path=step_ledger_path,

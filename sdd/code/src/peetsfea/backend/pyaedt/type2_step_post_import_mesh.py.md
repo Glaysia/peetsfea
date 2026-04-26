@@ -1,7 +1,7 @@
 ---
 title: type2_step_post_import_mesh.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 23:59
+updated: 2026-04-22 @ 03:10
 tags:
   - hfss-import
   - mesh
@@ -39,6 +39,7 @@ tags:
 - RX-only mesh target list contains `rx_copper_l0` only.
 - TX plate-stack pair는 single/array 모두 `tx_plate_copper`와 `rx_plate_copper`를 conductor mesh target으로 사용한다.
   개별 `*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`는 도체 mesh 대상이 아니다.
+- columns+RX mesh target list is exactly `tx_rect_void_columns_copper`, `rx_copper_l0`.
 - Branch-local TX array intermediate copper bodies and connector bridges are fused before import and are not separate mesh targets.
 - plate-stack mesh target에는 PCB, ferrite, underlay, reconstructed port sheet가 포함되지 않는다.
 - legacy pre-unite segment(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)는 final mesh 타겟으로 허용되지 않는다.
@@ -50,10 +51,12 @@ tags:
 - plate-stack entry에서 pre-unite segment 라벨이 final conductor 목록에 남아 있으면 즉시 실패한다.
 - `generic SOLID*` 이름은 즉시 실패한다.
 - mesh target은 conductor-only이며 ferrite/pcb/air/port sheet를 제외한다.
+- columns PCB bodies and reconstructed `tx_rect_void_columns_port_sheet` are not mesh targets.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_em_input.py]]
+- [[sdd/plans/0.2.22-type2-tx-rect-void-columns-setup-ready]]
 
 ## 관련 테스트
 - [[sdd/code/tests/backend_em/test_type2_step_setup_ready.py]]

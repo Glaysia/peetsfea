@@ -1,7 +1,7 @@
 ---
 title: test_build_type2_entry.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-21 @ 15:20
+updated: 2026-04-22 @ 03:30
 tags:
   - tests
   - type2
@@ -33,11 +33,13 @@ tags:
 - sampled owner replay drives non-empty RX `design_variables` with canonical owner-name order
 - sampled owner replay now also drives unitless `tx_region_actual` non-model usage-ratio, integer division-count, and `tx_region_actual_stack_space.scale_ratio` design variables. Fixed `tx_region_actual_stack_space.tilt_enabled` is excluded.
 - examples sweep/fixed SSOT loads (`examples/type2_sweep.toml`, `examples/type2_fixed.toml`) are validated as parser/sampler milestone surfaces with 2 modeled objects (`rx_single_coil`, `tx_rect_void_columns`).
-- build helper parser fixture that includes `tx_rect_void_columns` is expected to parse successfully (parser/sampler milestone), while runtime build/setup-ready still fails fast before export/runner execution.
-- setup-ready/build path fails fast for geometry-only `tx_rect_void_columns` modeled roles with parser/sampler-only milestone messaging before step-artifact export and before runner-side source/port setup.
+- build helper parser fixture that includes `tx_rect_void_columns` is expected to parse successfully.
+- setup-ready/build path accepts `tx_rect_void_columns` only when paired with `rx_single_coil`; a lone columns role still fails before export/runner execution.
+- sampled build preparation renders TX columns `turn_weight_a/b/c` as unitless float design variables.
 - geometry-only `tx_rect_void_columns` unsupported-role coverage does not expect TX outer-envelope design variables; that footprint is non-model stack-space state.
 - RX effective sampled owners are `outer_x_usage_ratio`, `outer_y_usage_ratio`, `void_usage_ratio`, `turn_count`, `metal_fill_factor`; `layer_count`, full-backing `underlay_repeat_count`, and removed split/centered `void_*` fields are excluded from `design_variables`
 - manifest parallelism contracts remain intact
+- related setup-ready plan: [[sdd/plans/0.2.22-type2-tx-rect-void-columns-setup-ready]]
 
 ## 변경 시 주의점
 - RX build path checks are independent of TX policy and still reject unsupported roles.

@@ -12,9 +12,15 @@ _PLATE_STACK_ROLE_PAIR: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_
 _MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset(
     {"tx_plate_stack", "rx_single_coil"}
 )
-_ALL_SUPPORTED_ROLES: frozenset[str] = frozenset({*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR})
+_TX_RECT_VOID_COLUMNS_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset(
+    {"tx_rect_void_columns", "rx_single_coil"}
+)
+_ALL_SUPPORTED_ROLES: frozenset[str] = frozenset(
+    {*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR, "tx_rect_void_columns"}
+)
 _TX_PLATE_COPPER_NAME = "tx_plate_copper"
 _RX_PLATE_COPPER_NAME = "rx_plate_copper"
+_TX_RECT_VOID_COLUMNS_COPPER_NAME = "tx_rect_void_columns_copper"
 
 
 def _is_tx_branch_pcb_name(name: str, *, suffix: str) -> bool:
@@ -83,10 +89,15 @@ def _resolve_supported_direct_em_input_entries(
             ("tx", entry_by_role["tx_plate_stack"], "modeled_objects[tx_plate_stack]"),
             ("rx", entry_by_role["rx_single_coil"], "modeled_objects[rx_single_coil]"),
         ]
+    if role_set == _TX_RECT_VOID_COLUMNS_RX_SINGLE_ROLE_PAIR:
+        return [
+            ("tx", entry_by_role["tx_rect_void_columns"], "modeled_objects[tx_rect_void_columns]"),
+            ("rx", entry_by_role["rx_single_coil"], "modeled_objects[rx_single_coil]"),
+        ]
     raise ValueError(
         "type2 setup-ready EM input requires one exact supported tx/rx role pair: "
         "['tx_single_coil', 'rx_single_coil'] or ['tx_plate_stack', 'rx_plate_stack'] "
-        "or ['tx_plate_stack', 'rx_single_coil'] "
+        "or ['tx_plate_stack', 'rx_single_coil'] or ['tx_rect_void_columns', 'rx_single_coil'] "
         f"(roles={modeled_roles})"
     )
 
@@ -114,6 +125,8 @@ def _pcb_names(imported_object_names: list[str], *, role: str) -> list[str]:
             or _is_tx_branch_pcb_name(name, suffix="_pcb_wall")
             or _is_tx_branch_pcb_name(name, suffix="_pcb_coil")
         ]
+    if role == "tx_rect_void_columns":
+        return [name for name in imported_object_names if name.startswith("txrvc_") and "_pcb_l" in name]
     assert role == "rx_plate_stack", f"unsupported role for pcb name resolution (actual={role!r})"
     return [name for name in imported_object_names if name in ("rx_pcb_wall", "rx_pcb_coil")]
 
@@ -125,6 +138,8 @@ def _copper_names(imported_object_names: list[str], *, role: str) -> list[str]:
         return [name for name in imported_object_names if name.startswith("rx_copper_l") or name == "rx_copper_stack"]
     if role == "tx_plate_stack":
         return [name for name in imported_object_names if _is_tx_plate_stack_copper_name(name)]
+    if role == "tx_rect_void_columns":
+        return [name for name in imported_object_names if name == _TX_RECT_VOID_COLUMNS_COPPER_NAME]
     assert role == "rx_plate_stack", f"unsupported role for copper name resolution (actual={role!r})"
     return [name for name in imported_object_names if name == _RX_PLATE_COPPER_NAME]
 
@@ -252,6 +267,8 @@ def _endpoint_entry(
         start_label = "input_stub"
         end_label = "output_stub"
     else:
+        if role == "tx_rect_void_columns":
+            return _tx_rect_void_columns_endpoint_entry(entry=entry, context=context)
         assert role == "rx_plate_stack", f"{context}.role must be a supported endpoint role (actual={role!r})"
         kind = require_non_empty_str(
             require_key(terminal_metadata, key="kind", context=f"{context}.terminal_metadata"),
@@ -278,6 +295,95 @@ def _endpoint_entry(
             "end_xyz": _world_point_from_plane(entry, field_name="end_point_plane_mm", context=context),
             "start_label": start_label,
             "end_label": end_label,
+            "present": True,
+        },
+    )
+
+
+def _center_of_vertices(vertices: tuple[tuple[float, float, float], ...]) -> tuple[float, float, float]:
+    return (
+        sum(vertex[0] for vertex in vertices) / float(len(vertices)),
+        sum(vertex[1] for vertex in vertices) / float(len(vertices)),
+        sum(vertex[2] for vertex in vertices) / float(len(vertices)),
+    )
+
+
+def _tx_rect_void_columns_tab_face_centers(
+    *,
+    entry: dict[str, object],
+    context: str,
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    terminal_metadata = require_key(entry, key="terminal_metadata", context=context)
+    assert isinstance(terminal_metadata, dict), f"{context}.terminal_metadata must be a table/object"
+    kind = require_non_empty_str(
+        require_key(terminal_metadata, key="kind", context=f"{context}.terminal_metadata"),
+        context=f"{context}.terminal_metadata.kind",
+    )
+    if kind not in ("parallel_collector_tabs", "series_collector_tabs"):
+        raise ValueError(
+            f"{context}.terminal_metadata.kind must be 'parallel_collector_tabs' or 'series_collector_tabs' "
+            f"for tx_rect_void_columns endpoint conversion (actual={kind!r})"
+        )
+    raw_tab_faces = require_key(
+        terminal_metadata,
+        key="tab_face_vertices_xyz",
+        context=f"{context}.terminal_metadata",
+    )
+    if isinstance(raw_tab_faces, (str, bytes)) or not isinstance(raw_tab_faces, list):
+        raise TypeError(f"{context}.terminal_metadata.tab_face_vertices_xyz must be a list")
+    centers_by_terminal: dict[str, tuple[float, float, float]] = {}
+    for face_index, raw_tab_face in enumerate(raw_tab_faces):
+        face_context = f"{context}.terminal_metadata.tab_face_vertices_xyz[{face_index}]"
+        if not isinstance(raw_tab_face, dict):
+            raise TypeError(f"{face_context} must be a table/object")
+        terminal = require_non_empty_str(
+            require_key(raw_tab_face, key="terminal", context=face_context),
+            context=f"{face_context}.terminal",
+        )
+        if terminal not in ("start", "end"):
+            raise ValueError(f"{face_context}.terminal must be 'start' or 'end' (actual={terminal!r})")
+        if terminal in centers_by_terminal:
+            raise ValueError(f"{context}.terminal_metadata.tab_face_vertices_xyz contains duplicate terminal {terminal!r}")
+        raw_vertices = require_key(raw_tab_face, key="vertices_xyz", context=face_context)
+        if isinstance(raw_vertices, (str, bytes)) or not isinstance(raw_vertices, list):
+            raise TypeError(f"{face_context}.vertices_xyz must be a list of 3D vertices")
+        vertices: list[tuple[float, float, float]] = []
+        for vertex_index, raw_vertex in enumerate(raw_vertices):
+            if isinstance(raw_vertex, (str, bytes)) or not isinstance(raw_vertex, list):
+                raise TypeError(f"{face_context}.vertices_xyz[{vertex_index}] must be a 3-item list")
+            if len(raw_vertex) != 3:
+                raise ValueError(f"{face_context}.vertices_xyz[{vertex_index}] must contain exactly 3 entries")
+            vertices.append((float(raw_vertex[0]), float(raw_vertex[1]), float(raw_vertex[2])))
+        if len(vertices) != 4:
+            raise ValueError(f"{face_context}.vertices_xyz must contain exactly 4 vertices")
+        centers_by_terminal[terminal] = _center_of_vertices(tuple(vertices))
+    if set(centers_by_terminal) != {"start", "end"}:
+        raise ValueError(
+            f"{context}.terminal_metadata.tab_face_vertices_xyz must contain start and end terminals "
+            f"(actual={sorted(centers_by_terminal)})"
+        )
+    return (centers_by_terminal["start"], centers_by_terminal["end"])
+
+
+def _tx_rect_void_columns_endpoint_entry(
+    *,
+    entry: dict[str, object],
+    context: str,
+) -> GroupEndpointEntry:
+    start_xyz, end_xyz = _tx_rect_void_columns_tab_face_centers(entry=entry, context=context)
+    return cast(
+        GroupEndpointEntry,
+        {
+            "group_kind": "tx_rect_void_columns",
+            "group_instance_index": 0,
+            "board_id": require_non_empty_str(
+                require_key(entry, key="object_id", context=context),
+                context=f"{context}.object_id",
+            ),
+            "start_xyz": start_xyz,
+            "end_xyz": end_xyz,
+            "start_label": "input_stub",
+            "end_label": "output_stub",
             "present": True,
         },
     )
@@ -368,6 +474,12 @@ def build_type2_em_input(
     if tx_role in _COIL_ROLE_PAIR:
         if len(tx_pcb_names) < 1 or len(tx_copper_names) != 1:
             raise ValueError(f"{tx_context}.imported_object_names must contain one or more PCB names and exactly one copper name")
+    elif tx_role == "tx_rect_void_columns":
+        if len(tx_pcb_names) < 1 or tx_copper_names != [_TX_RECT_VOID_COLUMNS_COPPER_NAME]:
+            raise ValueError(
+                f"{tx_context}.imported_object_names must contain one or more txrvc PCB names and exact copper "
+                f"{_TX_RECT_VOID_COLUMNS_COPPER_NAME!r}"
+            )
     else:
         if len(tx_pcb_names) < 2 or len(tx_copper_names) < 1:
             raise ValueError(
@@ -418,7 +530,7 @@ def _required_supported_role_for_direct_em_input(entry: dict[str, object], *, co
     role = require_non_empty_str(require_key(entry, key="role", context=context), context=f"{context}.role")
     if role not in _ALL_SUPPORTED_ROLES:
         raise ValueError(
-            f"{context}.role must be one of ['tx_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack'] "
+            f"{context}.role must be one of ['tx_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack', 'tx_rect_void_columns'] "
             f"(actual={role!r})"
         )
     return role

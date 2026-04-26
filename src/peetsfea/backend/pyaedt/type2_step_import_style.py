@@ -519,10 +519,15 @@ def _expected_port_sheet_name(modeled_entry: dict[str, object], *, context: str)
         return "tx_plate_port_sheet"
     if role == "rx_plate_stack":
         return "rx_plate_port_sheet"
+    if role == "tx_rect_void_columns":
+        return "tx_rect_void_columns_port_sheet"
     return None
 
 
 def _port_sheet_vertices_xyz(modeled_entry: dict[str, object], *, context: str) -> tuple[tuple[float, float, float], ...]:
+    role = require_non_empty_str(require_key(modeled_entry, key="role", context=context), context=f"{context}.role")
+    if role == "tx_rect_void_columns":
+        return _tx_rect_void_columns_port_sheet_vertices_xyz(modeled_entry, context=context)
     terminal_metadata = require_key(modeled_entry, key="terminal_metadata", context=context)
     assert isinstance(terminal_metadata, dict), f"{context}.terminal_metadata must be a table/object"
     raw_vertices = require_key(
@@ -554,6 +559,131 @@ def _port_sheet_vertices_xyz(modeled_entry: dict[str, object], *, context: str) 
     return tuple(vertices)
 
 
+def _tx_rect_void_columns_tab_face_vertices_by_terminal(
+    modeled_entry: dict[str, object],
+    *,
+    context: str,
+) -> dict[str, tuple[tuple[float, float, float], ...]]:
+    terminal_metadata = require_key(modeled_entry, key="terminal_metadata", context=context)
+    assert isinstance(terminal_metadata, dict), f"{context}.terminal_metadata must be a table/object"
+    kind = require_non_empty_str(
+        require_key(terminal_metadata, key="kind", context=f"{context}.terminal_metadata"),
+        context=f"{context}.terminal_metadata.kind",
+    )
+    if kind not in ("parallel_collector_tabs", "series_collector_tabs"):
+        raise ValueError(
+            f"{context}.terminal_metadata.kind must be 'parallel_collector_tabs' or 'series_collector_tabs' "
+            f"for tx_rect_void_columns port sheet reconstruction (actual={kind!r})"
+        )
+    raw_tab_faces = require_key(
+        terminal_metadata,
+        key="tab_face_vertices_xyz",
+        context=f"{context}.terminal_metadata",
+    )
+    if isinstance(raw_tab_faces, (str, bytes)) or not isinstance(raw_tab_faces, Sequence):
+        raise TypeError(f"{context}.terminal_metadata.tab_face_vertices_xyz must be a sequence")
+    faces_by_terminal: dict[str, tuple[tuple[float, float, float], ...]] = {}
+    for face_index, raw_face in enumerate(raw_tab_faces):
+        face_context = f"{context}.terminal_metadata.tab_face_vertices_xyz[{face_index}]"
+        if not isinstance(raw_face, dict):
+            raise TypeError(f"{face_context} must be a table/object")
+        terminal = require_non_empty_str(
+            require_key(raw_face, key="terminal", context=face_context),
+            context=f"{face_context}.terminal",
+        )
+        if terminal not in ("start", "end"):
+            raise ValueError(f"{face_context}.terminal must be 'start' or 'end' (actual={terminal!r})")
+        if terminal in faces_by_terminal:
+            raise ValueError(f"{context}.terminal_metadata.tab_face_vertices_xyz contains duplicate terminal {terminal!r}")
+        raw_vertices = require_key(raw_face, key="vertices_xyz", context=face_context)
+        if isinstance(raw_vertices, (str, bytes)) or not isinstance(raw_vertices, Sequence):
+            raise TypeError(f"{face_context}.vertices_xyz must be a sequence of 3D points")
+        vertices: list[tuple[float, float, float]] = []
+        for vertex_index, raw_vertex in enumerate(raw_vertices):
+            if isinstance(raw_vertex, (str, bytes)) or not isinstance(raw_vertex, Sequence):
+                raise TypeError(f"{face_context}.vertices_xyz[{vertex_index}] must be a sequence of length 3")
+            if len(raw_vertex) != 3:
+                raise ValueError(f"{face_context}.vertices_xyz[{vertex_index}] must contain exactly 3 entries")
+            vertices.append(
+                (
+                    _require_float(raw_vertex[0], context=f"{face_context}.vertices_xyz[{vertex_index}][0]"),
+                    _require_float(raw_vertex[1], context=f"{face_context}.vertices_xyz[{vertex_index}][1]"),
+                    _require_float(raw_vertex[2], context=f"{face_context}.vertices_xyz[{vertex_index}][2]"),
+                )
+            )
+        if len(vertices) != 4:
+            raise ValueError(f"{face_context}.vertices_xyz must contain exactly 4 vertices")
+        faces_by_terminal[terminal] = tuple(vertices)
+    if set(faces_by_terminal) != {"start", "end"}:
+        raise ValueError(
+            f"{context}.terminal_metadata.tab_face_vertices_xyz must contain start and end terminals "
+            f"(actual={sorted(faces_by_terminal)})"
+        )
+    return faces_by_terminal
+
+
+def _center_of_vertices(vertices: tuple[tuple[float, float, float], ...]) -> tuple[float, float, float]:
+    return (
+        sum(vertex[0] for vertex in vertices) / float(len(vertices)),
+        sum(vertex[1] for vertex in vertices) / float(len(vertices)),
+        sum(vertex[2] for vertex in vertices) / float(len(vertices)),
+    )
+
+
+def _edge_vertices_at_axis_extreme(
+    vertices: tuple[tuple[float, float, float], ...],
+    *,
+    axis_index: int,
+    use_maximum: bool,
+    context: str,
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    axis_values = tuple(vertex[axis_index] for vertex in vertices)
+    target_value = max(axis_values) if use_maximum else min(axis_values)
+    tolerance = 1e-8
+    edge_vertices = tuple(vertex for vertex in vertices if abs(vertex[axis_index] - target_value) <= tolerance)
+    if len(edge_vertices) != 2:
+        raise ValueError(
+            f"{context} must expose exactly one edge at the selected tab-face extreme "
+            f"(axis_index={axis_index}, use_maximum={use_maximum}, matches={len(edge_vertices)})"
+        )
+    sort_axes = tuple(index for index in (0, 1, 2) if index != axis_index)
+    sorted_vertices = tuple(sorted(edge_vertices, key=lambda vertex: tuple(vertex[index] for index in sort_axes)))
+    return (sorted_vertices[0], sorted_vertices[1])
+
+
+def _tx_rect_void_columns_port_sheet_vertices_xyz(
+    modeled_entry: dict[str, object],
+    *,
+    context: str,
+) -> tuple[tuple[float, float, float], ...]:
+    faces_by_terminal = _tx_rect_void_columns_tab_face_vertices_by_terminal(modeled_entry, context=context)
+    start_vertices = faces_by_terminal["start"]
+    end_vertices = faces_by_terminal["end"]
+    start_center = _center_of_vertices(start_vertices)
+    end_center = _center_of_vertices(end_vertices)
+    center_delta = tuple(end_center[index] - start_center[index] for index in (0, 1, 2))
+    axis_index = max((0, 1, 2), key=lambda index: abs(center_delta[index]))
+    if abs(center_delta[axis_index]) <= 1e-8:
+        raise ValueError(
+            f"{context}.terminal_metadata.tab_face_vertices_xyz start/end tab faces must have non-zero separation "
+            f"(start_center={start_center}, end_center={end_center})"
+        )
+    end_is_positive = center_delta[axis_index] > 0.0
+    start_edge = _edge_vertices_at_axis_extreme(
+        start_vertices,
+        axis_index=axis_index,
+        use_maximum=end_is_positive,
+        context=f"{context}.terminal_metadata.tab_face_vertices_xyz[start]",
+    )
+    end_edge = _edge_vertices_at_axis_extreme(
+        end_vertices,
+        axis_index=axis_index,
+        use_maximum=not end_is_positive,
+        context=f"{context}.terminal_metadata.tab_face_vertices_xyz[end]",
+    )
+    return (start_edge[0], end_edge[0], end_edge[1], start_edge[1])
+
+
 def _covered_sheet_name(covered: object, *, fallback_name: str, context: str) -> str:
     if covered is True:
         return fallback_name
@@ -579,6 +709,9 @@ def _reconstruct_port_sheet_if_needed(
     modeled_entry: dict[str, object],
     context: str,
 ) -> list[str]:
+    role = require_non_empty_str(require_key(modeled_entry, key="role", context=context), context=f"{context}.role")
+    if role == "tx_rect_void_columns":
+        return []
     expected_port_sheet_name = _expected_port_sheet_name(modeled_entry, context=context)
     if expected_port_sheet_name is None:
         return []
@@ -707,6 +840,8 @@ def validate_modeled_bounds_against_owner(
     plane = require_non_empty_str(require_key(modeled_entry, key="plane", context=context), context=f"{context}.plane")
     modeled_min_x, modeled_min_y, modeled_min_z = outer_bounds_min_xyz(modeled_entry, context=context)
     modeled_size_x, modeled_size_y, modeled_size_z = outer_bounds_size_xyz(modeled_entry, context=context)
+    modeled_max_x = modeled_min_x + modeled_size_x
+    modeled_max_y = modeled_min_y + modeled_size_y
     modeled_max_z = modeled_min_z + modeled_size_z
     raw_expected_names = require_key(modeled_entry, key="expected_exported_body_names", context=context)
     if not isinstance(raw_expected_names, list):
@@ -724,8 +859,29 @@ def validate_modeled_bounds_against_owner(
     owner_context = f"non_model_objects[*].member_objects[{owner_id}]"
     owner_min_x, owner_min_y, owner_min_z = outer_bounds_min_xyz(owner_member, context=owner_context)
     owner_size_x, owner_size_y, owner_size_z = outer_bounds_size_xyz(owner_member, context=owner_context)
+    owner_max_x = owner_min_x + owner_size_x
     owner_max_z = owner_min_z + owner_size_z
     owner_max_y = owner_min_y + owner_size_y
+    if role == "tx_rect_void_columns":
+        if owner_id != "tx_region_actual_stack_space":
+            raise ValueError(
+                f"{context}.placement_owner_id must be 'tx_region_actual_stack_space' for tx_rect_void_columns "
+                f"(actual={owner_id!r})"
+            )
+        if plane != "XY":
+            raise ValueError(f"{context}.plane must be 'XY' for tx_rect_void_columns geometry (actual={plane!r})")
+        if modeled_max_z > owner_max_z + _PLACEMENT_TOLERANCE:
+            raise ValueError(
+                f"{context} outer bounds max_z must not exceed {owner_id} max_z "
+                f"(actual={modeled_max_z}, expected_max={owner_max_z})"
+            )
+        if modeled_max_x < owner_min_x or modeled_min_x > owner_max_x or modeled_max_y < owner_min_y or modeled_min_y > owner_max_y:
+            raise ValueError(
+                f"{context} outer bounds must overlap {owner_id} in XY "
+                f"(modeled_min={(modeled_min_x, modeled_min_y)}, modeled_max={(modeled_max_x, modeled_max_y)}, "
+                f"owner_min={(owner_min_x, owner_min_y)}, owner_max={(owner_max_x, owner_max_y)})"
+            )
+        return
     allowed_modeled_size_y = (
         owner_size_y + _PLATE_STACK_STUB_LENGTH_MM if role in ("tx_plate_stack", "rx_plate_stack") else owner_size_y
     )

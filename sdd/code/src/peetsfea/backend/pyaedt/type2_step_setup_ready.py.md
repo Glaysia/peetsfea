@@ -1,7 +1,7 @@
 ---
 title: type2_step_setup_ready.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 23:59
+updated: 2026-04-22 @ 04:55
 tags:
   - hfss-import
   - em
@@ -34,8 +34,10 @@ tags:
 - preflight는 step ledger load 직후, HFSS launch 전에 수행된다.
 - exact coil pair는 current full setup-ready path를 유지한다.
 - exact plate-stack pair도 coil pair와 동일하게 full setup-ready pipeline을 수행한다.
+- active columns+RX role set(`tx_rect_void_columns` + `rx_single_coil`) also performs the full setup-ready pipeline without invoking HFSS solve.
 - active RX-only role set `rx_single_coil` performs the full setup-ready pipeline without a TX placeholder.
 - malformed role sets are rejected before HFSS launch.
+- `tx_rect_void_columns` without `rx_single_coil` is rejected before HFSS launch.
 - plate-stack branch는 `tx_plate_port_sheet` / `rx_plate_port_sheet` 재구성 체인을 그대로 보존하고 stub_port metadata를 downstream EM/mesh 단계까지 전달한다.
 - geometry-view import-only는 sibling import pipeline의 책임으로 계속 남는다.
 - setup-ready는 stable imported name contract를 소비하는 단계이며 geometry heal/subtract/repair ownership이 없다.
@@ -43,6 +45,9 @@ tags:
 
 ## Invariants / fail-fast
 - plate-stack branch도 post-import mesh, EM input/grouping/series/subtract, source phase, analysis/report, validate_pipeline, ValidateDesign, final save를 수행한다.
+- `ValidateDesign()` false failure includes AEDT desktop messages in the raised context so sheet/port/report rejection remains actionable.
+- Before `ValidateDesign()`, setup-ready sets AEDT validation entity checking to `None` while keeping
+  `skip_intersections = False`, so real part intersections still fail validation.
 - mixed TX plate-stack/RX single-coil branch도 동일 후반 체인을 수행하며 reduced setup으로 분기하지 않는다.
 - RX-only EM input requires `rx_copper_l0` as the RX conductor ready object and no TX conductor placeholder.
 - RX-only explicit port contract uses reconstructed `rx_port_sheet` and fixed numeric `1/1_T1`.
@@ -64,3 +69,4 @@ tags:
 - branch selection을 HFSS 생성 이후로 늦추지 않는다.
 - plate-stack exact pair를 reduced partial-setup contract로 되돌리지 않는다.
 - setup-ready 경로에 geometry-repair fallback을 추가하지 않는다.
+- setup-ready `.aedt` generation remains separate from external solve execution.

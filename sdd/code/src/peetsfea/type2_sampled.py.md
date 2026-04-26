@@ -1,7 +1,7 @@
 ---
 title: type2_sampled.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-22 @ 01:10
+updated: 2026-04-22 @ 03:30
 tags:
   - sampling
   - build
@@ -37,7 +37,7 @@ tags:
   - `modeled_objects.tx_rect_void_columns.turn_weight_a`
   - `modeled_objects.tx_rect_void_columns.turn_weight_b`
   - `modeled_objects.tx_rect_void_columns.turn_weight_c`
-- active `equivalent_turn_count` remains a unitless float owner and is emitted as a float design variable expression. It is not part of the integer design-variable field set.
+- active `equivalent_turn_count` and `turn_weight_a/b/c` remain unitless float owners and are emitted as float design variable expressions. They are not part of the integer design-variable field set.
 - active `equivalent_turn_count` candidate selection is filtered by the realized TX columns coil count (`x_division_count * y_division_count`) and mode so replay never freezes infeasible equivalent-turn candidates. Series feasibility keeps candidates whose rounded value falls in `[realized_coil_count, 31]`; parallel feasibility keeps candidates within the harmonic range `[1/N, 10/N]` for the realized branch count `N`.
 - legacy `turn_count_x*` tx-columns owners remain removed and must not reappear in sampled-owner resolution.
 - active RX single-coil sampled outer envelope owners use `outer_x_usage_ratio` and `outer_y_usage_ratio`.
@@ -76,6 +76,7 @@ tags:
 - `tx_array_x_usage_ratio` is a floating owner and design variable expression is unitless.
 - non-model usage-ratio design variables are unitless and must freeze into sampled TOML with count `1`, same as modeled usage ratios.
 - non-model division-count design variables are integer/unitless and must freeze into sampled TOML with count `1`.
+- TX columns turn-weight design variables are unitless floats; they must not receive `mm` units or fail the build-prep design-variable contract.
 - type2 constraints must be evaluated before sampled TOML is written, and failing candidates must retry until success or fail fast after the configured attempt budget.
 - constraint retry budget is fixed at 64 attempts (`retry_number` 0..63); if all fail with `ValueError`/`RuntimeError`, the attempted seed is skipped and recorded.
 - comparison constraints support path operands, numeric literal operands, and `sum(...)` operands that can mix owner paths and numeric literals.

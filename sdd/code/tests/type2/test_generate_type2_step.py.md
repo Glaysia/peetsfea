@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-22 @ 01:10
+updated: 2026-04-22 @ 04:35
 tags:
   - tests
   - type2
@@ -21,7 +21,7 @@ tags:
 
 ## Canonical coverage
 - `tx_plate_stack`, `rx_plate_stack`, and `rx_single_coil` parser/export acceptance
-- active fixed example loader expects one modeled object: RX `rx_single_coil`
+- active fixed example loader expects the full 0.2.21-style output-variable list and the active TX/RX modeled pair.
 - active fixed example also expects derived non-model `tx_region_actual` with fixed 0.3 X/Y usage ratios and 1x1 division.
 - export ledger coverage verifies `tx_region_actual` is min-X anchored, Y-centered, full-Z relative to `tx_region`, and can resolve to 3x3 concrete tiles.
 - export ledger coverage verifies `tx_region_actual_stack_space` bodies are generated one-for-one with concrete `tx_region_actual` tiles, with fixed `total_thickness_mm = 5.0`, top-face alignment before tilt, and scale-derived similar footprint.
@@ -31,6 +31,8 @@ tags:
   - parallel specs export one fused `tx_rect_void_columns_copper` body, per-tile PCBs, balanced collector pour bus/patch metadata, and exactly two future tab faces,
   - parser-bypass simulations (mocked loader + preflight no-op) still execute through full export and keep the same success contract,
   - generated specs using `tx_rect_void_columns` with varied tiling/turn matrices produce expected body metadata counts and scene bodies.
+  - TX columns export helpers assert final `tx_rect_void_columns_copper` has zero positive-volume intersection with every
+    exported `txrvc_*_pcb_l*` body.
   - grid contract regression explicitly covers `1x1`, `2x3`, `3x3` and validates `txrvc_x*_y*_pcb_l*`, series `txrvc_x*_y*_cu_l*`, series `txrvc_x*_y*_stub_*`, and parallel fused-copper naming/body-count 계약.
   - tilted series export verifies every generated `txrvc_x*_y*_stub_*` terminal body shares the same bottom Z, using the lowest natural stub as the common floorward height.
   - safe-turn grid variant fixtures keep TOML truth ranges for allocation surface, including canonical `equivalent_turn_count = [false, 0.1111111111111111, 31.0, 100]` and `turn_weight_c = [false, -0.3, 0.3, 21]`.

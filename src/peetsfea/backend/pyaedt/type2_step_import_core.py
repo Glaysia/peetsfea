@@ -12,7 +12,10 @@ from peetsfea.backend.pyaedt.type2_modeled_import_adapter import build_single_im
 from peetsfea.backend.pyaedt.type2_step_import_ledger import (
     ValidatedStepLedger,
     find_owner_member,
+    find_owner_members_by_concrete_prefix,
     member_object_id,
+    outer_bounds_min_xyz,
+    outer_bounds_size_xyz,
     require_key,
     require_member_objects,
     require_non_empty_str,
@@ -50,6 +53,7 @@ _RX_MERGED_STACK_MEMBER_NAMES: tuple[str, str, str] = (
     "rx_stack_ferrite",
     "rx_stack_air",
 )
+_TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
 
 
 def _is_tx_branch_stack_member(name: str, *, suffix: str) -> bool:
@@ -432,6 +436,49 @@ def _all_imported_modeled_object_names(modeled_names_by_object_id: dict[str, lis
     return imported_object_names
 
 
+def _union_owner_member(
+    owner_members: list[dict[str, object]],
+    *,
+    owner_id: str,
+    context: str,
+) -> dict[str, object]:
+    if len(owner_members) == 0:
+        raise ValueError(f"{context} requires at least one concrete owner member for {owner_id}")
+    min_points: list[tuple[float, float, float]] = []
+    max_points: list[tuple[float, float, float]] = []
+    for index, owner_member in enumerate(owner_members):
+        member_context = f"{context}.owner_members[{index}]"
+        min_x, min_y, min_z = outer_bounds_min_xyz(owner_member, context=member_context)
+        size_x, size_y, size_z = outer_bounds_size_xyz(owner_member, context=member_context)
+        min_points.append((min_x, min_y, min_z))
+        max_points.append((min_x + size_x, min_y + size_y, min_z + size_z))
+    union_min = (
+        min(point[0] for point in min_points),
+        min(point[1] for point in min_points),
+        min(point[2] for point in min_points),
+    )
+    union_max = (
+        max(point[0] for point in max_points),
+        max(point[1] for point in max_points),
+        max(point[2] for point in max_points),
+    )
+    union_size = (
+        union_max[0] - union_min[0],
+        union_max[1] - union_min[1],
+        union_max[2] - union_min[2],
+    )
+    return {
+        "object_id": owner_id,
+        "role": owner_id,
+        "canonical_coordinates": {
+            "frame_origin_xyz": union_min,
+            "outer_bounds_min_xyz": union_min,
+            "outer_bounds_max_xyz": union_max,
+            "outer_bounds_size_xyz": union_size,
+        },
+    }
+
+
 def build_imported_ledger(
     *,
     hfss: HfssSession,
@@ -485,7 +532,18 @@ def build_imported_ledger(
             require_key(validated_entry["entry"], key="placement_owner_id", context=context),
             context=f"{context}.placement_owner_id",
         )
-        owner_member = find_owner_member(ledger["non_model_objects"], object_id=owner_id)
+        role = require_non_empty_str(
+            require_key(validated_entry["entry"], key="role", context=context),
+            context=f"{context}.role",
+        )
+        if role == _TX_RECT_VOID_COLUMNS_ROLE:
+            owner_member = _union_owner_member(
+                find_owner_members_by_concrete_prefix(ledger["non_model_objects"], object_id=owner_id),
+                owner_id=owner_id,
+                context=context,
+            )
+        else:
+            owner_member = find_owner_member(ledger["non_model_objects"], object_id=owner_id)
         validate_modeled_bounds_against_owner(
             modeled_entry=validated_entry["entry"],
             owner_member=owner_member,

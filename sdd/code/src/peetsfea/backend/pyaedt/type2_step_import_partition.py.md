@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_partition.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 18:20
+updated: 2026-04-22 @ 03:10
 tags:
   - hfss-import
   - partition
@@ -50,6 +50,8 @@ tags:
 - plate-stack expected names에서 ferrite-family는 merged exact 3-body만 허용한다. legacy `tx_underlay_*`/`tx_wall_*`/`under_rx_*` ferrite-family labels는 export contract violation으로 즉시 중단한다.
 - copper/pcb/fr4/ferrite 구성원은 최종 소비 지점에서 TX/RX로 구분되어 role-local 정규화되며, plate-stack mesh/EM은
   `g_copper_tx`/`g_copper_rx`의 member를 사용한다.
+- `tx_rect_void_columns` partitions `txrvc_*_pcb_l*` as PCB and `tx_rect_void_columns_copper` as the only TX conductor.
+- columns expected body groups are empty; no ferrite/copper AEDT group recreation is required for this role.
 
 ## Invariants / fail-fast
 - modeled exact-name drift와 unclaimed imported object는 hard failure다.
@@ -64,12 +66,14 @@ tags:
 - export-side legacy pre-unite segment labels(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)가 final conductor로 남아 있으면 unsupported로 즉시 실패한다.
 - required concrete copper members 또는 `g_copper_tx`, `g_copper_rx` 미재생성은 fail-fast다.
 - TX branch-local ferrite-family names must all be claimed by `g_ferrite_tx`; missing branch members fail exact-name validation.
+- columns import requires exact labels and rejects any extra body names, generic `SOLID*` names, or missing fused copper.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_plate_stack.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_style.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py]]
+- [[sdd/plans/0.2.22-type2-tx-rect-void-columns-setup-ready]]
 
 ## 관련 테스트
 - [[sdd/code/tests/backend_em/test_type2_step_import_pipeline.py]]

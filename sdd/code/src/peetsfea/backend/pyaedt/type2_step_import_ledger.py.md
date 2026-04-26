@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_ledger.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 18:20
+updated: 2026-04-22 @ 04:05
 tags:
   - hfss-import
   - import-only
@@ -39,6 +39,10 @@ tags:
   RX=`rx_stack_pet_psa`, `rx_stack_ferrite`, `rx_stack_air`.
 - expected_imported_body_groups는 role 단위로 항상 `g_copper_tx`/`g_copper_rx` 및 `g_ferrite_tx`/`g_ferrite_rx`를 포함해야 한다.
 - TX arrays allow branch-local ferrite-family body names, but copper membership is the united `tx_plate_copper`.
+- `tx_rect_void_columns` is accepted for the active columns+RX setup-ready pair with collector terminal metadata.
+- Columns terminal metadata kinds are `parallel_collector_tabs` and `series_collector_tabs`; both must expose exactly two tab face entries under `tab_face_vertices_xyz`.
+- Columns placement owner lookup accepts concrete tiled stack-space members named from the canonical owner prefix, such as
+  `tx_region_actual_stack_space_x0_y0`, and requires at least one such member.
 - single-coil roles는 기존 underlay/wall prefix family contract를 유지한다.
 - copper grouping contract는 plate-stack role별 단일 그룹을 사용한다:
   TX=`g_copper_tx`, RX=`g_copper_rx`;
@@ -60,12 +64,15 @@ tags:
 - plate-stack roles에서는 old `*_stack_*_uN` ferrite-family naming을 허용하지 않는다.
 - legacy segment labels(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)를 final 도체로 간주하면 즉시 실패한다.
 - generic `SOLID*` 드리프트는 import ledger 단계에서 치유 없이 즉시 실패한다.
+- columns tab metadata must contain one `start` and one `end` terminal face; missing, duplicate, or malformed faces fail before HFSS port assignment.
+- columns concrete owner lookup still fails if no member exists for the declared placement owner prefix.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_step_ledger.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_modeled_import_adapter.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_partition.py]]
+- [[sdd/plans/0.2.22-type2-tx-rect-void-columns-setup-ready]]
 
 ## 관련 테스트
 - [[sdd/code/tests/backend_em/test_type2_step_import_pipeline.py]]

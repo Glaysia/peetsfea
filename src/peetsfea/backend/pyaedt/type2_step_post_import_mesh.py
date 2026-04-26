@@ -17,14 +17,19 @@ _TX_ROLE = "tx_single_coil"
 _RX_ROLE = "rx_single_coil"
 _TX_PLATE_STACK_ROLE = "tx_plate_stack"
 _RX_PLATE_STACK_ROLE = "rx_plate_stack"
+_TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
 _COIL_ROLE_PAIR: frozenset[str] = frozenset({_TX_ROLE, _RX_ROLE})
 _PLATE_STACK_ROLE_PAIR: frozenset[str] = frozenset({_TX_PLATE_STACK_ROLE, _RX_PLATE_STACK_ROLE})
 _MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset({_TX_PLATE_STACK_ROLE, _RX_ROLE})
-_ALL_SUPPORTED_MESH_ROLES: frozenset[str] = frozenset({*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR})
+_TX_RECT_VOID_COLUMNS_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset({_TX_RECT_VOID_COLUMNS_ROLE, _RX_ROLE})
+_ALL_SUPPORTED_MESH_ROLES: frozenset[str] = frozenset(
+    {*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR, _TX_RECT_VOID_COLUMNS_ROLE}
+)
 _TX_MESH_OBJECT_CANDIDATES = ("tx_copper_l0", "tx_copper_stack")
 _RX_MESH_OBJECT_NAME = "rx_copper_l0"
 _TX_PLATE_MESH_OBJECT_NAME = "tx_plate_copper"
 _RX_PLATE_MESH_OBJECT_NAME = "rx_plate_copper"
+_TX_RECT_VOID_COLUMNS_MESH_OBJECT_NAME = "tx_rect_void_columns_copper"
 MESH_LENGTH_MAX_ELEMENTS = "1000"
 MESH_LENGTH_MAX_LENGTH = "5mm"
 
@@ -161,7 +166,7 @@ def _required_supported_mesh_role(entry: dict[str, object], *, context: str) -> 
     role = require_non_empty_str(require_key(entry, key="role", context=context), context=f"{context}.role")
     if role not in _ALL_SUPPORTED_MESH_ROLES:
         raise ValueError(
-            f"{context}.role must be one of ['tx_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack'] "
+            f"{context}.role must be one of ['tx_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack', 'tx_rect_void_columns'] "
             f"(actual={role!r})"
         )
     return role
@@ -228,6 +233,24 @@ def _required_plate_stack_mesh_object_names(entry: dict[str, object], *, role: s
     return plate_stack_matches
 
 
+def _required_tx_rect_void_columns_mesh_object_name(entry: dict[str, object], *, context: str) -> str:
+    imported_object_names = _imported_object_names(entry, context=context)
+    matches = [name for name in imported_object_names if name == _TX_RECT_VOID_COLUMNS_MESH_OBJECT_NAME]
+    if len(matches) != 1:
+        raise ValueError(
+            f"{context}.imported_object_names must contain exactly one fused tx_rect_void_columns copper body "
+            f"{_TX_RECT_VOID_COLUMNS_MESH_OBJECT_NAME!r} for mesh "
+            f"(actual={matches}, available={imported_object_names})"
+        )
+    solid_drift_names = [name for name in imported_object_names if name.casefold().startswith("solid")]
+    if solid_drift_names:
+        raise ValueError(
+            f"{context}.imported_object_names contains generic SOLID* drift for tx_rect_void_columns mesh "
+            f"(solid_names={solid_drift_names})"
+        )
+    return matches[0]
+
+
 def _resolve_supported_mesh_entries(
     imported_modeled_objects: Sequence[dict[str, object]],
 ) -> list[tuple[str, dict[str, object], str]]:
@@ -273,10 +296,15 @@ def _resolve_supported_mesh_entries(
             (_TX_PLATE_STACK_ROLE, entry_by_role[_TX_PLATE_STACK_ROLE], f"modeled_objects[{_TX_PLATE_STACK_ROLE}]"),
             (_RX_ROLE, entry_by_role[_RX_ROLE], f"modeled_objects[{_RX_ROLE}]"),
         ]
+    if role_set == _TX_RECT_VOID_COLUMNS_RX_SINGLE_ROLE_PAIR:
+        return [
+            (_TX_RECT_VOID_COLUMNS_ROLE, entry_by_role[_TX_RECT_VOID_COLUMNS_ROLE], f"modeled_objects[{_TX_RECT_VOID_COLUMNS_ROLE}]"),
+            (_RX_ROLE, entry_by_role[_RX_ROLE], f"modeled_objects[{_RX_ROLE}]"),
+        ]
     raise ValueError(
         "Post-import mesh assignment requires one exact supported tx/rx role pair: "
         "['tx_single_coil', 'rx_single_coil'] or ['tx_plate_stack', 'rx_plate_stack'] "
-        "or ['tx_plate_stack', 'rx_single_coil'] "
+        "or ['tx_plate_stack', 'rx_single_coil'] or ['tx_rect_void_columns', 'rx_single_coil'] "
         f"(roles={modeled_roles})"
     )
 
@@ -294,7 +322,7 @@ def _required_mesh_object_names(imported_modeled_objects: Sequence[dict[str, obj
     tx_found = False
     rx_found = False
     for role, entry, context in resolved:
-        if role in (_TX_ROLE, _TX_PLATE_STACK_ROLE):
+        if role in (_TX_ROLE, _TX_PLATE_STACK_ROLE, _TX_RECT_VOID_COLUMNS_ROLE):
             tx_entry = entry
             tx_context = context
             tx_found = True
@@ -316,6 +344,11 @@ def _required_mesh_object_names(imported_modeled_objects: Sequence[dict[str, obj
     if tx_role == _TX_PLATE_STACK_ROLE and rx_role == _RX_ROLE:
         return [
             *_required_plate_stack_mesh_object_names(tx_entry, role=tx_role, context=tx_context),
+            _required_rx_mesh_object_name(rx_entry, context=rx_context),
+        ]
+    if tx_role == _TX_RECT_VOID_COLUMNS_ROLE and rx_role == _RX_ROLE:
+        return [
+            _required_tx_rect_void_columns_mesh_object_name(tx_entry, context=tx_context),
             _required_rx_mesh_object_name(rx_entry, context=rx_context),
         ]
     if tx_role == _TX_PLATE_STACK_ROLE and rx_role == _RX_PLATE_STACK_ROLE:

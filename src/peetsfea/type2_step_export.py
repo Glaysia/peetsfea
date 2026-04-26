@@ -341,6 +341,25 @@ def _require_plate_stack_merged_scene_shape_contract(*, scene_shapes: tuple[bd.S
             )
 
 
+def _single_solid_cut_shape(
+    *,
+    blank_shape: bd.Shape,
+    tool_shape: bd.Shape,
+    label: str,
+    context: str,
+) -> bd.Shape:
+    cut_shape = cast(bd.Shape, blank_shape.cut(tool_shape))
+    solids = tuple(cut_shape.solids())
+    if len(solids) != 1:
+        raise RuntimeError(
+            "type2 shape cut must produce exactly one solid "
+            f"(label={label}, context={context}, solid_count={len(solids)})"
+        )
+    solid = solids[0]
+    solid.label = label
+    return cast(bd.Shape, solid)
+
+
 def _export_modeled_single_coil(
     spec: ModeledTxSingleCoilSpec,
     *,
@@ -995,8 +1014,18 @@ def _build_tx_rect_void_columns_scene_data(
         overlap_audit = _collector_overlap_audit_metadata(
             audit=collector_handoff.overlap_audit,
         )
+        cut_pcb_shapes = tuple(
+            _single_solid_cut_shape(
+                blank_shape=shape,
+                tool_shape=fused_copper_body,
+                label=shape.label,
+                context="tx_rect_void_columns.final_pcb_copper_clearance",
+            )
+            for shape in transformed_shapes
+            if "_pcb_l" in shape.label
+        )
         transformed_shapes = [
-            *tuple(shape for shape in transformed_shapes if "_pcb_l" in shape.label),
+            *cut_pcb_shapes,
             fused_copper_body,
         ]
         if build_result.connection_mode == 0:

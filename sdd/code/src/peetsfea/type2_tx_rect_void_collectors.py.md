@@ -1,7 +1,7 @@
 ---
 title: type2_tx_rect_void_collectors.py
 created: 2026-04-21 @ 23:55
-updated: 2026-04-22 @ 02:10
+updated: 2026-04-22 @ 04:45
 tags:
   - type2
   - tx
@@ -31,6 +31,7 @@ tags:
 - Series collectors use deterministic boustrophedon order and local broad straps from each tile end pickup to the next tile start pickup.
 - Pours must not become full-array overlapping planes for both polarities; the overlap audit remains a hard contract.
 - The export-ready fused body is always labeled `tx_rect_void_columns_copper`.
+- The final fused copper handoff is deterministically `clean().fix()` normalized before export and must remain one valid solid.
 - The external port handoff exposes exactly two tab face vertex sets, one for start and one for end.
 
 ## Invariants / fail-fast
@@ -39,6 +40,7 @@ tags:
 - Every realized tile must expose one start pickup and one end pickup, and the pickup rectangles must be 4-vertex shapes with positive span.
 - Collector source labels are deterministic and unique before fusion. Pour labels replace the previous row-rail/spine/feed label family.
 - The fused TX copper handoff must be exactly one solid.
+- If final clean/fix normalization does not produce one valid solid, export fails before STEP handoff.
 - Start and end collector source solids must not have positive-volume intersection.
 - Aggregate start/end collector feed length must balance within numeric tolerance, and per-branch spread is bounded by the internal branch-spread limit after tilt.
 - Series collector links must not create positive-volume shortcuts between non-neighbor links or between the two external tabs.

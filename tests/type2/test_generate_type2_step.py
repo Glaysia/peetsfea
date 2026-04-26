@@ -1648,15 +1648,7 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     spec = load_type2_step_spec(source_toml)
 
     assert spec.simulation.radiation_margin_mm == pytest.approx(3500.0)
-    expected_output_variable_names = (
-        "Lrx_uH",
-        "Qrx_ratio",
-        "Rrx_ac_ohm",
-        "Xrx_ohm",
-        "Grx_S",
-        "Brx_S",
-        "S22_mag_ratio",
-    )
+    expected_output_variable_names = tuple(name for name, _ in TYPE1_OUTPUT_VARIABLES)
     assert tuple(variable["name"] for variable in spec.outputs["variables"]) == expected_output_variable_names
     assert len(spec.non_model_objects) == 6
     assert len(spec.modeled_objects) == 2
@@ -2918,6 +2910,10 @@ def _export_tx_rect_void_columns_spec_and_expect_success(
     scene_shapes_by_label = _step_shapes_by_label(scene_step_path)
     for body_name in expected_names:
         assert body_name in scene_shapes_by_label
+    fused_copper = scene_shapes_by_label["tx_rect_void_columns_copper"]
+    for body_name in expected_names:
+        if "_pcb_l" in body_name:
+            _assert_zero_intersection_volume(scene_shapes_by_label[body_name], fused_copper)
     return tx_entry
 
 

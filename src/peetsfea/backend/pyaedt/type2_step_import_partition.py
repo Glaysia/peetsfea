@@ -22,6 +22,8 @@ _BODY_ROLE_UNDERLAY_PET_PSA = "underlay_pet_psa"
 _BODY_ROLE_UNDERLAY_AIR = "underlay_air"
 _SINGLE_COIL_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
 _PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
+_TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
+_TX_RECT_VOID_COLUMNS_COPPER_NAME = "tx_rect_void_columns_copper"
 _TX_COPPER_GROUP_NAME = "g_copper_tx"
 _RX_COPPER_GROUP_NAME = "g_copper_rx"
 _TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
@@ -319,6 +321,13 @@ def _group_contract_for_role(
             member_names=(),
             ferrite_group_name=_RX_FERRITE_GROUP_NAME,
         )
+    if role == _TX_RECT_VOID_COLUMNS_ROLE:
+        if _TX_RECT_VOID_COLUMNS_COPPER_NAME not in expected_names:
+            raise ValueError(
+                f"{context}.expected_exported_body_names must include {_TX_RECT_VOID_COLUMNS_COPPER_NAME!r} "
+                "for tx_rect_void_columns"
+            )
+        return []
 
     if role == "tx_plate_stack":
         ferrite_member_names = tuple(
@@ -399,6 +408,8 @@ def _group_contract_for_role(
 
 
 def _body_role_from_expected_name(expected_name: str, *, context: str) -> str:
+    if expected_name.startswith(("tx_pcb_l", "rx_pcb_l", "txrvc_")) and "_pcb_l" in expected_name:
+        return _BODY_ROLE_PCB
     if expected_name.startswith(("tx_pcb_l", "rx_pcb_l")) or expected_name in (
         _TX_PCB_WALL_NAME,
         _TX_PCB_COIL_NAME,
@@ -415,6 +426,7 @@ def _body_role_from_expected_name(expected_name: str, *, context: str) -> str:
             _TX_COPPER_COIL_NAME,
             _RX_COPPER_WALL_NAME,
             _RX_COPPER_COIL_NAME,
+            _TX_RECT_VOID_COLUMNS_COPPER_NAME,
         ):
         return _BODY_ROLE_COPPER
     if _is_ferrite_family_name(expected_name):
@@ -425,6 +437,7 @@ def _body_role_from_expected_name(expected_name: str, *, context: str) -> str:
         return _BODY_ROLE_UNDERLAY_AIR
     raise ValueError(
         "unsupported exported body name; expected tx_pcb_l*/tx_copper_l*/tx_copper_stack/"
+        "txrvc_*_pcb_l*/tx_rect_void_columns_copper/"
         "tx_copper_wall/tx_pcb_wall/tx_plate_copper/tx_stack_ferrite/tx_stack_pet_psa/"
         "tx_stack_air/tx_b*_stack_ferrite/tx_b*_stack_pet_psa/tx_b*_stack_air/tx_pcb_coil/tx_copper_coil "
         "tx_underlay_ferrite_u*/tx_underlay_pet_psa_u*/tx_underlay_air_u* "
@@ -441,7 +454,8 @@ def _resolved_pcb_names(imported_object_names: list[str]) -> list[str]:
     return [
         name
         for name in imported_object_names
-        if name.startswith(("tx_pcb_l", "rx_pcb_l"))
+        if (name.startswith("txrvc_") and "_pcb_l" in name)
+        or name.startswith(("tx_pcb_l", "rx_pcb_l"))
         or name in (_TX_PCB_WALL_NAME, _TX_PCB_COIL_NAME, _RX_PCB_WALL_NAME, _RX_PCB_COIL_NAME)
         or _is_tx_branch_stack_member(name, suffix="_pcb_wall")
         or _is_tx_branch_stack_member(name, suffix="_pcb_coil")
@@ -462,6 +476,7 @@ def _resolved_copper_names(imported_object_names: list[str]) -> list[str]:
             _TX_COPPER_COIL_NAME,
             _RX_COPPER_WALL_NAME,
             _RX_COPPER_COIL_NAME,
+            _TX_RECT_VOID_COLUMNS_COPPER_NAME,
         )
     ]
 
@@ -578,6 +593,12 @@ def resolve_modeled_body_names(
                 "single-coil type2 import requires one or more PCB bodies and exactly one copper body "
                 f"(actual={expected_names})"
             )
+    elif role == _TX_RECT_VOID_COLUMNS_ROLE:
+        if expected_roles.count(_BODY_ROLE_PCB) < 1 or expected_roles.count(_BODY_ROLE_COPPER) != 1:
+            raise ValueError(
+                "tx_rect_void_columns type2 import requires one or more PCB bodies and exactly one fused copper body "
+                f"(actual={expected_names})"
+            )
     elif role in _PLATE_STACK_ROLES:
         _require_plate_stack_merged_ferrite_name_contract(role=role, expected_names=expected_names, context=context)
         expected_copper_count = expected_roles.count(_BODY_ROLE_COPPER)
@@ -622,7 +643,13 @@ def resolve_modeled_body_names(
         expected_names=expected_names,
         imported_object_names=imported_object_names,
         context=context,
-        role_label="single-coil" if role in _SINGLE_COIL_ROLES else "plate-stack",
+        role_label=(
+            "single-coil"
+            if role in _SINGLE_COIL_ROLES
+            else "tx_rect_void_columns"
+            if role == _TX_RECT_VOID_COLUMNS_ROLE
+            else "plate-stack"
+        ),
     )
     pcb_names = _resolved_pcb_names(imported_object_names)
     copper_names = _resolved_copper_names(imported_object_names)
@@ -634,6 +661,12 @@ def resolve_modeled_body_names(
             raise ValueError(
                 "single-coil type2 import requires one or more PCB bodies and exactly one copper body after exact-name matching "
                 f"(actual={imported_object_names})"
+            )
+    elif role == _TX_RECT_VOID_COLUMNS_ROLE:
+        if len(pcb_names) < 1 or copper_names != [_TX_RECT_VOID_COLUMNS_COPPER_NAME]:
+            raise ValueError(
+                "tx_rect_void_columns type2 import requires one or more PCB bodies and exactly one fused copper body "
+                f"(expected_copper={[_TX_RECT_VOID_COLUMNS_COPPER_NAME]}, pcb_names={pcb_names}, copper_names={copper_names})"
             )
     else:
         legacy_segment_names = [name for name in imported_object_names if _is_legacy_plate_stack_copper_segment_name(name)]

@@ -6,9 +6,9 @@
 #
 # 현재 상태:
 # - RX single-coil은 parser/sampler/export/build 경로가 살아 있다.
-# - TX columns는 parser/sampler-only milestone이다.
-# - 따라서 이 파일은 sample_type2(..., make_step_on_sample=false)에서 유효하다.
-# - TX geometry/export/build/setup-ready는 아직 fail-fast 해야 한다.
+# - TX columns는 STEP/export/build/setup-ready milestone이다.
+# - 이 파일은 sample_type2(..., make_step_on_sample=true|false) 양쪽에서 유효하다.
+# - build/setup-ready는 TX columns + RX single-coil pair를 AEDT solve-ready 상태로 만든다.
 # - TX 변수는 여기서만 관리하고, geometry milestone이 오면 이 same surface를 사용해 구현한다.
 #
 # Range 형식:
@@ -29,13 +29,11 @@ solver_tool = "hfss"
 interchange_format = "step"
 
 [simulation]
-# HFSS radiation boundary margin. 현재 TX columns는 EM-ready가 아니지만,
-# RX-only build/setup-ready 경로와 future full TX/RX 경로가 같은 top-level key를 공유한다.
+# HFSS radiation boundary margin. RX-only build/setup-ready 경로와 TX columns + RX setup-ready 경로가 같은 top-level key를 공유한다.
 radiation_margin_mm = 3500.0
 
 [outputs]
-# 현재 output expression은 RX-only다.
-# TX_TML을 참조하는 output은 TX geometry/port milestone 전에는 추가하지 않는다.
+# Active TX+RX setup uses the full 0.2.21-style output-variable contract.
 report_name = "Output Variables Table1"
 solution_name = "Setup1 : LastAdaptive"
 primary_sweep = "Freq"
@@ -43,20 +41,64 @@ report_category = "Terminal Solution Data"
 plot_type = "Data Table"
 
 [[outputs.variables]]
+name = "Ltx_uH"
+expression = "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"
+
+[[outputs.variables]]
 name = "Lrx_uH"
 expression = "im(Zt(RX_TML,RX_TML))/2/pi/freq*1e6"
+
+[[outputs.variables]]
+name = "M_uH"
+expression = "abs(im(Zt(TX_TML,RX_TML))/2/pi/freq*1e6)"
+
+[[outputs.variables]]
+name = "k_ratio"
+expression = "M_uH/sqrt(Ltx_uH*Lrx_uH)"
+
+[[outputs.variables]]
+name = "Qtx_ratio"
+expression = "im(Zt(TX_TML,TX_TML))/re(Zt(TX_TML,TX_TML))"
 
 [[outputs.variables]]
 name = "Qrx_ratio"
 expression = "im(Zt(RX_TML,RX_TML))/re(Zt(RX_TML,RX_TML))"
 
 [[outputs.variables]]
+name = "FOM_ratio"
+expression = "k_ratio*sqrt(Qtx_ratio*Qrx_ratio)"
+
+[[outputs.variables]]
+name = "Rtx_ac_ohm"
+expression = "re(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
 name = "Rrx_ac_ohm"
 expression = "re(Zt(RX_TML,RX_TML))"
 
 [[outputs.variables]]
+name = "Xtx_ohm"
+expression = "im(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
 name = "Xrx_ohm"
 expression = "im(Zt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "M_over_Ltx_ratio"
+expression = "M_uH/Ltx_uH"
+
+[[outputs.variables]]
+name = "M_over_Lrx_ratio"
+expression = "M_uH/Lrx_uH"
+
+[[outputs.variables]]
+name = "Gtx_S"
+expression = "re(Yt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Btx_S"
+expression = "im(Yt(TX_TML,TX_TML))"
 
 [[outputs.variables]]
 name = "Grx_S"
@@ -67,8 +109,52 @@ name = "Brx_S"
 expression = "im(Yt(RX_TML,RX_TML))"
 
 [[outputs.variables]]
+name = "S11_mag_ratio"
+expression = "mag(S(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "S21_mag_ratio"
+expression = "mag(S(TX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S21_phase_deg"
+expression = "ang_deg_val(S(TX_TML,RX_TML))"
+
+[[outputs.variables]]
 name = "S22_mag_ratio"
 expression = "mag(S(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "eta_s21_power_ratio"
+expression = "S21_mag_ratio*S21_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_tx_accept_ratio"
+expression = "1-S11_mag_ratio*S11_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_rx_accept_ratio"
+expression = "1-S22_mag_ratio*S22_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_match_product_ratio"
+expression = "eta_tx_accept_ratio*eta_rx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_from_tx_accept_ratio"
+expression = "eta_s21_power_ratio/eta_tx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_from_rx_accept_ratio"
+expression = "eta_s21_power_ratio/eta_rx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_two_sided_norm_ratio"
+expression = "eta_s21_power_ratio/(eta_tx_accept_ratio*eta_rx_accept_ratio)"
+
+[[outputs.variables]]
+name = "eta_fom_max_ratio"
+expression = "(FOM_ratio*FOM_ratio)/((1+sqrt(1+FOM_ratio*FOM_ratio))*(1+sqrt(1+FOM_ratio*FOM_ratio)))"
 
 [coordinate_system]
 origin = [0.0, 0.0, 0.0]
@@ -237,14 +323,14 @@ object_id = "tx_rect_void_columns"
 role = "tx_rect_void_columns"
 material = "composite"
 model_state = true
-# TX columns는 현재 parser/sampler-only modeled role이다.
+# TX columns는 현재 active TX modeled/setup-ready role이다.
 # 이 block의 변수는 반드시 sweep SSOT로 유지한다.
 # export_type2_step_artifacts/build/setup-ready는 이 role을 아직 geometry/runtime으로 처리하면 안 된다.
 pcb_thickness_mm = 0.3
 copper_thickness_mm = 0.1
 [modeled_objects.layer_count]
 # 각 TX coil 내부 layer 수다. 같은 coil 내부 layer들은 병렬 연결로 해석한다.
-# 30% milestone에서는 sampled contract만 열고 geometry에는 아직 반영하지 않는다.
+# TX geometry/setup-ready에 반영되는 각 realized coil 내부 layer 수다.
 range = [true, 1, 4, 4]
 [modeled_objects.layer_gap_mm]
 # TX coil 내부 layer 간격이다.
@@ -254,7 +340,7 @@ range = [false, 1.0, 1.8, 5]
 range = [false, 10.0, 10.0, 1]
 [modeled_objects.void_usage_ratio]
 # TX rect/void coil의 centered void 공통 size ratio다.
-# 현재 30% milestone에서는 geometry가 없으므로 parser/sampler owner만 된다.
+# TX rect/void geometry에 반영된다.
 range = [false, 0.2, 0.2, 1]
 [modeled_objects.margin_ratio]
 # TX void-to-outer minimum margin ratio.

@@ -1,7 +1,7 @@
 ---
 title: geometry.py
 created: 2026-04-20 @ 00:45
-updated: 2026-04-20 @ 00:45
+updated: 2026-04-22 @ 03:10
 tags:
   - types
   - geometry
@@ -24,7 +24,7 @@ tags:
 - 출력: geometry 관련 `TypedDict`/`Literal` 타입
 
 ## Canonical state
-- `GroupEndpointEntry.group_kind`는 coil 계열(`tx_dd`, `tx_vertical`, `rx_dd`)과 plate-stack 계열(`tx_plate_stack`, `rx_plate_stack`)을 모두 표현한다.
+- `GroupEndpointEntry.group_kind`는 coil 계열(`tx_dd`, `tx_vertical`, `rx_dd`), plate-stack 계열(`tx_plate_stack`, `rx_plate_stack`), columns TX 계열(`tx_rect_void_columns`)을 모두 표현한다.
 - endpoint label 타입은 runtime_selection의 `TerminalLabel`을 참조한다.
 
 ## Invariants / fail-fast
@@ -35,6 +35,7 @@ tags:
 - [[sdd/code/src/peetsfea/types/runtime_selection.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_em_input.py]]
 - [[sdd/code/src/peetsfea/types/manifest.py]]
+- [[sdd/plans/0.2.22-type2-tx-rect-void-columns-setup-ready]]
 
 ## 관련 테스트
 - [[sdd/code/tests/backend_em/test_type2_step_setup_ready.py]]

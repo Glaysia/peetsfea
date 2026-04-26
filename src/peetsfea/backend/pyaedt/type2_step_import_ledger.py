@@ -10,10 +10,11 @@ from peetsfea.spec.outputs import parse_outputs_table
 from peetsfea.types.manifest import OutputsSpec
 
 _SUPPORTED_MODELED_ROLES: frozenset[str] = frozenset(
-    {"tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack"}
+    {"tx_single_coil", "rx_single_coil", "tx_plate_stack", "rx_plate_stack", "tx_rect_void_columns"}
 )
 _SUPPORTED_MODELED_PLANES: frozenset[str] = frozenset({"XY", "YZ"})
 _PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
+_TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
 _TX_COPPER_GROUP_NAME = "g_copper_tx"
 _RX_COPPER_GROUP_NAME = "g_copper_rx"
 _TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
@@ -324,6 +325,58 @@ def _validated_plate_stack_terminal_metadata(
         require_key(terminal_metadata, key="port_sheet_vertices_xyz", context=f"{context}.terminal_metadata"),
         context=f"{context}.terminal_metadata.port_sheet_vertices_xyz",
     )
+
+
+def _validated_tx_rect_void_columns_terminal_metadata(
+    raw_terminal_metadata: object,
+    *,
+    context: str,
+) -> None:
+    terminal_metadata = _require_table(raw_terminal_metadata, context=f"{context}.terminal_metadata")
+    kind = require_non_empty_str(
+        require_key(terminal_metadata, key="kind", context=f"{context}.terminal_metadata"),
+        context=f"{context}.terminal_metadata.kind",
+    )
+    if kind not in ("parallel_collector_tabs", "series_collector_tabs"):
+        raise ValueError(
+            f"{context}.terminal_metadata.kind must be 'parallel_collector_tabs' or 'series_collector_tabs' "
+            f"for tx_rect_void_columns (actual={kind!r})"
+        )
+    raw_tab_faces = require_key(
+        terminal_metadata,
+        key="tab_face_vertices_xyz",
+        context=f"{context}.terminal_metadata",
+    )
+    tab_face_entries = _require_entry_list(
+        raw_tab_faces,
+        context=f"{context}.terminal_metadata.tab_face_vertices_xyz",
+    )
+    if len(tab_face_entries) != 2:
+        raise ValueError(
+            f"{context}.terminal_metadata.tab_face_vertices_xyz must contain exactly two terminal tab faces "
+            f"(actual={len(tab_face_entries)})"
+        )
+    seen_terminals: set[str] = set()
+    for index, tab_face_entry in enumerate(tab_face_entries):
+        face_context = f"{context}.terminal_metadata.tab_face_vertices_xyz[{index}]"
+        terminal = require_non_empty_str(
+            require_key(tab_face_entry, key="terminal", context=face_context),
+            context=f"{face_context}.terminal",
+        )
+        if terminal not in ("start", "end"):
+            raise ValueError(f"{face_context}.terminal must be 'start' or 'end' (actual={terminal!r})")
+        if terminal in seen_terminals:
+            raise ValueError(f"{context}.terminal_metadata.tab_face_vertices_xyz contains duplicate terminal {terminal!r}")
+        seen_terminals.add(terminal)
+        _require_float_triplet_sequence(
+            require_key(tab_face_entry, key="vertices_xyz", context=face_context),
+            context=f"{face_context}.vertices_xyz",
+        )
+    if seen_terminals != {"start", "end"}:
+        raise ValueError(
+            f"{context}.terminal_metadata.tab_face_vertices_xyz must contain start and end terminals "
+            f"(actual={sorted(seen_terminals)})"
+        )
 
 
 def _validated_exported_body_groups(
@@ -649,6 +702,11 @@ def _validated_modeled_entry(
             role=role,
             context=context,
         )
+    elif role == _TX_RECT_VOID_COLUMNS_ROLE:
+        _validated_tx_rect_void_columns_terminal_metadata(
+            raw_terminal_metadata,
+            context=context,
+        )
     else:
         terminal_metadata = _require_table(raw_terminal_metadata, context=f"{context}.terminal_metadata")
         if "kind" in terminal_metadata:
@@ -700,6 +758,31 @@ def find_owner_member(non_model_entries: list[ValidatedStepEntry], *, object_id:
             f"(actual={len(matching_members)})"
         )
     return matching_members[0]
+
+
+def find_owner_members_by_concrete_prefix(
+    non_model_entries: list[ValidatedStepEntry],
+    *,
+    object_id: str,
+) -> list[dict[str, object]]:
+    matching_members: list[dict[str, object]] = []
+    concrete_prefix = f"{object_id}_x"
+    for entry_index, validated_entry in enumerate(non_model_entries):
+        member_objects = require_member_objects(
+            validated_entry["entry"],
+            context=f"non_model_objects[{entry_index}]",
+        )
+        for member_index, member_object in enumerate(member_objects):
+            member_context = f"non_model_objects[{entry_index}].member_objects[{member_index}]"
+            current_object_id = member_object_id(member_object, context=member_context)
+            if current_object_id == object_id or current_object_id.startswith(concrete_prefix):
+                matching_members.append(member_object)
+    if len(matching_members) == 0:
+        raise ValueError(
+            f"type2 STEP ledger must contain at least one {object_id} concrete member object "
+            f"(actual=0)"
+        )
+    return matching_members
 
 
 def outer_bounds_min_xyz(entry: dict[str, object], *, context: str) -> tuple[float, float, float]:
@@ -782,10 +865,17 @@ def load_step_ledger(step_ledger_path: Path) -> ValidatedStepLedger:
             member_object_ids.append(member_object_id(member_object, context=member_context))
     for index, validated_entry in enumerate(modeled_entries):
         context = f"modeled_objects[{index}]"
+        role = require_non_empty_str(
+            require_key(validated_entry["entry"], key="role", context=context),
+            context=f"{context}.role",
+        )
         owner_id = require_non_empty_str(
             require_key(validated_entry["entry"], key="placement_owner_id", context=context),
             context=f"{context}.placement_owner_id",
         )
+        if role == _TX_RECT_VOID_COLUMNS_ROLE:
+            _ = find_owner_members_by_concrete_prefix(non_model_entries, object_id=owner_id)
+            continue
         if member_object_ids.count(owner_id) != 1:
             raise ValueError(
                 f"type2 STEP ledger must contain exactly one {owner_id} member object "
@@ -808,6 +898,7 @@ __all__ = [
     "ValidatedStepLedger",
     "Type2ImportEmPolicy",
     "find_owner_member",
+    "find_owner_members_by_concrete_prefix",
     "load_step_ledger",
     "member_object_id",
     "outer_bounds_min_xyz",

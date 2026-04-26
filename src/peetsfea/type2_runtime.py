@@ -24,11 +24,13 @@ _COIL_EXACT_MODELED_ROLES: tuple[str, str] = ("rx_single_coil", "tx_single_coil"
 _PLATE_STACK_EXACT_MODELED_ROLES: tuple[str, str] = ("rx_plate_stack", "tx_plate_stack")
 _RX_ONLY_MODELED_ROLES: tuple[str] = ("rx_single_coil",)
 _MIXED_MODELED_ROLES: tuple[str, str] = ("rx_single_coil", "tx_plate_stack")
+_TX_RECT_VOID_COLUMNS_RX_MODELED_ROLES: tuple[str, str] = ("rx_single_coil", "tx_rect_void_columns")
 _SUPPORTED_MODELED_ROLE_SETS: tuple[tuple[str, ...], ...] = (
     _RX_ONLY_MODELED_ROLES,
     _COIL_EXACT_MODELED_ROLES,
     _PLATE_STACK_EXACT_MODELED_ROLES,
     _MIXED_MODELED_ROLES,
+    _TX_RECT_VOID_COLUMNS_RX_MODELED_ROLES,
 )
 
 
@@ -48,12 +50,6 @@ class Type2BuiltArtifact(TypedDict):
 
 
 def _assert_setup_ready_supported(prepared_build: PreparedType2Build) -> None:
-    if "tx_rect_void_columns" in prepared_build.modeled_roles:
-        raise ValueError(
-            "type2 build/setup-ready failed at parser/sampler-only milestone: "
-            "role is deactivated for active type2 inputs: tx_rect_void_columns. "
-            f"actual_roles={prepared_build.modeled_roles}"
-        )
     actual_roles = tuple(sorted(prepared_build.modeled_roles))
     if actual_roles in _SUPPORTED_MODELED_ROLE_SETS:
         return

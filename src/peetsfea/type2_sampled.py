@@ -1054,7 +1054,7 @@ def _design_variable_name(owner_path: str) -> str:
 
 def _design_variable_expression(owner_path: str, value: SampledScalar) -> str:
     field_name = owner_path.split(".")[-1]
-    if field_name == "equivalent_turn_count":
+    if field_name in {"equivalent_turn_count", "turn_weight_a", "turn_weight_b", "turn_weight_c"}:
         return str(float(value))
     if field_name in _INTEGER_RANGE_FIELD_NAMES:
         return str(int(value))

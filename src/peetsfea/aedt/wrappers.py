@@ -741,6 +741,7 @@ class Hfss(RawHfss, _WrappedAccess):
         {
             "__setitem__",
             "assign_radiation_boundary_to_faces",
+            "change_validation_settings",
             "create_output_variable",
             "delete_setup",
             "desktop_class",
@@ -840,6 +841,36 @@ class Hfss(RawHfss, _WrappedAccess):
             ),
             operation="create_output_variable",
             context={"variable": variable, "solution": solution, "expression": expression},
+        )
+
+    def change_validation_settings(
+        self,
+        entity_check_level: str = "Strict",
+        ignore_unclassified: bool = False,
+        skip_intersections: bool = False,
+    ) -> object:
+        if entity_check_level not in ("Strict", "Basic", "Warning Only", "None"):
+            raise ValueError(
+                "Hfss.change_validation_settings entity_check_level must be one of "
+                "['Strict', 'Basic', 'Warning Only', 'None'] "
+                f"(actual={entity_check_level!r})"
+            )
+        return raise_on_false(
+            _require_callable_attr(
+                object.__getattribute__(self, "_raw"),
+                "change_validation_settings",
+                owner="Hfss",
+            )(
+                entity_check_level=entity_check_level,
+                ignore_unclassified=ignore_unclassified,
+                skip_intersections=skip_intersections,
+            ),
+            operation="change_validation_settings",
+            context={
+                "entity_check_level": entity_check_level,
+                "ignore_unclassified": ignore_unclassified,
+                "skip_intersections": skip_intersections,
+            },
         )
 
     def delete_setup(self, name: str) -> object:

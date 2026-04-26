@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_style.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 15:45
+updated: 2026-04-22 @ 03:10
 tags:
   - hfss-import
   - styling
@@ -35,6 +35,8 @@ tags:
 - TX array owner-fit validation keeps the TX max-Z top-aligned contract but allows X overflow for rotated copied branches.
 - legacy underlay/wall prefixes는 single-coil import path에서만 same-material styling path를 유지한다.
 - port-sheet reconstruction은 coil roles와 plate-stack roles 모두 수행할 수 있다.
+- columns port-sheet reconstruction is intentionally not owned by import-style; setup-ready port assignment creates the
+  single `tx_rect_void_columns_port_sheet` after resolving conductive TX tab sub-edges.
 - plate-stack roles는 `tx_plate_port_sheet`, `rx_plate_port_sheet` 이름의 metadata-only reconstructed sheet를 추가한다.
 - TX array reconstructs one `tx_plate_port_sheet` from branch 0 terminal metadata.
 - plate-stack Y placement validation follows the exported active window contract:
@@ -52,12 +54,15 @@ tags:
 - plate-stack ferrite-family material preflight(`ensure_underlay_materials`)는 merged exact-name contract만 인식하고 legacy `*_stack_*_uN` fallback을 두지 않는다.
 - plate-stack Z validation은 `z_usage_ratio`로 줄어든 active window를 허용하되 TX는 owner max-Z에, RX는 owner min-Z에 role-aware anchor를 유지해야 한다.
 - Single-branch and TX array mode both keep owner max-Z validation, and TX array mode must still reject Z overflow.
+- columns tab faces must be exact four-vertex faces with distinct `start` and `end` terminals; ambiguous tab geometry
+  fails before setup-ready port assignment creates the TX columns sheet.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/type2_plate_stack.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_partition.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
+- [[sdd/plans/0.2.22-type2-tx-rect-void-columns-setup-ready]]
 
 ## 관련 테스트
 - [[sdd/code/tests/backend_em/test_type2_step_import_pipeline.py]]

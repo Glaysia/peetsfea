@@ -76,7 +76,7 @@ class UniteGroups(TypedDict):
 
 
 class GroupEndpointEntry(TypedDict):
-    group_kind: Literal["tx_dd", "tx_vertical", "rx_dd", "tx_plate_stack", "rx_plate_stack"]
+    group_kind: Literal["tx_dd", "tx_vertical", "rx_dd", "tx_plate_stack", "rx_plate_stack", "tx_rect_void_columns"]
     group_instance_index: int
     board_id: str
     start_xyz: tuple[float, float, float]

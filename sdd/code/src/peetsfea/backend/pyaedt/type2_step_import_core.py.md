@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_core.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 18:20
+updated: 2026-04-22 @ 04:05
 tags:
   - hfss-import
   - core
@@ -46,6 +46,8 @@ tags:
     import-time에 final merged 도체/그룹 재구성을 확인한다.
 - final conductor는 pre-unite segment family(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`) 대신
   concrete exported copper members로 정규화한다.
+- `tx_rect_void_columns` owner-fit validation uses the union bounds of concrete `tx_region_actual_stack_space_*` members
+  when the placement owner is tiled.
 
 ## Invariants / fail-fast
 - scene import가 새 HFSS objects를 만들지 않으면 실패한다.
@@ -64,6 +66,7 @@ tags:
 - ferrite group recreation은 styling 직후, imported ledger merge 전에 실행한다.
 - group recreation 결과 이름은 요청한 고정 group name과 일치해야 한다.
 - setup-ready semantics는 여기서 실행하지 않는다.
+- concrete tiled owner union must remain deterministic and must not synthesize fallback geometry; it only summarizes ledger-owned members.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py]]

@@ -1,7 +1,7 @@
 ---
 title: type2_modeled_import_adapter.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-19 @ 23:40
+updated: 2026-04-22 @ 03:10
 tags:
   - hfss-import
   - adapter
@@ -25,6 +25,7 @@ tags:
 ## Canonical state
 - legacy single-coil role은 full terminal metadata를 파싱한다.
 - `tx_plate_stack`와 `rx_plate_stack`는 role-aware `stub_port` metadata만 허용한다.
+- `tx_rect_void_columns` preserves collector tab metadata used by setup-ready TX port reconstruction.
 - plate-stack metadata는 reconstructed `tx_port_sheet` / `rx_port_sheet` geometry source를 포함하며 sentinel `{"kind": "none"}` 계약은 사용하지 않는다.
 - canonical coordinates는 export ledger shape를 그대로 따른다.
 
@@ -33,10 +34,12 @@ tags:
 - plate roles에서 `terminal_metadata.kind != "stub_port"`면 즉시 실패해야 한다.
 - coil roles에서 plate-stack 전용 metadata shape를 허용하면 안 된다.
 - imported object names는 non-empty, duplicate-free exact set이어야 한다.
+- columns metadata must expose exactly one start and one end tab face.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py]]
+- [[sdd/plans/0.2.22-type2-tx-rect-void-columns-setup-ready]]
 
 ## 관련 테스트
 - [[sdd/code/tests/backend_em/test_type2_modeled_import_adapter.py]]

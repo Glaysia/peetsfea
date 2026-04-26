@@ -1,7 +1,7 @@
 ---
 title: type2_step_em_input.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 23:59
+updated: 2026-04-22 @ 03:10
 tags:
   - hfss-import
   - em
@@ -38,6 +38,8 @@ tags:
   - conductor: plate-stack은 single/array 모두 `tx_plate_copper` 또는 `rx_plate_copper`
   - fr4: role-local PCB bodies
   - ferrite: empty list
+- columns+RX maps `tx_rect_void_columns_copper` to TX conductors and `txrvc_*_pcb_l*` to FR4.
+- columns endpoint kind is `tx_rect_void_columns` with semantic labels `input_stub` and `output_stub`.
 - TX array conductor name is the exported united `tx_plate_copper`; branch-local PCB/ferrite bodies must not add TX
   conductors or ports.
 - pre-unite segment 이름(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)은 ready conductor에서 제외된다.
@@ -54,12 +56,14 @@ tags:
 - plate-stack EM target은 concrete exported copper members만 허용하며 개별 pre-unite copper family segment가 남아 있으면 즉시 실패한다.
 - generic `SOLID*` pre/post-unite 이름 drift는 즉시 실패한다.
 - plate-stack endpoint는 `terminal_metadata.kind == "stub_port"` 및 `plane == "YZ"`를 강제한다.
+- columns endpoint uses collector tab face centers and requires `terminal_metadata.kind` to be `parallel_collector_tabs` or `series_collector_tabs`.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_port_assignment.py]]
 - [[sdd/code/src/peetsfea/types/geometry.py]]
 - [[sdd/code/src/peetsfea/types/runtime_selection.py]]
+- [[sdd/plans/0.2.22-type2-tx-rect-void-columns-setup-ready]]
 
 ## 관련 테스트
 - [[sdd/code/tests/backend_em/test_type2_step_setup_ready.py]]

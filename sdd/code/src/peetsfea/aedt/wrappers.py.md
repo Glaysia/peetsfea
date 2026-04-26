@@ -1,7 +1,7 @@
 ---
 title: wrappers.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-22 @ 04:55
 tags:
   - aedt
 ---
@@ -28,12 +28,16 @@ tags:
 ## Canonical state
 - 각 wrapper instance의 canonical state는 `_raw` PyAEDT object reference다.
 - imported object discovery는 raw `Modeler3D.object_names`를 validated list로 노출한다.
+- HFSS validation settings are exposed through an allowlisted `change_validation_settings()` wrapper with explicit
+  entity-check-level validation and false-return fail-fast behavior.
 
 ## Invariants / fail-fast
 - raw attribute/method가 없거나 callable shape가 아니면 `assert`로 즉시 멈춘다.
 - PyAEDT call result가 `False`이면 `raise_on_false()`가 operation/context와 함께 raise한다.
 - `object_names`는 sequence of non-empty `str`이어야 하며 AEDT name length를 만족해야 한다.
 - `import_3d_cad()`는 PyAEDT `0.25.1` 지원 인자만 전달하고 newer stable-doc 인자 fallback을 추가하지 않는다.
+- `change_validation_settings()` accepts only PyAEDT-supported entity check levels and propagates `ignore_unclassified`
+  / `skip_intersections` exactly.
 
 ## 직접 의존
 - `ansys.aedt.core`

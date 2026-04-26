@@ -1,7 +1,7 @@
 ---
 title: type2_step_port_assignment.py
 created: 2026-04-19 @ 17:35
-updated: 2026-04-20 @ 23:59
+updated: 2026-04-22 @ 04:25
 tags:
   - hfss-import
   - port
@@ -28,6 +28,11 @@ tags:
 - helper는 reconstructed port-sheet ownership을 사용한다.
   - coil: `tx_port_sheet` / `rx_port_sheet`
   - plate-stack: `tx_plate_port_sheet` / `rx_plate_port_sheet`
+  - columns: `tx_rect_void_columns_port_sheet`
+- reconstructed port sheets remain required runtime geometry. `tx_rect_void_columns` lumped-port signal/reference edge ids
+  are resolved on `tx_rect_void_columns_copper` by selecting the single longest imported conductive sub-edge that lies
+  on the metadata-owned outer start/end tab edge. The TX columns port sheet is then created once from those resolved
+  conductor sub-edge endpoints during port assignment.
 - TX array still reconstructs one `tx_plate_port_sheet` and assigns one TX terminal port.
 - active RX-only path uses `rx_port_sheet` for RX and creates no TX port placeholder.
 
@@ -39,10 +44,17 @@ tags:
 - RX-only numeric boundary/excitation naming은 `1` / `1_T1` 고정이다.
 - plate roles를 coil endpoint fallback으로 취급하면 안 된다.
 - Parallel TX branches do not create per-branch port assignments in this plan.
+- columns+RX paired mode assigns one TX port from collector tabs and one RX port from `rx_port_sheet`.
+- sheet/conductor edge resolution must find exactly one signal edge and one reference edge for ordinary reconstructed
+  sheets. `tx_rect_void_columns` must fail before assignment if its conductor body exposes no matching outer tab
+  sub-edge or exposes tied longest candidates.
+- `tx_rect_void_columns_port_sheet` must not pre-exist before TX columns port assignment; this helper owns the single
+  runtime sheet and appends it to the imported object ledger after creation.
 
 ## Collaborators
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
 - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_em_input.py]]
+- [[sdd/plans/0.2.22-type2-tx-rect-void-columns-setup-ready]]
 
 ## 관련 테스트
 - [[sdd/code/tests/backend_em/test_type2_step_setup_ready.py]]

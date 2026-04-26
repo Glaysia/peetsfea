@@ -206,6 +206,13 @@ class HfssSession(TraceProviderSession, Protocol):
 
     def create_output_variable(self, variable: str, expression: str, solution: str) -> object: ...
 
+    def change_validation_settings(
+        self,
+        entity_check_level: str = "Strict",
+        ignore_unclassified: bool = False,
+        skip_intersections: bool = False,
+    ) -> object: ...
+
     def delete_setup(self, name: str) -> object: ...
 
     def save_project(self, path: str) -> object: ...

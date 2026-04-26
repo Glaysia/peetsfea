@@ -1,7 +1,7 @@
 ---
 title: current pipeline
 created: 2026-04-17 @ 15:55
-updated: 2026-04-21 @ 21:45
+updated: 2026-04-22 @ 03:10
 tags:
   - type2
   - pipeline
@@ -14,11 +14,12 @@ tags:
 - The canonical sampled authoring input is `examples/type2_sweep.toml`.
 - `examples/type2_fixed.toml` is one fixed realization of `examples/type2_sweep.toml` and must keep the same public field surface.
 - Type2 TOML owns both the STEP authoring registry and the EM report/output-variable contract.
-- `examples/type2_sweep.toml` is the SSOT and includes RX single-coil plus parser/sampler-only TX columns variables.
+- `examples/type2_sweep.toml` is the SSOT and includes RX single-coil plus active TX columns variables.
 - `examples/type2_fixed.toml` includes the same RX/TX modeled surface with fixed single-candidate ranges.
-- This is a reset point for TX modeled geometry/runtime, not a TX sampling disable mode. Active type2 may sample TX columns
-  variables, but it does not emit TX modeled geometry, TX ports, TX sources, or TX output expressions yet.
-- The TX columns surface in `examples/type2_sweep.toml` is not STEP/export/build-ready yet.
+- Active TX columns + RX setup uses the full 0.2.21-style output-variable set: TX/RX self terms, mutual terms,
+  S11/S21/S22 terms, acceptance ratios, normalized S21 ratios, and FOM efficiency.
+- Active type2 samples TX columns variables, emits TX columns STEP geometry, and builds setup-ready AEDT with TX/RX ports.
+- The TX columns surface in `examples/type2_sweep.toml` is STEP/export/build-ready for setup-ready AEDT generation; HFSS solve execution remains external to this repository.
 - Future TX redesign planning is tracked in `tmp/tx개편.md` and `sdd/plans/0.2.22-type2-tx-columns-reset.md`.
 - Active type2 includes a sampled non-modeled `tx_region_actual` box inside maximum `tx_region`; its X/Y usage ratios
   reserve the future actual TX footprint while preserving full `tx_region` Z.
@@ -44,7 +45,7 @@ tags:
 - `peetsfea.backend.pyaedt.type2_step_import_pipeline` remains the import-only helper.
 - `peetsfea.backend.pyaedt.type2_step_setup_ready` remains the setup-ready helper.
 - `entry/build.py` always calls the setup-ready facade for active type2 build; import-only remains a geometry inspection/import-only surface.
-- The setup-ready facade now handles the active RX-only modeled set through the full EM helper chain:
+- The setup-ready facade now handles active RX-only and active TX-columns+RX modeled sets through the full setup-ready helper chain:
   - post-import mesh
   - radiation boundary
   - explicit lumped ports
@@ -55,9 +56,14 @@ tags:
   - final `.aedt` save
 - active default mesh contract is conductor-only:
   - RX: `rx_copper_l0`
+- TX columns + RX mesh contract is conductor-only:
+  - TX: `tx_rect_void_columns_copper`
+  - RX: `rx_copper_l0`
 - underlay/PCB/reconstructed port-sheet bodies are not mesh targets.
 - setup-ready active default uses reconstructed `rx_port_sheet`
   with numeric boundary/excitation name `1/1_T1`.
+- TX columns + RX paired setup uses reconstructed `tx_rect_void_columns_port_sheet` and `rx_port_sheet`
+  with numeric boundary/excitation names `1/1_T1` and `2/2_T1`.
 - historical plate-stack ferrite-family STEP exact-name contract is merged-per-material, role당 3-body only:
   - TX: `tx_stack_pet_psa`, `tx_stack_ferrite`, `tx_stack_air`
   - RX: `rx_stack_pet_psa`, `rx_stack_ferrite`, `rx_stack_air`
@@ -72,7 +78,7 @@ tags:
   `g_ferrite_rx -> [rx_stack_pet_psa, rx_stack_ferrite, rx_stack_air]`.
   `g_ferrite_tx` / `g_ferrite_rx` members는 flattened per-set stack가 아니라 위 merged 3 exact bodies다.
 - TX/RX plate-stack and TX array contracts remain historical/component surfaces, not the active default example or
-  operator path.
+  operator path. Active TX columns is the current TX setup-ready path.
 - `docs/tx-rect-void-step.md` is now the legacy coil-only geometry reference.
 - These helpers are lower-level runtime surfaces; the active operator flow is sampled TOML first, then optional sample-side STEP export or build-side missing STEP export, then AEDT build.
 

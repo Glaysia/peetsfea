@@ -919,7 +919,7 @@ def test_build_prepared_type2_design_rejects_tx_only_modeled_role_before_runner(
     assert runner_calls == []
 
 
-def test_build_prepared_type2_design_rejects_tx_rect_void_columns_modeled_role_with_clear_message(tmp_path: Path) -> None:
+def test_build_prepared_type2_design_rejects_tx_rect_void_columns_without_rx_pair(tmp_path: Path) -> None:
     design_id = "design-tx-columns"
     design_dir = tmp_path / design_id
     design_dir.mkdir()
@@ -971,10 +971,7 @@ def test_build_prepared_type2_design_rejects_tx_rect_void_columns_modeled_role_w
             "imported_ledger_path": str(cast(Path, kwargs["imported_ledger_path"])),
         }
 
-    with pytest.raises(
-        ValueError,
-        match=r"parser/sampler-only milestone.*role is deactivated for active type2 inputs: tx_rect_void_columns",
-    ):
+    with pytest.raises(ValueError, match=r"type2 build/setup-ready rejects unsupported modeled roles"):
         type2_runtime.build_prepared_type2_design(
             prepared_build,
             exporter=_fake_exporter,
@@ -983,6 +980,107 @@ def test_build_prepared_type2_design_rejects_tx_rect_void_columns_modeled_role_w
 
     assert runner_calls == []
     assert exporter_calls == []
+
+
+def test_build_prepared_type2_design_accepts_tx_rect_void_columns_with_rx_single_coil_pair(tmp_path: Path) -> None:
+    design_id = "design-columns-rx"
+    design_dir = tmp_path / design_id
+    design_dir.mkdir()
+    sampled_toml_path = design_dir / "sampled.toml"
+    sampled_toml_path.write_text("[sampled]\n", encoding="utf-8")
+    source_toml_path = tmp_path / "source.toml"
+    source_toml_path.write_text("[design]\n", encoding="utf-8")
+    scene_step_path = design_dir / "type2_scene.step"
+    scene_step_path.write_text("STEP", encoding="utf-8")
+    step_ledger_path = design_dir / "type2_step_ledger.json"
+    step_ledger_path.write_text(
+        json.dumps({"scene_step_path": str(scene_step_path)}, indent=2),
+        encoding="utf-8",
+    )
+    output_aedt_path = design_dir / f"{design_id}.aedt"
+    imported_ledger_path = design_dir / "type2_imported_ledger.json"
+    prepared_build = PreparedType2Build(
+        design_id=design_id,
+        seed=1,
+        source_toml_path=source_toml_path,
+        sampled_toml_path=sampled_toml_path,
+        design_dir=design_dir,
+        scene_step_path=scene_step_path,
+        step_ledger_path=step_ledger_path,
+        imported_ledger_path=imported_ledger_path,
+        aedt_path=output_aedt_path,
+        sampled_owner_paths=(
+            "modeled_objects.tx_rect_void_columns.equivalent_turn_count",
+        ),
+        modeled_roles=("rx_single_coil", "tx_rect_void_columns"),
+        design_variables=(
+            ("non_model_objects_tx_region_actual_stack_space_scale_ratio", "0.6"),
+            ("modeled_objects_tx_rect_void_columns_equivalent_turn_count", "3.0"),
+        ),
+    )
+
+    runner_calls: list[dict[str, object]] = []
+    exporter_calls: list[dict[str, object]] = []
+
+    def _fake_exporter(**kwargs: object) -> object:
+        exporter_calls.append(dict(kwargs))
+        return {"ok": True}
+
+    def _fake_runner(**kwargs: object) -> _Type2BuildRunnerResult:
+        runner_calls.append(dict(kwargs))
+        return {
+            "aedt_path": str(cast(Path, kwargs["output_aedt_path"])),
+            "source_step_ledger_path": str(cast(Path, kwargs["step_ledger_path"])),
+            "imported_ledger_path": str(cast(Path, kwargs["imported_ledger_path"])),
+        }
+
+    result = type2_runtime.build_prepared_type2_design(
+        prepared_build,
+        exporter=_fake_exporter,
+        runner=_fake_runner,
+    )
+
+    assert exporter_calls == []
+    assert len(runner_calls) == 1
+    assert runner_calls[0]["design_variables"] == prepared_build.design_variables
+    assert result["design_id"] == design_id
+    assert result["aedt_path"] == str(output_aedt_path)
+
+
+def test_prepared_builds_from_manifest_renders_tx_rect_void_columns_turn_weights_as_unitless(
+    tmp_path: Path,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    source_toml_path = repo_root / "examples" / "type2_sweep.toml"
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+    document = sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=7,
+        seed_n=1,
+        sampler_n=1,
+        aedt_builder_n=1,
+        make_step_on_sample=False,
+    )
+    assert len(document["entries"]) == 1
+    design_id = document["entries"][0]["design_id"]
+
+    prepared_builds = type2_sampled.prepared_builds_from_manifest(
+        manifest_path,
+        selected_design_ids=(design_id,),
+    )
+
+    assert len(prepared_builds) == 1
+    design_variable_map = dict(prepared_builds[0].design_variables)
+    for suffix in ("turn_weight_a", "turn_weight_b", "turn_weight_c"):
+        variable_name = f"modeled_objects_tx_rect_void_columns_{suffix}"
+        assert variable_name in design_variable_map
+        expression = design_variable_map[variable_name]
+        assert expression != ""
+        assert "mm" not in expression
+        float(expression)
 
 
 def test_build_type2_rejects_list_manifest_payload(tmp_path: Path) -> None:

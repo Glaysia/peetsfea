@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 from typing import cast
@@ -203,6 +204,26 @@ class _SetupReadyModeler(_ImportFakeModeler):
         self._object_edge_ids[assignment] = edge_ids
         return result
 
+    def seed_object_edge(
+        self,
+        *,
+        object_name: str,
+        first_vertex: tuple[float, float, float],
+        second_vertex: tuple[float, float, float],
+    ) -> None:
+        first_vertex_id = self._next_vertex_id
+        self._next_vertex_id += 1
+        second_vertex_id = self._next_vertex_id
+        self._next_vertex_id += 1
+        self._vertex_positions[first_vertex_id] = first_vertex
+        self._vertex_positions[second_vertex_id] = second_vertex
+        edge_id = self._next_edge_id
+        self._next_edge_id += 1
+        self._edge_vertices[edge_id] = (first_vertex_id, second_vertex_id)
+        if object_name not in self._object_edge_ids:
+            self._object_edge_ids[object_name] = []
+        self._object_edge_ids[object_name].append(edge_id)
+
     def get_object_edges(self, assignment: str) -> list[int]:
         return list(self._object_edge_ids.get(assignment, []))
 
@@ -229,6 +250,7 @@ class _SetupReadyHfss(_ImportFakeHfss):
         self.edited_sources_payloads: list[list[object]] = []
         self.created_output_variables: list[tuple[str, str, str]] = []
         self.created_reports: list[dict[str, object]] = []
+        self.validation_settings_calls: list[tuple[str, bool, bool]] = []
         self.validate_design_result: object = True
         self.oboundary = _FakeBoundaryModule(self)
         self.design = _SetupReadyDesign(mesh_module=self.mesh_module, parent=self)
@@ -243,6 +265,15 @@ class _SetupReadyHfss(_ImportFakeHfss):
 
     def create_output_variable(self, variable: str, expression: str, solution: str) -> object:
         self.created_output_variables.append((variable, expression, solution))
+        return True
+
+    def change_validation_settings(
+        self,
+        entity_check_level: str = "Strict",
+        ignore_unclassified: bool = False,
+        skip_intersections: bool = False,
+    ) -> object:
+        self.validation_settings_calls.append((entity_check_level, ignore_unclassified, skip_intersections))
         return True
 
     def get_traces_for_plot(
@@ -421,6 +452,29 @@ def _seed_port_sheet_edges_from_terminal_metadata(
     assert cover_result is not False
 
 
+def _seed_tx_rect_void_columns_conductor_port_edges(modeler: _SetupReadyModeler) -> None:
+    modeler.seed_object_edge(
+        object_name="tx_rect_void_columns_copper",
+        first_vertex=(12.0, 5.0, 70.0),
+        second_vertex=(12.0, 5.4, 70.0),
+    )
+    modeler.seed_object_edge(
+        object_name="tx_rect_void_columns_copper",
+        first_vertex=(12.0, 5.4, 70.0),
+        second_vertex=(12.0, 6.0, 70.0),
+    )
+    modeler.seed_object_edge(
+        object_name="tx_rect_void_columns_copper",
+        first_vertex=(21.0, 5.0, 69.0),
+        second_vertex=(21.0, 5.4, 69.0),
+    )
+    modeler.seed_object_edge(
+        object_name="tx_rect_void_columns_copper",
+        first_vertex=(21.0, 5.4, 69.0),
+        second_vertex=(21.0, 6.0, 69.0),
+    )
+
+
 def _rewrite_plate_stack_terminal_metadata_to_equal_stripe_pitch(
     entry: dict[str, object],
     *,
@@ -466,6 +520,126 @@ def _minimal_em_input_ledger(*, modeled_objects: list[dict[str, object]]) -> dic
         "non_model_objects": [non_model_object],
         "modeled_objects": modeled_objects,
     }
+
+
+def _tx_rect_void_columns_terminal_metadata() -> dict[str, object]:
+    return {
+        "kind": "parallel_collector_tabs",
+        "connection_mode": 0,
+        "source_label_metadata": {
+            "start_pours": ["txrvc_pour_s_bus"],
+            "end_pours": ["txrvc_pour_e_bus"],
+            "end_layer_drops": ["txrvc_drop_e_x0_y0"],
+            "series_links": [],
+            "start_external_tabs": ["txrvc_tab_start"],
+            "end_external_tabs": ["txrvc_tab_end"],
+        },
+        "tab_face_vertices_xyz": [
+            {
+                "terminal": "start",
+                "vertices_xyz": [
+                    [12.0, 5.0, 70.0],
+                    [13.0, 5.0, 70.0],
+                    [13.0, 6.0, 70.0],
+                    [12.0, 6.0, 70.0],
+                ],
+            },
+            {
+                "terminal": "end",
+                "vertices_xyz": [
+                    [20.0, 5.0, 69.0],
+                    [21.0, 5.0, 69.0],
+                    [21.0, 6.0, 69.0],
+                    [20.0, 6.0, 69.0],
+                ],
+            },
+        ],
+        "branch_balance_audit": {
+            "branch_count": 1,
+            "start_total_feed_length_mm": 0.0,
+            "end_total_feed_length_mm": 0.0,
+            "balance_delta_mm": 0.0,
+            "max_branch_total_delta_mm": 0.0,
+            "branch_spread_limit_mm": 5.0,
+            "tolerance_mm": 1e-6,
+        },
+        "overlap_audit": {
+            "checked_pair_count": 1,
+            "positive_volume_pair_count": 0,
+            "max_intersection_volume_mm3": 0.0,
+            "tolerance_mm3": 1e-9,
+        },
+        "layer_count": 1,
+        "x_column_count": 1,
+        "y_tile_count": 1,
+    }
+
+
+def _tx_rect_void_columns_non_model_entry() -> dict[str, object]:
+    non_model_object = copy.deepcopy(_non_model_entry())
+    stack_space_member = {
+        "object_id": "tx_region_actual_stack_space",
+        "role": "tx_region_actual_stack_space",
+        "material": "vacuum",
+        "model_state": False,
+        "non_model": True,
+        "plane": "XY",
+        "canonical_coordinates": {
+            "frame_origin_xyz": [0.0, -20.0, 60.0],
+            "outer_bounds_min_xyz": [0.0, -20.0, 60.0],
+            "outer_bounds_max_xyz": [40.0, 20.0, 95.0],
+            "outer_bounds_size_xyz": [40.0, 40.0, 35.0],
+        },
+    }
+    member_object_ids = list(cast(tuple[str, ...], non_model_object["member_object_ids"]))
+    member_object_ids.append("tx_region_actual_stack_space")
+    non_model_object["member_object_ids"] = tuple(member_object_ids)
+    member_objects = list(cast(list[dict[str, object]], non_model_object["member_objects"]))
+    member_objects.append(stack_space_member)
+    non_model_object["member_objects"] = member_objects
+    return non_model_object
+
+
+def _tx_rect_void_columns_entry(tmp_path: Path) -> dict[str, object]:
+    modeled_object = _modeled_entry(
+        object_id="tx_rect_void_columns",
+        role="tx_rect_void_columns",
+        plane="XY",
+        placement_owner_id="tx_region_actual_stack_space",
+        origin_xyz=(10.0, -10.0, 65.0),
+        size_xyz=(20.0, 20.0, 25.0),
+        source_metadata_path=str(tmp_path / "tx_rect_void_columns.metadata.json"),
+        expected_names=["txrvc_x0_y0_pcb_l0", "tx_rect_void_columns_copper"],
+        expected_groups=[],
+    )
+    modeled_object["terminal_metadata"] = _tx_rect_void_columns_terminal_metadata()
+    return modeled_object
+
+
+def _tx_rect_void_columns_imported_name_batch() -> tuple[str, ...]:
+    return (
+        "environment",
+        "tx_region",
+        *_tx_region_actual_member_names(),
+        "rx_region_max",
+        "tx_region_actual_stack_space",
+        "txrvc_x0_y0_pcb_l0",
+        "tx_rect_void_columns_copper",
+        "rx_pcb_l0",
+        "rx_copper_l0",
+    )
+
+
+def _tx_rect_void_columns_modeled_objects_with_imported_names(tmp_path: Path) -> list[dict[str, object]]:
+    tx_entry = _tx_rect_void_columns_entry(tmp_path)
+    tx_entry["imported_object_names"] = [
+        "txrvc_x0_y0_pcb_l0",
+        "tx_rect_void_columns_copper",
+        "tx_rect_void_columns_port_sheet",
+    ]
+    rx_entry = _rx_single_coil_entry(tmp_path)
+    rx_entry["imported_object_names"] = ["rx_pcb_l0", "rx_copper_l0", "rx_port_sheet"]
+    return [tx_entry, rx_entry]
 
 
 def test_setup_type2_step_ledger_builds_mesh_boundary_ports_analysis_and_validation(tmp_path: Path) -> None:
@@ -1331,8 +1505,9 @@ def test_setup_type2_step_ledger_raises_when_validate_design_returns_false(tmp_p
     )
     session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[_single_layer_imported_name_batch()]))
     session.validate_design_result = False
+    session.desktop_class.messages = ["port assignment is invalid"]
 
-    with pytest.raises(RuntimeError, match=r"PyAEDT operation returned False: ValidateDesign"):
+    with pytest.raises(RuntimeError, match=r"ValidateDesign.*port assignment is invalid"):
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_setup_ready.aedt",
@@ -1414,6 +1589,7 @@ def test_setup_type2_step_ledger_accepts_plate_stack_exact_pair_and_runs_full_se
     assert result["sources"]["rx_source_name"] == "2_T1"
     assert result["analysis"]["setup_name"] == "Setup1"
     assert result["validation_report"] == {"ok": True, "gate": "hard_fail", "message": "ok"}
+    assert session.validation_settings_calls == [("None", False, False)]
     assert session.design.validate_design_calls == 1
     assert {"MeshSetup", "AnalysisSetup", "Solutions", "ReportSetup"}.issubset(set(session.design.get_module_calls))
     assert session.edited_sources_payloads
@@ -1438,6 +1614,71 @@ def test_setup_type2_step_ledger_accepts_plate_stack_exact_pair_and_runs_full_se
     assert "mesh" not in imported_payload
     assert "boundary" not in imported_payload
     assert imported_payload["aedt_path"] == str(output_aedt_path)
+
+
+def test_setup_type2_step_ledger_accepts_tx_rect_void_columns_with_rx_single_coil_and_runs_full_setup_ready(
+    tmp_path: Path,
+) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    modeled_objects = [_tx_rect_void_columns_entry(tmp_path), _rx_single_coil_entry(tmp_path)]
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_tx_rect_void_columns_non_model_entry()],
+        modeled_objects=modeled_objects,
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_setup_ready.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    modeler = _SetupReadyModeler(imported_name_batches=[_tx_rect_void_columns_imported_name_batch()])
+    _seed_tx_rect_void_columns_conductor_port_edges(modeler)
+    session = _SetupReadyHfss(modeler=modeler)
+
+    result = setup_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    assert result["mesh"]["objects"] == ["tx_rect_void_columns_copper", "rx_copper_l0"]
+    assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
+    assert result["sources"]["tx_source_name"] == "1_T1"
+    assert result["sources"]["rx_source_name"] == "2_T1"
+    assert result["analysis"]["setup_name"] == "Setup1"
+    assert result["validation_report"] == {"ok": True, "gate": "hard_fail", "message": "ok"}
+    assert session.design.validate_design_calls == 1
+    assert len(session.oboundary.assign_lumped_port_calls) == 2
+    assert session._excitation_names == ["1_T1", "2_T1"]
+    setup_modeler = cast(_SetupReadyModeler, session.modeler)
+    assert "tx_rect_void_columns_port_sheet" in setup_modeler._polyline_points_by_name
+    assert "rx_port_sheet" in setup_modeler._polyline_points_by_name
+    assert session.save_project_calls == [str(output_aedt_path)]
+
+    tx_sheet = setup_modeler._polyline_points_by_name["tx_rect_void_columns_port_sheet"]
+    assert tx_sheet == [
+        (12.0, 5.4, 70.0),
+        (21.0, 5.4, 69.0),
+        (21.0, 6.0, 69.0),
+        (12.0, 6.0, 70.0),
+    ]
+    imported_payload = _imported_ledger_payload(imported_ledger_path)
+    imported_modeled = cast(list[dict[str, object]], imported_payload["modeled_objects"])
+    tx_imported = next(entry for entry in imported_modeled if entry["role"] == "tx_rect_void_columns")
+    assert tx_imported["imported_object_names"] == [
+        "txrvc_x0_y0_pcb_l0",
+        "tx_rect_void_columns_copper",
+        "tx_rect_void_columns_port_sheet",
+    ]
+
+    tx_sheet_edges = setup_modeler._object_edge_ids["tx_rect_void_columns_port_sheet"]
+    tx_conductor_edges = setup_modeler._object_edge_ids.get("tx_rect_void_columns_copper", [])
+    assert tx_sheet_edges
+    assert tx_conductor_edges
+    tx_port_payload = session.oboundary.assign_lumped_port_calls[0]
+    tx_edges_index = tx_port_payload.index("Edges:=")
+    tx_edges = cast(list[int], tx_port_payload[tx_edges_index + 1])
+    assert set(tx_edges).issubset(set(tx_conductor_edges))
+    assert set(tx_edges).isdisjoint(set(tx_sheet_edges))
 
 
 def test_setup_type2_step_ledger_reconstructs_rotated_tx_plate_stack_array_port_sheet(tmp_path: Path) -> None:
@@ -1563,7 +1804,7 @@ def test_setup_type2_step_ledger_rejects_incomplete_plate_stack_pair_before_hfss
         )
 
 
-def test_setup_type2_step_ledger_rejects_tx_rect_void_columns_parallel_collector_tabs_before_hfss(
+def test_setup_type2_step_ledger_rejects_tx_rect_void_columns_parallel_collector_tabs_without_tab_faces_before_hfss(
     tmp_path: Path,
 ) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
@@ -1594,7 +1835,7 @@ def test_setup_type2_step_ledger_rejects_tx_rect_void_columns_parallel_collector
         modeled_objects=[modeled_object],
     )
 
-    with pytest.raises(ValueError, match=r"modeled_objects\[0\]\.role must be one of .*actual='tx_rect_void_columns'"):
+    with pytest.raises(ValueError, match=r"terminal_metadata is missing required key 'tab_face_vertices_xyz'"):
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_setup_ready.aedt",
@@ -1603,7 +1844,7 @@ def test_setup_type2_step_ledger_rejects_tx_rect_void_columns_parallel_collector
         )
 
 
-def test_setup_type2_step_ledger_rejects_tx_rect_void_columns_series_collector_tabs_before_hfss(
+def test_setup_type2_step_ledger_rejects_tx_rect_void_columns_series_collector_tabs_without_tab_faces_before_hfss(
     tmp_path: Path,
 ) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
@@ -1634,7 +1875,7 @@ def test_setup_type2_step_ledger_rejects_tx_rect_void_columns_series_collector_t
         modeled_objects=[modeled_object],
     )
 
-    with pytest.raises(ValueError, match=r"modeled_objects\[0\]\.role must be one of .*actual='tx_rect_void_columns'"):
+    with pytest.raises(ValueError, match=r"terminal_metadata is missing required key 'tab_face_vertices_xyz'"):
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_setup_ready.aedt",

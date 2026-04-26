@@ -1,7 +1,7 @@
 ---
 title: protocols.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-22 @ 04:55
 tags:
   - aedt
 ---
@@ -26,6 +26,7 @@ tags:
 - `ModelerSession.import_3d_cad(...) -> bool`
 - `ModelerSession.set_object_model_state(...) -> object`
 - `MeshModuleSession.AssignLengthOp(...) -> object`
+- `HfssSession.change_validation_settings(...) -> object`
 
 ## Canonical state
 - module-level mutable state는 없다.
@@ -35,6 +36,7 @@ tags:
 - Protocol은 fallback behavior를 구현하지 않고 required boundary shape만 선언한다.
 - `ModelerSession.import_3d_cad()` signature는 repo-pinned PyAEDT `0.25.1` wrapper와 일치해야 한다.
 - `MeshModuleSession`은 `MeshSetup` lookup 이후 explicit cast target이며 `False` return fail-fast enforcement는 runtime layer가 담당한다.
+- `change_validation_settings()` exposes PyAEDT's validation-design setting boundary; callers still fail fast on `False`.
 - runtime validation은 [[sdd/code/src/peetsfea/aedt/wrappers.py]]가 담당한다.
 
 ## 직접 의존

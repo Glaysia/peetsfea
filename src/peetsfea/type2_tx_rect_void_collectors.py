@@ -208,7 +208,10 @@ def _fuse_shapes(*, shapes: tuple[bd.Shape, ...], label: str) -> bd.Shape:
         fused_shape = cast(bd.Shape, fused[0])
     else:
         fused_shape = fused
-    solid = _require_single_solid_shape(shape=fused_shape, context=label)
+    cleaned_shape = cast(bd.Shape, fused_shape.clean().fix())
+    solid = _require_single_solid_shape(shape=cleaned_shape, context=label)
+    if not solid.is_valid:
+        raise RuntimeError(f"{label} fused collector solid must be valid after deterministic clean/fix")
     solid.label = label
     return solid
 
