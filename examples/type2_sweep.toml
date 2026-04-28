@@ -172,8 +172,8 @@ material = "composite"
 model_state = true
 # RX는 현재 EM-ready active modeled object다.
 # 아래 RX fields는 sampled TOML과 build design variables에 실제로 반영된다.
-pcb_thickness_mm = 0.3
-copper_thickness_mm = 0.1
+pcb_thickness_mm = 3.965
+copper_thickness_mm = 0.035
 [modeled_objects.outer_x_usage_ratio]
 # RX placement owner span 대비 local X outer size ratio.
 range = [false, 0.1, 0.6, 17]

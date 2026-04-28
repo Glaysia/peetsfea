@@ -277,8 +277,8 @@ object_id = "{modeled_object_id}"
 role = "{modeled_role}"
 material = "composite"
 model_state = true
-pcb_thickness_mm = 0.3
-copper_thickness_mm = 0.1
+pcb_thickness_mm = 3.965
+copper_thickness_mm = 0.035
 
 [modeled_objects.outer_x_usage_ratio]
 range = {outer_x_usage_ratio_range}
@@ -647,8 +647,8 @@ object_id = "tx_rect_void_columns"
 role = "tx_rect_void_columns"
 material = "composite"
 model_state = true
-pcb_thickness_mm = 0.3
-copper_thickness_mm = 0.1
+pcb_thickness_mm = 3.965
+copper_thickness_mm = 0.035
 [modeled_objects.layer_count]
 range = {layer_count_range}
 [modeled_objects.layer_gap_mm]
@@ -691,8 +691,8 @@ runtime_compatible = false
 units = "mm"
 
 [manufacturing]
-pcb_thickness_mm = 0.3
-copper_thickness_mm = 0.1
+pcb_thickness_mm = 3.965
+copper_thickness_mm = 0.035
 
 [tx_coil.outer_x_mm]
 range = {_range(False, 50.0, 50.0, 1)}
@@ -730,8 +730,8 @@ def _spec_with_deactivated_tx_rect_void_columns_for_export_dispatch(source_toml:
         role="tx_rect_void_columns",
         material="composite",
         model_state=True,
-        pcb_thickness_mm=0.3,
-        copper_thickness_mm=0.1,
+        pcb_thickness_mm=3.965,
+        copper_thickness_mm=0.035,
         layer_count=RangeSpec(True, 1.0, 4.0, 4),
         layer_gap_mm=RangeSpec(False, 1.0, 1.8, 5),
         terminal_stub_length_mm=RangeSpec(False, 10.0, 10.0, 1),
@@ -1700,8 +1700,8 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
     assert rx_entry.object_id == "rx_rect_void_coil"
     assert rx_entry.role == "rx_single_coil"
-    assert rx_entry.pcb_thickness_mm == pytest.approx(0.3)
-    assert rx_entry.copper_thickness_mm == pytest.approx(0.1)
+    assert rx_entry.pcb_thickness_mm == pytest.approx(3.965)
+    assert rx_entry.copper_thickness_mm == pytest.approx(0.035)
     assert rx_entry.outer_x_usage_ratio.start == pytest.approx(0.3)
     assert rx_entry.outer_y_usage_ratio.start == pytest.approx(0.3)
     assert rx_entry.outer_x_mm.start == pytest.approx(168.0)

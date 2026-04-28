@@ -20,6 +20,7 @@ tags:
 
 ## Canonical state
 - RX exported body names/counts and terminal metadata remain deterministic.
+- RX single-coil example geometry uses `pcb_thickness_mm = 3.965` and `copper_thickness_mm = 0.035`.
 - `tx_region` may be present as guide context only.
 - `tx_reference_line` ratio inputs, including centered `y_usage_ratio`, are expected to derive a visible non-modeled
   `tx_inner_region` STEP and retained ledger member without activating TX

@@ -21,6 +21,7 @@ tags:
 ## Canonical state
 - Build path can reuse existing STEP ledger or generate missing RX STEP artifacts.
 - `tx_region` is allowed only as non-modeled guide context.
+- RX single-coil fixtures use the active `3.965 mm` PCB plus `0.035 mm` copper stack.
 
 ## Invariants / fail-fast
 - Unsupported role sets fail before backend execution.

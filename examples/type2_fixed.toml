@@ -157,8 +157,8 @@ object_id = "rx_rect_void_coil"
 role = "rx_single_coil"
 material = "composite"
 model_state = true
-pcb_thickness_mm = 0.3
-copper_thickness_mm = 0.1
+pcb_thickness_mm = 3.965
+copper_thickness_mm = 0.035
 [modeled_objects.outer_x_usage_ratio]
 range = [false, 0.3, 0.3, 1]
 [modeled_objects.outer_y_usage_ratio]

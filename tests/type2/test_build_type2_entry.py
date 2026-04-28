@@ -156,8 +156,8 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 role="rx_single_coil",
                 material="composite",
                 model_state=True,
-                pcb_thickness_mm=0.3,
-                copper_thickness_mm=0.1,
+                pcb_thickness_mm=3.965,
+                copper_thickness_mm=0.035,
                 outer_x_usage_ratio=rx_outer_x_usage_ratio,
                 outer_y_usage_ratio=rx_outer_y_usage_ratio,
                 void_usage_ratio=rx_void_usage_ratio,
@@ -306,8 +306,8 @@ range = [true, 1, 1, 1]
     role = "rx_single_coil"
     material = "composite"
     model_state = true
-    pcb_thickness_mm = 0.3
-    copper_thickness_mm = 0.1
+    pcb_thickness_mm = 3.965
+    copper_thickness_mm = 0.035
     [modeled_objects.outer_x_usage_ratio]
     range = [false, 0.1, 0.6, 17]
     [modeled_objects.outer_y_usage_ratio]
@@ -410,8 +410,8 @@ object_id = "tx_rect_void_columns"
 role = "tx_rect_void_columns"
 material = "composite"
 model_state = true
-pcb_thickness_mm = 0.3
-copper_thickness_mm = 0.1
+pcb_thickness_mm = 3.965
+copper_thickness_mm = 0.035
 [modeled_objects.layer_count]
 range = [true, 1, 4, 4]
 [modeled_objects.layer_gap_mm]

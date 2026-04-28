@@ -92,8 +92,8 @@ def _patch_rx_only_spec_loader(
                 role="rx_single_coil",
                 material="composite",
                 model_state=True,
-                pcb_thickness_mm=0.3,
-                copper_thickness_mm=0.1,
+                pcb_thickness_mm=3.965,
+                copper_thickness_mm=0.035,
                 outer_x_usage_ratio=rx_outer_x_usage_ratio,
                 outer_y_usage_ratio=rx_outer_y_usage_ratio,
                 void_usage_ratio=rx_void_usage_ratio,
@@ -227,8 +227,8 @@ size_xyz = [10.0, 200.0, 200.0]
     role = "rx_single_coil"
     material = "composite"
     model_state = true
-    pcb_thickness_mm = 0.3
-    copper_thickness_mm = 0.1
+    pcb_thickness_mm = 3.965
+    copper_thickness_mm = 0.035
     [modeled_objects.outer_x_usage_ratio]
     range = [false, 0.1, 0.6, 17]
     [modeled_objects.outer_y_usage_ratio]
@@ -401,8 +401,8 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     rx_modeled_object = sampled_payload["modeled_objects"][0]
     assert rx_modeled_object["object_id"] == "rx_rect_void_coil"
     assert rx_modeled_object["role"] == "rx_single_coil"
-    assert rx_modeled_object["pcb_thickness_mm"] == 0.3
-    assert rx_modeled_object["copper_thickness_mm"] == 0.1
+    assert rx_modeled_object["pcb_thickness_mm"] == 3.965
+    assert rx_modeled_object["copper_thickness_mm"] == 0.035
     assert "ferrite_set_count" not in rx_modeled_object
     rx_outer_x_range = rx_modeled_object["outer_x_usage_ratio"]["range"]
     assert rx_outer_x_range[0] is False
@@ -760,8 +760,8 @@ object_id = "rx_rect_void_coil"
 role = "rx_single_coil"
 material = "composite"
 model_state = true
-pcb_thickness_mm = 0.3
-copper_thickness_mm = 0.1
+pcb_thickness_mm = 3.965
+copper_thickness_mm = 0.035
 [modeled_objects.outer_x_usage_ratio]
 range = [false, 0.1, 0.6, 17]
 [modeled_objects.outer_y_usage_ratio]

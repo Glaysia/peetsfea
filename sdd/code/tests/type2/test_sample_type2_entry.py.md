@@ -20,6 +20,7 @@ tags:
 
 ## Canonical state
 - Sampling remains deterministic by source TOML, version, seed, and retry number.
+- RX single-coil sampled fixtures preserve the active `3.965 mm` PCB plus `0.035 mm` copper stack.
 - `tx_region` is guide context only, but its `tx_reference_line` range fields are effective sampled owner coordinates.
 - RxOnly sampled-owner fixtures contain RX coil owners plus active non-modeled guide owners; TX derived non-model owners are absent.
 
