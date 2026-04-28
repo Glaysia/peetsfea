@@ -16,6 +16,7 @@ tags:
 - [0.2.22-type2-step-to-em-validate-pipeline](0.2.22-type2-step-to-em-validate-pipeline.md)
 
 ## Active Type2 Plans
+- `sdd/plans/0.2.24-type2-rxonly-tx-removal.md`
 - `sdd/plans/0.2.22-type2-step-to-em-validate-pipeline.md`
 - `sdd/plans/0.2.22-type2-rx-only-baseline.md`
 - `sdd/plans/0.2.22-type2-rx-single-coil.md`
@@ -33,6 +34,7 @@ tags:
 - RX plans remain active.
 - `tx_region` remains only as future placement guide.
 - Reusable EM output variable names are tracked in [type2-em-report-contract](../architecture/type2-em-report-contract.md).
+- Implementation handoff for sub-agents is [0.2.24-type2-rxonly-tx-removal](0.2.24-type2-rxonly-tx-removal.md).
 
 ## 규칙
 - 신규 기능과 큰 리팩터링은 코드 전에, 또는 코드와 함께 계획 문서를 만든다.

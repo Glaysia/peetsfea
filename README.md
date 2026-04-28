@@ -67,25 +67,15 @@ cd run
   - `<design_id>.source.toml`
 - `manifest_<design_id>.json`과 `geometry_metadata_<design_id>.json`은 기본적으로 비활성화되어 있으며 선택 사항입니다.
 
-## 0.2.22의 주요 계약
+## 0.2.24의 주요 계약
+- Active type2 기본 경로는 RxOnly입니다.
+- Active type2는 RX modeled geometry, RX mesh, RX lumped port, RX report variables만 setup-ready 대상으로 삼습니다.
+- 송신 형상, 송신 포트, 송신 출력 변수는 active type2 계약에서 제거되었습니다.
+- `tx_region`은 향후 송신 형상을 배치하기 위한 non-modeled guide로만 유지됩니다.
 - Sampling ownership은 canonical owner를 통해서만 관리합니다.
 - Alias/derived path는 독립 sampled dimension으로 계산하지 않습니다.
-- `dataset.toml`은 `coil_groups[*].count_*` 같은 inline sampled owner를 포함하지만, derived alias와 fixed field는 제외합니다.
 - `dataset.toml`과 `repro.toml`은 역할이 다르며, replay safety는 두 artifact의 대응 관계로 정의합니다.
-- 마지막 두 `design_id` fragment는 서로 다른 의미를 갖습니다. `design_unique_hash`는 실현된 설계 identity이고, `toml_space_hash`는 원본 `source.toml` sampling-space identity입니다. `retry_attempt`도 filename suffix에 반영됩니다.
-- Ferrite는 global `ferrite.present` flag만으로 제어하며, RX와 TX 모두에서 실제 coil footprint를 따르고, RX `2.0mm`, TX `2.0mm`, `mu_r=500`을 baseline spec contract로 사용합니다.
-- TX ferrite gap은 sampled path `ferrite.tx_gap_mm`이 소유하며, default example range는 `3.1..12.0`, `count=8`입니다.
-- TX ferrite는 여전히 가장 낮은 TX XY FR4 layer 아래 placement owner로 `ferrite.tx_gap_mm`을 사용하지만, finalized TX copper/bridge/terminal geometry는 이제 pre-subtract positive-gap rejection 대신 ferrite subtract cutout으로 resolve됩니다.
-- `coil_shape.corner_mode`는 public corner-shaping owner이며 `0=sharp_90`, `1=blunt` contract를 유지합니다.
-- 기본 runnable example은 이제 `tx.region.z_parts.vertical_z_mm`을 `5..15`, `count=11`로 sampling합니다. 실현된 `tx_vertical` height는 여전히 `min(coil_shape.neo_tx_vertical.outer_y, tx.region.z_parts.vertical_z_mm)`이므로, default sample은 실질적으로 `tx_region_vertical_z_mm`을 active height owner로 사용합니다.
-- TX DD top placement는 sampled path `coil_placement.neo_tx_dd_top_offset_ratio`가 소유하며, default example range는 `0.01..0.6`, `count=30`입니다. Internal `tx_dd_top_clearance_mm`은 `tx.region.z_parts.dd_z_mm`에서 derive됩니다.
-- `coil_placement.tx_vertical_orientation_mode`는 이제 `0 = no tx_vertical`, `1 = ZX tx_vertical`을 의미합니다.
-- `coil_groups.tx_vertical.count_range`는 requested ZX vertical count의 canonical sampling owner로 유지됩니다. Orientation mode가 `0`으로 resolve되면 owner는 sampling ledger에 남지만 실현된 `selected_count`는 `0`이 됩니다.
-- 기본 runnable scene은 기존 scene-anchor formula 아래에서 `scene_anchor.shelf_height_mm = 461.0`을 통해 nominal `TX-region top -> RX-region bottom` gap을 `50 mm`로 유지합니다.
-- Public spec은 더 이상 `coil_placement.tx_vertical_plane`을 허용하지 않습니다. 실현된 plane은 현재 내부적으로 `selected_parameters.tx_vertical_plane = "ZX"`로 고정되어 있습니다.
-- `tx_vertical_orientation_mode = 0`이면 finalized TX DD conductor set은 TX region top contract를 보존하면서 no-vertical mode를 실현하도록 `Y`축 기준으로 회전됩니다.
 - Adaptive default는 `percent_refinement=22`, `maximum_passes=10`, `minimum_passes=8`, `minimum_converged_passes=10`, `max_delta_s=0.007`로 표준화되어 있습니다.
-- 현재 상세 계획 entry point: [PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md](PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md).
 
 ## Legacy type1 참고 문서
 - 한글 개요: [docs/legacy/type1.md](docs/legacy/type1.md)

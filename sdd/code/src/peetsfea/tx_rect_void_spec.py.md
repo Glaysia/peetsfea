@@ -48,7 +48,7 @@ tags:
 - [test_tx_rect_void.py](../../tests/tx_rect_void/test_tx_rect_void.py.md)
 
 ## 변경 시 주의점
-- parser shape를 바꾸면 `docs/tx-rect-void-step.md`와 type2 export path를 같이 갱신해야 한다.
+- parser shape를 바꾸면 active RX/reusable code notes와 type2 export path를 같이 갱신해야 한다.
 - realization formula나 profile-specific validation cap을 바꾸면 centerline/export/import 계약이 모두 흔들린다.
 
 ## Links
