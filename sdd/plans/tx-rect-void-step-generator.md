@@ -40,10 +40,10 @@ tags:
 - 이 object stage는 still no EM ports, no sources, no solve다.
 
 ## Affected Notes
-- 관련 상위 계획: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
-- 관련 단일화 계획: [[sdd/plans/0.2.22-type2-toml-unification]]
-- 관련 completed baseline: [[sdd/plans/0.2.22-type2-build123d-non-model-step]]
-- 관련 non-model import smoke: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
+- 관련 상위 계획: [0.2.22-type2-step-to-em-validate-pipeline](0.2.22-type2-step-to-em-validate-pipeline.md)
+- 관련 단일화 계획: [0.2.22-type2-toml-unification](0.2.22-type2-toml-unification.md)
+- 관련 completed baseline: [0.2.22-type2-build123d-non-model-step](0.2.22-type2-build123d-non-model-step.md)
+- 관련 import/setup 방향: [0.2.22-type2-step-to-em-validate-pipeline](0.2.22-type2-step-to-em-validate-pipeline.md)
 
 ## Acceptance
 - `tx_rect_void`는 SDD 계획에서 standalone public workflow가 아니라 `type2_fixed.toml` modeled object로 설명된다.

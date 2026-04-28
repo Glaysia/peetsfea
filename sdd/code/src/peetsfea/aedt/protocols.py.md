@@ -11,9 +11,9 @@ tags:
 ## Source
 - Path: `src/peetsfea/aedt/protocols.py`
 - Code note path: `sdd/code/src/peetsfea/aedt/protocols.py.md`
-- Related plan: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
-- Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
-- Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
+- Related plan: [0.2.22-type2-step-to-em-validate-pipeline](../../../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)
+- Related umbrella plan: [0.2.22-type2-step-to-em-validate-pipeline](../../../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)
+- Related type2 architecture: [type2-step-to-em-validate-pipeline](../../../../architecture/type2-step-to-em-validate-pipeline.md)
 
 ## 역할
 - AEDT/PyAEDT session boundary의 structural Protocol 타입을 정의한다.
@@ -37,7 +37,7 @@ tags:
 - `ModelerSession.import_3d_cad()` signature는 repo-pinned PyAEDT `0.25.1` wrapper와 일치해야 한다.
 - `MeshModuleSession`은 `MeshSetup` lookup 이후 explicit cast target이며 `False` return fail-fast enforcement는 runtime layer가 담당한다.
 - `change_validation_settings()` exposes PyAEDT's validation-design setting boundary; callers still fail fast on `False`.
-- runtime validation은 [[sdd/code/src/peetsfea/aedt/wrappers.py]]가 담당한다.
+- runtime validation은 [wrappers.py](wrappers.py.md)가 담당한다.
 
 ## 직접 의존
 - `collections.abc.Mapping`, `collections.abc.Sequence`
@@ -47,13 +47,13 @@ tags:
 ## 이 파일을 쓰는 곳
 - `peetsfea.aedt.proxies`
 - backend tests with fake AEDT sessions
-- [[sdd/code/tests/backend_em/test_type2_step_import_smoke.py]]
+- [test_type2_step_import_smoke.py](../../../tests/backend_em/test_type2_step_import_smoke.py.md)
 
 ## 관련 테스트
-- [[sdd/code/tests/backend_em/test_type2_step_import_smoke.py]]
+- [test_type2_step_import_smoke.py](../../../tests/backend_em/test_type2_step_import_smoke.py.md)
 - `tests/backend_em/test_aedt_sidecar_modeler.py`
 - `tests/backend_em/test_aedt_sidecar_session.py`
 
 ## 변경 시 주의점
 - Protocol 변경은 wrappers, proxies, fake sessions, pyright diagnostics를 함께 흔든다.
-- PyAEDT version/API drift가 있으면 [[sdd/plans/0.2.22-type2-pyaedt-step-import]]와 관련 tests를 같이 갱신한다.
+- PyAEDT version/API drift가 있으면 [0.2.22-type2-step-to-em-validate-pipeline](../../../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)와 관련 tests를 같이 갱신한다.

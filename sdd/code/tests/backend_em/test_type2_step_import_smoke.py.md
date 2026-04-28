@@ -11,9 +11,9 @@ tags:
 ## Source
 - Path: `tests/backend_em/test_type2_step_import_smoke.py`
 - Code note path: `sdd/code/tests/backend_em/test_type2_step_import_smoke.py.md`
-- Related plan: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
-- Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
-- Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
+- Related plan: [0.2.22-type2-step-to-em-validate-pipeline](../../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)
+- Related umbrella plan: [0.2.22-type2-step-to-em-validate-pipeline](../../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)
+- Related type2 architecture: [type2-step-to-em-validate-pipeline](../../../architecture/type2-step-to-em-validate-pipeline.md)
 
 ## 역할
 - Type2 STEP PyAEDT import smoke path를 AEDT launch 없이 fake sessions로 검증한다.
@@ -43,7 +43,7 @@ tags:
 - default/test command path only.
 
 ## 관련 테스트
-- This file is the direct test note target for [[sdd/code/entry/import_non_model_step_to_hfss.py]].
+- This file is the direct test note target for [import_non_model_step_to_hfss.py](../../entry/import_non_model_step_to_hfss.py.md).
 
 ## 변경 시 주의점
 - Adding real AEDT launch to this file would violate its pure-Python smoke-test role.

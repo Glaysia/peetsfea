@@ -12,9 +12,9 @@ tags:
 ## Source
 - Path: `entry/import_tx_rect_void_step_to_hfss.py`
 - Code note path: `sdd/code/entry/import_tx_rect_void_step_to_hfss.py.md`
-- Related plan: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
-- Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
-- Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
+- Related plan: [0.2.22-type2-step-to-em-validate-pipeline](../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)
+- Related umbrella plan: [0.2.22-type2-step-to-em-validate-pipeline](../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)
+- Related type2 architecture: [type2-step-to-em-validate-pipeline](../../architecture/type2-step-to-em-validate-pipeline.md)
 
 ## 역할
 - `type2_fixed.toml`에서 생성된 `tx_single_coil` modeled STEP artifact를 headless HFSS 세션에 import하는 opt-in smoke script다.
@@ -29,7 +29,7 @@ tags:
   - `source_toml_path == examples/type2_fixed.toml`
   - `modeled_objects` single-entry
   - `modeled_objects[0].role == tx_single_coil`
-- 출력 AEDT: `run/aedt/type2_step_import_smoke/type2_tx_single_coil_import.aedt`
+- 출력 AEDT: historical smoke output path under `run/aedt/type2_step_import_smoke/`
 - CLI entry: `../.venv/bin/python ../entry/import_tx_rect_void_step_to_hfss.py` from `run/`
 - 반환:
   - `import_result` (`step_path`, `metadata_path`, `aedt_path`, `imported_object_names`)
@@ -59,14 +59,14 @@ tags:
 
 ## 이 파일을 쓰는 곳
 - 사람이 직접 실행하는 modeled STEP-to-HFSS smoke path다.
-- [[sdd/code/tests/backend_em/test_tx_rect_void_step_import_smoke.py]]가 fake HFSS/adapter로 pure-Python 계약을 방어한다.
+- [test_tx_rect_void_step_import_smoke.py](../tests/backend_em/test_tx_rect_void_step_import_smoke.py.md)가 fake HFSS/adapter로 pure-Python 계약을 방어한다.
 
 ## 관련 테스트
-- [[sdd/code/tests/backend_em/test_tx_rect_void_step_import_smoke.py]]
+- [test_tx_rect_void_step_import_smoke.py](../tests/backend_em/test_tx_rect_void_step_import_smoke.py.md)
 - Real AEDT validation is opt-in and not part of default tests.
 
 ## 변경 시 주의점
 - adapter 함수 시그니처를 바꾸면 이 smoke script의 loader/call site를 같이 갱신해야 한다.
 - type2 exporter script path나 metadata ledger shape가 바뀌면 이 smoke script의 auto-resolver 규칙도 함께 갱신해야 한다.
 - prototype 단계에서 geometry reverse-calculation을 추가하지 않는다. 좌표/terminal semantics는 metadata source를 유지한다.
-- scope 확장(ports/sources/solve, multi-coil)은 [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]] 결정 이후에만 진행한다.
+- scope 확장(ports/sources/solve, multi-coil)은 [0.2.22-type2-step-to-em-validate-pipeline](../../plans/0.2.22-type2-step-to-em-validate-pipeline.md) 결정 이후에만 진행한다.

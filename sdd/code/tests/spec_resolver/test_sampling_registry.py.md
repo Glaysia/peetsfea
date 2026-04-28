@@ -10,9 +10,9 @@ tags:
 
 - Source path: `tests/spec_resolver/test_sampling_registry.py`
 - Code note path: `sdd/code/tests/spec_resolver/test_sampling_registry.py.md`
-- Related plan: [[sdd/plans/0.2.22-sdd-adoption]]
-- Related architecture: [[sdd/architecture/current-pipeline-sdd-view]]
-- Related diagram: [[sdd/diagrams/sample-build-flow]]
+- Related plan: [0.2.22-sdd-adoption](../../../plans/0.2.22-sdd-adoption.md)
+- Related architecture: [current-pipeline-sdd-view](../../../architecture/current-pipeline-sdd-view.md)
+- Related diagram: [sample-build-flow](../../../diagrams/sample-build-flow.md)
 
 ## 역할
 - sampling registry의 coverage, unknown field preflight, duplicate owner rejection, normalized-away field 고정 규칙을 회귀 테스트로 고정한다.
@@ -35,7 +35,7 @@ tags:
 
 ## 직접 의존
 - `pytest`
-- [[sdd/code/src/peetsfea/spec/loader.py]]
+- [loader.py](../../src/peetsfea/spec/loader.py.md)
 - `peetsfea.spec.resolver`
 - `peetsfea.spec.resolver.sampling`
 - `tests.fixtures.type1_spec`
@@ -53,4 +53,4 @@ tags:
 ## 변경 시 주의점
 - sampling registry path naming을 바꾸면 expected error message와 coverage assertion을 같이 갱신해야 한다.
 - fail-fast 정책을 약화하면 `CODE_COMMANDMENTS.md`와 충돌한다.
-- selection contract가 바뀌면 [[sdd/architecture/current-pipeline-sdd-view]]와 관련 코드 노트를 같이 갱신한다.
+- selection contract가 바뀌면 [current-pipeline-sdd-view](../../../architecture/current-pipeline-sdd-view.md)와 관련 코드 노트를 같이 갱신한다.

@@ -12,8 +12,8 @@ tags:
 - Path: `src/peetsfea/tx_rect_void_centerline.py`
 - Code note path: `sdd/code/src/peetsfea/tx_rect_void_centerline.py.md`
 - Status: planned split target; source file is not created yet.
-- Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
-- Parent note: [[sdd/code/src/peetsfea/tx_rect_void.py]]
+- Related plan: [0.2.22-src-entry-800-line-refactor-threshold](../../../plans/0.2.22-src-entry-800-line-refactor-threshold.md)
+- Parent note: [tx_rect_void.py](tx_rect_void.py.md)
 
 ## 역할
 - same-corner terminal planner, ring traversal, blunt-corner shaping을 통해 canonical centerline을 만든다.
@@ -32,20 +32,20 @@ tags:
 - outer terminal은 next-ring coordinate seed를 유지해야 하며 raw corner에 남으면 안 된다.
 
 ## 직접 의존
-- [[sdd/code/src/peetsfea/tx_rect_void_types.py]]
+- [tx_rect_void_types.py](tx_rect_void_types.py.md)
 
 ## 이 파일을 쓰는 곳
-- [[sdd/code/src/peetsfea/tx_rect_void_export.py]]
+- [tx_rect_void_export.py](tx_rect_void_export.py.md)
 - compatibility facade `tx_rect_void.py`
 
 ## 관련 테스트
-- [[sdd/code/tests/tx_rect_void/test_tx_rect_void.py]]
+- [test_tx_rect_void.py](../../tests/tx_rect_void/test_tx_rect_void.py.md)
 
 ## 변경 시 주의점
 - centerline ownership과 geometry ownership을 섞지 않는다. 이 파일은 path만 소유하고 solid authoring은 소유하지 않는다.
 - point semantics를 바꾸면 terminal metadata와 short-detection tests가 모두 바뀐다.
 
 ## Links
-- [[sdd/code/src/peetsfea/tx_rect_void_spec.py]]
-- [[sdd/code/src/peetsfea/tx_rect_void_export.py]]
-- [[sdd/code/src/peetsfea/tx_rect_void_geometry.py]]
+- [tx_rect_void_spec.py](tx_rect_void_spec.py.md)
+- [tx_rect_void_export.py](tx_rect_void_export.py.md)
+- [tx_rect_void_geometry.py](tx_rect_void_geometry.py.md)

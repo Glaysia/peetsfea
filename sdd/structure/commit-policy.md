@@ -24,7 +24,7 @@ tags:
 - `src/`, `entry/`, `tests/`의 새 Python 파일 또는 실질 수정 파일은 같은 커밋에 대응 `sdd/code/` note를 포함한다.
 - 신규 기능이나 큰 리팩터링은 같은 커밋에 관련 `sdd/plans/` note를 포함한다.
 - 문서 배치, ownership, 운영 규칙이 바뀌면 관련 `sdd/structure/` note와 허브 링크를 같은 커밋에 포함한다.
-- SDD 링크를 추가할 때는 가능한 한 path-qualified Obsidian wikilink를 쓴다.
+- SDD 링크를 추가할 때는 가능한 한 실제 `.md` 파일을 가리키는 path-qualified Markdown 상대경로 링크를 쓴다.
 
 ## Exclusions
 - 생성물, cache, `run/` 산출물, AEDT output, `.aedt.lock` 파일은 명시 요청 없이는 커밋하지 않는다.

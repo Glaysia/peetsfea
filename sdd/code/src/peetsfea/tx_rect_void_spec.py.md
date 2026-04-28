@@ -12,8 +12,8 @@ tags:
 - Path: `src/peetsfea/tx_rect_void_spec.py`
 - Code note path: `sdd/code/src/peetsfea/tx_rect_void_spec.py.md`
 - Status: planned split target; source file is not created yet.
-- Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
-- Parent note: [[sdd/code/src/peetsfea/tx_rect_void.py]]
+- Related plan: [0.2.22-src-entry-800-line-refactor-threshold](../../../plans/0.2.22-src-entry-800-line-refactor-threshold.md)
+- Parent note: [tx_rect_void.py](tx_rect_void.py.md)
 
 ## 역할
 - rect/void TOML parsing, range validation, sampled realization을 담당한다.
@@ -37,21 +37,21 @@ tags:
 - `rx_single_coil.layer_count != 1`은 계속 fail-fast한다.
 
 ## 직접 의존
-- [[sdd/code/src/peetsfea/tx_rect_void_types.py]]
+- [tx_rect_void_types.py](tx_rect_void_types.py.md)
 
 ## 이 파일을 쓰는 곳
-- [[sdd/code/src/peetsfea/tx_rect_void_centerline.py]]
-- [[sdd/code/src/peetsfea/tx_rect_void_export.py]]
+- [tx_rect_void_centerline.py](tx_rect_void_centerline.py.md)
+- [tx_rect_void_export.py](tx_rect_void_export.py.md)
 - compatibility facade `tx_rect_void.py`
 
 ## 관련 테스트
-- [[sdd/code/tests/tx_rect_void/test_tx_rect_void.py]]
+- [test_tx_rect_void.py](../../tests/tx_rect_void/test_tx_rect_void.py.md)
 
 ## 변경 시 주의점
 - parser shape를 바꾸면 `docs/tx-rect-void-step.md`와 type2 export path를 같이 갱신해야 한다.
 - realization formula나 profile-specific validation cap을 바꾸면 centerline/export/import 계약이 모두 흔들린다.
 
 ## Links
-- [[sdd/code/src/peetsfea/tx_rect_void_types.py]]
-- [[sdd/code/src/peetsfea/tx_rect_void_centerline.py]]
-- [[sdd/code/src/peetsfea/tx_rect_void_export.py]]
+- [tx_rect_void_types.py](tx_rect_void_types.py.md)
+- [tx_rect_void_centerline.py](tx_rect_void_centerline.py.md)
+- [tx_rect_void_export.py](tx_rect_void_export.py.md)

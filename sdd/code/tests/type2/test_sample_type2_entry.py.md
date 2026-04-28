@@ -1,10 +1,9 @@
 ---
 title: test_sample_type2_entry.py
-created: 2026-04-19 @ 17:35
-updated: 2026-04-22 @ 01:10
+created: 2026-04-18 @ 09:09
+updated: 2026-04-28 @ 00:00
 tags:
-  - tests
-  - type2
+  - test
   - sampling
 ---
 
@@ -13,49 +12,20 @@ tags:
 ## Source
 - Path: `tests/type2/test_sample_type2_entry.py`
 - Code note path: `sdd/code/tests/type2/test_sample_type2_entry.py.md`
-- Direct owner: [[sdd/plans/0.2.22-type2-sampled-build-split]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]], [[sdd/plans/0.2.22-type2-tx-actual-region-pcb-non-model]], [[sdd/plans/0.2.22-type2-tx-rect-void-columns-geometry]]
-- Direct verification target: [[sdd/code/entry/sample.py]]
-- Discovery bridge: [[sdd/code/tests/type2/test_build_type2_entry.py]]
+- Status: active
 
 ## 역할
-- sampled TOML, manifest metadata, sampled owner-path selection contract를 검증한다.
-- sample entrypoint의 operator-facing progress/stage stdout contract를 검증한다.
+- type2 sampling entrypoint and manifest behavior를 검증한다.
+- 0.2.24 SDD 기준 RxOnly owner discovery and guide/context handling are active.
 
-## Canonical coverage
-- active fixed example is a fixed realization of the sweep field surface
-- `examples/type2_sweep.toml` is the sample SSOT and includes parser/sampler-only `tx_rect_void_columns` variables.
-- active fixed example keeps the same RX/TX modeled field surface as sweep, with fixed single-candidate ranges.
-- examples truth (`examples/type2_sweep.toml`, `examples/type2_fixed.toml`) keeps both modeled objects: `rx_single_coil` and `tx_rect_void_columns`.
-- tx-rect-void-columns role presence in active type2 sample tests is accepted on parser/sampler-only surface.
-- `make_step_on_sample=false` path emits `manifest.json` and sampled TOML entries for tx-columns source without invoking exporter.
-- tx-columns sampled owner list is mode-aware:
-  - sampled `connection_mode`, `equivalent_turn_count`, and `turn_weight_a/b/c` owners are included when their source ranges have more than one candidate.
-  - tx-columns sampling contract no longer exposes separate public turn owners for `series_total_turn_count` or `parallel_total_turn_count`.
-  - `equivalent_turn_count` candidate selection is filtered by the realized connection mode and coil count before replay freezes the chosen value.
-  - legacy `turn_count_x*` owners remain absent from manifest metadata and sampled metadata.
-- sampled owner paths cover only `rx_rect_void_coil` effective sampled degrees:
-  - `outer_x_usage_ratio`
-  - `outer_y_usage_ratio`
-  - `void_usage_ratio`
-  - `turn_count`
-  - `metal_fill_factor`
-- `rx_rect_void_coil.layer_count` stays fixed `count=1` and is not part of sampled owner paths.
-- `rx_rect_void_coil.underlay_repeat_count` is fixed for full backing and is not part of sampled owner paths.
-- sampled TOML keeps non-sampled RX fields as fixed scalar ranges.
-- sampled TOML excludes removed split/centered `void_*` fields and keeps usage ratios, including `void_usage_ratio`, unitless.
-- manifest identity and hash contract remain unchanged
-- manifest includes `skipped`; no-skip cases assert an empty skipped list.
-- sample skips `ValueError`/`RuntimeError` validation/infeasible attempts, records skip metadata, and continues without replacing skipped seeds.
-- skipped STEP attempts remove partial design directories.
-- `manifest_entry_for_sample_index` returns entries by successful entry order when skipped attempt indices exist.
-- sample-step skip record includes `phase=step` and skips are surfaced in `[sample] skip ...` stdout output.
-- sampled metadata and manifest owner paths include the four `non_model_objects.tx_region_actual.*` owners plus `non_model_objects.tx_region_actual_stack_space.scale_ratio` before modeled RX owners.
-- `MAKE_STEP_ON_SAMPLE=True` path emits coarse STEP stage lines around export.
-- `MAKE_STEP_ON_SAMPLE=True` path emits skip lines for skipped attempts.
-- `MAKE_STEP_ON_SAMPLE=False` does not emit STEP stage lines and does not call the exporter.
+## Canonical state
+- Sampling remains deterministic by source TOML, version, seed, and retry number.
+- `tx_region` is fixed guide context only.
 
-## 변경 시 주의점
-- sampled owner assertions를 role-blind로 환원하지 않되 canonical equivalent-turn owner surface로 고정한다.
-- tx-columns sample-only coverage를 parser-deactivation failure assertion으로 되돌리지 않는다.
-- non-model owner freezing must update the `[[non_model_objects]]` table, not synthesize modeled placeholders.
-- stage-log assertions는 manifest JSON shape나 design identity contract를 대체하지 않는다.
+## Invariants / fail-fast
+- Unknown owner paths fail immediately.
+- RxOnly sampling tests must not require TX modeled owners.
+
+## Collaborators
+- [sample.py](../../entry/sample.py.md)
+- [type2_sampled.py](../../src/peetsfea/type2_sampled.py.md)

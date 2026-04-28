@@ -11,10 +11,10 @@ tags:
 ## Source
 - Path: `entry/generate_non_model_step.py`
 - Code note path: `sdd/code/entry/generate_non_model_step.py.md`
-- Related plan: [[sdd/plans/0.2.22-type2-build123d-non-model-step]]
-- Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
-- Related STEP viewer registry: [[sdd/plans/0.2.22-step-viewer-notebook-registry]]
-- Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
+- Related plan: [0.2.22-type2-build123d-non-model-step](../../plans/0.2.22-type2-build123d-non-model-step.md)
+- Related umbrella plan: [0.2.22-type2-step-to-em-validate-pipeline](../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)
+- Related STEP viewer registry: [0.2.22-step-viewer-notebook-registry](../../plans/0.2.22-step-viewer-notebook-registry.md)
+- Related type2 architecture: [type2-step-to-em-validate-pipeline](../../architecture/type2-step-to-em-validate-pipeline.md)
 
 ## 역할
 - unified type2 TOML의 `non_model_objects`를 읽어 build123d box compound를 생성하고 STEP artifact로 export한다.
@@ -56,7 +56,7 @@ tags:
   - `test -s run/step/type2/type2_non_model_scene.step`
 
 ## 변경 시 주의점
-- TOML schema를 바꾸면 [[sdd/plans/0.2.22-type2-build123d-non-model-step]]도 같이 갱신한다.
+- TOML schema를 바꾸면 [0.2.22-type2-build123d-non-model-step](../../plans/0.2.22-type2-build123d-non-model-step.md)도 같이 갱신한다.
 - `origin_xyz` 해석을 바꾸면 기존 STEP artifact의 좌표계가 바뀐다.
 - type2 TX 영역은 현재 단일 `tx_region` box로 기록하며, sub-zone을 되살리려면 TOML과 계획 노트를 먼저 갱신한다.
 - tracked STEP artifact를 추가하면 `notebooks/view_step_files.ipynb`의 `STEP_ARTIFACTS` registry와 viewer cell을 같이 갱신한다.

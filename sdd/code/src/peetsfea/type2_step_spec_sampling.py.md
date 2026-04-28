@@ -1,10 +1,10 @@
 ---
 title: type2_step_spec_sampling.py
-created: 2026-04-21 @ 23:50
-updated: 2026-04-21 @ 23:50
+created: 2026-04-20 @ 00:00
+updated: 2026-04-28 @ 00:00
 tags:
-  - sampling
   - spec
+  - sampling
 ---
 
 # type2_step_spec_sampling.py
@@ -13,39 +13,23 @@ tags:
 - Path: `src/peetsfea/type2_step_spec_sampling.py`
 - Code note path: `sdd/code/src/peetsfea/type2_step_spec_sampling.py.md`
 - Status: active
-- Related plan: [[sdd/plans/0.2.22-type2-step-spec-split]]
 
 ## 역할
-- type2 sampled candidate extraction and seeded resolution ownership을 가진다.
-- modeled and non-model sampled fields에 대해 deterministic candidate selection helper를 제공한다.
-- shared dataclasses and range constants come from [[sdd/code/src/peetsfea/type2_step_spec_types.py]].
-- generic table and range validators come from [[sdd/code/src/peetsfea/type2_step_spec_non_model.py]].
+- type2 source spec에서 sampled owner paths를 도출한다.
+- 0.2.24 SDD 기준 RX owner paths and shared constraints are active.
 
 ## 입력 / 출력
-- 입력: `RangeSpec`, modeled/non-model spec instances, integer `seed`, logical range path
-- 출력: realized scalar values for sampled owners and candidate tuples for validation
+- 입력: parsed type2 spec
+- 출력: ordered sampled owner descriptors
 
 ## Canonical state
-- candidate generation is deterministic and derived only from the range spec.
-- seeded selection uses the stable `seed` + `range_path` hash input.
-- range helper output preserves the original canonical list semantics for integer and float ranges.
+- Owner paths remain deterministic and source-order stable.
+- `tx_region` is fixed guide context, not sampled TX geometry.
 
 ## Invariants / fail-fast
-- Integer helpers only accept integer range specs; float helpers only accept non-integer range specs.
-- Canonical candidate validation fails immediately when realized values drift outside the accepted owner contract.
-- Non-model tilt resolution remains fixed and ignores `seed` while still validating the canonical candidate set.
+- Unknown owner paths fail immediately.
+- RxOnly sampled owner discovery must not require TX modeled paths.
 
 ## Collaborators
-- [[sdd/code/src/peetsfea/type2_step_spec.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec_modeled.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec_types.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec_non_model.py]]
-
-## 관련 테스트
-- [[sdd/code/tests/type2/test_generate_type2_step.py]]
-- [[sdd/code/tests/type2/test_type2_tx_plate_stack_array_export.py]]
-- [[sdd/code/tests/type2/test_type2_tx_coil_count_spec_sampling.py]]
-
-## 변경 시 주의점
-- Do not add alternate sampling paths or best-effort fallback behavior.
-- Keep seed hashing and candidate ordering identical to the existing facade implementation.
+- [type2_step_spec.py](type2_step_spec.py.md)
+- [type2_sampled.py](type2_sampled.py.md)

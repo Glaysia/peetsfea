@@ -12,9 +12,9 @@ tags:
 ## Source
 - Path: `entry/import_non_model_step_to_hfss.py`
 - Code note path: `sdd/code/entry/import_non_model_step_to_hfss.py.md`
-- Related plan: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
-- Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
-- Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
+- Related plan: [0.2.22-type2-step-to-em-validate-pipeline](../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)
+- Related umbrella plan: [0.2.22-type2-step-to-em-validate-pipeline](../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)
+- Related type2 architecture: [type2-step-to-em-validate-pipeline](../../architecture/type2-step-to-em-validate-pipeline.md)
 
 ## 역할
 - type2 non-model STEP artifact를 headless HFSS 세션에 import하는 opt-in smoke script다.
@@ -44,14 +44,14 @@ tags:
 
 ## 이 파일을 쓰는 곳
 - 사람이 직접 실행하는 type2 STEP-to-HFSS smoke path다.
-- [[sdd/code/tests/backend_em/test_type2_step_import_smoke.py]]가 fake HFSS factory로 pure-Python 계약을 방어한다.
+- [test_type2_step_import_smoke.py](../tests/backend_em/test_type2_step_import_smoke.py.md)가 fake HFSS factory로 pure-Python 계약을 방어한다.
 
 ## 관련 테스트
-- [[sdd/code/tests/backend_em/test_type2_step_import_smoke.py]]
+- [test_type2_step_import_smoke.py](../tests/backend_em/test_type2_step_import_smoke.py.md)
 - Real AEDT validation is opt-in and not part of default tests.
 
 ## 변경 시 주의점
 - runtime build flow에 연결하려면 새 계획을 만들고 manifest/type dispatch 설계를 먼저 갱신한다.
-- full STEP-to-EM validation flow에 연결하려면 [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]의 object-level ledger와 `EmPipelineInput` adapter 계약을 먼저 구현한다.
-- PyAEDT 버전이 올라가 `input_file_unit` 같은 새 인자를 쓰게 되면 [[sdd/plans/0.2.22-type2-pyaedt-step-import]]를 갱신한다.
-- 출력 STEP artifact 경로를 바꾸면 [[sdd/plans/0.2.22-type2-build123d-non-model-step]]와 viewer registry도 같이 확인한다.
+- full STEP-to-EM validation flow에 연결하려면 [0.2.22-type2-step-to-em-validate-pipeline](../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)의 object-level ledger와 `EmPipelineInput` adapter 계약을 먼저 구현한다.
+- PyAEDT 버전이 올라가 `input_file_unit` 같은 새 인자를 쓰게 되면 [0.2.22-type2-step-to-em-validate-pipeline](../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)를 갱신한다.
+- 출력 STEP artifact 경로를 바꾸면 [0.2.22-type2-build123d-non-model-step](../../plans/0.2.22-type2-build123d-non-model-step.md)와 viewer registry도 같이 확인한다.

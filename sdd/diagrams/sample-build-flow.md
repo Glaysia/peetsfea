@@ -1,71 +1,31 @@
 ---
 title: Sample Build Flow
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-28 @ 00:00
 tags:
-  - legacy_type1
-  - sdd
+  - diagram
+  - sampling
 ---
 
 # Sample Build Flow
 
-이 구조도는 frozen legacy type1 샘플링에서 build replay로 넘어가는 흐름의 SDD 요약이다. active default path는 아니다. 서술형 설명은 [[sdd/architecture/current-pipeline-sdd-view]], 자세한 legacy 분석은 [[docs/legacy/current-pipeline-type1]]를 본다.
-
 ```mermaid
 flowchart TD
-    Source["run/legacy/type1.toml"]
-    Loader["[[sdd/code/src/peetsfea/spec/loader.py]]"]
-    Sample["legacy [[sdd/code/entry/legacy/type1/sample.py]]"]
-    Manifest["run/toml/.../manifest.json"]
-    Build["entry/legacy/type1/build.py"]
-    Geometry["src/peetsfea/backend/pyaedt/geometry/build.py"]
-    EM["src/peetsfea/backend/pyaedt/em_pipeline/runner.py"]
-    Tests["[[sdd/code/tests/spec_resolver/test_sampling_registry.py]]"]
+    Source["type2 source TOML"]
+    Sample["sample entry"]
+    Sampled["sampled TOML + manifest"]
+    Export["RX STEP export"]
+    Import["import-only or setup-ready"]
+    RxOnly["RxOnly mesh + RX port + RX reports"]
 
-    Source --> Loader
-    Loader --> Sample
-    Sample --> Manifest
-    Manifest --> Build
-    Build --> Geometry
-    Geometry --> EM
-    Tests -. guards sampling contracts .-> Sample
+    Source --> Sample
+    Sample --> Sampled
+    Sampled --> Export
+    Export --> Import
+    Import --> RxOnly
 ```
 
 ## Notes
-- loader 단계는 fallback 없이 parse/shape 오류를 raise한다.
-- sample 단계는 batch profile, seed selection, manifest write를 묶는다.
-- 테스트 노트는 sampling registry와 preflight fail-fast 계약을 대표 예시로 가리킨다.
-- type2 관련 참조는 `0.2.22` 문서 계약을 기준으로 유지한다.
-
-## Type2 STEP Import Smoke Flow
-
-이 흐름은 legacy type1 sample/build replay 경로의 요약이다. active type2 STEP import path와는 별도다.
-
-```mermaid
-flowchart TD
-    Type2Toml["examples/type2_fixed.toml\nSSOT"]
-    StepExport["entry/generate_type2_step.py"]
-    StepArtifact["run/step/type2/objects/*.step"]
-    SmokeImport["entry/import_tx_rect_void_step_to_hfss.py"]
-    HeadlessHfss["headless HFSS via PyAEDT"]
-    ImportCad["Modeler3D.import_3d_cad()"]
-    NonModelState["set_object_model_state(..., False)"]
-    SmokeAedt["run/aedt/type2_step_import_smoke/*.aedt"]
-    RuntimeBuild["entry/legacy/type1/build.py runtime replay"]
-    EmRuntime["EM pipeline"]
-
-    Type2Toml --> StepExport
-    StepExport --> StepArtifact
-    StepArtifact --> SmokeImport
-    SmokeImport --> HeadlessHfss
-    HeadlessHfss --> ImportCad
-    ImportCad --> NonModelState
-    NonModelState --> SmokeAedt
-    SmokeImport -. not wired .-> RuntimeBuild
-    SmokeImport -. not wired .-> EmRuntime
-```
-
-## Related notes
-- [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
-- [[sdd/code/entry/import_non_model_step_to_hfss.py]]
-- plate-stack ferrite-family group contract: `g_ferrite_tx`, `g_ferrite_rx` (ferrite/PET_PSA/vacuum in creation order)
+- TX shape-specific flow details were removed for the 0.2.24 reset.
+- `tx_region` may remain as guide context only.
+- Report variables are owned by [type2-em-report-contract](../architecture/type2-em-report-contract.md).

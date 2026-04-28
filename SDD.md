@@ -58,9 +58,9 @@ tags:
 - 직접 의존 모듈과 자신을 쓰는 대표 모듈/테스트
 - 관련 테스트
 - 변경 시 주의점
-- 관련 Obsidian wikilink
+- 관련 Markdown 상대경로 링크
 
-기본 시작점은 [[sdd/templates/source-note]]를 사용한다.
+기본 시작점은 [source-note](sdd/templates/source-note.md)를 사용한다.
 
 ## 비코드 문서 체계
 - 계획 문서: `sdd/plans/`
@@ -72,18 +72,18 @@ tags:
   - 저장소 구조, 모듈 배치, 문서 배치, ownership map을 다룬다.
 - 구조도/다이어그램 문서: `sdd/diagrams/`
   - Mermaid를 허용한다.
-- 커밋 운영 문서: [[sdd/structure/commit-policy]]
+- 커밋 운영 문서: [commit-policy](sdd/structure/commit-policy.md)
   - SDD note와 코드 변경을 같은 논리 커밋으로 묶는 기준을 다룬다.
 
 큰 변경은 계획 문서에서 시작하고, 경계/흐름/계층이 바뀌면 아키텍처 또는 구조 문서를 추가한다.
 
 ## 링크 규칙
-- 기본 링크 형식은 Obsidian wikilink다.
-- 충돌을 피하려면 path-qualified 링크를 우선 사용한다.
+- 기본 링크 형식은 실제 `.md` 파일을 가리키는 Markdown 상대경로 링크다.
+- 충돌과 새 문서 생성을 피하려면 path-qualified 상대경로 링크를 우선 사용한다.
 - 허용 링크 역할은 `parent hub`, `primary plan`, `primary architecture/structure`, `direct collaborator`, `direct verification`로 제한한다.
 - backlog, split map, inventory, future work, historical context, broad relatedness는 plain text path나 inline code로 기록한다.
 - 전역 정책 문서나 허브 문서를 모든 노트에 반복 링크하지 않는다.
-- 세부 예산과 demotion 규칙은 [[sdd/structure/obsidian-link-policy]]를 따른다.
+- 세부 예산과 demotion 규칙은 [obsidian-link-policy](sdd/structure/obsidian-link-policy.md)를 따른다.
 
 ## TOML spec SSOT와의 관계
 - TOML spec은 기능/입력의 SSOT다.
@@ -116,7 +116,7 @@ tags:
 - 기존 전체 코드를 한 번에 백필하려고 하는가: 사용자가 명시적으로 요청하지 않았다면 하지 않는다.
 
 ## 부트스트랩 시작점
-- 허브: [[sdd/sdd-index]]
+- 허브: [sdd-index](sdd/sdd-index.md)
 - 코드 노트 index: `sdd/code/sdd-code-index.md`
 - 계획 index: `sdd/plans/sdd-plans-index.md`
 - 아키텍처 index: `sdd/architecture/sdd-architecture-index.md`

@@ -1,10 +1,10 @@
 ---
 title: type2_step_import_ledger.py
-created: 2026-04-19 @ 17:35
-updated: 2026-04-22 @ 04:05
+created: 2026-04-18 @ 09:09
+updated: 2026-04-28 @ 00:00
 tags:
-  - hfss-import
-  - import-only
+  - import
+  - pyaedt
 ---
 
 # type2_step_import_ledger.py
@@ -14,70 +14,24 @@ tags:
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py.md`
 - Status: active
 
-## Ownership
-- Primary plan: [[sdd/plans/0.2.22-type2-import-ledger-pipeline]]
-- TX array plan: [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]]
-- Primary architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
-
 ## 역할
-- exported step ledger JSON을 import-only runtime이 신뢰할 수 있는 validated shape로 정규화한다.
+- STEP import 결과를 imported ledger로 직렬화한다.
+- 0.2.24 SDD 기준 RX ownership과 non-modeled guide/context ownership만 문서화한다.
 
 ## 입력 / 출력
-- 입력: `type2_step_ledger.json`
-- 출력: validated step ledger object, validated modeled/non-model entries
+- 입력: export ledger, imported object names, ownership partition result
+- 출력: `type2_imported_ledger.json`
 
 ## Canonical state
-- import-only path는 `tx_plate_stack`, `rx_plate_stack`, legacy single-coil roles를 모두 읽을 수 있다.
-- plate roles terminal metadata는 `kind = "stub_port"`와 stub body name / plane point / sheet vertices를 유지한다.
-- setup-ready/mesh/port/EM rejection은 downstream stage의 책임이며, 여기서는 import-only acceptance를 우선한다.
-- plate-stack의 export-side `tx_copper_wall_t*`, `tx_copper_coil_t*`, `tx_bridge_s*`, `tx_stub_in/out`,
-  `rx_copper_wall_t*`, `rx_copper_coil_t*`, `rx_bridge_s*`, `rx_stub_in/out`는 pre-unite provenance로만 취급한다.
-- final import ledger의 plate-stack 도체는 single/array 모두 `tx_plate_copper`, `rx_plate_copper` 단일 body다.
-- ferrite grouping contract는 per-`uN` sandwich가 아니라 role-family 단일 그룹이다: TX=`g_ferrite_tx`, RX=`g_ferrite_rx`.
-- active plate-stack roles의 ferrite group member contract는 merged exact-name 3개다:
-  TX=`tx_stack_pet_psa`, `tx_stack_ferrite`, `tx_stack_air`;
-  RX=`rx_stack_pet_psa`, `rx_stack_ferrite`, `rx_stack_air`.
-- expected_imported_body_groups는 role 단위로 항상 `g_copper_tx`/`g_copper_rx` 및 `g_ferrite_tx`/`g_ferrite_rx`를 포함해야 한다.
-- TX arrays allow branch-local ferrite-family body names, but copper membership is the united `tx_plate_copper`.
-- `tx_rect_void_columns` is accepted for the active columns+RX setup-ready pair with collector terminal metadata.
-- Columns terminal metadata kinds are `parallel_collector_tabs` and `series_collector_tabs`; both must expose exactly two tab face entries under `tab_face_vertices_xyz`.
-- Columns placement owner lookup accepts concrete tiled stack-space members named from the canonical owner prefix, such as
-  `tx_region_actual_stack_space_x0_y0`, and requires at least one such member.
-- single-coil roles는 기존 underlay/wall prefix family contract를 유지한다.
-- copper grouping contract는 plate-stack role별 단일 그룹을 사용한다:
-  TX=`g_copper_tx`, RX=`g_copper_rx`;
-  RX는 `member_names == ['rx_plate_copper']`, TX는 single/array 모두 `member_names == ['tx_plate_copper']`를 가진다.
-- ferrite grouping contract은 TX/RX 각각 `g_ferrite_tx`, `g_ferrite_rx` 단일 그룹을 기대하며
-  멤버 순서는 `pet_psa -> ferrite -> air`로 strict하게 고정한다.
-- final imported conductor 후보가 없거나 `g_copper_*` 그룹이 재생성되지 않으면 hard failure다.
+- Imported ledger records source paths, seed, imported ownership, and imported object names.
+- Imported ledger does not own mesh, boundary, port, or report summary state.
+- `tx_region` may appear as a non-modeled guide object; it is not TX modeled geometry.
 
 ## Invariants / fail-fast
-- required ledger keys와 retained `outputs`는 exact contract를 따라야 한다.
-- modeled expected body names/count mismatch는 hard failure다.
-- plane, owner id, source metadata path는 non-empty validated state여야 한다.
-- modeled ferrite groups는 legacy single-coil role에서는 0개(해당 ferrite family 없음) 또는 정확히 1개만 허용하고,
-  plate-stack 역할에서는 `g_ferrite_tx`/`g_ferrite_rx`가 정확히 1개씩 있어야 한다.
-- modeled copper groups는 role별로 정확히 1개만 허용하며 required concrete copper members가 반드시 포함되어야 한다.
-- modeled copper/ferrite contract은 role별로 `g_copper_*`와 `g_ferrite_*` 모두 존재해야 하며,
-  하나라도 누락되면 즉시 hard failure다.
-- ferrite family가 존재하면 group name/member set/member order mismatch는 즉시 실패한다.
-- plate-stack roles에서는 old `*_stack_*_uN` ferrite-family naming을 허용하지 않는다.
-- legacy segment labels(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)를 final 도체로 간주하면 즉시 실패한다.
-- generic `SOLID*` 드리프트는 import ledger 단계에서 치유 없이 즉시 실패한다.
-- columns tab metadata must contain one `start` and one `end` terminal face; missing, duplicate, or malformed faces fail before HFSS port assignment.
-- columns concrete owner lookup still fails if no member exists for the declared placement owner prefix.
+- Missing required RX imported bodies fail immediately.
+- Generic imported-name drift is a contract failure.
+- RxOnly imported ledger must not require TX modeled entries.
 
 ## Collaborators
-- [[sdd/code/src/peetsfea/type2_step_ledger.py]]
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_modeled_import_adapter.py]]
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py]]
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_partition.py]]
-- [[sdd/plans/0.2.22-type2-tx-rect-void-columns-setup-ready]]
-
-## 관련 테스트
-- [[sdd/code/tests/backend_em/test_type2_step_import_pipeline.py]]
-- [[sdd/code/tests/backend_em/test_type2_step_setup_ready.py]]
-
-## 변경 시 주의점
-- import-only acceptance와 setup-ready rejection 책임을 한 함수 안에 다시 섞지 않는다.
-- plate-stack terminal metadata validation은 direct EM enablement가 아니라 import-only sheet reconstruction precondition이다.
+- [type2_step_import_core.py](type2_step_import_core.py.md)
+- [type2_step_ledger.py](../../type2_step_ledger.py.md)

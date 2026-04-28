@@ -12,8 +12,8 @@ tags:
 ## Source
 - Path: `src/peetsfea/type2_step_spec_constraints.py`
 - Status: active
-- Parent spec module: [[sdd/code/src/peetsfea/type2_step_spec.py]]
-- Related runtime consumers: [[sdd/code/src/peetsfea/type2_sampled.py]]
+- Parent spec module: [type2_step_spec.py](type2_step_spec.py.md)
+- Related runtime consumers: [type2_sampled.py](type2_sampled.py.md)
 
 ## Responsibility
 - Own the loader-side parsing and validation helpers for active type2 `[constraints]`.
@@ -25,7 +25,7 @@ tags:
 - Outputs: typed constraint rule objects and fail-fast validation errors.
 
 ## Canonical state
-- Active operator set and constraint AST types are shared with [[sdd/code/src/peetsfea/type2_step_spec_types.py]].
+- Active operator set and constraint AST types are shared with [type2_step_spec_types.py](type2_step_spec_types.py.md).
 - Active constraint rule shape requires `id`, `kind`, `message`, `enabled`, `lhs`, `op`, and `rhs`.
 - Constraint operands are limited to `path`, `value`, and `func` payload tables with a single key each.
 
@@ -35,11 +35,11 @@ tags:
 - Constraint path validation only accepts paths present in the realized step spec owner-path registry.
 
 ## Collaborators
-- [[sdd/code/src/peetsfea/type2_step_spec.py]]
-- [[sdd/code/src/peetsfea/type2_sampled.py]]
+- [type2_step_spec.py](type2_step_spec.py.md)
+- [type2_sampled.py](type2_sampled.py.md)
 
 ## Related tests
-- [[sdd/code/tests/type2/test_generate_type2_step.py]]
+- [test_generate_type2_step.py](../../tests/type2/test_generate_type2_step.py.md)
 
 ## Change hazards
 - Keep the module free of fallback parsing paths.

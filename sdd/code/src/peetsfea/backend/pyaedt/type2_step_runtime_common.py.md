@@ -12,11 +12,11 @@ tags:
 ## Source
 - Path: `src/peetsfea/backend/pyaedt/type2_step_runtime_common.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_runtime_common.py.md`
-- Related architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
+- Related architecture: [type2-step-to-em-validate-pipeline](../../../../../architecture/type2-step-to-em-validate-pipeline.md)
 - Collaborators:
-  - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py]]
-  - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py]]
-  - [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
+  - [type2_step_import_core.py](type2_step_import_core.py.md)
+  - [type2_step_import_pipeline.py](type2_step_import_pipeline.py.md)
+  - [type2_step_setup_ready.py](type2_step_setup_ready.py.md)
 
 ## 역할
 - type2 import-only/runtime setup 공통 HFSS session helper를 제공한다.
@@ -42,15 +42,15 @@ tags:
 ## 직접 의존
 - `peetsfea.aedt.Hfss`
 - `peetsfea.aedt.protocols`
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py]]
+- [type2_step_import_ledger.py](type2_step_import_ledger.py.md)
 
 ## 이 파일을 쓰는 곳
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py]]
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
+- [type2_step_import_pipeline.py](type2_step_import_pipeline.py.md)
+- [type2_step_setup_ready.py](type2_step_setup_ready.py.md)
 
 ## 관련 테스트
-- [[sdd/code/tests/backend_em/test_type2_step_import_pipeline.py]]
-- [[sdd/code/tests/backend_em/test_type2_step_setup_ready.py]]
+- [test_type2_step_import_pipeline.py](../../../../tests/backend_em/test_type2_step_import_pipeline.py.md)
+- [test_type2_step_setup_ready.py](../../../../tests/backend_em/test_type2_step_setup_ready.py.md)
 
 ## 변경 시 주의점
 - type2 import-only와 setup-ready path가 attached-session rehome semantics를 공유해야 한다.

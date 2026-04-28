@@ -12,7 +12,7 @@ tags:
 - Path: `src/peetsfea/aedt/proxies_base.py`
 - Code note path: `sdd/code/src/peetsfea/aedt/proxies_base.py.md`
 - Status: planned split target; source file is not created yet.
-- Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
+- Related plan: [0.2.22-src-entry-800-line-refactor-threshold](../../../../plans/0.2.22-src-entry-800-line-refactor-threshold.md)
 
 ## 역할
 - proxy base class, require helpers, concrete proxy classes, wrap/unwrap primitive helpers를 담당한다.
@@ -33,8 +33,8 @@ tags:
 - `typing`, `collections.abc`
 
 ## 이 파일을 쓰는 곳
-- [[sdd/code/src/peetsfea/aedt/proxies_ops.py]]
-- [[sdd/code/src/peetsfea/aedt/proxies_inspect.py]]
+- [proxies_ops.py](proxies_ops.py.md)
+- [proxies_inspect.py](proxies_inspect.py.md)
 - facade `proxies.py`
 
 ## 관련 테스트
@@ -44,5 +44,5 @@ tags:
 - proxy class definitions와 heavy AEDT operation helpers를 다시 한 file에 합치지 않는다.
 
 ## Links
-- [[sdd/code/src/peetsfea/aedt/proxies_ops.py]]
-- [[sdd/code/src/peetsfea/aedt/proxies_inspect.py]]
+- [proxies_ops.py](proxies_ops.py.md)
+- [proxies_inspect.py](proxies_inspect.py.md)

@@ -13,7 +13,7 @@ tags:
 - Path: `src/peetsfea/aedt/wrappers_hfss.py`
 - Code note path: `sdd/code/src/peetsfea/aedt/wrappers_hfss.py.md`
 - Status: planned split target; source file is not created yet.
-- Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
+- Related plan: [0.2.22-src-entry-800-line-refactor-threshold](../../../../plans/0.2.22-src-entry-800-line-refactor-threshold.md)
 
 ## 역할
 - heavy `Modeler3D` and `Hfss` wrapper methods, geometry/session mutation helpers를 담당한다.
@@ -30,8 +30,8 @@ tags:
 - wrapper methods must not hide raw-session failure through fallback behavior
 
 ## 직접 의존
-- [[sdd/code/src/peetsfea/aedt/wrappers_common.py]]
-- [[sdd/code/src/peetsfea/aedt/wrappers_modules.py]]
+- [wrappers_common.py](wrappers_common.py.md)
+- [wrappers_modules.py](wrappers_modules.py.md)
 
 ## 이 파일을 쓰는 곳
 - facade `wrappers.py`
@@ -44,5 +44,5 @@ tags:
 - session mutation helpers와 lightweight module wrappers를 분리 유지한다.
 
 ## Links
-- [[sdd/code/src/peetsfea/aedt/wrappers_common.py]]
-- [[sdd/code/src/peetsfea/aedt/wrappers_modules.py]]
+- [wrappers_common.py](wrappers_common.py.md)
+- [wrappers_modules.py](wrappers_modules.py.md)

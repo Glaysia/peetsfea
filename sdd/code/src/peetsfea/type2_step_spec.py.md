@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-22 @ 01:10
+updated: 2026-04-28 @ 00:00
 tags:
   - step-export
   - spec
@@ -13,96 +13,43 @@ tags:
 - Path: `src/peetsfea/type2_step_spec.py`
 - Code note path: `sdd/code/src/peetsfea/type2_step_spec.py.md`
 - Status: active
-- Related feature plans: [[sdd/plans/0.2.22-type2-rx-plate-stack-striped-copper]], [[sdd/plans/0.2.22-type2-tx-rx-shared-plate-stack-import-only]], [[sdd/plans/0.2.22-type2-remove-plate-stack-shoe-contract]], [[sdd/plans/0.2.22-type2-plate-stack-equivalent-3-slab]], [[sdd/plans/0.2.22-type2-plate-stack-z-usage-ratio]], [[sdd/plans/0.2.22-type2-plate-stack-y-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-plate-stack-parallel-array]], [[sdd/plans/0.2.22-type2-single-coil-void-usage-ratio]], [[sdd/plans/0.2.22-type2-tx-actual-region-non-model-sampling]], [[sdd/plans/0.2.22-type2-tx-actual-region-pcb-non-model]], [[sdd/plans/0.2.22-type2-tx-rect-void-columns-geometry]]
 
 ## 역할
 - active type2 TOML 입력을 통합 타입으로 조합하는 thin compatibility facade다.
-- 파서/검증/샘플링의 실질 구현은 각각 [[sdd/code/src/peetsfea/type2_step_spec_non_model.py]], [[sdd/code/src/peetsfea/type2_step_spec_modeled.py]], [[sdd/code/src/peetsfea/type2_step_spec_sampling.py]]에 위임하고, facade는 `load_type2_step_spec`/`render_tx_rect_void_toml`와 공개 심벌 재노출만 유지한다.
-- shared constants, type aliases, dataclasses, and role/object/plane helpers are owned by [[sdd/code/src/peetsfea/type2_step_spec_types.py]].
-- active role set는 `tx_single_coil`, `rx_single_coil`, `tx_plate_stack`, `rx_plate_stack`로 제한된다.
-- modeled-object 테이블 파싱은 타입별 디스패치를 수행하는 `parse_modeled_object`로 한 번에 위임되며, facade는 분기 로직을 보유하지 않는다.
+- 파서/검증/샘플링의 실질 구현은 분리 모듈에 위임하고, facade는 공개 심벌 재노출과 `load_type2_step_spec` 경계를 유지한다.
+- 0.2.24 SDD 기준 active modeled shape contract는 RX 경로만 문서화한다.
+- TX geometry는 재설계 대상이므로 이 노트는 TX shape, TX port, TX output variable 생성을 명세하지 않는다.
 
 ## 입력 / 출력
 - 입력: type2 TOML path
-- 출력: parsed type2 step spec, parsed modeled/non-model objects, parsed `outputs`, parsed optional `constraints`
+- 출력: parsed type2 step spec, parsed RX modeled/non-model objects, parsed `outputs`, parsed optional `constraints`
 
 ## Canonical state
-- active plate roles는 `tx_plate_stack`와 `rx_plate_stack`다.
-- active type2 schema id는 `peetsfea.type2.step.v8`다.
-- `type2_step_spec.py` remains the parsing and validation facade; shared type ownership is delegated to `type2_step_spec_types.py`.
-- optional top-level `[constraints]` is part of the active type2 TOML schema and preserves declarative sampling feasibility rules for dataset/MOO consumers.
-- active type2 constraint support starts with `comparison` rules over sampled owner paths, literal values, and `sum(...)` expressions.
-- each comparison rule requires `id`, `message`, `enabled`, `lhs`, `op`, and `rhs`; parser-side validation enforces supported operators and required `path`/`value`/`func` payload forms.
-- constraint AST parsing and owner-path validation live in [[sdd/code/src/peetsfea/type2_step_spec_constraints.py]].
-- `tx_region` remains the maximum TX guide box.
-- `tx_region_actual` is a derived non-model sampled box owned by `tx_region`, using `x_usage_ratio`, `y_usage_ratio`, `x_division_count`, and `y_division_count`.
-- `tx_region_actual` anchors at `tx_region.min_x`, centers on `tx_region` Y, and preserves full `tx_region` Z.
-- `tx_region_actual_stack_space` is a derived materialless non-model sampled reservation volume owned by realized concrete `tx_region_actual` tiles, using fixed `total_thickness_mm = 5.0` and sampled `scale_ratio`.
-- `tx_region_actual_stack_space.scale_ratio` scales each realized concrete actual-region tile top-view rectangle uniformly and keeps each reservation volume centered in its tile.
-- `tx_region_actual_stack_space.tilt_enabled` is fixed to `1`; stack-space bodies always tilt toward the modeled RX center.
-- parser/public helper names use `*_tx_region_actual_stack_space_*` naming; the legacy `*_tx_region_actual_pcb_*` naming is removed from active type2 parser/spec ownership.
-- `tx_rect_void_columns`는 parser/sampler-only 마일스톤으로 parser surface를 재개한다.
-- 이 모듈은 구현 소유권을 분기 모듈로 이동한 thin facade이므로, 파서/샘플러 동작은 변경 없이 재노출 경로를 유지한다.
-- `tx_rect_void_columns` active parser contract는 `connection_mode`, `equivalent_turn_count`, `turn_weight_a`, `turn_weight_b`, `turn_weight_c`를 사용한다.
-- `tx_rect_void_columns` legacy fields `turn_count_x0/x1/x2`, `column_connection_mode`, `row_connection_mode`, `parallel_equivalent_turn_count`, `series_total_turn_count`, `parallel_total_turn_count`는 parser에서 즉시 실패한다.
-- TX plate object/owner/plane은 `tx_plate_stack` / `tx_region` / `YZ`다.
-- RX plate object/owner/plane은 `rx_plate_stack` / `rx_region_max` / `YZ`다.
-- TX plate role public fields are `pcb_total_thickness_mm`, `copper_thickness_mm`, `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio`, `tx_coil_count`, `tx_array_x_usage_ratio`.
-- RX plate role public fields remain `pcb_total_thickness_mm`, `copper_thickness_mm`, `turn_count`, `metal_fill_factor`, `z_usage_ratio`, `y_usage_ratio`.
-- single-coil public outer envelope fields are `outer_x_usage_ratio` and `outer_y_usage_ratio`, not mm fields.
-- single-coil public void size owner is `void_usage_ratio`; it applies the same centered void ratio to local X and local Y.
-- legacy single-coil `void_x_over_outer_x`, `void_y_over_outer_y`, and `void_center_*` public fields remain removed and unsupported.
-- `render_tx_rect_void_toml()` is a compatibility bridge into the reusable core and must pass canonical `void_usage_ratio` without exposing legacy split `void_*` ownership in type2 TOML.
-- `tx_coil_count` is TX-only and means total parallel-connected TX plate-stack branches including the original.
-- `tx_array_x_usage_ratio` is TX-only and scales the full available TX array branch-origin X span, where `1.0` preserves full-span placement.
-- plate `turn_count`는 wall-side copper turn owner다.
-- active plate roles는 terminal-path driven coil-only fields를 갖지 않는다.
+- active schema facade는 RX single-coil / RX plate-stack 관련 parsing surface를 유지한다.
+- `tx_region`은 future TX placement guide로만 보존한다.
+- `outputs.mode = "RxOnly"`는 TX port를 만들지 않고 RX 변수만 요청하는 모드다.
+- two-terminal output variable 이름은 [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)에서 shape-independent dormant contract로 보존한다.
+- constraints parsing remains declarative and deterministic.
 
 ## Invariants / fail-fast
-- `tx_region_actual_stack_space` is materialless and must not include `material`.
-- `tx_region_actual_stack_space` requires `total_thickness_mm == 5.0`.
-- `tx_region_actual_stack_space.scale_ratio` accepts only canonical sampled `[false, 0.35, 0.95, 25]` or fixed single candidate with `0.35 <= r <= 0.95`.
-- `tx_region_actual_stack_space.tilt_enabled` accepts only fixed `[true, 1, 1, 1]`.
-- source TOML must include exactly one `tx_region_actual` and exactly one `tx_region_actual_stack_space` derived object.
-- `tx_rect_void_columns.layer_count`는 canonical `[true, 1, 4, 4]`만 허용한다.
-- `tx_rect_void_columns.layer_gap_mm`는 canonical `[false, 1.0, 1.8, 5]`만 허용한다.
-- `tx_rect_void_columns.terminal_stub_length_mm`는 `[false, 10.0, 10.0, 1]`만 허용한다.
-- `tx_rect_void_columns.connection_mode`는 `[true, 0, 1, 2]`만 허용한다.
-- `tx_rect_void_columns.equivalent_turn_count`는 canonical `[false, 0.1111111111111111, 31.0, 100]` 또는 해당 범위 안의 고정 단일 후보를 허용한다.
-- `tx_rect_void_columns.turn_weight_a/b/c`는 각각 `[false, 0.5, 1.5, 5]`, `[false, -0.5, 0.5, 21]`, `[false, -0.5, 0.5, 21]`만 허용한다.
-- malformed constraint rules, duplicate rule ids, unknown owner paths, unsupported functions, and unsupported operators fail during type2 source loading or sampling preflight.
-- plate roles는 `pcb_total_thickness_mm > copper_thickness_mm > 0`
-- active plate roles do not accept `ferrite_set_count`; if present it is an unsupported key and must fail immediately.
-- plate `turn_count` realized value는 `>= 2`여야 한다.
-- plate `metal_fill_factor` realized value는 `> 0`, `<= 0.6`이어야 한다.
-- plate `z_usage_ratio` realized value는 `> 0`, `<= 1`이어야 한다.
-- plate `y_usage_ratio` realized value는 `> 0`, `<= 1`이어야 한다.
-- TX `tx_coil_count` accepts only canonical `[true, 1, 4, 4]` or fixed `[true, n, n, 1]` where `n in 1..4`.
-- TX `tx_array_x_usage_ratio` accepts canonical `[false, 0.1, 0.6, 14]` or fixed `[false, r, r, 1]` where `0 < r <= 1`.
-- RX `tx_coil_count` and `tx_array_x_usage_ratio` must fail as unsupported.
-- old type2 schema id와 removed plate field `shoe_depth_mm`는 즉시 실패한다.
-- `tx_rect_void_columns` parser acceptance는 유지하되 export/build/runtime 단계는 parser/sampler-only 경계에서 fail-fast 한다.
-- plate roles에 coil-only keys가 나타나면 즉시 실패한다.
-- single-coil outer usage ratios must realize to `0 < ratio <= 1`; single-coil `void_usage_ratio` must realize to `0 < ratio < 1`; legacy `outer_x_mm`, `outer_y_mm`, and split/centered legacy `void_*` fields fail as unsupported public type2 input.
-- active example drift는 role/object_id/owner/plane mismatch를 허용하지 않는다.
-- `tx_region_actual` ratio candidates must realize to `0 < ratio <= 1`; missing source `tx_region` or unsupported source id fails immediately.
-- `tx_region_actual` division counts accept only canonical `[true, 1, 3, 3]` or fixed `[true, n, n, 1]` where `n in {1, 2, 3}`.
+- unsupported schema keys fail during load; compatibility fallback is not allowed.
+- RxOnly mode must not require a TX modeled object.
+- RxOnly mode must not request TX report expressions.
+- malformed constraints, duplicate rule ids, unknown owner paths, unsupported functions, and unsupported operators fail during type2 source loading or sampling preflight.
 
 ## Collaborators
-- [[sdd/code/src/peetsfea/type2_step_spec_non_model.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec_modeled.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec_sampling.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec_types.py]]
-- [[sdd/code/src/peetsfea/type2_plate_stack.py]]
-- [[sdd/code/src/peetsfea/type2_step_scene.py]]
-- [[sdd/code/src/peetsfea/type2_step_export.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec_constraints.py]]
-- [[sdd/code/src/peetsfea/type2_sampled.py]]
+- [type2_step_spec_non_model.py](type2_step_spec_non_model.py.md)
+- [type2_step_spec_modeled.py](type2_step_spec_modeled.py.md)
+- [type2_step_spec_sampling.py](type2_step_spec_sampling.py.md)
+- [type2_step_spec_types.py](type2_step_spec_types.py.md)
+- [type2_step_spec_constraints.py](type2_step_spec_constraints.py.md)
+- [type2_sampled.py](type2_sampled.py.md)
+- [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)
 
 ## 관련 테스트
-- [[sdd/code/tests/type2/test_generate_type2_step.py]]
+- [test_generate_type2_step.py](../../tests/type2/test_generate_type2_step.py.md)
+- [test_sample_type2_entry.py](../../tests/type2/test_sample_type2_entry.py.md)
 
 ## 변경 시 주의점
-- active plate role contract를 legacy single-coil bridge와 다시 결합하지 않는다.
-- spec field drift는 sampled/export/import docs와 같이 갱신해야 한다.
-- removed plate key는 fallback 없이 unsupported key로 막아야 한다.
+- TX shape fields must not be reintroduced through this facade while the 0.2.24 TX reset is active.
+- Any active output mode change must update [type2-em-report-contract](../../../architecture/type2-em-report-contract.md).

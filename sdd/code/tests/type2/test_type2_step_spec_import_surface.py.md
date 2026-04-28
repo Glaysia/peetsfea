@@ -13,7 +13,7 @@ tags:
 ## Source
 - Path: `tests/type2/test_type2_step_spec_import_surface.py`
 - Code note path: `sdd/code/tests/type2/test_type2_step_spec_import_surface.py.md`
-- Direct owner: [[sdd/code/src/peetsfea/type2_step_spec.py]]
+- Direct owner: [type2_step_spec.py](../../src/peetsfea/type2_step_spec.py.md)
 
 ## 역할
 - verify `peetsfea.type2_step_spec` exposes the expected split-facing import surface via `__all__`
@@ -34,12 +34,12 @@ tags:
 - facade import errors are surfaced as hard assertion failures
 
 ## 협력 모듈
-- [[sdd/code/src/peetsfea/type2_step_spec.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec_modeled.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec_sampling.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec_types.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec_constraints.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec_non_model.py]]
+- [type2_step_spec.py](../../src/peetsfea/type2_step_spec.py.md)
+- [type2_step_spec_modeled.py](../../src/peetsfea/type2_step_spec_modeled.py.md)
+- [type2_step_spec_sampling.py](../../src/peetsfea/type2_step_spec_sampling.py.md)
+- [type2_step_spec_types.py](../../src/peetsfea/type2_step_spec_types.py.md)
+- [type2_step_spec_constraints.py](../../src/peetsfea/type2_step_spec_constraints.py.md)
+- [type2_step_spec_non_model.py](../../src/peetsfea/type2_step_spec_non_model.py.md)
 
 ## 변경 시 주의점
 - keep the expected surface list synchronized if split ownership intentionally changes

@@ -12,7 +12,7 @@ tags:
 - Path: `src/peetsfea/aedt/proxies_ops.py`
 - Code note path: `sdd/code/src/peetsfea/aedt/proxies_ops.py.md`
 - Status: planned split target; source file is not created yet.
-- Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
+- Related plan: [0.2.22-src-entry-800-line-refactor-threshold](../../../../plans/0.2.22-src-entry-800-line-refactor-threshold.md)
 
 ## 역할
 - wrapped/raw AEDT session에 대한 mutation-capable operation helper를 담당한다.
@@ -29,7 +29,7 @@ tags:
 - proxy unwrap/wrap 경계는 explicit해야 한다.
 
 ## 직접 의존
-- [[sdd/code/src/peetsfea/aedt/proxies_base.py]]
+- [proxies_base.py](proxies_base.py.md)
 
 ## 이 파일을 쓰는 곳
 - backend geometry/build/import modules
@@ -43,5 +43,5 @@ tags:
 - payload normalization을 fallback-style permissive parser로 바꾸지 않는다.
 
 ## Links
-- [[sdd/code/src/peetsfea/aedt/proxies_base.py]]
-- [[sdd/code/src/peetsfea/aedt/proxies_inspect.py]]
+- [proxies_base.py](proxies_base.py.md)
+- [proxies_inspect.py](proxies_inspect.py.md)

@@ -12,7 +12,7 @@ tags:
 - Path: `src/peetsfea/aedt/wrappers_common.py`
 - Code note path: `sdd/code/src/peetsfea/aedt/wrappers_common.py.md`
 - Status: planned split target; source file is not created yet.
-- Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
+- Related plan: [0.2.22-src-entry-800-line-refactor-threshold](../../../../plans/0.2.22-src-entry-800-line-refactor-threshold.md)
 
 ## 역할
 - AEDT wrapper 공통 require helper, shared extraction helper, `_WrappedAccess` base를 담당한다.
@@ -31,8 +31,8 @@ tags:
 - `typing`, `collections.abc`
 
 ## 이 파일을 쓰는 곳
-- [[sdd/code/src/peetsfea/aedt/wrappers_modules.py]]
-- [[sdd/code/src/peetsfea/aedt/wrappers_hfss.py]]
+- [wrappers_modules.py](wrappers_modules.py.md)
+- [wrappers_hfss.py](wrappers_hfss.py.md)
 - facade `wrappers.py`
 
 ## 관련 테스트
@@ -42,5 +42,5 @@ tags:
 - low-level require helper semantics를 완화하면 wrapper layer 전체 fail-fast contract가 무너진다.
 
 ## Links
-- [[sdd/code/src/peetsfea/aedt/wrappers_modules.py]]
-- [[sdd/code/src/peetsfea/aedt/wrappers_hfss.py]]
+- [wrappers_modules.py](wrappers_modules.py.md)
+- [wrappers_hfss.py](wrappers_hfss.py.md)

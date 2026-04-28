@@ -37,15 +37,15 @@ tags:
 - empty string expression/name, unsupported key, missing key는 즉시 실패다.
 
 ## 직접 의존
-- [[sdd/code/src/peetsfea/types/manifest.py]]
+- [manifest.py](../types/manifest.py.md)
 
 ## 이 파일을 쓰는 곳
-- [[sdd/code/src/peetsfea/type2_step_spec.py]]
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py]]
+- [type2_step_spec.py](../type2_step_spec.py.md)
+- [type2_step_import_ledger.py](../backend/pyaedt/type2_step_import_ledger.py.md)
 
 ## 관련 테스트
-- [[sdd/code/tests/type2/test_generate_type2_step.py]]
-- [[sdd/code/tests/backend_em/test_type2_step_setup_ready.py]]
+- [test_generate_type2_step.py](../../../tests/type2/test_generate_type2_step.py.md)
+- [test_type2_step_setup_ready.py](../../../tests/backend_em/test_type2_step_setup_ready.py.md)
 
 ## 변경 시 주의점
 - legacy parser를 active path의 hidden dependency로 다시 끌어오지 않는다.

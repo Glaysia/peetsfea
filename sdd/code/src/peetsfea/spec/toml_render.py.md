@@ -12,7 +12,7 @@ tags:
 ## Source
 - Path: `src/peetsfea/spec/toml_render.py`
 - Code note path: `sdd/code/src/peetsfea/spec/toml_render.py.md`
-- Related plan: [[sdd/plans/0.2.22-type2-sampled-build-split]]
+- Related plan: [0.2.22-type2-sampled-build-split](../../../../plans/0.2.22-type2-sampled-build-split.md)
 
 ## 역할
 - active path에서 사용할 generic TOML serializer를 제공한다.
@@ -31,11 +31,11 @@ tags:
 - array-of-tables와 nested tables ordering을 입력 table 순서대로 유지한다.
 
 ## 직접 의존
-- [[sdd/code/src/peetsfea/spec/loader.py]]
+- [loader.py](loader.py.md)
 
 ## 관련 테스트
 - indirect coverage:
-  - [[sdd/code/tests/type2/test_sample_type2_entry.py]]
+  - [test_sample_type2_entry.py](../../../tests/type2/test_sample_type2_entry.py.md)
 
 ## 변경 시 주의점
 - active type2가 legacy type1 TOML dump helper를 다시 직접 의존하게 만들지 않는다.

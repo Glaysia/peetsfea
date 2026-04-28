@@ -9,13 +9,13 @@ tags:
 
 # Current Pipeline SDD View
 
-이 문서는 frozen legacy type1 파이프라인의 SDD 관점 요약이다. active default path는 더 이상 이 문서를 기준으로 하지 않는다. 자세한 legacy 분석은 [[docs/legacy/current-pipeline-type1]]를 보고, active path는 [[docs/current-pipeline]]를 본다.
+이 문서는 frozen legacy type1 파이프라인의 SDD 관점 요약이다. active default path는 더 이상 이 문서를 기준으로 하지 않는다. 자세한 legacy 분석은 [current-pipeline-type1](../../docs/legacy/current-pipeline-type1.md)를 보고, active path는 [current-pipeline](../../docs/current-pipeline.md)를 본다.
 
 ## Boundary
 - 입력 SSOT는 TOML spec이다.
-- legacy 샘플링 entry는 [[sdd/code/entry/legacy/type1/sample.py]]가 대표 예시다.
-- TOML 로딩과 최소 shape 검증은 [[sdd/code/src/peetsfea/spec/loader.py]]가 담당한다.
-- 샘플링 registry 계약은 [[sdd/code/tests/spec_resolver/test_sampling_registry.py]] 같은 테스트가 방어한다.
+- legacy 샘플링 entry는 [sample.py](../code/entry/legacy/type1/sample.py.md)가 대표 예시다.
+- TOML 로딩과 최소 shape 검증은 [loader.py](../code/src/peetsfea/spec/loader.py.md)가 담당한다.
+- 샘플링 registry 계약은 [test_sampling_registry.py](../code/tests/spec_resolver/test_sampling_registry.py.md) 같은 테스트가 방어한다.
 
 ## Flow
 1. `entry/legacy/type1/sample.py`가 batch profile을 계산한다.
@@ -30,8 +30,8 @@ tags:
 - build/run 실패는 기본적으로 즉시 멈춰야 한다.
 
 ## Related notes
-- 구조도: [[sdd/diagrams/sample-build-flow]]
+- 구조도: [sample-build-flow](../diagrams/sample-build-flow.md)
 - 예시 코드 노트:
-  - [[sdd/code/entry/legacy/type1/sample.py]]
-  - [[sdd/code/src/peetsfea/spec/loader.py]]
-  - [[sdd/code/tests/spec_resolver/test_sampling_registry.py]]
+  - [sample.py](../code/entry/legacy/type1/sample.py.md)
+  - [loader.py](../code/src/peetsfea/spec/loader.py.md)
+  - [test_sampling_registry.py](../code/tests/spec_resolver/test_sampling_registry.py.md)

@@ -12,7 +12,7 @@ tags:
 ## Source
 - Path: `tests/type2/test_setup_type2_step_entry.py`
 - Code note path: `sdd/code/tests/type2/test_setup_type2_step_entry.py.md`
-- Tested source: [[sdd/code/entry/setup_type2_step.py]]
+- Tested source: [setup_type2_step.py](../../entry/setup_type2_step.py.md)
 
 ## 역할
 - setup-ready entry dispatcher가 exporter와 runtime을 올바른 순서로 호출하는지 검증한다.
@@ -36,14 +36,14 @@ tags:
 - notebook은 this entry/runtime helper의 thin consumer다.
 
 ## 직접 의존
-- [[sdd/code/entry/setup_type2_step.py]]
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
+- [setup_type2_step.py](../../entry/setup_type2_step.py.md)
+- [type2_step_setup_ready.py](../../src/peetsfea/backend/pyaedt/type2_step_setup_ready.py.md)
 
 ## 이 파일을 쓰는 곳
 - Default pure-Python test suite.
 
 ## 관련 테스트
-- This file is the direct test coverage for [[sdd/code/entry/setup_type2_step.py]].
+- This file is the direct test coverage for [setup_type2_step.py](../../entry/setup_type2_step.py.md).
 
 ## 변경 시 주의점
 - real STEP export or AEDT launch를 넣지 않는다.

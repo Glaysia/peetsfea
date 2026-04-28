@@ -12,7 +12,7 @@ tags:
 ## Source
 - Path: `entry/legacy/type1/sample.py`
 - Code note path: `sdd/code/entry/legacy/type1/sample.py.md`
-- Related diagram: [[sdd/diagrams/sample-build-flow]]
+- Related diagram: [sample-build-flow](../../../../diagrams/sample-build-flow.md)
 
 ## 역할
 - frozen legacy type1 batch profile 계산, feasible seed selection, sample artifact generation, `manifest.json` 기록을 묶는다.

@@ -1,10 +1,9 @@
 ---
 title: type2_sampled_sampling.py
-created: 2026-04-21 @ 23:40
-updated: 2026-04-22 @ 01:10
+created: 2026-04-20 @ 00:00
+updated: 2026-04-28 @ 00:00
 tags:
   - sampling
-  - sdd
 ---
 
 # type2_sampled_sampling.py
@@ -13,33 +12,24 @@ tags:
 - Path: `src/peetsfea/type2_sampled_sampling.py`
 - Code note path: `sdd/code/src/peetsfea/type2_sampled_sampling.py.md`
 - Status: active
-- Related feature plans: [[sdd/plans/0.2.22-type2-sampled-build-split]]
 
 ## 역할
-- `type2_sampled`가 import해 사용하는 샘플링 코어를 소유한다.
-- type2 sampled owner path 해석, deterministic sampled scalar 선택, constraint 파싱/평가를 담당한다.
-- `tx_rect_void_columns` mode-aware `equivalent_turn_count` sampled owner 계산과 replay freeze 값을 제공한다.
+- sampled owner candidate selection, retry, and freeze logic을 구현한다.
+- 0.2.24 SDD 기준 RX sampled owners and shared constraints are active.
 
 ## 입력 / 출력
-- 입력: `Type2StepSpec`, source TOML table 일부, seed/retry/sampled owner path
-- 출력: sampled owner path/value tuple, constraint rule list, validation/evaluation 결과
+- 입력: source spec, seed, sample index, retry number
+- 출력: frozen sampled values and sampled metadata
 
 ## Canonical state
-- sampled owner canonical path는 `modeled_objects.<object_id>.<field>` / `non_model_objects.<object_id>.<field>`다.
-- constraint retry 입력은 `seed` + `owner_path` + `retry_number` 결정 규칙을 따른다.
+- Same source spec + version + seed + retry number yields deterministic sampled values.
+- RxOnly sampling does not require TX modeled owner values.
 
 ## Invariants / fail-fast
-- unknown owner path, malformed constraint operand/function/operator는 즉시 raise한다.
-- count==1 owner는 sampled owner set에서 제외하고 fixed scalar로만 해석한다.
-- mode-aware tx columns equivalent-turn candidate selection은 `connection_mode`와 realized coil count 제약을 유지한다. Series는 `round(candidate)`가 `[realized_coil_count, 31]` 안에 들어가는 후보만 허용하고, parallel은 realized branch count `N`에 대해 harmonic range `[1/N, 10/N]` 안의 후보만 허용한다. Candidate selection does not require exact harmonic representability.
+- Unknown owner paths fail immediately.
+- Constraint exhaustion is recorded only through the explicit skipped-attempt path.
+- Non-validation exceptions remain fail-fast.
 
 ## Collaborators
-- [[sdd/code/src/peetsfea/type2_sampled.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec.py]]
-
-## 관련 테스트
-- [[sdd/code/tests/type2/test_sample_type2_entry.py]]
-- [[sdd/code/tests/type2/test_type2_tx_coil_count_spec_sampling.py]]
-
-## 변경 시 주의점
-- public import contract는 `peetsfea.type2_sampled`에 남겨야 하며, 직접 외부 공개 경로 전환은 허용하지 않는다.
+- [type2_sampled.py](type2_sampled.py.md)
+- [type2_step_spec_sampling.py](type2_step_spec_sampling.py.md)

@@ -11,11 +11,11 @@ tags:
 ## Source
 - Path: `src/peetsfea/tx_rect_void_geometry.py`
 - Code note path: `sdd/code/src/peetsfea/tx_rect_void_geometry.py.md`
-- Parent orchestrator: [[sdd/code/src/peetsfea/tx_rect_void.py]]
+- Parent orchestrator: [tx_rect_void.py](tx_rect_void.py.md)
 - Related plans:
-  - [[sdd/plans/0.2.22-type2-single-coil-corner-relief]]
-  - [[sdd/plans/0.2.23-rect-void-fast-face-export]]
-- Related tests: [[sdd/code/tests/tx_rect_void/test_tx_rect_void.py]]
+  - [0.2.22-type2-single-coil-corner-relief](../../../plans/0.2.22-type2-single-coil-corner-relief.md)
+  - [0.2.23-rect-void-fast-face-export](../../../plans/0.2.23-rect-void-fast-face-export.md)
+- Related tests: [test_tx_rect_void.py](../../tests/tx_rect_void/test_tx_rect_void.py.md)
 
 ## 역할
 - Type2 single-coil blunt corner authoring과 footprint path에 필요한 point/polygon helper와 copper primitive dataclass를 한곳에 모은다.
@@ -45,11 +45,11 @@ tags:
 - 표준 라이브러리: `math`, `dataclasses`, `typing`
 
 ## 이 파일을 쓰는 곳
-- [[sdd/code/src/peetsfea/tx_rect_void.py]]
-- [[sdd/code/src/peetsfea/tx_rect_void_export.py]]
+- [tx_rect_void.py](tx_rect_void.py.md)
+- [tx_rect_void_export.py](tx_rect_void_export.py.md)
 
 ## 관련 테스트
-- [[sdd/code/tests/tx_rect_void/test_tx_rect_void.py]]
+- [test_tx_rect_void.py](../../tests/tx_rect_void/test_tx_rect_void.py.md)
 
 ## 변경 시 주의점
 - `trace_outline_polygon()`은 `_segment_joined_polygon()`을 제거하지 않고 추가되는 보조 출력이다.

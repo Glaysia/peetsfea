@@ -11,7 +11,7 @@ tags:
 ## Source
 - Path: `tests/type2/test_refresh_type2_step_viewer_artifacts.py`
 - Code note path: `sdd/code/tests/type2/test_refresh_type2_step_viewer_artifacts.py.md`
-- Tested source: [[sdd/code/entry/refresh_type2_step_viewer_artifacts.py]]
+- Tested source: [refresh_type2_step_viewer_artifacts.py](../../entry/refresh_type2_step_viewer_artifacts.py.md)
 
 ## 역할
 - type2 STEP viewer refresh entry가 stale output dir를 지우고 fresh STEP artifacts를 다시 만드는지 검증한다.
@@ -41,13 +41,13 @@ tags:
 - refreshed active example also preserves RX underlay exact-name ordering and owner `-X` anchor without changing the RX coil max-X contact contract.
 
 ## 직접 의존
-- [[sdd/code/entry/refresh_type2_step_viewer_artifacts.py]]
+- [refresh_type2_step_viewer_artifacts.py](../../entry/refresh_type2_step_viewer_artifacts.py.md)
 
 ## 이 파일을 쓰는 곳
 - default pure-Python regression suite.
 
 ## 관련 테스트
-- This file is the direct test coverage for [[sdd/code/entry/refresh_type2_step_viewer_artifacts.py]].
+- This file is the direct test coverage for [refresh_type2_step_viewer_artifacts.py](../../entry/refresh_type2_step_viewer_artifacts.py.md).
 
 ## 변경 시 주의점
 - notebook refresh output layout이 바뀌면 file existence assertions를 같이 갱신한다.

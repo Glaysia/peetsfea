@@ -70,7 +70,7 @@ This document defines the project rules for coding agents working in this reposi
   - `entry/legacy/type1/sample.py` -> `sdd/code/entry/sample.py.md`
   - `tests/legacy/type1/spec_resolver/test_sampling_registry.py` -> `sdd/code/tests/spec_resolver/test_sampling_registry.py.md`
 - A substantive edit includes changes to logic, interfaces, runtime state, invariants, I/O, fail-fast behavior, or data flow. Formatting-only, comment-only, or purely mechanical non-behavioral changes do not trigger mandatory note updates.
-- Every code note must state the source path, single responsibility, inputs/outputs, canonical state, invariants, fail-fast points, collaborator modules, related tests, change hazards, and relevant Obsidian wikilink connections.
+- Every code note must state the source path, single responsibility, inputs/outputs, canonical state, invariants, fail-fast points, collaborator modules, related tests, change hazards, and relevant Markdown relative-link connections.
 - For any substantive edit to tracked Python under `src/`, `entry/`, or `tests/`, update or create the matching `sdd/code/...md` note before editing the Python code whenever feasible. Do not defer SDD note updates until after the code change unless the user explicitly asks to postpone documentation work for the current task.
 - New features and large refactors must create or update a plan note under `sdd/plans/` before or alongside the code change.
 - For `src/` or `entry/` size-driven refactors, treat the 800-line threshold as a strong guideline rather than a hard cap. Exceptions should be justified by documented ownership boundaries instead of convenience.
@@ -79,7 +79,7 @@ This document defines the project rules for coding agents working in this reposi
 - If module boundaries, flows, or layering change, also create or update the relevant notes under `sdd/architecture/`, `sdd/structure/`, or `sdd/diagrams/`.
 - When a size-driven split changes module boundaries or collaboration flow, update the relevant `sdd/plans/` note and any affected `sdd/architecture/` or `sdd/structure/` note in the same change.
 - `tests/` remain in scope for ordinary SDD code-note coverage, but they are excluded from the 800-line split-threshold rule.
-- Use Obsidian-style wikilinks for meaningful relationships only: parent/child index structure, direct collaborator modules, direct tests, directly related plans, and concrete architecture/diagram notes. Do not repeat global policy or hub links in every note. Prefer path-qualified links such as `[[sdd/code/src/peetsfea/spec/loader.py]]` to avoid ambiguity.
+- Use Markdown links to actual `.md` files for meaningful relationships only: parent/child index structure, direct collaborator modules, direct tests, directly related plans, and concrete architecture/diagram notes. Do not repeat global policy or hub links in every note. Prefer path-qualified relative links such as `[loader.py](sdd/code/src/peetsfea/spec/loader.py.md)` to avoid ambiguity.
 - Do not backfill the entire repository unless the user explicitly asks for it. The default policy is forward-only SDD coverage from `0.2.22` onward.
 
 ## Sampling and replay rules

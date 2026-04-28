@@ -12,7 +12,7 @@ tags:
 - Path: `src/peetsfea/aedt/proxies_inspect.py`
 - Code note path: `sdd/code/src/peetsfea/aedt/proxies_inspect.py.md`
 - Status: planned split target; source file is not created yet.
-- Related plan: [[sdd/plans/0.2.22-src-entry-800-line-refactor-threshold]]
+- Related plan: [0.2.22-src-entry-800-line-refactor-threshold](../../../../plans/0.2.22-src-entry-800-line-refactor-threshold.md)
 
 ## 역할
 - AEDT object/session inspection helper, name extraction, bbox/sample readers, report/setup query helper를 담당한다.
@@ -29,7 +29,7 @@ tags:
 - inspect helper가 mutation side effect를 가져서는 안 된다.
 
 ## 직접 의존
-- [[sdd/code/src/peetsfea/aedt/proxies_base.py]]
+- [proxies_base.py](proxies_base.py.md)
 
 ## 이 파일을 쓰는 곳
 - backend inspection/build/import modules
@@ -42,5 +42,5 @@ tags:
 - object inspection helper와 mutation helper를 한 file owner로 되돌리지 않는다.
 
 ## Links
-- [[sdd/code/src/peetsfea/aedt/proxies_base.py]]
-- [[sdd/code/src/peetsfea/aedt/proxies_ops.py]]
+- [proxies_base.py](proxies_base.py.md)
+- [proxies_ops.py](proxies_ops.py.md)

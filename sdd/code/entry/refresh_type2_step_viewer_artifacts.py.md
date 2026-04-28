@@ -11,8 +11,8 @@ tags:
 ## Source
 - Path: `entry/refresh_type2_step_viewer_artifacts.py`
 - Code note path: `sdd/code/entry/refresh_type2_step_viewer_artifacts.py.md`
-- Related plan: [[sdd/plans/0.2.22-step-viewer-notebook-registry]]
-- Related test: [[sdd/code/tests/type2/test_refresh_type2_step_viewer_artifacts.py]]
+- Related plan: [0.2.22-step-viewer-notebook-registry](../../plans/0.2.22-step-viewer-notebook-registry.md)
+- Related test: [test_refresh_type2_step_viewer_artifacts.py](../tests/type2/test_refresh_type2_step_viewer_artifacts.py.md)
 
 ## 역할
 - type2 STEP viewer notebook가 쓰는 generated artifact 집합을 clean refresh한다.
@@ -46,14 +46,14 @@ tags:
 - placement contract mismatch, missing artifact, `build123d.export_step()` false는 즉시 raise한다.
 
 ## 직접 의존
-- [[sdd/code/entry/generate_type2_step.py]]
+- [generate_type2_step.py](generate_type2_step.py.md)
 
 ## 이 파일을 쓰는 곳
 - `notebooks/view_step_files.ipynb`
 - 사람이 직접 실행하는 refresh CLI
 
 ## 관련 테스트
-- [[sdd/code/tests/type2/test_refresh_type2_step_viewer_artifacts.py]]
+- [test_refresh_type2_step_viewer_artifacts.py](../tests/type2/test_refresh_type2_step_viewer_artifacts.py.md)
 
 ## TODO
 - [ ] viewer notebook가 ledger summary도 함께 보여줄지 결정한다.

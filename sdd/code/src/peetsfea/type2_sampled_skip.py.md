@@ -12,8 +12,8 @@ tags:
 ## Source
 - Path: `src/peetsfea/type2_sampled_skip.py`
 - Code note path: `sdd/code/src/peetsfea/type2_sampled_skip.py.md`
-- Parent note: [[sdd/code/src/peetsfea/type2_sampled.py]]
-- Related plan: [[sdd/plans/0.2.22-type2-sampled-build-split]]
+- Parent note: [type2_sampled.py](type2_sampled.py.md)
+- Related plan: [0.2.22-type2-sampled-build-split](../../../plans/0.2.22-type2-sampled-build-split.md)
 
 ## 역할
 - Type2 sample manifest의 skipped seed ledger shape와 validation helpers를 소유한다.
@@ -33,11 +33,11 @@ tags:
 - this module accepts only the orchestration-approved skippable exception classes: `ValueError` and `RuntimeError`.
 
 ## Collaborators
-- [[sdd/code/src/peetsfea/type2_sampled.py]]
-- [[sdd/code/entry/sample.py]]
+- [type2_sampled.py](type2_sampled.py.md)
+- [sample.py](../../entry/sample.py.md)
 
 ## 관련 테스트
-- [[sdd/code/tests/type2/test_sample_type2_entry.py]]
+- [test_sample_type2_entry.py](../../tests/type2/test_sample_type2_entry.py.md)
 
 ## 변경 시 주의점
 - Do not hide missing required skipped fields with mapping fallback APIs.

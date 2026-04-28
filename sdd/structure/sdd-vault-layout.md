@@ -8,30 +8,30 @@ tags:
 
 # SDD Vault Layout
 
-이 문서는 SDD 볼트 구조와 경로 규칙을 설명한다. 현재 도입 계획은 [[sdd/plans/0.2.22-sdd-adoption]]다.
+이 문서는 SDD 볼트 구조와 경로 규칙을 설명한다. 현재 도입 계획은 [0.2.22-sdd-adoption](../plans/0.2.22-sdd-adoption.md)다.
 
 ## Directory roles
-- [[sdd/code/sdd-code-index]]: 코드와 일대일 대응되는 노트
-- [[sdd/plans/sdd-plans-index]]: 기능/리팩터링 계획
-- [[sdd/architecture/sdd-architecture-index]]: 계층, 경계, 흐름
-- [[sdd/structure/sdd-structure-index]]: 저장소/문서 구조와 ownership map
-- [[sdd/diagrams/sdd-diagrams-index]]: Mermaid 구조도와 흐름도
+- [sdd-code-index](../code/sdd-code-index.md): 코드와 일대일 대응되는 노트
+- [sdd-plans-index](../plans/sdd-plans-index.md): 기능/리팩터링 계획
+- [sdd-architecture-index](../architecture/sdd-architecture-index.md): 계층, 경계, 흐름
+- [sdd-structure-index](sdd-structure-index.md): 저장소/문서 구조와 ownership map
+- [sdd-diagrams-index](../diagrams/sdd-diagrams-index.md): Mermaid 구조도와 흐름도
 - 템플릿:
-  - [[sdd/templates/source-note]]
-  - [[sdd/templates/plan-note]]
-  - [[sdd/templates/architecture-note]]
+  - [source-note](../templates/source-note.md)
+  - [plan-note](../templates/plan-note.md)
+  - [architecture-note](../templates/architecture-note.md)
 
 ## Path mapping
 - 코드 노트는 소스 경로를 그대로 미러링한다.
 - 예시:
-  - `src/peetsfea/spec/loader.py` -> [[sdd/code/src/peetsfea/spec/loader.py]]
-  - `entry/legacy/type1/sample.py` -> [[sdd/code/entry/legacy/type1/sample.py]]
-  - `tests/spec_resolver/test_sampling_registry.py` -> [[sdd/code/tests/spec_resolver/test_sampling_registry.py]]
+  - `src/peetsfea/spec/loader.py` -> [loader.py](../code/src/peetsfea/spec/loader.py.md)
+  - `entry/legacy/type1/sample.py` -> [sample.py](../code/entry/legacy/type1/sample.py.md)
+  - `tests/spec_resolver/test_sampling_registry.py` -> [test_sampling_registry.py](../code/tests/spec_resolver/test_sampling_registry.py.md)
 - `__init__.py`도 예외 없이 같은 규칙을 따른다.
 
 ## Link style
-- 기본 링크는 Obsidian wikilink다.
-- 가능한 한 path-qualified 링크를 써서 같은 이름 충돌을 피한다.
+- 기본 링크는 실제 `.md` 파일을 가리키는 Markdown 상대경로 링크다.
+- 가능한 한 path-qualified 상대경로 링크를 써서 같은 이름 충돌과 새 문서 생성을 피한다.
 - 전역 정책/허브 링크를 모든 노트에 반복하지 않는다.
 - 계획 문서는 실제 영향 받는 코드 노트와 직접 선행/후속 계획만 링크한다.
 - 코드 노트는 직접 계획, 협력 코드, 테스트, 구체적 관련 문서만 링크한다.

@@ -1,7 +1,7 @@
 ---
 title: Type2 STEP to EM Validate Pipeline
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 05:36
+updated: 2026-04-28 @ 00:00
 tags:
   - step-export
   - sdd
@@ -9,21 +9,20 @@ tags:
 
 # Type2 STEP to EM Validate Pipeline
 
-이 문서는 current type2 runtime split을 설명하고, 0.2.22 underlay 관련 문서-first 계약도 함께 고정한다.
-세부 helper inventory는 graph edge로 연결하지 않고 plain text path로 유지한다.
+이 문서는 current type2 runtime split과 RxOnly setup-ready 계약을 설명한다.
+TX 형상은 재설계 예정이므로 현 SDD에서 shape contract를 제거하고, `tx_region`만 future placement guide로 보존한다.
 
 ## Current Split
 - sampled/build owner:
   - entry: `entry/sample.py`
   - entry: `entry/build.py`
 - import-only owner:
-  - entry: [[sdd/code/entry/import_type2_step.py]]
-  - runtime: [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py]]
+  - entry: [import_type2_step.py](../code/entry/import_type2_step.py.md)
+  - runtime: [type2_step_import_pipeline.py](../code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py.md)
 - setup-ready owner:
-  - entry: [[sdd/code/entry/setup_type2_step.py]]
-  - runtime: [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
-- active plate-stack build owner는 import-only helper direct call이 아니라 role-aware setup-ready
-  facade다. same facade가 exact plate-stack pair를 full-EM-ready branch로 처리한다.
+  - entry: [setup_type2_step.py](../code/entry/setup_type2_step.py.md)
+  - runtime: [type2_step_setup_ready.py](../code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py.md)
+- active setup-ready owner는 RxOnly mode에서 RX port/report만 만든다.
 - import-only helper는 geometry inspection / import-only surface다. active default build owner가 아니다.
 - notebook `hfss_sampled.ipynb`는 sampled/build output artifact를 읽는 thin manual consumer다.
 - notebook `view_step_files.ipynb`는 `VIEW_INDEX = -1`일 때 fixed example refresh path, `VIEW_INDEX >= 0`일 때 manifest `entries` order 기반 sampled STEP selection을 사용한다.
@@ -38,50 +37,25 @@ tags:
 - import-only handoff artifact는 `run/sampled/type2/<design_id>/type2_imported_ledger.json`이다.
 - imported ledger는 source paths, seed, imported ownership, imported object names만 보존한다.
 - imported ledger는 mesh/boundary/ports/analysis summary를 canonical persisted owner로 갖지 않는다.
-- 0.2.22 underlay document contract:
-  - `underlay_repeat_count`는 TX/RX shared field이며 canonical encoding은 `[true, 0, 8, 5]`다.
-  - `underlay_gap_mm`는 TX-only field이며 canonical encoding은 `[false, 1.0, 10.0, 4]`다.
-  - TX underlay footprint는 `tx_region` full `XY` bounds다.
-  - RX underlay footprint는 `rx_region_max` full `YZ` bounds다.
-  - TX exact names는 `tx_underlay_*`, RX exact names는 `under_rx_*`다.
-  - new underlay exact object/body names는 feature-local rule로 `<= 32` chars여야 한다.
-  - active plate-stack ferrite-family exact-name contract는 per-set `*_uN`이 아니라
-    per-material merged 3-body/role이다.
-    - TX: `tx_stack_pet_psa`, `tx_stack_ferrite`, `tx_stack_air`
-    - RX: `rx_stack_pet_psa`, `rx_stack_ferrite`, `rx_stack_air`
-  - active plate-stack ferrite-family는 STEP export 전에 unite가 끝난 exact named body여야 한다.
-  - ferrite-family child가 ungrouped 상태로 STEP handoff에 남는 export는 unsupported다.
-  - ferrite-family group contract는 role별 단일 group이며 `g_ferrite_tx`, `g_ferrite_rx` member는
-    flattened per-set stack가 아니라 merged 3-body exact names다.
-  - active plate-stack copper final body contract는 role별 단일 united conductor다.
-    - TX: `tx_plate_copper`
-    - RX: `rx_plate_copper`
-  - TX plate-stack arrays still use one `tx_plate_stack` modeled entry and one final conductor `tx_plate_copper`.
-    Branch-local PCB/ferrite-family names may expand the TX exact body list, but mesh/source/report contracts remain single TX port and single RX port.
-  - plate-stack import-side 검증은 `g_copper_tx`, `g_copper_rx`와
-    `g_ferrite_tx`, `g_ferrite_rx` 모두를 요구한다.
-  - copper segment labels(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_in/out`)는
-    pre-unite provenance only이며 final STEP/import/mesh body로 남기지 않는다.
-  - copper group contract는 role별 단일 group이며 `g_copper_tx`, `g_copper_rx` member는
-    각각 `tx_plate_copper`, `rx_plate_copper`다.
+- `tx_region` is retained only as a non-modeled future TX placement guide.
+- active EM report variables are defined by [type2-em-report-contract](type2-em-report-contract.md).
 
 ## Runtime Flow
 1. sample 단계가 source TOML에서 frozen sampled TOML을 만들고, `make_step_on_sample=true`일 때만 same-worker scene STEP/retained step ledger까지 만든다.
 2. sample 단계는 모든 sampled design이 끝난 뒤 manifest object를 기록한다.
    - manifest `entries` order is the notebook sampled-index SSOT
-3. export-side underlay contract는 scene/export/import 계층이 소유한다.
-   - TX는 `tx_region` full footprint + TX-only `underlay_gap_mm`
-   - RX는 `rx_region_max` `-X` boundary anchor + full region footprint
+3. export-side non-model contract는 scene/export/import 계층이 소유한다.
+   - `tx_region`은 future guide로 export될 수 있지만 EM setup 대상이 아니다.
+   - RX non-model bodies may remain as import-visible context only when the RX path explicitly owns them.
 4. build 단계가 retained step ledger를 재사용하거나 missing STEP을 same-worker에서 만든 뒤
    role-aware setup-ready runtime으로 `.aedt`와 imported ledger를 만든다.
 5. import-only runtime이 STEP import, ownership partition, style/material application, metadata-driven port-sheet reconstruction을 수행한다.
-6. setup-ready runtime은 같은 import core를 재사용한 뒤 exact modeled pair(coil/plate-stack) 모두에 대해
-   동일한 full setup-ready 후반부를 실행한다:
+6. setup-ready runtime은 같은 import core를 재사용한 뒤 RxOnly 후반부를 실행한다:
    - post-import mesh
    - radiation boundary
-   - explicit lumped ports
+   - explicit RX lumped port
    - source phase
-   - analysis/report templates
+   - RX analysis/report templates
    - `validate_pipeline()`
    - `ValidateDesign()`
    - final `.aedt` save
@@ -91,15 +65,10 @@ tags:
 - radiation boundary의 canonical owner는 setup-ready runtime이다.
 - explicit lumped port의 canonical owner도 setup-ready runtime이다.
 - import-only runtime은 boundary/ports를 만들지 않는다.
-- current explicit port contract는 reconstructed sheet를 사용한다.
-  - coil: `tx_port_sheet` / `rx_port_sheet`
-  - plate-stack: `tx_plate_port_sheet` / `rx_plate_port_sheet`
-- current numeric port naming rule은 plate-stack full-EM-ready branch에도 동일 적용된다.
-  - TX boundary/excitation = `1` / `1_T1`
-  - RX boundary/excitation = `2` / `2_T1`
-- underlay geometry/footprint/gap contract의 canonical owner는 type2 scene/export/import 계층이다.
-- underlay bodies는 imported exact-name solids지만 conductor mesh owner는 아니다.
-- RX underlay absolute stack는 `rx_region_max` `-X` boundary에 anchor하고, coil-facing material은 ferrite다.
+- RxOnly explicit port contract는 RX reconstructed sheet를 사용한다.
+  - RX boundary/excitation = `1` / `1_T1`
+- `tx_region` guide의 canonical owner는 non-model scene/export 계층이다.
+- guide bodies are never conductor mesh owners.
 - current edge ownership rule:
   - signal/start edge = `(v3, v0)`
   - reference/end edge = `(v1, v2)`
@@ -109,29 +78,18 @@ tags:
   `assign_radiation_boundary_to_faces`, `AssignLumpedPort` false는 모두 즉시 raise다.
 - setup-ready full EM chain에서는 post-import mesh, source/analysis calls, `ValidateDesign()` false도 즉시 raise다.
 - attached-session path는 dirty design을 재사용하지 않고 fresh design으로 rehome해야 한다.
-- setup-ready mesh contract는 conductor-only exact set이며 plate-stack pair에서는
-  `tx_plate_copper`, `rx_plate_copper`만 mesh target이다.
-- TX plate-stack array branch bodies are imported/styled as part of the TX modeled entry but do not add mesh targets or extra TX ports.
-- TX/RX underlay exact-name bodies와 reconstructed port sheets는 mesh 대상에 들어가지 않는다.
-- `*_pcb_wall` / `*_pcb_coil` bodies도 mesh 대상이 아니다.
-- current import/runtime contract에서 `tx_port_sheet` / `rx_port_sheet`는 metadata-driven reconstructed sheet다. PCB/copper exact-name contract와 별도 ownership이다.
-- ferrite-family import/runtime contract에서 per-set sandwich group은 canonical owner가 아니다.
-  canonical group contract는 `g_ferrite_tx` / `g_ferrite_rx` 단일 role group이고,
-  member는 merged exact names (`*_stack_pet_psa`, `*_stack_ferrite`, `*_stack_air`)다.
-- plate-stack import/runtime contract에서 copper conductor는 `tx_plate_copper`/`rx_plate_copper`로
-  통일되어야 하며, 개별 family segment(`*_copper_wall_t*`, `*_copper_coil_t*`, `*_bridge_s*`, `*_stub_*`)는
-  도체/mesh 계약의 최종 대상이 아니다.
-- copper import/runtime contract에서 stripe/bridge/stub segment는 canonical imported conductor가 아니다.
-  canonical group contract는 `g_copper_tx` / `g_copper_rx` 단일 role group이고,
-  member는 `tx_plate_copper` / `rx_plate_copper`다.
-- generic `SOLID*` plate-stack drift는 import-side rename 대상이 아니라 export-side contract failure다.
+- setup-ready mesh contract는 RX conductor-only exact set이다.
+- TX guide bodies, RX context bodies, and reconstructed port sheets are not mesh targets.
+- RxOnly mode must not create TX ports or TX output variables.
+- generic `SOLID*` drift in modeled RX conductor import is an export-side contract failure.
 
 ## Supporting Modules
 - import body assembly: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py.md`
 - post-import mesh/setup: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_post_import_mesh.py.md`
 - EM input assembly: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_em_input.py.md`
 - explicit port assignment: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_port_assignment.py.md`
+- report variables: [type2-em-report-contract](type2-em-report-contract.md)
 
 ## Related
-- Diagram: [[sdd/diagrams/type2-step-to-em-validate-flow]]
-- Implementation plan: [[sdd/plans/0.2.22-type2-import-ledger-pipeline]]
+- Diagram: [type2-step-to-em-validate-flow](../diagrams/type2-step-to-em-validate-flow.md)
+- Implementation plan: [0.2.22-type2-import-ledger-pipeline](../plans/0.2.22-type2-import-ledger-pipeline.md)

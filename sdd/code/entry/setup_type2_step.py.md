@@ -12,7 +12,7 @@ tags:
 ## Source
 - Path: `entry/setup_type2_step.py`
 - Code note path: `sdd/code/entry/setup_type2_step.py.md`
-- Runtime module: [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
+- Runtime module: [type2_step_setup_ready.py](../src/peetsfea/backend/pyaedt/type2_step_setup_ready.py.md)
 
 ## 역할
 - type2 export + full setup-ready runtime을 연결하는 CLI entrypoint다.
@@ -38,15 +38,15 @@ tags:
 - sampled/build notebook은 이 entry를 직접 호출하지 않는다.
 
 ## 직접 의존
-- [[sdd/code/entry/generate_type2_step.py]]
-- [[sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py]]
+- [generate_type2_step.py](generate_type2_step.py.md)
+- [type2_step_setup_ready.py](../src/peetsfea/backend/pyaedt/type2_step_setup_ready.py.md)
 
 ## 이 파일을 쓰는 곳
 - Human/agent opt-in type2 setup-ready validation entrypoint.
-- [[sdd/code/entry/build.py]]가 사용하는 lower-level runtime surface.
+- [build.py](build.py.md)가 사용하는 lower-level runtime surface.
 
 ## 관련 테스트
-- [[sdd/code/tests/type2/test_setup_type2_step_entry.py]]
+- [test_setup_type2_step_entry.py](../tests/type2/test_setup_type2_step_entry.py.md)
 
 ## 변경 시 주의점
-- import-only entry [[sdd/code/entry/import_type2_step.py]]를 full setup-ready owner로 다시 합치지 않는다.
+- import-only entry [import_type2_step.py](import_type2_step.py.md)를 full setup-ready owner로 다시 합치지 않는다.

@@ -11,9 +11,9 @@ tags:
 ## Source
 - Path: `src/peetsfea/aedt/wrappers.py`
 - Code note path: `sdd/code/src/peetsfea/aedt/wrappers.py.md`
-- Related plan: [[sdd/plans/0.2.22-type2-pyaedt-step-import]]
-- Related umbrella plan: [[sdd/plans/0.2.22-type2-step-to-em-validate-pipeline]]
-- Related type2 architecture: [[sdd/architecture/type2-step-to-em-validate-pipeline]]
+- Related plan: [0.2.22-type2-step-to-em-validate-pipeline](../../../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)
+- Related umbrella plan: [0.2.22-type2-step-to-em-validate-pipeline](../../../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)
+- Related type2 architecture: [type2-step-to-em-validate-pipeline](../../../../architecture/type2-step-to-em-validate-pipeline.md)
 
 ## 역할
 - Raw PyAEDT `Hfss`, `Modeler3D`, `Object3d` boundary를 repository fail-fast wrapper로 감싼다.
@@ -47,10 +47,10 @@ tags:
 ## 이 파일을 쓰는 곳
 - `peetsfea.aedt` top-level exports
 - backend geometry and EM pipeline code that imports `Hfss`, `Modeler3D`, `Object3d`
-- [[sdd/code/entry/import_non_model_step_to_hfss.py]]
+- [import_non_model_step_to_hfss.py](../../../entry/import_non_model_step_to_hfss.py.md)
 
 ## 관련 테스트
-- [[sdd/code/tests/backend_em/test_type2_step_import_smoke.py]]
+- [test_type2_step_import_smoke.py](../../../tests/backend_em/test_type2_step_import_smoke.py.md)
 - `tests/backend_em/test_aedt_sidecar_modeler.py`
 - `tests/backend_em/test_aedt_sidecar_session.py`
 

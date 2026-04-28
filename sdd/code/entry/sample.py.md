@@ -11,10 +11,10 @@ tags:
 
 - Source path: `entry/sample.py`
 - Code note path: `sdd/code/entry/sample.py.md`
-- Related plan: [[sdd/plans/0.2.22-type2-sampled-build-split]]
+- Related plan: [0.2.22-type2-sampled-build-split](../../plans/0.2.22-type2-sampled-build-split.md)
 - Collaborators:
-  - [[sdd/code/src/peetsfea/type2_sampled.py]]
-  - [[sdd/code/src/peetsfea/type2_step_export.py]]
+  - [type2_sampled.py](../src/peetsfea/type2_sampled.py.md)
+  - [type2_step_export.py](../src/peetsfea/type2_step_export.py.md)
 
 ## 역할
 - active type2 sample owner entrypoint다.
@@ -71,7 +71,7 @@ tags:
 - human/agent active sample entrypoint
 
 ## 관련 테스트
-- [[sdd/code/tests/type2/test_sample_type2_entry.py]]
+- [test_sample_type2_entry.py](../tests/type2/test_sample_type2_entry.py.md)
 
 ## 변경 시 주의점
 - manifest config ownership을 `entry/build.py`로 이동시키지 않는다.

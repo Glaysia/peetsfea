@@ -10,10 +10,10 @@ tags:
 
 # Obsidian Link Policy
 
-이 문서는 SDD markdown를 Obsidian graph에서 읽히게 유지하기 위한 링크 위생 규칙을 정의한다. 상위 허브는 [[sdd/structure/sdd-structure-index]]다.
+이 문서는 SDD markdown를 Obsidian graph에서 읽히게 유지하기 위한 링크 위생 규칙을 정의한다. 상위 허브는 [sdd-structure-index](sdd-structure-index.md)다.
 
 ## Goal
-- 문서 탐색용 wikilink는 유지하되, graph를 의미 없는 대형 허브로 만들지 않는다.
+- 문서 탐색용 Markdown 상대경로 링크는 유지하되, graph를 의미 없는 대형 허브로 만들지 않는다.
 - 문서 간 직접 ownership, boundary, verification 관계만 graph edge로 남긴다.
 - backlog, inventory, historical context는 문서 안에 남기되 graph edge로 승격하지 않는다.
 - graph 품질을 "허브 억제"만으로 정의하지 않는다. local cluster, handoff 경로, 대표 검증 경로도 읽혀야 한다.
@@ -27,7 +27,7 @@ tags:
 - `direct verification`: 이 문서를 직접 방어하는 대표 테스트나 대표 소비자
 - `discovery bridge`: sink/star leaf를 피하기 위한 최소 연결 1개. broad relatedness가 아니라 nearest owner, nearest sibling canonical note, 또는 direct consumer만 허용한다.
 
-위 여섯 역할 밖의 관련성은 기본적으로 wikilink가 아니라 plain text path 또는 inline code로 기록한다.
+위 여섯 역할 밖의 관련성은 기본적으로 Markdown 링크가 아니라 plain text path 또는 inline code로 기록한다.
 
 ## Minimum Connectivity
 - `sdd/templates/`, release note, archive, generated registry 성격의 note는 최소 연결성 budget에서 제외한다.

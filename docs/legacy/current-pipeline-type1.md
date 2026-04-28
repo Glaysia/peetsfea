@@ -224,4 +224,4 @@ finalize 계층:
 - geometry 계층은 `build_square_spiral_from_manifest()`가 세 kind와 현재 plane 계약(`tx_vertical=ZX`, `rx=YZ`)을 고정으로 본다.
 - `tx_vertical_orientation_mode`의 공개 입력도 사실상 `0=no vertical`, `1=ZX vertical`의 2값 계약에 묶여 있다.
 - EM context의 `source`는 현재 `"type1_geometry"`로 고정된다.
-- 재사용 관점의 세부 분리는 sibling 문서인 [docs/type2-reuse.md](type2-reuse.md)를 본다.
+- 재사용 관점의 세부 분리는 sibling 문서인 [docs/type2-reuse.md](../type2-reuse.md)를 본다.

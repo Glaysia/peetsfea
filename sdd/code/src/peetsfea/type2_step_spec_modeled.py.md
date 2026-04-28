@@ -1,10 +1,10 @@
 ---
 title: type2_step_spec_modeled.py
-created: 2026-04-21 @ 23:50
-updated: 2026-04-22 @ 00:35
+created: 2026-04-20 @ 00:00
+updated: 2026-04-28 @ 00:00
 tags:
-  - step-export
   - spec
+  - modeled
 ---
 
 # type2_step_spec_modeled.py
@@ -13,41 +13,24 @@ tags:
 - Path: `src/peetsfea/type2_step_spec_modeled.py`
 - Code note path: `sdd/code/src/peetsfea/type2_step_spec_modeled.py.md`
 - Status: active
-- Related plan: [[sdd/plans/0.2.22-type2-step-spec-split]]
 
 ## 역할
-- type2 modeled-object TOML parsing ownership을 가진다.
-- single-coil, plate-stack, and `tx_rect_void_columns` modeled role validation, role/owner/plane helpers delegation, and `tx_rect_void` TOML rendering bridge를 제공한다.
-- shared dataclasses and role constants come from [[sdd/code/src/peetsfea/type2_step_spec_types.py]].
-- generic table and range validators come from [[sdd/code/src/peetsfea/type2_step_spec_non_model.py]].
+- type2 modeled-object parsing and validation helper다.
+- 0.2.24 SDD 기준 active documented shape path는 RX modeled roles다.
 
 ## 입력 / 출력
-- 입력: raw modeled object tables, `seen_object_ids`, `non_model_specs_by_id`, modeled spec instances for render bridge
-- 출력: parsed modeled spec objects, deterministic role helper results, rendered `tx_rect_void` TOML text
+- 입력: modeled object TOML tables
+- 출력: validated modeled object specs
 
 ## Canonical state
-- canonical modeled roles remain `tx_single_coil`, `rx_single_coil`, `tx_rect_void_columns`, `tx_plate_stack`, and `rx_plate_stack`.
-- role→object/owner/plane 해석은 `type2_step_spec_types.py`의 canonical 함수를 그대로 재사용해 drift-free로 유지한다.
-- parsing은 `parse_modeled_object` 중심으로 단일 진입점을 가지며 facade 중복 분기를 제거한다.
-- `tx_rect_void` rendering preserves the canonical `void_usage_ratio` bridge contract.
+- RX single-coil and RX plate-stack parsing remain documented.
+- TX modeled roles are not documented as active shape contracts during the reset.
+- `tx_region` remains outside modeled parsing as future guide context.
 
 ## Invariants / fail-fast
-- Unsupported modeled role, role/object_id mismatch, unsupported legacy keys, or invalid range tables fail immediately with context.
-- `tx_rect_void_columns` parsing accepts the single `equivalent_turn_count` public owner, including the canonical sweep range `[false, 0.1111111111111111, 31.0, 100]`, and rejects legacy column fields plus removed `series_total_turn_count` / `parallel_total_turn_count` without fallback.
-- rendering keeps the current canonical text layout and does not infer alternate TOML shapes.
+- Unsupported modeled roles/fields fail during parse.
+- RxOnly must parse without requiring TX modeled roles.
 
 ## Collaborators
-- [[sdd/code/src/peetsfea/type2_step_spec.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec_sampling.py]]
-- [[sdd/code/src/peetsfea/tx_rect_void.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec_types.py]]
-- [[sdd/code/src/peetsfea/type2_step_spec_non_model.py]]
-
-## 관련 테스트
-- [[sdd/code/tests/type2/test_generate_type2_step.py]]
-- [[sdd/code/tests/type2/test_build_type2_entry.py]]
-- [[sdd/code/tests/type2/test_sample_type2_entry.py]]
-
-## 변경 시 주의점
-- Do not import from `type2_step_spec.py` in a way that reintroduces a loader cycle beyond the existing facade bootstrap.
-- Keep all fail-fast messages and canonical range acceptance unchanged.
+- [type2_step_spec.py](type2_step_spec.py.md)
+- [type2_step_spec_types.py](type2_step_spec_types.py.md)
