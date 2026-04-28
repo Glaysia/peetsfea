@@ -20,11 +20,12 @@ tags:
 
 ## Canonical state
 - Sampling remains deterministic by source TOML, version, seed, and retry number.
-- `tx_region` is fixed guide context only.
-- RxOnly sampled-owner fixtures contain only RX coil owners; TX derived non-model owners are absent.
+- `tx_region` is guide context only, but its `tx_reference_line` range fields are effective sampled owner coordinates.
+- RxOnly sampled-owner fixtures contain RX coil owners plus active non-modeled guide owners; TX derived non-model owners are absent.
 
 ## Invariants / fail-fast
 - Unknown owner paths fail immediately.
+- `sampled_owner_paths` must include every active `count > 1` range owner, including non-modeled guide ranges.
 - RxOnly sampling tests must not require TX modeled owners.
 - RxOnly sampling tests must not require `tx_region_actual` or `tx_region_actual_stack_space`.
 - TX modeled-role fixtures assert parser/sampling fail-fast behavior instead of sampled manifest success.

@@ -21,6 +21,7 @@ from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelDerivedSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
+from peetsfea.type2_step_spec import NonModelTxRegionSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import load_type2_step_spec as _load_type2_step_spec
@@ -144,6 +145,9 @@ def _modeled_roles(spec: Type2StepSpec) -> tuple[str, ...]:
 
 def _non_model_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpec], ...]:
     owner_specs: list[tuple[str, RangeSpec]] = []
+    for non_model_spec in spec.non_model_objects:
+        if isinstance(non_model_spec, NonModelTxRegionSpec):
+            owner_specs.extend(_tx_region_reference_line_range_owner_specs(non_model_spec))
     for non_model_spec in spec.non_model_derived_objects:
         owner_specs.extend(_derived_non_model_range_owner_specs(non_model_spec))
     return tuple(owner_specs)
@@ -435,6 +439,25 @@ def _derived_non_model_range_owner_specs(
     if isinstance(non_model_spec, NonModelTxRegionActualStackSpaceSpec):
         return _tx_region_actual_stack_space_range_owner_specs(non_model_spec)
     raise RuntimeError(f"unsupported non-model derived spec: {type(non_model_spec).__name__}")
+
+
+def _tx_region_reference_line_range_owner_specs(
+    non_model_spec: NonModelTxRegionSpec,
+) -> tuple[tuple[str, RangeSpec], ...]:
+    return (
+        (
+            f"non_model_objects.{non_model_spec.object_id}.tx_reference_line.x_ratio",
+            non_model_spec.tx_reference_line.x_ratio,
+        ),
+        (
+            f"non_model_objects.{non_model_spec.object_id}.tx_reference_line.y_usage_ratio",
+            non_model_spec.tx_reference_line.y_usage_ratio,
+        ),
+        (
+            f"non_model_objects.{non_model_spec.object_id}.tx_reference_line.z_ratio",
+            non_model_spec.tx_reference_line.z_ratio,
+        ),
+    )
 
 
 def _tx_region_actual_range_owner_specs(

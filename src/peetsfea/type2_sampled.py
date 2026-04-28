@@ -259,9 +259,9 @@ def _freeze_owner_range_in_raw_spec(
     range_spec: RangeSpec,
 ) -> None:
     owner_parts = owner_path.split(".")
-    if len(owner_parts) != 3:
+    if len(owner_parts) < 3:
         raise ValueError(f"Unsupported type2 sampled owner path: {owner_path}")
-    owner_root, object_id, field_name = owner_parts
+    owner_root, object_id = owner_parts[0], owner_parts[1]
     owner_table: TOMLTable
     if owner_root == "modeled_objects":
         owner_table = _modeled_object_table(raw_spec, object_id=object_id)
@@ -269,6 +269,14 @@ def _freeze_owner_range_in_raw_spec(
         owner_table = _non_model_object_table(raw_spec, object_id=object_id)
     else:
         raise ValueError(f"Unsupported type2 sampled owner path: {owner_path}")
+    for table_name in owner_parts[2:-1]:
+        if table_name not in owner_table:
+            raise ValueError(f"type2 source TOML is missing sampled owner table: {owner_path}")
+        raw_owner_table = owner_table[table_name]
+        if not isinstance(raw_owner_table, dict):
+            raise TypeError(f"{owner_path} parent {table_name!r} must be a table")
+        owner_table = cast(TOMLTable, raw_owner_table)
+    field_name = owner_parts[-1]
     if field_name not in owner_table:
         raise ValueError(f"type2 source TOML is missing sampled owner field: {owner_path}")
     raw_field = owner_table[field_name]

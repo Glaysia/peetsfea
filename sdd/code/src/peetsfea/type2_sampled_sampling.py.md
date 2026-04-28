@@ -25,10 +25,13 @@ tags:
 - Same source spec + version + seed + retry number yields deterministic sampled values.
 - RxOnly sampling does not require TX modeled owner values.
 - Active TX modeled roles (`tx_single_coil`, `tx_plate_stack`, `tx_rect_void_columns`) are not sampled owners.
-- `tx_region_actual` and `tx_region_actual_stack_space` may remain sampled non-modeled guide/context owners.
+- Active `count > 1` range owners must appear in `sampled_owner_paths` regardless of modeled/non-modeled ownership.
+- `tx_region.tx_reference_line.x_ratio`, `tx_region.tx_reference_line.y_usage_ratio`, and `tx_region.tx_reference_line.z_ratio` are active non-modeled guide/context sampled owners.
+- `tx_region_actual` and `tx_region_actual_stack_space` are not active RxOnly sampled owner sources.
 
 ## Invariants / fail-fast
 - Unknown owner paths fail immediately.
+- Missing sampled-owner registration for an active non-model range is a dataset ledger bug, not a notebook display issue.
 - Active TX modeled sampled owner roles fail immediately with RxOnly context.
 - Constraint exhaustion is recorded only through the explicit skipped-attempt path.
 - Non-validation exceptions remain fail-fast.

@@ -15,11 +15,16 @@ import peetsfea.type2_sampled as type2_sampled
 from entry.sample import sample_type2
 from peetsfea.type2_sampled import manifest_entry_for_sample_index
 from peetsfea.type2_step_spec import NonModelDerivedSpec
+from peetsfea.type2_step_spec import NonModelTxReferenceLineSpec
+from peetsfea.type2_step_spec import NonModelTxRegionSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 
 _EXPECTED_SAMPLED_OWNER_PATHS = [
+    "non_model_objects.tx_region.tx_reference_line.x_ratio",
+    "non_model_objects.tx_region.tx_reference_line.y_usage_ratio",
+    "non_model_objects.tx_region.tx_reference_line.z_ratio",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
@@ -34,6 +39,7 @@ _RX_NON_SAMPLED_OWNER_PATHS = [
 
 @dataclass(frozen=True)
 class _FakeRxOnlyType2Spec:
+    non_model_objects: tuple[NonModelTxRegionSpec, ...]
     non_model_derived_objects: tuple[NonModelDerivedSpec, ...]
     modeled_objects: tuple[ModeledRxSingleCoilSpec, ...]
 
@@ -56,8 +62,29 @@ def _patch_rx_only_spec_loader(
     rx_terminal_stub = RangeSpec(is_integer=False, start=5.0, end=5.0, count=1)
     rx_margin_ratio = RangeSpec(is_integer=False, start=0.05, end=0.05, count=1)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
+    tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.2, end=0.8, count=13)
+    tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
+    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.2, end=0.9, count=13)
 
     fake_spec = _FakeRxOnlyType2Spec(
+        non_model_objects=(
+            NonModelTxRegionSpec(
+                object_id="tx_region",
+                kind="tx_region",
+                primitive="box",
+                present=True,
+                non_model=True,
+                material="vacuum",
+                plane="YZ",
+                origin_xyz=(0.0, -140.0, 0.0),
+                size_xyz=(160.0, 280.0, 90.0),
+                tx_reference_line=NonModelTxReferenceLineSpec(
+                    x_ratio=tx_reference_line_x_ratio,
+                    y_usage_ratio=tx_reference_line_y_usage_ratio,
+                    z_ratio=tx_reference_line_z_ratio,
+                ),
+            ),
+        ),
         non_model_derived_objects=(),
         modeled_objects=(
             ModeledRxSingleCoilSpec(
@@ -177,6 +204,12 @@ material = "vacuum"
 plane = "YZ"
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
+[non_model_objects.tx_reference_line.x_ratio]
+range = [false, 0.2, 0.8, 13]
+[non_model_objects.tx_reference_line.y_usage_ratio]
+range = [false, 0.2, 1.0, 17]
+[non_model_objects.tx_reference_line.z_ratio]
+range = [false, 0.2, 0.9, 13]
 
 [[non_model_objects]]
 id = "rx_region_max"
@@ -343,6 +376,27 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert sampled_metadata["sampled_owner_paths"] == _EXPECTED_SAMPLED_OWNER_PATHS
     assert all(path not in sampled_metadata["sampled_owner_paths"] for path in _RX_NON_SAMPLED_OWNER_PATHS)
     assert "design_id" not in sampled_metadata
+
+    non_model_objects = cast(list[dict[str, object]], sampled_payload["non_model_objects"])
+    tx_region_object = next(non_model for non_model in non_model_objects if non_model["id"] == "tx_region")
+    tx_reference_line = cast(dict[str, object], tx_region_object["tx_reference_line"])
+    tx_reference_line_x_range = cast(list[object], cast(dict[str, object], tx_reference_line["x_ratio"])["range"])
+    assert tx_reference_line_x_range[0] is False
+    assert tx_reference_line_x_range[3] == 1
+    assert tx_reference_line_x_range[1] == tx_reference_line_x_range[2]
+    assert 0.2 <= float(cast(int | float, tx_reference_line_x_range[1])) <= 0.8
+    tx_reference_line_y_range = cast(
+        list[object], cast(dict[str, object], tx_reference_line["y_usage_ratio"])["range"]
+    )
+    assert tx_reference_line_y_range[0] is False
+    assert tx_reference_line_y_range[3] == 1
+    assert tx_reference_line_y_range[1] == tx_reference_line_y_range[2]
+    assert 0.2 <= float(cast(int | float, tx_reference_line_y_range[1])) <= 1.0
+    tx_reference_line_z_range = cast(list[object], cast(dict[str, object], tx_reference_line["z_ratio"])["range"])
+    assert tx_reference_line_z_range[0] is False
+    assert tx_reference_line_z_range[3] == 1
+    assert tx_reference_line_z_range[1] == tx_reference_line_z_range[2]
+    assert 0.2 <= float(cast(int | float, tx_reference_line_z_range[1])) <= 0.9
 
     rx_modeled_object = sampled_payload["modeled_objects"][0]
     assert rx_modeled_object["object_id"] == "rx_rect_void_coil"
@@ -683,6 +737,12 @@ material = "vacuum"
 plane = "YZ"
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
+[non_model_objects.tx_reference_line.x_ratio]
+range = [false, 0.2, 0.8, 13]
+[non_model_objects.tx_reference_line.y_usage_ratio]
+range = [false, 0.2, 1.0, 17]
+[non_model_objects.tx_reference_line.z_ratio]
+range = [false, 0.2, 0.9, 13]
 
 [[non_model_objects]]
 id = "rx_region_max"

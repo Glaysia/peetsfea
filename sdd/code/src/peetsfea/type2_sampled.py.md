@@ -24,8 +24,8 @@ tags:
 - 출력: sampled TOML, manifest entries, skipped attempts, prepared build metadata
 
 ## Canonical state
-- sampled owner canonical paths are `modeled_objects.<object_id>.<field>` and `non_model_objects.<object_id>.<field>`.
-- `tx_region` may be present as a fixed guide; it is not a sampled TX geometry owner in the reset contract.
+- sampled owner canonical paths are rooted at `modeled_objects.<object_id>` or `non_model_objects.<object_id>` and may address nested TOML tables.
+- `tx_region` remains guide context; its `tx_reference_line` nested range fields are sampled non-modeled owner coordinates, not TX modeled geometry.
 - constraints are preserved in sampled TOML and evaluated as deterministic sampling feasibility filters.
 - `retry_number` records the first constraint-satisfying retry attempt and remains part of the `design_id`.
 - manifest `entries` contains only successful sampled designs; validation/infeasible attempts are recorded in top-level `skipped`.
@@ -33,6 +33,7 @@ tags:
 
 ## Invariants / fail-fast
 - sampled metadata owner list must exactly match the source exportable sampled owner set.
+- sampled TOML freeze logic must support every sampled owner path shape emitted by owner discovery, including nested non-modeled paths.
 - usage-ratio design variables are unitless; only `_mm` owners receive `mm` expressions.
 - RxOnly sampling must not require TX modeled owners.
 - type2 constraints must be evaluated before sampled TOML is written.
