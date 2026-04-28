@@ -1,7 +1,7 @@
 ---
 title: outputs.py
 created: 2026-04-18 @ 13:45
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-28 @ 00:00
 tags:
   - spec
   - em
@@ -17,6 +17,7 @@ tags:
 ## 역할
 - active/shared EM report/output-variable contract parser를 제공한다.
 - `[outputs]` TOML table과 retained step ledger top-level `outputs` object를 같은 fail-fast 규칙으로 검증한다.
+- active type2 output mode는 `RxOnly`로 고정하고 RX-only report variable contract를 검증한다.
 
 ## 입력 / 출력
 - 입력:
@@ -28,12 +29,16 @@ tags:
 ## Canonical state
 - module-level mutable state는 없다.
 - canonical report contract는 `OutputsSpec` 한 shape로 고정한다.
+- canonical active output mode는 `RxOnly`다.
+- active RX-only variable set은 [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)의 `Active RxOnly Variables`와 일치한다.
 - active type2와 retained step ledger는 같은 parser/validator를 공유한다.
 
 ## Invariants / fail-fast
-- `outputs`는 exact required keys만 허용한다.
+- `outputs`는 exact required keys만 허용하며 `mode = "RxOnly"`가 필수다.
 - `outputs.variables`는 non-empty array of tables여야 한다.
 - variable name은 `^[A-Za-z][A-Za-z0-9_]*$`를 따라야 하고 unique여야 한다.
+- RxOnly 변수 이름은 active RX-only variable set 안에 있어야 한다.
+- RxOnly expression은 `TX_TML`을 참조할 수 없다.
 - empty string expression/name, unsupported key, missing key는 즉시 실패다.
 
 ## 직접 의존

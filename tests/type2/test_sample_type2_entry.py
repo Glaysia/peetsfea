@@ -14,18 +14,12 @@ import pytest
 import peetsfea.type2_sampled as type2_sampled
 from entry.sample import sample_type2
 from peetsfea.type2_sampled import manifest_entry_for_sample_index
-from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
-from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
+from peetsfea.type2_step_spec import NonModelDerivedSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 
 _EXPECTED_SAMPLED_OWNER_PATHS = [
-    "non_model_objects.tx_region_actual.x_usage_ratio",
-    "non_model_objects.tx_region_actual.y_usage_ratio",
-    "non_model_objects.tx_region_actual.x_division_count",
-    "non_model_objects.tx_region_actual.y_division_count",
-    "non_model_objects.tx_region_actual_stack_space.scale_ratio",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
@@ -40,7 +34,7 @@ _RX_NON_SAMPLED_OWNER_PATHS = [
 
 @dataclass(frozen=True)
 class _FakeRxOnlyType2Spec:
-    non_model_derived_objects: tuple[NonModelTxRegionActualSpec | NonModelTxRegionActualStackSpaceSpec, ...]
+    non_model_derived_objects: tuple[NonModelDerivedSpec, ...]
     modeled_objects: tuple[ModeledRxSingleCoilSpec, ...]
 
 
@@ -62,33 +56,9 @@ def _patch_rx_only_spec_loader(
     rx_terminal_stub = RangeSpec(is_integer=False, start=5.0, end=5.0, count=1)
     rx_margin_ratio = RangeSpec(is_integer=False, start=0.05, end=0.05, count=1)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
-    tx_region_actual_x_usage_ratio = RangeSpec(is_integer=False, start=0.3, end=1.0, count=27)
-    tx_region_actual_y_usage_ratio = RangeSpec(is_integer=False, start=0.3, end=1.0, count=27)
-    tx_region_actual_x_division_count = RangeSpec(is_integer=True, start=1, end=3, count=3)
-    tx_region_actual_y_division_count = RangeSpec(is_integer=True, start=1, end=3, count=3)
-    tx_region_actual_stack_space_scale_ratio = RangeSpec(is_integer=False, start=0.35, end=0.95, count=25)
-    tx_region_actual_stack_space_tilt_enabled = RangeSpec(is_integer=True, start=1, end=1, count=1)
 
     fake_spec = _FakeRxOnlyType2Spec(
-        non_model_derived_objects=(
-            NonModelTxRegionActualSpec(
-                object_id="tx_region_actual",
-                kind="tx_region_actual",
-                source_region_id="tx_region",
-                x_usage_ratio=tx_region_actual_x_usage_ratio,
-                y_usage_ratio=tx_region_actual_y_usage_ratio,
-                x_division_count=tx_region_actual_x_division_count,
-                y_division_count=tx_region_actual_y_division_count,
-            ),
-            NonModelTxRegionActualStackSpaceSpec(
-                object_id="tx_region_actual_stack_space",
-                kind="tx_region_actual_stack_space",
-                source_region_id="tx_region_actual",
-                total_thickness_mm=5.0,
-                scale_ratio=tx_region_actual_stack_space_scale_ratio,
-                tilt_enabled=tx_region_actual_stack_space_tilt_enabled,
-            ),
-        ),
+        non_model_derived_objects=(),
         modeled_objects=(
             ModeledRxSingleCoilSpec(
                 object_id="rx_rect_void_coil",
@@ -142,6 +112,7 @@ interchange_format = "step"
 radiation_margin_mm = 3500.0
 
 [outputs]
+mode = "RxOnly"
 report_name = "Output Variables Table1"
 solution_name = "Setup1 : LastAdaptive"
 primary_sweep = "Freq"
@@ -217,29 +188,6 @@ material = "vacuum"
 plane = "YZ"
 origin_xyz = [200.0, -100.0, 0.0]
 size_xyz = [10.0, 200.0, 200.0]
-
-[[non_model_objects]]
-id = "tx_region_actual"
-kind = "tx_region_actual"
-source_region_id = "tx_region"
-[non_model_objects.x_usage_ratio]
-range = [false, 0.3, 1.0, 27]
-[non_model_objects.y_usage_ratio]
-range = [false, 0.3, 1.0, 27]
-[non_model_objects.x_division_count]
-range = [true, 1, 3, 3]
-[non_model_objects.y_division_count]
-range = [true, 1, 3, 3]
-
-[[non_model_objects]]
-id = "tx_region_actual_stack_space"
-kind = "tx_region_actual_stack_space"
-source_region_id = "tx_region_actual"
-total_thickness_mm = 5.0
-[non_model_objects.scale_ratio]
-range = [false, 0.35, 0.95, 25]
-[non_model_objects.tilt_enabled]
-range = [true, 1, 1, 1]
 
 [[modeled_objects]]
     object_id = "rx_rect_void_coil"
@@ -395,50 +343,6 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert sampled_metadata["sampled_owner_paths"] == _EXPECTED_SAMPLED_OWNER_PATHS
     assert all(path not in sampled_metadata["sampled_owner_paths"] for path in _RX_NON_SAMPLED_OWNER_PATHS)
     assert "design_id" not in sampled_metadata
-
-    non_model_objects = cast(list[dict[str, object]], sampled_payload["non_model_objects"])
-    tx_region_actual = next(non_model for non_model in non_model_objects if non_model["id"] == "tx_region_actual")
-    tx_region_actual_x_range = cast(list[object], cast(dict[str, object], tx_region_actual["x_usage_ratio"])["range"])
-    assert tx_region_actual_x_range[0] is False
-    assert tx_region_actual_x_range[3] == 1
-    assert tx_region_actual_x_range[1] == tx_region_actual_x_range[2]
-    assert 0.3 <= float(cast(int | float, tx_region_actual_x_range[1])) <= 1.0
-    tx_region_actual_y_range = cast(list[object], cast(dict[str, object], tx_region_actual["y_usage_ratio"])["range"])
-    assert tx_region_actual_y_range[0] is False
-    assert tx_region_actual_y_range[3] == 1
-    assert tx_region_actual_y_range[1] == tx_region_actual_y_range[2]
-    assert 0.3 <= float(cast(int | float, tx_region_actual_y_range[1])) <= 1.0
-    tx_region_actual_x_division_count_range = cast(
-        list[object], cast(dict[str, object], tx_region_actual["x_division_count"])["range"]
-    )
-    assert tx_region_actual_x_division_count_range[0] is True
-    assert tx_region_actual_x_division_count_range[3] == 1
-    assert tx_region_actual_x_division_count_range[1] == tx_region_actual_x_division_count_range[2]
-    assert cast(int, tx_region_actual_x_division_count_range[1]) in {1, 2, 3}
-    tx_region_actual_y_division_count_range = cast(
-        list[object], cast(dict[str, object], tx_region_actual["y_division_count"])["range"]
-    )
-    assert tx_region_actual_y_division_count_range[0] is True
-    assert tx_region_actual_y_division_count_range[3] == 1
-    assert tx_region_actual_y_division_count_range[1] == tx_region_actual_y_division_count_range[2]
-    assert cast(int, tx_region_actual_y_division_count_range[1]) in {1, 2, 3}
-    tx_region_actual_stack_space = next(
-        non_model for non_model in non_model_objects if non_model["id"] == "tx_region_actual_stack_space"
-    )
-    tx_region_actual_stack_space_scale_ratio_range = cast(
-        list[object], cast(dict[str, object], tx_region_actual_stack_space["scale_ratio"])["range"]
-    )
-    assert tx_region_actual_stack_space_scale_ratio_range[0] is False
-    assert tx_region_actual_stack_space_scale_ratio_range[3] == 1
-    assert tx_region_actual_stack_space_scale_ratio_range[1] == tx_region_actual_stack_space_scale_ratio_range[2]
-    assert 0.35 <= float(cast(int | float, tx_region_actual_stack_space_scale_ratio_range[1])) <= 0.95
-    tx_region_actual_stack_space_tilt_enabled_range = cast(
-        list[object], cast(dict[str, object], tx_region_actual_stack_space["tilt_enabled"])["range"]
-    )
-    assert tx_region_actual_stack_space_tilt_enabled_range[0] is True
-    assert tx_region_actual_stack_space_tilt_enabled_range[3] == 1
-    assert tx_region_actual_stack_space_tilt_enabled_range[1] == tx_region_actual_stack_space_tilt_enabled_range[2]
-    assert tx_region_actual_stack_space_tilt_enabled_range[1] == 1
 
     rx_modeled_object = sampled_payload["modeled_objects"][0]
     assert rx_modeled_object["object_id"] == "rx_rect_void_coil"
@@ -758,6 +662,7 @@ interchange_format = "step"
 radiation_margin_mm = 3500.0
 
 [outputs]
+mode = "RxOnly"
 report_name = "Output Variables Table1"
 solution_name = "Setup1 : LastAdaptive"
 primary_sweep = "Freq"
@@ -789,29 +694,6 @@ material = "vacuum"
 plane = "YZ"
 origin_xyz = [200.0, -100.0, 0.0]
 size_xyz = [10.0, 200.0, 200.0]
-
-[[non_model_objects]]
-id = "tx_region_actual"
-kind = "tx_region_actual"
-source_region_id = "tx_region"
-[non_model_objects.x_usage_ratio]
-range = [false, 0.3, 1.0, 27]
-[non_model_objects.y_usage_ratio]
-range = [false, 0.3, 1.0, 27]
-[non_model_objects.x_division_count]
-range = [true, 1, 3, 3]
-[non_model_objects.y_division_count]
-range = [true, 1, 3, 3]
-
-[[non_model_objects]]
-id = "tx_region_actual_stack_space"
-kind = "tx_region_actual_stack_space"
-source_region_id = "tx_region_actual"
-total_thickness_mm = 5.0
-[non_model_objects.scale_ratio]
-range = [false, 0.35, 0.95, 25]
-[non_model_objects.tilt_enabled]
-range = [true, 1, 1, 1]
 
 [[modeled_objects]]
 object_id = "rx_rect_void_coil"
@@ -877,162 +759,30 @@ range = [false, -0.3, 0.3, 21]
 """.strip()
 
 
-def test_sampled_owner_values_tx_rect_void_columns_uses_mode_aware_effective_turn_owner(
+def test_sampled_owner_values_rejects_tx_rect_void_columns_modeled_owner(
     tmp_path: Path,
 ) -> None:
     source_toml_path = tmp_path / "type2_tx_rect_source.toml"
     source_toml_path.write_text(_source_type2_toml_text_with_tx_rect_void_columns(), encoding="utf-8")
-    spec = load_type2_step_spec(source_toml_path)
-
-    owner_prefix = "modeled_objects.tx_rect_void_columns"
-    connection_mode_path = f"{owner_prefix}.connection_mode"
-    equivalent_owner_path = f"{owner_prefix}.equivalent_turn_count"
-    turn_weight_paths = (
-        f"{owner_prefix}.turn_weight_a",
-        f"{owner_prefix}.turn_weight_b",
-        f"{owner_prefix}.turn_weight_c",
-    )
-    for seed in range(32):
-        sampled_owner_values = dict(type2_sampled.sampled_owner_values(spec, seed=seed))
-        assert connection_mode_path in sampled_owner_values
-        assert equivalent_owner_path in sampled_owner_values
-        for turn_weight_path in turn_weight_paths:
-            assert turn_weight_path in sampled_owner_values
-        assert all("turn_count_x" not in owner_path for owner_path in sampled_owner_values)
-        assert all("series_total_turn_count" not in owner_path for owner_path in sampled_owner_values)
-        assert all("parallel_total_turn_count" not in owner_path for owner_path in sampled_owner_values)
-        assert isinstance(sampled_owner_values[equivalent_owner_path], float)
+    with pytest.raises(ValueError, match=r"unsupported in active RxOnly type2 mode"):
+        load_type2_step_spec(source_toml_path)
 
 
-def test_sample_type2_tx_rect_void_columns_sample_only_emits_manifest_and_sampled_toml(
+def test_sample_type2_tx_rect_void_columns_sample_only_records_sample_skip(
     tmp_path: Path,
 ) -> None:
     source_toml_path = tmp_path / "type2_tx_rect_source.toml"
     source_toml_path.write_text(_source_type2_toml_text_with_tx_rect_void_columns(), encoding="utf-8")
     output_dir = tmp_path / "run" / "sampled" / "type2"
     manifest_path = output_dir / "manifest.json"
-    document = sample_type2(
-        source_toml_path=source_toml_path,
-        output_dir=output_dir,
-        manifest_path=manifest_path,
-        seed_first=11,
-        seed_n=4,
-        sampler_n=1,
-        aedt_builder_n=1,
-        make_step_on_sample=False,
-    )
-
-    assert manifest_path.is_file()
-    assert json.loads(manifest_path.read_text(encoding="utf-8")) == document
-    assert json.loads(manifest_path.read_text(encoding="utf-8"))["skipped"] == []
-    assert len(document["entries"]) == 4
-    owner_prefix = "modeled_objects.tx_rect_void_columns"
-    connection_mode_path = f"{owner_prefix}.connection_mode"
-    equivalent_owner_path = f"{owner_prefix}.equivalent_turn_count"
-    turn_weight_paths = (
-        f"{owner_prefix}.turn_weight_a",
-        f"{owner_prefix}.turn_weight_b",
-        f"{owner_prefix}.turn_weight_c",
-    )
-    for entry in document["entries"]:
-        sampled_owner_paths = cast(list[str], entry["sampled_owner_paths"])
-        assert connection_mode_path in sampled_owner_paths
-        assert equivalent_owner_path in sampled_owner_paths
-        assert all(turn_weight_path in sampled_owner_paths for turn_weight_path in turn_weight_paths)
-        assert all("series_total_turn_count" not in owner_path for owner_path in sampled_owner_paths)
-        assert all("parallel_total_turn_count" not in owner_path for owner_path in sampled_owner_paths)
-
-
-def test_sample_type2_sweep_ssot_emits_tx_columns_manifest_and_sampled_toml(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    source_toml_path = repo_root / "examples" / "type2_sweep.toml"
-    spec = load_type2_step_spec(source_toml_path)
-    assert len(spec.modeled_objects) == 2
-    assert {modeled_object.role for modeled_object in spec.modeled_objects} == {
-        "rx_single_coil",
-        "tx_rect_void_columns",
-    }
-    output_dir = tmp_path / "run" / "sampled" / "type2"
-    manifest_path = output_dir / "manifest.json"
-
-    document = sample_type2(
-        source_toml_path=source_toml_path,
-        output_dir=output_dir,
-        manifest_path=manifest_path,
-        seed_first=21,
-        seed_n=2,
-        sampler_n=1,
-        aedt_builder_n=1,
-        make_step_on_sample=False,
-    )
-
-    assert manifest_path.is_file()
-    assert len(document["entries"]) == 2
-    owner_prefix = "modeled_objects.tx_rect_void_columns"
-    connection_mode_path = f"{owner_prefix}.connection_mode"
-    equivalent_owner_path = f"{owner_prefix}.equivalent_turn_count"
-    turn_weight_paths = (
-        f"{owner_prefix}.turn_weight_a",
-        f"{owner_prefix}.turn_weight_b",
-        f"{owner_prefix}.turn_weight_c",
-    )
-    for entry in document["entries"]:
-        sampled_owner_paths = cast(list[str], entry["sampled_owner_paths"])
-        assert connection_mode_path in sampled_owner_paths
-        assert equivalent_owner_path in sampled_owner_paths
-        assert all(turn_weight_path in sampled_owner_paths for turn_weight_path in turn_weight_paths)
-        assert all("series_total_turn_count" not in owner_path for owner_path in sampled_owner_paths)
-        assert all("parallel_total_turn_count" not in owner_path for owner_path in sampled_owner_paths)
-        sampled_toml_path = Path(cast(str, entry["sampled_toml_path"]))
-        assert sampled_toml_path.is_file()
-        sampled_payload = tomllib.loads(sampled_toml_path.read_text(encoding="utf-8"))
-        modeled_objects = cast(list[dict[str, object]], sampled_payload["modeled_objects"])
-        tx_columns = next(
-            modeled_object
-            for modeled_object in modeled_objects
-            if modeled_object["object_id"] == "tx_rect_void_columns"
+    with pytest.raises(ValueError, match=r"unsupported in active RxOnly type2 mode"):
+        sample_type2(
+            source_toml_path=source_toml_path,
+            output_dir=output_dir,
+            manifest_path=manifest_path,
+            seed_first=11,
+            seed_n=4,
+            sampler_n=1,
+            aedt_builder_n=1,
+            make_step_on_sample=False,
         )
-        assert "turn_count_x0" not in tx_columns
-        assert "column_connection_mode" not in tx_columns
-        assert all("turn_count_x" not in owner_path for owner_path in sampled_owner_paths)
-        sampled_toml_path = Path(cast(str, entry["sampled_toml_path"]))
-        assert sampled_toml_path.is_file()
-        assert Path(entry["scene_step_path"]).exists() is False
-        assert Path(entry["step_ledger_path"]).exists() is False
-        assert Path(entry["aedt_path"]).exists() is False
-
-        sampled_payload = tomllib.loads(sampled_toml_path.read_text(encoding="utf-8"))
-        sampled_metadata = cast(dict[str, object], sampled_payload["sampled"])
-        assert cast(list[str], sampled_metadata["sampled_owner_paths"]) == sampled_owner_paths
-        modeled_objects = cast(list[dict[str, object]], sampled_payload["modeled_objects"])
-        tx_rect_columns_object = next(
-            modeled_object
-            for modeled_object in modeled_objects
-            if modeled_object["object_id"] == "tx_rect_void_columns"
-        )
-        assert "turn_count_x0" not in tx_rect_columns_object
-        assert "turn_count_x1" not in tx_rect_columns_object
-        assert "turn_count_x2" not in tx_rect_columns_object
-        assert equivalent_owner_path in sampled_owner_paths
-        assert connection_mode_path in sampled_owner_paths
-        assert all(turn_weight_path in sampled_owner_paths for turn_weight_path in turn_weight_paths)
-
-        equivalent_range = cast(
-            list[object],
-            cast(dict[str, object], tx_rect_columns_object["equivalent_turn_count"])["range"],
-        )
-        assert equivalent_range[0] is False
-        assert equivalent_range[3] == 1
-        assert equivalent_range[1] == equivalent_range[2]
-
-
-def test_sample_type2_fixed_ssot_keeps_two_modeled_objects() -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    source_toml_path = repo_root / "examples" / "type2_fixed.toml"
-    spec = load_type2_step_spec(source_toml_path)
-
-    assert len(spec.modeled_objects) == 2
-    assert {modeled_object.role for modeled_object in spec.modeled_objects} == {
-        "rx_single_coil",
-        "tx_rect_void_columns",
-    }

@@ -25,8 +25,6 @@ from peetsfea.type2_step_spec_non_model import Point3
 from peetsfea.type2_step_spec_non_model import RangeSpec
 from peetsfea.type2_step_spec_non_model import Type2SimulationPolicy
 from peetsfea.type2_step_spec_non_model import _parse_non_model_box
-from peetsfea.type2_step_spec_non_model import _parse_non_model_tx_region_actual
-from peetsfea.type2_step_spec_non_model import _parse_non_model_tx_region_actual_stack_space
 from peetsfea.type2_step_spec_non_model import _parse_simulation_policy
 from peetsfea.type2_step_spec_non_model import _require_key
 from peetsfea.type2_step_spec_non_model import _require_non_empty_str
@@ -91,51 +89,16 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
         context = f"{toml_path.name}.non_model_objects[{index}]"
         table = _require_table(raw_object, context)
         kind = _require_non_empty_str(table, "kind", context)
-        if kind == "tx_region_actual":
-            non_model_derived_specs.append(
-                _parse_non_model_tx_region_actual(raw_object, index=index, seen_object_ids=seen_object_ids)
+        if kind in ("tx_region_actual", "tx_region_actual_stack_space"):
+            raise ValueError(
+                f"{context}.kind {kind!r} is not supported in active RxOnly type2; "
+                "keep only non-modeled guide regions until TX geometry is redesigned"
             )
-            continue
-        if kind == "tx_region_actual_stack_space":
-            non_model_derived_specs.append(
-                _parse_non_model_tx_region_actual_stack_space(raw_object, index=index, seen_object_ids=seen_object_ids)
-            )
-            continue
         non_model_box_specs.append(_parse_non_model_box(raw_object, index=index, seen_object_ids=seen_object_ids))
 
     non_model_objects = tuple(non_model_box_specs)
     non_model_derived_objects = tuple(non_model_derived_specs)
     non_model_specs_by_id = {spec.object_id: spec for spec in non_model_objects}
-
-    tx_region_actual_spec_count = sum(
-        1 for spec in non_model_derived_objects if isinstance(spec, NonModelTxRegionActualSpec)
-    )
-    if tx_region_actual_spec_count != 1:
-        raise ValueError(
-            f"{toml_path.name} requires exactly one tx_region_actual derived non-model object "
-            f"(actual={tx_region_actual_spec_count})"
-        )
-    tx_region_actual_stack_space_spec_count = sum(
-        1 for spec in non_model_derived_objects if isinstance(spec, NonModelTxRegionActualStackSpaceSpec)
-    )
-    if tx_region_actual_stack_space_spec_count != 1:
-        raise ValueError(
-            f"{toml_path.name} requires exactly one tx_region_actual_stack_space derived non-model object "
-            f"(actual={tx_region_actual_stack_space_spec_count})"
-        )
-    for spec in non_model_derived_objects:
-        if isinstance(spec, NonModelTxRegionActualStackSpaceSpec):
-            continue
-        if spec.source_region_id not in non_model_specs_by_id:
-            raise ValueError(
-                f"{toml_path.name} requires tx_region_actual source region '{spec.source_region_id}' in non_model_objects"
-            )
-        source_spec = non_model_specs_by_id[spec.source_region_id]
-        if source_spec.kind != "tx_region":
-            raise ValueError(
-                f"{toml_path.name} tx_region_actual source region must have kind 'tx_region' "
-                f"(actual={source_spec.kind!r})"
-            )
 
     modeled_objects_list: list[ModeledObjectSpec] = []
     for index, raw_object in enumerate(raw_modeled_objects):

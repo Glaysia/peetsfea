@@ -24,11 +24,12 @@ tags:
 
 ## Canonical state
 - RX single-coil and RX plate-stack parsing remain documented.
-- TX modeled roles are not documented as active shape contracts during the reset.
+- TX modeled roles are rejected at the active parser boundary during the reset.
 - `tx_region` remains outside modeled parsing as future guide context.
 
 ## Invariants / fail-fast
 - Unsupported modeled roles/fields fail during parse.
+- `tx_single_coil`, `tx_rect_void_columns`, and `tx_plate_stack` fail before active runtime state is bound.
 - RxOnly must parse without requiring TX modeled roles.
 
 ## Collaborators

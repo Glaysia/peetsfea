@@ -22,6 +22,7 @@ tags:
 - Import ledger preserves source paths, seed, imported ownership, and imported object names.
 - Import-only path must not create boundary, ports, mesh, or reports.
 - `tx_region` may be carried as guide context only.
+- Ledger fixtures declare `outputs.mode = "RxOnly"` and only active RX output variables.
 
 ## Invariants / fail-fast
 - Missing RX imported bodies and generic imported names fail.

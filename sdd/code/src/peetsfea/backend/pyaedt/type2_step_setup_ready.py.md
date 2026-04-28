@@ -26,6 +26,8 @@ tags:
 ## Invariants / fail-fast
 - PyAEDT false returns fail immediately.
 - RxOnly must not create TX ports or TX output variables.
+- A loaded ledger with modeled TX roles is rejected before HFSS setup begins; there is no paired-mode fallback path.
+- RxOnly report setup filters to the active RX variable contract and requires every active RX variable to be present.
 
 ## Collaborators
 - [type2_step_em_input.py](type2_step_em_input.py.md)

@@ -24,9 +24,12 @@ tags:
 ## Canonical state
 - Same source spec + version + seed + retry number yields deterministic sampled values.
 - RxOnly sampling does not require TX modeled owner values.
+- Active TX modeled roles (`tx_single_coil`, `tx_plate_stack`, `tx_rect_void_columns`) are not sampled owners.
+- `tx_region_actual` and `tx_region_actual_stack_space` may remain sampled non-modeled guide/context owners.
 
 ## Invariants / fail-fast
 - Unknown owner paths fail immediately.
+- Active TX modeled sampled owner roles fail immediately with RxOnly context.
 - Constraint exhaustion is recorded only through the explicit skipped-attempt path.
 - Non-validation exceptions remain fail-fast.
 

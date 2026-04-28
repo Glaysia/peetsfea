@@ -32,30 +32,30 @@ from peetsfea.backend.pyaedt.type2_step_runtime_common import (
     prepare_attached_import_design,
 )
 from peetsfea.type2_sampled import DesignVariableEntry
-from peetsfea.types.manifest import EmPolicy, EmPorts
+from peetsfea.types.manifest import EmPolicy, EmPorts, OutputsSpec, OutputVariableSpec
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_SOURCE_STEP_LEDGER_PATH = REPO_ROOT / "run" / "step" / "type2" / "type2_step_ledger.json"
 DEFAULT_IMPORTED_LEDGER_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_import" / "type2_imported_ledger.json"
 DEFAULT_OUTPUT_AEDT_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_setup_ready" / "type2_setup_ready.aedt"
 DEFAULT_DESIGN_NAME = "type2_step_setup_ready"
-_COIL_ROLE_PAIR: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
-_PLATE_STACK_ROLE_PAIR: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
-_MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset(
-    {"tx_plate_stack", "rx_single_coil"}
-)
-_TX_RECT_VOID_COLUMNS_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset(
-    {"tx_rect_void_columns", "rx_single_coil"}
-)
-_ALL_SUPPORTED_ROLE_PAIRS: frozenset[str] = frozenset(
-    {*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR, *_TX_RECT_VOID_COLUMNS_RX_SINGLE_ROLE_PAIR}
-)
 _RX_SINGLE_COIL_ROLE: str = "rx_single_coil"
-_SETUP_BRANCH_COIL_FULL_READY = "coil_full_setup_ready"
-_SETUP_BRANCH_PLATE_STACK_FULL_READY = "plate_stack_full_setup_ready"
-_SETUP_BRANCH_MIXED_TX_PLATE_STACK_RX_SINGLE_READY = "mixed_tx_plate_stack_rx_single_ready"
-_SETUP_BRANCH_TX_RECT_VOID_COLUMNS_RX_SINGLE_READY = "tx_rect_void_columns_rx_single_ready"
 _SETUP_BRANCH_RX_SINGLE_READY = "rx_single_ready"
+_ACTIVE_RX_ONLY_OUTPUT_VARIABLE_NAMES: frozenset[str] = frozenset(
+    {
+        "Lrx_uH",
+        "Qrx_ratio",
+        "Rrx_ac_ohm",
+        "Xrx_ohm",
+        "Grx_S",
+        "Brx_S",
+        "Srx_self_mag_ratio",
+        "eta_rx_accept_ratio",
+    }
+)
+_RX_ONLY_OUTPUT_VARIABLE_ALIASES: dict[str, str] = {
+    "S22_mag_ratio": "Srx_self_mag_ratio",
+}
 
 HfssFactory = Callable[[str], HfssSession]
 
@@ -112,6 +112,37 @@ def _assign_design_variables(
         hfss[variable_name] = expression
 
 
+def _rx_only_outputs(outputs: OutputsSpec) -> OutputsSpec:
+    variables: list[OutputVariableSpec] = []
+    emitted_names: set[str] = set()
+    for output_variable in outputs["variables"]:
+        source_name = output_variable["name"]
+        output_name = _RX_ONLY_OUTPUT_VARIABLE_ALIASES[source_name] if source_name in _RX_ONLY_OUTPUT_VARIABLE_ALIASES else source_name
+        if output_name not in _ACTIVE_RX_ONLY_OUTPUT_VARIABLE_NAMES:
+            continue
+        if output_name in emitted_names:
+            raise ValueError(f"RX-only output variable name collision (name={output_name!r})")
+        expression = output_variable["expression"]
+        if "TX_TML" in expression:
+            raise ValueError(
+                "RX-only active output variable must not reference TX_TML "
+                f"(name={source_name!r}, expression={expression!r})"
+            )
+        variables.append({"name": output_name, "expression": expression})
+        emitted_names.add(output_name)
+    missing_names = sorted(_ACTIVE_RX_ONLY_OUTPUT_VARIABLE_NAMES.difference(emitted_names))
+    if missing_names:
+        raise ValueError(f"RX-only output spec is missing active variables (missing={missing_names})")
+    return {
+        "report_name": outputs["report_name"],
+        "solution_name": outputs["solution_name"],
+        "primary_sweep": outputs["primary_sweep"],
+        "report_category": outputs["report_category"],
+        "plot_type": outputs["plot_type"],
+        "variables": variables,
+    }
+
+
 def _modeled_role(*, entry: dict[str, object], context: str) -> str:
     if "role" not in entry:
         raise ValueError(f"{context} is missing required key 'role'")
@@ -138,8 +169,7 @@ def _resolve_setup_branch(ledger: ValidatedStepLedger) -> str:
         return _SETUP_BRANCH_RX_SINGLE_READY
     if len(modeled_entries) != 2:
         raise ValueError(
-            "type2 setup facade requires exactly two modeled_objects entries for paired setup "
-            "or one rx_single_coil entry for RX-only "
+            "type2 setup facade requires one rx_single_coil entry for active RX-only setup "
             f"(actual={len(modeled_entries)})"
         )
     modeled_roles: list[str] = []
@@ -150,30 +180,8 @@ def _resolve_setup_branch(ledger: ValidatedStepLedger) -> str:
                 context=f"modeled_objects[{index}]",
             )
         )
-    role_set = frozenset(modeled_roles)
-    if len(role_set) != 2:
-        raise ValueError(
-            "type2 setup facade requires an exact tx/rx role pair without duplicates "
-            f"(roles={modeled_roles})"
-        )
-    unsupported_roles = role_set.difference(_ALL_SUPPORTED_ROLE_PAIRS)
-    if unsupported_roles:
-        raise ValueError(
-            "type2 setup facade encountered unsupported modeled roles "
-            f"(roles={modeled_roles}, unsupported={sorted(unsupported_roles)})"
-        )
-    if role_set == _COIL_ROLE_PAIR:
-        return _SETUP_BRANCH_COIL_FULL_READY
-    if role_set == _PLATE_STACK_ROLE_PAIR:
-        return _SETUP_BRANCH_PLATE_STACK_FULL_READY
-    if role_set == _MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR:
-        return _SETUP_BRANCH_MIXED_TX_PLATE_STACK_RX_SINGLE_READY
-    if role_set == _TX_RECT_VOID_COLUMNS_RX_SINGLE_ROLE_PAIR:
-        return _SETUP_BRANCH_TX_RECT_VOID_COLUMNS_RX_SINGLE_READY
     raise ValueError(
-        "type2 setup facade rejects mixed modeled role families; expected exact pair "
-        "['tx_single_coil', 'rx_single_coil'] or ['tx_plate_stack', 'rx_plate_stack'] "
-        "or ['tx_plate_stack', 'rx_single_coil'] or ['tx_rect_void_columns', 'rx_single_coil'] "
+        "type2 setup facade rejects modeled TX setup paths in active RX-only mode "
         f"(roles={modeled_roles})"
     )
 
@@ -216,7 +224,7 @@ def _setup_ready_from_loaded_ledger_full(
     subtract = build_subtract(groups)
     sources = apply_sources_phase(hfss, ports)
     analysis = build_analysis(hfss, em_policy)
-    post_templates = build_post_templates(hfss, ledger["outputs"], ports)
+    post_templates = build_post_templates(hfss, _rx_only_outputs(ledger["outputs"]), ports)
     raise_on_false(
         hfss.change_validation_settings(
             entity_check_level="None",
@@ -272,42 +280,6 @@ def _setup_ready_from_loaded_ledger_by_branch(
     design_variables: tuple[DesignVariableEntry, ...],
     setup_branch: str,
 ) -> Type2StepSetupFacadeResult:
-    if setup_branch == _SETUP_BRANCH_COIL_FULL_READY:
-        return _setup_ready_from_loaded_ledger_full(
-            hfss=hfss,
-            step_ledger_path=step_ledger_path,
-            output_aedt_path=output_aedt_path,
-            imported_ledger_path=imported_ledger_path,
-            ledger=ledger,
-            design_variables=design_variables,
-        )
-    if setup_branch == _SETUP_BRANCH_PLATE_STACK_FULL_READY:
-        return _setup_ready_from_loaded_ledger_full(
-            hfss=hfss,
-            step_ledger_path=step_ledger_path,
-            output_aedt_path=output_aedt_path,
-            imported_ledger_path=imported_ledger_path,
-            ledger=ledger,
-            design_variables=design_variables,
-        )
-    if setup_branch == _SETUP_BRANCH_MIXED_TX_PLATE_STACK_RX_SINGLE_READY:
-        return _setup_ready_from_loaded_ledger_full(
-            hfss=hfss,
-            step_ledger_path=step_ledger_path,
-            output_aedt_path=output_aedt_path,
-            imported_ledger_path=imported_ledger_path,
-            ledger=ledger,
-            design_variables=design_variables,
-        )
-    if setup_branch == _SETUP_BRANCH_TX_RECT_VOID_COLUMNS_RX_SINGLE_READY:
-        return _setup_ready_from_loaded_ledger_full(
-            hfss=hfss,
-            step_ledger_path=step_ledger_path,
-            output_aedt_path=output_aedt_path,
-            imported_ledger_path=imported_ledger_path,
-            ledger=ledger,
-            design_variables=design_variables,
-        )
     if setup_branch == _SETUP_BRANCH_RX_SINGLE_READY:
         return _setup_ready_from_loaded_ledger_full(
             hfss=hfss,

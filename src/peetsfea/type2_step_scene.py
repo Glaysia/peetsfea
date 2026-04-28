@@ -17,7 +17,15 @@ from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
+from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
+
+
+def _raise_modeled_tx_role_deactivated(*, object_id: str, role: str, context: str) -> None:
+    raise ValueError(
+        f"{context} does not support modeled TX geometry in active Type2 RxOnly export "
+        f"(object_id={object_id}, role={role}). Remove the TX modeled object or use a future two-terminal export path."
+    )
 
 
 def build_modeled_scene_data(
@@ -26,12 +34,13 @@ def build_modeled_scene_data(
     owner_spec: NonModelBoxSpec,
     seed: int,
 ) -> tuple[tuple[bd.Shape, ...], ModeledObjectSceneData]:
-    if isinstance(spec, ModeledTxRectVoidColumnsSpec):
-        raise RuntimeError(
-            "tx_rect_void_columns scene generation requires tilted tx_region_actual_stack_space placement "
-            "and must be built from type2_step_export"
+    if isinstance(spec, (ModeledTxSingleCoilSpec, ModeledTxPlateStackSpec, ModeledTxRectVoidColumnsSpec)):
+        _raise_modeled_tx_role_deactivated(
+            object_id=spec.object_id,
+            role=spec.role,
+            context="type2 modeled scene generation",
         )
-    if isinstance(spec, (ModeledTxPlateStackSpec, ModeledRxPlateStackSpec)):
+    if isinstance(spec, ModeledRxPlateStackSpec):
         return build_plate_stack_scene_data(spec, owner_spec=owner_spec, seed=seed)
     return build_modeled_single_coil_scene_data(
         cast(ModeledSingleCoilSpec, spec),

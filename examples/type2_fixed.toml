@@ -2,7 +2,7 @@
 # ----------------------------------------------------------------------------
 # This file is one frozen realization of examples/type2_sweep.toml.
 # It must keep the same public field surface as the sweep SSOT.
-# TX columns fields are active for STEP/export/build/setup-ready AEDT generation.
+# Active setup is RxOnly: RX modeled geometry, RX reports, and no TX modeled objects.
 
 spec_version = "0.2.22"
 schema_id = "peetsfea.type2.step.v8"
@@ -20,7 +20,8 @@ interchange_format = "step"
 radiation_margin_mm = 3500.0
 
 [outputs]
-# Active TX+RX setup uses the full 0.2.21-style output-variable contract.
+# Active RxOnly setup creates only RX report variables.
+mode = "RxOnly"
 report_name = "Output Variables Table1"
 solution_name = "Setup1 : LastAdaptive"
 primary_sweep = "Freq"
@@ -28,64 +29,20 @@ report_category = "Terminal Solution Data"
 plot_type = "Data Table"
 
 [[outputs.variables]]
-name = "Ltx_uH"
-expression = "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"
-
-[[outputs.variables]]
 name = "Lrx_uH"
 expression = "im(Zt(RX_TML,RX_TML))/2/pi/freq*1e6"
-
-[[outputs.variables]]
-name = "M_uH"
-expression = "abs(im(Zt(TX_TML,RX_TML))/2/pi/freq*1e6)"
-
-[[outputs.variables]]
-name = "k_ratio"
-expression = "M_uH/sqrt(Ltx_uH*Lrx_uH)"
-
-[[outputs.variables]]
-name = "Qtx_ratio"
-expression = "im(Zt(TX_TML,TX_TML))/re(Zt(TX_TML,TX_TML))"
 
 [[outputs.variables]]
 name = "Qrx_ratio"
 expression = "im(Zt(RX_TML,RX_TML))/re(Zt(RX_TML,RX_TML))"
 
 [[outputs.variables]]
-name = "FOM_ratio"
-expression = "k_ratio*sqrt(Qtx_ratio*Qrx_ratio)"
-
-[[outputs.variables]]
-name = "Rtx_ac_ohm"
-expression = "re(Zt(TX_TML,TX_TML))"
-
-[[outputs.variables]]
 name = "Rrx_ac_ohm"
 expression = "re(Zt(RX_TML,RX_TML))"
 
 [[outputs.variables]]
-name = "Xtx_ohm"
-expression = "im(Zt(TX_TML,TX_TML))"
-
-[[outputs.variables]]
 name = "Xrx_ohm"
 expression = "im(Zt(RX_TML,RX_TML))"
-
-[[outputs.variables]]
-name = "M_over_Ltx_ratio"
-expression = "M_uH/Ltx_uH"
-
-[[outputs.variables]]
-name = "M_over_Lrx_ratio"
-expression = "M_uH/Lrx_uH"
-
-[[outputs.variables]]
-name = "Gtx_S"
-expression = "re(Yt(TX_TML,TX_TML))"
-
-[[outputs.variables]]
-name = "Btx_S"
-expression = "im(Yt(TX_TML,TX_TML))"
 
 [[outputs.variables]]
 name = "Grx_S"
@@ -96,52 +53,12 @@ name = "Brx_S"
 expression = "im(Yt(RX_TML,RX_TML))"
 
 [[outputs.variables]]
-name = "S11_mag_ratio"
-expression = "mag(S(TX_TML,TX_TML))"
-
-[[outputs.variables]]
-name = "S21_mag_ratio"
-expression = "mag(S(TX_TML,RX_TML))"
-
-[[outputs.variables]]
-name = "S21_phase_deg"
-expression = "ang_deg_val(S(TX_TML,RX_TML))"
-
-[[outputs.variables]]
-name = "S22_mag_ratio"
+name = "Srx_self_mag_ratio"
 expression = "mag(S(RX_TML,RX_TML))"
 
 [[outputs.variables]]
-name = "eta_s21_power_ratio"
-expression = "S21_mag_ratio*S21_mag_ratio"
-
-[[outputs.variables]]
-name = "eta_tx_accept_ratio"
-expression = "1-S11_mag_ratio*S11_mag_ratio"
-
-[[outputs.variables]]
 name = "eta_rx_accept_ratio"
-expression = "1-S22_mag_ratio*S22_mag_ratio"
-
-[[outputs.variables]]
-name = "eta_match_product_ratio"
-expression = "eta_tx_accept_ratio*eta_rx_accept_ratio"
-
-[[outputs.variables]]
-name = "eta_s21_from_tx_accept_ratio"
-expression = "eta_s21_power_ratio/eta_tx_accept_ratio"
-
-[[outputs.variables]]
-name = "eta_s21_from_rx_accept_ratio"
-expression = "eta_s21_power_ratio/eta_rx_accept_ratio"
-
-[[outputs.variables]]
-name = "eta_s21_two_sided_norm_ratio"
-expression = "eta_s21_power_ratio/(eta_tx_accept_ratio*eta_rx_accept_ratio)"
-
-[[outputs.variables]]
-name = "eta_fom_max_ratio"
-expression = "(FOM_ratio*FOM_ratio)/((1+sqrt(1+FOM_ratio*FOM_ratio))*(1+sqrt(1+FOM_ratio*FOM_ratio)))"
+expression = "1-Srx_self_mag_ratio*Srx_self_mag_ratio"
 
 [coordinate_system]
 origin = [0.0, 0.0, 0.0]
@@ -205,6 +122,7 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "YZ"
+# Guide-only future TX placement context. RxOnly does not derive sampled TX owners from it.
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
 
@@ -218,29 +136,6 @@ material = "vacuum"
 plane = "YZ"
 origin_xyz = [0.0, -280.0, 139.0]
 size_xyz = [5.0, 560.0, 360.0]
-
-[[non_model_objects]]
-id = "tx_region_actual"
-kind = "tx_region_actual"
-source_region_id = "tx_region"
-[non_model_objects.x_usage_ratio]
-range = [false, 0.3, 0.3, 1]
-[non_model_objects.y_usage_ratio]
-range = [false, 0.3, 0.3, 1]
-[non_model_objects.x_division_count]
-range = [true, 1, 1, 1]
-[non_model_objects.y_division_count]
-range = [true, 1, 1, 1]
-
-[[non_model_objects]]
-id = "tx_region_actual_stack_space"
-kind = "tx_region_actual_stack_space"
-source_region_id = "tx_region_actual"
-total_thickness_mm = 5.0
-[non_model_objects.scale_ratio]
-range = [false, 0.35, 0.35, 1]
-[non_model_objects.tilt_enabled]
-range = [true, 1, 1, 1]
 
 # ----------------------------------------------------------------------------
 # Modeled object registry
@@ -273,37 +168,5 @@ range = [false, 0.2, 0.2, 1]
 range = [false, 0.05, 0.05, 1]
 [modeled_objects.metal_fill_factor]
 range = [false, 0.5, 0.5, 1]
-[modeled_objects.terminal_path]
-value = "A_cw_to_a"
-
-[[modeled_objects]]
-object_id = "tx_rect_void_columns"
-role = "tx_rect_void_columns"
-material = "composite"
-model_state = true
-pcb_thickness_mm = 0.3
-copper_thickness_mm = 0.1
-[modeled_objects.layer_count]
-range = [true, 1, 1, 1]
-[modeled_objects.layer_gap_mm]
-range = [false, 1.0, 1.0, 1]
-[modeled_objects.terminal_stub_length_mm]
-range = [false, 10.0, 10.0, 1]
-[modeled_objects.void_usage_ratio]
-range = [false, 0.2, 0.2, 1]
-[modeled_objects.margin_ratio]
-range = [false, 0.05, 0.05, 1]
-[modeled_objects.metal_fill_factor]
-range = [false, 0.6, 0.6, 1]
-[modeled_objects.connection_mode]
-range = [true, 0, 0, 1]
-[modeled_objects.equivalent_turn_count]
-range = [false, 3.0, 3.0, 1]
-[modeled_objects.turn_weight_a]
-range = [false, 1.0, 1.0, 1]
-[modeled_objects.turn_weight_b]
-range = [false, 0.0, 0.0, 1]
-[modeled_objects.turn_weight_c]
-range = [false, 0.0, 0.0, 1]
 [modeled_objects.terminal_path]
 value = "A_cw_to_a"

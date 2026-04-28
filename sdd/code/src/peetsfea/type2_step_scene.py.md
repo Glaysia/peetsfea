@@ -1,10 +1,11 @@
 ---
 title: type2_step_scene.py
-created: 2026-04-18 @ 09:09
+created: 2026-04-28 @ 00:00
 updated: 2026-04-28 @ 00:00
 tags:
-  - scene
   - step-export
+  - type2
+  - rxonly
 ---
 
 # type2_step_scene.py
@@ -14,19 +15,21 @@ tags:
 - Code note path: `sdd/code/src/peetsfea/type2_step_scene.py.md`
 - Status: active
 
-## 역할
-- type2 scene assembly facade다.
-- 0.2.24 SDD 기준 RX geometry and non-modeled guide/context assembly만 active contract다.
+## Responsibility
+- Dispatch modeled scene-data construction for active Type2 RxOnly bodies.
 
-## Canonical state
-- RX scene bodies are deterministic and exact.
-- `tx_region` is future placement guide context only.
-- RxOnly scene assembly must not require TX modeled geometry.
+## Inputs / Outputs
+- Inputs: modeled object spec, placement owner spec, deterministic seed.
+- Outputs: build123d shapes and `ModeledObjectSceneData` for supported RX modeled objects.
 
-## Invariants / fail-fast
-- Missing RX inputs or unsupported object ids fail immediately.
-- TX guide context must not become mesh, port, or report owner.
+## Canonical State
+- RX modeled geometry is represented by returned shapes and scene data.
+- TX modeled geometry is not active runtime state.
+
+## Invariants / Fail-Fast
+- TX modeled roles fail immediately.
+- Supported modeled specs must produce scene data through the role-specific geometry builders.
 
 ## Collaborators
-- [type2_non_model_scene.py](type2_non_model_scene.py.md)
 - [type2_step_export.py](type2_step_export.py.md)
+- [type2_step_ledger.py](type2_step_ledger.py.md)

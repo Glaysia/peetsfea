@@ -25,6 +25,7 @@ tags:
 ## Invariants / fail-fast
 - Unsupported role sets fail before backend execution.
 - RxOnly build tests must not require TX modeled objects.
+- TX modeled build dependencies, including TX columns paired with RX, must not reach the setup-ready runner.
 
 ## Collaborators
 - [build.py](../../entry/build.py.md)

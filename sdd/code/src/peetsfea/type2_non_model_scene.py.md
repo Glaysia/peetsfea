@@ -1,10 +1,11 @@
 ---
 title: type2_non_model_scene.py
-created: 2026-04-20 @ 00:00
+created: 2026-04-28 @ 00:00
 updated: 2026-04-28 @ 00:00
 tags:
-  - scene
-  - non-model
+  - step-export
+  - type2
+  - rxonly
 ---
 
 # type2_non_model_scene.py
@@ -14,32 +15,22 @@ tags:
 - Code note path: `sdd/code/src/peetsfea/type2_non_model_scene.py.md`
 - Status: active
 
-## 역할
-- type2 non-model scene resolution과 non-model scene ledger/shape 생성을 담당한다.
-- 0.2.24 SDD 기준 `tx_region`은 future TX placement guide only다.
-- RX non-model context remains valid when owned by RX setup/export flow.
+## Responsibility
+- Resolve and build non-modeled Type2 guide/context scene members.
 
-## 입력 / 출력
-- 입력: parsed non-model specs, seed, active modeled RX context
-- 출력: resolved non-model specs, non-model shapes, non-model ledger entries
+## Inputs / Outputs
+- Inputs: non-modeled base and derived specs, deterministic seed.
+- Outputs: non-modeled scene shapes and ledger entries.
 
-## Canonical state
-- non-model scene member order must be deterministic.
-- `environment`, `tx_region`, and RX region/context objects are non-conductor context unless a specific RX path owns otherwise.
-- `tx_region` guide bodies are never mesh or port owners.
+## Canonical State
+- `environment`, `tx_region`, and `rx_region_max` are the active visible non-modeled scene members.
+- `tx_region_actual` and `tx_region_actual_stack_space` derived specs are inactive for RxOnly scene export.
 
-## Invariants / fail-fast
-- unsupported object ids, duplicate specs, invalid ranges, and missing parent specs raise immediately.
-- non-model guide geometry must not create TX ports, TX output variables, or conductor mesh targets in RxOnly.
+## Invariants / Fail-Fast
+- Visible groups must resolve from required specs.
+- Grouped visible geometry must form exactly one solid.
+- Derived TX actual placement helpers remain fail-fast if called by unsupported paths.
 
 ## Collaborators
-- [type2_scene_geometry.py](type2_scene_geometry.py.md)
-- [type2_step_spec.py](type2_step_spec.py.md)
-- [type2_step_ledger.py](type2_step_ledger.py.md)
 - [type2_step_export.py](type2_step_export.py.md)
-
-## 관련 테스트
-- [test_generate_type2_step.py](../../tests/type2/test_generate_type2_step.py.md)
-
-## 변경 시 주의점
-- Do not restore derived TX actual/stack-space shape contracts while the 0.2.24 TX reset is active.
+- [type2_step_ledger.py](type2_step_ledger.py.md)

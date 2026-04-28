@@ -5,6 +5,9 @@ from types import ModuleType
 
 import pytest
 
+from peetsfea.spec.outputs import parse_outputs_table
+from peetsfea.type2_step_spec_modeled import parse_modeled_object
+
 
 _EXPECTED_PUBLIC_SURFACE: set[str] = {
     "ModeledObjectSpec",
@@ -20,6 +23,7 @@ _EXPECTED_PUBLIC_SURFACE: set[str] = {
     "ModeledTxSingleCoilSpec",
     "ModeledTxRectVoidColumnsSpec",
     "Type2ConstraintComparisonOperator",
+    "Type2ConstraintComparableRef",
     "Type2ConstraintFuncRef",
     "Type2ConstraintPathRef",
     "Type2ConstraintRule",
@@ -50,9 +54,9 @@ _EXPECTED_PUBLIC_SURFACE: set[str] = {
 }
 
 _EXPECTED_SURFACE_ORIGINS: dict[str, str] = {
-    "modeled_object_id_for_role": "peetsfea.type2_step_spec_modeled",
-    "modeled_plane_for_role": "peetsfea.type2_step_spec_modeled",
-    "placement_owner_id_for_role": "peetsfea.type2_step_spec_modeled",
+    "modeled_object_id_for_role": "peetsfea.type2_step_spec_types",
+    "modeled_plane_for_role": "peetsfea.type2_step_spec_types",
+    "placement_owner_id_for_role": "peetsfea.type2_step_spec_types",
     "render_tx_rect_void_toml": "peetsfea.type2_step_spec_modeled",
     "resolve_modeled_plate_stack_metal_fill_factor": "peetsfea.type2_step_spec_sampling",
     "resolve_modeled_plate_stack_turn_count": "peetsfea.type2_step_spec_sampling",
@@ -95,3 +99,55 @@ def test_type2_step_spec_public_surface_paths(name: str, expected_module: str) -
     symbol = getattr(type2_step_spec, name)
     actual_module = getattr(symbol, "__module__")
     assert actual_module == expected_module, f"{name} should come from {expected_module}, got {actual_module}"
+
+
+def test_outputs_parser_accepts_rx_only_variable_contract() -> None:
+    outputs = parse_outputs_table(
+        {
+            "mode": "RxOnly",
+            "report_name": "Output Variables Table1",
+            "solution_name": "Setup1 : LastAdaptive",
+            "primary_sweep": "Freq",
+            "report_category": "Terminal Solution Data",
+            "plot_type": "Data Table",
+            "variables": [
+                {"name": "Lrx_uH", "expression": "im(Zt(RX_TML,RX_TML))/2/pi/freq*1e6"},
+                {"name": "eta_rx_accept_ratio", "expression": "1-mag(S(RX_TML,RX_TML))*mag(S(RX_TML,RX_TML))"},
+            ],
+        },
+        context="outputs",
+    )
+
+    assert outputs["variables"][0]["name"] == "Lrx_uH"
+
+
+def test_outputs_parser_rejects_tx_variable_in_rx_only_mode() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"outputs\.variables\[0\]\.name is not supported for RxOnly \(actual='Ltx_uH'\)",
+    ):
+        parse_outputs_table(
+            {
+                "mode": "RxOnly",
+                "report_name": "Output Variables Table1",
+                "solution_name": "Setup1 : LastAdaptive",
+                "primary_sweep": "Freq",
+                "report_category": "Terminal Solution Data",
+                "plot_type": "Data Table",
+                "variables": [{"name": "Ltx_uH", "expression": "im\\(Zt\\(TX_TML,TX_TML\\)\\)"}],
+            },
+            context="outputs",
+        )
+
+
+def test_active_modeled_parser_rejects_tx_role() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"modeled_objects\[0\]\.role is unsupported in active RxOnly type2 mode \(actual='tx_plate_stack'\)",
+    ):
+        parse_modeled_object(
+            {"role": "tx_plate_stack"},
+            index=0,
+            seen_object_ids=set(),
+            non_model_specs_by_id={},
+        )

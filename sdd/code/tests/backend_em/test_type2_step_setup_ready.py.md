@@ -21,6 +21,7 @@ tags:
 ## Canonical state
 - Tests should verify RX conductor mesh and one RX lumped port.
 - Tests should verify RxOnly does not create TX ports or TX output variables.
+- The active full setup-ready happy path uses a single `rx_single_coil` modeled entry.
 - Future two-terminal report names are documented in [type2-em-report-contract](../../../architecture/type2-em-report-contract.md) but are not active RxOnly assertions.
 
 ## Invariants / fail-fast

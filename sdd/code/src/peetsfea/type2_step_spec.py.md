@@ -27,13 +27,18 @@ tags:
 ## Canonical state
 - active schema facade는 RX single-coil / RX plate-stack 관련 parsing surface를 유지한다.
 - `tx_region`은 future TX placement guide로만 보존한다.
+- `tx_region_actual`과 `tx_region_actual_stack_space`는 active RxOnly 입력에서 제거된 TX 형상 파생 객체다.
+- legacy collaborator imports may still see the derived TX type names, but active loading never materializes those objects.
 - `outputs.mode = "RxOnly"`는 TX port를 만들지 않고 RX 변수만 요청하는 모드다.
+- active modeled object parsing rejects TX modeled roles before downstream sampling/export can treat them as runtime state.
 - two-terminal output variable 이름은 [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)에서 shape-independent dormant contract로 보존한다.
 - constraints parsing remains declarative and deterministic.
 
 ## Invariants / fail-fast
 - unsupported schema keys fail during load; compatibility fallback is not allowed.
 - RxOnly mode must not require a TX modeled object.
+- RxOnly mode must reject TX modeled object roles.
+- RxOnly mode must reject TX derived non-model object kinds instead of requiring or materializing them.
 - RxOnly mode must not request TX report expressions.
 - malformed constraints, duplicate rule ids, unknown owner paths, unsupported functions, and unsupported operators fail during type2 source loading or sampling preflight.
 

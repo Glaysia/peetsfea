@@ -201,6 +201,7 @@ interchange_format = "step"
 radiation_margin_mm = 3500.0
 
 [outputs]
+mode = "RxOnly"
 report_name = "Output Variables Table1"
 solution_name = "Setup1 : LastAdaptive"
 primary_sweep = "Freq"
@@ -339,7 +340,7 @@ def _write_source_type2_toml(tmp_path: Path) -> Path:
     return path
 
 
-def test_load_type2_step_spec_accepts_tx_rect_void_columns_for_parser_sampler_milestone(tmp_path: Path) -> None:
+def test_load_type2_step_spec_rejects_tx_rect_void_columns_for_rxonly(tmp_path: Path) -> None:
     source_toml_path = tmp_path / "type2_tx_rect_source.toml"
     source_toml_path.write_text(
         """
@@ -359,6 +360,7 @@ interchange_format = "step"
 radiation_margin_mm = 3500.0
 
 [outputs]
+mode = "RxOnly"
 report_name = "Output Variables Table1"
 solution_name = "Setup1 : LastAdaptive"
 primary_sweep = "Freq"
@@ -437,21 +439,8 @@ value = "A_cw_to_a"
 """.strip(),
         encoding="utf-8",
     )
-    spec = load_type2_step_spec(source_toml_path)
-    assert len(spec.modeled_objects) == 1
-    assert spec.modeled_objects[0].role == "tx_rect_void_columns"
-
-
-def test_load_type2_step_spec_from_examples_has_two_modeled_objects() -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    for example_name in ("type2_sweep.toml", "type2_fixed.toml"):
-        source_toml_path = repo_root / "examples" / example_name
-        spec = load_type2_step_spec(source_toml_path)
-        assert len(spec.modeled_objects) == 2
-        assert {modeled_object.role for modeled_object in spec.modeled_objects} == {
-            "rx_single_coil",
-            "tx_rect_void_columns",
-        }
+    with pytest.raises(ValueError, match=r"unsupported in active RxOnly type2 mode"):
+        load_type2_step_spec(source_toml_path)
 
 
 def test_build_type2_reads_aedt_builder_n_from_manifest(
@@ -982,7 +971,7 @@ def test_build_prepared_type2_design_rejects_tx_rect_void_columns_without_rx_pai
     assert exporter_calls == []
 
 
-def test_build_prepared_type2_design_accepts_tx_rect_void_columns_with_rx_single_coil_pair(tmp_path: Path) -> None:
+def test_build_prepared_type2_design_rejects_tx_rect_void_columns_with_rx_single_coil_pair(tmp_path: Path) -> None:
     design_id = "design-columns-rx"
     design_dir = tmp_path / design_id
     design_dir.mkdir()
@@ -1034,53 +1023,15 @@ def test_build_prepared_type2_design_accepts_tx_rect_void_columns_with_rx_single
             "imported_ledger_path": str(cast(Path, kwargs["imported_ledger_path"])),
         }
 
-    result = type2_runtime.build_prepared_type2_design(
-        prepared_build,
-        exporter=_fake_exporter,
-        runner=_fake_runner,
-    )
+    with pytest.raises(ValueError, match=r"type2 build/setup-ready rejects unsupported modeled roles"):
+        type2_runtime.build_prepared_type2_design(
+            prepared_build,
+            exporter=_fake_exporter,
+            runner=_fake_runner,
+        )
 
     assert exporter_calls == []
-    assert len(runner_calls) == 1
-    assert runner_calls[0]["design_variables"] == prepared_build.design_variables
-    assert result["design_id"] == design_id
-    assert result["aedt_path"] == str(output_aedt_path)
-
-
-def test_prepared_builds_from_manifest_renders_tx_rect_void_columns_turn_weights_as_unitless(
-    tmp_path: Path,
-) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    source_toml_path = repo_root / "examples" / "type2_sweep.toml"
-    output_dir = tmp_path / "run" / "sampled" / "type2"
-    manifest_path = output_dir / "manifest.json"
-    document = sample_type2(
-        source_toml_path=source_toml_path,
-        output_dir=output_dir,
-        manifest_path=manifest_path,
-        seed_first=7,
-        seed_n=1,
-        sampler_n=1,
-        aedt_builder_n=1,
-        make_step_on_sample=False,
-    )
-    assert len(document["entries"]) == 1
-    design_id = document["entries"][0]["design_id"]
-
-    prepared_builds = type2_sampled.prepared_builds_from_manifest(
-        manifest_path,
-        selected_design_ids=(design_id,),
-    )
-
-    assert len(prepared_builds) == 1
-    design_variable_map = dict(prepared_builds[0].design_variables)
-    for suffix in ("turn_weight_a", "turn_weight_b", "turn_weight_c"):
-        variable_name = f"modeled_objects_tx_rect_void_columns_{suffix}"
-        assert variable_name in design_variable_map
-        expression = design_variable_map[variable_name]
-        assert expression != ""
-        assert "mm" not in expression
-        float(expression)
+    assert runner_calls == []
 
 
 def test_build_type2_rejects_list_manifest_payload(tmp_path: Path) -> None:

@@ -967,16 +967,11 @@ def parse_modeled_object(
     context = f"modeled_objects[{index}]"
     table = _require_table(raw_object, context)
     role = _require_non_empty_str(table, "role", context)
-    if role == "tx_rect_void_columns":
-        return _parse_modeled_tx_rect_void_columns(
-            raw_object,
-            index=index,
-            seen_object_ids=seen_object_ids,
-            non_model_specs_by_id=non_model_specs_by_id,
-        )
-    if role in ("tx_plate_stack", "rx_plate_stack"):
+    if role in ("tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"):
+        raise ValueError(f"{context}.role is unsupported in active RxOnly type2 mode (actual={role!r})")
+    if role == "rx_plate_stack":
         return _parse_modeled_plate_stack(raw_object, index=index, seen_object_ids=seen_object_ids)
-    if role in ("tx_single_coil", "rx_single_coil"):
+    if role == "rx_single_coil":
         return _parse_modeled_single_coil(
             raw_object,
             index=index,

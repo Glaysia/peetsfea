@@ -342,13 +342,33 @@ def _write_ledger(
     modeled_objects: list[dict[str, object]],
     radiation_margin_mm: float = 3500.0,
 ) -> Path:
+    legacy_outputs = type1_outputs_spec()
+    legacy_variable_by_name = {entry["name"]: entry["expression"] for entry in legacy_outputs["variables"]}
+    outputs = {
+        "mode": "RxOnly",
+        "report_name": legacy_outputs["report_name"],
+        "solution_name": legacy_outputs["solution_name"],
+        "primary_sweep": legacy_outputs["primary_sweep"],
+        "report_category": legacy_outputs["report_category"],
+        "plot_type": legacy_outputs["plot_type"],
+        "variables": [
+            {"name": "Lrx_uH", "expression": legacy_variable_by_name["Lrx_uH"]},
+            {"name": "Qrx_ratio", "expression": legacy_variable_by_name["Qrx_ratio"]},
+            {"name": "Rrx_ac_ohm", "expression": legacy_variable_by_name["Rrx_ac_ohm"]},
+            {"name": "Xrx_ohm", "expression": legacy_variable_by_name["Xrx_ohm"]},
+            {"name": "Grx_S", "expression": legacy_variable_by_name["Grx_S"]},
+            {"name": "Brx_S", "expression": legacy_variable_by_name["Brx_S"]},
+            {"name": "Srx_self_mag_ratio", "expression": legacy_variable_by_name["S22_mag_ratio"]},
+            {"name": "eta_rx_accept_ratio", "expression": legacy_variable_by_name["eta_rx_accept_ratio"]},
+        ],
+    }
     payload = {
         "source_toml_path": str(path.parent / "type2_fixed.toml"),
         "output_dir": str(path.parent),
         "scene_step_path": str(scene_step_path),
         "seed": 7,
         "em_policy": {"radiation_margin_mm": radiation_margin_mm},
-        "outputs": type1_outputs_spec(),
+        "outputs": outputs,
         "non_model_objects": non_model_objects,
         "modeled_objects": modeled_objects,
     }

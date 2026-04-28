@@ -1,7 +1,7 @@
 ---
 title: test_setup_type2_step_entry.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-28 @ 00:00
 tags:
   - hfss-import
   - em
@@ -15,36 +15,37 @@ tags:
 - Tested source: [setup_type2_step.py](../../entry/setup_type2_step.py.md)
 
 ## 역할
-- setup-ready entry dispatcher가 exporter와 runtime을 올바른 순서로 호출하는지 검증한다.
-- headless helper와 attached helper가 code-owned orchestration surface로 유지되는지 검증한다.
+- active type2 examples가 0.2.24 RxOnly setup-ready contract를 표현하는지 검증한다.
+- TX output variable, TX modeled role, TX sampled-owner block이 active example surface로 돌아오면 실패한다.
 
 ## 입력 / 출력
 - 입력:
-  - parsed CLI args
-  - fake exporter/runtime callables
+  - `examples/type2_fixed.toml`
+  - `examples/type2_sweep.toml`
+  - test-local mutated TOML payloads for rejection coverage
 - 출력:
-  - fake call history
-  - fake setup-ready result
+  - parsed TOML assertions
+  - expected rejection assertions
 
 ## Canonical state
-- test-local call history가 canonical assertion surface다.
+- active example TOML payload가 canonical assertion surface다.
 
 ## Invariants / fail-fast
-- default mode는 exporter 후 runtime 호출이다.
-- `--ledger` mode는 exporter를 건너뛴다.
-- `--ledger` mode에서도 report/output-variable source는 retained ledger `outputs` contract다.
-- notebook은 this entry/runtime helper의 thin consumer다.
+- `outputs.mode` must be `RxOnly`.
+- active outputs must match the RX-only report variable list in [type2-em-report-contract](../../../architecture/type2-em-report-contract.md).
+- active modeled objects must contain RX modeled object(s) and no TX modeled object role.
+- active examples must not expose TX derived sampled owners such as `tx_region_actual`, `tx_region_actual_stack_space`, or TX modeled sampled fields.
 
 ## 직접 의존
-- [setup_type2_step.py](../../entry/setup_type2_step.py.md)
-- [type2_step_setup_ready.py](../../src/peetsfea/backend/pyaedt/type2_step_setup_ready.py.md)
+- [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)
+- [0.2.24-type2-rxonly-tx-removal](../../../plans/0.2.24-type2-rxonly-tx-removal.md)
 
 ## 이 파일을 쓰는 곳
 - Default pure-Python test suite.
 
 ## 관련 테스트
-- This file is the direct test coverage for [setup_type2_step.py](../../entry/setup_type2_step.py.md).
+- This file is high-level active example coverage for RxOnly setup-ready input expectations.
 
 ## 변경 시 주의점
 - real STEP export or AEDT launch를 넣지 않는다.
-- import-only entry assertions와 setup-ready entry assertions를 섞지 않는다.
+- parser/export/backend implementation assertions owned by other workers must stay in their own files.

@@ -1,7 +1,7 @@
 ---
 title: test_refresh_type2_step_viewer_artifacts.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-04-28 @ 00:00
 tags:
   - step-export
 ---
@@ -14,41 +14,33 @@ tags:
 - Tested source: [refresh_type2_step_viewer_artifacts.py](../../entry/refresh_type2_step_viewer_artifacts.py.md)
 
 ## 역할
-- type2 STEP viewer refresh entry가 stale output dir를 지우고 fresh STEP artifacts를 다시 만드는지 검증한다.
-- refreshed ledger와 canonical scene STEP가 TX/RX placement contract를 유지하는지 확인한다.
-- active example의 TX multilayer metadata-owned port-sheet vertices까지 refresh 경로에서 살아남는지 함께 확인한다.
+- viewer refresh input fixture인 active fixed example이 RxOnly viewer/setup surface를 유지하는지 검증한다.
+- fixed example에서 TX modeled object, TX sampled-owner block, TX output variable이 다시 생기면 실패한다.
 
 ## 입력 / 출력
 - 입력:
-  - temp output dir with stale files
   - active `examples/type2_fixed.toml`
 - 출력:
-  - refreshed artifact files
-  - parsed refreshed ledger assertions
+  - parsed fixed example assertions
 
 ## Canonical state
-- refreshed output dir contents와 ledger JSON이 직접 assertion 대상이다.
+- active fixed example TOML payload가 canonical assertion surface다.
 
 ## Invariants / fail-fast
-- stale file/subdir는 refresh 후 남아 있으면 안 된다.
-- `type2_step_ledger.json`, `type2_scene.step`, modeled metadata files가 다시 생성돼야 한다.
-- stale `type2_combined_preview.step`와 `objects/` 디렉터리는 refresh 후 남아 있으면 안 된다.
-- refreshed active example baseline must keep `tx_region.bottom == 0` after the scene Z rebase.
-- refreshed active example TX multilayer path must still emit exactly four canonical `port_sheet_vertices_xyz` entries.
-- refreshed active `examples/type2_fixed.toml` may now express underlay contracts as fixed single-candidate ranges, and refresh must still resolve the same underlay geometry without depending on sweep-form input.
-- TX는 `tx_region.min_x` touch + centered Y + top-aligned contract를 유지해야 한다.
-- RX는 centered Y + bottom Z + owner max-X contract를 유지해야 하며, rebased active example에서는 `rx_region_max.min_z == 139`를 그대로 써야 한다.
-- refreshed active example also preserves RX underlay exact-name ordering and owner `-X` anchor without changing the RX coil max-X contact contract.
+- fixed example keeps `tx_region` only as guide context.
+- fixed example keeps `rx_region_max` and the RX modeled object as active geometry inputs.
+- fixed example has no active TX modeled role, no TX sampled-owner blocks, and no output expression referencing `TX_TML`.
 
 ## 직접 의존
-- [refresh_type2_step_viewer_artifacts.py](../../entry/refresh_type2_step_viewer_artifacts.py.md)
+- [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)
+- [0.2.24-type2-rxonly-tx-removal](../../../plans/0.2.24-type2-rxonly-tx-removal.md)
 
 ## 이 파일을 쓰는 곳
 - default pure-Python regression suite.
 
 ## 관련 테스트
-- This file is the direct test coverage for [refresh_type2_step_viewer_artifacts.py](../../entry/refresh_type2_step_viewer_artifacts.py.md).
+- This file is high-level active fixed example coverage for the viewer refresh input contract.
 
 ## 변경 시 주의점
-- notebook refresh output layout이 바뀌면 file existence assertions를 같이 갱신한다.
-- example type2 TOML의 modeled object registry가 바뀌면 object id assertions를 같이 갱신한다.
+- notebook refresh output layout must not be tested by editing notebooks in this worker scope.
+- example type2 TOML의 modeled object registry가 바뀌면 RxOnly object id assertions를 같이 갱신한다.

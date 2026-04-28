@@ -25,6 +25,7 @@ tags:
 ## Canonical state
 - RX body names/counts/groups are exact export contract values.
 - `tx_region` may be present as non-modeled future guide context.
+- `tx_region_actual` and TX modeled bodies are not required ledger entries for RxOnly.
 - Mesh/boundary/port/report runtime summaries are not ledger-owned.
 
 ## Invariants / fail-fast

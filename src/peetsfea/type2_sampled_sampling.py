@@ -40,9 +40,12 @@ _INTEGER_RANGE_FIELD_NAMES = (
     "y_division_count",
 )
 _SAMPLED_METADATA_TABLE = "sampled"
-_SAMPLED_SINGLE_COIL_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
+_SAMPLED_SINGLE_COIL_ROLES: frozenset[str] = frozenset({"rx_single_coil"})
 _PLATE_STACK_ROLE_SUFFIX = "_plate_stack"
 _TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
+_UNSUPPORTED_RXONLY_TX_MODELED_ROLES: frozenset[str] = frozenset(
+    {"tx_single_coil", "tx_plate_stack", _TX_RECT_VOID_COLUMNS_ROLE}
+)
 _TYPE2_CONSTRAINT_RETRY_LIMIT: Final[int] = 64
 _CONSTRAINT_COMPARISON_OPERATORS: Final[frozenset[str]] = frozenset({"<", "<=", ">", ">=", "==", "!="})
 
@@ -463,13 +466,12 @@ def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpe
     owner_specs: list[tuple[str, RangeSpec]] = []
     for modeled_spec in spec.modeled_objects:
         role = _modeled_spec_role(modeled_spec)
+        if role in _UNSUPPORTED_RXONLY_TX_MODELED_ROLES:
+            raise ValueError(f"RxOnly type2 sampling does not support active TX modeled sampled owner role: {role}")
         if role in _SAMPLED_SINGLE_COIL_ROLES:
             owner_specs.extend(
                 _single_coil_range_owner_specs(cast(ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec, modeled_spec))
             )
-            continue
-        if role == _TX_RECT_VOID_COLUMNS_ROLE:
-            owner_specs.extend(_tx_rect_void_columns_range_owner_specs(modeled_spec))
             continue
         if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
             owner_specs.extend(_plate_stack_range_owner_specs(cast(ModeledPlateStackSpec, modeled_spec)))
@@ -810,33 +812,14 @@ def sampled_owner_values(
                     ),
                 )
             )
-    tx_rect_void_columns_realized_coil_count = _tx_rect_void_columns_realized_coil_count(
-        spec=spec,
-        sampled_values=tuple(sampled_values),
-        seed=seed,
-        retry_number=retry_number,
-    )
     for modeled_spec in spec.modeled_objects:
         role = _modeled_spec_role(modeled_spec)
+        if role in _UNSUPPORTED_RXONLY_TX_MODELED_ROLES:
+            raise ValueError(f"RxOnly type2 sampling does not support active TX modeled sampled owner role: {role}")
         if role in _SAMPLED_SINGLE_COIL_ROLES:
             sampled_values.extend(
                 _single_coil_range_owner_values(
                     cast(ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec, modeled_spec),
-                    seed=seed,
-                    retry_number=retry_number,
-                )
-            )
-            continue
-        if role == _TX_RECT_VOID_COLUMNS_ROLE:
-            assert hasattr(modeled_spec, "object_id"), "tx_rect_void_columns modeled spec must expose object_id"
-            raw_object_id = cast(object, getattr(modeled_spec, "object_id"))
-            assert isinstance(raw_object_id, str), "tx_rect_void_columns object_id must be str"
-            owner_prefix = f"modeled_objects.{raw_object_id}"
-            sampled_values.extend(
-                _tx_rect_void_columns_sampled_owner_values(
-                    modeled_spec,
-                    owner_prefix=owner_prefix,
-                    realized_coil_count=tx_rect_void_columns_realized_coil_count,
                     seed=seed,
                     retry_number=retry_number,
                 )

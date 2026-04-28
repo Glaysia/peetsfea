@@ -59,8 +59,19 @@ def _range(is_integer: bool, start: float, end: float, count: int) -> str:
 
 
 def _outputs_spec_text() -> str:
+    rx_only_output_variables = (
+        "Lrx_uH",
+        "Qrx_ratio",
+        "Rrx_ac_ohm",
+        "Xrx_ohm",
+        "Grx_S",
+        "Brx_S",
+        "Srx_self_mag_ratio",
+        "eta_rx_accept_ratio",
+    )
     lines = [
         "[outputs]",
+        'mode = "RxOnly"',
         'report_name = "Output Variables Table1"',
         'solution_name = "Setup1 : LastAdaptive"',
         'primary_sweep = "Freq"',
@@ -68,12 +79,12 @@ def _outputs_spec_text() -> str:
         'plot_type = "Data Table"',
         "",
     ]
-    for name, expression in TYPE1_OUTPUT_VARIABLES:
+    for name in rx_only_output_variables:
         lines.extend(
             (
                 "[[outputs.variables]]",
                 f'name = "{name}"',
-                f'expression = "{expression}"',
+                f'expression = "{name}"',
                 "",
             )
         )
@@ -676,8 +687,7 @@ def _write_spec(tmp_path: Path, text: str) -> Path:
     return path
 
 
-def _spec_with_deactivated_tx_rect_void_columns_for_export_dispatch() -> Type2StepSpec:
-    source_toml = Path(__file__).resolve().parents[2] / "examples" / "type2_fixed.toml"
+def _spec_with_deactivated_tx_rect_void_columns_for_export_dispatch(source_toml: Path) -> Type2StepSpec:
     baseline = load_type2_step_spec(source_toml)
     columns_spec = ModeledTxRectVoidColumnsSpec(
         object_id="tx_rect_void_columns",
@@ -2366,110 +2376,60 @@ def test_realize_tx_rect_void_spec_uses_single_void_usage_ratio_for_x_and_y(tmp_
     assert realized.void_center_y_over_outer_y == pytest.approx(0.0)
 
 
-def test_export_type2_step_artifacts_supports_tx_rect_void_columns_modeled_role(tmp_path: Path) -> None:
+def test_export_type2_step_artifacts_rejects_tx_rect_void_columns_modeled_role(tmp_path: Path) -> None:
     source_toml = _write_spec(
         tmp_path,
         _type2_tx_rect_void_columns_spec_text(equivalent_turn_count_range="[false, 1.0, 1.0, 1]"),
     )
     output_dir = tmp_path / "out"
     output_ledger_path = output_dir / "type2_ledger.json"
-    ledger = export_type2_step_artifacts(
-        toml_path=source_toml,
-        output_dir=output_dir,
-        ledger_path=output_ledger_path,
-        seed=0,
-    )
 
-    assert output_ledger_path.exists()
-    scene_step_path = Path(cast(str, ledger["scene_step_path"]))
-    assert scene_step_path.is_file()
-    tx_entry = cast(
-        dict[str, object],
-        next(
-            entry for entry in cast(list[object], ledger["modeled_objects"])
-            if cast(dict[str, object], entry)["object_id"] == "tx_rect_void_columns"
-        ),
-    )
-    expected_names = cast(tuple[str, ...], tx_entry["expected_exported_body_names"])
-    _assert_tx_rect_void_columns_expected_body_contract(
-        expected_names=expected_names,
-        x_division_count=1,
-        y_division_count=1,
-    )
-    assert cast(int, tx_entry["expected_exported_body_count"]) == len(
-        expected_names
-    )
-    assert cast(int, tx_entry["expected_exported_body_count"]) > 0
-    terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
-    _assert_tx_rect_void_columns_terminal_metadata_contract(
-        terminal_metadata=terminal_metadata,
-        x_division_count=1,
-        y_division_count=1,
-    )
-    modeled_metadata_path = output_dir / "metadata" / "tx_rect_void_columns.metadata.json"
-    assert modeled_metadata_path.is_file()
-    scene_shapes_by_label = _step_shapes_by_label(scene_step_path)
-    for body_name in cast(tuple[str, ...], tx_entry["expected_exported_body_names"]):
-        assert body_name in scene_shapes_by_label
+    with pytest.raises(ValueError, match=r"role is unsupported in active RxOnly type2 mode.*tx_rect_void_columns"):
+        export_type2_step_artifacts(
+            toml_path=source_toml,
+            output_dir=output_dir,
+            ledger_path=output_ledger_path,
+            seed=0,
+        )
+    assert not output_ledger_path.exists()
 
 
-def test_export_type2_step_artifacts_supports_tx_rect_void_columns_when_preflight_bypassed(
+def test_export_type2_step_artifacts_rejects_tx_rect_void_columns_when_legacy_preflight_bypassed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import peetsfea.type2_step_export as module_under_test
-    source_toml = Path(__file__).resolve().parents[2] / "examples" / "type2_fixed.toml"
+    source_toml = _write_spec(
+        tmp_path,
+        _type2_spec_text(modeled_object_id="rx_rect_void_coil", modeled_role="rx_single_coil"),
+    )
 
     def _no_raise_preflight(*, spec: object, context: str) -> None:
         del spec, context
 
     def _load_fake_spec(_toml_path: Path) -> Type2StepSpec:
-        return _spec_with_deactivated_tx_rect_void_columns_for_export_dispatch()
+        return _spec_with_deactivated_tx_rect_void_columns_for_export_dispatch(source_toml)
 
     monkeypatch.setattr(module_under_test, "_raise_if_tx_rect_void_columns_modeled_role_present", _no_raise_preflight)
     monkeypatch.setattr(module_under_test, "load_type2_step_spec", _load_fake_spec)
 
     output_dir = tmp_path / "out"
     output_ledger_path = output_dir / "type2_ledger.json"
-    ledger = module_under_test.export_type2_step_artifacts(
-        toml_path=source_toml,
-        output_dir=output_dir,
-        ledger_path=output_ledger_path,
-        seed=0,
-    )
-
-    assert output_ledger_path.exists()
-    scene_step_path = Path(cast(str, ledger["scene_step_path"]))
-    assert scene_step_path.is_file()
-    tx_entry = cast(
-        dict[str, object],
-        next(
-            entry for entry in cast(list[object], ledger["modeled_objects"])
-            if cast(dict[str, object], entry)["object_id"] == "tx_rect_void_columns"
-        ),
-    )
-    assert cast(int, tx_entry["expected_exported_body_count"]) == len(
-        cast(tuple[str, ...], tx_entry["expected_exported_body_names"])
-    )
-    assert cast(int, tx_entry["expected_exported_body_count"]) > 0
-    terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
-    _assert_tx_rect_void_columns_terminal_metadata_contract(
-        terminal_metadata=terminal_metadata,
-        x_division_count=1,
-        y_division_count=1,
-    )
-    modeled_metadata_path = output_dir / "metadata" / "tx_rect_void_columns.metadata.json"
-    assert modeled_metadata_path.is_file()
-    scene_shapes_by_label = _step_shapes_by_label(scene_step_path)
-    for body_name in cast(tuple[str, ...], tx_entry["expected_exported_body_names"]):
-        assert body_name in scene_shapes_by_label
+    with pytest.raises(ValueError, match=r"does not support modeled TX geometry.*tx_rect_void_columns"):
+        module_under_test.export_type2_step_artifacts(
+            toml_path=source_toml,
+            output_dir=output_dir,
+            ledger_path=output_ledger_path,
+            seed=0,
+        )
+    assert not output_ledger_path.exists()
 
 
 def test_export_type2_tx_single_coil_artifact_rejects_tx_rect_void_columns_modeled_role(tmp_path: Path) -> None:
     source_toml = _write_spec(tmp_path, _type2_tx_rect_void_columns_spec_text())
     with pytest.raises(
         ValueError,
-        match=r"parser/sampler-only milestone.*role is deactivated for active type2 inputs: tx_rect_void_columns",
+        match=r"role is unsupported in active RxOnly type2 mode.*tx_rect_void_columns",
     ):
         export_type2_tx_single_coil_artifact(
             toml_path=source_toml,
@@ -2484,20 +2444,23 @@ def test_export_type2_tx_single_coil_artifact_rejects_tx_rect_void_columns_when_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import peetsfea.type2_step_export as module_under_test
-    source_toml = Path(__file__).resolve().parents[2] / "examples" / "type2_fixed.toml"
+    source_toml = _write_spec(
+        tmp_path,
+        _type2_spec_text(modeled_object_id="rx_rect_void_coil", modeled_role="rx_single_coil"),
+    )
 
     def _no_raise_preflight(*, spec: object, context: str) -> None:
         del spec, context
 
     def _load_fake_spec(_toml_path: Path) -> Type2StepSpec:
-        return _spec_with_deactivated_tx_rect_void_columns_for_export_dispatch()
+        return _spec_with_deactivated_tx_rect_void_columns_for_export_dispatch(source_toml)
 
     monkeypatch.setattr(module_under_test, "_raise_if_tx_rect_void_columns_modeled_role_present", _no_raise_preflight)
     monkeypatch.setattr(module_under_test, "load_type2_step_spec", _load_fake_spec)
 
     with pytest.raises(
         ValueError,
-        match=r"parser/sampler-only milestone.*role is deactivated for active type2 inputs: tx_rect_void_columns",
+        match=r"does not support modeled TX geometry.*tx_rect_void_columns",
     ):
         module_under_test.export_type2_tx_single_coil_artifact(
             toml_path=source_toml,
@@ -2507,7 +2470,7 @@ def test_export_type2_tx_single_coil_artifact_rejects_tx_rect_void_columns_when_
         )
 
 
-def test_export_type2_step_artifacts_tiles_tx_region_actual_for_forced_3x3_divisions(tmp_path: Path) -> None:
+def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tmp_path: Path) -> None:
     toml_path = _write_spec(
         tmp_path,
         _type2_spec_text(
@@ -2525,62 +2488,26 @@ def test_export_type2_step_artifacts_tiles_tx_region_actual_for_forced_3x3_divis
     )
 
     non_model_entry = ledger["non_model_objects"][0]
-    tile_names = _tx_region_actual_tile_names(x_division_count=3, y_division_count=3)
-    stack_space_tile_names = _tx_region_actual_stack_space_tile_names(x_division_count=3, y_division_count=3)
     assert non_model_entry["member_object_ids"] == (
         "environment",
         "tx_region",
-        *tile_names,
-        *stack_space_tile_names,
         "rx_region_max",
     )
     member_objects = non_model_entry["member_objects"]
     tx_region_actual_members = [member for member in member_objects if cast(str, member["role"]) == "tx_region_actual"]
-    assert tuple(cast(str, member["object_id"]) for member in tx_region_actual_members) == tile_names
-    for member in tx_region_actual_members:
-        assert member["canonical_coordinates"]["outer_bounds_size_xyz"] == pytest.approx((16.0, 28.0, 90.0))
+    assert tx_region_actual_members == []
     tx_region_actual_stack_space_members = [
         member for member in member_objects if cast(str, member["role"]) == "tx_region_actual_stack_space"
     ]
-    assert tuple(cast(str, member["object_id"]) for member in tx_region_actual_stack_space_members) == stack_space_tile_names
-    stack_space_coordinates_by_name = {
-        cast(str, member["object_id"]): cast(dict[str, object], member["canonical_coordinates"])
-        for member in tx_region_actual_stack_space_members
-    }
-    tile_coordinates_by_name = {
-        cast(str, member["object_id"]): cast(dict[str, object], member["canonical_coordinates"])
-        for member in tx_region_actual_members
-    }
-    for tile_name, stack_space_name in zip(tile_names, stack_space_tile_names, strict=True):
-        tile_bounds = tile_coordinates_by_name[tile_name]
-        stack_space_bounds = stack_space_coordinates_by_name[stack_space_name]
-        assert isinstance(tile_bounds["outer_bounds_size_xyz"], tuple)
-        assert isinstance(stack_space_bounds["outer_bounds_size_xyz"], tuple)
-        tile_size_xyz = cast(tuple[float, float, float], tile_bounds["outer_bounds_size_xyz"])
-        stack_space_size_xyz = cast(tuple[float, float, float], stack_space_bounds["outer_bounds_size_xyz"])
-        tile_min_xyz = cast(tuple[float, float, float], tile_bounds["outer_bounds_min_xyz"])
-        stack_space_min_xyz = cast(tuple[float, float, float], stack_space_bounds["outer_bounds_min_xyz"])
-        tile_max_z = tile_min_xyz[2] + tile_size_xyz[2]
-        assert stack_space_size_xyz[0] > tile_size_xyz[0] * 0.35
-        assert stack_space_size_xyz[1] >= (tile_size_xyz[1] * 0.35) - 1e-8
-        assert stack_space_size_xyz[2] > 5.0
-        assert stack_space_min_xyz[2] >= tile_min_xyz[2] - 1e-8
-        assert cast(tuple[float, float, float], stack_space_bounds["outer_bounds_max_xyz"])[2] <= tile_max_z + 1e-8
+    assert tx_region_actual_stack_space_members == []
+    assert tuple(entry["object_id"] for entry in ledger["modeled_objects"]) == ("rx_rect_void_coil",)
+    rx_entry = ledger["modeled_objects"][0]
+    assert cast(dict[str, object], rx_entry["terminal_metadata"])["port_sheet_vertices_xyz"]
 
     scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
-    for tile_name in tile_names:
-        assert tile_name in scene_shapes_by_label
-        assert type(scene_shapes_by_label[tile_name]).__name__ == "Solid"
-    for stack_space_name in stack_space_tile_names:
-        assert stack_space_name in scene_shapes_by_label
-        assert type(scene_shapes_by_label[stack_space_name]).__name__ == "Solid"
+    assert "tx_region" in scene_shapes_by_label
+    assert "tx_region_actual" not in scene_shapes_by_label
     assert "tx_region_actual_stack_space" not in scene_shapes_by_label
-    _assert_tx_region_actual_tiles_contract(
-        scene_shapes_by_label=scene_shapes_by_label,
-        tile_names=tile_names,
-        expected_origin_xyz=(0.0, -42.0, 0.0),
-        expected_size_xyz=(48.0, 84.0, 90.0),
-    )
 
 
 def test_export_type2_step_artifacts_tilts_only_tx_region_actual_stack_space_toward_modeled_rx_center(tmp_path: Path) -> None:

@@ -24,6 +24,8 @@ tags:
 ## Canonical state
 - RxOnly build path does not require TX modeled geometry.
 - `tx_region` may flow as non-modeled guide context only.
+- Setup-ready role validation accepts only the active RX modeled role set.
+- Build prep must not pass TX modeled sampled design variables to the backend.
 
 ## Invariants / fail-fast
 - Unsupported role sets fail before backend execution.

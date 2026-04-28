@@ -323,6 +323,40 @@ def _expected_output_variables() -> list[tuple[str, str, str]]:
     ]
 
 
+def _expected_rx_only_output_variables() -> list[tuple[str, str, str]]:
+    outputs = type1_outputs_spec()
+    solution_name = outputs["solution_name"]
+    source_by_name = dict(TYPE1_OUTPUT_VARIABLES)
+    expected_names = [
+        "Lrx_uH",
+        "Qrx_ratio",
+        "Rrx_ac_ohm",
+        "Xrx_ohm",
+        "Grx_S",
+        "Brx_S",
+        "Srx_self_mag_ratio",
+        "eta_rx_accept_ratio",
+    ]
+    expression_by_name = {
+        "Lrx_uH": source_by_name["Lrx_uH"],
+        "Qrx_ratio": source_by_name["Qrx_ratio"],
+        "Rrx_ac_ohm": source_by_name["Rrx_ac_ohm"],
+        "Xrx_ohm": source_by_name["Xrx_ohm"],
+        "Grx_S": source_by_name["Grx_S"],
+        "Brx_S": source_by_name["Brx_S"],
+        "Srx_self_mag_ratio": source_by_name["S22_mag_ratio"],
+        "eta_rx_accept_ratio": source_by_name["eta_rx_accept_ratio"],
+    }
+    return [
+        (
+            name,
+            expression_by_name[name].replace("RX_TML", "1_T1"),
+            solution_name,
+        )
+        for name in expected_names
+    ]
+
+
 def _role_aware_mesh_entries(*, tx_object_name: str = "tx_copper_l0") -> list[dict[str, object]]:
     return [
         {
@@ -1304,7 +1338,7 @@ def test_setup_type2_step_ledger_raises_when_required_mesh_role_is_missing(tmp_p
     assert not imported_ledger_path.exists()
 
 
-def test_setup_type2_step_ledger_rx_single_coil_only_runs_until_rx_only_tx_tml_guard(tmp_path: Path) -> None:
+def test_setup_type2_step_ledger_rx_single_coil_only_runs_full_rx_only_setup_ready(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
     _write_ledger(
         ledger_path,
@@ -1316,13 +1350,12 @@ def test_setup_type2_step_ledger_rx_single_coil_only_runs_until_rx_only_tx_tml_g
     imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
     session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[_rx_only_imported_name_batch()]))
 
-    with pytest.raises(ValueError, match=r"Output expression references TX_TML but RX-only mode has no TX terminal"):
-        setup_type2_step_ledger(
-            step_ledger_path=ledger_path,
-            output_aedt_path=output_aedt_path,
-            imported_ledger_path=imported_ledger_path,
-            hfss_factory=lambda _: cast(HfssSession, session),
-        )
+    result = setup_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
 
     assert session.mesh_module.assign_length_op_calls == [
         [
@@ -1344,8 +1377,24 @@ def test_setup_type2_step_ledger_rx_single_coil_only_runs_until_rx_only_tx_tml_g
         ]
     ]
     assert len(session.oboundary.assign_lumped_port_calls) == 1
+    assert result["ports"] == {"tx": [], "rx": ["1_T1"]}
+    assert result["sources"] == {
+        "rx_source_name": "1_T1",
+        "rx_phase_deg": "0deg",
+        "rx_magnitude": "1V",
+    }
     assert session._excitation_names == ["1_T1"]
-    assert session.save_project_calls == []
+    assert session.created_output_variables == _expected_rx_only_output_variables()
+    assert all("TX_TML" not in expression for _name, expression, _solution in session.created_output_variables)
+    assert all(not name.lower().startswith(("tx", "s21", "fom")) for name, _expression, _solution in session.created_output_variables)
+    outputs = type1_outputs_spec()
+    assert session.created_reports[0]["components"] == [
+        "X Component:=",
+        outputs["primary_sweep"],
+        "Y Component:=",
+        [name for name, _expression, _solution in _expected_rx_only_output_variables()],
+    ]
+    assert session.save_project_calls == [str(output_aedt_path)]
     assert session.desktop_class.release_calls == [(True, True)]
 
 

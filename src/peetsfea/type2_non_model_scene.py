@@ -216,32 +216,9 @@ def _non_model_group_specs(
     specs: tuple[NonModelBoxSpec, ...],
 ) -> tuple[tuple[str, str, Literal["XY", "YZ", "ZX", "mixed"], tuple[NonModelBoxSpec, ...]], ...]:
     groups: list[tuple[str, str, Literal["XY", "YZ", "ZX", "mixed"], tuple[NonModelBoxSpec, ...]]] = []
-    tx_region_actual_specs = tuple(spec for spec in specs if spec.kind == "tx_region_actual")
-    if len(tx_region_actual_specs) == 0:
-        raise RuntimeError("type2 non-model registry must contain at least one tx_region_actual concrete object")
-    tx_region_actual_sorted_specs = tuple(sorted(tx_region_actual_specs, key=lambda spec: spec.object_id))
-    tx_region_actual_stack_space_specs = tuple(spec for spec in specs if spec.kind == "tx_region_actual_stack_space")
-    if len(tx_region_actual_stack_space_specs) == 0:
-        raise RuntimeError(
-            "type2 non-model registry must contain at least one tx_region_actual_stack_space concrete object "
-            f"(actual={len(tx_region_actual_stack_space_specs)})"
-        )
-    tx_region_actual_stack_space_sorted_specs = tuple(
-        sorted(tx_region_actual_stack_space_specs, key=lambda spec: spec.object_id)
-    )
     for object_id, role, plane, member_ids in _NON_MODEL_VISIBLE_GROUPS:
         group_specs = tuple(require_non_model_object_spec(specs, object_id=member_id) for member_id in member_ids)
         groups.append((object_id, role, plane, group_specs))
-        if object_id == "tx_region":
-            groups.append(("tx_region_actual", "tx_region_actual", "XY", tx_region_actual_sorted_specs))
-            groups.append(
-                (
-                    "tx_region_actual_stack_space",
-                    "tx_region_actual_stack_space",
-                    "XY",
-                    tx_region_actual_stack_space_sorted_specs,
-                )
-            )
     return tuple(groups)
 
 
@@ -639,10 +616,6 @@ def _non_model_scene_members(specs: tuple[NonModelBoxSpec, ...]) -> tuple[NonMod
 def build_non_model_scene_shapes(specs: tuple[NonModelBoxSpec, ...]) -> tuple[bd.Shape, ...]:
     scene_shapes: list[bd.Shape] = []
     for object_id, _role, _plane, group_specs in _non_model_group_specs(specs):
-        if object_id in ("tx_region_actual", "tx_region_actual_stack_space"):
-            for tx_region_actual_spec in group_specs:
-                scene_shapes.append(build_non_model_box_shape(tx_region_actual_spec))
-            continue
         scene_shapes.append(_build_non_model_group_shape(object_id=object_id, specs=group_specs))
     return tuple(scene_shapes)
 
@@ -650,7 +623,12 @@ def build_non_model_scene_shapes(specs: tuple[NonModelBoxSpec, ...]) -> tuple[bd
 def build_non_model_scene_entry(specs: tuple[NonModelBoxSpec, ...]) -> NonModelObjectLedgerEntry:
     if not specs:
         raise ValueError("non-model scene entry requires at least one spec")
-    material_names = tuple(sorted({spec.material for spec in specs}))
+    visible_specs = tuple(
+        spec
+        for _object_id, _role, _plane, group_specs in _non_model_group_specs(specs)
+        for spec in group_specs
+    )
+    material_names = tuple(sorted({spec.material for spec in visible_specs}))
     material = material_names[0] if len(material_names) == 1 else "mixed"
     member_objects = _non_model_scene_members(specs)
     return {
@@ -658,7 +636,7 @@ def build_non_model_scene_entry(specs: tuple[NonModelBoxSpec, ...]) -> NonModelO
         "role": "non_model_scene",
         "material": material,
         "model_state": False,
-        "canonical_coordinates": canonical_from_non_model_specs(specs, context="non-model scene"),
+        "canonical_coordinates": canonical_from_non_model_specs(visible_specs, context="non-model scene"),
         "plane": "mixed",
         "non_model": True,
         "member_object_ids": tuple(member["object_id"] for member in member_objects),
