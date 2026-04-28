@@ -21,7 +21,7 @@ tags:
 
 ## Inputs / Outputs
 - Inputs: non-modeled base specs, legacy inactive derived specs, deterministic seed.
-- Expected parser interface: the parsed `tx_region` non-model spec is a concrete `NonModelTxRegionSpec` with a `tx_reference_line` object containing `x_ratio` and `z_ratio` `RangeSpec` fields.
+- Expected parser interface: the parsed `tx_region` non-model spec is a concrete `NonModelTxRegionSpec` with a `tx_reference_line` object containing `x_ratio`, `y_usage_ratio`, and `z_ratio` `RangeSpec` fields.
 - Outputs: non-modeled scene shapes and ledger entries.
 
 ## Canonical State
@@ -33,7 +33,7 @@ tags:
 ## Invariants / Fail-Fast
 - Visible groups must resolve from required specs.
 - Grouped visible geometry must form exactly one solid.
-- `tx_inner_region` ratios must be finite and strictly inside `(0, 1)`.
+- `tx_inner_region` X/Z ratios must be finite and strictly inside `(0, 1)`, and Y usage ratio must be finite and in `(0, 1]`.
 - `tx_inner_region` must derive from `tx_region`; a base box named `tx_inner_region` without reference-line provenance is rejected.
 - Ledger construction for `tx_inner_region` requires matching creation-time provenance in the registry.
 - Derived TX actual placement helpers remain fail-fast if called by unsupported paths.

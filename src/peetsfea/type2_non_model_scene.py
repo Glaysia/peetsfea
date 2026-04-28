@@ -416,6 +416,14 @@ def _validated_tx_inner_region_ratio(*, ratio: float, owner_path: str) -> float:
     return ratio
 
 
+def _validated_tx_inner_region_y_usage_ratio(*, ratio: float, owner_path: str) -> float:
+    if not math.isfinite(ratio):
+        raise RuntimeError(f"{owner_path} must resolve to a finite ratio (actual={ratio})")
+    if ratio <= 0.0 or ratio > 1.0:
+        raise RuntimeError(f"{owner_path} must resolve in (0, 1] (actual={ratio})")
+    return ratio
+
+
 def _resolved_tx_inner_region_spec_from_tx_region_spec(
     *,
     tx_region_spec: NonModelTxRegionSpec,
@@ -429,8 +437,10 @@ def _resolved_tx_inner_region_spec_from_tx_region_spec(
     return _resolved_tx_inner_region_from_reference_line(
         source_region_spec=tx_region_spec,
         x_ratio=tx_region_spec.tx_reference_line.x_ratio,
+        y_usage_ratio=tx_region_spec.tx_reference_line.y_usage_ratio,
         z_ratio=tx_region_spec.tx_reference_line.z_ratio,
         x_ratio_owner_path="non_model_objects.tx_region.tx_reference_line.x_ratio",
+        y_usage_ratio_owner_path="non_model_objects.tx_region.tx_reference_line.y_usage_ratio",
         z_ratio_owner_path="non_model_objects.tx_region.tx_reference_line.z_ratio",
         seed=seed,
     )
@@ -440,8 +450,10 @@ def _resolved_tx_inner_region_from_reference_line(
     *,
     source_region_spec: NonModelBoxSpec,
     x_ratio: RangeSpec,
+    y_usage_ratio: RangeSpec,
     z_ratio: RangeSpec,
     x_ratio_owner_path: str,
+    y_usage_ratio_owner_path: str,
     z_ratio_owner_path: str,
     seed: int,
 ) -> NonModelBoxSpec:
@@ -464,26 +476,39 @@ def _resolved_tx_inner_region_from_reference_line(
         ),
         owner_path=z_ratio_owner_path,
     )
+    resolved_y_usage_ratio = _validated_tx_inner_region_y_usage_ratio(
+        ratio=_selected_float_candidate(
+            range_spec=y_usage_ratio,
+            owner_path=y_usage_ratio_owner_path,
+            seed=seed,
+        ),
+        owner_path=y_usage_ratio_owner_path,
+    )
     x_ref = tx_origin_x + (tx_size_x * resolved_x_ratio)
     z_ref = tx_origin_z + (tx_size_z * resolved_z_ratio)
     inner_size_x = x_ref - tx_origin_x
+    inner_size_y = tx_size_y * resolved_y_usage_ratio
     inner_size_z = z_ref - tx_origin_z
-    if inner_size_x <= 0.0 or inner_size_z <= 0.0:
+    if inner_size_x <= 0.0 or inner_size_y <= 0.0 or inner_size_z <= 0.0:
         raise RuntimeError(
-            "tx_inner_region resolved size must be positive "
+            "tx_inner_region resolved sizes must be positive "
             f"(x_ratio={resolved_x_ratio}, z_ratio={resolved_z_ratio}, "
-            f"size_x={inner_size_x}, size_z={inner_size_z})"
+            f"y_usage_ratio={resolved_y_usage_ratio}, "
+            f"size_x={inner_size_x}, size_y={inner_size_y}, size_z={inner_size_z})"
         )
+    inner_origin_y = tx_origin_y + ((tx_size_y - inner_size_y) / 2.0)
     _TX_INNER_REGION_PROVENANCE_BY_OBJECT_ID[_TX_INNER_REGION_OBJECT_ID] = {
         "source_region_id": tx_region_spec.object_id,
         "x_ratio_owner_path": x_ratio_owner_path,
+        "y_usage_ratio_owner_path": y_usage_ratio_owner_path,
         "z_ratio_owner_path": z_ratio_owner_path,
         "x_ratio": resolved_x_ratio,
+        "y_usage_ratio": resolved_y_usage_ratio,
         "z_ratio": resolved_z_ratio,
         "x_ref": x_ref,
         "z_ref": z_ref,
-        "line_start_xyz": (x_ref, tx_origin_y, z_ref),
-        "line_end_xyz": (x_ref, tx_origin_y + tx_size_y, z_ref),
+        "line_start_xyz": (x_ref, inner_origin_y, z_ref),
+        "line_end_xyz": (x_ref, inner_origin_y + inner_size_y, z_ref),
     }
     return NonModelBoxSpec(
         object_id=_TX_INNER_REGION_OBJECT_ID,
@@ -493,8 +518,8 @@ def _resolved_tx_inner_region_from_reference_line(
         non_model=True,
         material=tx_region_spec.material,
         plane=tx_region_spec.plane,
-        origin_xyz=tx_region_spec.origin_xyz,
-        size_xyz=(inner_size_x, tx_size_y, inner_size_z),
+        origin_xyz=(tx_origin_x, inner_origin_y, tx_origin_z),
+        size_xyz=(inner_size_x, inner_size_y, inner_size_z),
     )
 
 

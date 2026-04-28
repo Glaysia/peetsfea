@@ -29,7 +29,7 @@ tags:
 
 ## Canonical state
 - active example TOML payload가 canonical assertion surface다.
-- active examples include fixed/sampled `tx_reference_line` ratio inputs for
+- active examples include fixed/sampled `tx_reference_line` ratio inputs, including `y_usage_ratio`, for
   retained non-modeled `tx_inner_region` guide export.
 
 ## Invariants / fail-fast
@@ -37,7 +37,7 @@ tags:
 - active outputs must match the RX-only report variable list in [type2-em-report-contract](../../../architecture/type2-em-report-contract.md).
 - active modeled objects must contain RX modeled object(s) and no TX modeled object role.
 - active examples must not expose TX derived sampled owners such as `tx_region_actual`, `tx_region_actual_stack_space`, or TX modeled sampled fields.
-- `tx_reference_line.x_ratio` and `tx_reference_line.z_ratio` are guide-only
+- `tx_reference_line.x_ratio`, `tx_reference_line.y_usage_ratio`, and `tx_reference_line.z_ratio` are guide-only
   inputs and must not imply TX ports, reports, modeled roles, or active TX
   sampled owners.
 

@@ -19,8 +19,8 @@ _RX_ONLY_OUTPUT_NAMES = (
 )
 _TX_MODELED_ROLES = {"tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"}
 _TX_SAMPLED_OWNER_IDS = {"tx_region_actual", "tx_region_actual_stack_space"}
-_FIXED_TX_REFERENCE_LINE_RATIOS = (0.35, 0.65)
-_SAMPLED_TX_REFERENCE_LINE_RANGES = ((0.2, 0.8, 13), (0.2, 0.8, 13))
+_FIXED_TX_REFERENCE_LINE_RATIOS = (0.35, 1.0, 0.65)
+_SAMPLED_TX_REFERENCE_LINE_RANGES = ((0.2, 0.8, 13), (0.2, 1.0, 17), (0.2, 0.9, 13))
 
 
 def _repo_root() -> Path:
@@ -112,19 +112,25 @@ def _assert_rx_only_payload(payload: dict[str, object]) -> None:
 
 def _assert_tx_reference_line_payload(payload: dict[str, object], *, example_name: str) -> None:
     x_range = _tx_reference_line_ratio_range(payload, "x_ratio")
+    y_range = _tx_reference_line_ratio_range(payload, "y_usage_ratio")
     z_range = _tx_reference_line_ratio_range(payload, "z_ratio")
     assert x_range[0] is False
+    assert y_range[0] is False
     assert z_range[0] is False
     assert 0.0 < x_range[1] <= x_range[2] < 1.0
+    assert 0.0 < y_range[1] <= y_range[2] <= 1.0
     assert 0.0 < z_range[1] <= z_range[2] < 1.0
     if example_name == "type2_fixed.toml":
         assert x_range == (False, _FIXED_TX_REFERENCE_LINE_RATIOS[0], _FIXED_TX_REFERENCE_LINE_RATIOS[0], 1)
-        assert z_range == (False, _FIXED_TX_REFERENCE_LINE_RATIOS[1], _FIXED_TX_REFERENCE_LINE_RATIOS[1], 1)
+        assert y_range == (False, _FIXED_TX_REFERENCE_LINE_RATIOS[1], _FIXED_TX_REFERENCE_LINE_RATIOS[1], 1)
+        assert z_range == (False, _FIXED_TX_REFERENCE_LINE_RATIOS[2], _FIXED_TX_REFERENCE_LINE_RATIOS[2], 1)
         return
     if example_name == "type2_sweep.toml":
         expected_x_start, expected_x_end, expected_x_count = _SAMPLED_TX_REFERENCE_LINE_RANGES[0]
-        expected_z_start, expected_z_end, expected_z_count = _SAMPLED_TX_REFERENCE_LINE_RANGES[1]
+        expected_y_start, expected_y_end, expected_y_count = _SAMPLED_TX_REFERENCE_LINE_RANGES[1]
+        expected_z_start, expected_z_end, expected_z_count = _SAMPLED_TX_REFERENCE_LINE_RANGES[2]
         assert x_range == (False, expected_x_start, expected_x_end, expected_x_count)
+        assert y_range == (False, expected_y_start, expected_y_end, expected_y_count)
         assert z_range == (False, expected_z_start, expected_z_end, expected_z_count)
         return
     raise AssertionError(f"unsupported example fixture: {example_name}")

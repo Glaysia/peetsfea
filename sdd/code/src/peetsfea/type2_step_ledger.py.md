@@ -17,7 +17,7 @@ tags:
 ## 역할
 - STEP export handoff metadata를 JSON ledger로 직렬화한다.
 - 0.2.24 SDD 기준 RX modeled handoff와 non-modeled guide/context handoff만 active shape contract다.
-- `tx_inner_region` member provenance carries creation-time TX reference-line ratios and resolved Y-parallel line endpoints.
+- `tx_inner_region` member provenance carries creation-time TX reference-line ratios, centered Y usage ratio, and resolved Y-parallel line endpoints.
 
 ## 입력 / 출력
 - 입력: exported RX modeled entries, non-modeled guide/context entries, EM policy

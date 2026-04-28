@@ -143,6 +143,9 @@ size_xyz = [160.0, 280.0, 90.0]
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.2, 0.8, 13]
 
+[non_model_objects.tx_reference_line.y_usage_ratio]
+range = [false, 0.2, 1.0, 17]
+
 [non_model_objects.tx_reference_line.z_ratio]
 range = [false, 0.2, 0.9, 13]
 

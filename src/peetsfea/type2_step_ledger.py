@@ -43,8 +43,10 @@ class NonModelSceneMemberLedgerEntry(TypedDict):
 class TxInnerRegionReferenceLineProvenance(TypedDict):
     source_region_id: str
     x_ratio_owner_path: str
+    y_usage_ratio_owner_path: str
     z_ratio_owner_path: str
     x_ratio: float
+    y_usage_ratio: float
     z_ratio: float
     x_ref: float
     z_ref: float

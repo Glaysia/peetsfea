@@ -87,6 +87,7 @@ class NonModelBoxSpec:
 @dataclass(frozen=True)
 class NonModelTxReferenceLineSpec:
     x_ratio: RangeSpec
+    y_usage_ratio: RangeSpec
     z_ratio: RangeSpec
 
 

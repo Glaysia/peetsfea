@@ -171,10 +171,26 @@ def _require_tx_reference_line_ratio_range(
     return range_spec
 
 
+def _require_tx_reference_line_y_usage_ratio_range(
+    table: dict[str, object],
+    *,
+    key: str,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, key, context, expect_integer=False)
+    candidates = _float_range_candidates(range_spec)
+    if any(candidate <= 0.0 or candidate > 1.0 for candidate in candidates):
+        raise ValueError(
+            f"{context}.{key} must realize to values in (0, 1] "
+            f"(actual={candidates})"
+        )
+    return range_spec
+
+
 def _parse_tx_reference_line(table: dict[str, object], *, context: str) -> NonModelTxReferenceLineSpec:
     raw_reference_line = _require_key(table, "tx_reference_line", context)
     reference_line = _require_table(raw_reference_line, f"{context}.tx_reference_line")
-    allowed_keys = {"x_ratio", "z_ratio"}
+    allowed_keys = {"x_ratio", "y_usage_ratio", "z_ratio"}
     missing_keys = sorted(allowed_keys - set(reference_line.keys()))
     if missing_keys:
         raise ValueError(f"{context}.tx_reference_line is missing required keys: {missing_keys}")
@@ -185,6 +201,11 @@ def _parse_tx_reference_line(table: dict[str, object], *, context: str) -> NonMo
         x_ratio=_require_tx_reference_line_ratio_range(
             reference_line,
             key="x_ratio",
+            context=f"{context}.tx_reference_line",
+        ),
+        y_usage_ratio=_require_tx_reference_line_y_usage_ratio_range(
+            reference_line,
+            key="y_usage_ratio",
             context=f"{context}.tx_reference_line",
         ),
         z_ratio=_require_tx_reference_line_ratio_range(

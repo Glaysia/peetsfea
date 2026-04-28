@@ -24,7 +24,7 @@ tags:
 ## Canonical state
 - RX modeled role constants remain active.
 - `tx_region` guide constants may remain as non-modeled context.
-- `NonModelTxReferenceLineSpec` owns required `x_ratio` and `z_ratio` range specs for the TX reference-line anchor inside `tx_region`.
+- `NonModelTxReferenceLineSpec` owns required `x_ratio`, `y_usage_ratio`, and `z_ratio` range specs for the TX reference-line anchor and centered inner Y span inside `tx_region`.
 - `NonModelTxRegionSpec` extends the regular box spec with the required TX reference-line spec while preserving box fields used by downstream guide paths.
 - TX shape role constants are not active SDD contracts during the 0.2.24 reset.
 

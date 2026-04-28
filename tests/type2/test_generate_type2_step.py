@@ -232,6 +232,9 @@ size_xyz = [160.0, 280.0, 90.0]
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.35, 0.35, 1]
 
+[non_model_objects.tx_reference_line.y_usage_ratio]
+range = [false, 1.0, 1.0, 1]
+
 [non_model_objects.tx_reference_line.z_ratio]
 range = [false, 0.65, 0.65, 1]
 
@@ -394,6 +397,9 @@ size_xyz = [160.0, 280.0, 90.0]
 
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.35, 0.35, 1]
+
+[non_model_objects.tx_reference_line.y_usage_ratio]
+range = [false, 1.0, 1.0, 1]
 
 [non_model_objects.tx_reference_line.z_ratio]
 range = [false, 0.65, 0.65, 1]
@@ -595,6 +601,9 @@ size_xyz = [160.0, 280.0, 90.0]
 
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.35, 0.35, 1]
+
+[non_model_objects.tx_reference_line.y_usage_ratio]
+range = [false, 1.0, 1.0, 1]
 
 [non_model_objects.tx_reference_line.z_ratio]
 range = [false, 0.65, 0.65, 1]
@@ -2553,7 +2562,10 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     reference_line = cast(dict[str, object], tx_inner_member["tx_reference_line"])
     assert reference_line["source_region_id"] == "tx_region"
     assert reference_line["x_ratio"] == pytest.approx(0.35)
+    assert reference_line["y_usage_ratio"] == pytest.approx(1.0)
     assert reference_line["z_ratio"] == pytest.approx(0.65)
+    assert reference_line["line_start_xyz"] == pytest.approx((56.0, -140.0, 58.5))
+    assert reference_line["line_end_xyz"] == pytest.approx((56.0, 140.0, 58.5))
 
     assert tuple(entry["object_id"] for entry in ledger["modeled_objects"]) == ("rx_rect_void_coil",)
     rx_entry = ledger["modeled_objects"][0]
@@ -2567,10 +2579,43 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert "tx_region_actual_stack_space" not in scene_shapes_by_label
 
 
+def test_export_type2_step_artifacts_centers_tx_inner_region_y_usage_ratio(
+    tmp_path: Path,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    source_text = (repo_root / "examples" / "type2_fixed.toml").read_text(encoding="utf-8")
+    source_text = source_text.replace(
+        "range = [false, 1.0, 1.0, 1]",
+        "range = [false, 0.5, 0.5, 1]",
+        1,
+    )
+    source_toml = _write_spec(tmp_path, source_text)
+
+    ledger = export_type2_step_artifacts(
+        toml_path=source_toml,
+        output_dir=tmp_path / "out",
+        ledger_path=tmp_path / "out" / "ledger.json",
+        seed=0,
+    )
+
+    non_model_entry = ledger["non_model_objects"][0]
+    member_objects = cast(Sequence[dict[str, object]], non_model_entry["member_objects"])
+    tx_inner_member = next(member for member in member_objects if member["object_id"] == "tx_inner_region")
+    canonical_coordinates = cast(dict[str, object], tx_inner_member["canonical_coordinates"])
+    assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx((0.0, -70.0, 0.0))
+    assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx((56.0, 140.0, 58.5))
+    reference_line = cast(dict[str, object], tx_inner_member["tx_reference_line"])
+    assert reference_line["y_usage_ratio"] == pytest.approx(0.5)
+    assert reference_line["line_start_xyz"] == pytest.approx((56.0, -70.0, 58.5))
+    assert reference_line["line_end_xyz"] == pytest.approx((56.0, 70.0, 58.5))
+
+
 @pytest.mark.parametrize(
     ("ratio_name", "invalid_range", "match"),
     (
         ("x_ratio", "[false, 0.0, 0.0, 1]", r"tx_reference_line\.x_ratio.*strictly inside"),
+        ("y_usage_ratio", "[false, 0.0, 0.0, 1]", r"tx_reference_line\.y_usage_ratio.*\(0, 1\]"),
+        ("y_usage_ratio", "[false, 1.1, 1.1, 1]", r"tx_reference_line\.y_usage_ratio.*\(0, 1\]"),
         ("z_ratio", "[false, 1.0, 1.0, 1]", r"tx_reference_line\.z_ratio.*strictly inside"),
     ),
 )
@@ -2582,7 +2627,13 @@ def test_load_type2_step_spec_rejects_invalid_tx_reference_line_ratio(
 ) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     source_text = (repo_root / "examples" / "type2_fixed.toml").read_text(encoding="utf-8")
-    valid_range = "[false, 0.35, 0.35, 1]" if ratio_name == "x_ratio" else "[false, 0.65, 0.65, 1]"
+    valid_range_by_ratio = {
+        "x_ratio": "[false, 0.35, 0.35, 1]",
+        "y_usage_ratio": "[false, 1.0, 1.0, 1]",
+        "z_ratio": "[false, 0.65, 0.65, 1]",
+    }
+    assert ratio_name in valid_range_by_ratio
+    valid_range = valid_range_by_ratio[ratio_name]
     invalid_text = source_text.replace(f"range = {valid_range}", f"range = {invalid_range}", 1)
     toml_path = _write_spec(tmp_path, invalid_text)
 
