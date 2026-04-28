@@ -19,8 +19,10 @@ from peetsfea.type2_step_spec_modeled import placement_owner_id_for_role
 from peetsfea.type2_step_spec_modeled import render_tx_rect_void_toml
 from peetsfea.type2_step_spec_non_model import NonModelBoxSpec
 from peetsfea.type2_step_spec_non_model import NonModelDerivedSpec
+from peetsfea.type2_step_spec_non_model import NonModelTxReferenceLineSpec
 from peetsfea.type2_step_spec_non_model import NonModelTxRegionActualSpec
 from peetsfea.type2_step_spec_non_model import NonModelTxRegionActualStackSpaceSpec
+from peetsfea.type2_step_spec_non_model import NonModelTxRegionSpec
 from peetsfea.type2_step_spec_non_model import Point3
 from peetsfea.type2_step_spec_non_model import RangeSpec
 from peetsfea.type2_step_spec_non_model import Type2SimulationPolicy
@@ -145,8 +147,10 @@ __all__ = [
     "Type2ConstraintComparableRef",
     "NonModelBoxSpec",
     "NonModelDerivedSpec",
+    "NonModelTxReferenceLineSpec",
     "NonModelTxRegionActualSpec",
     "NonModelTxRegionActualStackSpaceSpec",
+    "NonModelTxRegionSpec",
     "Point3",
     "RangeSpec",
     "Type2SimulationPolicy",

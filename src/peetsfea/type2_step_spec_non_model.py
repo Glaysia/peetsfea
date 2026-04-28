@@ -5,6 +5,8 @@ from typing import Literal, cast
 
 from peetsfea.type2_step_spec_types import NonModelBoxSpec
 from peetsfea.type2_step_spec_types import NonModelDerivedSpec
+from peetsfea.type2_step_spec_types import NonModelTxReferenceLineSpec
+from peetsfea.type2_step_spec_types import NonModelTxRegionSpec
 from peetsfea.type2_step_spec_types import NonModelTxRegionActualSpec
 from peetsfea.type2_step_spec_types import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec_types import Point3
@@ -153,6 +155,46 @@ def _float_range_candidates(range_spec: RangeSpec) -> tuple[float, ...]:
     return tuple(range_spec.start + (step * index) for index in range(range_spec.count))
 
 
+def _require_tx_reference_line_ratio_range(
+    table: dict[str, object],
+    *,
+    key: str,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, key, context, expect_integer=False)
+    candidates = _float_range_candidates(range_spec)
+    if any(candidate <= 0.0 or candidate >= 1.0 for candidate in candidates):
+        raise ValueError(
+            f"{context}.{key} must realize to values strictly inside (0, 1) "
+            f"(actual={candidates})"
+        )
+    return range_spec
+
+
+def _parse_tx_reference_line(table: dict[str, object], *, context: str) -> NonModelTxReferenceLineSpec:
+    raw_reference_line = _require_key(table, "tx_reference_line", context)
+    reference_line = _require_table(raw_reference_line, f"{context}.tx_reference_line")
+    allowed_keys = {"x_ratio", "z_ratio"}
+    missing_keys = sorted(allowed_keys - set(reference_line.keys()))
+    if missing_keys:
+        raise ValueError(f"{context}.tx_reference_line is missing required keys: {missing_keys}")
+    extra_keys = sorted(set(reference_line.keys()) - allowed_keys)
+    if extra_keys:
+        raise ValueError(f"{context}.tx_reference_line contains unsupported keys: {extra_keys}")
+    return NonModelTxReferenceLineSpec(
+        x_ratio=_require_tx_reference_line_ratio_range(
+            reference_line,
+            key="x_ratio",
+            context=f"{context}.tx_reference_line",
+        ),
+        z_ratio=_require_tx_reference_line_ratio_range(
+            reference_line,
+            key="z_ratio",
+            context=f"{context}.tx_reference_line",
+        ),
+    )
+
+
 def _require_type2_schema_id(root: dict[str, object], *, context: str) -> str:
     schema_id = _require_non_empty_str(root, "schema_id", context)
     if schema_id != _TYPE2_SCHEMA_ID:
@@ -195,16 +237,59 @@ def _parse_non_model_box(
     if primitive != "box":
         raise ValueError(f"{context}.primitive must be 'box'")
 
+    kind = _require_non_empty_str(table, "kind", context)
+    present = _require_true(table, "present", context)
+    non_model = _require_true(table, "non_model", context)
+    material = _require_non_empty_str(table, "material", context)
+    plane = _require_plane(table, "plane", context)
+    origin_xyz = _require_point3(table, "origin_xyz", context, positive=False)
+    size_xyz = _require_point3(table, "size_xyz", context, positive=True)
+
+    base_allowed_keys = {
+        "id",
+        "kind",
+        "primitive",
+        "present",
+        "non_model",
+        "material",
+        "plane",
+        "origin_xyz",
+        "size_xyz",
+    }
+    if object_id == "tx_region":
+        if kind != "tx_region":
+            raise ValueError(f"{context}.kind must be 'tx_region' for tx_region (actual={kind!r})")
+        allowed_keys = base_allowed_keys | {"tx_reference_line"}
+        extra_keys = sorted(set(table.keys()) - allowed_keys)
+        if extra_keys:
+            raise ValueError(f"{context} contains unsupported keys for tx_region (actual={extra_keys})")
+        return NonModelTxRegionSpec(
+            object_id="tx_region",
+            kind="tx_region",
+            primitive="box",
+            present=present,
+            non_model=non_model,
+            material=material,
+            plane=plane,
+            origin_xyz=origin_xyz,
+            size_xyz=size_xyz,
+            tx_reference_line=_parse_tx_reference_line(table, context=context),
+        )
+
+    extra_keys = sorted(set(table.keys()) - base_allowed_keys)
+    if extra_keys:
+        raise ValueError(f"{context} contains unsupported keys for non-model box (actual={extra_keys})")
+
     return NonModelBoxSpec(
         object_id=object_id,
-        kind=_require_non_empty_str(table, "kind", context),
+        kind=kind,
         primitive="box",
-        present=_require_true(table, "present", context),
-        non_model=_require_true(table, "non_model", context),
-        material=_require_non_empty_str(table, "material", context),
-        plane=_require_plane(table, "plane", context),
-        origin_xyz=_require_point3(table, "origin_xyz", context, positive=False),
-        size_xyz=_require_point3(table, "size_xyz", context, positive=True),
+        present=present,
+        non_model=non_model,
+        material=material,
+        plane=plane,
+        origin_xyz=origin_xyz,
+        size_xyz=size_xyz,
     )
 
 
@@ -447,6 +532,8 @@ def _parse_non_model_tx_region_actual_stack_space(
 __all__ = [
     "NonModelBoxSpec",
     "NonModelDerivedSpec",
+    "NonModelTxReferenceLineSpec",
+    "NonModelTxRegionSpec",
     "NonModelTxRegionActualSpec",
     "NonModelTxRegionActualStackSpaceSpec",
     "Point3",

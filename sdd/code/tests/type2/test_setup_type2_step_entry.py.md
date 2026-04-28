@@ -1,7 +1,7 @@
 ---
 title: test_setup_type2_step_entry.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-28 @ 00:00
+updated: 2026-04-28 @ 23:55
 tags:
   - hfss-import
   - em
@@ -29,16 +29,22 @@ tags:
 
 ## Canonical state
 - active example TOML payload가 canonical assertion surface다.
+- active examples include fixed/sampled `tx_reference_line` ratio inputs for
+  retained non-modeled `tx_inner_region` guide export.
 
 ## Invariants / fail-fast
 - `outputs.mode` must be `RxOnly`.
 - active outputs must match the RX-only report variable list in [type2-em-report-contract](../../../architecture/type2-em-report-contract.md).
 - active modeled objects must contain RX modeled object(s) and no TX modeled object role.
 - active examples must not expose TX derived sampled owners such as `tx_region_actual`, `tx_region_actual_stack_space`, or TX modeled sampled fields.
+- `tx_reference_line.x_ratio` and `tx_reference_line.z_ratio` are guide-only
+  inputs and must not imply TX ports, reports, modeled roles, or active TX
+  sampled owners.
 
 ## 직접 의존
 - [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)
 - [0.2.24-type2-rxonly-tx-removal](../../../plans/0.2.24-type2-rxonly-tx-removal.md)
+- [0.2.24-type2-tx-inner-region-non-model-step](../../../plans/0.2.24-type2-tx-inner-region-non-model-step.md)
 
 ## 이 파일을 쓰는 곳
 - Default pure-Python test suite.

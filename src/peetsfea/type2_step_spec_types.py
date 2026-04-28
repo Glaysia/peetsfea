@@ -85,6 +85,19 @@ class NonModelBoxSpec:
 
 
 @dataclass(frozen=True)
+class NonModelTxReferenceLineSpec:
+    x_ratio: RangeSpec
+    z_ratio: RangeSpec
+
+
+@dataclass(frozen=True)
+class NonModelTxRegionSpec(NonModelBoxSpec):
+    object_id: Literal["tx_region"]
+    kind: Literal["tx_region"]
+    tx_reference_line: NonModelTxReferenceLineSpec
+
+
+@dataclass(frozen=True)
 class NonModelTxRegionActualSpec:
     object_id: Literal["tx_region_actual"]
     kind: Literal["tx_region_actual"]
@@ -289,6 +302,8 @@ __all__ = [
     "ModeledTxSingleCoilSpec",
     "NonModelBoxSpec",
     "NonModelDerivedSpec",
+    "NonModelTxReferenceLineSpec",
+    "NonModelTxRegionSpec",
     "NonModelTxRegionActualSpec",
     "NonModelTxRegionActualStackSpaceSpec",
     "Point3",

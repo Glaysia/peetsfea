@@ -138,6 +138,14 @@ plane = "YZ"
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
 
+# TX guide-only reference line used to derive retained tx_inner_region STEP context.
+# Ratios are sampled strictly inside tx_region and do not activate TX modeled geometry.
+[non_model_objects.tx_reference_line.x_ratio]
+range = [false, 0.2, 0.8, 13]
+
+[non_model_objects.tx_reference_line.z_ratio]
+range = [false, 0.2, 0.9, 13]
+
 [[non_model_objects]]
 id = "rx_region_max"
 kind = "rx_region_max"

@@ -40,6 +40,29 @@ class NonModelSceneMemberLedgerEntry(TypedDict):
     non_model: Literal[True]
 
 
+class TxInnerRegionReferenceLineProvenance(TypedDict):
+    source_region_id: str
+    x_ratio_owner_path: str
+    z_ratio_owner_path: str
+    x_ratio: float
+    z_ratio: float
+    x_ref: float
+    z_ref: float
+    line_start_xyz: Point3
+    line_end_xyz: Point3
+
+
+class TxInnerRegionNonModelSceneMemberLedgerEntry(TypedDict):
+    object_id: Literal["tx_inner_region"]
+    role: Literal["tx_inner_region"]
+    material: str
+    model_state: Literal[False]
+    canonical_coordinates: CanonicalCoordinates
+    plane: Literal["XY", "YZ", "ZX"]
+    non_model: Literal[True]
+    tx_reference_line: TxInnerRegionReferenceLineProvenance
+
+
 class MateriallessNonModelSceneMemberLedgerEntry(TypedDict):
     object_id: str
     role: str
@@ -49,7 +72,11 @@ class MateriallessNonModelSceneMemberLedgerEntry(TypedDict):
     non_model: Literal[True]
 
 
-NonModelSceneMemberEntry = NonModelSceneMemberLedgerEntry | MateriallessNonModelSceneMemberLedgerEntry
+NonModelSceneMemberEntry = (
+    NonModelSceneMemberLedgerEntry
+    | MateriallessNonModelSceneMemberLedgerEntry
+    | TxInnerRegionNonModelSceneMemberLedgerEntry
+)
 
 
 class NonModelObjectLedgerEntry(TypedDict):
@@ -183,6 +210,8 @@ __all__ = [
     "Type2ImportEmPolicy",
     "Type2DirectModeledArtifact",
     "Type2StepLedger",
+    "TxInnerRegionNonModelSceneMemberLedgerEntry",
+    "TxInnerRegionReferenceLineProvenance",
     "build_modeled_object_ledger_entry",
     "build_type2_step_ledger",
     "write_modeled_source_metadata",

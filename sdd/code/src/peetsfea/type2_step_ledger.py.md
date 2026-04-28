@@ -1,7 +1,7 @@
 ---
 title: type2_step_ledger.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-28 @ 00:00
+updated: 2026-04-28 @ 12:00
 tags:
   - step-export
   - ledger
@@ -17,6 +17,7 @@ tags:
 ## 역할
 - STEP export handoff metadata를 JSON ledger로 직렬화한다.
 - 0.2.24 SDD 기준 RX modeled handoff와 non-modeled guide/context handoff만 active shape contract다.
+- `tx_inner_region` member provenance carries creation-time TX reference-line ratios and resolved Y-parallel line endpoints.
 
 ## 입력 / 출력
 - 입력: exported RX modeled entries, non-modeled guide/context entries, EM policy
@@ -25,12 +26,14 @@ tags:
 ## Canonical state
 - RX body names/counts/groups are exact export contract values.
 - `tx_region` may be present as non-modeled future guide context.
+- `tx_inner_region`, when present, records canonical coordinates plus `tx_reference_line` provenance instead of requiring downstream geometry inference.
 - `tx_region_actual` and TX modeled bodies are not required ledger entries for RxOnly.
 - Mesh/boundary/port/report runtime summaries are not ledger-owned.
 
 ## Invariants / fail-fast
 - Ledger body names must match exported names exactly.
 - RxOnly ledger must not require TX modeled bodies.
+- `tx_inner_region` provenance is mandatory when that member is emitted.
 - Missing RX terminal metadata for RxOnly is a contract failure.
 
 ## Collaborators

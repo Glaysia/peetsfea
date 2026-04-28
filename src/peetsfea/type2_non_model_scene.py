@@ -14,19 +14,26 @@ from peetsfea.type2_scene_geometry import canonical_from_non_model_specs
 from peetsfea.type2_scene_geometry import canonical_from_shape
 from peetsfea.type2_step_ledger import CanonicalCoordinates
 from peetsfea.type2_step_ledger import NonModelObjectLedgerEntry
+from peetsfea.type2_step_ledger import NonModelSceneMemberEntry
 from peetsfea.type2_step_ledger import NonModelSceneMemberLedgerEntry
+from peetsfea.type2_step_ledger import TxInnerRegionReferenceLineProvenance
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import NonModelDerivedSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
+from peetsfea.type2_step_spec import NonModelTxRegionSpec
 from peetsfea.type2_step_spec import Point3
 from peetsfea.type2_step_spec import RangeSpec
 
-_NON_MODEL_VISIBLE_GROUPS: tuple[tuple[str, str, Literal["XY", "YZ", "ZX", "mixed"], tuple[str, ...]], ...] = (
+_BASE_NON_MODEL_VISIBLE_GROUPS: tuple[tuple[str, str, Literal["XY", "YZ", "ZX", "mixed"], tuple[str, ...]], ...] = (
     ("environment", "environment", "mixed", ("floor", "shelf", "wall", "tv")),
     ("tx_region", "tx_region", "XY", ("tx_region",)),
     ("rx_region_max", "rx_region_max", "YZ", ("rx_region_max",)),
 )
+_TX_INNER_REGION_OBJECT_ID = "tx_inner_region"
+_TX_INNER_REGION_KIND = "tx_inner_region"
+_TX_INNER_REGION_SOURCE_REGION_ID = "tx_region"
+_TX_INNER_REGION_PROVENANCE_BY_OBJECT_ID: dict[str, TxInnerRegionReferenceLineProvenance] = {}
 
 
 @dataclass(frozen=True)
@@ -212,11 +219,37 @@ def require_non_model_object_spec(specs: tuple[NonModelBoxSpec, ...], *, object_
     return matching_specs[0]
 
 
+def _contains_non_model_object_spec(specs: tuple[NonModelBoxSpec, ...], *, object_id: str) -> bool:
+    return any(spec.object_id == object_id for spec in specs)
+
+
 def _non_model_group_specs(
     specs: tuple[NonModelBoxSpec, ...],
 ) -> tuple[tuple[str, str, Literal["XY", "YZ", "ZX", "mixed"], tuple[NonModelBoxSpec, ...]], ...]:
     groups: list[tuple[str, str, Literal["XY", "YZ", "ZX", "mixed"], tuple[NonModelBoxSpec, ...]]] = []
-    for object_id, role, plane, member_ids in _NON_MODEL_VISIBLE_GROUPS:
+    visible_groups: list[tuple[str, str, Literal["XY", "YZ", "ZX", "mixed"], tuple[str, ...]]] = []
+    for group in _BASE_NON_MODEL_VISIBLE_GROUPS:
+        visible_groups.append(group)
+        if group[0] == _TX_INNER_REGION_SOURCE_REGION_ID and _contains_non_model_object_spec(
+            specs,
+            object_id=_TX_INNER_REGION_OBJECT_ID,
+        ):
+            visible_groups.append(
+                (
+                    _TX_INNER_REGION_OBJECT_ID,
+                    _TX_INNER_REGION_OBJECT_ID,
+                    "XY",
+                    (_TX_INNER_REGION_OBJECT_ID,),
+                )
+            )
+    if _contains_non_model_object_spec(specs, object_id=_TX_INNER_REGION_OBJECT_ID):
+        tx_inner_group_count = sum(1 for group in visible_groups if group[0] == _TX_INNER_REGION_OBJECT_ID)
+        if tx_inner_group_count != 1:
+            raise RuntimeError(
+                "tx_inner_region visible group must be inserted exactly once "
+                f"(actual={tx_inner_group_count})"
+            )
+    for object_id, role, plane, member_ids in visible_groups:
         group_specs = tuple(require_non_model_object_spec(specs, object_id=member_id) for member_id in member_ids)
         groups.append((object_id, role, plane, group_specs))
     return tuple(groups)
@@ -332,7 +365,22 @@ def resolve_non_model_scene_specs(
     derived_specs: tuple[NonModelDerivedSpec, ...],
     seed: int,
 ) -> tuple[NonModelBoxSpec, ...]:
+    _TX_INNER_REGION_PROVENANCE_BY_OBJECT_ID.clear()
+    if _contains_non_model_object_spec(base_specs, object_id=_TX_INNER_REGION_OBJECT_ID):
+        raise RuntimeError(
+            "tx_inner_region must be resolved from tx_reference_line ratios; "
+            "base non-model box specs for tx_inner_region are unsupported"
+        )
     resolved_specs = list(base_specs)
+    tx_region_spec = require_non_model_object_spec(base_specs, object_id=_TX_INNER_REGION_SOURCE_REGION_ID)
+    tx_inner_region_resolved = isinstance(tx_region_spec, NonModelTxRegionSpec)
+    if tx_inner_region_resolved:
+        resolved_specs.append(
+            _resolved_tx_inner_region_spec_from_tx_region_spec(
+                tx_region_spec=tx_region_spec,
+                seed=seed,
+            )
+        )
     tx_region_actual_specs: tuple[NonModelBoxSpec, ...] = ()
     for derived_spec in derived_specs:
         if isinstance(derived_spec, NonModelTxRegionActualStackSpaceSpec):
@@ -358,6 +406,96 @@ def resolve_non_model_scene_specs(
             )
         )
     return tuple(resolved_specs)
+
+
+def _validated_tx_inner_region_ratio(*, ratio: float, owner_path: str) -> float:
+    if not math.isfinite(ratio):
+        raise RuntimeError(f"{owner_path} must resolve to a finite ratio (actual={ratio})")
+    if ratio <= 0.0 or ratio >= 1.0:
+        raise RuntimeError(f"{owner_path} must resolve strictly inside (0, 1) (actual={ratio})")
+    return ratio
+
+
+def _resolved_tx_inner_region_spec_from_tx_region_spec(
+    *,
+    tx_region_spec: NonModelTxRegionSpec,
+    seed: int,
+) -> NonModelBoxSpec:
+    if tx_region_spec.object_id != _TX_INNER_REGION_SOURCE_REGION_ID:
+        raise RuntimeError(
+            "tx_inner_region base reference-line resolution requires tx_region source "
+            f"(actual={tx_region_spec.object_id})"
+        )
+    return _resolved_tx_inner_region_from_reference_line(
+        source_region_spec=tx_region_spec,
+        x_ratio=tx_region_spec.tx_reference_line.x_ratio,
+        z_ratio=tx_region_spec.tx_reference_line.z_ratio,
+        x_ratio_owner_path="non_model_objects.tx_region.tx_reference_line.x_ratio",
+        z_ratio_owner_path="non_model_objects.tx_region.tx_reference_line.z_ratio",
+        seed=seed,
+    )
+
+
+def _resolved_tx_inner_region_from_reference_line(
+    *,
+    source_region_spec: NonModelBoxSpec,
+    x_ratio: RangeSpec,
+    z_ratio: RangeSpec,
+    x_ratio_owner_path: str,
+    z_ratio_owner_path: str,
+    seed: int,
+) -> NonModelBoxSpec:
+    tx_region_spec = source_region_spec
+    tx_origin_x, tx_origin_y, tx_origin_z = tx_region_spec.origin_xyz
+    tx_size_x, tx_size_y, tx_size_z = tx_region_spec.size_xyz
+    resolved_x_ratio = _validated_tx_inner_region_ratio(
+        ratio=_selected_float_candidate(
+            range_spec=x_ratio,
+            owner_path=x_ratio_owner_path,
+            seed=seed,
+        ),
+        owner_path=x_ratio_owner_path,
+    )
+    resolved_z_ratio = _validated_tx_inner_region_ratio(
+        ratio=_selected_float_candidate(
+            range_spec=z_ratio,
+            owner_path=z_ratio_owner_path,
+            seed=seed,
+        ),
+        owner_path=z_ratio_owner_path,
+    )
+    x_ref = tx_origin_x + (tx_size_x * resolved_x_ratio)
+    z_ref = tx_origin_z + (tx_size_z * resolved_z_ratio)
+    inner_size_x = x_ref - tx_origin_x
+    inner_size_z = z_ref - tx_origin_z
+    if inner_size_x <= 0.0 or inner_size_z <= 0.0:
+        raise RuntimeError(
+            "tx_inner_region resolved size must be positive "
+            f"(x_ratio={resolved_x_ratio}, z_ratio={resolved_z_ratio}, "
+            f"size_x={inner_size_x}, size_z={inner_size_z})"
+        )
+    _TX_INNER_REGION_PROVENANCE_BY_OBJECT_ID[_TX_INNER_REGION_OBJECT_ID] = {
+        "source_region_id": tx_region_spec.object_id,
+        "x_ratio_owner_path": x_ratio_owner_path,
+        "z_ratio_owner_path": z_ratio_owner_path,
+        "x_ratio": resolved_x_ratio,
+        "z_ratio": resolved_z_ratio,
+        "x_ref": x_ref,
+        "z_ref": z_ref,
+        "line_start_xyz": (x_ref, tx_origin_y, z_ref),
+        "line_end_xyz": (x_ref, tx_origin_y + tx_size_y, z_ref),
+    }
+    return NonModelBoxSpec(
+        object_id=_TX_INNER_REGION_OBJECT_ID,
+        kind=_TX_INNER_REGION_KIND,
+        primitive="box",
+        present=True,
+        non_model=True,
+        material=tx_region_spec.material,
+        plane=tx_region_spec.plane,
+        origin_xyz=tx_region_spec.origin_xyz,
+        size_xyz=(inner_size_x, tx_size_y, inner_size_z),
+    )
 
 
 def _resolved_tx_region_actual_specs(
@@ -551,9 +689,41 @@ def _build_non_model_group_shape(*, object_id: str, specs: tuple[NonModelBoxSpec
     return solid
 
 
-def _non_model_scene_members(specs: tuple[NonModelBoxSpec, ...]) -> tuple[NonModelSceneMemberLedgerEntry, ...]:
-    members: list[NonModelSceneMemberLedgerEntry] = []
+def _non_model_scene_members(specs: tuple[NonModelBoxSpec, ...]) -> tuple[NonModelSceneMemberEntry, ...]:
+    members: list[NonModelSceneMemberEntry] = []
     for object_id, role, plane, group_specs in _non_model_group_specs(specs):
+        if object_id == _TX_INNER_REGION_OBJECT_ID:
+            if len(group_specs) != 1:
+                raise RuntimeError(
+                    "tx_inner_region scene member must derive from one source spec "
+                    f"(object_id={object_id}, source_count={len(group_specs)})"
+                )
+            tx_inner_region_spec = group_specs[0]
+            if tx_inner_region_spec.kind != _TX_INNER_REGION_KIND:
+                raise RuntimeError(
+                    "tx_inner_region concrete scene member must preserve tx_inner_region kind "
+                    f"(object_id={tx_inner_region_spec.object_id}, kind={tx_inner_region_spec.kind})"
+                )
+            if tx_inner_region_spec.object_id not in _TX_INNER_REGION_PROVENANCE_BY_OBJECT_ID:
+                raise RuntimeError(
+                    "tx_inner_region ledger member requires creation-time tx_reference_line provenance "
+                    f"(object_id={tx_inner_region_spec.object_id})"
+                )
+            assert tx_inner_region_spec.object_id in _TX_INNER_REGION_PROVENANCE_BY_OBJECT_ID
+            tx_reference_line = _TX_INNER_REGION_PROVENANCE_BY_OBJECT_ID[tx_inner_region_spec.object_id]
+            members.append(
+                {
+                    "object_id": _TX_INNER_REGION_OBJECT_ID,
+                    "role": _TX_INNER_REGION_OBJECT_ID,
+                    "material": tx_inner_region_spec.material,
+                    "model_state": False,
+                    "canonical_coordinates": canonical_from_non_model_box(tx_inner_region_spec),
+                    "plane": tx_inner_region_spec.plane,
+                    "non_model": True,
+                    "tx_reference_line": tx_reference_line,
+                }
+            )
+            continue
         if object_id in ("tx_region_actual", "tx_region_actual_stack_space"):
             expected_kind = "tx_region_actual" if object_id == "tx_region_actual" else "tx_region_actual_stack_space"
             for tx_region_actual_spec in group_specs:
