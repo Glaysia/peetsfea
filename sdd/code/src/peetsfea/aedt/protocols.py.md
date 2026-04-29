@@ -27,6 +27,8 @@ tags:
 - `ModelerSession.set_object_model_state(...) -> object`
 - `MeshModuleSession.AssignLengthOp(...) -> object`
 - `HfssSession.change_validation_settings(...) -> object`
+- `HfssSession.analyze_setup(...) -> object`
+- `ReportSetupModuleSession.ExportToFile(...) -> object`
 
 ## Canonical state
 - module-level mutable state는 없다.
@@ -37,6 +39,7 @@ tags:
 - `ModelerSession.import_3d_cad()` signature는 repo-pinned PyAEDT `0.25.1` wrapper와 일치해야 한다.
 - `MeshModuleSession`은 `MeshSetup` lookup 이후 explicit cast target이며 `False` return fail-fast enforcement는 runtime layer가 담당한다.
 - `change_validation_settings()` exposes PyAEDT's validation-design setting boundary; callers still fail fast on `False`.
+- EM solve/export callers own fail-fast handling for `analyze_setup()` and `ExportToFile()`.
 - runtime validation은 [wrappers.py](wrappers.py.md)가 담당한다.
 
 ## 직접 의존

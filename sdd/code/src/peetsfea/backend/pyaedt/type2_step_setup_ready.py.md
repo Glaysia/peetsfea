@@ -20,6 +20,7 @@ tags:
 
 ## Canonical state
 - RxOnly creates RX mesh, radiation boundary, one RX port, RX sources/reports, validates, and saves.
+- The solve-enabled facade keeps the same HFSS session alive after setup-ready generation, runs `Setup1`, exports the active report CSV, then saves.
 - TX guide geometry and geometry-only `tx_inner_single_coil` imported bodies may exist as context but are not setup targets.
 - The full imported ledger records all imported bodies; active setup passes an RX-only modeled-object subset into mesh, port assignment, EM input, sources, and reports.
 - Report variables are owned by [type2-em-report-contract](../../../../../architecture/type2-em-report-contract.md).
@@ -30,7 +31,9 @@ tags:
 - A loaded ledger with generic/legacy modeled TX roles is rejected before HFSS setup begins; there is no paired-mode fallback path.
 - A loaded ledger with exactly one `rx_single_coil` plus geometry-only `tx_inner_single_coil` is accepted, then filtered to the single RX modeled object for setup.
 - RxOnly report setup filters to the active RX variable contract and requires every active RX variable to be present.
+- Solve-enabled setup must not release the desktop before analysis/report export completes.
 
 ## Collaborators
 - [type2_step_em_input.py](type2_step_em_input.py.md)
 - [type2_step_port_assignment.py](type2_step_port_assignment.py.md)
+- [type2_step_em_solve.py](type2_step_em_solve.py.md)

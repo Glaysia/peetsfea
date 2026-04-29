@@ -13,10 +13,18 @@ from entry.sample import MANIFEST_PATH
 from peetsfea.aedt import Hfss
 from peetsfea.aedt.protocols import HfssSession
 from peetsfea.backend.pyaedt.type2_step_setup_ready import (
+    setup_and_solve_type2_step_ledger,
     setup_type2_step_ledger,
     setup_type2_step_ledger_into_hfss,
 )
-from peetsfea.type2_runtime import Type2BuiltArtifact, build_prepared_type2_designs
+from peetsfea.backend.pyaedt.type2_step_em_solve import Type2EmSolveResult
+from peetsfea.type2_runtime import (
+    Type2BuiltArtifact,
+    Type2EmArtifact,
+    build_prepared_type2_designs,
+    ensure_prepared_type2_step_ledgers,
+)
+from peetsfea.type2_runtime import solve_prepared_type2_designs
 from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_sampled import DesignVariableEntry, load_type2_sample_manifest, prepared_builds_from_manifest
 
@@ -30,6 +38,13 @@ class _Type2BuildRunnerResult(TypedDict):
 
 
 _Runner = Callable[..., _Type2BuildRunnerResult]
+
+
+class _Type2SolveRunnerResult(_Type2BuildRunnerResult):
+    em_solve: Type2EmSolveResult
+
+
+_SolveRunner = Callable[..., _Type2SolveRunnerResult]
 
 
 def _create_gui_hfss(design_name: str) -> HfssSession:
@@ -65,9 +80,11 @@ def build_type2(
 ) -> list[Type2BuiltArtifact]:
     document = load_type2_sample_manifest(manifest_path)
     prepared_builds = prepared_builds_from_manifest(manifest_path, selected_design_ids=())
+    jobs = document["config"]["aedt_builder_n"]
+    ensure_prepared_type2_step_ledgers(prepared_builds, jobs=jobs, exporter=exporter)
     return build_prepared_type2_designs(
         prepared_builds,
-        jobs=document["config"]["aedt_builder_n"],
+        jobs=jobs,
         exporter=exporter,
         runner=runner,
     )
@@ -83,7 +100,45 @@ def build_type2_debug(
     if design_id == "":
         raise ValueError("design_id is required for debug mode")
     prepared_builds = prepared_builds_from_manifest(manifest_path, selected_design_ids=(design_id,))
+    ensure_prepared_type2_step_ledgers(prepared_builds, jobs=1, exporter=exporter)
     return build_prepared_type2_designs(
+        prepared_builds,
+        jobs=1,
+        exporter=exporter,
+        runner=runner,
+    )
+
+
+def solve_type2(
+    *,
+    manifest_path: Path = MANIFEST_PATH,
+    exporter: _Exporter = export_type2_step_artifacts,
+    runner: _SolveRunner = setup_and_solve_type2_step_ledger,
+) -> list[Type2EmArtifact]:
+    document = load_type2_sample_manifest(manifest_path)
+    prepared_builds = prepared_builds_from_manifest(manifest_path, selected_design_ids=())
+    jobs = document["config"]["aedt_builder_n"]
+    ensure_prepared_type2_step_ledgers(prepared_builds, jobs=jobs, exporter=exporter)
+    return solve_prepared_type2_designs(
+        prepared_builds,
+        jobs=jobs,
+        exporter=exporter,
+        runner=runner,
+    )
+
+
+def solve_type2_debug(
+    *,
+    manifest_path: Path = MANIFEST_PATH,
+    design_id: str,
+    exporter: _Exporter = export_type2_step_artifacts,
+    runner: _SolveRunner = setup_and_solve_type2_step_ledger,
+) -> list[Type2EmArtifact]:
+    if design_id == "":
+        raise ValueError("design_id is required for debug solve mode")
+    prepared_builds = prepared_builds_from_manifest(manifest_path, selected_design_ids=(design_id,))
+    ensure_prepared_type2_step_ledgers(prepared_builds, jobs=1, exporter=exporter)
+    return solve_prepared_type2_designs(
         prepared_builds,
         jobs=1,
         exporter=exporter,
@@ -96,29 +151,37 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--manifest", type=Path, default=MANIFEST_PATH)
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--design-id", default="")
+    parser.add_argument("--solve", action="store_true")
     return parser
 
 
-def run_build_cli(argv: Sequence[str]) -> list[Type2BuiltArtifact]:
+def run_build_cli(argv: Sequence[str]) -> list[Type2BuiltArtifact] | list[Type2EmArtifact]:
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
     if args.debug and args.design_id == "":
         parser.error("--debug requires --design-id")
     if not args.debug and args.design_id != "":
         parser.error("--design-id requires --debug")
-    if args.debug:
+    if args.solve and args.debug:
+        results = solve_type2_debug(manifest_path=args.manifest, design_id=args.design_id)
+    elif args.solve:
+        results = solve_type2(manifest_path=args.manifest)
+    elif args.debug:
         results = build_type2_debug(manifest_path=args.manifest, design_id=args.design_id)
     else:
         results = build_type2(manifest_path=args.manifest)
 
     print(f"manifest: {args.manifest}")
-    print(f"built design count: {len(results)}")
+    stage_label = "solved" if args.solve else "built"
+    print(f"{stage_label} design count: {len(results)}")
     for result in results:
         print(f"{result['design_id']}: {result['aedt_path']}")
+        if "em_solve" in result:
+            print(f"{result['design_id']} report: {result['em_solve']['report_csv_path']}")
     return results
 
 
-def main() -> list[Type2BuiltArtifact]:
+def main() -> list[Type2BuiltArtifact] | list[Type2EmArtifact]:
     return run_build_cli(tuple(sys.argv[1:]))
 
 

@@ -21,6 +21,7 @@ from peetsfea.backend.pyaedt.type2_step_import_core import (
     build_imported_ledger,
     write_imported_ledger,
 )
+from peetsfea.backend.pyaedt.type2_step_em_solve import Type2EmSolveResult, solve_type2_setup_ready_hfss
 from peetsfea.backend.pyaedt.type2_step_import_ledger import ValidatedStepLedger, load_step_ledger
 from peetsfea.backend.pyaedt.type2_step_port_assignment import assign_type2_lumped_ports
 from peetsfea.backend.pyaedt.type2_step_post_import_mesh import (
@@ -74,6 +75,10 @@ class Type2SetupReadyResult(TypedDict):
     sources: dict[str, str]
     analysis: dict[str, float | str]
     validation_report: dict[str, str | bool]
+
+
+class Type2SetupSolvedResult(Type2SetupReadyResult):
+    em_solve: Type2EmSolveResult
 
 
 Type2PlateStackPortReadyResult = Type2SetupReadyResult
@@ -365,6 +370,60 @@ def setup_type2_step_ledger(
         )
 
 
+def setup_and_solve_type2_step_ledger(
+    *,
+    step_ledger_path: Path = DEFAULT_SOURCE_STEP_LEDGER_PATH,
+    output_aedt_path: Path = DEFAULT_OUTPUT_AEDT_PATH,
+    imported_ledger_path: Path = DEFAULT_IMPORTED_LEDGER_PATH,
+    design_name: str = DEFAULT_DESIGN_NAME,
+    hfss_factory: HfssFactory = create_headless_hfss,
+    design_variables: tuple[DesignVariableEntry, ...] = (),
+) -> Type2SetupSolvedResult:
+    checked_step_ledger_path = step_ledger_path.resolve(strict=False)
+    ledger = load_step_ledger(checked_step_ledger_path)
+    setup_branch = _resolve_setup_branch(ledger)
+    output_aedt_path.parent.mkdir(parents=True, exist_ok=True)
+    hfss = hfss_factory(design_name)
+    try:
+        setup_result = _setup_ready_from_loaded_ledger_by_branch(
+            hfss=hfss,
+            step_ledger_path=checked_step_ledger_path,
+            output_aedt_path=output_aedt_path,
+            imported_ledger_path=imported_ledger_path,
+            ledger=ledger,
+            design_variables=design_variables,
+            setup_branch=setup_branch,
+        )
+        em_solve = solve_type2_setup_ready_hfss(
+            hfss,
+            output_dir=output_aedt_path.parent,
+        )
+        save_result = hfss.save_project(str(output_aedt_path))
+        raise_on_false(save_result, operation="save_project", context={"path": str(output_aedt_path)})
+        return {
+            "source_toml_path": setup_result["source_toml_path"],
+            "source_step_ledger_path": setup_result["source_step_ledger_path"],
+            "scene_step_path": setup_result["scene_step_path"],
+            "seed": setup_result["seed"],
+            "aedt_path": setup_result["aedt_path"],
+            "imported_ledger_path": setup_result["imported_ledger_path"],
+            "mesh": setup_result["mesh"],
+            "boundary": setup_result["boundary"],
+            "ports": setup_result["ports"],
+            "sources": setup_result["sources"],
+            "analysis": setup_result["analysis"],
+            "validation_report": setup_result["validation_report"],
+            "em_solve": em_solve,
+        }
+    finally:
+        release_result = hfss.desktop_class.release_desktop(close_projects=True, close_on_exit=True)
+        raise_on_false(
+            release_result,
+            operation="release_desktop",
+            context={"close_projects": True, "close_on_exit": True},
+        )
+
+
 def setup_type2_step_ledger_into_hfss(
     *,
     hfss: HfssSession,
@@ -405,7 +464,9 @@ __all__ = [
     "HfssFactory",
     "Type2PlateStackPortReadyResult",
     "Type2StepSetupFacadeResult",
+    "Type2SetupSolvedResult",
     "Type2SetupReadyResult",
+    "setup_and_solve_type2_step_ledger",
     "setup_type2_step_ledger",
     "setup_type2_step_ledger_into_hfss",
 ]

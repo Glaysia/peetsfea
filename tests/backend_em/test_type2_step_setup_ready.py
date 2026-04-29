@@ -14,9 +14,11 @@ from peetsfea.backend.pyaedt.type2_step_post_import_mesh import assign_post_impo
 from peetsfea.backend.pyaedt.type2_step_port_assignment import assign_type2_lumped_ports
 from peetsfea.backend.pyaedt.type2_step_setup_ready import (
     Type2SetupReadyResult,
+    setup_and_solve_type2_step_ledger,
     setup_type2_step_ledger,
     setup_type2_step_ledger_into_hfss,
 )
+from peetsfea.backend.pyaedt.type2_step_em_solve import solve_type2_setup_ready_hfss
 from peetsfea.types.manifest import EmPorts
 from tests.backend_em.test_type2_step_import_pipeline import (
     _PLATE_STACK_STUB_LENGTH_MM,
@@ -137,6 +139,13 @@ class _FakeReportSetupModule:
     def GetAllReportNames(self) -> list[str]:
         return [cast(str, report["plot_name"]) for report in self._parent.created_reports]
 
+    def ExportToFile(self, report_name: str, export_path: str) -> object:
+        self._parent.exported_report_calls.append((report_name, export_path))
+        if self._parent.export_report_result is False:
+            return False
+        Path(export_path).write_text("Freq,Lrx_uH\n1,2\n", encoding="utf-8")
+        return True
+
 
 class _SetupReadyDesign(_ImportFakeDesign):
     def __init__(self, *, mesh_module: _FakeMeshModule, parent: "_SetupReadyHfss") -> None:
@@ -250,6 +259,10 @@ class _SetupReadyHfss(_ImportFakeHfss):
         self.edited_sources_payloads: list[list[object]] = []
         self.created_output_variables: list[tuple[str, str, str]] = []
         self.created_reports: list[dict[str, object]] = []
+        self.exported_report_calls: list[tuple[str, str]] = []
+        self.export_report_result: object = True
+        self.analyze_setup_calls: list[tuple[str, bool]] = []
+        self.analyze_setup_result: object = True
         self.validation_settings_calls: list[tuple[str, bool, bool]] = []
         self.validate_design_result: object = True
         self.oboundary = _FakeBoundaryModule(self)
@@ -275,6 +288,10 @@ class _SetupReadyHfss(_ImportFakeHfss):
     ) -> object:
         self.validation_settings_calls.append((entity_check_level, ignore_unclassified, skip_intersections))
         return True
+
+    def analyze_setup(self, name: str, blocking: bool = True) -> object:
+        self.analyze_setup_calls.append((name, blocking))
+        return self.analyze_setup_result
 
     def get_traces_for_plot(
         self,
@@ -1395,6 +1412,53 @@ def test_setup_type2_step_ledger_rx_single_coil_only_runs_full_rx_only_setup_rea
         [name for name, _expression, _solution in _expected_rx_only_output_variables()],
     ]
     assert session.save_project_calls == [str(output_aedt_path)]
+    assert session.desktop_class.release_calls == [(True, True)]
+
+
+def test_solve_type2_setup_ready_hfss_analyzes_and_exports_report(tmp_path: Path) -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+    session.created_reports.append({"plot_name": "Output Variables Table1"})
+
+    result = solve_type2_setup_ready_hfss(
+        cast(HfssSession, session),
+        output_dir=tmp_path,
+    )
+
+    expected_csv = tmp_path / "Output_Variables_Table1.csv"
+    assert result == {
+        "setup_name": "Setup1",
+        "report_name": "Output Variables Table1",
+        "report_csv_path": str(expected_csv),
+    }
+    assert session.analyze_setup_calls == [("Setup1", True)]
+    assert session.exported_report_calls == [("Output Variables Table1", str(expected_csv))]
+    assert expected_csv.is_file()
+
+
+def test_setup_and_solve_type2_step_ledger_keeps_session_for_analysis_export(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=[_rx_single_coil_entry(tmp_path)],
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_setup_ready.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[_rx_only_imported_name_batch()]))
+
+    result = setup_and_solve_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    expected_csv = output_aedt_path.parent / "Output_Variables_Table1.csv"
+    assert result["em_solve"]["report_csv_path"] == str(expected_csv)
+    assert session.analyze_setup_calls == [("Setup1", True)]
+    assert session.exported_report_calls == [("Output Variables Table1", str(expected_csv))]
+    assert session.save_project_calls == [str(output_aedt_path), str(output_aedt_path)]
     assert session.desktop_class.release_calls == [(True, True)]
 
 
