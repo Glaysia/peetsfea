@@ -1,7 +1,7 @@
 ---
 title: test_sample_type2_entry.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-28 @ 00:00
+updated: 2026-04-29 @ 00:00
 tags:
   - test
   - sampling
@@ -29,6 +29,8 @@ tags:
 - RxOnly sampling tests must not require TX modeled owners.
 - RxOnly sampling tests must not require `tx_region_actual` or `tx_region_actual_stack_space`.
 - TX modeled-role fixtures assert parser/sampling fail-fast behavior instead of sampled manifest success.
+- TX inner trace-width feasibility is validated as a sample-time constraint so retry occurs before STEP export.
+- Lightweight spec tools must import without CAD/AEDT modules.
 
 ## Collaborators
 - [sample.py](../../entry/sample.py.md)

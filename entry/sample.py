@@ -38,10 +38,16 @@ class _SampleStatusLine:
         self._tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
         self._active = False
         self._rendered_line = ""
+        self._last_completed = 0
+        self._last_total = 0
+        self._last_detail = ""
 
     def log(self, message: str) -> None:
+        should_restore = self._tty and self._last_total > 0
         self.clear()
         info(message)
+        if should_restore:
+            self._render(completed=self._last_completed, total=self._last_total, detail=self._last_detail)
 
     def show_waiting(self, *, total: int) -> None:
         self._render(completed=0, total=total, detail="waiting")
@@ -70,6 +76,9 @@ class _SampleStatusLine:
 
     def _render(self, *, completed: int, total: int, detail: str) -> None:
         assert total > 0
+        self._last_completed = completed
+        self._last_total = total
+        self._last_detail = detail
         ratio = completed / total
         percent = ratio * 100.0
         bar_width = 30

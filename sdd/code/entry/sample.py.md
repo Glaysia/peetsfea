@@ -1,7 +1,7 @@
 ---
 title: sample.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-19 @ 11:05
+updated: 2026-04-29 @ 00:00
 tags:
   - sampling
   - step
@@ -22,7 +22,7 @@ tags:
 - sample runtime은 단계 시작/진행률/완료 요약을 stdout에 계속 기록한다.
 - `MAKE_STEP_ON_SAMPLE=True`인 in-process sample path는 coarse STEP 단계 로그를 entry-level stdout으로 전달한다.
 - validation/infeasible seed skip은 entry-level stdout에 별도 skip line으로 전달한다.
-- interactive terminal에서는 하단 status line 하나를 carriage-return으로 계속 갱신해 현재 퍼센트와 마지막 완료 항목을 보여준다.
+- interactive terminal에서는 하단 status line 하나를 carriage-return으로 계속 갱신해 현재 퍼센트와 마지막 완료 항목을 보여주며, step/log line 뒤에도 마지막 status line을 즉시 복원한다.
 - 모든 sampled design이 끝난 뒤 `manifest.json`을 기록한다.
 - 완료 요약에는 전체 wall-clock `elapsed_s`를 포함한다.
 
@@ -60,7 +60,7 @@ tags:
 - `.aedt`는 만들지 않는다.
 - manifest object shape는 list fallback 없이 고정한다.
 - notebook-visible sampled index는 `entries` 배열 순서를 그대로 쓴다.
-- live status line은 stage 경계에서 newline으로 정리한 뒤 다음 info line을 써야 한다.
+- live status line은 stage 경계에서 newline으로 정리한 뒤 다음 info line을 쓰고, interactive terminal이면 마지막 status line을 다시 그려야 한다.
 
 ## 직접 의존
 - `peetsfea.type2_sampled`
