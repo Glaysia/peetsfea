@@ -14,9 +14,10 @@ tags:
 - The canonical sampled authoring input is `examples/type2_sweep.toml`.
 - `examples/type2_fixed.toml` is one fixed realization of `examples/type2_sweep.toml` and must keep the same public field surface.
 - Type2 TOML owns the STEP authoring registry and the EM report/output-variable contract.
-- Active type2 setup-ready generation uses RX modeled geometry only.
-- Transmitter modeled geometry, transmitter ports, transmitter sources, and transmitter output variables are not active type2 contracts.
-- `tx_region` may remain in non-modeled scene data as a future placement guide only.
+- Active type2 setup-ready generation uses RX modeled geometry only for EM mesh, port, source, and reports.
+- `tx_inner_single_coil` may be present as geometry-only TX STEP/ledger context.
+- Transmitter ports, transmitter sources, transmitter mesh ownership, and transmitter output variables are not active type2 contracts.
+- `tx_region` and derived `tx_inner_region` remain non-modeled placement guide context.
 - The active runtime flow is:
   1. `entry/sample.py`
   2. `entry/build.py`
@@ -41,6 +42,7 @@ tags:
   - `ValidateDesign()`
   - final `.aedt` save
 - Active mesh ownership is RX conductor-only.
+- Geometry-only TX inner bodies may be imported with the STEP scene but are not consumed by RxOnly setup-ready EM inputs.
 - Reconstructed RX port-sheet geometry is runtime metadata and not a STEP body.
 - Active report variables are the RxOnly variables documented in `sdd/architecture/type2-em-report-contract.md`.
 

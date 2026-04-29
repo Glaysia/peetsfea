@@ -1,7 +1,7 @@
 ---
 title: test_build_type2_entry.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-28 @ 00:00
+updated: 2026-04-28 @ 19:40
 tags:
   - test
   - build
@@ -20,7 +20,8 @@ tags:
 
 ## Canonical state
 - Build path can reuse existing STEP ledger or generate missing RX STEP artifacts.
-- `tx_region` is allowed only as non-modeled guide context.
+- `tx_region` is allowed only as non-modeled guide context and must include the required `tx_reference_line` ratios.
+- Fake RxOnly specs used by entry tests mirror the current `Type2StepSpec` shape, including `non_model_objects`.
 
 ## Invariants / fail-fast
 - Unsupported role sets fail before backend execution.
@@ -30,3 +31,4 @@ tags:
 ## Collaborators
 - [build.py](../../entry/build.py.md)
 - [type2_runtime.py](../../src/peetsfea/type2_runtime.py.md)
+- [type2_step_spec.py](../../src/peetsfea/type2_step_spec.py.md)

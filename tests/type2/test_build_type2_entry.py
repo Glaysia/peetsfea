@@ -24,16 +24,16 @@ from peetsfea.type2_runtime import Type2BuiltArtifact
 from peetsfea.type2_sampled import PreparedType2Build
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
+from peetsfea.type2_step_spec import NonModelTxReferenceLineSpec
+from peetsfea.type2_step_spec import NonModelTxRegionSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 
 _EXPECTED_SAMPLED_OWNER_PATHS = (
-    "non_model_objects.tx_region_actual.x_usage_ratio",
-    "non_model_objects.tx_region_actual.y_usage_ratio",
-    "non_model_objects.tx_region_actual.x_division_count",
-    "non_model_objects.tx_region_actual.y_division_count",
-    "non_model_objects.tx_region_actual_stack_space.scale_ratio",
+    "non_model_objects.tx_region.tx_reference_line.x_ratio",
+    "non_model_objects.tx_region.tx_reference_line.y_usage_ratio",
+    "non_model_objects.tx_region.tx_reference_line.z_ratio",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
@@ -60,21 +60,12 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
     modeled_by_id: dict[str, dict[str, object]] = {
         cast(str, modeled_object["object_id"]): modeled_object for modeled_object in modeled_objects
     }
-    tx_region_actual_x_range = cast(
-        list[object], cast(dict[str, object], non_model_by_id["tx_region_actual"]["x_usage_ratio"])["range"]
+    tx_reference_line = cast(dict[str, object], non_model_by_id["tx_region"]["tx_reference_line"])
+    tx_reference_line_x_range = cast(list[object], cast(dict[str, object], tx_reference_line["x_ratio"])["range"])
+    tx_reference_line_y_range = cast(
+        list[object], cast(dict[str, object], tx_reference_line["y_usage_ratio"])["range"]
     )
-    tx_region_actual_y_range = cast(
-        list[object], cast(dict[str, object], non_model_by_id["tx_region_actual"]["y_usage_ratio"])["range"]
-    )
-    tx_region_actual_x_division_range = cast(
-        list[object], cast(dict[str, object], non_model_by_id["tx_region_actual"]["x_division_count"])["range"]
-    )
-    tx_region_actual_y_division_range = cast(
-        list[object], cast(dict[str, object], non_model_by_id["tx_region_actual"]["y_division_count"])["range"]
-    )
-    tx_region_actual_stack_space_scale_ratio_range = cast(
-        list[object], cast(dict[str, object], non_model_by_id["tx_region_actual_stack_space"]["scale_ratio"])["range"]
-    )
+    tx_reference_line_z_range = cast(list[object], cast(dict[str, object], tx_reference_line["z_ratio"])["range"])
     rx_outer_x_range = cast(
         list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["outer_x_usage_ratio"])["range"]
     )
@@ -91,21 +82,20 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
         list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["metal_fill_factor"])["range"]
     )
     return (
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[0], str(float(cast(int | float, tx_region_actual_x_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, tx_region_actual_y_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(int(cast(int | float, tx_region_actual_x_division_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(int(cast(int | float, tx_region_actual_y_division_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, tx_region_actual_stack_space_scale_ratio_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, rx_outer_x_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(float(cast(int | float, rx_outer_y_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[7], str(float(cast(int | float, rx_void_ratio_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[8], str(int(cast(int | float, rx_turn_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[9], str(float(cast(int | float, rx_fill_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[0], str(float(cast(int | float, tx_reference_line_x_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, tx_reference_line_y_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(float(cast(int | float, tx_reference_line_z_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(float(cast(int | float, rx_outer_x_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, rx_outer_y_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, rx_void_ratio_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(int(cast(int | float, rx_turn_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[7], str(float(cast(int | float, rx_fill_range[1])))),
     )
 
 
 @dataclass(frozen=True)
 class _FakeRxOnlyType2Spec:
+    non_model_objects: tuple[NonModelTxRegionSpec, ...]
     non_model_derived_objects: tuple[NonModelTxRegionActualSpec | NonModelTxRegionActualStackSpaceSpec, ...]
     modeled_objects: tuple[ModeledRxSingleCoilSpec, ...]
 
@@ -124,32 +114,29 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     rx_terminal_stub = RangeSpec(is_integer=False, start=5.0, end=5.0, count=1)
     rx_margin_ratio = RangeSpec(is_integer=False, start=0.05, end=0.05, count=1)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
-    tx_region_actual_x_usage_ratio = RangeSpec(is_integer=False, start=0.3, end=1.0, count=27)
-    tx_region_actual_y_usage_ratio = RangeSpec(is_integer=False, start=0.3, end=1.0, count=27)
-    tx_region_actual_x_division_count = RangeSpec(is_integer=True, start=1, end=3, count=3)
-    tx_region_actual_y_division_count = RangeSpec(is_integer=True, start=1, end=3, count=3)
-    tx_region_actual_stack_space_scale_ratio = RangeSpec(is_integer=False, start=0.35, end=0.95, count=25)
-    tx_region_actual_stack_space_tilt_enabled = RangeSpec(is_integer=True, start=1, end=1, count=1)
+    tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.2, end=0.8, count=13)
+    tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
+    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.2, end=0.9, count=13)
     fake_spec = _FakeRxOnlyType2Spec(
-        non_model_derived_objects=(
-            NonModelTxRegionActualSpec(
-                object_id="tx_region_actual",
-                kind="tx_region_actual",
-                source_region_id="tx_region",
-                x_usage_ratio=tx_region_actual_x_usage_ratio,
-                y_usage_ratio=tx_region_actual_y_usage_ratio,
-                x_division_count=tx_region_actual_x_division_count,
-                y_division_count=tx_region_actual_y_division_count,
-            ),
-            NonModelTxRegionActualStackSpaceSpec(
-                object_id="tx_region_actual_stack_space",
-                kind="tx_region_actual_stack_space",
-                source_region_id="tx_region_actual",
-                total_thickness_mm=5.0,
-                scale_ratio=tx_region_actual_stack_space_scale_ratio,
-                tilt_enabled=tx_region_actual_stack_space_tilt_enabled,
+        non_model_objects=(
+            NonModelTxRegionSpec(
+                object_id="tx_region",
+                kind="tx_region",
+                primitive="box",
+                present=True,
+                non_model=True,
+                material="vacuum",
+                plane="YZ",
+                origin_xyz=(0.0, -140.0, 0.0),
+                size_xyz=(160.0, 280.0, 90.0),
+                tx_reference_line=NonModelTxReferenceLineSpec(
+                    x_ratio=tx_reference_line_x_ratio,
+                    y_usage_ratio=tx_reference_line_y_usage_ratio,
+                    z_ratio=tx_reference_line_z_ratio,
+                ),
             ),
         ),
+        non_model_derived_objects=(),
         modeled_objects=(
             ModeledRxSingleCoilSpec(
                 object_id="rx_rect_void_coil",
@@ -267,6 +254,15 @@ plane = "YZ"
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
 
+[non_model_objects.tx_reference_line.x_ratio]
+range = [false, 0.2, 0.8, 13]
+
+[non_model_objects.tx_reference_line.y_usage_ratio]
+range = [false, 0.2, 1.0, 17]
+
+[non_model_objects.tx_reference_line.z_ratio]
+range = [false, 0.2, 0.9, 13]
+
 [[non_model_objects]]
 id = "rx_region_max"
 kind = "rx_region_max"
@@ -277,29 +273,6 @@ material = "vacuum"
 plane = "YZ"
 origin_xyz = [200.0, -100.0, 0.0]
 size_xyz = [10.0, 200.0, 200.0]
-
-[[non_model_objects]]
-id = "tx_region_actual"
-kind = "tx_region_actual"
-source_region_id = "tx_region"
-[non_model_objects.x_usage_ratio]
-range = [false, 0.3, 1.0, 27]
-[non_model_objects.y_usage_ratio]
-range = [false, 0.3, 1.0, 27]
-[non_model_objects.x_division_count]
-range = [true, 1, 3, 3]
-[non_model_objects.y_division_count]
-range = [true, 1, 3, 3]
-
-[[non_model_objects]]
-id = "tx_region_actual_stack_space"
-kind = "tx_region_actual_stack_space"
-source_region_id = "tx_region_actual"
-total_thickness_mm = 5.0
-[non_model_objects.scale_ratio]
-range = [false, 0.35, 0.95, 25]
-[non_model_objects.tilt_enabled]
-range = [true, 1, 1, 1]
 
 [[modeled_objects]]
     object_id = "rx_rect_void_coil"
@@ -382,28 +355,14 @@ plane = "YZ"
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
 
-[[non_model_objects]]
-id = "tx_region_actual"
-kind = "tx_region_actual"
-source_region_id = "tx_region"
-[non_model_objects.x_usage_ratio]
-range = [false, 0.3, 1.0, 27]
-[non_model_objects.y_usage_ratio]
-range = [false, 0.3, 1.0, 27]
-[non_model_objects.x_division_count]
-range = [true, 1, 3, 3]
-[non_model_objects.y_division_count]
-range = [true, 1, 3, 3]
+[non_model_objects.tx_reference_line.x_ratio]
+range = [false, 0.35, 0.35, 1]
 
-[[non_model_objects]]
-id = "tx_region_actual_stack_space"
-kind = "tx_region_actual_stack_space"
-source_region_id = "tx_region_actual"
-total_thickness_mm = 5.0
-[non_model_objects.scale_ratio]
-range = [false, 0.35, 0.95, 25]
-[non_model_objects.tilt_enabled]
-range = [true, 1, 1, 1]
+[non_model_objects.tx_reference_line.y_usage_ratio]
+range = [false, 1.0, 1.0, 1]
+
+[non_model_objects.tx_reference_line.z_ratio]
+range = [false, 0.65, 0.65, 1]
 
 [[modeled_objects]]
 object_id = "tx_rect_void_columns"

@@ -1,7 +1,7 @@
 ---
 title: test_setup_type2_step_entry.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-28 @ 23:55
+updated: 2026-04-28 @ 23:59
 tags:
   - hfss-import
   - em
@@ -16,7 +16,8 @@ tags:
 
 ## 역할
 - active type2 examples가 0.2.24 RxOnly setup-ready contract를 표현하는지 검증한다.
-- TX output variable, TX modeled role, TX sampled-owner block이 active example surface로 돌아오면 실패한다.
+- Generic TX output variable, generic TX modeled role, TX sampled-owner block이 active example surface로 돌아오면 실패한다.
+- Geometry-only `tx_inner_single_coil` is allowed as retained modeled geometry and must keep fixed zero underlay.
 
 ## 입력 / 출력
 - 입력:
@@ -35,11 +36,12 @@ tags:
 ## Invariants / fail-fast
 - `outputs.mode` must be `RxOnly`.
 - active outputs must match the RX-only report variable list in [type2-em-report-contract](../../../architecture/type2-em-report-contract.md).
-- active modeled objects must contain RX modeled object(s) and no TX modeled object role.
+- active modeled objects must contain geometry-only `tx_inner_single_coil` plus RX modeled object(s), and no generic
+  TX modeled role.
 - active examples must not expose TX derived sampled owners such as `tx_region_actual`, `tx_region_actual_stack_space`, or TX modeled sampled fields.
 - `tx_reference_line.x_ratio`, `tx_reference_line.y_usage_ratio`, and `tx_reference_line.z_ratio` are guide-only
-  inputs and must not imply TX ports, reports, modeled roles, or active TX
-  sampled owners.
+  inputs and may derive TX inner geometry context, but must not imply TX ports, reports, generic TX modeled roles,
+  or active TX sampled owners.
 
 ## 직접 의존
 - [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)

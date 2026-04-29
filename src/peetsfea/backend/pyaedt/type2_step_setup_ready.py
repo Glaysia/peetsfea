@@ -40,6 +40,7 @@ DEFAULT_IMPORTED_LEDGER_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_import" 
 DEFAULT_OUTPUT_AEDT_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_setup_ready" / "type2_setup_ready.aedt"
 DEFAULT_DESIGN_NAME = "type2_step_setup_ready"
 _RX_SINGLE_COIL_ROLE: str = "rx_single_coil"
+_TX_INNER_SINGLE_COIL_ROLE: str = "tx_inner_single_coil"
 _SETUP_BRANCH_RX_SINGLE_READY = "rx_single_ready"
 _ACTIVE_RX_ONLY_OUTPUT_VARIABLE_NAMES: frozenset[str] = frozenset(
     {
@@ -156,6 +157,21 @@ def _modeled_role(*, entry: dict[str, object], context: str) -> str:
 
 def _resolve_setup_branch(ledger: ValidatedStepLedger) -> str:
     modeled_entries = ledger["modeled_objects"]
+    rx_entry_count = 0
+    unsupported_roles: list[str] = []
+    for index, modeled_entry in enumerate(modeled_entries):
+        role = _modeled_role(
+            entry=modeled_entry["entry"],
+            context=f"modeled_objects[{index}]",
+        )
+        if role == _RX_SINGLE_COIL_ROLE:
+            rx_entry_count += 1
+            continue
+        if role == _TX_INNER_SINGLE_COIL_ROLE:
+            continue
+        unsupported_roles.append(role)
+    if rx_entry_count == 1 and len(unsupported_roles) == 0:
+        return _SETUP_BRANCH_RX_SINGLE_READY
     if len(modeled_entries) == 1:
         only_role = _modeled_role(
             entry=modeled_entries[0]["entry"],
@@ -186,6 +202,29 @@ def _resolve_setup_branch(ledger: ValidatedStepLedger) -> str:
     )
 
 
+def _rx_only_imported_ledger(imported_ledger: Type2ImportedLedger) -> Type2ImportedLedger:
+    rx_modeled_objects = [
+        entry
+        for entry in imported_ledger["modeled_objects"]
+        if _modeled_role(entry=entry, context="imported_ledger.modeled_objects[]") == _RX_SINGLE_COIL_ROLE
+    ]
+    if len(rx_modeled_objects) != 1:
+        raise ValueError(
+            "type2 RX-only setup requires exactly one imported rx_single_coil modeled object "
+            f"(actual={len(rx_modeled_objects)})"
+        )
+    return {
+        "source_toml_path": imported_ledger["source_toml_path"],
+        "source_step_ledger_path": imported_ledger["source_step_ledger_path"],
+        "scene_step_path": imported_ledger["scene_step_path"],
+        "seed": imported_ledger["seed"],
+        "aedt_path": imported_ledger["aedt_path"],
+        "imported_ledger_path": imported_ledger["imported_ledger_path"],
+        "non_model_objects": imported_ledger["non_model_objects"],
+        "modeled_objects": rx_modeled_objects,
+    }
+
+
 def _setup_ready_from_loaded_ledger_full(
     *,
     hfss: HfssSession,
@@ -203,9 +242,10 @@ def _setup_ready_from_loaded_ledger_full(
         imported_ledger_path=imported_ledger_path,
         ledger=ledger,
     )
+    rx_only_imported_ledger = _rx_only_imported_ledger(imported_ledger)
     mesh = assign_post_import_mesh(
         hfss=hfss,
-        imported_modeled_objects=imported_ledger["modeled_objects"],
+        imported_modeled_objects=rx_only_imported_ledger["modeled_objects"],
     )
     em_policy = _setup_ready_policy(ledger)
     boundary = build_boundary(
@@ -216,9 +256,9 @@ def _setup_ready_from_loaded_ledger_full(
     ports = assign_type2_lumped_ports(
         hfss=hfss,
         modeler=hfss.modeler,
-        imported_ledger=imported_ledger,
+        imported_ledger=rx_only_imported_ledger,
     )
-    em_input = build_type2_em_input(imported_ledger=imported_ledger, ports=ports)
+    em_input = build_type2_em_input(imported_ledger=rx_only_imported_ledger, ports=ports)
     groups = build_groups(em_input)
     series = build_series(groups)
     subtract = build_subtract(groups)

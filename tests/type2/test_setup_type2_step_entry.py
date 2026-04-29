@@ -99,9 +99,14 @@ def _assert_rx_only_payload(payload: dict[str, object]) -> None:
     assert names == _RX_ONLY_OUTPUT_NAMES
     assert all("TX_TML" not in expression for expression in expressions)
 
-    modeled_roles = tuple(cast(str, table["role"]) for table in _tables(payload, "modeled_objects"))
-    assert modeled_roles == ("rx_single_coil",)
+    modeled_objects = _tables(payload, "modeled_objects")
+    modeled_roles = tuple(cast(str, table["role"]) for table in modeled_objects)
+    assert modeled_roles == ("tx_inner_single_coil", "rx_single_coil")
     assert not _TX_MODELED_ROLES.intersection(modeled_roles)
+    modeled_by_id = {cast(str, table["object_id"]): table for table in modeled_objects}
+    tx_inner = modeled_by_id["tx_inner_rect_void_coil"]
+    assert tx_inner["role"] == "tx_inner_single_coil"
+    assert cast(dict[str, object], tx_inner["underlay_repeat_count"])["range"] == [True, 0, 0, 1]
 
     non_model_ids = tuple(cast(str, table["id"]) for table in _tables(payload, "non_model_objects"))
     assert "tx_region" in non_model_ids

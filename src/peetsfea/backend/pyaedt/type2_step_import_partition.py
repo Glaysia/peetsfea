@@ -20,7 +20,7 @@ _BODY_ROLE_COPPER = "copper"
 _BODY_ROLE_UNDERLAY_FERRITE = "underlay_ferrite"
 _BODY_ROLE_UNDERLAY_PET_PSA = "underlay_pet_psa"
 _BODY_ROLE_UNDERLAY_AIR = "underlay_air"
-_SINGLE_COIL_ROLES: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
+_SINGLE_COIL_ROLES: frozenset[str] = frozenset({"tx_single_coil", "tx_inner_single_coil", "rx_single_coil"})
 _PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
 _TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
 _TX_RECT_VOID_COLUMNS_COPPER_NAME = "tx_rect_void_columns_copper"
@@ -408,17 +408,18 @@ def _group_contract_for_role(
 
 
 def _body_role_from_expected_name(expected_name: str, *, context: str) -> str:
-    if expected_name.startswith(("tx_pcb_l", "rx_pcb_l", "txrvc_")) and "_pcb_l" in expected_name:
+    if expected_name.startswith(("tx_pcb_l", "tx_inner_pcb_l", "rx_pcb_l", "txrvc_")) and "_pcb_l" in expected_name:
         return _BODY_ROLE_PCB
-    if expected_name.startswith(("tx_pcb_l", "rx_pcb_l")) or expected_name in (
+    if expected_name.startswith(("tx_pcb_l", "tx_inner_pcb_l", "rx_pcb_l")) or expected_name in (
         _TX_PCB_WALL_NAME,
         _TX_PCB_COIL_NAME,
         _RX_PCB_WALL_NAME,
         _RX_PCB_COIL_NAME,
     ) or _is_tx_branch_stack_member(expected_name, suffix="_pcb_wall") or _is_tx_branch_stack_member(expected_name, suffix="_pcb_coil"):
         return _BODY_ROLE_PCB
-    if expected_name.startswith(("tx_copper_l", "rx_copper_l")) or expected_name in (
+    if expected_name.startswith(("tx_copper_l", "tx_inner_copper_l", "rx_copper_l")) or expected_name in (
             "tx_copper_stack",
+            "tx_inner_copper_stack",
             "rx_copper_stack",
             _TX_PLATE_COPPER_NAME,
             _RX_PLATE_COPPER_NAME,
@@ -437,6 +438,7 @@ def _body_role_from_expected_name(expected_name: str, *, context: str) -> str:
         return _BODY_ROLE_UNDERLAY_AIR
     raise ValueError(
         "unsupported exported body name; expected tx_pcb_l*/tx_copper_l*/tx_copper_stack/"
+        "tx_inner_pcb_l*/tx_inner_copper_l*/tx_inner_copper_stack/"
         "txrvc_*_pcb_l*/tx_rect_void_columns_copper/"
         "tx_copper_wall/tx_pcb_wall/tx_plate_copper/tx_stack_ferrite/tx_stack_pet_psa/"
         "tx_stack_air/tx_b*_stack_ferrite/tx_b*_stack_pet_psa/tx_b*_stack_air/tx_pcb_coil/tx_copper_coil "
@@ -455,7 +457,7 @@ def _resolved_pcb_names(imported_object_names: list[str]) -> list[str]:
         name
         for name in imported_object_names
         if (name.startswith("txrvc_") and "_pcb_l" in name)
-        or name.startswith(("tx_pcb_l", "rx_pcb_l"))
+        or name.startswith(("tx_pcb_l", "tx_inner_pcb_l", "rx_pcb_l"))
         or name in (_TX_PCB_WALL_NAME, _TX_PCB_COIL_NAME, _RX_PCB_WALL_NAME, _RX_PCB_COIL_NAME)
         or _is_tx_branch_stack_member(name, suffix="_pcb_wall")
         or _is_tx_branch_stack_member(name, suffix="_pcb_coil")
@@ -466,9 +468,10 @@ def _resolved_copper_names(imported_object_names: list[str]) -> list[str]:
     return [
         name
         for name in imported_object_names
-        if name.startswith(("tx_copper_l", "rx_copper_l"))
+        if name.startswith(("tx_copper_l", "tx_inner_copper_l", "rx_copper_l"))
         or name in (
             "tx_copper_stack",
+            "tx_inner_copper_stack",
             "rx_copper_stack",
             _TX_PLATE_COPPER_NAME,
             _RX_PLATE_COPPER_NAME,
