@@ -52,6 +52,7 @@ class OutputVariableSpec(TypedDict):
 
 
 class OutputsSpec(TypedDict):
+    mode: str
     report_name: str
     solution_name: str
     primary_sweep: str

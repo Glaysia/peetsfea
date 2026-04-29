@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_spec_import_surface.py
 created: 2026-04-21 @ 17:45
-updated: 2026-04-21 @ 17:45
+updated: 2026-04-29 @ 00:00
 tags:
   - tests
   - type2
@@ -18,6 +18,7 @@ tags:
 ## 역할
 - verify `peetsfea.type2_step_spec` exposes the expected split-facing import surface via `__all__`
 - verify chosen façade symbols still resolve to their owning split modules for role/object mapping, resolvers, and rendering helper paths
+- verify output mode parsing exposes active `RxOnly`와 `TxRx` 계약의 fail-fast 동작을 검증한다
 
 ## 입력 / 출력
 - 입력: runtime import of `peetsfea.type2_step_spec`

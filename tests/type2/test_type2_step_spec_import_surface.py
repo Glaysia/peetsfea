@@ -121,6 +121,69 @@ def test_outputs_parser_accepts_rx_only_variable_contract() -> None:
     assert outputs["variables"][0]["name"] == "Lrx_uH"
 
 
+def test_outputs_parser_accepts_txrx_variable_contract() -> None:
+    outputs = parse_outputs_table(
+        {
+            "mode": "TxRx",
+            "report_name": "Output Variables Table1",
+            "solution_name": "Setup1 : LastAdaptive",
+            "primary_sweep": "Freq",
+            "report_category": "Terminal Solution Data",
+            "plot_type": "Data Table",
+            "variables": [
+                {"name": "Ltx_uH", "expression": "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"},
+                {"name": "Lrx_uH", "expression": "im(Zt(RX_TML,RX_TML))/2/pi/freq*1e6"},
+                {"name": "M_uH", "expression": "abs(im(Zt(TX_TML,RX_TML))/2/pi/freq*1e6)"},
+                {"name": "k_ratio", "expression": "M_uH/sqrt(Ltx_uH*Lrx_uH)"},
+                {"name": "Qtx_ratio", "expression": "im(Zt(TX_TML,TX_TML))/re(Zt(TX_TML,TX_TML))"},
+                {"name": "Qrx_ratio", "expression": "im(Zt(RX_TML,RX_TML))/re(Zt(RX_TML,RX_TML))"},
+                {"name": "FOM_ratio", "expression": "k_ratio*sqrt(Qtx_ratio*Qrx_ratio)"},
+                {"name": "Rtx_ac_ohm", "expression": "re(Zt(TX_TML,TX_TML))"},
+                {"name": "Rrx_ac_ohm", "expression": "re(Zt(RX_TML,RX_TML))"},
+                {"name": "Xtx_ohm", "expression": "im(Zt(TX_TML,TX_TML))"},
+                {"name": "Xrx_ohm", "expression": "im(Zt(RX_TML,RX_TML))"},
+                {"name": "M_over_Ltx_ratio", "expression": "M_uH/Ltx_uH"},
+                {"name": "M_over_Lrx_ratio", "expression": "M_uH/Lrx_uH"},
+                {"name": "Gtx_S", "expression": "re(Yt(TX_TML,TX_TML))"},
+                {"name": "Btx_S", "expression": "im(Yt(TX_TML,TX_TML))"},
+                {"name": "Grx_S", "expression": "re(Yt(RX_TML,RX_TML))"},
+                {"name": "Brx_S", "expression": "im(Yt(RX_TML,RX_TML))"},
+                {"name": "S11_mag_ratio", "expression": "mag(S(TX_TML,TX_TML))"},
+                {"name": "S21_mag_ratio", "expression": "mag(S(TX_TML,RX_TML))"},
+                {"name": "S21_phase_deg", "expression": "ang_deg_val(S(TX_TML,RX_TML))"},
+                {"name": "S22_mag_ratio", "expression": "mag(S(RX_TML,RX_TML))"},
+                {"name": "eta_s21_power_ratio", "expression": "S21_mag_ratio*S21_mag_ratio"},
+                {"name": "eta_tx_accept_ratio", "expression": "1-S11_mag_ratio*S11_mag_ratio"},
+                {"name": "eta_rx_accept_ratio", "expression": "1-S22_mag_ratio*S22_mag_ratio"},
+                {"name": "eta_match_product_ratio", "expression": "eta_tx_accept_ratio*eta_rx_accept_ratio"},
+                {"name": "eta_s21_from_tx_accept_ratio", "expression": "eta_s21_power_ratio/eta_tx_accept_ratio"},
+                {"name": "eta_s21_from_rx_accept_ratio", "expression": "eta_s21_power_ratio/eta_rx_accept_ratio"},
+                {"name": "eta_s21_two_sided_norm_ratio", "expression": "eta_s21_power_ratio/(eta_tx_accept_ratio*eta_rx_accept_ratio)"},
+                {"name": "eta_fom_max_ratio", "expression": "(FOM_ratio*FOM_ratio)/((1+sqrt(1+FOM_ratio*FOM_ratio))*(1+sqrt(1+FOM_ratio*FOM_ratio)))"},
+            ],
+        },
+        context="outputs",
+    )
+
+    assert outputs["variables"][-1]["name"] == "eta_fom_max_ratio"
+
+
+def test_outputs_parser_rejects_unknown_variable_in_txrx_mode() -> None:
+    with pytest.raises(ValueError, match=r"outputs\.variables\[0\]\.name is not supported for TxRx"):
+        parse_outputs_table(
+            {
+                "mode": "TxRx",
+                "report_name": "Output Variables Table1",
+                "solution_name": "Setup1 : LastAdaptive",
+                "primary_sweep": "Freq",
+                "report_category": "Terminal Solution Data",
+                "plot_type": "Data Table",
+                "variables": [{"name": "Srx_self_mag_ratio", "expression": "mag(S(RX_TML,RX_TML))"}],
+            },
+            context="outputs",
+        )
+
+
 def test_outputs_parser_rejects_tx_variable_in_rx_only_mode() -> None:
     with pytest.raises(
         ValueError,
