@@ -8,10 +8,11 @@ from peetsfea.types.manifest import OutputsSpec
 Point3 = tuple[float, float, float]
 
 
-ModeledSingleCoilRole = Literal["tx_single_coil", "rx_single_coil"]
+ModeledSingleCoilRole = Literal["tx_single_coil", "tx_inner_single_coil", "rx_single_coil"]
 ModeledPlateStackRole = Literal["tx_plate_stack", "rx_plate_stack"]
 ModeledObjectRole = Literal[
     "tx_single_coil",
+    "tx_inner_single_coil",
     "rx_single_coil",
     "tx_rect_void_columns",
     "tx_plate_stack",
@@ -187,6 +188,11 @@ class ModeledTxSingleCoilSpec(ModeledSingleCoilCommonSpec):
 
 
 @dataclass(frozen=True)
+class ModeledTxInnerSingleCoilSpec(ModeledSingleCoilCommonSpec):
+    role: Literal["tx_inner_single_coil"]
+
+
+@dataclass(frozen=True)
 class ModeledRxSingleCoilSpec(ModeledSingleCoilCommonSpec):
     role: Literal["rx_single_coil"]
 
@@ -239,7 +245,7 @@ class ModeledTxRectVoidColumnsSpec:
     turn_weight_c: RangeSpec
 
 
-ModeledSingleCoilSpec = ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec
+ModeledSingleCoilSpec = ModeledTxSingleCoilSpec | ModeledTxInnerSingleCoilSpec | ModeledRxSingleCoilSpec
 ModeledPlateStackSpec = ModeledTxPlateStackSpec | ModeledRxPlateStackSpec
 ModeledObjectSpec = ModeledSingleCoilSpec | ModeledPlateStackSpec | ModeledTxRectVoidColumnsSpec
 
@@ -258,6 +264,8 @@ class Type2StepSpec:
 def modeled_object_id_for_role(role: ModeledObjectRole) -> str:
     if role == "tx_single_coil":
         return "tx_rect_void_coil"
+    if role == "tx_inner_single_coil":
+        return "tx_inner_rect_void_coil"
     if role == "rx_single_coil":
         return "rx_rect_void_coil"
     if role == "tx_rect_void_columns":
@@ -272,13 +280,15 @@ def modeled_object_id_for_role(role: ModeledObjectRole) -> str:
 def placement_owner_id_for_role(role: ModeledObjectRole) -> str:
     if role in ("tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"):
         return "tx_region"
+    if role == "tx_inner_single_coil":
+        return "tx_inner_region"
     if role in ("rx_single_coil", "rx_plate_stack"):
         return "rx_region_max"
     raise RuntimeError(f"unsupported modeled object role for placement owner resolution: {role}")
 
 
 def modeled_plane_for_role(role: ModeledObjectRole) -> Literal["XY", "YZ"]:
-    if role == "tx_single_coil":
+    if role in ("tx_single_coil", "tx_inner_single_coil"):
         return "XY"
     if role == "tx_rect_void_columns":
         return "XY"
@@ -300,6 +310,7 @@ __all__ = [
     "ModeledSingleCoilSpec",
     "ModeledTxPlateStackSpec",
     "ModeledTxRectVoidColumnsSpec",
+    "ModeledTxInnerSingleCoilSpec",
     "ModeledTxSingleCoilSpec",
     "NonModelBoxSpec",
     "NonModelDerivedSpec",

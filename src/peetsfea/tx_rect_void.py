@@ -33,6 +33,8 @@ from peetsfea.tx_rect_void_types import (
     SingleCoilProfile,
     TerminalPath,
     TX_SINGLE_COIL_PROFILE,
+    TX_INNER_SINGLE_COIL_PROFILE,
+    TX_PARALLEL_SINGLE_COIL_ROLES,
     profile_for_modeled_role,
 )
 
@@ -54,6 +56,8 @@ __all__ = [
     "RealizedSingleCoilRectVoid",
     "TerminalPath",
     "TX_SINGLE_COIL_PROFILE",
+    "TX_INNER_SINGLE_COIL_PROFILE",
+    "TX_PARALLEL_SINGLE_COIL_ROLES",
     "build_tx_rect_void_box_specs",
     "build_tx_rect_void_centerline",
     "build_tx_rect_void_step_scene",

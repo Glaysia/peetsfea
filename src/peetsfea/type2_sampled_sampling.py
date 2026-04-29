@@ -13,9 +13,10 @@ from typing import Final, Literal, TypedDict, cast
 
 from peetsfea.spec.loader import TOMLTable, TOMLValue, load_toml_bytes
 from peetsfea.spec.toml_render import toml_dumps
-from peetsfea.type2_step_export import export_type2_step_artifacts
+from peetsfea.type2_rect_void_feasibility import min_centered_rect_void_trace_width_mm
 from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
+from peetsfea.type2_step_spec import ModeledTxInnerSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelDerivedSpec
@@ -41,7 +42,7 @@ _INTEGER_RANGE_FIELD_NAMES = (
     "y_division_count",
 )
 _SAMPLED_METADATA_TABLE = "sampled"
-_SAMPLED_SINGLE_COIL_ROLES: frozenset[str] = frozenset({"rx_single_coil"})
+_SAMPLED_SINGLE_COIL_ROLES: frozenset[str] = frozenset({"tx_inner_single_coil", "rx_single_coil"})
 _PLATE_STACK_ROLE_SUFFIX = "_plate_stack"
 _TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
 _UNSUPPORTED_RXONLY_TX_MODELED_ROLES: frozenset[str] = frozenset(
@@ -165,13 +166,27 @@ def _constraint_id_for_rule(index: int) -> str:
 
 def _parse_constraint_func(raw_text: str, context: str) -> tuple[str, tuple[str, ...]]:
     text = raw_text.strip()
-    if not text.startswith("sum(") or not text.endswith(")"):
-        raise ValueError(f"{context}.func must be in the form sum(arg_1, arg_2, ...)")
-    body = text[4:-1].strip()
+    if not text.endswith(")") or "(" not in text:
+        raise ValueError(
+            f"{context}.func must be in the form sum(arg_1, arg_2, ...), "
+            "tx_inner_min_trace_width_mm(tx_inner_rect_void_coil), or rx_min_trace_width_mm(rx_rect_void_coil)"
+        )
+    open_index = text.find("(")
+    function_name = text[:open_index].strip()
+    if function_name not in ("sum", "tx_inner_min_trace_width_mm", "rx_min_trace_width_mm"):
+        raise ValueError(
+            f"{context}.func must use one of ['sum', 'tx_inner_min_trace_width_mm', 'rx_min_trace_width_mm'] "
+            f"(actual={function_name!r})"
+        )
+    body = text[open_index + 1 : -1].strip()
     args = _split_function_args(body, context=f"{context}.func")
     if len(args) == 0:
-        raise ValueError(f"{context}.func sum() must contain at least one argument")
-    return "sum", tuple(args)
+        raise ValueError(f"{context}.func {function_name}() must contain at least one argument")
+    if function_name == "tx_inner_min_trace_width_mm" and len(args) != 1:
+        raise ValueError(f"{context}.func tx_inner_min_trace_width_mm() must contain exactly one argument")
+    if function_name == "rx_min_trace_width_mm" and len(args) != 1:
+        raise ValueError(f"{context}.func rx_min_trace_width_mm() must contain exactly one argument")
+    return function_name, tuple(args)
 
 
 def _split_function_args(raw_text: str, context: str) -> tuple[str, ...]:
@@ -318,10 +333,31 @@ def _validate_constraint_paths(sampled_source: Type2StepSpec, *, constraints: li
                 _validate_constraint_path(sampled_source, raw_side["path"], context=f"constraints.rules[{rule['id']}]")
             if "func" in raw_side:
                 func_name, args = _parse_constraint_func(raw_side["func"], f"constraints.rules[{rule['id']}]")
-                if func_name != "sum":
-                    raise ValueError(f"constraints.rules[{rule['id']}].func only supports sum()")
-                for arg in args:
-                    _validate_constraint_sum_arg(sampled_source, arg, context=f"constraints.rules[{rule['id']}]")
+                if func_name == "sum":
+                    for arg in args:
+                        _validate_constraint_sum_arg(sampled_source, arg, context=f"constraints.rules[{rule['id']}]")
+                    continue
+                if func_name == "tx_inner_min_trace_width_mm":
+                    _validate_single_coil_min_trace_width_arg(
+                        sampled_source,
+                        args[0],
+                        expected_type=ModeledTxInnerSingleCoilSpec,
+                        function_name=func_name,
+                        expected_role="tx_inner_single_coil",
+                        context=f"constraints.rules[{rule['id']}]",
+                    )
+                    continue
+                if func_name == "rx_min_trace_width_mm":
+                    _validate_single_coil_min_trace_width_arg(
+                        sampled_source,
+                        args[0],
+                        expected_type=ModeledRxSingleCoilSpec,
+                        function_name=func_name,
+                        expected_role="rx_single_coil",
+                        context=f"constraints.rules[{rule['id']}]",
+                    )
+                    continue
+                raise ValueError(f"constraints.rules[{rule['id']}].func unsupported function: {func_name}")
 
 
 def _validate_constraint_sum_arg(sampled_source: Type2StepSpec, arg: str, *, context: str) -> None:
@@ -331,6 +367,27 @@ def _validate_constraint_sum_arg(sampled_source: Type2StepSpec, arg: str, *, con
         float(arg)
     except ValueError:
         _validate_constraint_path(sampled_source, arg, context=f"{context}.func")
+
+
+def _validate_single_coil_min_trace_width_arg(
+    sampled_source: Type2StepSpec,
+    object_id: str,
+    *,
+    expected_type: type[ModeledTxInnerSingleCoilSpec] | type[ModeledRxSingleCoilSpec],
+    function_name: str,
+    expected_role: str,
+    context: str,
+) -> None:
+    if object_id == "":
+        raise ValueError(f"{context}.func {function_name}() object id must be non-empty")
+    matches = [modeled_spec for modeled_spec in sampled_source.modeled_objects if modeled_spec.object_id == object_id]
+    if len(matches) != 1:
+        raise ValueError(f"{context}.func references unknown modeled object: {object_id}")
+    if not isinstance(matches[0], expected_type):
+        raise ValueError(
+            f"{context}.func {function_name}() requires {expected_role} object "
+            f"(actual={object_id})"
+        )
 
 
 def _resolve_constraint_path_value(
@@ -370,8 +427,22 @@ def _resolve_constraint_operand(
         return operand["value"]
     function = _parse_constraint_func(cast(str, operand["func"]), context=f"{context}.func")
     function_name, args = function
+    if function_name == "tx_inner_min_trace_width_mm":
+        return _resolve_tx_inner_min_trace_width_mm(
+            source,
+            sampled_values,
+            object_id=args[0],
+            context=context,
+        )
+    if function_name == "rx_min_trace_width_mm":
+        return _resolve_rx_min_trace_width_mm(
+            source,
+            sampled_values,
+            object_id=args[0],
+            context=context,
+        )
     if function_name != "sum":
-        raise ValueError(f"{context}.func only supports sum()")
+        raise ValueError(f"{context}.func unsupported function: {function_name}")
     total = 0.0
     for arg in args:
         if " " in arg:
@@ -383,6 +454,214 @@ def _resolve_constraint_operand(
             pass
         total += float(_resolve_constraint_path_value(source, sampled_values, arg, context=context))
     return total
+
+
+def _resolve_tx_inner_min_trace_width_mm(
+    source: Type2StepSpec,
+    sampled_values: dict[str, SampledScalar],
+    *,
+    object_id: str,
+    context: str,
+) -> float:
+    tx_region_matches = [
+        non_model_spec
+        for non_model_spec in source.non_model_objects
+        if isinstance(non_model_spec, NonModelTxRegionSpec) and non_model_spec.object_id == "tx_region"
+    ]
+    if len(tx_region_matches) != 1:
+        raise ValueError(f"{context}.func requires exactly one tx_region source object")
+    tx_region_spec = tx_region_matches[0]
+    tx_size_x, tx_size_y, _tx_size_z = tx_region_spec.size_xyz
+    x_ratio = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        "non_model_objects.tx_region.tx_reference_line.x_ratio",
+        context=context,
+    )
+    y_usage_ratio = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        "non_model_objects.tx_region.tx_reference_line.y_usage_ratio",
+        context=context,
+    )
+    z_ratio = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        "non_model_objects.tx_region.tx_reference_line.z_ratio",
+        context=context,
+    )
+    inner_region_x_mm = tx_size_x * x_ratio
+    inner_region_y_mm = tx_size_y * y_usage_ratio
+    inner_region_z_mm = _tx_size_z * z_ratio
+    if inner_region_z_mm <= 0.0:
+        raise ValueError(f"{context}.func resolved tx_inner_region z size must be > 0 (actual={inner_region_z_mm})")
+
+    modeled_spec = _require_tx_inner_single_coil_spec(source, object_id=object_id, context=context)
+    owner_prefix = f"modeled_objects.{modeled_spec.object_id}"
+    outer_x_usage_ratio = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.outer_x_usage_ratio",
+        context=context,
+    )
+    outer_y_usage_ratio = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.outer_y_usage_ratio",
+        context=context,
+    )
+    turn_count = _resolve_int_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.turn_count",
+        context=context,
+    )
+    void_usage_ratio = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.void_usage_ratio",
+        context=context,
+    )
+    margin_ratio = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.margin_ratio",
+        context=context,
+    )
+    metal_fill_factor = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.metal_fill_factor",
+        context=context,
+    )
+    return min_centered_rect_void_trace_width_mm(
+        outer_x_mm=inner_region_x_mm * outer_x_usage_ratio,
+        outer_y_mm=inner_region_y_mm * outer_y_usage_ratio,
+        turn_count=turn_count,
+        void_usage_ratio=void_usage_ratio,
+        margin_ratio=margin_ratio,
+        metal_fill_factor=metal_fill_factor,
+    )
+
+
+def _resolve_rx_min_trace_width_mm(
+    source: Type2StepSpec,
+    sampled_values: dict[str, SampledScalar],
+    *,
+    object_id: str,
+    context: str,
+) -> float:
+    rx_region_matches = [
+        non_model_spec for non_model_spec in source.non_model_objects if non_model_spec.object_id == "rx_region_max"
+    ]
+    if len(rx_region_matches) != 1:
+        raise ValueError(f"{context}.func requires exactly one rx_region_max source object")
+    rx_region_spec = rx_region_matches[0]
+    if rx_region_spec.plane != "YZ":
+        raise ValueError(f"{context}.func rx_region_max plane must be YZ (actual={rx_region_spec.plane})")
+    _owner_size_x, owner_size_y, owner_size_z = rx_region_spec.size_xyz
+    modeled_spec = _require_rx_single_coil_spec(source, object_id=object_id, context=context)
+    owner_prefix = f"modeled_objects.{modeled_spec.object_id}"
+    outer_x_usage_ratio = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.outer_x_usage_ratio",
+        context=context,
+    )
+    outer_y_usage_ratio = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.outer_y_usage_ratio",
+        context=context,
+    )
+    turn_count = _resolve_int_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.turn_count",
+        context=context,
+    )
+    void_usage_ratio = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.void_usage_ratio",
+        context=context,
+    )
+    margin_ratio = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.margin_ratio",
+        context=context,
+    )
+    metal_fill_factor = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.metal_fill_factor",
+        context=context,
+    )
+    return min_centered_rect_void_trace_width_mm(
+        outer_x_mm=owner_size_y * outer_x_usage_ratio,
+        outer_y_mm=owner_size_z * outer_y_usage_ratio,
+        turn_count=turn_count,
+        void_usage_ratio=void_usage_ratio,
+        margin_ratio=margin_ratio,
+        metal_fill_factor=metal_fill_factor,
+    )
+
+
+def _require_tx_inner_single_coil_spec(
+    source: Type2StepSpec,
+    *,
+    object_id: str,
+    context: str,
+) -> ModeledTxInnerSingleCoilSpec:
+    matches = [modeled_spec for modeled_spec in source.modeled_objects if modeled_spec.object_id == object_id]
+    if len(matches) != 1:
+        raise ValueError(f"{context}.func references unknown modeled object: {object_id}")
+    modeled_spec = matches[0]
+    if not isinstance(modeled_spec, ModeledTxInnerSingleCoilSpec):
+        raise ValueError(f"{context}.func requires tx_inner_single_coil object (actual={object_id})")
+    return modeled_spec
+
+
+def _require_rx_single_coil_spec(
+    source: Type2StepSpec,
+    *,
+    object_id: str,
+    context: str,
+) -> ModeledRxSingleCoilSpec:
+    matches = [modeled_spec for modeled_spec in source.modeled_objects if modeled_spec.object_id == object_id]
+    if len(matches) != 1:
+        raise ValueError(f"{context}.func references unknown modeled object: {object_id}")
+    modeled_spec = matches[0]
+    if not isinstance(modeled_spec, ModeledRxSingleCoilSpec):
+        raise ValueError(f"{context}.func requires rx_single_coil object (actual={modeled_spec.object_id})")
+    return modeled_spec
+
+
+def _resolve_float_constraint_path_value(
+    source: Type2StepSpec,
+    sampled_values: dict[str, SampledScalar],
+    path: str,
+    *,
+    context: str,
+) -> float:
+    value = _resolve_constraint_path_value(source, sampled_values, path, context=context)
+    if isinstance(value, bool):
+        raise ValueError(f"{context} expected float-compatible owner value for {path} (actual={value!r})")
+    return float(value)
+
+
+def _resolve_int_constraint_path_value(
+    source: Type2StepSpec,
+    sampled_values: dict[str, SampledScalar],
+    path: str,
+    *,
+    context: str,
+) -> int:
+    value = _resolve_constraint_path_value(source, sampled_values, path, context=context)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{context} expected integer owner value for {path} (actual={value!r})")
+    return value
 
 
 def _evaluate_comparison(lhs: int | float | str, op: str, rhs: int | float | str) -> bool:
@@ -493,7 +772,9 @@ def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpe
             raise ValueError(f"RxOnly type2 sampling does not support active TX modeled sampled owner role: {role}")
         if role in _SAMPLED_SINGLE_COIL_ROLES:
             owner_specs.extend(
-                _single_coil_range_owner_specs(cast(ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec, modeled_spec))
+                _single_coil_range_owner_specs(
+                    cast(ModeledTxSingleCoilSpec | ModeledTxInnerSingleCoilSpec | ModeledRxSingleCoilSpec, modeled_spec)
+                )
             )
             continue
         if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
@@ -508,7 +789,7 @@ def _all_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpec], 
 
 
 def _single_coil_range_owner_specs(
-    modeled_spec: ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec,
+    modeled_spec: ModeledTxSingleCoilSpec | ModeledTxInnerSingleCoilSpec | ModeledRxSingleCoilSpec,
 ) -> tuple[tuple[str, RangeSpec], ...]:
     owner_specs: list[tuple[str, RangeSpec]] = [
         (f"modeled_objects.{modeled_spec.object_id}.outer_x_usage_ratio", modeled_spec.outer_x_usage_ratio),
@@ -842,7 +1123,7 @@ def sampled_owner_values(
         if role in _SAMPLED_SINGLE_COIL_ROLES:
             sampled_values.extend(
                 _single_coil_range_owner_values(
-                    cast(ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec, modeled_spec),
+                    cast(ModeledTxSingleCoilSpec | ModeledTxInnerSingleCoilSpec | ModeledRxSingleCoilSpec, modeled_spec),
                     seed=seed,
                     retry_number=retry_number,
                 )
@@ -914,7 +1195,7 @@ def _integer_sampled_or_fixed_owner_value(
 
 
 def _single_coil_range_owner_values(
-    modeled_spec: ModeledTxSingleCoilSpec | ModeledRxSingleCoilSpec,
+    modeled_spec: ModeledTxSingleCoilSpec | ModeledTxInnerSingleCoilSpec | ModeledRxSingleCoilSpec,
     *,
     seed: int,
     retry_number: int,

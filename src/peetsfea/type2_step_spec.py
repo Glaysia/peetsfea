@@ -52,6 +52,7 @@ from peetsfea.type2_step_spec_types import ModeledSingleCoilCommonSpec
 from peetsfea.type2_step_spec_types import ModeledSingleCoilRole
 from peetsfea.type2_step_spec_types import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledTxPlateStackSpec
+from peetsfea.type2_step_spec_types import ModeledTxInnerSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec_types import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec_types import Type2StepSpec
@@ -147,10 +148,8 @@ __all__ = [
     "Type2ConstraintComparableRef",
     "NonModelBoxSpec",
     "NonModelDerivedSpec",
-    "NonModelTxReferenceLineSpec",
     "NonModelTxRegionActualSpec",
     "NonModelTxRegionActualStackSpaceSpec",
-    "NonModelTxRegionSpec",
     "Point3",
     "RangeSpec",
     "Type2SimulationPolicy",

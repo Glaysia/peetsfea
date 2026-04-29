@@ -7,6 +7,8 @@ from peetsfea.type2_step_spec_types import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec_types import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec_types import ModeledTxSingleCoilSpec
+from peetsfea.type2_step_spec_types import ModeledTxInnerSingleCoilSpec
+from peetsfea.type2_step_spec_types import NonModelTxRegionSpec
 from peetsfea.type2_step_spec_types import NonModelTxRegionActualSpec
 from peetsfea.type2_step_spec_types import Type2ConstraintComparableRef
 from peetsfea.type2_step_spec_types import Type2ConstraintComparisonOperator
@@ -104,15 +106,22 @@ def _parse_constraint_func(value: object, *, dotted_path: str) -> str:
     name = text[:open_index].strip()
     if name == "":
         raise ValueError(f"{dotted_path}.func name must be non-empty")
-    if name != "sum":
-        raise ValueError(f"{dotted_path}.func must be 'sum(...)' (actual={name!r})")
+    if name not in ("sum", "tx_inner_min_trace_width_mm", "rx_min_trace_width_mm"):
+        raise ValueError(
+            f"{dotted_path}.func must be one of ['sum(...)', 'tx_inner_min_trace_width_mm(...)', 'rx_min_trace_width_mm(...)'] "
+            f"(actual={name!r})"
+        )
     body = text[open_index + 1 : -1].strip()
     if body == "":
         raise ValueError(f"{dotted_path}.func must include at least one argument")
     try:
-        _split_constraint_func_args(body)
+        args = _split_constraint_func_args(body)
     except ValueError as exc:
         raise ValueError(f"{dotted_path}.func {exc}") from exc
+    if name == "tx_inner_min_trace_width_mm" and len(args) != 1:
+        raise ValueError(f"{dotted_path}.func tx_inner_min_trace_width_mm() must contain exactly one argument")
+    if name == "rx_min_trace_width_mm" and len(args) != 1:
+        raise ValueError(f"{dotted_path}.func rx_min_trace_width_mm() must contain exactly one argument")
     return raw_func
 
 
@@ -190,6 +199,16 @@ def _parse_constraints(constraints: object, *, context: str) -> tuple[Type2Const
 
 def _constraint_reference_paths(spec: Type2StepSpec) -> set[str]:
     paths: set[str] = set()
+    for non_model_spec in spec.non_model_objects:
+        if isinstance(non_model_spec, NonModelTxRegionSpec):
+            base = f"non_model_objects.{non_model_spec.object_id}.tx_reference_line"
+            paths.update(
+                (
+                    f"{base}.x_ratio",
+                    f"{base}.y_usage_ratio",
+                    f"{base}.z_ratio",
+                )
+            )
     for non_model_spec in spec.non_model_derived_objects:
         base = f"non_model_objects.{non_model_spec.object_id}"
         if isinstance(non_model_spec, NonModelTxRegionActualSpec):
@@ -223,7 +242,7 @@ def _constraint_reference_paths(spec: Type2StepSpec) -> set[str]:
                 )
             )
             continue
-        if isinstance(modeled_spec, ModeledRxSingleCoilSpec):
+        if isinstance(modeled_spec, (ModeledTxInnerSingleCoilSpec, ModeledRxSingleCoilSpec)):
             paths.update(
                 (
                     f"{base}.outer_x_usage_ratio",
@@ -294,6 +313,52 @@ def _validate_constraints_for_spec(constraints: tuple[Type2ConstraintRule, ...],
             path = rule.rhs["path"]
             if path not in valid_paths:
                 raise ValueError(f"{dotted}.rhs.path references unknown owner path: {path!r}")
+        if "func" in rule.lhs:
+            _validate_constraint_func_ref(rule.lhs["func"], spec=spec, dotted_path=f"{dotted}.lhs")
+        if "func" in rule.rhs:
+            _validate_constraint_func_ref(rule.rhs["func"], spec=spec, dotted_path=f"{dotted}.rhs")
+
+
+def _validate_constraint_func_ref(func: str, *, spec: Type2StepSpec, dotted_path: str) -> None:
+    text = func.strip()
+    open_index = text.find("(")
+    name = text[:open_index].strip()
+    body = text[open_index + 1 : -1].strip()
+    args = _split_constraint_func_args(body)
+    if name == "sum":
+        valid_paths = _constraint_reference_paths(spec)
+        for arg in args:
+            try:
+                float(arg)
+            except ValueError:
+                if arg not in valid_paths:
+                    raise ValueError(f"{dotted_path}.func references unknown owner path: {arg!r}") from None
+        return
+    if name == "tx_inner_min_trace_width_mm":
+        object_id = args[0]
+        matches = [modeled_spec for modeled_spec in spec.modeled_objects if modeled_spec.object_id == object_id]
+        if len(matches) != 1:
+            raise ValueError(f"{dotted_path}.func references unknown modeled object: {object_id!r}")
+        modeled_spec = matches[0]
+        if not isinstance(modeled_spec, ModeledTxInnerSingleCoilSpec):
+            raise ValueError(
+                f"{dotted_path}.func requires a tx_inner_single_coil modeled object "
+                f"(actual={modeled_spec.object_id!r})"
+            )
+        return
+    if name == "rx_min_trace_width_mm":
+        object_id = args[0]
+        matches = [modeled_spec for modeled_spec in spec.modeled_objects if modeled_spec.object_id == object_id]
+        if len(matches) != 1:
+            raise ValueError(f"{dotted_path}.func references unknown modeled object: {object_id!r}")
+        modeled_spec = matches[0]
+        if not isinstance(modeled_spec, ModeledRxSingleCoilSpec):
+            raise ValueError(
+                f"{dotted_path}.func requires an rx_single_coil modeled object "
+                f"(actual={modeled_spec.object_id!r})"
+            )
+        return
+    raise ValueError(f"{dotted_path}.func unsupported function: {name!r}")
 
 
 __all__ = [
