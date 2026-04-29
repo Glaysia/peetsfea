@@ -60,6 +60,37 @@ _RX_ONLY_OUTPUT_NAMES = (
     "Srx_self_mag_ratio",
     "eta_rx_accept_ratio",
 )
+_TXRX_OUTPUT_NAMES = (
+    "Ltx_uH",
+    "Lrx_uH",
+    "M_uH",
+    "k_ratio",
+    "Qtx_ratio",
+    "Qrx_ratio",
+    "FOM_ratio",
+    "Rtx_ac_ohm",
+    "Rrx_ac_ohm",
+    "Xtx_ohm",
+    "Xrx_ohm",
+    "M_over_Ltx_ratio",
+    "M_over_Lrx_ratio",
+    "Gtx_S",
+    "Btx_S",
+    "Grx_S",
+    "Brx_S",
+    "S11_mag_ratio",
+    "S21_mag_ratio",
+    "S21_phase_deg",
+    "S22_mag_ratio",
+    "eta_s21_power_ratio",
+    "eta_tx_accept_ratio",
+    "eta_rx_accept_ratio",
+    "eta_match_product_ratio",
+    "eta_s21_from_tx_accept_ratio",
+    "eta_s21_from_rx_accept_ratio",
+    "eta_s21_two_sided_norm_ratio",
+    "eta_fom_max_ratio",
+)
 
 _OBSOLETE_GENERIC_TX_ACTIVE_RXONLY_TEST_NAME_PARTS = (
     "parses_tx_rect_void_columns_parser_surface",
@@ -1648,7 +1679,8 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     spec = load_type2_step_spec(source_toml)
 
     assert spec.simulation.radiation_margin_mm == pytest.approx(3500.0)
-    assert tuple(variable["name"] for variable in spec.outputs["variables"]) == _RX_ONLY_OUTPUT_NAMES
+    assert spec.outputs["mode"] == "TxRx"
+    assert tuple(variable["name"] for variable in spec.outputs["variables"]) == _TXRX_OUTPUT_NAMES
     assert len(spec.non_model_objects) == 6
     assert len(spec.modeled_objects) == 2
     tx_inner_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_inner_rect_void_coil")
@@ -2592,7 +2624,8 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
         "tx_inner_rect_void_coil",
         "rx_rect_void_coil",
     )
-    assert "TX_TML" not in json.dumps(ledger, sort_keys=True)
+    assert ledger["outputs"]["mode"] == "TxRx"
+    assert "TX_TML" in json.dumps(ledger["outputs"], sort_keys=True)
     tx_inner_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_inner_rect_void_coil")
     assert tx_inner_entry["role"] == "tx_inner_single_coil"
     assert tx_inner_entry["expected_exported_body_names"] == (
@@ -2675,7 +2708,8 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert tx_inner_terminal_metadata["port_sheet_vertices_xyz"]
     rx_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "rx_rect_void_coil")
     assert cast(dict[str, object], rx_entry["terminal_metadata"])["port_sheet_vertices_xyz"]
-    assert "TX_TML" not in json.dumps(ledger, sort_keys=True)
+    assert ledger["outputs"]["mode"] == "TxRx"
+    assert "TX_TML" in json.dumps(ledger["outputs"], sort_keys=True)
 
     scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
     assert "tx_region" in scene_shapes_by_label

@@ -2,7 +2,7 @@
 # ----------------------------------------------------------------------------
 # This file is one frozen realization of examples/type2_sweep.toml.
 # It must keep the same public field surface as the sweep SSOT.
-# Active setup is RxOnly: RX modeled geometry, RX reports, and no TX modeled objects.
+# Active setup is TxRx: TX-inner and RX modeled coils with two-terminal EM outputs.
 
 spec_version = "0.2.22"
 schema_id = "peetsfea.type2.step.v8"
@@ -20,8 +20,8 @@ interchange_format = "step"
 radiation_margin_mm = 3500.0
 
 [outputs]
-# Active RxOnly setup creates only RX report variables.
-mode = "RxOnly"
+# Active TxRx setup creates TX inner + RX report variables.
+mode = "TxRx"
 report_name = "Output Variables Table1"
 solution_name = "Setup1 : LastAdaptive"
 primary_sweep = "Freq"
@@ -29,20 +29,64 @@ report_category = "Terminal Solution Data"
 plot_type = "Data Table"
 
 [[outputs.variables]]
+name = "Ltx_uH"
+expression = "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"
+
+[[outputs.variables]]
 name = "Lrx_uH"
 expression = "im(Zt(RX_TML,RX_TML))/2/pi/freq*1e6"
+
+[[outputs.variables]]
+name = "M_uH"
+expression = "abs(im(Zt(TX_TML,RX_TML))/2/pi/freq*1e6)"
+
+[[outputs.variables]]
+name = "k_ratio"
+expression = "M_uH/sqrt(Ltx_uH*Lrx_uH)"
+
+[[outputs.variables]]
+name = "Qtx_ratio"
+expression = "im(Zt(TX_TML,TX_TML))/re(Zt(TX_TML,TX_TML))"
 
 [[outputs.variables]]
 name = "Qrx_ratio"
 expression = "im(Zt(RX_TML,RX_TML))/re(Zt(RX_TML,RX_TML))"
 
 [[outputs.variables]]
+name = "FOM_ratio"
+expression = "k_ratio*sqrt(Qtx_ratio*Qrx_ratio)"
+
+[[outputs.variables]]
+name = "Rtx_ac_ohm"
+expression = "re(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
 name = "Rrx_ac_ohm"
 expression = "re(Zt(RX_TML,RX_TML))"
 
 [[outputs.variables]]
+name = "Xtx_ohm"
+expression = "im(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
 name = "Xrx_ohm"
 expression = "im(Zt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "M_over_Ltx_ratio"
+expression = "M_uH/Ltx_uH"
+
+[[outputs.variables]]
+name = "M_over_Lrx_ratio"
+expression = "M_uH/Lrx_uH"
+
+[[outputs.variables]]
+name = "Gtx_S"
+expression = "re(Yt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Btx_S"
+expression = "im(Yt(TX_TML,TX_TML))"
 
 [[outputs.variables]]
 name = "Grx_S"
@@ -53,12 +97,52 @@ name = "Brx_S"
 expression = "im(Yt(RX_TML,RX_TML))"
 
 [[outputs.variables]]
-name = "Srx_self_mag_ratio"
+name = "S11_mag_ratio"
+expression = "mag(S(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "S21_mag_ratio"
+expression = "mag(S(TX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S21_phase_deg"
+expression = "ang_deg_val(S(TX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S22_mag_ratio"
 expression = "mag(S(RX_TML,RX_TML))"
 
 [[outputs.variables]]
+name = "eta_s21_power_ratio"
+expression = "S21_mag_ratio*S21_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_tx_accept_ratio"
+expression = "1-S11_mag_ratio*S11_mag_ratio"
+
+[[outputs.variables]]
 name = "eta_rx_accept_ratio"
-expression = "1-Srx_self_mag_ratio*Srx_self_mag_ratio"
+expression = "1-S22_mag_ratio*S22_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_match_product_ratio"
+expression = "eta_tx_accept_ratio*eta_rx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_from_tx_accept_ratio"
+expression = "eta_s21_power_ratio/eta_tx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_from_rx_accept_ratio"
+expression = "eta_s21_power_ratio/eta_rx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_two_sided_norm_ratio"
+expression = "eta_s21_power_ratio/(eta_tx_accept_ratio*eta_rx_accept_ratio)"
+
+[[outputs.variables]]
+name = "eta_fom_max_ratio"
+expression = "(FOM_ratio*FOM_ratio)/((1+sqrt(1+FOM_ratio*FOM_ratio))*(1+sqrt(1+FOM_ratio*FOM_ratio)))"
 
 [coordinate_system]
 origin = [0.0, 0.0, 0.0]
