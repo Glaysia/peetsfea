@@ -179,7 +179,7 @@ range = [false, 0.2, 0.9, 15]
 # TX inner coil Y size ratio against resolved tx_inner_region.
 range = [false, 0.2, 0.9, 15]
 [modeled_objects.turn_count]
-range = [true, 1, 6, 6]
+range = [true, 1, 4, 4]
 [modeled_objects.layer_count]
 range = [true, 1, 4, 4]
 [modeled_objects.underlay_repeat_count]
@@ -215,7 +215,7 @@ range = [false, 0.1, 0.6, 17]
 range = [false, 0.1, 0.6, 17]
 [modeled_objects.turn_count]
 # RX spiral turn count. RX single-coil은 현재 layer_count=1만 지원한다.
-range = [true, 1, 6, 6]
+range = [true, 1, 4, 4]
 [modeled_objects.layer_count]
 # RX multilayer는 아직 지원하지 않으므로 1로 고정한다.
 range = [true, 1, 1, 1]
