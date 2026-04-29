@@ -1347,6 +1347,7 @@ def _widest_owner_bottom_face_diagonal_vertices(
 
 def _single_coil_placement_offset_from_local_bounds(
     *,
+    owner_object_id: str,
     owner_origin_xyz: tuple[float, float, float],
     owner_size_xyz: tuple[float, float, float],
     local_bounds_min_xyz: tuple[float, float, float],
@@ -1357,8 +1358,13 @@ def _single_coil_placement_offset_from_local_bounds(
     world_size_xyz = profile.world_size(local_size_xyz)
     world_min_delta = profile.world_delta(local_bounds_min_xyz)
     if plane == "XY":
+        target_world_min_x = (
+            owner_origin_xyz[0]
+            if owner_object_id == "tx_region"
+            else owner_origin_xyz[0] + (owner_size_xyz[0] - world_size_xyz[0]) / 2.0
+        )
         target_world_min_xyz = (
-            owner_origin_xyz[0],
+            target_world_min_x,
             owner_origin_xyz[1] + (owner_size_xyz[1] - world_size_xyz[1]) / 2.0,
             owner_origin_xyz[2] + owner_size_xyz[2] - world_size_xyz[2],
         )
@@ -1666,6 +1672,7 @@ def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path:
         local_boxes = build_tx_rect_void_box_specs(realized, profile=profile)
         local_bounds_min_xyz, _local_bounds_max_xyz, local_size_xyz = modeled_body_bounds_from_boxes(local_boxes)
         frame_origin_xyz = _single_coil_placement_offset_from_local_bounds(
+            owner_object_id=owner_spec.object_id,
             owner_origin_xyz=owner_spec.origin_xyz,
             owner_size_xyz=owner_spec.size_xyz,
             local_bounds_min_xyz=local_bounds_min_xyz,

@@ -23,6 +23,7 @@ tags:
 - RX exported body names/counts and terminal metadata remain deterministic.
 - `tx_inner_rect_void_coil` is modeled geometry-only with expected bodies `tx_inner_pcb_l0`,
   `tx_inner_pcb_l1`, and `tx_inner_copper_stack`; it must not create `TX_TML`.
+- `tx_inner_rect_void_coil` must be centered inside the resolved `tx_inner_region` owner in X and Y.
 - `tx_region` may be present as guide context only.
 - `tx_reference_line` ratio inputs, including centered `y_usage_ratio`, are expected to derive a visible non-modeled
   `tx_inner_region` STEP and retained ledger member without activating TX

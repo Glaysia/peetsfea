@@ -123,7 +123,7 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "YZ"
-origin_xyz = [0.0, -921.0, 139.0]
+origin_xyz = [0.0, -921.0, 170.0]
 size_xyz = [9.0, 1842.0, 1055.0]
 
 [[non_model_objects]]
@@ -158,7 +158,7 @@ non_model = true
 material = "vacuum"
 plane = "YZ"
 # RX single-coil placement owner다.
-origin_xyz = [0.0, -280.0, 139.0]
+origin_xyz = [0.0, -280.0, 170.0]
 size_xyz = [5.0, 560.0, 360.0]
 
 # ----------------------------------------------------------------------------
@@ -179,7 +179,7 @@ range = [false, 0.2, 0.9, 15]
 # TX inner coil Y size ratio against resolved tx_inner_region.
 range = [false, 0.2, 0.9, 15]
 [modeled_objects.turn_count]
-range = [true, 2, 6, 5]
+range = [true, 1, 6, 6]
 [modeled_objects.layer_count]
 range = [true, 1, 4, 4]
 [modeled_objects.underlay_repeat_count]
@@ -190,7 +190,7 @@ range = [false, 3, 3, 1]
 [modeled_objects.terminal_stub_length_mm]
 range = [false, 5, 5, 1]
 [modeled_objects.void_usage_ratio]
-range = [false, 0.2, 0.8, 10]
+range = [false, 0.2, 0.8, 25]
 [modeled_objects.margin_ratio]
 range = [false, 0.05, 0.05, 1]
 [modeled_objects.metal_fill_factor]
@@ -215,7 +215,7 @@ range = [false, 0.1, 0.6, 17]
 range = [false, 0.1, 0.6, 17]
 [modeled_objects.turn_count]
 # RX spiral turn count. RX single-coil은 현재 layer_count=1만 지원한다.
-range = [true, 2, 6, 5]
+range = [true, 1, 6, 6]
 [modeled_objects.layer_count]
 # RX multilayer는 아직 지원하지 않으므로 1로 고정한다.
 range = [true, 1, 1, 1]
@@ -230,7 +230,7 @@ range = [false, 2, 2, 1]
 range = [false, 5, 5, 1]
 [modeled_objects.void_usage_ratio]
 # centered void keepout의 X/Y 공통 size ratio다.
-range = [false, 0.2, 0.8, 10]
+range = [false, 0.2, 0.8, 25]
 [modeled_objects.margin_ratio]
 # void-to-outer minimum margin ratio.
 range = [false, 0.05, 0.05, 1]

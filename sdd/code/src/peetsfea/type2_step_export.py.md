@@ -28,6 +28,7 @@ tags:
 - RX modeled body names, body groups, canonical coordinates, and terminal metadata are export-owned.
 - `tx_region`/`tx_inner_region` remain non-modeled guide context and placement owner context.
 - `tx_inner_single_coil` may be exported as modeled geometry, but not consumed for active TX ports, sources, or reports.
+- `tx_inner_single_coil` geometry and terminal metadata validation use centered X/Y placement inside `tx_inner_region`.
 - Generic `tx_single_coil`, `tx_plate_stack`, and `tx_rect_void_columns` remain unsupported in active RxOnly export.
 
 ## Invariants / Fail-Fast

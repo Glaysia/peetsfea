@@ -90,8 +90,13 @@ def _single_coil_placement_offset_from_local_bounds(
             f"(coil_size={world_size_xyz}, owner_size={owner_spec.size_xyz})"
         )
     if profile.plane == "XY":
+        target_min_x = (
+            owner_origin_x
+            if owner_spec.object_id == "tx_region"
+            else owner_origin_x + (owner_size_x - world_size_xyz[0]) / 2.0
+        )
         target_world_min_xyz = (
-            owner_origin_x,
+            target_min_x,
             owner_origin_y + (owner_size_y - world_size_xyz[1]) / 2.0,
             owner_origin_z + owner_size_z - world_size_xyz[2],
         )

@@ -21,6 +21,7 @@ tags:
 - Invalid RX scene dimensions fail immediately.
 - Invalid TX inner scene dimensions fail immediately.
 - TX inner scene assembly computes mm outer ranges from the resolved `tx_inner_region` owner before building the rect-void geometry.
+- TX inner scene placement centers the realized coil footprint inside `tx_inner_region`; only legacy/direct `tx_region` TX placement touches the owner's min-X face.
 - TX ferrite/underlay contracts are not active for `tx_inner_single_coil`.
 
 ## Collaborators

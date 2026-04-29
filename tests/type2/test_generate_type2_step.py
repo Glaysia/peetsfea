@@ -2653,6 +2653,17 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     tx_inner_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_inner_rect_void_coil")
     assert tx_inner_entry["role"] == "tx_inner_single_coil"
     assert tx_inner_entry["placement_owner_id"] == "tx_inner_region"
+    tx_inner_model_canonical = cast(dict[str, object], tx_inner_entry["canonical_coordinates"])
+    tx_inner_model_min_xyz = cast(tuple[float, float, float], tx_inner_model_canonical["outer_bounds_min_xyz"])
+    tx_inner_model_size_xyz = cast(tuple[float, float, float], tx_inner_model_canonical["outer_bounds_size_xyz"])
+    tx_inner_region_min_xyz = cast(tuple[float, float, float], canonical_coordinates["outer_bounds_min_xyz"])
+    tx_inner_region_size_xyz = cast(tuple[float, float, float], canonical_coordinates["outer_bounds_size_xyz"])
+    assert tx_inner_model_min_xyz[0] == pytest.approx(
+        tx_inner_region_min_xyz[0] + (tx_inner_region_size_xyz[0] - tx_inner_model_size_xyz[0]) / 2.0
+    )
+    assert tx_inner_model_min_xyz[1] == pytest.approx(
+        tx_inner_region_min_xyz[1] + (tx_inner_region_size_xyz[1] - tx_inner_model_size_xyz[1]) / 2.0
+    )
     assert tx_inner_entry["expected_exported_body_names"] == (
         "tx_inner_pcb_l0",
         "tx_inner_pcb_l1",
