@@ -315,6 +315,14 @@ def _group_contract_for_role(
             member_names=(),
             ferrite_group_name=_TX_FERRITE_GROUP_NAME,
         )
+    if role == "tx_inner_single_coil":
+        mismatched_role_members = [name for name in expected_names if _is_any_ferrite_group_name(name)]
+        if mismatched_role_members:
+            raise ValueError(
+                f"{context}.expected_exported_body_names contains ferrite family bodies for geometry-only {role} "
+                f"(mismatched={mismatched_role_members})"
+            )
+        return []
     if role == "rx_single_coil":
         return _single_coil_group_contract(
             member_prefixes=_RX_SINGLE_COIL_FERRITE_GROUP_MEMBER_PREFIXES,

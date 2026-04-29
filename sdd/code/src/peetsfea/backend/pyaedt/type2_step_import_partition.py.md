@@ -26,6 +26,7 @@ tags:
 - RX conductor and RX context names are exact.
 - `tx_region` is non-modeled guide context only.
 - `tx_inner_pcb_l*`, `tx_inner_copper_l*`, and `tx_inner_copper_stack` are recognized only for imported geometry ownership; setup-ready filtering decides whether they participate in EM.
+- `tx_inner_single_coil` has no ferrite/body group contract; its expected group list must be empty.
 
 ## Invariants / fail-fast
 - Missing required RX bodies fail immediately.
