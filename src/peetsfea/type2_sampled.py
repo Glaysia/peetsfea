@@ -21,7 +21,6 @@ from peetsfea.type2_sampled_sampling import _require_constraints_satisfied
 from peetsfea.type2_sampled_sampling import exportable_sampled_owner_paths
 from peetsfea.type2_sampled_sampling import exportable_sampled_owner_paths_for_seed
 from peetsfea.type2_sampled_sampling import sampled_owner_values
-from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
@@ -57,6 +56,25 @@ _PLATE_STACK_ROLE_SUFFIX = "_plate_stack"
 _TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
 _TYPE2_CONSTRAINT_RETRY_LIMIT: Final[int] = 64
 _CONSTRAINT_COMPARISON_OPERATORS: Final[frozenset[str]] = frozenset({"<", "<=", ">", ">=", "==", "!="})
+
+
+def _default_sample_exporter(
+    *,
+    toml_path: Path,
+    output_dir: Path,
+    ledger_path: Path,
+    seed: int,
+    stage_reporter: Callable[[object], None],
+) -> object:
+    from peetsfea.type2_step_export import export_type2_step_artifacts
+
+    return export_type2_step_artifacts(
+        toml_path=toml_path,
+        output_dir=output_dir,
+        ledger_path=ledger_path,
+        seed=seed,
+        stage_reporter=stage_reporter,
+    )
 
 
 class _ConstraintPathRef(TypedDict):
@@ -584,7 +602,7 @@ def _build_sample_manifest_entry_for_seed_task(
         )
     if make_step_on_sample:
         try:
-            _export_step_for_sample_entry(entry, exporter=export_type2_step_artifacts)
+            _export_step_for_sample_entry(entry, exporter=_default_sample_exporter)
         except (ValueError, RuntimeError) as exc:
             _remove_failed_step_design_dir(
                 design_dir=Path(entry["design_dir"]),
@@ -654,7 +672,7 @@ def generate_sample_manifest_entries(
     count: int,
     jobs: int = 1,
     make_step_on_sample: bool = True,
-    exporter: _SampleExporter = export_type2_step_artifacts,
+    exporter: _SampleExporter = _default_sample_exporter,
     report_progress: _SampleProgressReporter | None = None,
     report_step_stage: _SampleStepStageReporter = _no_op_sample_step_stage_reporter,
     load_type2_step_spec: Callable[[Path], Type2StepSpec] | None = None,
@@ -681,7 +699,7 @@ def generate_sample_manifest_attempts(
     count: int,
     jobs: int = 1,
     make_step_on_sample: bool = True,
-    exporter: _SampleExporter = export_type2_step_artifacts,
+    exporter: _SampleExporter = _default_sample_exporter,
     report_progress: _SampleProgressReporter | None = None,
     report_skipped: _SampleSkippedProgressReporter = _no_op_sample_skip_progress_reporter,
     report_step_stage: _SampleStepStageReporter = _no_op_sample_step_stage_reporter,
@@ -699,7 +717,7 @@ def generate_sample_manifest_attempts(
     output_dir.mkdir(parents=True, exist_ok=True)
     seed_values = tuple(range(seed_start, seed_start + count))
     head_hash4 = _current_head_hash4()
-    if jobs == 1 or count == 1 or (make_step_on_sample and exporter is not export_type2_step_artifacts):
+    if jobs == 1 or count == 1 or (make_step_on_sample and exporter is not _default_sample_exporter):
         source_spec = resolved_spec_loader(source_toml_path)
         raw_source_spec, _raw_source_bytes = load_toml_bytes(source_toml_path)
         _require_not_sampled_source(raw_source_spec, context=str(source_toml_path))
