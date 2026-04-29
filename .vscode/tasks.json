@@ -17,9 +17,9 @@
       "problemMatcher": []
     },
     {
-      "label": "run-type2-sample",
+      "label": "run-type2-sample-with-step",
       "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/python ../entry/sample.py",
+      "command": "${workspaceFolder}/.venv/bin/python ../entry/sample.py --build-step",
       "options": {
         "cwd": "${workspaceFolder}/run"
       },

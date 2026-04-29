@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import argparse
 from collections.abc import Callable
+from shutil import get_terminal_size
 from time import perf_counter
 import sys
 from pathlib import Path
@@ -28,10 +30,12 @@ SEED_FIRST = 0
 SEED_N = 12
 SAMPLER_N = 12
 AEDT_BUILDER_N = 6
-MAKE_STEP_ON_SAMPLE = True
+MAKE_STEP_ON_SAMPLE = False
 
 _Exporter = Callable[..., object]
-
+_STATUS_PREFIX = "PeetsFEA INFO: "
+_STATUS_BAR_MAX_WIDTH = 30
+_STATUS_BAR_MIN_WIDTH = 6
 
 class _SampleStatusLine:
     def __init__(self) -> None:
@@ -59,8 +63,9 @@ class _SampleStatusLine:
     def clear(self) -> None:
         if not self._active:
             return
+        columns = _terminal_status_columns()
         sys.stdout.write("\r")
-        sys.stdout.write(" " * len(self._rendered_line))
+        sys.stdout.write(" " * columns)
         sys.stdout.write("\r")
         sys.stdout.flush()
         self._active = False
@@ -90,14 +95,53 @@ class _SampleStatusLine:
         if not self._tty:
             info(message)
             return
-        rendered_line = f"PeetsFEA INFO: {message}"
+        rendered_line = _interactive_status_line(
+            completed=completed,
+            total=total,
+            percent=percent,
+            detail=detail,
+        )
         padded_line = rendered_line
-        if len(self._rendered_line) > len(rendered_line):
-            padded_line = rendered_line + (" " * (len(self._rendered_line) - len(rendered_line)))
+        previous_width = min(len(self._rendered_line), _terminal_status_columns())
+        if previous_width > len(rendered_line):
+            padded_line = rendered_line + (" " * (previous_width - len(rendered_line)))
         sys.stdout.write(f"\r{padded_line}")
         sys.stdout.flush()
         self._active = True
         self._rendered_line = rendered_line
+
+
+def _terminal_status_columns() -> int:
+    columns = get_terminal_size().columns
+    if columns <= 1:
+        return 1
+    return columns - 1
+
+
+def _interactive_status_line(
+    *,
+    completed: int,
+    total: int,
+    percent: float,
+    detail: str,
+) -> str:
+    columns = _terminal_status_columns()
+    suffix = f"] {percent:6.2f}% {completed}/{total} {detail}"
+    fixed_width = len(_STATUS_PREFIX) + len("[sample] status [") + len(suffix)
+    bar_width = _STATUS_BAR_MAX_WIDTH
+    if fixed_width + bar_width > columns:
+        bar_width = columns - fixed_width
+    if bar_width < _STATUS_BAR_MIN_WIDTH:
+        bar_width = _STATUS_BAR_MIN_WIDTH
+    ratio = completed / total
+    filled = int(ratio * bar_width)
+    if completed == total:
+        filled = bar_width
+    bar = "#" * filled + "-" * (bar_width - filled)
+    rendered_line = f"{_STATUS_PREFIX}[sample] status [{bar}{suffix}"
+    if len(rendered_line) <= columns:
+        return rendered_line
+    return rendered_line[:columns]
 
 
 def _report_sample_progress(
@@ -252,11 +296,28 @@ def sample_type2(
         f"[sample] done count={success_count} skipped={skipped_count} attempted={seed_n} "
         f"manifest={manifest_path} elapsed_s={elapsed_s:.3f}"
     )
+    status_line.finish()
     return document
 
 
+def _build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--build-step",
+        action="store_true",
+        help="Whether sample workers also export STEP artifacts.",
+    )
+    return parser
+
+
+def run_sample_cli(argv: tuple[str, ...]) -> Type2SampleManifestDocument:
+    parser = _build_arg_parser()
+    args = parser.parse_args(argv)
+    return sample_type2(make_step_on_sample=args.build_step)
+
+
 def main() -> Type2SampleManifestDocument:
-    return sample_type2()
+    return run_sample_cli(tuple(sys.argv[1:]))
 
 
 if __name__ == "__main__":

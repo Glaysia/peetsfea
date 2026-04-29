@@ -11,8 +11,9 @@ from typing import cast
 
 import pytest
 
+import entry.sample as sample_entry
 import peetsfea.type2_sampled as type2_sampled
-from entry.sample import sample_type2
+from entry.sample import run_sample_cli, sample_type2
 from peetsfea.type2_sampled import manifest_entry_for_sample_index
 from peetsfea.type2_step_spec import NonModelDerivedSpec
 from peetsfea.type2_step_spec import NonModelTxReferenceLineSpec
@@ -268,6 +269,36 @@ def _current_head_hash4() -> str:
         text=True,
     )
     return result.stdout.strip()[:4]
+
+
+def test_run_sample_cli_defaults_to_sample_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[bool] = []
+
+    def _sample_type2(**kwargs: object) -> dict[str, object]:
+        calls.append(cast(bool, kwargs["make_step_on_sample"]))
+        return {"config": {}, "entries": [], "skipped": []}
+
+    monkeypatch.setattr(sample_entry, "sample_type2", _sample_type2)
+
+    result = run_sample_cli(())
+
+    assert result == {"config": {}, "entries": [], "skipped": []}
+    assert calls == [False]
+
+
+def test_run_sample_cli_build_step_flag_enables_step_export(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[bool] = []
+
+    def _sample_type2(**kwargs: object) -> dict[str, object]:
+        calls.append(cast(bool, kwargs["make_step_on_sample"]))
+        return {"config": {}, "entries": [], "skipped": []}
+
+    monkeypatch.setattr(sample_entry, "sample_type2", _sample_type2)
+
+    result = run_sample_cli(("--build-step",))
+
+    assert result == {"config": {}, "entries": [], "skipped": []}
+    assert calls == [True]
 
 
 def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(

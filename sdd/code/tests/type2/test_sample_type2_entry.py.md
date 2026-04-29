@@ -16,6 +16,7 @@ tags:
 
 ## 역할
 - type2 sampling entrypoint and manifest behavior를 검증한다.
+- `entry/sample.py --build-step` opt-in behavior and sample-only CLI default를 검증한다.
 - 0.2.24 SDD 기준 RxOnly owner discovery and guide/context handling are active.
 
 ## Canonical state
