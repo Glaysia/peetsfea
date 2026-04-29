@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from typing import Literal, cast
 
@@ -9,6 +10,7 @@ import build123d as bd
 
 from peetsfea.tx_rect_void import BoxSpec
 from peetsfea.tx_rect_void import SingleCoilProfile
+from peetsfea.tx_rect_void import TX_PARALLEL_SINGLE_COIL_ROLES
 from peetsfea.tx_rect_void import build_tx_rect_void_box_specs
 from peetsfea.tx_rect_void import build_tx_rect_void_centerline
 from peetsfea.tx_rect_void import build_tx_rect_void_step_scene
@@ -26,6 +28,7 @@ from peetsfea.type2_single_coil_ports import port_sheet_label_for_profile
 from peetsfea.type2_step_ledger import CanonicalCoordinates
 from peetsfea.type2_step_ledger import ModeledObjectSceneData
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
+from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import Point3
@@ -106,6 +109,55 @@ def _single_coil_placement_offset_from_local_bounds(
     )
 
 
+def _scaled_outer_mm_range_from_owner(
+    *,
+    ratio_range: RangeSpec,
+    owner_span_mm: float,
+    owner_path: str,
+) -> RangeSpec:
+    if owner_span_mm <= 0.0:
+        raise RuntimeError(f"{owner_path} span must be > 0 for single-coil owner-scaled range (actual={owner_span_mm})")
+    return RangeSpec(
+        is_integer=False,
+        start=ratio_range.start * owner_span_mm,
+        end=ratio_range.end * owner_span_mm,
+        count=ratio_range.count,
+    )
+
+
+def _spec_with_owner_scaled_outer_ranges(
+    spec: ModeledSingleCoilSpec,
+    *,
+    owner_spec: NonModelBoxSpec,
+    profile: SingleCoilProfile,
+) -> ModeledSingleCoilSpec:
+    if owner_spec.plane != profile.plane:
+        raise RuntimeError(
+            "type2 single-coil placement owner plane must match profile plane "
+            f"(owner={owner_spec.object_id}, owner_plane={owner_spec.plane}, profile_plane={profile.plane})"
+        )
+    owner_size_x, owner_size_y, owner_size_z = owner_spec.size_xyz
+    if profile.plane == "XY":
+        outer_x_owner_span_mm = owner_size_x
+        outer_y_owner_span_mm = owner_size_y
+    else:
+        outer_x_owner_span_mm = owner_size_y
+        outer_y_owner_span_mm = owner_size_z
+    return replace(
+        spec,
+        outer_x_mm=_scaled_outer_mm_range_from_owner(
+            ratio_range=spec.outer_x_usage_ratio,
+            owner_span_mm=outer_x_owner_span_mm,
+            owner_path=f"{owner_spec.object_id}.x",
+        ),
+        outer_y_mm=_scaled_outer_mm_range_from_owner(
+            ratio_range=spec.outer_y_usage_ratio,
+            owner_span_mm=outer_y_owner_span_mm,
+            owner_path=f"{owner_spec.object_id}.y",
+        ),
+    )
+
+
 def _transform_modeled_box_spec(
     box_spec: BoxSpec,
     *,
@@ -136,7 +188,7 @@ def _local_terminal_plane_points(
     end_label = f"{profile.copper_body_prefix}_bus_end"
     start_bus_matches = [box for box in transformed_boxes if box.label == start_label]
     end_bus_matches = [box for box in transformed_boxes if box.label == end_label]
-    if profile.role == "tx_single_coil" and start_bus_matches and end_bus_matches:
+    if profile.role in TX_PARALLEL_SINGLE_COIL_ROLES and start_bus_matches and end_bus_matches:
         if len(start_bus_matches) != 1 or len(end_bus_matches) != 1:
             raise RuntimeError(
                 "type2 tx multilayer terminal metadata requires exactly one start/end bus box "
@@ -168,7 +220,7 @@ def _local_terminal_plane_points(
 
 
 def _port_sheet_label_for_profile(profile: SingleCoilProfile) -> str:
-    if profile.role == "tx_single_coil":
+    if profile.role in TX_PARALLEL_SINGLE_COIL_ROLES:
         return "tx_port_sheet"
     if profile.role == "rx_single_coil":
         return "rx_port_sheet"
@@ -251,7 +303,7 @@ def _port_sheet_owner_boxes(
     transformed_boxes: tuple[BoxSpec, ...],
     profile: SingleCoilProfile,
 ) -> tuple[BoxSpec, BoxSpec]:
-    if profile.role == "tx_single_coil":
+    if profile.role in TX_PARALLEL_SINGLE_COIL_ROLES:
         first_box, second_box = (
             _synthetic_tx_bus_owner_box(
                 transformed_boxes=transformed_boxes,
@@ -549,7 +601,12 @@ def build_modeled_single_coil_scene_data(
     profile = profile_for_modeled_role(spec.role)
     with tempfile.TemporaryDirectory(prefix="type2_tx_rect_void_") as temp_dir:
         temp_toml_path = Path(temp_dir) / f"{spec.object_id}.toml"
-        temp_toml_path.write_text(render_tx_rect_void_toml(spec), encoding="utf-8")
+        owner_scaled_spec = _spec_with_owner_scaled_outer_ranges(
+            spec,
+            owner_spec=owner_spec,
+            profile=profile,
+        )
+        temp_toml_path.write_text(render_tx_rect_void_toml(owner_scaled_spec), encoding="utf-8")
         tx_rect_void_spec = load_tx_rect_void_spec(temp_toml_path)
         realized = realize_tx_rect_void_spec(tx_rect_void_spec, seed=seed, profile=profile)
         local_boxes = build_tx_rect_void_box_specs(realized, profile=profile)
@@ -607,6 +664,13 @@ def build_modeled_single_coil_scene_data(
                 underlay_scene_children = wall_underlay_scene_children
             else:
                 underlay_scene_children = ()
+        elif profile.role == "tx_inner_single_coil":
+            if underlay_repeat_count != 0:
+                raise RuntimeError(
+                    "type2 tx_inner_single_coil underlay repeat count must remain zero "
+                    f"(actual={underlay_repeat_count})"
+                )
+            underlay_scene_children = ()
         else:
             underlay_scene_children = (
                 build_rx_underlay_scene_shapes(
@@ -626,7 +690,7 @@ def build_modeled_single_coil_scene_data(
                 "type2 modeled scene body names must be unique "
                 f"(object_id={spec.object_id}, names={expected_exported_body_names})"
             )
-        modeled_role = cast(Literal["tx_single_coil", "rx_single_coil"], profile.role)
+        modeled_role = cast(Literal["tx_single_coil", "tx_inner_single_coil", "rx_single_coil"], profile.role)
         expected_exported_body_groups = single_coil_expected_ferrite_groups(
             role=modeled_role,
             underlay_scene_children=underlay_scene_children,

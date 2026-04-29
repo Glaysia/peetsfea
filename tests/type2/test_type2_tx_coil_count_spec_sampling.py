@@ -12,6 +12,13 @@ from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec import resolve_modeled_tx_array_x_usage_ratio
 from peetsfea.type2_step_spec import resolve_modeled_tx_coil_count
 
+pytestmark = pytest.mark.xfail(
+    reason=(
+        "generic TX plate-stack parser/sampling contracts are intentionally inactive in active RxOnly; "
+        "tx_inner_single_coil is the supported geometry-only TX path"
+    )
+)
+
 
 def _type2_plate_stack_toml(
     *,

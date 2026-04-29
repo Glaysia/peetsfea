@@ -19,6 +19,13 @@ from tests.type2.test_generate_type2_step import _step_shapes_by_label
 from tests.type2.test_generate_type2_step import _type2_tx_plate_stack_spec_text
 from tests.type2.test_generate_type2_step import _write_spec
 
+pytestmark = pytest.mark.xfail(
+    reason=(
+        "generic TX plate-stack export contracts are intentionally inactive in active RxOnly; "
+        "tx_inner_single_coil is the supported geometry-only TX path"
+    )
+)
+
 
 def _seed_for_tx_coil_count(*, spec_path: Path, target_count: int) -> int:
     spec = load_type2_step_spec(spec_path)

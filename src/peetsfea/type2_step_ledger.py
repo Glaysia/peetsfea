@@ -95,7 +95,14 @@ class NonModelObjectLedgerEntry(TypedDict):
 
 class ModeledObjectSceneData(TypedDict):
     object_id: str
-    role: Literal["tx_single_coil", "rx_single_coil", "tx_rect_void_columns", "tx_plate_stack", "rx_plate_stack"]
+    role: Literal[
+        "tx_single_coil",
+        "tx_inner_single_coil",
+        "rx_single_coil",
+        "tx_rect_void_columns",
+        "tx_plate_stack",
+        "rx_plate_stack",
+    ]
     plane: Literal["XY", "YZ"]
     placement_owner_id: str
     material: str

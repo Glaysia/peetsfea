@@ -36,9 +36,11 @@ class _TxUnderlayPlacementDescriptor:
     wall_size_z: float
 
 
-def ferrite_group_name_for_modeled_role(*, role: Literal["tx_single_coil", "rx_single_coil"]) -> str:
+def ferrite_group_name_for_modeled_role(*, role: Literal["tx_single_coil", "tx_inner_single_coil", "rx_single_coil"]) -> str:
     if role == "tx_single_coil":
         return _TX_FERRITE_GROUP_NAME
+    if role == "tx_inner_single_coil":
+        raise RuntimeError("tx_inner_single_coil does not own ferrite/underlay grouping")
     if role == "rx_single_coil":
         return _RX_FERRITE_GROUP_NAME
     raise RuntimeError(f"unsupported ferrite grouping role: {role}")
@@ -87,7 +89,7 @@ def _build_labeled_group(*, label: str, children: tuple[bd.Shape, ...]) -> bd.Sh
 
 def single_coil_expected_ferrite_groups(
     *,
-    role: Literal["tx_single_coil", "rx_single_coil"],
+    role: Literal["tx_single_coil", "tx_inner_single_coil", "rx_single_coil"],
     underlay_scene_children: tuple[bd.Shape, ...],
 ) -> tuple[ExportedBodyGroup, ...]:
     if len(underlay_scene_children) == 0:
@@ -351,5 +353,3 @@ def build_rx_underlay_scene_shapes(
             ),
         ),
     )
-
-

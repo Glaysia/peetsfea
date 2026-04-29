@@ -15,11 +15,13 @@ tags:
 - Status: active
 
 ## 역할
-- RX single-coil scene assembly helper다.
+- RX single-coil and geometry-only TX inner single-coil scene assembly helper다.
 
 ## Invariants / fail-fast
 - Invalid RX scene dimensions fail immediately.
-- TX ferrite/group shape contracts are not active SDD contracts during the reset.
+- Invalid TX inner scene dimensions fail immediately.
+- TX inner scene assembly computes mm outer ranges from the resolved `tx_inner_region` owner before building the rect-void geometry.
+- TX ferrite/underlay contracts are not active for `tx_inner_single_coil`.
 
 ## Collaborators
 - [type2_step_scene.py](type2_step_scene.py.md)

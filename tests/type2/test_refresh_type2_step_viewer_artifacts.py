@@ -28,9 +28,19 @@ def test_fixed_viewer_refresh_fixture_is_rx_only() -> None:
     assert non_model_ids == ("floor", "shelf", "wall", "tv", "tx_region", "rx_region_max")
 
     modeled_objects = _tables(payload, "modeled_objects")
-    assert len(modeled_objects) == 1
-    assert modeled_objects[0]["object_id"] == "rx_rect_void_coil"
-    assert modeled_objects[0]["role"] == "rx_single_coil"
+    assert tuple(cast(str, table["object_id"]) for table in modeled_objects) == (
+        "tx_inner_rect_void_coil",
+        "rx_rect_void_coil",
+    )
+    modeled_by_id = {cast(str, table["object_id"]): table for table in modeled_objects}
+    assert modeled_by_id["tx_inner_rect_void_coil"]["role"] == "tx_inner_single_coil"
+    assert cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["underlay_repeat_count"])["range"] == [
+        True,
+        0,
+        0,
+        1,
+    ]
+    assert modeled_by_id["rx_rect_void_coil"]["role"] == "rx_single_coil"
 
     outputs = cast(dict[str, object], payload["outputs"])
     assert outputs["mode"] == "RxOnly"

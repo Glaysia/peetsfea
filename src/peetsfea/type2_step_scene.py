@@ -17,6 +17,7 @@ from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
+from peetsfea.type2_step_spec import ModeledTxInnerSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 
@@ -42,6 +43,8 @@ def build_modeled_scene_data(
         )
     if isinstance(spec, ModeledRxPlateStackSpec):
         return build_plate_stack_scene_data(spec, owner_spec=owner_spec, seed=seed)
+    if isinstance(spec, ModeledTxInnerSingleCoilSpec):
+        return build_modeled_single_coil_scene_data(spec, owner_spec=owner_spec, seed=seed)
     return build_modeled_single_coil_scene_data(
         cast(ModeledSingleCoilSpec, spec),
         owner_spec=owner_spec,
