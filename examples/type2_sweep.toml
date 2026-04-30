@@ -265,7 +265,7 @@ range = [false, 0.2, 0.9, 15]
 [modeled_objects.turn_count]
 range = [true, 1, 4, 4]
 [modeled_objects.layer_count]
-range = [true, 1, 4, 4]
+range = [true, 1, 8, 8]
 [modeled_objects.underlay_repeat_count]
 # TX inner coil v1 has no underlay/ferrite.
 range = [true, 0, 0, 1]

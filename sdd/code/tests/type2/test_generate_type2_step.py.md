@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-29 @ 00:00
+updated: 2026-04-30 @ 14:12
 tags:
   - test
   - step-export
@@ -28,8 +28,12 @@ tags:
 - TX inner terminal metadata remains deterministic and can drive `tx_inner_port_sheet` for `TxRx`.
 - `tx_inner_rect_void_coil` is modeled geometry-only with expected bodies `tx_inner_pcb_l0`,
   `tx_inner_pcb_l1`, and `tx_inner_copper_stack`; it must not create `TX_TML`.
+- Multilayer TX inner tests must include the active sweep upper bound: fixed `layer_count=8` exports
+  `tx_inner_pcb_l0` through `tx_inner_pcb_l7` plus `tx_inner_copper_stack`.
 - `tx_inner_rect_void_coil` must be centered inside the resolved `tx_inner_region` owner in X and Y.
 - `tx_region` may be present as guide context only.
+- Deterministic tx_inner body-name contract is now explicitly covered for a fixed `layer_count=8` realization:
+  expected exported bodies are `tx_inner_pcb_l0` through `tx_inner_pcb_l7` plus `tx_inner_copper_stack`.
 - `tx_reference_line` ratio inputs, including centered `y_usage_ratio`, are expected to derive a visible non-modeled
   `tx_inner_region` STEP and retained ledger member without activating TX
   modeled geometry.

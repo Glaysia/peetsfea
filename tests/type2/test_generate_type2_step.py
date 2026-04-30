@@ -945,6 +945,15 @@ def _tx_expected_body_names(
     return tuple(names)
 
 
+def _tx_inner_expected_body_names(*, layer_count: int) -> tuple[str, ...]:
+    names = [f"tx_inner_pcb_l{index}" for index in range(layer_count)]
+    if layer_count == 1:
+        names.append("tx_inner_copper_l0")
+    else:
+        names.append("tx_inner_copper_stack")
+    return tuple(names)
+
+
 def _rx_expected_body_names(*, underlay_repeat_count: int) -> tuple[str, ...]:
     names = ["rx_pcb_l0", "rx_copper_l0"]
     names.extend(_rx_underlay_expected_body_names(repeat_count=underlay_repeat_count))
@@ -1825,6 +1834,9 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     assert len(spec.non_model_objects) >= 2
     tx_inner_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_inner_rect_void_coil")
     assert tx_inner_entry.role == "tx_inner_single_coil"
+    assert tx_inner_entry.layer_count.start == pytest.approx(1.0)
+    assert tx_inner_entry.layer_count.end == pytest.approx(8.0)
+    assert tx_inner_entry.layer_count.count == 8
     assert tx_inner_entry.underlay_repeat_count.start == pytest.approx(0.0)
     assert tx_inner_entry.underlay_repeat_count.end == pytest.approx(0.0)
     assert tx_inner_entry.underlay_repeat_count.count == 1
@@ -2704,6 +2716,38 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     assert "tx_outer_actual_region" not in scene_shapes_by_label
     assert "tx_region_actual" not in scene_shapes_by_label
     assert "tx_region_actual_stack_space" not in scene_shapes_by_label
+
+
+def test_export_type2_step_artifacts_supports_tx_inner_single_coil_layer_count_eight_body_contract(tmp_path: Path) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_spec_text(
+            modeled_object_id="tx_inner_rect_void_coil",
+            modeled_role="tx_inner_single_coil",
+            underlay_repeat_count_range=_range(True, 0.0, 0.0, 1),
+            layer_count=8,
+        ),
+    )
+    ledger = export_type2_step_artifacts(
+        toml_path=toml_path,
+        output_dir=tmp_path / "out",
+        ledger_path=tmp_path / "out" / "ledger.json",
+        seed=0,
+    )
+
+    tx_inner_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_inner_rect_void_coil")
+    assert tx_inner_entry["role"] == "tx_inner_single_coil"
+    expected_names = _tx_inner_expected_body_names(layer_count=8)
+    assert tx_inner_entry["expected_exported_body_names"] == expected_names
+    assert tx_inner_entry["expected_exported_body_count"] == len(expected_names)
+    assert tx_inner_entry["expected_exported_body_count"] == 9
+    assert ledger["outputs"]["mode"] == "RxOnly"
+    assert "TX_TML" not in json.dumps(ledger["outputs"], sort_keys=True)
+
+    scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
+    for body_name in expected_names:
+        assert body_name in scene_shapes_by_label
+    assert "tx_inner_copper_l0" not in scene_shapes_by_label
 
 
 def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_ledger(
