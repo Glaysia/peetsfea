@@ -1753,7 +1753,7 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     tx_inner_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_inner_rect_void_coil")
     assert tx_inner_entry.role == "tx_inner_single_coil"
     assert tx_inner_entry.pcb_thickness_mm == pytest.approx(0.3)
-    assert tx_inner_entry.copper_thickness_mm == pytest.approx(0.1)
+    assert tx_inner_entry.copper_thickness_mm == pytest.approx(0.035)
     assert tx_inner_entry.outer_x_usage_ratio.start == pytest.approx(0.5)
     assert tx_inner_entry.outer_y_usage_ratio.start == pytest.approx(0.6)
     assert tx_inner_entry.turn_count.start == pytest.approx(2.0)

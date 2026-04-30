@@ -255,7 +255,7 @@ role = "tx_inner_single_coil"
 material = "composite"
 model_state = true
 pcb_thickness_mm = 0.3
-copper_thickness_mm = 0.1
+copper_thickness_mm = 0.035
 [modeled_objects.outer_x_usage_ratio]
 # TX inner coil X size ratio against resolved tx_inner_region.
 range = [false, 0.2, 0.9, 15]

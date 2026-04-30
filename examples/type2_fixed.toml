@@ -242,7 +242,7 @@ role = "tx_inner_single_coil"
 material = "composite"
 model_state = true
 pcb_thickness_mm = 0.3
-copper_thickness_mm = 0.1
+copper_thickness_mm = 0.035
 [modeled_objects.outer_x_usage_ratio]
 range = [false, 0.5, 0.5, 1]
 [modeled_objects.outer_y_usage_ratio]

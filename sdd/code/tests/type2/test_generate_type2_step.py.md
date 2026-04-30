@@ -27,6 +27,7 @@ tags:
 - RX exported body names/counts and terminal metadata remain deterministic.
 - RX single-coil example geometry uses `pcb_thickness_mm = 3.965` and `copper_thickness_mm = 0.035`.
 - RX full-backing thickness assertions derive the active coil stack thickness from exported PCB/copper bounds.
+- TX inner active example geometry uses `pcb_thickness_mm = 0.3` and one-ounce `copper_thickness_mm = 0.035`.
 - TX inner terminal metadata remains deterministic and can drive `tx_inner_port_sheet` for `TxRx`.
 - `tx_inner_rect_void_coil` is modeled geometry-only with expected bodies `tx_inner_pcb_l0`,
   `tx_inner_pcb_l1`, and `tx_inner_copper_stack`; it must not create `TX_TML`.
