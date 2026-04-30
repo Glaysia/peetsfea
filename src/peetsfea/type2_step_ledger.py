@@ -170,6 +170,7 @@ class ModeledObjectSceneData(TypedDict):
     role: Literal[
         "tx_single_coil",
         "tx_inner_single_coil",
+        "tx_outer_single_coil",
         "rx_single_coil",
         "tx_rect_void_columns",
         "tx_plate_stack",

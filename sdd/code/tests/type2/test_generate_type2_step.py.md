@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-30 @ 14:12
+updated: 2026-04-30 @ 23:59
 tags:
   - test
   - step-export
@@ -21,6 +21,7 @@ tags:
 - 2026-04-29 TxRx plan treats `tx_inner_single_coil` as an active EM setup target when the output mode is `TxRx`.
 - Tests in this file should include TxRx-facing assertions that verify generated ledgers preserve `tx_inner_single_coil` and `rx_single_coil` modeled entries for downstream setup-ready consumption.
 - Tests cover the `tx_outer_region` non-modeled guide prism derived from semantic `tx_region` and `tx_inner_region` edges.
+- Tests cover derived `tx_outer_single_coil` modeled geometry emitted from the inner TX spec and fixed `A_cw_to_a` outer terminal selector.
 - Tests cover `tx_inner_actual_region` as a non-modeled coil-fit envelope derived before modeled coil construction.
 
 ## Canonical state
@@ -34,6 +35,7 @@ tags:
 - Multilayer TX inner tests must include the active sweep upper bound: fixed `layer_count=8` exports
   `tx_inner_pcb_l0` through `tx_inner_pcb_l7` plus `tx_inner_copper_stack`.
 - `tx_inner_rect_void_coil` must be centered inside the resolved `tx_inner_region` owner in X and Y.
+- `tx_outer_rect_void_coil` must be a modeled companion with role `tx_outer_single_coil`, placement owner `tx_outer_region`, and no independent sampled owner paths.
 - `tx_region` may be present as guide context only.
 - Deterministic tx_inner body-name contract is now explicitly covered for a fixed `layer_count=8` realization:
   expected exported bodies are `tx_inner_pcb_l0` through `tx_inner_pcb_l7` plus `tx_inner_copper_stack`.

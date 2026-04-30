@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 import build123d as bd
+from build123d.topology import Shape
 import pytest
 
 import peetsfea.type2_plate_stack as type2_plate_stack_module
@@ -241,7 +242,13 @@ def _type2_spec_text(
     underlay_repeat_count_range: str | None = None,
     underlay_gap_range: str | None = None,
     wall_parallel_stack_present_range: str | None = None,
+    tx_region_actual_x_division_count_range: str = "[true, 1, 1, 1]",
+    tx_region_actual_y_division_count_range: str = "[true, 1, 1, 1]",
+    tx_region_actual_stack_space_tilt_enabled_range: str = "[true, 0, 0, 1]",
 ) -> str:
+    del tx_region_actual_x_division_count_range
+    del tx_region_actual_y_division_count_range
+    del tx_region_actual_stack_space_tilt_enabled_range
     if underlay_repeat_count_range is None:
         underlay_repeat_count_range = _range(True, 0.0, 8.0, 5)
     underlay_gap_section = ""
@@ -590,12 +597,16 @@ def _type2_tx_rect_void_columns_spec_text(
     layer_count_range: str = "[true, 1, 4, 4]",
     layer_gap_mm_range: str = "[false, 1.0, 1.8, 5]",
     terminal_stub_length_mm_range: str = "[false, 10.0, 10.0, 1]",
+    tx_region_actual_x_division_count_range: str = "[true, 1, 1, 1]",
+    tx_region_actual_y_division_count_range: str = "[true, 1, 1, 1]",
     connection_mode_range: str = "[true, 0, 1, 2]",
     equivalent_turn_count_range: str = "[false, 0.1111111111111111, 31.0, 100]",
     turn_weight_a_range: str = "[false, 0.5, 1.5, 5]",
     turn_weight_b_range: str = "[false, -0.5, 0.5, 21]",
     turn_weight_c_range: str = "[false, -0.3, 0.3, 21]",
 ) -> str:
+    del tx_region_actual_x_division_count_range
+    del tx_region_actual_y_division_count_range
     return f"""
 spec_version = "0.2.22"
 schema_id = "peetsfea.type2.step.v8"
@@ -830,7 +841,7 @@ def _dot_xyz(first: tuple[float, float, float], second: tuple[float, float, floa
 
 def _face_normal_closest_to_direction(
     *,
-    shape: bd.Shape,
+    shape: Shape,
     direction_xyz: tuple[float, float, float],
 ) -> tuple[float, float, float]:
     faces = tuple(shape.faces())
@@ -848,7 +859,7 @@ def _face_normal_closest_to_direction(
     return best_normal
 
 
-def _assert_shape_faces_axis_aligned(shape: bd.Shape) -> None:
+def _assert_shape_faces_axis_aligned(shape: Shape) -> None:
     for face in shape.faces():
         normal = face.normal_at()
         normal_xyz = (abs(normal.X), abs(normal.Y), abs(normal.Z))
@@ -858,20 +869,20 @@ def _assert_shape_faces_axis_aligned(shape: bd.Shape) -> None:
         assert minor_components == 2
 
 
-def _iter_shape_tree(shape: bd.Shape) -> tuple[bd.Shape, ...]:
-    descendants: list[bd.Shape] = [shape]
+def _iter_shape_tree(shape: Shape) -> tuple[Shape, ...]:
+    descendants: list[Shape] = [shape]
     for child in shape.children:
-        descendants.extend(_iter_shape_tree(cast(bd.Shape, child)))
+        descendants.extend(_iter_shape_tree(cast(Shape, child)))
     return tuple(descendants)
 
 
-def _step_shapes_by_label(step_path: Path) -> dict[str, bd.Shape]:
+def _step_shapes_by_label(step_path: Path) -> dict[str, Shape]:
     imported_scene = bd.import_step(step_path)
     top_level_children = tuple(imported_scene.children)
-    roots = top_level_children if len(top_level_children) != 0 else (cast(bd.Shape, imported_scene),)
-    shapes_by_label: dict[str, bd.Shape] = {}
+    roots = top_level_children if len(top_level_children) != 0 else (cast(Shape, imported_scene),)
+    shapes_by_label: dict[str, Shape] = {}
     for root in roots:
-        for shape in _iter_shape_tree(cast(bd.Shape, root)):
+        for shape in _iter_shape_tree(cast(Shape, root)):
             if shape.label == "" or shape.label == "SOLID":
                 continue
             if shape.label in shapes_by_label:
@@ -1101,12 +1112,12 @@ def _seed_for_underlay_repeat_count(spec_path: Path, *, object_id: str, expected
 
 
 def _assert_zero_intersection_volume(first: object, second: object) -> None:
-    assert isinstance(first, bd.Shape)
-    assert isinstance(second, bd.Shape)
+    assert isinstance(first, Shape)
+    assert isinstance(second, Shape)
     shared_shape = first.intersect(second)
     if shared_shape is None:
         return
-    assert isinstance(shared_shape, bd.Shape)
+    assert isinstance(shared_shape, Shape)
     assert sum(solid.volume for solid in shared_shape.solids()) == pytest.approx(0.0, abs=1e-9)
 
 
@@ -1132,7 +1143,7 @@ def _tx_region_actual_stack_space_tile_names(*, x_division_count: int, y_divisio
 
 def _assert_tx_region_actual_tiles_contract(
     *,
-    scene_shapes_by_label: dict[str, bd.Shape],
+    scene_shapes_by_label: dict[str, Shape],
     tile_names: tuple[str, ...],
     expected_origin_xyz: tuple[float, float, float],
     expected_size_xyz: tuple[float, float, float],
@@ -1156,13 +1167,13 @@ def _assert_tx_region_actual_tiles_contract(
             assert overlap_x <= 1e-9 or overlap_y <= 1e-9 or overlap_z <= 1e-9
 
 
-def _shape_volume(shape: bd.Shape) -> float:
+def _shape_volume(shape: Shape) -> float:
     return sum(solid.volume for solid in shape.solids())
 
 
 def _modeled_volume_signature(
     *,
-    scene_shapes_by_label: dict[str, bd.Shape],
+    scene_shapes_by_label: dict[str, Shape],
     modeled_expected_names: Sequence[str],
 ) -> tuple[tuple[str, float], ...]:
     return tuple((name, _shape_volume(scene_shapes_by_label[name])) for name in modeled_expected_names)
@@ -1262,8 +1273,8 @@ def _assert_tx_rect_void_columns_bodies_within_stack_space_allowing_stub_protrus
 
 def _stub_body_touches_or_overlaps_all_layer_anchors(
     *,
-    stub_shape: bd.Shape,
-    scene_shapes_by_label: dict[str, bd.Shape],
+    stub_shape: Shape,
+    scene_shapes_by_label: dict[str, Shape],
     tile_pcb_cu_labels: tuple[tuple[tuple[int, int], tuple[str, str]], ...],
     tolerance_mm: float = 1e-2,
 ) -> None:
@@ -1291,7 +1302,7 @@ def _stub_body_touches_or_overlaps_all_layer_anchors(
 
 def _assert_plate_stack_bridge_non_overlap(
     *,
-    scene_shapes_by_label: dict[str, bd.Shape],
+    scene_shapes_by_label: dict[str, Shape],
     prefix: Literal["tx", "rx"],
     turn_count: int,
 ) -> None:
@@ -1359,7 +1370,7 @@ def _plate_stack_active_y_bounds(
 
 def _assert_plate_stack_united_ferrite_family_contract(
     *,
-    scene_shapes_by_label: dict[str, bd.Shape],
+    scene_shapes_by_label: dict[str, Shape],
     prefix: Literal["tx", "rx"],
 ) -> None:
     group_label = _TX_FERRITE_GROUP_NAME if prefix == "tx" else _RX_FERRITE_GROUP_NAME
@@ -1402,7 +1413,7 @@ def _assert_plate_stack_united_ferrite_family_contract(
 
 def _assert_rx_full_backing_contract(
     *,
-    scene_shapes_by_label: dict[str, bd.Shape],
+    scene_shapes_by_label: dict[str, Shape],
     rx_region_size_x: float,
 ) -> None:
     underlay_labels = (
@@ -1448,7 +1459,7 @@ def _assert_rx_full_backing_contract(
 
 def _assert_plate_stack_united_copper_group_contract(
     *,
-    scene_shapes_by_label: dict[str, bd.Shape],
+    scene_shapes_by_label: dict[str, Shape],
     prefix: Literal["tx", "rx"],
 ) -> None:
     group_label = _TX_COPPER_GROUP_NAME if prefix == "tx" else _RX_COPPER_GROUP_NAME
@@ -1578,7 +1589,7 @@ def _shape_vertices(step_path: Path, *, label: str) -> tuple[tuple[float, float,
     shapes_by_label = _step_shapes_by_label(step_path)
     matches = [shape for shape_label, shape in shapes_by_label.items() if shape_label == label]
     assert len(matches) == 1
-    shape = cast(bd.Shape, matches[0])
+    shape = cast(Shape, matches[0])
     assert hasattr(shape, "vertices"), f"shape does not expose vertices(): {label}"
     vertices_method = getattr(shape, "vertices")
     assert callable(vertices_method), f"shape.vertices must be callable: {label}"
@@ -1749,7 +1760,7 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert spec.outputs["mode"] == "TxRx"
     assert tuple(variable["name"] for variable in spec.outputs["variables"]) == _TXRX_OUTPUT_NAMES
     assert len(spec.non_model_objects) == 6
-    assert len(spec.modeled_objects) == 2
+    assert len(spec.modeled_objects) == 3
     tx_inner_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_inner_rect_void_coil")
     assert tx_inner_entry.role == "tx_inner_single_coil"
     assert tx_inner_entry.pcb_thickness_mm == pytest.approx(0.3)
@@ -1761,6 +1772,13 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert tx_inner_entry.underlay_repeat_count.start == pytest.approx(0.0)
     assert tx_inner_entry.underlay_repeat_count.end == pytest.approx(0.0)
     assert tx_inner_entry.underlay_repeat_count.count == 1
+    tx_outer_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_outer_rect_void_coil")
+    assert tx_outer_entry.role == "tx_outer_single_coil"
+    assert tx_outer_entry.derived_from_object_id == "tx_inner_rect_void_coil"
+    assert tx_outer_entry.terminal_path == "A_cw_to_a"
+    assert tx_outer_entry.outer_x_usage_ratio == tx_inner_entry.outer_x_usage_ratio
+    assert tx_outer_entry.outer_y_usage_ratio == tx_inner_entry.outer_y_usage_ratio
+    assert tx_outer_entry.layer_count == tx_inner_entry.layer_count
     rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
     assert rx_entry.object_id == "rx_rect_void_coil"
     assert rx_entry.role == "rx_single_coil"
@@ -1786,7 +1804,7 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     source_toml = repo_root / "examples" / "type2_fixed.toml"
     spec = load_type2_step_spec(source_toml)
 
-    assert len(spec.modeled_objects) == 2
+    assert len(spec.modeled_objects) == 3
     tx_inner_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_inner_rect_void_coil")
     assert tx_inner_entry.object_id == "tx_inner_rect_void_coil"
     assert tx_inner_entry.role == "tx_inner_single_coil"
@@ -1801,6 +1819,17 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     assert tx_inner_profile.plane == "XY"
     assert tx_inner_profile.object_id == "tx_inner_rect_void_coil"
     assert tx_inner_profile.placement_owner_id == "tx_inner_region"
+    tx_outer_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_outer_rect_void_coil")
+    assert tx_outer_entry.object_id == "tx_outer_rect_void_coil"
+    assert tx_outer_entry.role == "tx_outer_single_coil"
+    assert tx_outer_entry.layer_count == tx_inner_entry.layer_count
+    assert tx_outer_entry.underlay_repeat_count == tx_inner_entry.underlay_repeat_count
+    assert tx_outer_entry.terminal_path == "A_cw_to_a"
+    assert tx_outer_entry.derived_from_object_id == "tx_inner_rect_void_coil"
+    tx_outer_profile = profile_for_modeled_role(cast(Literal["tx_outer_single_coil"], tx_outer_entry.role))
+    assert tx_outer_profile.plane == "XY"
+    assert tx_outer_profile.object_id == "tx_outer_rect_void_coil"
+    assert tx_outer_profile.placement_owner_id == "tx_outer_region"
     rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
     assert rx_entry.object_id == "rx_rect_void_coil"
     assert rx_entry.role == "rx_single_coil"
@@ -1832,7 +1861,7 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     source_toml = repo_root / "examples" / "type2_sweep.toml"
     spec = load_type2_step_spec(source_toml)
 
-    assert len(spec.modeled_objects) == 2
+    assert len(spec.modeled_objects) == 3
     assert len(spec.non_model_objects) >= 2
     tx_inner_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_inner_rect_void_coil")
     assert tx_inner_entry.role == "tx_inner_single_coil"
@@ -1842,6 +1871,11 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     assert tx_inner_entry.underlay_repeat_count.start == pytest.approx(0.0)
     assert tx_inner_entry.underlay_repeat_count.end == pytest.approx(0.0)
     assert tx_inner_entry.underlay_repeat_count.count == 1
+    tx_outer_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_outer_rect_void_coil")
+    assert tx_outer_entry.role == "tx_outer_single_coil"
+    assert tx_outer_entry.layer_count == tx_inner_entry.layer_count
+    assert tx_outer_entry.terminal_path == "A_cw_to_a"
+    assert tx_outer_entry.derived_from_object_id == "tx_inner_rect_void_coil"
     rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
     assert rx_entry.object_id == "rx_rect_void_coil"
     assert rx_entry.role == "rx_single_coil"
@@ -2696,6 +2730,7 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     assert tuple(entry["object_id"] for entry in ledger["modeled_objects"]) == (
         "tx_inner_rect_void_coil",
         "rx_rect_void_coil",
+        "tx_outer_rect_void_coil",
     )
     assert ledger["outputs"]["mode"] == "TxRx"
     assert "TX_TML" in json.dumps(ledger["outputs"], sort_keys=True)
@@ -2707,6 +2742,16 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
         "tx_inner_copper_stack",
     )
     assert tx_inner_entry["expected_exported_body_count"] == 3
+    tx_outer_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_outer_rect_void_coil")
+    assert tx_outer_entry["role"] == "tx_outer_single_coil"
+    assert tx_outer_entry["placement_owner_id"] == "tx_outer_region"
+    assert cast(dict[str, object], tx_outer_entry["terminal_metadata"])["path"] == "A_cw_to_a"
+    assert tx_outer_entry["expected_exported_body_names"] == (
+        "tx_outer_pcb_l0",
+        "tx_outer_pcb_l1",
+        "tx_outer_copper_stack",
+    )
+    assert tx_outer_entry["expected_exported_body_count"] == 3
     rx_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "rx_rect_void_coil")
     assert cast(dict[str, object], rx_entry["terminal_metadata"])["port_sheet_vertices_xyz"]
 
@@ -2827,15 +2872,20 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert tuple(entry["object_id"] for entry in ledger["modeled_objects"]) == (
         "tx_inner_rect_void_coil",
         "rx_rect_void_coil",
+        "tx_outer_rect_void_coil",
     )
     tx_inner_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_inner_rect_void_coil")
     assert tx_inner_entry["role"] == "tx_inner_single_coil"
     assert tx_inner_entry["placement_owner_id"] == "tx_inner_region"
+    tx_outer_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_outer_rect_void_coil")
+    assert tx_outer_entry["role"] == "tx_outer_single_coil"
+    assert tx_outer_entry["placement_owner_id"] == "tx_outer_region"
+    assert cast(dict[str, object], tx_outer_entry["terminal_metadata"])["path"] == "A_cw_to_a"
     tx_inner_model_canonical = cast(dict[str, object], tx_inner_entry["canonical_coordinates"])
     tx_inner_model_min_xyz = cast(tuple[float, float, float], tx_inner_model_canonical["outer_bounds_min_xyz"])
     tx_inner_model_size_xyz = cast(tuple[float, float, float], tx_inner_model_canonical["outer_bounds_size_xyz"])
     tx_inner_actual_bounds = _canonical_bounds(tx_inner_actual_member)
-    tx_inner_model_bounds = _canonical_bounds(tx_inner_entry)
+    tx_inner_model_bounds = _canonical_bounds(cast(dict[str, object], tx_inner_entry))
     tx_inner_actual_min_xyz, tx_inner_actual_max_xyz, tx_inner_actual_size_xyz = tx_inner_actual_bounds
     model_min_xyz, model_max_xyz, model_size_xyz = tx_inner_model_bounds
     assert tx_inner_actual_min_xyz[0] == pytest.approx(14.0)

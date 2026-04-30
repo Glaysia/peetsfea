@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Literal, NoReturn, cast
 
 import build123d as bd
+from build123d.topology import Shape
 
 from peetsfea.tx_rect_void import BoxSpec
 from peetsfea.tx_rect_void import SingleCoilProfile
@@ -43,6 +44,7 @@ from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec import ModeledTxInnerSingleCoilSpec
+from peetsfea.type2_step_spec import ModeledTxOuterSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
@@ -147,11 +149,11 @@ def _raise_tx_rect_void_columns_deactivated(
     )
 
 
-def _validate_top_level_scene_child(shape: bd.Shape) -> None:
+def _validate_top_level_scene_child(shape: Shape) -> None:
     children = tuple(shape.children)
     if children:
         for child in children:
-            _validate_top_level_scene_child(cast(bd.Shape, child))
+            _validate_top_level_scene_child(cast(Shape, child))
         return
     solid_count = len(tuple(shape.solids()))
     if solid_count == 1:
@@ -337,7 +339,7 @@ def _remove_generated_type2_artifacts(output_dir: Path) -> None:
             shutil.rmtree(stale_dir_path)
 
 
-def _require_plate_stack_merged_scene_shape_contract(*, scene_shapes: tuple[bd.Shape, ...]) -> None:
+def _require_plate_stack_merged_scene_shape_contract(*, scene_shapes: tuple[Shape, ...]) -> None:
     scene_shape_by_label = {shape.label: shape for shape in scene_shapes}
     for body_name in _PLATE_STACK_MERGED_BODY_NAMES:
         if body_name not in scene_shape_by_label:
@@ -359,12 +361,12 @@ def _require_plate_stack_merged_scene_shape_contract(*, scene_shapes: tuple[bd.S
 
 def _single_solid_cut_shape(
     *,
-    blank_shape: bd.Shape,
-    tool_shape: bd.Shape,
+    blank_shape: Shape,
+    tool_shape: Shape,
     label: str,
     context: str,
-) -> bd.Shape:
-    cut_shape = cast(bd.Shape, blank_shape.cut(tool_shape))
+) -> Shape:
+    cut_shape = cast(Shape, blank_shape.cut(tool_shape))
     solids = tuple(cut_shape.solids())
     if len(solids) != 1:
         raise RuntimeError(
@@ -373,7 +375,7 @@ def _single_solid_cut_shape(
         )
     solid = solids[0]
     solid.label = label
-    return cast(bd.Shape, solid)
+    return cast(Shape, solid)
 
 
 def _export_modeled_single_coil(
@@ -554,7 +556,7 @@ def _build_non_model_scene_entry_and_shapes(
     resolved_non_model_specs: tuple[NonModelBoxSpec, ...],
     tilt_enabled: int,
     rx_center: Point3,
-) -> tuple[NonModelObjectLedgerEntry, tuple[bd.Shape, ...], dict[str, dict[str, object]]]:
+) -> tuple[NonModelObjectLedgerEntry, tuple[Shape, ...], dict[str, dict[str, object]]]:
     del rx_center
     non_model_entry = build_non_model_scene_entry(resolved_non_model_specs)
     shapes = tuple(build_non_model_scene_shapes(resolved_non_model_specs))
@@ -569,7 +571,7 @@ def _build_tx_rect_void_columns_scene_data(
     resolved_non_model_specs: tuple[NonModelBoxSpec, ...],
     stack_space_tilt_placements: dict[str, dict[str, object]],
     seed: int,
-) -> tuple[tuple[bd.Shape, ...], ModeledObjectSceneData]:
+) -> tuple[tuple[Shape, ...], ModeledObjectSceneData]:
     stack_space_specs = tuple(
         spec for spec in resolved_non_model_specs if spec.kind == "tx_region_actual_stack_space"
     )
@@ -614,7 +616,7 @@ def _build_tx_rect_void_columns_scene_data(
             f"(actual={build_result.terminal_stub_length_mm})"
         )
 
-    transformed_shapes: list[bd.Shape] = []
+    transformed_shapes: list[Shape] = []
     tile_metadata: list[dict[str, object]] = []
     pcb_layer_positions: list[float] = []
     copper_layer_positions: list[float] = []
@@ -708,7 +710,7 @@ def _build_tx_rect_void_columns_scene_data(
         transform: TxRegionActualStackSpaceTiltTransform,
         stack_space_object_id: str,
         bottom_z: float,
-    ) -> tuple[bd.Shape, bd.Face, tuple[tuple[float, float, float], ...]]:
+    ) -> tuple[Shape, bd.Face, tuple[tuple[float, float, float], ...]]:
         transformed_top_faces_by_z = _transformed_terminal_top_faces_by_z(
             terminal_anchor_box_specs=terminal_anchor_box_specs,
             transform=transform,
@@ -732,7 +734,7 @@ def _build_tx_rect_void_columns_scene_data(
             ).moved(bd.Location((0.0, 0.0, bottom_z))),
         )
         terminal_shape = cast(
-            bd.Shape,
+            Shape,
             bd.loft((*sorted_top_faces, bottom_face), ruled=True),
         )
         terminal_shape.label = terminal_body_name
@@ -816,9 +818,9 @@ def _build_tx_rect_void_columns_scene_data(
                 f"(tile={stack_space_object_id}, scene_labels={tile_scene.terminal_stub_body_names}, "
                 f"anchor_labels={tile_anchor_metadata.terminal_stub_body_names})"
         )
-        transformed_tile_shapes: list[bd.Shape] = []
+        transformed_tile_shapes: list[Shape] = []
         tile_body_names: list[str] = []
-        tile_parallel_copper_shapes: list[bd.Shape] = []
+        tile_parallel_copper_shapes: list[Shape] = []
         terminal_stub_label_pairs = tile_anchor_metadata.terminal_stub_body_names
         terminal_stub_labels = [stub_name for pair in terminal_stub_label_pairs for stub_name in pair]
         if len(terminal_stub_labels) != len(set(terminal_stub_labels)):
@@ -865,7 +867,7 @@ def _build_tx_rect_void_columns_scene_data(
                 "tx_rect_void_columns terminal anchor metadata must provide all configured terminal bodies "
                 f"(tile={stack_space_object_id}, expected={terminal_name_order}, actual={tuple(terminal_box_specs_by_terminal)})"
             )
-        parallel_terminal_shapes_by_name: dict[str, tuple[bd.Shape, tuple[tuple[float, float, float], ...]]] = {}
+        parallel_terminal_shapes_by_name: dict[str, tuple[Shape, tuple[tuple[float, float, float], ...]]] = {}
         for terminal_body_name in terminal_name_order:
             terminal_anchor_box_specs = terminal_box_specs_by_terminal[terminal_body_name]
             terminal_shape, _pickup_face, pickup_vertices = _build_slanted_terminal_body(
@@ -1023,7 +1025,7 @@ def _build_tx_rect_void_columns_scene_data(
             f"(count={len(expected_names)})"
         )
     compound = bd.Compound(children=tuple(transformed_shapes), label=modeled_spec.object_id)
-    canonical_coordinates: dict[str, object] = dict(canonical_from_shape(cast(bd.Shape, compound)))
+    canonical_coordinates: dict[str, object] = dict(canonical_from_shape(cast(Shape, compound)))
     canonical_coordinates["pcb_layer_z_positions_mm"] = tuple(sorted(set(round(value, 10) for value in pcb_layer_positions)))
     canonical_coordinates["copper_layer_z_positions_mm"] = tuple(
         sorted(set(round(value, 10) for value in copper_layer_positions))
@@ -1122,6 +1124,22 @@ def _require_modeled_expected_body_contract(
                 expected_names.append("tx_inner_copper_l0")
             else:
                 expected_names.append("tx_inner_copper_stack")
+            expected_groups = []
+        elif role == "tx_outer_single_coil":
+            if not isinstance(modeled_spec, ModeledTxOuterSingleCoilSpec):
+                raise ValueError(
+                    f"type2 modeled object spec registry must retain ModeledTxOuterSingleCoilSpec for {object_id} "
+                    f"(actual={type(modeled_spec).__name__})"
+                )
+            pcb_layer_positions = cast(
+                tuple[float, ...],
+                modeled_entry["canonical_coordinates"]["pcb_layer_z_positions_mm"],
+            )
+            expected_names = [f"tx_outer_pcb_l{index}" for index in range(len(pcb_layer_positions))]
+            if len(pcb_layer_positions) == 1:
+                expected_names.append("tx_outer_copper_l0")
+            else:
+                expected_names.append("tx_outer_copper_stack")
             expected_groups = []
         elif role == "rx_single_coil":
             if not isinstance(modeled_spec, ModeledRxSingleCoilSpec):
@@ -1755,7 +1773,7 @@ def export_type2_step_artifacts(
     )
 
     modeled_scene_data: list[ModeledObjectSceneData] = []
-    modeled_scene_shapes: list[bd.Shape] = []
+    modeled_scene_shapes: list[Shape] = []
     modeled_entries = []
     for modeled_spec in spec.modeled_objects:
         owner_spec = require_non_model_object_spec(

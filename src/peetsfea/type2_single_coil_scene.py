@@ -92,6 +92,31 @@ def single_coil_placement_offset(
     )
 
 
+def _profile_for_modeled_single_coil_role(role: str) -> SingleCoilProfile:
+    return profile_for_modeled_role(
+        cast(Literal["tx_single_coil", "tx_inner_single_coil", "tx_outer_single_coil", "rx_single_coil"], role)
+    )
+
+
+def _resolve_modeled_single_coil_underlay_repeat_count(
+    spec: ModeledSingleCoilSpec,
+    *,
+    profile: SingleCoilProfile,
+    seed: int,
+) -> int:
+    if profile.role == "tx_outer_single_coil":
+        underlay_repeat_count = spec.underlay_repeat_count
+        if underlay_repeat_count.is_integer is not True:
+            raise RuntimeError("type2 tx_outer_single_coil underlay_repeat_count must be an integer range")
+        if underlay_repeat_count.count != 1 or underlay_repeat_count.start != 0.0 or underlay_repeat_count.end != 0.0:
+            raise RuntimeError(
+                "type2 tx_outer_single_coil underlay_repeat_count must be fixed to zero "
+                f"(actual={underlay_repeat_count})"
+            )
+        return 0
+    return resolve_modeled_underlay_repeat_count(spec, seed=seed)
+
+
 def _single_coil_placement_offset_from_local_bounds(
     *,
     owner_spec: NonModelBoxSpec,
@@ -246,7 +271,7 @@ def resolve_modeled_single_coil_fit_envelope(
     owner_spec: NonModelBoxSpec,
     seed: int,
 ) -> RealizedSingleCoilFitEnvelope:
-    profile = profile_for_modeled_role(spec.role)
+    profile = _profile_for_modeled_single_coil_role(spec.role)
     with tempfile.TemporaryDirectory(prefix="type2_tx_rect_void_") as temp_dir:
         temp_toml_path = Path(temp_dir) / f"{spec.object_id}.toml"
         owner_scaled_spec = _spec_with_owner_scaled_outer_ranges(
@@ -742,7 +767,7 @@ def build_modeled_single_coil_scene_data(
     owner_spec: NonModelBoxSpec,
     seed: int,
 ) -> tuple[tuple[Shape, ...], ModeledObjectSceneData]:
-    profile = profile_for_modeled_role(spec.role)
+    profile = _profile_for_modeled_single_coil_role(spec.role)
     fit_envelope = resolve_modeled_single_coil_fit_envelope(spec, owner_spec=owner_spec, seed=seed)
     centerline = build_tx_rect_void_centerline(fit_envelope.realized)
     modeled_scene = build_tx_rect_void_step_scene(
@@ -756,7 +781,7 @@ def build_modeled_single_coil_scene_data(
     base_scene_children = tuple(shape for shape in existing_scene_children if shape.label != port_sheet_label)
     if len(base_scene_children) == 0:
         raise RuntimeError(f"type2 modeled scene must expose child bodies: {spec.object_id}")
-    underlay_repeat_count = resolve_modeled_underlay_repeat_count(spec, seed=seed)
+    underlay_repeat_count = _resolve_modeled_single_coil_underlay_repeat_count(spec, profile=profile, seed=seed)
     if profile.role == "tx_single_coil":
         if cast(Literal["XY", "YZ"], profile.plane) != "XY":
             raise RuntimeError(f"type2 tx underlay requires XY modeled plane (actual={profile.plane})")
@@ -780,11 +805,10 @@ def build_modeled_single_coil_scene_data(
             underlay_scene_children = wall_underlay_scene_children
         else:
             underlay_scene_children = ()
-    elif profile.role == "tx_inner_single_coil":
+    elif profile.role in ("tx_inner_single_coil", "tx_outer_single_coil"):
         if underlay_repeat_count != 0:
             raise RuntimeError(
-                "type2 tx_inner_single_coil underlay repeat count must remain zero "
-                f"(actual={underlay_repeat_count})"
+                f"type2 {profile.role} underlay repeat count must remain zero (actual={underlay_repeat_count})"
             )
         underlay_scene_children = ()
     else:
