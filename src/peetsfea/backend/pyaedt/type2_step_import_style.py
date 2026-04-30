@@ -517,6 +517,8 @@ def _expected_port_sheet_name(modeled_entry: dict[str, object], *, context: str)
         return "rx_port_sheet"
     if role == "tx_inner_single_coil":
         return "tx_inner_port_sheet"
+    if role == "tx_outer_single_coil":
+        return None
     if role == "tx_plate_stack":
         return "tx_plate_port_sheet"
     if role == "rx_plate_stack":
@@ -713,6 +715,8 @@ def _reconstruct_port_sheet_if_needed(
 ) -> list[str]:
     role = require_non_empty_str(require_key(modeled_entry, key="role", context=context), context=f"{context}.role")
     if role == "tx_rect_void_columns":
+        return []
+    if role == "tx_outer_single_coil":
         return []
     expected_port_sheet_name = _expected_port_sheet_name(modeled_entry, context=context)
     if expected_port_sheet_name is None:
@@ -987,6 +991,30 @@ def validate_modeled_bounds_against_owner(
             raise ValueError(
                 "rx_plate_stack outer bounds min_z must already touch rx_region_max min_z "
                 f"(actual={modeled_min_z}, expected={owner_min_z})"
+            )
+        return
+    if role == "tx_outer_single_coil":
+        if owner_id != "tx_outer_region":
+            raise ValueError(
+                f"{context}.placement_owner_id must be 'tx_outer_region' for geometry-only tx_outer_single_coil "
+                f"(actual={owner_id!r})"
+            )
+        if plane != "XY":
+            raise ValueError(f"{context}.plane must be 'XY' for tx_outer_single_coil geometry (actual={plane!r})")
+        if (
+            modeled_min_x < owner_min_x - _PLACEMENT_TOLERANCE
+            or modeled_max_x > owner_max_x + _PLACEMENT_TOLERANCE
+            or modeled_min_y < owner_min_y - _PLACEMENT_TOLERANCE
+            or modeled_max_y > owner_max_y + _PLACEMENT_TOLERANCE
+            or modeled_min_z < owner_min_z - _PLACEMENT_TOLERANCE
+            or modeled_max_z > owner_max_z + _PLACEMENT_TOLERANCE
+        ):
+            raise ValueError(
+                "tx_outer_single_coil outer bounds must fit inside tx_outer_region creation-time bounds "
+                f"(modeled_min={(modeled_min_x, modeled_min_y, modeled_min_z)}, "
+                f"modeled_max={(modeled_max_x, modeled_max_y, modeled_max_z)}, "
+                f"owner_min={(owner_min_x, owner_min_y, owner_min_z)}, "
+                f"owner_max={(owner_max_x, owner_max_y, owner_max_z)})"
             )
         return
     if plane == "XY":

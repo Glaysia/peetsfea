@@ -42,6 +42,7 @@ DEFAULT_OUTPUT_AEDT_PATH = REPO_ROOT / "run" / "aedt" / "type2_step_setup_ready"
 DEFAULT_DESIGN_NAME = "type2_step_setup_ready"
 _RX_SINGLE_COIL_ROLE: str = "rx_single_coil"
 _TX_INNER_SINGLE_COIL_ROLE: str = "tx_inner_single_coil"
+_TX_OUTER_SINGLE_COIL_ROLE: str = "tx_outer_single_coil"
 _SETUP_BRANCH_RX_SINGLE_READY = "rx_single_ready"
 _SETUP_BRANCH_TXRX_READY = "txrx_ready"
 _ACTIVE_RX_ONLY_OUTPUT_VARIABLE_NAMES: frozenset[str] = frozenset(
@@ -253,7 +254,13 @@ def _resolve_setup_branch(ledger: ValidatedStepLedger) -> str:
         modeled_roles.append(role)
 
     if output_mode == "RxOnly":
-        if len(modeled_entries) == 1 and modeled_roles[0] == _RX_SINGLE_COIL_ROLE:
+        if modeled_roles.count(_RX_SINGLE_COIL_ROLE) == 1 and all(
+            role in {_RX_SINGLE_COIL_ROLE, _TX_INNER_SINGLE_COIL_ROLE, _TX_OUTER_SINGLE_COIL_ROLE}
+            for role in modeled_roles
+        ) and (
+            modeled_roles.count(_TX_INNER_SINGLE_COIL_ROLE) <= 1
+            and modeled_roles.count(_TX_OUTER_SINGLE_COIL_ROLE) <= 1
+        ):
             return _SETUP_BRANCH_RX_SINGLE_READY
         if len(modeled_entries) == 1:
             raise ValueError(
@@ -261,22 +268,24 @@ def _resolve_setup_branch(ledger: ValidatedStepLedger) -> str:
                 f"(required_role={_RX_SINGLE_COIL_ROLE!r}, actual_role={modeled_roles[0]!r})"
             )
         raise ValueError(
-            "type2 setup facade supports only ['rx_single_coil'] for setup-ready orchestration "
+            "type2 setup facade supports exactly one active 'rx_single_coil' plus optional geometry-only "
+            "'tx_inner_single_coil'/'tx_outer_single_coil' entries for RX-only setup-ready orchestration "
             f"(roles={modeled_roles})"
         )
 
     if output_mode == "TxRx":
-        if len(modeled_entries) != 2:
-            raise ValueError(
-                "type2 setup mode 'TxRx' requires exactly one tx_inner_single_coil and one rx_single_coil "
-                f"modeled entry (actual={len(modeled_entries)})"
-            )
-        role_set = frozenset(modeled_roles)
-        if role_set == frozenset({_TX_INNER_SINGLE_COIL_ROLE, _RX_SINGLE_COIL_ROLE}):
+        allowed_txrx_roles = frozenset({_TX_INNER_SINGLE_COIL_ROLE, _TX_OUTER_SINGLE_COIL_ROLE, _RX_SINGLE_COIL_ROLE})
+        if all(role in allowed_txrx_roles for role in modeled_roles) and (
+            modeled_roles.count(_TX_INNER_SINGLE_COIL_ROLE) == 1
+            and modeled_roles.count(_RX_SINGLE_COIL_ROLE) == 1
+            and modeled_roles.count(_TX_OUTER_SINGLE_COIL_ROLE) <= 1
+        ):
             return _SETUP_BRANCH_TXRX_READY
         raise ValueError(
             "type2 setup mode 'TxRx' supports only ['tx_inner_single_coil', 'rx_single_coil'] "
-            f"for setup-ready orchestration (roles={modeled_roles})"
+            "for setup-ready orchestration, with at most one optional geometry-only "
+            "'tx_outer_single_coil'; outer TX is imported and styled but is not assigned a "
+            f"port/source/report in this setup-ready path (roles={modeled_roles})"
         )
 
     raise ValueError(f"type2 setup mode is unsupported (mode={output_mode!r})")
@@ -303,6 +312,16 @@ def _txrx_imported_ledger(imported_ledger: Type2ImportedLedger) -> Type2Imported
             "type2 TxRx setup requires exactly one tx_inner_single_coil and one rx_single_coil imported object "
             f"(roles={tx_roles})"
         )
+    outer_roles = [
+        _modeled_role(entry=entry, context="imported_ledger.modeled_objects[]")
+        for entry in imported_ledger["modeled_objects"]
+        if _modeled_role(entry=entry, context="imported_ledger.modeled_objects[]") == _TX_OUTER_SINGLE_COIL_ROLE
+    ]
+    if len(outer_roles) > 1:
+        raise ValueError(
+            "type2 TxRx setup accepts at most one geometry-only tx_outer_single_coil imported object "
+            f"(actual={len(outer_roles)})"
+        )
     return {
         "source_toml_path": imported_ledger["source_toml_path"],
         "source_step_ledger_path": imported_ledger["source_step_ledger_path"],
@@ -325,6 +344,17 @@ def _rx_only_imported_ledger(imported_ledger: Type2ImportedLedger) -> Type2Impor
         raise ValueError(
             "type2 RX-only setup requires exactly one imported rx_single_coil modeled object "
             f"(actual={len(rx_modeled_objects)})"
+        )
+    inactive_tx_roles = [
+        _modeled_role(entry=entry, context="imported_ledger.modeled_objects[]")
+        for entry in imported_ledger["modeled_objects"]
+        if _modeled_role(entry=entry, context="imported_ledger.modeled_objects[]")
+        in {_TX_INNER_SINGLE_COIL_ROLE, _TX_OUTER_SINGLE_COIL_ROLE}
+    ]
+    if inactive_tx_roles.count(_TX_OUTER_SINGLE_COIL_ROLE) > 1:
+        raise ValueError(
+            "type2 RX-only setup accepts at most one geometry-only tx_outer_single_coil imported object "
+            f"(roles={inactive_tx_roles})"
         )
     return {
         "source_toml_path": imported_ledger["source_toml_path"],

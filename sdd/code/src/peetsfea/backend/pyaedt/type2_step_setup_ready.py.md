@@ -1,7 +1,7 @@
 ---
 title: type2_step_setup_ready.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-29 @ 00:00
+updated: 2026-04-30 @ 00:00
 tags:
   - em
   - pyaedt
@@ -17,7 +17,7 @@ tags:
 ## 역할
 - STEP import 후 setup-ready HFSS project를 만든다.
 - 0.2.24 SDD 기준 active modes are `RxOnly` and `TxRx`.
-- `TxRx` orchestration preserves `tx_inner_single_coil` and RX ledger entries and passes both into import styling, port assignment, EM input, post-import mesh, and report setup.
+- `TxRx` orchestration preserves `tx_inner_single_coil` and RX ledger entries for active EM setup while allowing an optional imported/styled `tx_outer_single_coil` geometry entry to remain inactive.
 
 ## Canonical state
 - RxOnly creates RX mesh, radiation boundary, one RX port, RX sources/reports, validates, and saves.
@@ -26,7 +26,8 @@ tags:
 - Generic TX roles remain unsupported setup targets.
 - The full imported ledger records all imported bodies; active setup resolves and caches a branch-specific modeled ledger for mesh, port assignment, EM input, sources, and reports.
 - `RxOnly` branch accepts only a single `rx_single_coil` modeled object.
-- `TxRx` branch uses exact `tx_inner_single_coil` + `rx_single_coil` modeled objects and preserves both for downstream passes.
+- `RxOnly` branch accepts exactly one active `rx_single_coil` modeled object and may carry optional geometry-only TX inner/outer entries that are filtered before active EM setup.
+- `TxRx` branch uses exact `tx_inner_single_coil` + `rx_single_coil` modeled objects for downstream passes; an optional `tx_outer_single_coil` may be imported and styled but is excluded from mesh, port assignment, EM input, sources, and reports.
 - Report variables are owned by [type2-em-report-contract](../../../../../architecture/type2-em-report-contract.md).
 
 ## Invariants / fail-fast
@@ -34,7 +35,8 @@ tags:
 - RxOnly must not create TX ports or TX output variables.
 - `TxRx` must create TX and RX ports, TX+RX output variables, and two terminal groups.
 - Generic TX roles are rejected before setup-ready begins; there is no paired-mode fallback path.
-- A loaded ledger with exactly one `tx_inner_single_coil` and one `rx_single_coil` in `TxRx` mode is preserved through setup as both active modeled entries.
+- A loaded ledger with exactly one `tx_inner_single_coil`, one `rx_single_coil`, and at most one geometry-only `tx_outer_single_coil` in `TxRx` mode is imported in full, then filtered to the active inner/RX pair for setup.
+- `tx_outer_single_coil` must not receive a port, source, mesh assignment, or report variable in this setup-ready path.
 - RxOnly report setup filters to the active RX variable contract and requires every active RX variable to be present.
 - TxRx report setup filters to the active TxRx variable contract and requires every active TxRx variable to be present.
 - Solve-enabled setup must not release the desktop before analysis/report export completes.
