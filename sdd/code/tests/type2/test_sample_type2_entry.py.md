@@ -24,12 +24,14 @@ tags:
 - RX single-coil sampled fixtures preserve the active `3.965 mm` PCB plus `0.035 mm` copper stack.
 - `tx_region` is guide context only, but its `tx_reference_line` range fields are effective sampled owner coordinates.
 - RxOnly sampled-owner fixtures contain RX coil owners plus active non-modeled guide owners; TX derived non-model owners are absent.
+- `tx_outer_single_coil` / `tx_outer_rect_void_coil` is a derived modeled companion and must not add sampled owner paths.
 
 ## Invariants / fail-fast
 - Unknown owner paths fail immediately.
 - `sampled_owner_paths` must include every active `count > 1` range owner, including non-modeled guide ranges.
 - RxOnly sampling tests must not require TX modeled owners.
 - RxOnly sampling tests must not require `tx_region_actual` or `tx_region_actual_stack_space`.
+- Sampled owner discovery must preserve canonical `modeled_objects.tx_inner_rect_void_coil.*` owners while excluding `modeled_objects.tx_outer_rect_void_coil.*`.
 - TX modeled-role fixtures assert parser/sampling fail-fast behavior instead of sampled manifest success.
 - TX inner trace-width feasibility is validated as a sample-time constraint so retry occurs before STEP export.
 - Lightweight spec tools must import without CAD/AEDT modules.

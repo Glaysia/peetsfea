@@ -43,6 +43,7 @@ _INTEGER_RANGE_FIELD_NAMES = (
 )
 _SAMPLED_METADATA_TABLE = "sampled"
 _SAMPLED_SINGLE_COIL_ROLES: frozenset[str] = frozenset({"tx_inner_single_coil", "rx_single_coil"})
+_DERIVED_MODELED_ROLES: frozenset[str] = frozenset({"tx_outer_single_coil"})
 _PLATE_STACK_ROLE_SUFFIX = "_plate_stack"
 _TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
 _UNSUPPORTED_RXONLY_TX_MODELED_ROLES: frozenset[str] = frozenset(
@@ -777,6 +778,8 @@ def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpe
                 )
             )
             continue
+        if role in _DERIVED_MODELED_ROLES:
+            continue
         if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
             owner_specs.extend(_plate_stack_range_owner_specs(cast(ModeledPlateStackSpec, modeled_spec)))
             continue
@@ -1128,6 +1131,8 @@ def sampled_owner_values(
                     retry_number=retry_number,
                 )
             )
+            continue
+        if role in _DERIVED_MODELED_ROLES:
             continue
         if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
             sampled_values.extend(

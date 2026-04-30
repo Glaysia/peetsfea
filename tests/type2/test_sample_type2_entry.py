@@ -19,7 +19,9 @@ from peetsfea.type2_step_spec import NonModelDerivedSpec
 from peetsfea.type2_step_spec import NonModelTxReferenceLineSpec
 from peetsfea.type2_step_spec import NonModelTxRegionSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
+from peetsfea.type2_step_spec import ModeledTxInnerSingleCoilSpec
 from peetsfea.type2_step_spec import RangeSpec
+from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 
 _EXPECTED_SAMPLED_OWNER_PATHS = [
@@ -43,6 +45,70 @@ class _FakeRxOnlyType2Spec:
     non_model_objects: tuple[NonModelTxRegionSpec, ...]
     non_model_derived_objects: tuple[NonModelDerivedSpec, ...]
     modeled_objects: tuple[ModeledRxSingleCoilSpec, ...]
+
+
+@dataclass(frozen=True)
+class _FakeOuterTxSingleCoilSpec:
+    object_id: str
+    role: str
+
+
+@dataclass(frozen=True)
+class _FakeTxOuterCompanionType2Spec:
+    non_model_objects: tuple[NonModelTxRegionSpec, ...]
+    non_model_derived_objects: tuple[NonModelDerivedSpec, ...]
+    modeled_objects: tuple[ModeledTxInnerSingleCoilSpec | _FakeOuterTxSingleCoilSpec, ...]
+
+
+def _range_spec(is_integer: bool, start: float, end: float, count: int) -> RangeSpec:
+    return RangeSpec(is_integer=is_integer, start=start, end=end, count=count)
+
+
+def _tx_inner_single_coil_spec() -> ModeledTxInnerSingleCoilSpec:
+    fixed_zero = _range_spec(True, 0.0, 0.0, 1)
+    fixed_float = _range_spec(False, 1.0, 1.0, 1)
+    return ModeledTxInnerSingleCoilSpec(
+        object_id="tx_inner_rect_void_coil",
+        role="tx_inner_single_coil",
+        material="composite",
+        model_state=True,
+        pcb_thickness_mm=0.3,
+        copper_thickness_mm=0.035,
+        outer_x_usage_ratio=_range_spec(False, 0.2, 0.8, 7),
+        outer_y_usage_ratio=_range_spec(False, 0.2, 0.8, 7),
+        outer_x_mm=_range_spec(False, 100.0, 100.0, 1),
+        outer_y_mm=_range_spec(False, 80.0, 80.0, 1),
+        void_usage_ratio=_range_spec(False, 0.3, 0.3, 1),
+        turn_count=_range_spec(True, 2.0, 6.0, 5),
+        layer_count=_range_spec(True, 2.0, 2.0, 1),
+        underlay_repeat_count=fixed_zero,
+        layer_gap_mm=_range_spec(False, 2.0, 2.0, 1),
+        terminal_stub_length_mm=_range_spec(False, 5.0, 5.0, 1),
+        margin_ratio=_range_spec(False, 0.05, 0.05, 1),
+        metal_fill_factor=fixed_float,
+        terminal_path="B_cw_to_b",
+    )
+
+
+def test_exportable_sampled_owner_paths_excludes_tx_outer_companion_paths() -> None:
+    spec = _FakeTxOuterCompanionType2Spec(
+        non_model_objects=(),
+        non_model_derived_objects=(),
+        modeled_objects=(
+            _tx_inner_single_coil_spec(),
+            _FakeOuterTxSingleCoilSpec(
+                object_id="tx_outer_rect_void_coil",
+                role="tx_outer_single_coil",
+            ),
+        ),
+    )
+
+    owner_paths = type2_sampled.exportable_sampled_owner_paths_for_seed(cast(Type2StepSpec, spec), seed=11)
+
+    assert "modeled_objects.tx_inner_rect_void_coil.outer_x_usage_ratio" in owner_paths
+    assert "modeled_objects.tx_inner_rect_void_coil.outer_y_usage_ratio" in owner_paths
+    assert "modeled_objects.tx_inner_rect_void_coil.turn_count" in owner_paths
+    assert all(not owner_path.startswith("modeled_objects.tx_outer_rect_void_coil.") for owner_path in owner_paths)
 
 
 def _patch_rx_only_spec_loader(

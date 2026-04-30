@@ -11,7 +11,7 @@ InnerCornerLabel = Literal["a", "b", "c", "d"]
 PathDirection = Literal["cw", "ccw"]
 BoxRole = Literal["pcb", "copper"]
 Plane = Literal["XY", "YZ"]
-ModeledObjectRole = Literal["tx_single_coil", "tx_inner_single_coil", "rx_single_coil"]
+ModeledObjectRole = Literal["tx_single_coil", "tx_inner_single_coil", "tx_outer_single_coil", "rx_single_coil"]
 ModeledObjectMaterial = Literal["composite"]
 
 
@@ -85,6 +85,17 @@ TX_INNER_SINGLE_COIL_PROFILE = SingleCoilProfile(
     max_turn_count=6,
 )
 
+TX_OUTER_SINGLE_COIL_PROFILE = SingleCoilProfile(
+    role="tx_outer_single_coil",
+    object_id="tx_outer_rect_void_coil",
+    plane="XY",
+    placement_owner_id="tx_outer_region",
+    pcb_body_prefix="tx_outer_pcb",
+    copper_body_prefix="tx_outer_copper",
+    compound_label="tx_outer_rect_void_coil",
+    max_turn_count=6,
+)
+
 RX_SINGLE_COIL_PROFILE = SingleCoilProfile(
     role="rx_single_coil",
     object_id="rx_rect_void_coil",
@@ -99,10 +110,13 @@ RX_SINGLE_COIL_PROFILE = SingleCoilProfile(
 _PROFILE_BY_ROLE: dict[ModeledObjectRole, SingleCoilProfile] = {
     "tx_single_coil": TX_SINGLE_COIL_PROFILE,
     "tx_inner_single_coil": TX_INNER_SINGLE_COIL_PROFILE,
+    "tx_outer_single_coil": TX_OUTER_SINGLE_COIL_PROFILE,
     "rx_single_coil": RX_SINGLE_COIL_PROFILE,
 }
 
-TX_PARALLEL_SINGLE_COIL_ROLES: frozenset[str] = frozenset({"tx_single_coil", "tx_inner_single_coil"})
+TX_PARALLEL_SINGLE_COIL_ROLES: frozenset[str] = frozenset(
+    {"tx_single_coil", "tx_inner_single_coil", "tx_outer_single_coil"}
+)
 
 
 def profile_for_modeled_role(role: ModeledObjectRole) -> SingleCoilProfile:

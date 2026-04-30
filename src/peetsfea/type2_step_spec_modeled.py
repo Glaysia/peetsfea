@@ -15,6 +15,7 @@ from peetsfea.type2_step_spec_types import ModeledSingleCoilRole
 from peetsfea.type2_step_spec_types import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec_types import ModeledTxInnerSingleCoilSpec
+from peetsfea.type2_step_spec_types import ModeledTxOuterSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec_types import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec_types import modeled_object_id_for_role
@@ -569,6 +570,7 @@ def _parse_modeled_single_coil(
         "metal_fill_factor",
         "terminal_path",
     }
+    tx_inner_allowed_keys = rx_allowed_keys | {"tx_outer_terminal_path"}
     if modeled_role == "tx_single_coil":
         extra_keys = sorted(set(table.keys()) - tx_allowed_keys)
         if extra_keys:
@@ -604,7 +606,7 @@ def _parse_modeled_single_coil(
             raise ValueError(f"{context}.underlay_gap_mm is unsupported for tx_inner_single_coil")
         if "wall_parallel_stack_present" in table:
             raise ValueError(f"{context}.wall_parallel_stack_present is unsupported for tx_inner_single_coil")
-        extra_keys = sorted(set(table.keys()) - rx_allowed_keys)
+        extra_keys = sorted(set(table.keys()) - tx_inner_allowed_keys)
         if extra_keys:
             raise ValueError(
                 f"{context} contains unsupported keys for {modeled_role} "
@@ -1033,6 +1035,85 @@ def parse_modeled_object(
     raise ValueError(f"unsupported modeled object role: {role}")
 
 
+def _parse_tx_outer_terminal_path_selector(raw_object: object, *, index: int) -> str:
+    context = f"modeled_objects[{index}]"
+    table = _require_table(raw_object, context)
+    role = _require_non_empty_str(table, "role", context)
+    if "tx_outer_terminal_path" not in table:
+        raise ValueError(f"{context}.tx_outer_terminal_path selector is missing")
+    if role != "tx_inner_single_coil":
+        raise ValueError(
+            f"{context}.tx_outer_terminal_path is supported only on tx_inner_single_coil "
+            f"(actual_role={role!r})"
+        )
+    selector_node = _require_table(
+        _require_key(table, "tx_outer_terminal_path", context),
+        f"{context}.tx_outer_terminal_path",
+    )
+    if set(selector_node.keys()) != {"value"}:
+        raise ValueError(f"{context}.tx_outer_terminal_path must contain only ['value']")
+    terminal_path = _require_non_empty_str(selector_node, "value", f"{context}.tx_outer_terminal_path")
+    if terminal_path != "A_cw_to_a":
+        raise ValueError(
+            f"{context}.tx_outer_terminal_path.value must be 'A_cw_to_a' "
+            f"for tx_outer_single_coil (actual={terminal_path!r})"
+        )
+    return terminal_path
+
+
+def append_tx_outer_single_coil_companion_specs(
+    raw_modeled_objects: list[object],
+    modeled_objects: tuple[ModeledObjectSpec, ...],
+) -> tuple[ModeledObjectSpec, ...]:
+    selector_indexes = tuple(
+        index
+        for index, raw_object in enumerate(raw_modeled_objects)
+        if "tx_outer_terminal_path" in _require_table(raw_object, f"modeled_objects[{index}]")
+    )
+    if len(selector_indexes) == 0:
+        return modeled_objects
+    if len(selector_indexes) != 1:
+        raise ValueError(
+            "tx_outer_terminal_path selector must appear exactly once when deriving tx_outer_single_coil "
+            f"(actual={len(selector_indexes)})"
+        )
+    selector_index = selector_indexes[0]
+    terminal_path = _parse_tx_outer_terminal_path_selector(raw_modeled_objects[selector_index], index=selector_index)
+    tx_inner_specs = tuple(spec for spec in modeled_objects if isinstance(spec, ModeledTxInnerSingleCoilSpec))
+    if len(tx_inner_specs) != 1:
+        raise ValueError(
+            "tx_outer_terminal_path selector requires exactly one tx_inner_single_coil companion "
+            f"(actual={len(tx_inner_specs)})"
+        )
+    tx_inner_spec = tx_inner_specs[0]
+    companion = ModeledTxOuterSingleCoilSpec(
+        object_id=modeled_object_id_for_role("tx_outer_single_coil"),
+        role="tx_outer_single_coil",
+        material=tx_inner_spec.material,
+        model_state=True,
+        pcb_thickness_mm=tx_inner_spec.pcb_thickness_mm,
+        copper_thickness_mm=tx_inner_spec.copper_thickness_mm,
+        outer_x_usage_ratio=tx_inner_spec.outer_x_usage_ratio,
+        outer_y_usage_ratio=tx_inner_spec.outer_y_usage_ratio,
+        outer_x_mm=tx_inner_spec.outer_x_mm,
+        outer_y_mm=tx_inner_spec.outer_y_mm,
+        turn_count=tx_inner_spec.turn_count,
+        layer_count=tx_inner_spec.layer_count,
+        underlay_repeat_count=tx_inner_spec.underlay_repeat_count,
+        layer_gap_mm=tx_inner_spec.layer_gap_mm,
+        terminal_stub_length_mm=tx_inner_spec.terminal_stub_length_mm,
+        void_usage_ratio=tx_inner_spec.void_usage_ratio,
+        margin_ratio=tx_inner_spec.margin_ratio,
+        metal_fill_factor=tx_inner_spec.metal_fill_factor,
+        terminal_path=terminal_path,
+        derived_from_object_id="tx_inner_rect_void_coil",
+    )
+    existing_object_ids = tuple(spec.object_id for spec in modeled_objects)
+    if companion.object_id in existing_object_ids:
+        raise ValueError(f"duplicate object id: {companion.object_id}")
+    return (*modeled_objects, companion)
+
+
 def _format_range(range_spec: RangeSpec) -> str:
     is_integer = "true" if range_spec.is_integer else "false"
     return f"[{is_integer}, {range_spec.start}, {range_spec.end}, {range_spec.count}]"
@@ -1079,6 +1160,7 @@ def render_tx_rect_void_toml(spec: ModeledSingleCoilCommonSpec) -> str:
 
 __all__ = [
     "modeled_object_id_for_role",
+    "append_tx_outer_single_coil_companion_specs",
     "modeled_plane_for_role",
     "parse_modeled_object",
     "placement_owner_id_for_role",

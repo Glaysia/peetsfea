@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-28 @ 13:10
+updated: 2026-04-30 @ 00:00
 tags:
   - step-export
   - spec
@@ -17,22 +17,23 @@ tags:
 ## 역할
 - active type2 TOML 입력을 통합 타입으로 조합하는 thin compatibility facade다.
 - 파서/검증/샘플링의 실질 구현은 분리 모듈에 위임하고, facade는 공개 심벌 재노출과 `load_type2_step_spec` 경계를 유지한다.
-- 0.2.24 SDD 기준 active modeled shape contract는 RX 경로만 문서화한다.
-- TX geometry는 재설계 대상이므로 이 노트는 TX shape, TX port, TX output variable 생성을 명세하지 않는다.
+- 0.2.24 SDD 기준 active modeled shape contract includes geometry-only TX inner plus derived outer companion state, while setup/port activation remains separate.
+- TX outer geometry is admitted through a fixed selector on the TX inner modeled table; this note does not authorize new TX excitation semantics.
 
 ## 입력 / 출력
 - 입력: type2 TOML path
-- 출력: parsed type2 step spec, parsed RX modeled/non-model objects, parsed `outputs`, parsed optional `constraints`
+- 출력: parsed type2 step spec, parsed RX modeled/non-model objects, parsed geometry-only TX inner/outer objects, parsed `outputs`, parsed optional `constraints`
 
 ## Canonical state
 - active schema facade는 RX single-coil / RX plate-stack 관련 parsing surface를 유지한다.
 - `tx_region`은 future TX placement guide로만 보존한다.
 - `NonModelTxRegionSpec`과 `NonModelTxReferenceLineSpec`은 facade에서 재노출되어 non-model scene/export가 concrete parser state를 공유한다.
 - `tx_region_actual`과 `tx_region_actual_stack_space`는 active RxOnly 입력에서 제거된 TX 형상 파생 객체다.
-- legacy collaborator imports may still see the derived TX type names, but active loading never materializes those objects.
+- `tx_outer_single_coil` is materialized after explicit modeled-object parsing and after constraint validation over explicit TOML objects, because the companion is derived state rather than an independent constraint owner.
 - `outputs.mode = "RxOnly"`는 TX port를 만들지 않고 RX 변수만 요청하는 모드다.
 - active modeled object parsing rejects generic/legacy TX modeled roles before downstream sampling/export can treat them as runtime state.
 - `tx_inner_single_coil` is parsed as geometry-only modeled state for STEP export/import, but remains outside the facade `__all__` public import contract while active tests own that surface.
+- `ModeledTxOuterSingleCoilSpec` is re-exported through the facade for downstream scene/export packages that need concrete companion type checks.
 - two-terminal output variable 이름은 [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)에서 shape-independent dormant contract로 보존한다.
 - constraints parsing remains declarative and deterministic.
 
@@ -41,6 +42,7 @@ tags:
 - RxOnly mode must not require a TX modeled object.
 - RxOnly mode must reject generic/legacy TX modeled object roles.
 - RxOnly mode may carry geometry-only `tx_inner_single_coil` through parsed/exported/imported state, but downstream setup must filter it out of mesh, ports, sources, and reports.
+- `tx_outer_terminal_path` must fail unless it appears once on the single `tx_inner_single_coil` table with value `A_cw_to_a`; loading then appends one `tx_outer_single_coil` companion.
 - RxOnly mode must reject TX derived non-model object kinds instead of requiring or materializing them.
 - RxOnly mode must not request TX report expressions.
 - TX reference-line parsing must remain guide-only and must not activate generic/legacy TX modeled roles through this facade.
@@ -54,6 +56,7 @@ tags:
 - [type2_step_spec_constraints.py](type2_step_spec_constraints.py.md)
 - [type2_sampled.py](type2_sampled.py.md)
 - [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)
+- [0.2.24 Type2 TX Outer Single Coil](../../../plans/0.2.24-type2-tx-outer-single-coil.md)
 
 ## 관련 테스트
 - [test_generate_type2_step.py](../../tests/type2/test_generate_type2_step.py.md)

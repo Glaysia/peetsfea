@@ -265,6 +265,8 @@ range = [false, 0.05, 0.05, 1]
 range = [false, 0.5, 0.5, 1]
 [modeled_objects.terminal_path]
 value = "B_cw_to_b"
+[modeled_objects.tx_outer_terminal_path]
+value = "A_cw_to_a"
 
 [[modeled_objects]]
 object_id = "rx_rect_void_coil"
