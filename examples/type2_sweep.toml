@@ -280,7 +280,7 @@ range = [false, 0.05, 0.05, 1]
 [modeled_objects.metal_fill_factor]
 range = [false, 0.2, 0.6, 15]
 [modeled_objects.terminal_path]
-value = "A_cw_to_a"
+value = "B_cw_to_b"
 
 [[modeled_objects]]
 object_id = "rx_rect_void_coil"

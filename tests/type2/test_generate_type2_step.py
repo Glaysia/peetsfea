@@ -1785,7 +1785,7 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     assert tx_inner_entry.underlay_repeat_count.start == pytest.approx(0.0)
     assert tx_inner_entry.underlay_repeat_count.end == pytest.approx(0.0)
     assert tx_inner_entry.underlay_repeat_count.count == 1
-    assert tx_inner_entry.terminal_path == "A_cw_to_a"
+    assert tx_inner_entry.terminal_path == "B_cw_to_b"
     tx_inner_profile = profile_for_modeled_role(cast(Literal["tx_inner_single_coil"], tx_inner_entry.role))
     assert tx_inner_profile.plane == "XY"
     assert tx_inner_profile.object_id == "tx_inner_rect_void_coil"
