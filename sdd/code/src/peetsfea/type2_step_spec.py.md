@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-28 @ 12:00
+updated: 2026-04-28 @ 13:10
 tags:
   - step-export
   - spec
@@ -31,17 +31,19 @@ tags:
 - `tx_region_actual`과 `tx_region_actual_stack_space`는 active RxOnly 입력에서 제거된 TX 형상 파생 객체다.
 - legacy collaborator imports may still see the derived TX type names, but active loading never materializes those objects.
 - `outputs.mode = "RxOnly"`는 TX port를 만들지 않고 RX 변수만 요청하는 모드다.
-- active modeled object parsing rejects TX modeled roles before downstream sampling/export can treat them as runtime state.
+- active modeled object parsing rejects generic/legacy TX modeled roles before downstream sampling/export can treat them as runtime state.
+- `tx_inner_single_coil` is parsed as geometry-only modeled state for STEP export/import, but remains outside the facade `__all__` public import contract while active tests own that surface.
 - two-terminal output variable 이름은 [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)에서 shape-independent dormant contract로 보존한다.
 - constraints parsing remains declarative and deterministic.
 
 ## Invariants / fail-fast
 - unsupported schema keys fail during load; compatibility fallback is not allowed.
 - RxOnly mode must not require a TX modeled object.
-- RxOnly mode must reject TX modeled object roles.
+- RxOnly mode must reject generic/legacy TX modeled object roles.
+- RxOnly mode may carry geometry-only `tx_inner_single_coil` through parsed/exported/imported state, but downstream setup must filter it out of mesh, ports, sources, and reports.
 - RxOnly mode must reject TX derived non-model object kinds instead of requiring or materializing them.
 - RxOnly mode must not request TX report expressions.
-- TX reference-line parsing must remain guide-only and must not activate TX modeled roles through this facade.
+- TX reference-line parsing must remain guide-only and must not activate generic/legacy TX modeled roles through this facade.
 - malformed constraints, duplicate rule ids, unknown owner paths, unsupported functions, and unsupported operators fail during type2 source loading or sampling preflight.
 
 ## Collaborators

@@ -1,7 +1,7 @@
 ---
 title: Type2 EM Report Contract
 created: 2026-04-28 @ 00:00
-updated: 2026-04-28 @ 00:00
+updated: 2026-04-29 @ 00:00
 tags:
   - em
   - sdd
@@ -10,7 +10,12 @@ tags:
 # Type2 EM Report Contract
 
 이 문서는 type2 setup-ready EM 출력 변수의 shape-independent 계약이다.
-현재 active runtime은 RxOnly 기준이며, TX 형상이 재설계되는 동안 TX geometry 자체는 SDD 계약에서 제거한다.
+현재 active runtime은 `RxOnly`와 `TxRx` 두 모드를 지원한다. `TxRx`의 활성 TX 형상은 `tx_inner_single_coil` 하나로 제한한다.
+
+## Active Modes
+- `RxOnly` assigns only `RX_TML`, reports RX self terms, and rejects TX or transfer expressions.
+- `TxRx` assigns `TX_TML` and `RX_TML`, reports TX self, RX self, transfer, coupling, and efficiency variables, and requires both port sheets to exist.
+- Generic TX modeled roles remain unsupported for EM setup unless a later plan gives them explicit import, port, mesh, and output contracts.
 
 ## Active RxOnly Variables
 - `Lrx_uH`
@@ -22,9 +27,8 @@ tags:
 - `Srx_self_mag_ratio`
 - `eta_rx_accept_ratio`
 
-## Dormant Two-terminal Variables
-아래 변수들은 나중에 TX 두 단자와 RX 두 단자를 다시 연결할 때 재사용할 shape-independent report 이름이다.
-현재 TX 형상 명세나 TX 포트 생성 요구사항이 아니다.
+## Active TxRx Variables
+아래 변수들은 `TxRx` 모드에서 active report 이름이다. `RxOnly`에서는 계속 금지된다.
 
 - `Ltx_uH`
 - `Lrx_uH`
@@ -59,14 +63,20 @@ tags:
 ## Port Naming
 - RxOnly setup creates only the RX lumped port and RX output variables.
 - RxOnly must not create TX ports or TX output variables.
-- Future two-terminal setup may reuse `TX_TML` and `RX_TML` symbolic terminal references, but those names do not imply any current TX shape.
-- Numeric port names remain a runtime convention, not a geometry-shape contract.
+- TxRx setup creates the TX inner lumped port and RX lumped port from STEP ledger `terminal_metadata`.
+- TX inner port sheet object name: `tx_inner_port_sheet`.
+- RX port sheet object name: `rx_port_sheet`.
+- TX terminal name: `TX_TML`.
+- RX terminal name: `RX_TML`.
+- Numeric AEDT port names remain a runtime convention, not a geometry-shape contract.
 
 ## Invariants
 - Report expressions must be derived from solved terminal quantities, not from object names that encode a particular conductor shape.
 - Missing terminal data is a hard failure for the mode that requires it.
-- Dormant two-terminal variables are documentation of future report continuity only; they are not active validation targets in RxOnly.
+- `TxRx` two-terminal variables are active validation targets only in `TxRx`.
+- Generic TX roles are not implied by the `TxRx` mode; only `tx_inner_single_coil` is active in this plan.
 
 ## Related
 - [type2-step-to-em-validate-pipeline](type2-step-to-em-validate-pipeline.md)
 - [type2-step-to-em-validate-flow](../diagrams/type2-step-to-em-validate-flow.md)
+- [0.2.24-type2-txrx-tx-inner-em](../plans/0.2.24-type2-txrx-tx-inner-em.md)

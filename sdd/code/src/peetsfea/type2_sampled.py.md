@@ -1,7 +1,7 @@
 ---
 title: type2_sampled.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-28 @ 00:00
+updated: 2026-04-29 @ 00:00
 tags:
   - sampling
   - build
@@ -38,6 +38,7 @@ tags:
 - RxOnly sampling must not require TX modeled owners.
 - type2 constraints must be evaluated before sampled TOML is written.
 - constraint retry budget is fixed; exhausted candidates are recorded as skipped only for expected validation/infeasible failures.
+- STEP/CAD export dependencies are imported only by orchestration paths that actually build STEP artifacts.
 - non-validation exceptions remain fail-fast.
 
 ## Collaborators

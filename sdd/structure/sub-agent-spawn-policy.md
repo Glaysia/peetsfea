@@ -1,7 +1,7 @@
 ---
 title: Sub-Agent Spawn Policy
 created: 2026-04-19 @ 14:50
-updated: 2026-04-22 @ 01:10
+updated: 2026-04-29 @ 00:00
 tags:
   - governance
   - agents
@@ -19,18 +19,18 @@ tags:
 ## Model Allowlist
 - 사용자가 이 문서를 읽고 분배 작업을 요청하면서 `mini`, `5.4mini`, 또는 `gpt-5.4-mini`를 명시하면, 분배 모드의 1차 생성은 `gpt-5.4-mini`와 `reasoning_effort="medium"` 조합 4개를 허용한다.
 - 기본 단일 서브에이전트 생성의 1차 생성은 `gpt-5.3-codex-spark`와 `reasoning_effort="medium"` 조합만 허용한다.
-- 기본 단일 서브에이전트 생성의 1차 생성이 실패했을 때만 2차 생성으로 `gpt-5.3-codex`와 `reasoning_effort="medium"` 조합을 허용한다.
+- 기본 단일 서브에이전트 생성의 1차 생성이 실패했을 때만 2차 생성으로 빠른 fallback인 `gpt-5.5`와 `reasoning_effort="low"` 조합을 허용한다.
 - 분배 모드의 1차 생성은 `gpt-5.3-codex-spark` `medium` 에이전트 4개만 동시에 작업에 투입한다.
-- 분배 모드의 1차 생성 중 실패한 슬롯에 한해서만 2차 생성으로 `gpt-5.3-codex` `medium` 에이전트를 투입한다.
+- 분배 모드의 1차 생성 중 실패한 슬롯에 한해서만 2차 생성으로 `gpt-5.5` `low` 에이전트를 투입한다.
 - 분배 모드에서 Spark 에이전트와 non-Spark 에이전트를 섞는 것은 실패 슬롯 보충 목적일 때만 허용한다.
 - 위 조합 외의 모델 또는 reasoning effort는 사용하지 않는다.
 
 ## Default Retry Order
 1. 먼저 `gpt-5.3-codex-spark` `medium`으로 생성한다.
-2. 생성 호출 또는 초기 시작이 실패하면 같은 작업을 `gpt-5.3-codex` `medium`으로 다시 생성한다.
+2. 생성 호출 또는 초기 시작이 실패하면 같은 작업을 빠른 fallback인 `gpt-5.5` `low`로 다시 생성한다.
 3. 2차도 실패하면 다른 모델로 우회하지 않는다. 상위 에이전트가 직접 처리하거나, 막힌 이유를 사용자에게 보고하고 다음 결정을 받는다.
 
-분배 모드에서는 먼저 `gpt-5.3-codex-spark` `medium` 4개를 생성한다. 사용자가 `mini`, `5.4mini`, 또는 `gpt-5.4-mini`를 명시한 분배 모드에서는 대신 `gpt-5.4-mini` `medium` 4개를 생성한다. 이 1차 생성 중 일부 슬롯만 실패하면 성공적으로 생성되어 작업 중인 1차 에이전트는 유지하고, 실패한 슬롯의 같은 작업만 `gpt-5.3-codex` `medium`으로 다시 생성한다. 실패 슬롯의 2차 non-Spark 생성도 실패하면 다른 모델로 우회하지 않는다.
+분배 모드에서는 먼저 `gpt-5.3-codex-spark` `medium` 4개를 생성한다. 사용자가 `mini`, `5.4mini`, 또는 `gpt-5.4-mini`를 명시한 분배 모드에서는 대신 `gpt-5.4-mini` `medium` 4개를 생성한다. 이 1차 생성 중 일부 슬롯만 실패하면 성공적으로 생성되어 작업 중인 1차 에이전트는 유지하고, 실패한 슬롯의 같은 작업만 `gpt-5.5` `low`로 다시 생성한다. 실패 슬롯의 2차 non-Spark 생성도 실패하면 다른 모델로 우회하지 않는다.
 
 ## Distribution Trigger
 사용자가 `서브에이전트규칙을 읽고 일을 분배해`라고 요청하면 분배 모드로 처리한다.
@@ -40,7 +40,7 @@ tags:
 - `gpt-5.3-codex-spark` `medium` 에이전트 4개
 - 사용자가 `mini`, `5.4mini`, 또는 `gpt-5.4-mini`를 명시한 경우: `gpt-5.4-mini` `medium` 에이전트 4개
 
-위 Spark 생성 중 일부 슬롯만 실패하면 실패한 작업만 `gpt-5.3-codex` `medium` 에이전트로 다시 생성한다. 분배 모드에서는 성공한 Spark 에이전트를 종료하지 않으며, Spark 에이전트와 non-Spark 에이전트가 섞인 조합은 실패 슬롯을 보충한 결과일 때만 완료 조합으로 사용할 수 있다.
+위 Spark 생성 중 일부 슬롯만 실패하면 실패한 작업만 `gpt-5.5` `low` 에이전트로 다시 생성한다. 분배 모드에서는 성공한 Spark 에이전트를 종료하지 않으며, Spark 에이전트와 non-Spark 에이전트가 섞인 조합은 실패 슬롯을 보충한 결과일 때만 완료 조합으로 사용할 수 있다.
 
 네 서브에이전트는 직접 코드 작성, 테스트 작성, 리팩터링, 버그 수정 같은 주요 구현 작업을 맡는다. 상위제어에이전트는 작업 분해, 구현 전 계획/구조/경계 SDD 문서 수정, 충돌 조정, 최종 통합 검토를 직접 맡는다.
 - 상위제어에이전트는 원칙적으로 Markdown/SDD와 통합 검토를 맡는다. 다만 서브에이전트 결과 통합에 필요한 최소 Python 수정, 충돌 해소, 검증 실패 수습은 직접 수행할 수 있으며, 이 경우 해당 Python 파일의 SDD code note 갱신 의무도 함께 따른다.
@@ -80,7 +80,7 @@ tags:
 }
 ```
 
-실패 시에는 같은 형태를 유지하고 `model`만 `gpt-5.3-codex`로 바꾼다.
+실패 시에는 같은 형태를 유지하고 `model`은 `gpt-5.5`, `reasoning_effort`는 `low`로 바꾼다.
 
 분배 모드 1차 생성:
 
@@ -134,8 +134,8 @@ tags:
 {
   "agent_type": "worker",
   "fork_context": false,
-  "model": "gpt-5.3-codex",
-  "reasoning_effort": "medium",
+  "model": "gpt-5.5",
+  "reasoning_effort": "low",
   "message": "<bounded implementation task A>"
 }
 ```
@@ -144,8 +144,8 @@ tags:
 {
   "agent_type": "worker",
   "fork_context": false,
-  "model": "gpt-5.3-codex",
-  "reasoning_effort": "medium",
+  "model": "gpt-5.5",
+  "reasoning_effort": "low",
   "message": "<bounded implementation task B>"
 }
 ```
@@ -154,8 +154,8 @@ tags:
 {
   "agent_type": "worker",
   "fork_context": false,
-  "model": "gpt-5.3-codex",
-  "reasoning_effort": "medium",
+  "model": "gpt-5.5",
+  "reasoning_effort": "low",
   "message": "<bounded implementation task C>"
 }
 ```
@@ -164,8 +164,8 @@ tags:
 {
   "agent_type": "worker",
   "fork_context": false,
-  "model": "gpt-5.3-codex",
-  "reasoning_effort": "medium",
+  "model": "gpt-5.5",
+  "reasoning_effort": "low",
   "message": "<bounded implementation task D>"
 }
 ```

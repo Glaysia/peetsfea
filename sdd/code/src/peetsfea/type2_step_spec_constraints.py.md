@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec_constraints.py
 created: 2026-04-21 @ 20:35
-updated: 2026-04-21 @ 20:35
+updated: 2026-04-29 @ 23:59
 tags:
   - spec
   - constraints
@@ -28,10 +28,12 @@ tags:
 - Active operator set and constraint AST types are shared with [type2_step_spec_types.py](type2_step_spec_types.py.md).
 - Active constraint rule shape requires `id`, `kind`, `message`, `enabled`, `lhs`, `op`, and `rhs`.
 - Constraint operands are limited to `path`, `value`, and `func` payload tables with a single key each.
+- Constraint owner-path validation includes sampled `tx_region.tx_reference_line.*` owners, derived non-model owners, and modeled owners.
 
 ## Invariants / fail-fast
 - Malformed rules, duplicate rule ids, unsupported operators, unsupported functions, and unknown owner paths must raise immediately.
-- `sum(...)` is the only supported constraint function form in loader parsing.
+- Supported function forms are loader-validated explicitly; `sum(...)` handles scalar owner arithmetic, while `tx_inner_min_trace_width_mm(tx_inner_rect_void_coil)` and `rx_min_trace_width_mm(rx_rect_void_coil)` handle type2 rect/void trace feasibility.
+- Trace-width functions must name exactly one modeled object with the expected single-coil role.
 - Constraint path validation only accepts paths present in the realized step spec owner-path registry.
 
 ## Collaborators

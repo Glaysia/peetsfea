@@ -9,6 +9,7 @@ import pytest
 from peetsfea.aedt.protocols import HfssSession
 from peetsfea.backend.pyaedt.type2_step_import_pipeline import import_type2_step_ledger
 from peetsfea.backend.pyaedt.type2_step_import_pipeline import import_type2_step_ledger_into_hfss
+from peetsfea.backend.pyaedt.type2_step_import_partition import resolve_imported_body_groups
 from peetsfea.type2_plate_stack import expected_plate_stack_body_names
 from peetsfea.type2_step_ledger import ExportedBodyGroup
 from tests.fixtures.legacy.type1_spec import type1_outputs_spec
@@ -917,6 +918,25 @@ def _rx_plate_stack_expected_groups(
 ) -> list[ExportedBodyGroup]:
     expected_names = _rx_plate_stack_expected_names()
     return _expected_ferrite_group_for_role(role="rx_plate_stack", expected_names=expected_names)
+
+
+def test_resolve_imported_body_groups_accepts_tx_inner_single_coil_empty_group_contract() -> None:
+    modeled_entry = _modeled_entry(
+        object_id="tx_inner_rect_void_coil",
+        role="tx_inner_single_coil",
+        plane="XY",
+        placement_owner_id="tx_inner_region",
+        expected_names=["tx_inner_pcb_l0", "tx_inner_copper_l0"],
+        expected_groups=[],
+    )
+
+    groups = resolve_imported_body_groups(
+        modeled_entry=modeled_entry,
+        imported_object_names=["tx_inner_pcb_l0", "tx_inner_copper_l0"],
+        context="modeled_objects[0]",
+    )
+
+    assert groups == []
 
 
 def _plate_stack_modeled_entry(

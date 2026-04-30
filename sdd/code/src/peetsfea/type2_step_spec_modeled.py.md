@@ -16,7 +16,8 @@ tags:
 
 ## 역할
 - type2 modeled-object parsing and validation helper다.
-- 0.2.24 SDD 기준 active documented shape path는 RX modeled roles다.
+- 0.2.24 SDD 기준 active EM-ready path는 RX modeled roles다.
+- `tx_inner_single_coil`은 geometry-only TX STEP body로 허용한다.
 
 ## 입력 / 출력
 - 입력: modeled object TOML tables
@@ -24,12 +25,14 @@ tags:
 
 ## Canonical state
 - RX single-coil and RX plate-stack parsing remain documented.
-- TX modeled roles are rejected at the active parser boundary during the reset.
+- Generic/legacy TX modeled roles are rejected at the active parser boundary during the reset.
+- `tx_inner_single_coil` is parsed as an explicit rect-void inner TX coil placed by derived `tx_inner_region`; it carries no underlay/ferrite fields.
 - `tx_region` remains outside modeled parsing as future guide context.
 
 ## Invariants / fail-fast
 - Unsupported modeled roles/fields fail during parse.
 - `tx_single_coil`, `tx_rect_void_columns`, and `tx_plate_stack` fail before active runtime state is bound.
+- `tx_inner_single_coil` requires fixed zero underlay repeat count and rejects TX underlay/wall-stack fields.
 - RxOnly must parse without requiring TX modeled roles.
 
 ## Collaborators

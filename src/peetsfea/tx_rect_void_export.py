@@ -34,14 +34,15 @@ from peetsfea.tx_rect_void_types import (
     SingleCoilRectVoidSpec,
     SingleCoilProfile,
     TX_SINGLE_COIL_PROFILE,
+    TX_PARALLEL_SINGLE_COIL_ROLES,
 )
 
 _TERMINAL_STUB_SIDE_RATIO = 0.60
 
 
 def _single_coil_port_sheet_label(profile: SingleCoilProfile) -> str:
-    if profile.role == "tx_single_coil":
-        return "tx_port_sheet"
+    if profile.role in TX_PARALLEL_SINGLE_COIL_ROLES:
+        return f"{profile.copper_body_prefix.removesuffix('_copper')}_port_sheet"
     return "rx_port_sheet"
 
 
@@ -258,7 +259,7 @@ def _is_tx_multilayer_parallel_stack(
     *,
     profile: SingleCoilProfile,
 ) -> bool:
-    return profile.role == "tx_single_coil" and realized.layer_count > 1
+    return profile.role in TX_PARALLEL_SINGLE_COIL_ROLES and realized.layer_count > 1
 
 
 def _vertical_bus_primitive_from_stub_column(
@@ -378,7 +379,7 @@ def _single_coil_port_sheet_owner_primitives(
     centerline: tuple[tuple[float, float], ...],
     profile: SingleCoilProfile,
 ) -> tuple[CopperPrimitive, CopperPrimitive]:
-    if profile.role == "tx_single_coil":
+    if profile.role in TX_PARALLEL_SINGLE_COIL_ROLES:
         all_layer_copper_primitives: list[CopperPrimitive] = []
         for layer_index in range(realized.layer_count):
             pcb_z = float(layer_index) * (realized.pcb_thickness_mm + realized.layer_gap_mm)
@@ -861,7 +862,7 @@ def _build_tx_multilayer_copper_stack_shape(
     frame_origin_xyz: tuple[float, float, float],
 ) -> bd.Shape:
     if not _is_tx_multilayer_parallel_stack(realized, profile=profile):
-        raise ValueError("tx multilayer copper stack shape requires tx_single_coil multilayer realized state")
+        raise ValueError("tx multilayer copper stack shape requires TX parallel single-coil multilayer realized state")
     layer_copper_shapes: list[bd.Shape] = []
     for layer_index in range(realized.layer_count):
         layer_copper_shapes.append(
@@ -1015,8 +1016,8 @@ def _tx_multilayer_bottom_bus_plane_points(
     boxes: tuple[BoxSpec, ...],
     profile: SingleCoilProfile,
 ) -> tuple[tuple[float, float], tuple[float, float]]:
-    if profile.role != "tx_single_coil":
-        raise ValueError("multilayer bus plane points are only defined for tx_single_coil")
+    if profile.role not in TX_PARALLEL_SINGLE_COIL_ROLES:
+        raise ValueError("multilayer bus plane points are only defined for TX parallel single-coil roles")
     start_label = f"{profile.copper_body_prefix}_bus_start"
     end_label = f"{profile.copper_body_prefix}_bus_end"
     start_matches = [box for box in boxes if box.label == start_label]

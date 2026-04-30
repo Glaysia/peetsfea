@@ -26,12 +26,14 @@ tags:
 - `tx_region` guide constants may remain as non-modeled context.
 - `NonModelTxReferenceLineSpec` owns required `x_ratio`, `y_usage_ratio`, and `z_ratio` range specs for the TX reference-line anchor and centered inner Y span inside `tx_region`.
 - `NonModelTxRegionSpec` extends the regular box spec with the required TX reference-line spec while preserving box fields used by downstream guide paths.
-- TX shape role constants are not active SDD contracts during the 0.2.24 reset.
+- `tx_inner_single_coil` is the first geometry-only TX modeled role after the reset. It is explicit inner-coil state, not a reactivation of generic `tx_single_coil`.
+- Legacy/generic TX role constants remain unsupported for active EM setup unless a later two-terminal plan enables them.
 
 ## Invariants / fail-fast
 - Runtime state must be concrete and non-null.
 - Unsupported active role drift must fail in parser/preflight.
 - TX reference-line state is never nullable; absent or invalid ratio state must fail in the parser.
+- `tx_inner_single_coil` owns concrete role/object/profile identity and must not be represented as nullable or fake `tx_single_coil` state.
 
 ## Collaborators
 - [type2_step_spec.py](type2_step_spec.py.md)

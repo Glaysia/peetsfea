@@ -515,6 +515,8 @@ def _expected_port_sheet_name(modeled_entry: dict[str, object], *, context: str)
         return "tx_port_sheet"
     if role == "rx_single_coil":
         return "rx_port_sheet"
+    if role == "tx_inner_single_coil":
+        return "tx_inner_port_sheet"
     if role == "tx_plate_stack":
         return "tx_plate_port_sheet"
     if role == "rx_plate_stack":

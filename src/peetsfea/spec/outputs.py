@@ -6,19 +6,54 @@ from typing import cast
 
 from peetsfea.types.manifest import OutputVariableSpec, OutputsSpec
 
-ACTIVE_RX_ONLY_OUTPUT_VARIABLE_NAMES = frozenset(
-    (
-        "Lrx_uH",
-        "Qrx_ratio",
-        "Rrx_ac_ohm",
-        "Xrx_ohm",
-        "Grx_S",
-        "Brx_S",
-        "Srx_self_mag_ratio",
-        "eta_rx_accept_ratio",
-    )
-)
-_ACTIVE_OUTPUT_MODE = "RxOnly"
+ACTIVE_OUTPUT_VARIABLE_NAMES_BY_MODE: dict[str, frozenset[str]] = {
+    "RxOnly": frozenset(
+        (
+            "Lrx_uH",
+            "Qrx_ratio",
+            "Rrx_ac_ohm",
+            "Xrx_ohm",
+            "Grx_S",
+            "Brx_S",
+            "Srx_self_mag_ratio",
+            "eta_rx_accept_ratio",
+        )
+    ),
+    "TxRx": frozenset(
+        (
+            "Ltx_uH",
+            "Lrx_uH",
+            "M_uH",
+            "k_ratio",
+            "Qtx_ratio",
+            "Qrx_ratio",
+            "FOM_ratio",
+            "Rtx_ac_ohm",
+            "Rrx_ac_ohm",
+            "Xtx_ohm",
+            "Xrx_ohm",
+            "M_over_Ltx_ratio",
+            "M_over_Lrx_ratio",
+            "Gtx_S",
+            "Btx_S",
+            "Grx_S",
+            "Brx_S",
+            "S11_mag_ratio",
+            "S21_mag_ratio",
+            "S21_phase_deg",
+            "S22_mag_ratio",
+            "eta_s21_power_ratio",
+            "eta_tx_accept_ratio",
+            "eta_rx_accept_ratio",
+            "eta_match_product_ratio",
+            "eta_s21_from_tx_accept_ratio",
+            "eta_s21_from_rx_accept_ratio",
+            "eta_s21_two_sided_norm_ratio",
+            "eta_fom_max_ratio",
+        )
+    ),
+}
+_ACTIVE_OUTPUT_MODES = frozenset(ACTIVE_OUTPUT_VARIABLE_NAMES_BY_MODE.keys())
 
 
 def _require_table(value: object, *, context: str) -> Mapping[str, object]:
@@ -54,8 +89,11 @@ def parse_outputs_table(raw_outputs: object, *, context: str) -> OutputsSpec:
         raise ValueError(f"{context} contains unsupported keys: {extra_keys}")
 
     mode = _require_non_empty_string(outputs["mode"], context=f"{context}.mode")
-    if mode != _ACTIVE_OUTPUT_MODE:
-        raise ValueError(f"{context}.mode must be '{_ACTIVE_OUTPUT_MODE}' (actual={mode!r})")
+    if mode not in _ACTIVE_OUTPUT_MODES:
+        raise ValueError(
+            f"{context}.mode must be one of {tuple(_ACTIVE_OUTPUT_MODES)} (actual={mode!r})"
+        )
+    active_output_variables = ACTIVE_OUTPUT_VARIABLE_NAMES_BY_MODE[mode]
 
     raw_variables = outputs["variables"]
     if not isinstance(raw_variables, list):
@@ -80,18 +118,18 @@ def parse_outputs_table(raw_outputs: object, *, context: str) -> OutputsSpec:
             raise ValueError(f"{context}.variables[{index}].name must match ^[A-Za-z][A-Za-z0-9_]*$")
         if name in seen_names:
             raise ValueError(f"{context}.variables[{index}].name must be unique: {name}")
-        if name not in ACTIVE_RX_ONLY_OUTPUT_VARIABLE_NAMES:
+        if name not in active_output_variables:
             raise ValueError(
-                f"{context}.variables[{index}].name is not supported for {_ACTIVE_OUTPUT_MODE} "
+                f"{context}.variables[{index}].name is not supported for {mode} "
                 f"(actual={name!r})"
             )
         expression = _require_non_empty_string(
             raw_variable["expression"],
             context=f"{context}.variables[{index}].expression",
         )
-        if "TX_TML" in expression:
+        if mode == "RxOnly" and "TX_TML" in expression:
             raise ValueError(
-                f"{context}.variables[{index}].expression references TX_TML but {_ACTIVE_OUTPUT_MODE} has no TX terminal"
+                f"{context}.variables[{index}].expression references TX_TML but RxOnly has no TX terminal"
             )
         seen_names.add(name)
         variables.append({"name": name, "expression": expression})
@@ -113,4 +151,4 @@ def parse_outputs_table(raw_outputs: object, *, context: str) -> OutputsSpec:
     )
 
 
-__all__ = ["ACTIVE_RX_ONLY_OUTPUT_VARIABLE_NAMES", "parse_outputs_table"]
+__all__ = ["ACTIVE_OUTPUT_VARIABLE_NAMES_BY_MODE", "parse_outputs_table"]

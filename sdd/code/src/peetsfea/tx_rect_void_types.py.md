@@ -27,9 +27,11 @@ tags:
 - module-level mutable state는 없다.
 - canonical profile registry `_PROFILE_BY_ROLE`만 이 파일이 소유한다.
 - `SingleCoilRangeSpec` owns sampled/public ranges accepted by the core TOML, including canonical `void_usage_ratio`.
+- `tx_inner_single_coil` owns explicit inner TX identity, `tx_inner_rect_void_coil` object id, XY plane, `tx_inner_region` placement owner, and `tx_inner_*` body prefixes.
 
 ## Invariants / fail-fast
 - role별 `object_id`, `plane`, `placement_owner_id`, body-name prefix는 stable contract여야 한다.
+- TX parallel rect-void roles share multilayer bus behavior, but only the explicit role names decide whether the caller may use them.
 - `SingleCoilProfile.max_turn_count`는 core public single-coil path와 internal type2 TX columns 재사용 path의 turn cap을 분리한다.
 - runtime/state type는 nullable fallback 없이 required field를 유지해야 한다.
 - `SingleCoilRangeSpec`는 public TOML sampled fields만 소유하며 legacy split/centered `void_*` range ownership을 포함하지 않는다.

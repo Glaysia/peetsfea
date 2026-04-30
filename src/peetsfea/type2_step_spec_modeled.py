@@ -14,6 +14,7 @@ from peetsfea.type2_step_spec_types import ModeledSingleCoilCommonSpec
 from peetsfea.type2_step_spec_types import ModeledSingleCoilRole
 from peetsfea.type2_step_spec_types import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledTxPlateStackSpec
+from peetsfea.type2_step_spec_types import ModeledTxInnerSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec_types import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec_types import modeled_object_id_for_role
@@ -439,7 +440,7 @@ def _parse_modeled_single_coil(
     seen_object_ids.add(object_id)
 
     role = _require_non_empty_str(table, "role", context)
-    if role not in ("tx_single_coil", "rx_single_coil"):
+    if role not in ("tx_single_coil", "tx_inner_single_coil", "rx_single_coil"):
         raise ValueError(f"unsupported modeled object role: {role}")
     modeled_role = cast(ModeledSingleCoilRole, role)
     profile = profile_for_modeled_role(modeled_role)
@@ -489,11 +490,17 @@ def _parse_modeled_single_coil(
         )
 
     placement_owner_id = placement_owner_id_for_role(modeled_role)
-    if placement_owner_id not in non_model_specs_by_id:
+    if placement_owner_id not in non_model_specs_by_id and modeled_role != "tx_inner_single_coil":
         raise ValueError(
             f"{context} requires non-model placement owner '{placement_owner_id}' for role {modeled_role}"
         )
-    owner_spec = non_model_specs_by_id[placement_owner_id]
+    if modeled_role == "tx_inner_single_coil":
+        if "tx_region" not in non_model_specs_by_id:
+            raise ValueError(f"{context} requires non-model source owner 'tx_region' for role {modeled_role}")
+        owner_spec = non_model_specs_by_id["tx_region"]
+    else:
+        assert placement_owner_id in non_model_specs_by_id
+        owner_spec = non_model_specs_by_id[placement_owner_id]
 
     outer_x_usage_ratio = _require_range(table, "outer_x_usage_ratio", context, expect_integer=False)
     outer_y_usage_ratio = _require_range(table, "outer_y_usage_ratio", context, expect_integer=False)
@@ -591,6 +598,44 @@ def _parse_modeled_single_coil(
             terminal_path=terminal_path,
             underlay_gap_mm=_require_underlay_gap_range(table, context=context),
             wall_parallel_stack_present=_require_wall_parallel_stack_present_range(table, context=context),
+        )
+    if modeled_role == "tx_inner_single_coil":
+        if "underlay_gap_mm" in table:
+            raise ValueError(f"{context}.underlay_gap_mm is unsupported for tx_inner_single_coil")
+        if "wall_parallel_stack_present" in table:
+            raise ValueError(f"{context}.wall_parallel_stack_present is unsupported for tx_inner_single_coil")
+        extra_keys = sorted(set(table.keys()) - rx_allowed_keys)
+        if extra_keys:
+            raise ValueError(
+                f"{context} contains unsupported keys for {modeled_role} "
+                f"(actual={extra_keys})"
+            )
+        underlay_candidates = _integer_range_candidates(underlay_repeat_count)
+        if underlay_candidates != (0,):
+            raise ValueError(
+                f"{context}.underlay_repeat_count must be fixed to [true, 0, 0, 1] for tx_inner_single_coil "
+                f"(actual={underlay_candidates})"
+            )
+        return ModeledTxInnerSingleCoilSpec(
+            object_id=object_id,
+            role="tx_inner_single_coil",
+            material=material,
+            model_state=True,
+            pcb_thickness_mm=pcb_thickness_mm,
+            copper_thickness_mm=copper_thickness_mm,
+            outer_x_usage_ratio=outer_x_usage_ratio,
+            outer_y_usage_ratio=outer_y_usage_ratio,
+            outer_x_mm=outer_x_mm,
+            outer_y_mm=outer_y_mm,
+            turn_count=turn_count,
+            layer_count=layer_count,
+            underlay_repeat_count=underlay_repeat_count,
+            layer_gap_mm=layer_gap_mm,
+            terminal_stub_length_mm=terminal_stub_length_mm,
+            void_usage_ratio=void_usage_ratio,
+            margin_ratio=margin_ratio,
+            metal_fill_factor=metal_fill_factor,
+            terminal_path=terminal_path,
         )
     if "underlay_gap_mm" in table:
         raise ValueError(f"{context}.underlay_gap_mm is unsupported for rx_single_coil")
@@ -969,6 +1014,13 @@ def parse_modeled_object(
     role = _require_non_empty_str(table, "role", context)
     if role in ("tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"):
         raise ValueError(f"{context}.role is unsupported in active RxOnly type2 mode (actual={role!r})")
+    if role == "tx_inner_single_coil":
+        return _parse_modeled_single_coil(
+            raw_object,
+            index=index,
+            seen_object_ids=seen_object_ids,
+            non_model_specs_by_id=non_model_specs_by_id,
+        )
     if role == "rx_plate_stack":
         return _parse_modeled_plate_stack(raw_object, index=index, seen_object_ids=seen_object_ids)
     if role == "rx_single_coil":

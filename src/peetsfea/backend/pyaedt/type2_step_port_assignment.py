@@ -12,6 +12,7 @@ from peetsfea.backend.pyaedt.type2_step_import_core import Type2ImportedLedger
 from peetsfea.types.manifest import EmPorts
 
 _COIL_ROLE_PAIR: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
+_TX_INNER_COIL_ROLE_PAIR: frozenset[str] = frozenset({"tx_inner_single_coil", "rx_single_coil"})
 _PLATE_STACK_ROLE_PAIR: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
 _MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset(
     {"tx_plate_stack", "rx_single_coil"}
@@ -20,7 +21,12 @@ _TX_RECT_VOID_COLUMNS_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset(
     {"tx_rect_void_columns", "rx_single_coil"}
 )
 _ALL_SUPPORTED_ROLES: frozenset[str] = frozenset(
-    {*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR, "tx_rect_void_columns"}
+    {
+        *_COIL_ROLE_PAIR,
+        *_TX_INNER_COIL_ROLE_PAIR,
+        *_PLATE_STACK_ROLE_PAIR,
+        "tx_rect_void_columns",
+    }
 )
 _TX_RECT_VOID_COLUMNS_PORT_SHEET_NAME = "tx_rect_void_columns_port_sheet"
 _GEOMETRY_TOLERANCE = 1e-6
@@ -503,6 +509,8 @@ def _required_port_sheet_name(entry: dict[str, object], *, context: str) -> str:
         expected_name = "tx_port_sheet"
     elif role == "rx_single_coil":
         expected_name = "rx_port_sheet"
+    elif role == "tx_inner_single_coil":
+        expected_name = "tx_inner_port_sheet"
     elif role == "tx_plate_stack":
         expected_name = "tx_plate_port_sheet"
     elif role == "rx_plate_stack":
@@ -511,7 +519,7 @@ def _required_port_sheet_name(entry: dict[str, object], *, context: str) -> str:
         expected_name = _TX_RECT_VOID_COLUMNS_PORT_SHEET_NAME
     else:
         raise ValueError(
-            f"{context}.role must be one of ['tx_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack', 'tx_rect_void_columns'] "
+            f"{context}.role must be one of ['tx_single_coil', 'tx_inner_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack', 'tx_rect_void_columns'] "
             f"(actual={role!r})"
         )
     if expected_name not in imported_object_names:
@@ -537,6 +545,18 @@ def _required_port_conductor_name(entry: dict[str, object], *, context: str) -> 
         if len(copper_names) != 1:
             raise ValueError(f"{context}.imported_object_names must contain exactly one copper body before port assignment")
         return copper_names[0]
+    if role == "tx_inner_single_coil":
+        copper_names = [
+            name
+            for name in imported_object_names
+            if name.startswith("tx_inner_copper_l") or name in ("tx_inner_copper_stack",)
+        ]
+        if len(copper_names) != 1:
+            raise ValueError(
+                f"{context}.imported_object_names must contain exactly one tx_inner conductor body "
+                f"(actual={imported_object_names})"
+            )
+        return copper_names[0]
     if role == "tx_plate_stack":
         expected_name = "tx_plate_copper"
     elif role == "rx_plate_stack":
@@ -545,7 +565,7 @@ def _required_port_conductor_name(entry: dict[str, object], *, context: str) -> 
         expected_name = "tx_rect_void_columns_copper"
     else:
         raise ValueError(
-            f"{context}.role must be one of ['tx_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack', 'tx_rect_void_columns'] "
+            f"{context}.role must be one of ['tx_single_coil', 'tx_inner_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack', 'tx_rect_void_columns'] "
             f"(actual={role!r})"
         )
     if expected_name not in imported_object_names:
@@ -868,6 +888,11 @@ def _resolve_supported_direct_port_assignment_entries(
             ("tx", entry_by_role["tx_single_coil"], "modeled_objects[tx_single_coil]"),
             ("rx", entry_by_role["rx_single_coil"], "modeled_objects[rx_single_coil]"),
         ]
+    if role_set == _TX_INNER_COIL_ROLE_PAIR:
+        return [
+            ("tx", entry_by_role["tx_inner_single_coil"], "modeled_objects[tx_inner_single_coil]"),
+            ("rx", entry_by_role["rx_single_coil"], "modeled_objects[rx_single_coil]"),
+        ]
     if role_set == _PLATE_STACK_ROLE_PAIR:
         return [
             ("tx", entry_by_role["tx_plate_stack"], "modeled_objects[tx_plate_stack]"),
@@ -886,6 +911,7 @@ def _resolve_supported_direct_port_assignment_entries(
     raise ValueError(
         "type2 setup-ready direct port assignment requires one exact supported tx/rx role pair: "
         "['tx_single_coil', 'rx_single_coil'] or ['tx_plate_stack', 'rx_plate_stack'] "
+        "or ['tx_inner_single_coil', 'rx_single_coil'] "
         "or ['tx_plate_stack', 'rx_single_coil'] or ['tx_rect_void_columns', 'rx_single_coil'] "
         f"(roles={modeled_roles})"
     )
@@ -895,7 +921,7 @@ def _required_supported_role_for_direct_port_assignment(entry: dict[str, object]
     role = require_non_empty_str(require_key(entry, key="role", context=context), context=f"{context}.role")
     if role not in _ALL_SUPPORTED_ROLES:
         raise ValueError(
-            f"{context}.role must be one of ['tx_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack', 'tx_rect_void_columns'] "
+            f"{context}.role must be one of ['tx_single_coil', 'tx_inner_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack', 'tx_rect_void_columns'] "
             f"(actual={role!r})"
         )
     return role

@@ -28,7 +28,7 @@ peetsfea는 TOML 명세에서 HFSS(AEDT) 설계를 결정적으로 생성하는 
 
 ## 이 프로젝트가 보장하려는 것
 - 활성 입력: type2 작성용 명세(`examples/type2_fixed.toml`)
-- 활성 프로세스: type2 STEP 작성과 headless HFSS 가져오기/setup-ready 검증 경로
+- 활성 프로세스: type2 STEP 작성, headless HFSS 가져오기/setup-ready 검증, 선택적 EM solve/report export 경로
 - legacy type1 경로는 명시적인 legacy entrypoint와 legacy 테스트/문서 아래에만 유지합니다.
 - 출력: HFSS 설계 출력과 스냅샷 데이터(`.aedt`, `.repro.toml`, `.dataset.toml`, `.source.toml`)
 - `repro.toml`: 실현된 설계의 정확한 replay artifact

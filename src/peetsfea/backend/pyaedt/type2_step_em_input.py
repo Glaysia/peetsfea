@@ -7,7 +7,12 @@ from peetsfea.backend.pyaedt.type2_step_import_ledger import require_key, requir
 from peetsfea.backend.pyaedt.type2_step_import_core import Type2ImportedLedger
 from peetsfea.types.manifest import EmPorts, GroupEndpointEntry
 
-_COIL_ROLE_PAIR: frozenset[str] = frozenset({"tx_single_coil", "rx_single_coil"})
+_RX_SINGLE_COIL_ROLE = "rx_single_coil"
+_TX_SINGLE_COIL_ROLE = "tx_single_coil"
+_TX_INNER_SINGLE_COIL_ROLE = "tx_inner_single_coil"
+_COIL_ROLE_PAIR: frozenset[str] = frozenset({_TX_SINGLE_COIL_ROLE, _RX_SINGLE_COIL_ROLE})
+_COIL_TX_INNER_ROLE_PAIR: frozenset[str] = frozenset({_TX_INNER_SINGLE_COIL_ROLE, _RX_SINGLE_COIL_ROLE})
+_SINGLE_COIL_TX_ROLES: frozenset[str] = frozenset({_TX_SINGLE_COIL_ROLE, _TX_INNER_SINGLE_COIL_ROLE})
 _PLATE_STACK_ROLE_PAIR: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
 _MIXED_TX_PLATE_STACK_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset(
     {"tx_plate_stack", "rx_single_coil"}
@@ -16,7 +21,7 @@ _TX_RECT_VOID_COLUMNS_RX_SINGLE_ROLE_PAIR: frozenset[str] = frozenset(
     {"tx_rect_void_columns", "rx_single_coil"}
 )
 _ALL_SUPPORTED_ROLES: frozenset[str] = frozenset(
-    {*_COIL_ROLE_PAIR, *_PLATE_STACK_ROLE_PAIR, "tx_rect_void_columns"}
+    {*_COIL_ROLE_PAIR, _TX_INNER_SINGLE_COIL_ROLE, *_PLATE_STACK_ROLE_PAIR, "tx_rect_void_columns"}
 )
 _TX_PLATE_COPPER_NAME = "tx_plate_copper"
 _RX_PLATE_COPPER_NAME = "rx_plate_copper"
@@ -76,8 +81,13 @@ def _resolve_supported_direct_em_input_entries(
     role_set = frozenset(modeled_roles)
     if role_set == _COIL_ROLE_PAIR:
         return [
-            ("tx", entry_by_role["tx_single_coil"], "modeled_objects[tx_single_coil]"),
-            ("rx", entry_by_role["rx_single_coil"], "modeled_objects[rx_single_coil]"),
+            ("tx", entry_by_role[_TX_SINGLE_COIL_ROLE], f"modeled_objects[{_TX_SINGLE_COIL_ROLE}]"),
+            ("rx", entry_by_role[_RX_SINGLE_COIL_ROLE], f"modeled_objects[{_RX_SINGLE_COIL_ROLE}]"),
+        ]
+    if role_set == _COIL_TX_INNER_ROLE_PAIR:
+        return [
+            ("tx", entry_by_role[_TX_INNER_SINGLE_COIL_ROLE], f"modeled_objects[{_TX_INNER_SINGLE_COIL_ROLE}]"),
+            ("rx", entry_by_role[_RX_SINGLE_COIL_ROLE], f"modeled_objects[{_RX_SINGLE_COIL_ROLE}]"),
         ]
     if role_set == _PLATE_STACK_ROLE_PAIR:
         return [
@@ -96,8 +106,9 @@ def _resolve_supported_direct_em_input_entries(
         ]
     raise ValueError(
         "type2 setup-ready EM input requires one exact supported tx/rx role pair: "
-        "['tx_single_coil', 'rx_single_coil'] or ['tx_plate_stack', 'rx_plate_stack'] "
-        "or ['tx_plate_stack', 'rx_single_coil'] or ['tx_rect_void_columns', 'rx_single_coil'] "
+        "['tx_single_coil', 'rx_single_coil'] or ['tx_inner_single_coil', 'rx_single_coil'] "
+        "or ['tx_plate_stack', 'rx_plate_stack'] or ['tx_plate_stack', 'rx_single_coil'] "
+        "or ['tx_rect_void_columns', 'rx_single_coil'] "
         f"(roles={modeled_roles})"
     )
 
@@ -113,10 +124,12 @@ def _imported_object_names(entry: dict[str, object], *, context: str) -> list[st
 
 
 def _pcb_names(imported_object_names: list[str], *, role: str) -> list[str]:
-    if role == "tx_single_coil":
+    if role == _TX_SINGLE_COIL_ROLE:
         return [name for name in imported_object_names if name.startswith("tx_pcb_l")]
-    if role == "rx_single_coil":
+    if role == _RX_SINGLE_COIL_ROLE:
         return [name for name in imported_object_names if name.startswith("rx_pcb_l")]
+    if role == _TX_INNER_SINGLE_COIL_ROLE:
+        return [name for name in imported_object_names if name.startswith("tx_inner_pcb_l")]
     if role == "tx_plate_stack":
         return [
             name
@@ -132,10 +145,16 @@ def _pcb_names(imported_object_names: list[str], *, role: str) -> list[str]:
 
 
 def _copper_names(imported_object_names: list[str], *, role: str) -> list[str]:
-    if role == "tx_single_coil":
+    if role == _TX_SINGLE_COIL_ROLE:
         return [name for name in imported_object_names if name.startswith("tx_copper_l") or name == "tx_copper_stack"]
-    if role == "rx_single_coil":
+    if role == _RX_SINGLE_COIL_ROLE:
         return [name for name in imported_object_names if name.startswith("rx_copper_l") or name == "rx_copper_stack"]
+    if role == _TX_INNER_SINGLE_COIL_ROLE:
+        return [
+            name
+            for name in imported_object_names
+            if name.startswith("tx_inner_copper_l") or name == "tx_inner_copper_stack"
+        ]
     if role == "tx_plate_stack":
         return [name for name in imported_object_names if _is_tx_plate_stack_copper_name(name)]
     if role == "tx_rect_void_columns":
@@ -233,7 +252,7 @@ def _endpoint_entry(
     group_kind: str
     start_label: str
     end_label: str
-    if role == "tx_single_coil":
+    if role in (_TX_SINGLE_COIL_ROLE, _TX_INNER_SINGLE_COIL_ROLE):
         group_kind = "tx_vertical"
         start_label = require_non_empty_str(
             require_key(terminal_metadata, key="outer_corner", context=f"{context}.terminal_metadata"),
@@ -243,7 +262,7 @@ def _endpoint_entry(
             require_key(terminal_metadata, key="inner_corner", context=f"{context}.terminal_metadata"),
             context=f"{context}.terminal_metadata.inner_corner",
         )
-    elif role == "rx_single_coil":
+    elif role == _RX_SINGLE_COIL_ROLE:
         group_kind = "rx_dd"
         start_label = require_non_empty_str(
             require_key(terminal_metadata, key="outer_corner", context=f"{context}.terminal_metadata"),
@@ -471,7 +490,7 @@ def build_type2_em_input(
     tx_copper_names = _copper_names(tx_imported_names, role=tx_role)
     rx_pcb_names = _pcb_names(rx_imported_names, role=rx_role)
     rx_copper_names = _copper_names(rx_imported_names, role=rx_role)
-    if tx_role in _COIL_ROLE_PAIR:
+    if tx_role in _SINGLE_COIL_TX_ROLES:
         if len(tx_pcb_names) < 1 or len(tx_copper_names) != 1:
             raise ValueError(f"{tx_context}.imported_object_names must contain one or more PCB names and exactly one copper name")
     elif tx_role == "tx_rect_void_columns":
@@ -530,7 +549,8 @@ def _required_supported_role_for_direct_em_input(entry: dict[str, object], *, co
     role = require_non_empty_str(require_key(entry, key="role", context=context), context=f"{context}.role")
     if role not in _ALL_SUPPORTED_ROLES:
         raise ValueError(
-            f"{context}.role must be one of ['tx_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack', 'tx_rect_void_columns'] "
+            f"{context}.role must be one of ['tx_single_coil', 'tx_inner_single_coil', 'rx_single_coil', "
+            f"'tx_plate_stack', 'rx_plate_stack', 'tx_rect_void_columns'] "
             f"(actual={role!r})"
         )
     return role

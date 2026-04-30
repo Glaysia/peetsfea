@@ -1,7 +1,7 @@
 ---
 title: type2_step_em_input.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-28 @ 00:00
+updated: 2026-04-29 @ 00:00
 tags:
   - em
   - pyaedt
@@ -16,11 +16,13 @@ tags:
 
 ## 역할
 - imported ledger와 setup-ready runtime state에서 EM pipeline input을 조립한다.
-- 0.2.24 SDD 기준 active setup mode는 RxOnly다.
+- 0.2.24 SDD 기준 active setup modes are `RxOnly` and `TxRx`.
+- `TxRx` payloads include `tx_inner_single_coil` and RX terminal paths so source/report setup can bind `TX_TML` and `RX_TML`.
+- `tx_inner_single_coil` is now resolved through deterministic imported-name families (`tx_inner_pcb_l*`, `tx_inner_copper_l*`), not generic TX roles.
 
 ## 입력 / 출력
-- 입력: imported ownership, RX port metadata, EM policy
-- 출력: `EmPipelineInput` equivalent runtime payload
+- 입력: imported ownership, TX inner/RX port metadata, EM policy
+- 출력: mode-specific `EmPipelineInput` equivalent runtime payload
 
 ## Canonical state
 - RxOnly payload contains RX conductor, RX port, RX source/report context only.
@@ -28,7 +30,8 @@ tags:
 - report variable surface is owned by [type2-em-report-contract](../../../../../architecture/type2-em-report-contract.md).
 
 ## Invariants / fail-fast
-- Missing RX conductor or RX port metadata fails immediately.
+- Missing RX/TX conductor or terminal metadata fails immediately with role context.
+- Unsupported role families or unexpected role pairings fail immediately with role names.
 - RxOnly must not synthesize TX conductors, TX ports, or TX output variables.
 - Imported guide/context bodies are not conductor mesh targets.
 

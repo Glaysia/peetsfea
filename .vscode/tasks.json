@@ -8,14 +8,24 @@
       "problemMatcher": []
     },
     {
-      "label": "run-type2-sample",
+      "label": "install-peetsfea-all",
       "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/python ../entry/sample.py",
+      "command": "uv pip install --python ${workspaceFolder}/.venv/bin/python -e \".[all]\"",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "run-type2-sample-with-step",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/python ../entry/sample.py --build-step",
       "options": {
         "cwd": "${workspaceFolder}/run"
       },
       "dependsOrder": "sequence",
       "dependsOn": [
+        "install-peetsfea-all",
         "clean-run"
       ],
       "problemMatcher": []

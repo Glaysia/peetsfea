@@ -7,6 +7,7 @@ import build123d as bd
 
 from peetsfea.tx_rect_void import BoxSpec
 from peetsfea.tx_rect_void import SingleCoilProfile
+from peetsfea.tx_rect_void import TX_PARALLEL_SINGLE_COIL_ROLES
 from peetsfea.type2_step_spec import Point3
 
 
@@ -24,7 +25,7 @@ def local_terminal_plane_points(
     end_label = f"{profile.copper_body_prefix}_bus_end"
     start_bus_matches = [box for box in transformed_boxes if box.label == start_label]
     end_bus_matches = [box for box in transformed_boxes if box.label == end_label]
-    if profile.role == "tx_single_coil" and start_bus_matches and end_bus_matches:
+    if profile.role in TX_PARALLEL_SINGLE_COIL_ROLES and start_bus_matches and end_bus_matches:
         if len(start_bus_matches) != 1 or len(end_bus_matches) != 1:
             raise RuntimeError(
                 "type2 tx multilayer terminal metadata requires exactly one start/end bus box "
@@ -56,8 +57,8 @@ def local_terminal_plane_points(
 
 
 def port_sheet_label_for_profile(profile: SingleCoilProfile) -> str:
-    if profile.role == "tx_single_coil":
-        return "tx_port_sheet"
+    if profile.role in TX_PARALLEL_SINGLE_COIL_ROLES:
+        return f"{profile.copper_body_prefix.removesuffix('_copper')}_port_sheet"
     if profile.role == "rx_single_coil":
         return "rx_port_sheet"
     raise RuntimeError(f"unsupported single-coil profile role for port sheet label: {profile.role}")
@@ -141,7 +142,7 @@ def port_sheet_owner_boxes(
     transformed_boxes: tuple[BoxSpec, ...],
     profile: SingleCoilProfile,
 ) -> tuple[BoxSpec, BoxSpec]:
-    if profile.role == "tx_single_coil":
+    if profile.role in TX_PARALLEL_SINGLE_COIL_ROLES:
         first_box, second_box = (
             synthetic_tx_bus_owner_box(
                 transformed_boxes=transformed_boxes,

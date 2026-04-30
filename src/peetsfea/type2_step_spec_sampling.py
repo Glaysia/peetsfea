@@ -63,8 +63,15 @@ def _is_canonical_tx_plate_stack_array_x_usage_ratio_range(range_spec: RangeSpec
 
 def resolve_modeled_underlay_repeat_count(spec: ModeledSingleCoilSpec, *, seed: int) -> int:
     candidates = _integer_range_candidates(spec.underlay_repeat_count)
-    if spec.role not in ("tx_single_coil", "rx_single_coil"):
+    if spec.role not in ("tx_single_coil", "tx_inner_single_coil", "rx_single_coil"):
         raise RuntimeError(f"unsupported modeled object role for underlay repeat resolution: {spec.role}")
+    if spec.role == "tx_inner_single_coil":
+        if candidates != (0,):
+            raise ValueError(
+                "tx_inner_single_coil.underlay_repeat_count must realize to fixed zero "
+                f"(actual={candidates})"
+            )
+        return 0
     if candidates != _UNDERLAY_REPEAT_COUNT_CANDIDATES and not (
         len(candidates) == 1 and candidates[0] in _UNDERLAY_REPEAT_COUNT_CANDIDATES
     ):

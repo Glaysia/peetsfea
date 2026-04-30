@@ -5,10 +5,10 @@
 # 별도 TX sweep TOML을 만들지 않는다.
 #
 # 현재 상태:
-# - RX single-coil은 parser/sampler/export/build 경로가 살아 있다.
+# - TX_inner_single_coil과 RX_single_coil가 parser/sampler/export/build 경로에서 활성이다.
 # - 이 파일은 sample_type2(..., make_step_on_sample=true|false) 양쪽에서 유효하다.
-# - build/setup-ready는 RX single-coil만 AEDT solve-ready 상태로 만든다.
-# - tx_region은 future TX placement guide context이고 active sampled owner가 아니다.
+# - build/setup-ready는 TX-Inner + RX 두 텀널을 지원하는 TxRx 모드를 대상으로 한다.
+# - tx_region은 TX_inner_single_coil 가이드를 위한 샘플링 소유자다.
 #
 # Range 형식:
 # - [true, start, end, count]는 integer 후보 range다.
@@ -28,12 +28,12 @@ solver_tool = "hfss"
 interchange_format = "step"
 
 [simulation]
-# HFSS radiation boundary margin for RxOnly setup-ready.
+# HFSS radiation boundary margin for TxRx setup-ready.
 radiation_margin_mm = 3500.0
 
 [outputs]
-# Active RxOnly setup creates only RX report variables.
-mode = "RxOnly"
+# Active TxRx setup creates TX inner + RX report variables.
+mode = "TxRx"
 report_name = "Output Variables Table1"
 solution_name = "Setup1 : LastAdaptive"
 primary_sweep = "Freq"
@@ -41,20 +41,64 @@ report_category = "Terminal Solution Data"
 plot_type = "Data Table"
 
 [[outputs.variables]]
+name = "Ltx_uH"
+expression = "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"
+
+[[outputs.variables]]
 name = "Lrx_uH"
 expression = "im(Zt(RX_TML,RX_TML))/2/pi/freq*1e6"
+
+[[outputs.variables]]
+name = "M_uH"
+expression = "abs(im(Zt(TX_TML,RX_TML))/2/pi/freq*1e6)"
+
+[[outputs.variables]]
+name = "k_ratio"
+expression = "M_uH/sqrt(Ltx_uH*Lrx_uH)"
+
+[[outputs.variables]]
+name = "Qtx_ratio"
+expression = "im(Zt(TX_TML,TX_TML))/re(Zt(TX_TML,TX_TML))"
 
 [[outputs.variables]]
 name = "Qrx_ratio"
 expression = "im(Zt(RX_TML,RX_TML))/re(Zt(RX_TML,RX_TML))"
 
 [[outputs.variables]]
+name = "FOM_ratio"
+expression = "k_ratio*sqrt(Qtx_ratio*Qrx_ratio)"
+
+[[outputs.variables]]
+name = "Rtx_ac_ohm"
+expression = "re(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
 name = "Rrx_ac_ohm"
 expression = "re(Zt(RX_TML,RX_TML))"
 
 [[outputs.variables]]
+name = "Xtx_ohm"
+expression = "im(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
 name = "Xrx_ohm"
 expression = "im(Zt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "M_over_Ltx_ratio"
+expression = "M_uH/Ltx_uH"
+
+[[outputs.variables]]
+name = "M_over_Lrx_ratio"
+expression = "M_uH/Lrx_uH"
+
+[[outputs.variables]]
+name = "Gtx_S"
+expression = "re(Yt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Btx_S"
+expression = "im(Yt(TX_TML,TX_TML))"
 
 [[outputs.variables]]
 name = "Grx_S"
@@ -65,12 +109,52 @@ name = "Brx_S"
 expression = "im(Yt(RX_TML,RX_TML))"
 
 [[outputs.variables]]
-name = "Srx_self_mag_ratio"
+name = "S11_mag_ratio"
+expression = "mag(S(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "S21_mag_ratio"
+expression = "mag(S(TX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S21_phase_deg"
+expression = "ang_deg_val(S(TX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S22_mag_ratio"
 expression = "mag(S(RX_TML,RX_TML))"
 
 [[outputs.variables]]
+name = "eta_s21_power_ratio"
+expression = "S21_mag_ratio*S21_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_tx_accept_ratio"
+expression = "1-S11_mag_ratio*S11_mag_ratio"
+
+[[outputs.variables]]
 name = "eta_rx_accept_ratio"
-expression = "1-Srx_self_mag_ratio*Srx_self_mag_ratio"
+expression = "1-S22_mag_ratio*S22_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_match_product_ratio"
+expression = "eta_tx_accept_ratio*eta_rx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_from_tx_accept_ratio"
+expression = "eta_s21_power_ratio/eta_tx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_from_rx_accept_ratio"
+expression = "eta_s21_power_ratio/eta_rx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_two_sided_norm_ratio"
+expression = "eta_s21_power_ratio/(eta_tx_accept_ratio*eta_rx_accept_ratio)"
+
+[[outputs.variables]]
+name = "eta_fom_max_ratio"
+expression = "(FOM_ratio*FOM_ratio)/((1+sqrt(1+FOM_ratio*FOM_ratio))*(1+sqrt(1+FOM_ratio*FOM_ratio)))"
 
 [coordinate_system]
 origin = [0.0, 0.0, 0.0]
@@ -123,7 +207,7 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "YZ"
-origin_xyz = [0.0, -921.0, 139.0]
+origin_xyz = [0.0, -921.0, 170.0]
 size_xyz = [9.0, 1842.0, 1055.0]
 
 [[non_model_objects]]
@@ -133,7 +217,7 @@ primitive = "box"
 present = true
 non_model = true
 material = "vacuum"
-plane = "YZ"
+plane = "XY"
 # Guide-only future TX placement context. RxOnly does not derive sampled TX owners from it.
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
@@ -158,12 +242,45 @@ non_model = true
 material = "vacuum"
 plane = "YZ"
 # RX single-coil placement owner다.
-origin_xyz = [0.0, -280.0, 139.0]
+origin_xyz = [0.0, -280.0, 170.0]
 size_xyz = [5.0, 560.0, 360.0]
 
 # ----------------------------------------------------------------------------
 # Modeled object registry
 # ----------------------------------------------------------------------------
+
+[[modeled_objects]]
+object_id = "tx_inner_rect_void_coil"
+role = "tx_inner_single_coil"
+material = "composite"
+model_state = true
+pcb_thickness_mm = 0.3
+copper_thickness_mm = 0.1
+[modeled_objects.outer_x_usage_ratio]
+# TX inner coil X size ratio against resolved tx_inner_region.
+range = [false, 0.2, 0.9, 15]
+[modeled_objects.outer_y_usage_ratio]
+# TX inner coil Y size ratio against resolved tx_inner_region.
+range = [false, 0.2, 0.9, 15]
+[modeled_objects.turn_count]
+range = [true, 1, 4, 4]
+[modeled_objects.layer_count]
+range = [true, 1, 8, 8]
+[modeled_objects.underlay_repeat_count]
+# TX inner coil v1 has no underlay/ferrite.
+range = [true, 0, 0, 1]
+[modeled_objects.layer_gap_mm]
+range = [false, 3, 3, 1]
+[modeled_objects.terminal_stub_length_mm]
+range = [false, 5, 5, 1]
+[modeled_objects.void_usage_ratio]
+range = [false, 0.2, 0.8, 25]
+[modeled_objects.margin_ratio]
+range = [false, 0.05, 0.05, 1]
+[modeled_objects.metal_fill_factor]
+range = [false, 0.2, 0.6, 15]
+[modeled_objects.terminal_path]
+value = "B_cw_to_b"
 
 [[modeled_objects]]
 object_id = "rx_rect_void_coil"
@@ -182,7 +299,7 @@ range = [false, 0.1, 0.6, 17]
 range = [false, 0.1, 0.6, 17]
 [modeled_objects.turn_count]
 # RX spiral turn count. RX single-coil은 현재 layer_count=1만 지원한다.
-range = [true, 2, 6, 5]
+range = [true, 1, 4, 4]
 [modeled_objects.layer_count]
 # RX multilayer는 아직 지원하지 않으므로 1로 고정한다.
 range = [true, 1, 1, 1]
@@ -197,7 +314,7 @@ range = [false, 2, 2, 1]
 range = [false, 5, 5, 1]
 [modeled_objects.void_usage_ratio]
 # centered void keepout의 X/Y 공통 size ratio다.
-range = [false, 0.2, 0.8, 10]
+range = [false, 0.2, 0.8, 25]
 [modeled_objects.margin_ratio]
 # void-to-outer minimum margin ratio.
 range = [false, 0.05, 0.05, 1]
@@ -207,3 +324,23 @@ range = [false, 0.2, 0.6, 15]
 [modeled_objects.terminal_path]
 # terminal path는 same-corner format '<outer>_<cw|ccw>_to_<inner>'를 사용한다.
 value = "A_cw_to_a"
+
+[constraints]
+
+[[constraints.rules]]
+id = "tx_inner_min_trace_width"
+kind = "comparison"
+message = "TX inner rect-void trace width must be >= 0.5 mm."
+enabled = true
+lhs = { func = "tx_inner_min_trace_width_mm(tx_inner_rect_void_coil)" }
+op = ">="
+rhs = { value = 0.5 }
+
+[[constraints.rules]]
+id = "rx_min_trace_width"
+kind = "comparison"
+message = "RX rect-void trace width must be >= 0.5 mm."
+enabled = true
+lhs = { func = "rx_min_trace_width_mm(rx_rect_void_coil)" }
+op = ">="
+rhs = { value = 0.5 }

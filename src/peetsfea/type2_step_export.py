@@ -4,6 +4,7 @@ import math
 import shutil
 import tempfile
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Literal, NoReturn, cast
 
@@ -11,6 +12,7 @@ import build123d as bd
 
 from peetsfea.tx_rect_void import BoxSpec
 from peetsfea.tx_rect_void import SingleCoilProfile
+from peetsfea.tx_rect_void import TX_PARALLEL_SINGLE_COIL_ROLES
 from peetsfea.tx_rect_void import build_tx_rect_void_box_specs
 from peetsfea.tx_rect_void import load_tx_rect_void_spec
 from peetsfea.tx_rect_void import modeled_body_bounds_from_boxes
@@ -33,25 +35,21 @@ from peetsfea.type2_non_model_scene import TxRegionActualStackSpaceTiltTransform
 from peetsfea.type2_non_model_scene import apply_tx_region_actual_stack_space_tilt_transform
 from peetsfea.type2_non_model_scene import build_non_model_scene_entry
 from peetsfea.type2_non_model_scene import build_non_model_scene_shapes
-from peetsfea.type2_non_model_scene import is_concrete_tx_region_actual_stack_space_object_id
-from peetsfea.type2_non_model_scene import parent_tx_region_actual_object_id_for_stack_space_object_id
 from peetsfea.type2_non_model_scene import require_non_model_object_spec
 from peetsfea.type2_non_model_scene import resolve_non_model_scene_specs
-from peetsfea.type2_non_model_scene import resolve_tx_region_actual_stack_space_tilt_enabled
-from peetsfea.type2_non_model_scene import resolve_tx_region_actual_stack_space_tilt_transform
 from peetsfea.type2_step_scene import build_modeled_scene_data
 from peetsfea.type2_step_scene import build_modeled_single_coil_scene_data
 from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
-from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
+from peetsfea.type2_step_spec import ModeledTxInnerSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
-from peetsfea.type2_step_spec import NonModelDerivedSpec
 from peetsfea.type2_step_spec import Point3
+from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 from peetsfea.type2_step_spec import placement_owner_id_for_role
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
@@ -379,7 +377,7 @@ def _single_solid_cut_shape(
 
 
 def _export_modeled_single_coil(
-    spec: ModeledTxSingleCoilSpec,
+    spec: ModeledTxSingleCoilSpec | ModeledTxInnerSingleCoilSpec,
     *,
     owner_spec: NonModelBoxSpec,
     source_toml_path: Path,
@@ -1109,6 +1107,22 @@ def _require_modeled_expected_body_contract(
                 if len(tx_wall_names) > 0
                 else []
             )
+        elif role == "tx_inner_single_coil":
+            if not isinstance(modeled_spec, ModeledTxInnerSingleCoilSpec):
+                raise ValueError(
+                    f"type2 modeled object spec registry must retain ModeledTxInnerSingleCoilSpec for {object_id} "
+                    f"(actual={type(modeled_spec).__name__})"
+                )
+            pcb_layer_positions = cast(
+                tuple[float, ...],
+                modeled_entry["canonical_coordinates"]["pcb_layer_z_positions_mm"],
+            )
+            expected_names = [f"tx_inner_pcb_l{index}" for index in range(len(pcb_layer_positions))]
+            if len(pcb_layer_positions) == 1:
+                expected_names.append("tx_inner_copper_l0")
+            else:
+                expected_names.append("tx_inner_copper_stack")
+            expected_groups = []
         elif role == "rx_single_coil":
             if not isinstance(modeled_spec, ModeledRxSingleCoilSpec):
                 raise ValueError(
@@ -1327,6 +1341,7 @@ def _widest_owner_bottom_face_diagonal_vertices(
 
 def _single_coil_placement_offset_from_local_bounds(
     *,
+    owner_object_id: str,
     owner_origin_xyz: tuple[float, float, float],
     owner_size_xyz: tuple[float, float, float],
     local_bounds_min_xyz: tuple[float, float, float],
@@ -1337,8 +1352,13 @@ def _single_coil_placement_offset_from_local_bounds(
     world_size_xyz = profile.world_size(local_size_xyz)
     world_min_delta = profile.world_delta(local_bounds_min_xyz)
     if plane == "XY":
+        target_world_min_x = (
+            owner_origin_xyz[0]
+            if owner_object_id == "tx_region"
+            else owner_origin_xyz[0] + (owner_size_xyz[0] - world_size_xyz[0]) / 2.0
+        )
         target_world_min_xyz = (
-            owner_origin_xyz[0],
+            target_world_min_x,
             owner_origin_xyz[1] + (owner_size_xyz[1] - world_size_xyz[1]) / 2.0,
             owner_origin_xyz[2] + owner_size_xyz[2] - world_size_xyz[2],
         )
@@ -1398,7 +1418,7 @@ def _local_port_sheet_owner_boxes(
 ) -> tuple[BoxSpec, BoxSpec]:
     role = profile.role
     copper_body_prefix = profile.copper_body_prefix
-    if role == "tx_single_coil":
+    if role in TX_PARALLEL_SINGLE_COIL_ROLES:
         return (
             _synthetic_tx_bus_owner_box(
                 local_boxes=local_boxes,
@@ -1424,11 +1444,18 @@ def _local_port_sheet_owner_boxes(
 
 def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path: Path, seed: int) -> None:
     spec = load_type2_step_spec(toml_path)
+    resolved_non_model_specs = resolve_non_model_scene_specs(
+        base_specs=spec.non_model_objects,
+        derived_specs=spec.non_model_derived_objects,
+        seed=seed,
+        modeled_specs=spec.modeled_objects,
+    )
     for modeled_spec in spec.modeled_objects:
         modeled_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == modeled_spec.object_id)
         terminal_metadata = cast(dict[str, object], modeled_entry["terminal_metadata"])
-        owner_spec = next(
-            non_model for non_model in spec.non_model_objects if non_model.object_id == placement_owner_id_for_role(modeled_spec.role)
+        owner_spec = require_non_model_object_spec(
+            resolved_non_model_specs,
+            object_id=placement_owner_id_for_role(modeled_spec.role),
         )
         if isinstance(modeled_spec, (ModeledTxPlateStackSpec, ModeledRxPlateStackSpec)):
             if isinstance(modeled_spec, ModeledTxPlateStackSpec) and resolve_modeled_tx_coil_count(modeled_spec, seed=seed) > 1:
@@ -1610,6 +1637,28 @@ def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path:
             )
         single_coil_spec = cast(ModeledSingleCoilSpec, modeled_spec)
         profile = profile_for_modeled_role(single_coil_spec.role)
+        owner_size_x, owner_size_y, owner_size_z = owner_spec.size_xyz
+        if profile.plane == "XY":
+            outer_x_owner_span_mm = owner_size_x
+            outer_y_owner_span_mm = owner_size_y
+        else:
+            outer_x_owner_span_mm = owner_size_y
+            outer_y_owner_span_mm = owner_size_z
+        single_coil_spec = replace(
+            single_coil_spec,
+            outer_x_mm=RangeSpec(
+                is_integer=False,
+                start=single_coil_spec.outer_x_usage_ratio.start * outer_x_owner_span_mm,
+                end=single_coil_spec.outer_x_usage_ratio.end * outer_x_owner_span_mm,
+                count=single_coil_spec.outer_x_usage_ratio.count,
+            ),
+            outer_y_mm=RangeSpec(
+                is_integer=False,
+                start=single_coil_spec.outer_y_usage_ratio.start * outer_y_owner_span_mm,
+                end=single_coil_spec.outer_y_usage_ratio.end * outer_y_owner_span_mm,
+                count=single_coil_spec.outer_y_usage_ratio.count,
+            ),
+        )
         with tempfile.TemporaryDirectory() as temp_dir:
             tx_rect_void_toml_path = Path(temp_dir) / f"{single_coil_spec.object_id}.toml"
             tx_rect_void_toml_path.write_text(render_tx_rect_void_toml(single_coil_spec), encoding="utf-8")
@@ -1618,6 +1667,7 @@ def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path:
         local_boxes = build_tx_rect_void_box_specs(realized, profile=profile)
         local_bounds_min_xyz, _local_bounds_max_xyz, local_size_xyz = modeled_body_bounds_from_boxes(local_boxes)
         frame_origin_xyz = _single_coil_placement_offset_from_local_bounds(
+            owner_object_id=owner_spec.object_id,
             owner_origin_xyz=owner_spec.origin_xyz,
             owner_size_xyz=owner_spec.size_xyz,
             local_bounds_min_xyz=local_bounds_min_xyz,
@@ -1632,7 +1682,10 @@ def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path:
             )
             for box in owner_boxes
         )
-        sheet_label = "tx_port_sheet" if single_coil_spec.role == "tx_single_coil" else "rx_port_sheet"
+        if single_coil_spec.role in TX_PARALLEL_SINGLE_COIL_ROLES:
+            sheet_label = f"{profile.copper_body_prefix.removesuffix('_copper')}_port_sheet"
+        else:
+            sheet_label = "rx_port_sheet"
         raw_sheet_vertices = cast(
             tuple[tuple[float, float, float], ...],
             terminal_metadata["port_sheet_vertices_xyz"],
@@ -1698,6 +1751,7 @@ def export_type2_step_artifacts(
         base_specs=spec.non_model_objects,
         derived_specs=spec.non_model_derived_objects,
         seed=seed,
+        modeled_specs=spec.modeled_objects,
     )
 
     modeled_scene_data: list[ModeledObjectSceneData] = []
@@ -1705,7 +1759,7 @@ def export_type2_step_artifacts(
     modeled_entries = []
     for modeled_spec in spec.modeled_objects:
         owner_spec = require_non_model_object_spec(
-            spec.non_model_objects,
+            resolved_non_model_specs,
             object_id=placement_owner_id_for_role(modeled_spec.role),
         )
         metadata_path = object_metadata_dir / f"{modeled_spec.object_id}.metadata.json"

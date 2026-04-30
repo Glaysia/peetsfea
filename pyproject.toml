@@ -6,20 +6,20 @@ readme = "README.md"
 requires-python = "==3.12"
 license = { text = "MIT" }
 dependencies = [
-  "pyaedt==0.25.1",
-  "pandas>=2.3.3",
-  "dearpygui>=2.1.1",
-  "cadquery>=2.6.1",
-  "sympy>=1.14.0",
-  "pyvista>=0.46.5",
-  "build123d>=0.10.0",
-  "ocp-vscode>=3.1.2",
-  "ocp-tessellate==3.1.2",
-  "ipykernel>=7.2.0",
 ]
 
 [project.optional-dependencies]
-dev = [
+all = [
+  "build123d>=0.10.0",
+  "cadquery>=2.6.1",
+  "dearpygui>=2.1.1",
+  "ipykernel>=7.2.0",
+  "ocp-tessellate==3.1.2",
+  "ocp-vscode>=3.1.2",
+  "pandas>=2.3.3",
+  "pyaedt==0.25.1",
+  "pyvista>=0.46.5",
+  "sympy>=1.14.0",
   "pytest",
   "pytest-cov",
   "ruff",

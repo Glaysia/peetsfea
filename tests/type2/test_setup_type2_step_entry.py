@@ -6,17 +6,8 @@ from typing import cast
 
 import pytest
 
+from peetsfea.spec.outputs import ACTIVE_OUTPUT_VARIABLE_NAMES_BY_MODE
 
-_RX_ONLY_OUTPUT_NAMES = (
-    "Lrx_uH",
-    "Qrx_ratio",
-    "Rrx_ac_ohm",
-    "Xrx_ohm",
-    "Grx_S",
-    "Brx_S",
-    "Srx_self_mag_ratio",
-    "eta_rx_accept_ratio",
-)
 _TX_MODELED_ROLES = {"tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"}
 _TX_SAMPLED_OWNER_IDS = {"tx_region_actual", "tx_region_actual_stack_space"}
 _FIXED_TX_REFERENCE_LINE_RATIOS = (0.35, 1.0, 0.65)
@@ -89,19 +80,26 @@ def _raw_output_variable_list(payload: dict[str, object]) -> list[object]:
     return raw_variables
 
 
-def _assert_rx_only_payload(payload: dict[str, object]) -> None:
+def _assert_txrx_payload(payload: dict[str, object]) -> None:
     outputs = cast(dict[str, object], payload["outputs"])
-    assert outputs["mode"] == "RxOnly"
+    assert outputs["mode"] == "TxRx"
 
     variables = _output_variables(payload)
     names = tuple(cast(str, variable["name"]) for variable in variables)
     expressions = tuple(cast(str, variable["expression"]) for variable in variables)
-    assert names == _RX_ONLY_OUTPUT_NAMES
-    assert all("TX_TML" not in expression for expression in expressions)
+    assert len(names) == len(ACTIVE_OUTPUT_VARIABLE_NAMES_BY_MODE["TxRx"])
+    assert frozenset(names) == ACTIVE_OUTPUT_VARIABLE_NAMES_BY_MODE["TxRx"]
+    assert any("TX_TML" in expression for expression in expressions)
+    assert any("RX_TML" in expression for expression in expressions)
 
-    modeled_roles = tuple(cast(str, table["role"]) for table in _tables(payload, "modeled_objects"))
-    assert modeled_roles == ("rx_single_coil",)
+    modeled_objects = _tables(payload, "modeled_objects")
+    modeled_roles = tuple(cast(str, table["role"]) for table in modeled_objects)
+    assert modeled_roles == ("tx_inner_single_coil", "rx_single_coil")
     assert not _TX_MODELED_ROLES.intersection(modeled_roles)
+    modeled_by_id = {cast(str, table["object_id"]): table for table in modeled_objects}
+    tx_inner = modeled_by_id["tx_inner_rect_void_coil"]
+    assert tx_inner["role"] == "tx_inner_single_coil"
+    assert cast(dict[str, object], tx_inner["underlay_repeat_count"])["range"] == [True, 0, 0, 1]
 
     non_model_ids = tuple(cast(str, table["id"]) for table in _tables(payload, "non_model_objects"))
     assert "tx_region" in non_model_ids
@@ -160,9 +158,9 @@ def _assert_rejects_tx_sampled_owner(payload: dict[str, object]) -> None:
 
 
 @pytest.mark.parametrize("example_name", ("type2_fixed.toml", "type2_sweep.toml"))
-def test_active_type2_examples_are_rx_only(example_name: str) -> None:
+def test_active_type2_examples_are_txrx(example_name: str) -> None:
     payload = _example_payload(example_name)
-    _assert_rx_only_payload(payload)
+    _assert_txrx_payload(payload)
     _assert_tx_reference_line_payload(payload, example_name=example_name)
 
 
