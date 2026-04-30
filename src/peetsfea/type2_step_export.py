@@ -35,25 +35,19 @@ from peetsfea.type2_non_model_scene import TxRegionActualStackSpaceTiltTransform
 from peetsfea.type2_non_model_scene import apply_tx_region_actual_stack_space_tilt_transform
 from peetsfea.type2_non_model_scene import build_non_model_scene_entry
 from peetsfea.type2_non_model_scene import build_non_model_scene_shapes
-from peetsfea.type2_non_model_scene import is_concrete_tx_region_actual_stack_space_object_id
-from peetsfea.type2_non_model_scene import parent_tx_region_actual_object_id_for_stack_space_object_id
 from peetsfea.type2_non_model_scene import require_non_model_object_spec
 from peetsfea.type2_non_model_scene import resolve_non_model_scene_specs
-from peetsfea.type2_non_model_scene import resolve_tx_region_actual_stack_space_tilt_enabled
-from peetsfea.type2_non_model_scene import resolve_tx_region_actual_stack_space_tilt_transform
 from peetsfea.type2_step_scene import build_modeled_scene_data
 from peetsfea.type2_step_scene import build_modeled_single_coil_scene_data
 from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec import ModeledTxInnerSingleCoilSpec
-from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
-from peetsfea.type2_step_spec import NonModelDerivedSpec
 from peetsfea.type2_step_spec import Point3
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
@@ -1454,6 +1448,7 @@ def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path:
         base_specs=spec.non_model_objects,
         derived_specs=spec.non_model_derived_objects,
         seed=seed,
+        modeled_specs=spec.modeled_objects,
     )
     for modeled_spec in spec.modeled_objects:
         modeled_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == modeled_spec.object_id)
@@ -1756,6 +1751,7 @@ def export_type2_step_artifacts(
         base_specs=spec.non_model_objects,
         derived_specs=spec.non_model_derived_objects,
         seed=seed,
+        modeled_specs=spec.modeled_objects,
     )
 
     modeled_scene_data: list[ModeledObjectSceneData] = []

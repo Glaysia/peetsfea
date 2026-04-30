@@ -174,6 +174,63 @@ def _vertex_triplets(raw_vertices: list[list[float]]) -> tuple[tuple[float, floa
     return tuple((vertex[0], vertex[1], vertex[2]) for vertex in raw_vertices)
 
 
+def _canonical_min_size(member: dict[str, object]) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    canonical_coordinates = cast(dict[str, object], member["canonical_coordinates"])
+    min_xyz = cast(tuple[float, float, float], canonical_coordinates["outer_bounds_min_xyz"])
+    size_xyz = cast(tuple[float, float, float], canonical_coordinates["outer_bounds_size_xyz"])
+    return min_xyz, size_xyz
+
+
+def _canonical_bounds(
+    entry: dict[str, object],
+) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
+    canonical_coordinates = cast(dict[str, object], entry["canonical_coordinates"])
+    min_xyz = cast(tuple[float, float, float], canonical_coordinates["outer_bounds_min_xyz"])
+    max_xyz = cast(tuple[float, float, float], canonical_coordinates["outer_bounds_max_xyz"])
+    size_xyz = cast(tuple[float, float, float], canonical_coordinates["outer_bounds_size_xyz"])
+    return min_xyz, max_xyz, size_xyz
+
+
+def _max_x_z(min_xyz: tuple[float, float, float], size_xyz: tuple[float, float, float]) -> tuple[float, float]:
+    return min_xyz[0] + size_xyz[0], min_xyz[2] + size_xyz[2]
+
+
+def _assert_tx_outer_region_prism_follows_semantic_edges(
+    *,
+    tx_outer_prism: dict[str, object],
+    tx_region_min_xyz: tuple[float, float, float],
+    tx_region_size_xyz: tuple[float, float, float],
+    tx_inner_min_xyz: tuple[float, float, float],
+    tx_inner_size_xyz: tuple[float, float, float],
+) -> None:
+    tx_region_max_x, tx_region_max_z = _max_x_z(tx_region_min_xyz, tx_region_size_xyz)
+    tx_inner_max_x, tx_inner_max_z = _max_x_z(tx_inner_min_xyz, tx_inner_size_xyz)
+    pcb_thickness_mm = cast(float, tx_outer_prism["pcb_thickness_mm"])
+    layer_gap_mm = cast(float, tx_outer_prism["layer_gap_mm"])
+    layer_count = cast(int, tx_outer_prism["layer_count"])
+    height_mm = (pcb_thickness_mm + layer_gap_mm) * layer_count
+
+    assert tx_outer_prism["height_mm"] == pytest.approx(height_mm)
+    assert tx_outer_prism["top_inner_start_xyz"] == pytest.approx(
+        (tx_inner_max_x, tx_inner_min_xyz[1], tx_inner_max_z)
+    )
+    assert tx_outer_prism["top_inner_end_xyz"] == pytest.approx(
+        (tx_inner_max_x, tx_inner_min_xyz[1] + tx_inner_size_xyz[1], tx_inner_max_z)
+    )
+    assert tx_outer_prism["top_outer_start_xyz"] == pytest.approx(
+        (tx_region_max_x, tx_region_min_xyz[1], tx_region_max_z)
+    )
+    assert tx_outer_prism["top_outer_end_xyz"] == pytest.approx(
+        (tx_region_max_x, tx_region_min_xyz[1] + tx_region_size_xyz[1], tx_region_max_z)
+    )
+    assert tx_outer_prism["bottom_inner_start_xyz"] == pytest.approx(
+        (tx_inner_max_x, tx_inner_min_xyz[1], tx_inner_max_z - height_mm)
+    )
+    assert tx_outer_prism["bottom_outer_start_xyz"] == pytest.approx(
+        (tx_region_max_x, tx_region_min_xyz[1], tx_region_max_z - height_mm)
+    )
+
+
 def _type2_spec_text(
     *,
     modeled_object_id: str = "rx_rect_void_coil",
@@ -1314,7 +1371,6 @@ def _assert_plate_stack_united_ferrite_family_contract(
     ferrite_label = f"{prefix}_stack_ferrite"
     air_label = f"{prefix}_stack_air"
     coil_label = f"{prefix}_pcb_coil"
-    wall_min_x = scene_shapes_by_label[wall_label].bounding_box().min.X
     wall_max_x = scene_shapes_by_label[wall_label].bounding_box().max.X
     pet_min_x = scene_shapes_by_label[pet_label].bounding_box().min.X
     pet_max_x = scene_shapes_by_label[pet_label].bounding_box().max.X
@@ -2608,6 +2664,8 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
         "environment",
         "tx_region",
         "tx_inner_region",
+        "tx_inner_actual_region",
+        "tx_outer_region",
         "rx_region_max",
     )
     member_objects = non_model_entry["member_objects"]
@@ -2620,6 +2678,7 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
         member for member in member_objects if cast(str, member["role"]) == "tx_region_actual_stack_space"
     ]
     assert tx_region_actual_stack_space_members == []
+    assert not any(member["object_id"] == "tx_outer_actual_region" for member in member_objects)
     assert tuple(entry["object_id"] for entry in ledger["modeled_objects"]) == (
         "tx_inner_rect_void_coil",
         "rx_rect_void_coil",
@@ -2640,6 +2699,9 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
     assert "tx_region" in scene_shapes_by_label
     assert "tx_inner_region" in scene_shapes_by_label
+    assert "tx_inner_actual_region" in scene_shapes_by_label
+    assert "tx_outer_region" in scene_shapes_by_label
+    assert "tx_outer_actual_region" not in scene_shapes_by_label
     assert "tx_region_actual" not in scene_shapes_by_label
     assert "tx_region_actual_stack_space" not in scene_shapes_by_label
 
@@ -2659,18 +2721,40 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
 
     non_model_entry = ledger["non_model_objects"][0]
     member_object_ids = tuple(cast(Sequence[str], non_model_entry["member_object_ids"]))
-    assert set(member_object_ids) == {"environment", "tx_region", "tx_inner_region", "rx_region_max"}
+    assert set(member_object_ids) == {
+        "environment",
+        "tx_region",
+        "tx_inner_region",
+        "tx_inner_actual_region",
+        "tx_outer_region",
+        "rx_region_max",
+    }
     assert member_object_ids.index("tx_region") < member_object_ids.index("tx_inner_region")
+    assert member_object_ids.index("tx_inner_region") < member_object_ids.index("tx_inner_actual_region")
+    assert member_object_ids.index("tx_inner_actual_region") < member_object_ids.index("tx_outer_region")
     member_objects = cast(Sequence[dict[str, object]], non_model_entry["member_objects"])
+    tx_region_member = next(member for member in member_objects if member["object_id"] == "tx_region")
     tx_inner_member = next(member for member in member_objects if member["object_id"] == "tx_inner_region")
+    tx_inner_actual_member = next(member for member in member_objects if member["object_id"] == "tx_inner_actual_region")
+    tx_outer_member = next(member for member in member_objects if member["object_id"] == "tx_outer_region")
     assert tx_inner_member["role"] == "tx_inner_region"
     assert tx_inner_member["model_state"] is False
     assert tx_inner_member["non_model"] is True
     assert tx_inner_member["material"] == "vacuum"
+    assert tx_inner_actual_member["role"] == "tx_inner_actual_region"
+    assert tx_inner_actual_member["model_state"] is False
+    assert tx_inner_actual_member["non_model"] is True
+    assert tx_inner_actual_member["material"] == "vacuum"
+    assert tx_outer_member["role"] == "tx_outer_region"
+    assert tx_outer_member["model_state"] is False
+    assert tx_outer_member["non_model"] is True
+    assert tx_outer_member["material"] == "vacuum"
+    assert not any(member["object_id"] == "tx_outer_actual_region" for member in member_objects)
 
     canonical_coordinates = cast(dict[str, object], tx_inner_member["canonical_coordinates"])
     assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx((0.0, -140.0, 0.0))
     assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx((56.0, 280.0, 58.5))
+    tx_inner_region_min_xyz, tx_inner_region_size_xyz = _canonical_min_size(tx_inner_member)
     reference_line = cast(dict[str, object], tx_inner_member["tx_reference_line"])
     assert reference_line["source_region_id"] == "tx_region"
     assert reference_line["x_ratio"] == pytest.approx(0.35)
@@ -2678,6 +2762,21 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert reference_line["z_ratio"] == pytest.approx(0.65)
     assert reference_line["line_start_xyz"] == pytest.approx((56.0, -140.0, 58.5))
     assert reference_line["line_end_xyz"] == pytest.approx((56.0, 140.0, 58.5))
+    tx_region_min_xyz, tx_region_size_xyz = _canonical_min_size(tx_region_member)
+    tx_outer_prism = cast(dict[str, object], tx_outer_member["tx_outer_region_prism"])
+    assert tx_outer_prism["source_region_id"] == "tx_region"
+    assert tx_outer_prism["inner_region_id"] == "tx_inner_region"
+    assert tx_outer_prism["stack_source_object_id"] == "tx_inner_rect_void_coil"
+    assert tx_outer_prism["pcb_thickness_mm"] == pytest.approx(0.3)
+    assert tx_outer_prism["layer_gap_mm"] == pytest.approx(2.0)
+    assert tx_outer_prism["layer_count"] == 2
+    _assert_tx_outer_region_prism_follows_semantic_edges(
+        tx_outer_prism=tx_outer_prism,
+        tx_region_min_xyz=tx_region_min_xyz,
+        tx_region_size_xyz=tx_region_size_xyz,
+        tx_inner_min_xyz=tx_inner_region_min_xyz,
+        tx_inner_size_xyz=tx_inner_region_size_xyz,
+    )
 
     assert tuple(entry["object_id"] for entry in ledger["modeled_objects"]) == (
         "tx_inner_rect_void_coil",
@@ -2689,8 +2788,22 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     tx_inner_model_canonical = cast(dict[str, object], tx_inner_entry["canonical_coordinates"])
     tx_inner_model_min_xyz = cast(tuple[float, float, float], tx_inner_model_canonical["outer_bounds_min_xyz"])
     tx_inner_model_size_xyz = cast(tuple[float, float, float], tx_inner_model_canonical["outer_bounds_size_xyz"])
-    tx_inner_region_min_xyz = cast(tuple[float, float, float], canonical_coordinates["outer_bounds_min_xyz"])
-    tx_inner_region_size_xyz = cast(tuple[float, float, float], canonical_coordinates["outer_bounds_size_xyz"])
+    tx_inner_actual_bounds = _canonical_bounds(tx_inner_actual_member)
+    tx_inner_model_bounds = _canonical_bounds(tx_inner_entry)
+    tx_inner_actual_min_xyz, tx_inner_actual_max_xyz, tx_inner_actual_size_xyz = tx_inner_actual_bounds
+    model_min_xyz, model_max_xyz, model_size_xyz = tx_inner_model_bounds
+    assert tx_inner_actual_min_xyz[0] == pytest.approx(14.0)
+    assert tx_inner_actual_min_xyz[1] == pytest.approx(-84.0)
+    assert tx_inner_actual_size_xyz[0] == pytest.approx(28.0)
+    assert tx_inner_actual_size_xyz[1] == pytest.approx(168.0)
+    assert tx_inner_actual_min_xyz[0] <= model_min_xyz[0]
+    assert model_max_xyz[0] <= tx_inner_actual_max_xyz[0]
+    assert tx_inner_actual_min_xyz[1] <= model_min_xyz[1]
+    assert model_max_xyz[1] <= tx_inner_actual_max_xyz[1]
+    assert tx_inner_actual_min_xyz[0] != pytest.approx(model_min_xyz[0])
+    assert tx_inner_actual_size_xyz[0] != pytest.approx(model_size_xyz[0])
+    assert tx_inner_actual_min_xyz[1] != pytest.approx(model_min_xyz[1])
+    assert tx_inner_actual_size_xyz[1] != pytest.approx(model_size_xyz[1])
     assert tx_inner_model_min_xyz[0] == pytest.approx(
         tx_inner_region_min_xyz[0] + (tx_inner_region_size_xyz[0] - tx_inner_model_size_xyz[0]) / 2.0
     )
@@ -2714,6 +2827,9 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
     assert "tx_region" in scene_shapes_by_label
     assert "tx_inner_region" in scene_shapes_by_label
+    assert "tx_inner_actual_region" in scene_shapes_by_label
+    assert "tx_outer_region" in scene_shapes_by_label
+    assert "tx_outer_actual_region" not in scene_shapes_by_label
     assert "tx_region_actual" not in scene_shapes_by_label
     assert "tx_region_actual_stack_space" not in scene_shapes_by_label
 
@@ -2747,6 +2863,109 @@ def test_export_type2_step_artifacts_centers_tx_inner_region_y_usage_ratio(
     assert reference_line["y_usage_ratio"] == pytest.approx(0.5)
     assert reference_line["line_start_xyz"] == pytest.approx((56.0, -70.0, 58.5))
     assert reference_line["line_end_xyz"] == pytest.approx((56.0, 70.0, 58.5))
+    tx_inner_min_xyz, tx_inner_size_xyz = _canonical_min_size(tx_inner_member)
+    tx_outer_member = next(member for member in member_objects if member["object_id"] == "tx_outer_region")
+    tx_outer_prism = cast(dict[str, object], tx_outer_member["tx_outer_region_prism"])
+    tx_inner_max_x, tx_inner_max_z = _max_x_z(tx_inner_min_xyz, tx_inner_size_xyz)
+    assert tx_outer_prism["top_inner_start_xyz"] == pytest.approx(
+        (tx_inner_max_x, tx_inner_min_xyz[1], tx_inner_max_z)
+    )
+    assert tx_outer_prism["top_inner_end_xyz"] == pytest.approx(
+        (tx_inner_max_x, tx_inner_min_xyz[1] + tx_inner_size_xyz[1], tx_inner_max_z)
+    )
+
+
+def test_export_type2_step_artifacts_resizes_tx_inner_actual_region_without_resizing_guide(
+    tmp_path: Path,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    source_text = (repo_root / "examples" / "type2_fixed.toml").read_text(encoding="utf-8")
+    changed_text = source_text.replace(
+        "[modeled_objects.outer_x_usage_ratio]\nrange = [false, 0.5, 0.5, 1]\n"
+        "[modeled_objects.outer_y_usage_ratio]\nrange = [false, 0.6, 0.6, 1]",
+        "[modeled_objects.outer_x_usage_ratio]\nrange = [false, 0.25, 0.25, 1]\n"
+        "[modeled_objects.outer_y_usage_ratio]\nrange = [false, 0.3, 0.3, 1]",
+        1,
+    )
+    assert changed_text != source_text
+    baseline_dir = tmp_path / "baseline"
+    changed_dir = tmp_path / "changed"
+    baseline_dir.mkdir()
+    changed_dir.mkdir()
+    baseline_toml = _write_spec(baseline_dir, source_text)
+    changed_toml = _write_spec(changed_dir, changed_text)
+
+    baseline_ledger = export_type2_step_artifacts(
+        toml_path=baseline_toml,
+        output_dir=tmp_path / "baseline_out",
+        ledger_path=tmp_path / "baseline_out" / "ledger.json",
+        seed=0,
+    )
+    changed_ledger = export_type2_step_artifacts(
+        toml_path=changed_toml,
+        output_dir=tmp_path / "changed_out",
+        ledger_path=tmp_path / "changed_out" / "ledger.json",
+        seed=0,
+    )
+
+    baseline_member_objects = cast(Sequence[dict[str, object]], baseline_ledger["non_model_objects"][0]["member_objects"])
+    changed_member_objects = cast(Sequence[dict[str, object]], changed_ledger["non_model_objects"][0]["member_objects"])
+    baseline_guide = next(member for member in baseline_member_objects if member["object_id"] == "tx_inner_region")
+    changed_guide = next(member for member in changed_member_objects if member["object_id"] == "tx_inner_region")
+    baseline_actual = next(member for member in baseline_member_objects if member["object_id"] == "tx_inner_actual_region")
+    changed_actual = next(member for member in changed_member_objects if member["object_id"] == "tx_inner_actual_region")
+
+    baseline_guide_min_xyz, baseline_guide_max_xyz, baseline_guide_size_xyz = _canonical_bounds(baseline_guide)
+    changed_guide_min_xyz, changed_guide_max_xyz, changed_guide_size_xyz = _canonical_bounds(changed_guide)
+    assert changed_guide_min_xyz == pytest.approx(baseline_guide_min_xyz)
+    assert changed_guide_max_xyz == pytest.approx(baseline_guide_max_xyz)
+    assert changed_guide_size_xyz == pytest.approx(baseline_guide_size_xyz)
+    baseline_actual_min_xyz, _baseline_actual_max_xyz, baseline_actual_size_xyz = _canonical_bounds(baseline_actual)
+    changed_actual_min_xyz, _changed_actual_max_xyz, changed_actual_size_xyz = _canonical_bounds(changed_actual)
+    assert changed_actual_size_xyz[0] == pytest.approx(baseline_actual_size_xyz[0] / 2.0)
+    assert changed_actual_size_xyz[1] == pytest.approx(baseline_actual_size_xyz[1] / 2.0)
+    assert changed_actual_size_xyz[2] == pytest.approx(baseline_actual_size_xyz[2])
+    assert changed_actual_min_xyz[0] != pytest.approx(baseline_actual_min_xyz[0])
+    assert changed_actual_min_xyz[1] != pytest.approx(baseline_actual_min_xyz[1])
+
+
+def test_export_type2_step_artifacts_derives_tx_outer_region_from_moved_tx_region(
+    tmp_path: Path,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    source_text = (repo_root / "examples" / "type2_fixed.toml").read_text(encoding="utf-8")
+    source_text = source_text.replace(
+        "origin_xyz = [0.0, -140.0, 0.0]\nsize_xyz = [160.0, 280.0, 90.0]",
+        "origin_xyz = [12.0, -120.0, 20.0]\nsize_xyz = [220.0, 240.0, 80.0]",
+        1,
+    )
+    source_toml = _write_spec(tmp_path, source_text)
+
+    ledger = export_type2_step_artifacts(
+        toml_path=source_toml,
+        output_dir=tmp_path / "out",
+        ledger_path=tmp_path / "out" / "ledger.json",
+        seed=0,
+    )
+
+    non_model_entry = ledger["non_model_objects"][0]
+    member_objects = cast(Sequence[dict[str, object]], non_model_entry["member_objects"])
+    tx_region_member = next(member for member in member_objects if member["object_id"] == "tx_region")
+    tx_inner_member = next(member for member in member_objects if member["object_id"] == "tx_inner_region")
+    tx_outer_member = next(member for member in member_objects if member["object_id"] == "tx_outer_region")
+    tx_region_min_xyz, tx_region_size_xyz = _canonical_min_size(tx_region_member)
+    tx_inner_min_xyz, tx_inner_size_xyz = _canonical_min_size(tx_inner_member)
+    tx_outer_prism = cast(dict[str, object], tx_outer_member["tx_outer_region_prism"])
+
+    assert tx_region_min_xyz == pytest.approx((12.0, -120.0, 20.0))
+    assert tx_region_size_xyz == pytest.approx((220.0, 240.0, 80.0))
+    _assert_tx_outer_region_prism_follows_semantic_edges(
+        tx_outer_prism=tx_outer_prism,
+        tx_region_min_xyz=tx_region_min_xyz,
+        tx_region_size_xyz=tx_region_size_xyz,
+        tx_inner_min_xyz=tx_inner_min_xyz,
+        tx_inner_size_xyz=tx_inner_size_xyz,
+    )
 
 
 @pytest.mark.parametrize(

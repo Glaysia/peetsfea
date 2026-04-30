@@ -54,6 +54,42 @@ class TxInnerRegionReferenceLineProvenance(TypedDict):
     line_end_xyz: Point3
 
 
+class TxOuterRegionPrismProvenance(TypedDict):
+    source_region_id: str
+    inner_region_id: str
+    stack_source_object_id: str
+    pcb_thickness_mm: float
+    layer_gap_mm: float
+    layer_count: int
+    height_mm: float
+    top_inner_start_xyz: Point3
+    top_inner_end_xyz: Point3
+    top_outer_start_xyz: Point3
+    top_outer_end_xyz: Point3
+    bottom_inner_start_xyz: Point3
+    bottom_inner_end_xyz: Point3
+    bottom_outer_start_xyz: Point3
+    bottom_outer_end_xyz: Point3
+
+
+class TxActualRegionBounds(TypedDict):
+    min_xyz: Point3
+    max_xyz: Point3
+    size_xyz: Point3
+
+
+class TxActualRegionProvenance(TypedDict):
+    source_guide_id: str
+    modeled_source_id: str
+    x_usage_ratio_owner_path: str
+    y_usage_ratio_owner_path: str
+    x_usage_ratio: float
+    y_usage_ratio: float
+    guide_bounds: TxActualRegionBounds
+    actual_region_bounds: TxActualRegionBounds
+    physical_modeled_body_bounds: TxActualRegionBounds
+
+
 class TxInnerRegionNonModelSceneMemberLedgerEntry(TypedDict):
     object_id: Literal["tx_inner_region"]
     role: Literal["tx_inner_region"]
@@ -63,6 +99,39 @@ class TxInnerRegionNonModelSceneMemberLedgerEntry(TypedDict):
     plane: Literal["XY", "YZ", "ZX"]
     non_model: Literal[True]
     tx_reference_line: TxInnerRegionReferenceLineProvenance
+
+
+class TxInnerActualRegionNonModelSceneMemberLedgerEntry(TypedDict):
+    object_id: Literal["tx_inner_actual_region"]
+    role: Literal["tx_inner_actual_region"]
+    material: str
+    model_state: Literal[False]
+    canonical_coordinates: CanonicalCoordinates
+    plane: Literal["XY", "YZ", "ZX"]
+    non_model: Literal[True]
+    tx_actual_region: TxActualRegionProvenance
+
+
+class TxOuterRegionNonModelSceneMemberLedgerEntry(TypedDict):
+    object_id: Literal["tx_outer_region"]
+    role: Literal["tx_outer_region"]
+    material: str
+    model_state: Literal[False]
+    canonical_coordinates: CanonicalCoordinates
+    plane: Literal["XY", "YZ", "ZX"]
+    non_model: Literal[True]
+    tx_outer_region_prism: TxOuterRegionPrismProvenance
+
+
+class TxOuterActualRegionNonModelSceneMemberLedgerEntry(TypedDict):
+    object_id: Literal["tx_outer_actual_region"]
+    role: Literal["tx_outer_actual_region"]
+    material: str
+    model_state: Literal[False]
+    canonical_coordinates: CanonicalCoordinates
+    plane: Literal["XY", "YZ", "ZX"]
+    non_model: Literal[True]
+    tx_actual_region: TxActualRegionProvenance
 
 
 class MateriallessNonModelSceneMemberLedgerEntry(TypedDict):
@@ -77,7 +146,10 @@ class MateriallessNonModelSceneMemberLedgerEntry(TypedDict):
 NonModelSceneMemberEntry = (
     NonModelSceneMemberLedgerEntry
     | MateriallessNonModelSceneMemberLedgerEntry
+    | TxInnerActualRegionNonModelSceneMemberLedgerEntry
     | TxInnerRegionNonModelSceneMemberLedgerEntry
+    | TxOuterActualRegionNonModelSceneMemberLedgerEntry
+    | TxOuterRegionNonModelSceneMemberLedgerEntry
 )
 
 
@@ -219,8 +291,14 @@ __all__ = [
     "Type2ImportEmPolicy",
     "Type2DirectModeledArtifact",
     "Type2StepLedger",
+    "TxActualRegionBounds",
+    "TxActualRegionProvenance",
+    "TxInnerActualRegionNonModelSceneMemberLedgerEntry",
     "TxInnerRegionNonModelSceneMemberLedgerEntry",
     "TxInnerRegionReferenceLineProvenance",
+    "TxOuterActualRegionNonModelSceneMemberLedgerEntry",
+    "TxOuterRegionNonModelSceneMemberLedgerEntry",
+    "TxOuterRegionPrismProvenance",
     "build_modeled_object_ledger_entry",
     "build_type2_step_ledger",
     "write_modeled_source_metadata",

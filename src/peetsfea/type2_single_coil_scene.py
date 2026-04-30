@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import math
 import tempfile
+from dataclasses import dataclass
 from dataclasses import replace
 from pathlib import Path
 from typing import Literal, cast
 
 import build123d as bd
+from build123d.topology import Shape
 
 from peetsfea.tx_rect_void import BoxSpec
+from peetsfea.tx_rect_void import RealizedSingleCoilRectVoid
 from peetsfea.tx_rect_void import SingleCoilProfile
 from peetsfea.tx_rect_void import TX_PARALLEL_SINGLE_COIL_ROLES
 from peetsfea.tx_rect_void import build_tx_rect_void_box_specs
@@ -38,7 +41,27 @@ from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
 from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
 
 
-def _canonical_from_shape(shape: bd.Shape) -> CanonicalCoordinates:
+@dataclass(frozen=True)
+class RealizedSingleCoilFitEnvelope:
+    realized: RealizedSingleCoilRectVoid
+    local_boxes: tuple[BoxSpec, ...]
+    transformed_boxes: tuple[BoxSpec, ...]
+    frame_origin_xyz: Point3
+    design_outer_bounds_min_xyz: Point3
+    design_outer_bounds_max_xyz: Point3
+    design_outer_bounds_size_xyz: Point3
+    physical_modeled_body_bounds_min_xyz: Point3
+    physical_modeled_body_bounds_max_xyz: Point3
+    physical_modeled_body_bounds_size_xyz: Point3
+    local_bounds_min_xyz: Point3
+    local_bounds_max_xyz: Point3
+    local_bounds_size_xyz: Point3
+    outer_bounds_min_xyz: Point3
+    outer_bounds_max_xyz: Point3
+    outer_bounds_size_xyz: Point3
+
+
+def _canonical_from_shape(shape: Shape) -> CanonicalCoordinates:
     bbox = shape.bounding_box()
     min_xyz = (bbox.min.X, bbox.min.Y, bbox.min.Z)
     max_xyz = (bbox.max.X, bbox.max.Y, bbox.max.Z)
@@ -114,6 +137,60 @@ def _single_coil_placement_offset_from_local_bounds(
     )
 
 
+def _single_coil_design_outer_bounds_from_realized(
+    *,
+    owner_spec: NonModelBoxSpec,
+    realized: RealizedSingleCoilRectVoid,
+    local_bounds_size_xyz: Point3,
+    profile: SingleCoilProfile,
+) -> tuple[Point3, Point3, Point3]:
+    if owner_spec.plane != profile.plane:
+        raise RuntimeError(
+            "type2 single-coil design outer bounds owner plane must match profile plane "
+            f"(owner={owner_spec.object_id}, owner_plane={owner_spec.plane}, profile_plane={profile.plane})"
+        )
+    local_design_outer_size_xyz = (
+        realized.outer_x_mm,
+        realized.outer_y_mm,
+        local_bounds_size_xyz[2],
+    )
+    world_design_outer_size_xyz = profile.world_size(local_design_outer_size_xyz)
+    owner_origin_x, owner_origin_y, owner_origin_z = owner_spec.origin_xyz
+    owner_size_x, owner_size_y, owner_size_z = owner_spec.size_xyz
+    if (
+        world_design_outer_size_xyz[0] > owner_size_x
+        or world_design_outer_size_xyz[1] > owner_size_y
+        or world_design_outer_size_xyz[2] > owner_size_z
+    ):
+        raise RuntimeError(
+            f"type2 {profile.role} realized design outer bounds must fit inside {owner_spec.object_id} "
+            f"(design_outer_size={world_design_outer_size_xyz}, owner_size={owner_spec.size_xyz})"
+        )
+    if profile.plane == "XY":
+        target_min_x = (
+            owner_origin_x
+            if owner_spec.object_id == "tx_region"
+            else owner_origin_x + (owner_size_x - world_design_outer_size_xyz[0]) / 2.0
+        )
+        world_design_outer_min_xyz = (
+            target_min_x,
+            owner_origin_y + (owner_size_y - world_design_outer_size_xyz[1]) / 2.0,
+            owner_origin_z + owner_size_z - world_design_outer_size_xyz[2],
+        )
+    else:
+        world_design_outer_min_xyz = (
+            owner_origin_x + owner_size_x - world_design_outer_size_xyz[0],
+            owner_origin_y + (owner_size_y - world_design_outer_size_xyz[1]) / 2.0,
+            owner_origin_z,
+        )
+    world_design_outer_max_xyz = (
+        world_design_outer_min_xyz[0] + world_design_outer_size_xyz[0],
+        world_design_outer_min_xyz[1] + world_design_outer_size_xyz[1],
+        world_design_outer_min_xyz[2] + world_design_outer_size_xyz[2],
+    )
+    return (world_design_outer_min_xyz, world_design_outer_max_xyz, world_design_outer_size_xyz)
+
+
 def _scaled_outer_mm_range_from_owner(
     *,
     ratio_range: RangeSpec,
@@ -160,6 +237,68 @@ def _spec_with_owner_scaled_outer_ranges(
             owner_span_mm=outer_y_owner_span_mm,
             owner_path=f"{owner_spec.object_id}.y",
         ),
+    )
+
+
+def resolve_modeled_single_coil_fit_envelope(
+    spec: ModeledSingleCoilSpec,
+    *,
+    owner_spec: NonModelBoxSpec,
+    seed: int,
+) -> RealizedSingleCoilFitEnvelope:
+    profile = profile_for_modeled_role(spec.role)
+    with tempfile.TemporaryDirectory(prefix="type2_tx_rect_void_") as temp_dir:
+        temp_toml_path = Path(temp_dir) / f"{spec.object_id}.toml"
+        owner_scaled_spec = _spec_with_owner_scaled_outer_ranges(
+            spec,
+            owner_spec=owner_spec,
+            profile=profile,
+        )
+        temp_toml_path.write_text(render_tx_rect_void_toml(owner_scaled_spec), encoding="utf-8")
+        tx_rect_void_spec = load_tx_rect_void_spec(temp_toml_path)
+        realized = realize_tx_rect_void_spec(tx_rect_void_spec, seed=seed, profile=profile)
+    local_boxes = build_tx_rect_void_box_specs(realized, profile=profile)
+    local_bounds_min_xyz, local_bounds_max_xyz, local_bounds_size_xyz = modeled_body_bounds_from_boxes(local_boxes)
+    placement_offset_xyz = _single_coil_placement_offset_from_local_bounds(
+        owner_spec=owner_spec,
+        local_bounds_min_xyz=local_bounds_min_xyz,
+        local_size_xyz=local_bounds_size_xyz,
+        profile=profile,
+    )
+    transformed_boxes = tuple(
+        _transform_modeled_box_spec(
+            box_spec,
+            profile=profile,
+            frame_origin_xyz=placement_offset_xyz,
+        )
+        for box_spec in local_boxes
+    )
+    world_bounds_min_xyz, world_bounds_max_xyz, world_bounds_size_xyz = modeled_body_bounds_from_boxes(transformed_boxes)
+    design_outer_bounds_min_xyz, design_outer_bounds_max_xyz, design_outer_bounds_size_xyz = (
+        _single_coil_design_outer_bounds_from_realized(
+            owner_spec=owner_spec,
+            realized=realized,
+            local_bounds_size_xyz=local_bounds_size_xyz,
+            profile=profile,
+        )
+    )
+    return RealizedSingleCoilFitEnvelope(
+        realized=realized,
+        local_boxes=local_boxes,
+        transformed_boxes=transformed_boxes,
+        frame_origin_xyz=placement_offset_xyz,
+        design_outer_bounds_min_xyz=design_outer_bounds_min_xyz,
+        design_outer_bounds_max_xyz=design_outer_bounds_max_xyz,
+        design_outer_bounds_size_xyz=design_outer_bounds_size_xyz,
+        physical_modeled_body_bounds_min_xyz=world_bounds_min_xyz,
+        physical_modeled_body_bounds_max_xyz=world_bounds_max_xyz,
+        physical_modeled_body_bounds_size_xyz=world_bounds_size_xyz,
+        local_bounds_min_xyz=local_bounds_min_xyz,
+        local_bounds_max_xyz=local_bounds_max_xyz,
+        local_bounds_size_xyz=local_bounds_size_xyz,
+        outer_bounds_min_xyz=design_outer_bounds_min_xyz,
+        outer_bounds_max_xyz=design_outer_bounds_max_xyz,
+        outer_bounds_size_xyz=design_outer_bounds_size_xyz,
     )
 
 
@@ -602,121 +741,91 @@ def build_modeled_single_coil_scene_data(
     *,
     owner_spec: NonModelBoxSpec,
     seed: int,
-) -> tuple[tuple[bd.Shape, ...], ModeledObjectSceneData]:
+) -> tuple[tuple[Shape, ...], ModeledObjectSceneData]:
     profile = profile_for_modeled_role(spec.role)
-    with tempfile.TemporaryDirectory(prefix="type2_tx_rect_void_") as temp_dir:
-        temp_toml_path = Path(temp_dir) / f"{spec.object_id}.toml"
-        owner_scaled_spec = _spec_with_owner_scaled_outer_ranges(
-            spec,
-            owner_spec=owner_spec,
-            profile=profile,
-        )
-        temp_toml_path.write_text(render_tx_rect_void_toml(owner_scaled_spec), encoding="utf-8")
-        tx_rect_void_spec = load_tx_rect_void_spec(temp_toml_path)
-        realized = realize_tx_rect_void_spec(tx_rect_void_spec, seed=seed, profile=profile)
-        local_boxes = build_tx_rect_void_box_specs(realized, profile=profile)
-        local_bounds_min_xyz, _local_bounds_max_xyz, local_size_xyz = modeled_body_bounds_from_boxes(local_boxes)
-        placement_offset_xyz = _single_coil_placement_offset_from_local_bounds(
-            owner_spec=owner_spec,
-            local_bounds_min_xyz=local_bounds_min_xyz,
-            local_size_xyz=local_size_xyz,
-            profile=profile,
-        )
-        transformed_boxes = tuple(
-            _transform_modeled_box_spec(
-                box_spec,
-                profile=profile,
-                frame_origin_xyz=placement_offset_xyz,
+    fit_envelope = resolve_modeled_single_coil_fit_envelope(spec, owner_spec=owner_spec, seed=seed)
+    centerline = build_tx_rect_void_centerline(fit_envelope.realized)
+    modeled_scene = build_tx_rect_void_step_scene(
+        fit_envelope.realized,
+        fit_envelope.transformed_boxes,
+        profile=profile,
+        frame_origin_xyz=fit_envelope.frame_origin_xyz,
+    )
+    existing_scene_children = tuple(modeled_scene.children)
+    port_sheet_label = port_sheet_label_for_profile(profile)
+    base_scene_children = tuple(shape for shape in existing_scene_children if shape.label != port_sheet_label)
+    if len(base_scene_children) == 0:
+        raise RuntimeError(f"type2 modeled scene must expose child bodies: {spec.object_id}")
+    underlay_repeat_count = resolve_modeled_underlay_repeat_count(spec, seed=seed)
+    if profile.role == "tx_single_coil":
+        if cast(Literal["XY", "YZ"], profile.plane) != "XY":
+            raise RuntimeError(f"type2 tx underlay requires XY modeled plane (actual={profile.plane})")
+        if not isinstance(spec, ModeledTxSingleCoilSpec):
+            raise RuntimeError(f"type2 tx underlay gap requires tx modeled spec (object_id={spec.object_id})")
+        if underlay_repeat_count > 0:
+            tx_underlay_descriptor = resolve_tx_underlay_placement_descriptor(
+                owner_spec=owner_spec,
+                modeled_min_z=fit_envelope.physical_modeled_body_bounds_min_xyz[2],
+                modeled_max_x=fit_envelope.physical_modeled_body_bounds_max_xyz[0],
+                repeat_count=underlay_repeat_count,
+                gap_mm=resolve_modeled_underlay_gap_mm(spec, seed=seed),
             )
-            for box_spec in local_boxes
-        )
-        centerline = build_tx_rect_void_centerline(realized)
-        modeled_scene = build_tx_rect_void_step_scene(
-            realized,
-            transformed_boxes,
-            profile=profile,
-            frame_origin_xyz=placement_offset_xyz,
-        )
-        existing_scene_children = tuple(modeled_scene.children)
-        port_sheet_label = port_sheet_label_for_profile(profile)
-        base_scene_children = tuple(shape for shape in existing_scene_children if shape.label != port_sheet_label)
-        if len(base_scene_children) == 0:
-            raise RuntimeError(f"type2 modeled scene must expose child bodies: {spec.object_id}")
-        modeled_bounds_min_xyz, modeled_bounds_max_xyz, _modeled_bounds_size_xyz = modeled_body_bounds_from_boxes(
-            transformed_boxes
-        )
-        underlay_repeat_count = resolve_modeled_underlay_repeat_count(spec, seed=seed)
-        if profile.role == "tx_single_coil":
-            if cast(Literal["XY", "YZ"], profile.plane) != "XY":
-                raise RuntimeError(f"type2 tx underlay requires XY modeled plane (actual={profile.plane})")
-            if not isinstance(spec, ModeledTxSingleCoilSpec):
-                raise RuntimeError(f"type2 tx underlay gap requires tx modeled spec (object_id={spec.object_id})")
-            if underlay_repeat_count > 0:
-                tx_underlay_descriptor = resolve_tx_underlay_placement_descriptor(
-                    owner_spec=owner_spec,
-                    modeled_min_z=modeled_bounds_min_xyz[2],
-                    modeled_max_x=modeled_bounds_max_xyz[0],
-                    repeat_count=underlay_repeat_count,
-                    gap_mm=resolve_modeled_underlay_gap_mm(spec, seed=seed),
-                )
-                # TX floor-parallel underlay is intentionally omitted from exported scene bodies.
-                # The placement descriptor still owns the wall-stack envelope below the coil.
-                wall_underlay_scene_children = (
-                    build_tx_wall_parallel_scene_shapes(tx_underlay_descriptor)
-                    if resolve_modeled_wall_parallel_stack_present(spec, seed=seed)
-                    else ()
-                )
-                underlay_scene_children = wall_underlay_scene_children
-            else:
-                underlay_scene_children = ()
-        elif profile.role == "tx_inner_single_coil":
-            if underlay_repeat_count != 0:
-                raise RuntimeError(
-                    "type2 tx_inner_single_coil underlay repeat count must remain zero "
-                    f"(actual={underlay_repeat_count})"
-                )
-            underlay_scene_children = ()
-        else:
-            underlay_scene_children = (
-                build_rx_underlay_scene_shapes(
-                    owner_spec=owner_spec,
-                    repeat_count=underlay_repeat_count,
-                    modeled_bounds_min_xyz=modeled_bounds_min_xyz,
-                    modeled_bounds_max_xyz=modeled_bounds_max_xyz,
-                )
-                if underlay_repeat_count > 0
+            # TX floor-parallel underlay is intentionally omitted from exported scene bodies.
+            # The placement descriptor still owns the wall-stack envelope below the coil.
+            wall_underlay_scene_children = (
+                build_tx_wall_parallel_scene_shapes(tx_underlay_descriptor)
+                if resolve_modeled_wall_parallel_stack_present(spec, seed=seed)
                 else ()
             )
-        expected_exported_body_names = tuple(
-            shape.label for shape in (base_scene_children + underlay_scene_children)
-        )
-        if len(set(expected_exported_body_names)) != len(expected_exported_body_names):
+            underlay_scene_children = wall_underlay_scene_children
+        else:
+            underlay_scene_children = ()
+    elif profile.role == "tx_inner_single_coil":
+        if underlay_repeat_count != 0:
             raise RuntimeError(
-                "type2 modeled scene body names must be unique "
-                f"(object_id={spec.object_id}, names={expected_exported_body_names})"
+                "type2 tx_inner_single_coil underlay repeat count must remain zero "
+                f"(actual={underlay_repeat_count})"
             )
-        modeled_role = cast(Literal["tx_single_coil", "tx_inner_single_coil", "rx_single_coil"], profile.role)
-        expected_exported_body_groups = single_coil_expected_ferrite_groups(
-            role=modeled_role,
-            underlay_scene_children=underlay_scene_children,
+        underlay_scene_children = ()
+    else:
+        underlay_scene_children = (
+            build_rx_underlay_scene_shapes(
+                owner_spec=owner_spec,
+                repeat_count=underlay_repeat_count,
+                modeled_bounds_min_xyz=fit_envelope.physical_modeled_body_bounds_min_xyz,
+                modeled_bounds_max_xyz=fit_envelope.physical_modeled_body_bounds_max_xyz,
+            )
+            if underlay_repeat_count > 0
+            else ()
         )
-        scene_children = single_coil_scene_children_with_grouped_ferrite_family(
-            base_scene_children=base_scene_children,
-            underlay_scene_children=underlay_scene_children,
-            expected_exported_body_groups=expected_exported_body_groups,
+    expected_exported_body_names = tuple(shape.label for shape in (base_scene_children + underlay_scene_children))
+    if len(set(expected_exported_body_names)) != len(expected_exported_body_names):
+        raise RuntimeError(
+            "type2 modeled scene body names must be unique "
+            f"(object_id={spec.object_id}, names={expected_exported_body_names})"
         )
-        canonical_coordinates = _modeled_canonical_coordinates(
-            transformed_boxes=transformed_boxes,
-            profile=profile,
-            frame_origin_xyz=placement_offset_xyz,
-        )
-        terminal_metadata = modeled_terminal_metadata(
-            terminal_path=realized.terminal_path,
-            centerline=centerline,
-            profile=profile,
-            frame_origin_xyz=placement_offset_xyz,
-            transformed_boxes=transformed_boxes,
-        )
+    modeled_role = cast(Literal["tx_single_coil", "tx_inner_single_coil", "rx_single_coil"], profile.role)
+    expected_exported_body_groups = single_coil_expected_ferrite_groups(
+        role=modeled_role,
+        underlay_scene_children=underlay_scene_children,
+    )
+    scene_children = single_coil_scene_children_with_grouped_ferrite_family(
+        base_scene_children=base_scene_children,
+        underlay_scene_children=underlay_scene_children,
+        expected_exported_body_groups=expected_exported_body_groups,
+    )
+    canonical_coordinates = _modeled_canonical_coordinates(
+        transformed_boxes=fit_envelope.transformed_boxes,
+        profile=profile,
+        frame_origin_xyz=fit_envelope.frame_origin_xyz,
+    )
+    terminal_metadata = modeled_terminal_metadata(
+        terminal_path=fit_envelope.realized.terminal_path,
+        centerline=centerline,
+        profile=profile,
+        frame_origin_xyz=fit_envelope.frame_origin_xyz,
+        transformed_boxes=fit_envelope.transformed_boxes,
+    )
 
     return (
         scene_children,
@@ -737,6 +846,8 @@ def build_modeled_single_coil_scene_data(
 
 
 __all__ = [
+    "RealizedSingleCoilFitEnvelope",
     "build_modeled_single_coil_scene_data",
+    "resolve_modeled_single_coil_fit_envelope",
     "single_coil_placement_offset",
 ]

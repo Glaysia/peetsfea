@@ -20,6 +20,8 @@ tags:
   are active.
 - 2026-04-29 TxRx plan treats `tx_inner_single_coil` as an active EM setup target when the output mode is `TxRx`.
 - Tests in this file should include TxRx-facing assertions that verify generated ledgers preserve `tx_inner_single_coil` and `rx_single_coil` modeled entries for downstream setup-ready consumption.
+- Tests cover the `tx_outer_region` non-modeled guide prism derived from semantic `tx_region` and `tx_inner_region` edges.
+- Tests cover `tx_inner_actual_region` as a non-modeled coil-fit envelope derived before modeled coil construction.
 
 ## Canonical state
 - RX exported body names/counts and terminal metadata remain deterministic.
@@ -31,6 +33,8 @@ tags:
 - `tx_reference_line` ratio inputs, including centered `y_usage_ratio`, are expected to derive a visible non-modeled
   `tx_inner_region` STEP and retained ledger member without activating TX
   modeled geometry.
+- `tx_outer_region` must follow source-region semantic `+X/+Z` edges and resolved TX inner stack height, without fixed example-coordinate coupling or clipping to `tx_region`.
+- `tx_inner_actual_region` must match the resolved TX inner design outer box for the same TOML and seed while leaving `tx_inner_region` as the larger guide region. The modeled material/body bbox must be contained in X/Y, not equal.
 
 ## Invariants / fail-fast
 - Exported body drift and generic names fail.
@@ -41,8 +45,11 @@ tags:
   explicitly reactivated.
 - TX reference-line X/Z ratios must be strictly inside `(0, 1)`, Y usage ratio must be in `(0, 1]`, and invalid ratios
   must fail before STEP construction.
+- TX outer guide assertions must compare against source-region ledger coordinates and provenance vertices, not sorted STEP vertices.
+- TX actual-region assertions must compare against shared sizing/placement math, not post-hoc imported geometry inference.
 
 ## Collaborators
 - [generate_type2_step.py](../../entry/generate_type2_step.py.md)
+- [0.2.24 Type2 TX Actual Regions](../../../plans/0.2.24-type2-tx-actual-regions.md)
 - [type2_step_export.py](../../src/peetsfea/type2_step_export.py.md)
 - [0.2.24-type2-tx-inner-region-non-model-step](../../../plans/0.2.24-type2-tx-inner-region-non-model-step.md)

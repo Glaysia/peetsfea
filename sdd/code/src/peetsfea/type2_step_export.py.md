@@ -1,7 +1,7 @@
 ---
 title: type2_step_export.py
 created: 2026-04-28 @ 00:00
-updated: 2026-04-28 @ 00:00
+updated: 2026-04-29 @ 00:00
 tags:
   - step-export
   - type2
@@ -18,6 +18,8 @@ tags:
 ## Responsibility
 - Build the active Type2 STEP scene and ledger artifacts for RxOnly EM export.
 - Allow geometry-only `tx_inner_single_coil` STEP bodies while keeping TX EM setup inactive.
+- Pass modeled specs into non-model guide resolution so `tx_outer_region` can derive stack height from active TX inner stack parameters.
+- Pass enough modeled sizing context into non-model scene resolution for `tx_inner_actual_region` to be resolved before modeled coil STEP construction.
 - Reject legacy/generic modeled TX export requests with actionable errors.
 
 ## Inputs / Outputs
@@ -27,6 +29,8 @@ tags:
 ## Canonical State
 - RX modeled body names, body groups, canonical coordinates, and terminal metadata are export-owned.
 - `tx_region`/`tx_inner_region` remain non-modeled guide context and placement owner context.
+- `tx_outer_region` remains non-modeled guide context and follows `tx_region`/`tx_inner_region` semantic edges.
+- `tx_inner_actual_region` remains non-modeled context and mirrors the TX inner coil-fit envelope without becoming the modeled coil placement owner.
 - `tx_inner_single_coil` may be exported as modeled geometry, but not consumed for active TX ports, sources, or reports.
 - `tx_inner_single_coil` geometry and terminal metadata validation use centered X/Y placement inside `tx_inner_region`.
 - Generic `tx_single_coil`, `tx_plate_stack`, and `tx_rect_void_columns` remain unsupported in active RxOnly export.
@@ -34,6 +38,8 @@ tags:
 ## Invariants / Fail-Fast
 - Generic modeled TX roles fail before scene construction.
 - `tx_inner_single_coil` placement uses the resolved `tx_inner_region`; later code must not reverse-calculate that region from imported geometry.
+- `tx_outer_region` height uses resolved modeled `tx_inner_single_coil` layer parameters and must not use literal example coordinates.
+- `tx_inner_actual_region` sizing must match modeled `tx_inner_single_coil` sizing for the same seed and must not create active EM setup changes.
 - STEP export must return `True`.
 - Scene body labels must be unique.
 - RX terminal metadata must match the geometry contract.
