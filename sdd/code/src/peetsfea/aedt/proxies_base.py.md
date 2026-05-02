@@ -1,7 +1,7 @@
 ---
 title: proxies_base.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-05-03 @ 00:00
 tags:
   - aedt
 ---
@@ -12,7 +12,8 @@ tags:
 - Path: `src/peetsfea/aedt/proxies_base.py`
 - Code note path: `sdd/code/src/peetsfea/aedt/proxies_base.py.md`
 - Status: planned split target; source file is not created yet.
-- Related plan: [0.2.22-src-entry-800-line-refactor-threshold](../../../../plans/0.2.22-src-entry-800-line-refactor-threshold.md)
+- Primary graph owner: [pyaedt-boundary](../../../../architecture/pyaedt-boundary.md)
+- Planning context: `sdd/plans/0.2.22-src-entry-800-line-refactor-threshold.md`
 
 ## 역할
 - proxy base class, require helpers, concrete proxy classes, wrap/unwrap primitive helpers를 담당한다.
@@ -33,8 +34,8 @@ tags:
 - `typing`, `collections.abc`
 
 ## 이 파일을 쓰는 곳
-- [proxies_ops.py](proxies_ops.py.md)
-- [proxies_inspect.py](proxies_inspect.py.md)
+- `sdd/code/src/peetsfea/aedt/proxies_ops.py.md`
+- `sdd/code/src/peetsfea/aedt/proxies_inspect.py.md`
 - facade `proxies.py`
 
 ## 관련 테스트
@@ -43,6 +44,7 @@ tags:
 ## 변경 시 주의점
 - proxy class definitions와 heavy AEDT operation helpers를 다시 한 file에 합치지 않는다.
 
-## Links
-- [proxies_ops.py](proxies_ops.py.md)
-- [proxies_inspect.py](proxies_inspect.py.md)
+## Graph links
+- Primary owner: [pyaedt-boundary](../../../../architecture/pyaedt-boundary.md)
+- Direct handoff: [proxies_ops.py](proxies_ops.py.md)
+- Direct handoff: [proxies_inspect.py](proxies_inspect.py.md)

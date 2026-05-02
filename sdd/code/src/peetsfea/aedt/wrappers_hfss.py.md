@@ -1,7 +1,7 @@
 ---
 title: wrappers_hfss.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-05-03 @ 00:00
 tags:
   - hfss-import
   - aedt
@@ -13,7 +13,8 @@ tags:
 - Path: `src/peetsfea/aedt/wrappers_hfss.py`
 - Code note path: `sdd/code/src/peetsfea/aedt/wrappers_hfss.py.md`
 - Status: planned split target; source file is not created yet.
-- Related plan: [0.2.22-src-entry-800-line-refactor-threshold](../../../../plans/0.2.22-src-entry-800-line-refactor-threshold.md)
+- Primary graph owner: [pyaedt-boundary](../../../../architecture/pyaedt-boundary.md)
+- Planning context: `sdd/plans/0.2.22-src-entry-800-line-refactor-threshold.md`
 
 ## 역할
 - heavy `Modeler3D` and `Hfss` wrapper methods, geometry/session mutation helpers를 담당한다.
@@ -30,8 +31,8 @@ tags:
 - wrapper methods must not hide raw-session failure through fallback behavior
 
 ## 직접 의존
-- [wrappers_common.py](wrappers_common.py.md)
-- [wrappers_modules.py](wrappers_modules.py.md)
+- `sdd/code/src/peetsfea/aedt/wrappers_common.py.md`
+- `sdd/code/src/peetsfea/aedt/wrappers_modules.py.md`
 
 ## 이 파일을 쓰는 곳
 - facade `wrappers.py`
@@ -43,6 +44,7 @@ tags:
 ## 변경 시 주의점
 - session mutation helpers와 lightweight module wrappers를 분리 유지한다.
 
-## Links
-- [wrappers_common.py](wrappers_common.py.md)
-- [wrappers_modules.py](wrappers_modules.py.md)
+## Graph links
+- Primary owner: [pyaedt-boundary](../../../../architecture/pyaedt-boundary.md)
+- Direct handoff: [wrappers_common.py](wrappers_common.py.md)
+- Direct handoff: [wrappers_modules.py](wrappers_modules.py.md)

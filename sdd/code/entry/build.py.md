@@ -1,7 +1,7 @@
 ---
 title: build.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-28 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - entry
   - build
@@ -13,6 +13,7 @@ tags:
 - Path: `entry/build.py`
 - Code note path: `sdd/code/entry/build.py.md`
 - Status: active
+- Primary graph owner: [type2-em-setup-boundary](../../architecture/type2-em-setup-boundary.md)
 
 ## 역할
 - sampled type2 design을 build/setup-ready runtime으로 넘기는 entrypoint다.
@@ -26,5 +27,7 @@ tags:
 - Solve failures raise immediately; setup-ready success is not treated as EM success.
 - Existing STEP ledgers are validated and reused; missing STEP ledgers are generated before AEDT setup.
 
-## Collaborators
-- [type2_runtime.py](../src/peetsfea/type2_runtime.py.md)
+## Graph links
+- Primary owner: [type2-em-setup-boundary](../../architecture/type2-em-setup-boundary.md)
+- Direct runtime handoff: [type2_runtime.py](../src/peetsfea/type2_runtime.py.md)
+- Representative verification: [test_build_type2_entry.py](../tests/type2/test_build_type2_entry.py.md)

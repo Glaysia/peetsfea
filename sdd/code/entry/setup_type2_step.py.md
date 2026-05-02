@@ -1,7 +1,7 @@
 ---
 title: setup_type2_step.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-05-03 @ 00:00
 tags:
   - hfss-import
   - em
@@ -12,7 +12,8 @@ tags:
 ## Source
 - Path: `entry/setup_type2_step.py`
 - Code note path: `sdd/code/entry/setup_type2_step.py.md`
-- Runtime module: [type2_step_setup_ready.py](../src/peetsfea/backend/pyaedt/type2_step_setup_ready.py.md)
+- Primary graph owner: [type2-em-setup-boundary](../../architecture/type2-em-setup-boundary.md)
+- Runtime module: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py.md`
 
 ## 역할
 - type2 export + full setup-ready runtime을 연결하는 CLI entrypoint다.
@@ -38,15 +39,21 @@ tags:
 - sampled/build notebook은 이 entry를 직접 호출하지 않는다.
 
 ## 직접 의존
-- [generate_type2_step.py](generate_type2_step.py.md)
-- [type2_step_setup_ready.py](../src/peetsfea/backend/pyaedt/type2_step_setup_ready.py.md)
+- `entry/generate_type2_step.py`
+- `src/peetsfea/backend/pyaedt/type2_step_setup_ready.py`
 
 ## 이 파일을 쓰는 곳
 - Human/agent opt-in type2 setup-ready validation entrypoint.
-- [build.py](build.py.md)가 사용하는 lower-level runtime surface.
+- `entry/build.py`가 사용하는 lower-level runtime surface.
 
 ## 관련 테스트
-- [test_setup_type2_step_entry.py](../tests/type2/test_setup_type2_step_entry.py.md)
+- `tests/type2/test_setup_type2_step_entry.py`
 
 ## 변경 시 주의점
-- import-only entry [import_type2_step.py](import_type2_step.py.md)를 full setup-ready owner로 다시 합치지 않는다.
+- import-only entry `entry/import_type2_step.py`를 full setup-ready owner로 다시 합치지 않는다.
+
+## Graph links
+- Primary owner: [type2-em-setup-boundary](../../architecture/type2-em-setup-boundary.md)
+- Direct handoff: [type2_step_setup_ready.py](../src/peetsfea/backend/pyaedt/type2_step_setup_ready.py.md)
+- Exceptional entry handoff: [generate_type2_step.py](generate_type2_step.py.md)
+- Representative verification: [test_setup_type2_step_entry.py](../tests/type2/test_setup_type2_step_entry.py.md)

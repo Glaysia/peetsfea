@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_partition.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-30 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - import
   - pyaedt
@@ -13,6 +13,7 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_import_partition.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_partition.py.md`
 - Status: active
+- Primary graph owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
 
 ## 역할
 - Imported object names를 modeled/non-modeled ownership buckets로 분류한다.
@@ -34,5 +35,6 @@ tags:
 - Unknown generic bodies fail immediately.
 - RxOnly partition may validate declared geometry-only TX inner bodies, but must not synthesize TX setup inputs.
 
-## Collaborators
-- [type2_step_import_core.py](type2_step_import_core.py.md)
+## Graph links
+- Primary owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
+- Direct handoff: [type2_step_import_core.py](type2_step_import_core.py.md)

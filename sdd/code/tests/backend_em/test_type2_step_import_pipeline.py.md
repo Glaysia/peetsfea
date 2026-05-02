@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_import_pipeline.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-28 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - test
   - import
@@ -13,6 +13,7 @@ tags:
 - Path: `tests/backend_em/test_type2_step_import_pipeline.py`
 - Code note path: `sdd/code/tests/backend_em/test_type2_step_import_pipeline.py.md`
 - Status: active
+- Primary graph owner: [type2-step-import-boundary](../../../architecture/type2-step-import-boundary.md)
 
 ## 역할
 - type2 STEP import-only pipeline behavior를 검증한다.
@@ -33,6 +34,7 @@ tags:
 - `tx_outer_single_coil` without `outer_tilt_metadata` must fail strict X-overrun check.
 - `tx_outer_single_coil` malformed or negative `outer_tilt_metadata` must fail parsing/validation with no fallback.
 
-## Collaborators
-- [type2_step_import_pipeline.py](../../src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py.md)
-- [type2_step_import_core.py](../../src/peetsfea/backend/pyaedt/type2_step_import_core.py.md)
+## Graph links
+- Primary owner: [type2-step-import-boundary](../../../architecture/type2-step-import-boundary.md)
+- Direct verification: [type2_step_import_pipeline.py](../../src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py.md)
+- Direct verification: [type2_step_import_core.py](../../src/peetsfea/backend/pyaedt/type2_step_import_core.py.md)

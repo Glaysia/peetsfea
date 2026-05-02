@@ -1,7 +1,7 @@
 ---
 title: type2_step_setup_ready.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-30 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - em
   - pyaedt
@@ -13,6 +13,7 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_setup_ready.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py.md`
 - Status: active
+- Primary graph owner: [type2-em-setup-boundary](../../../../../architecture/type2-em-setup-boundary.md)
 
 ## 역할
 - STEP import 후 setup-ready HFSS project를 만든다.
@@ -28,7 +29,7 @@ tags:
 - `RxOnly` branch accepts only a single `rx_single_coil` modeled object.
 - `RxOnly` branch accepts exactly one active `rx_single_coil` modeled object and may carry optional geometry-only TX inner/outer entries that are filtered before active EM setup.
 - `TxRx` branch uses exact `tx_inner_single_coil` + `rx_single_coil` modeled objects for downstream passes; an optional `tx_outer_single_coil` may be imported and styled but is excluded from mesh, port assignment, EM input, sources, and reports.
-- Report variables are owned by [type2-em-report-contract](../../../../../architecture/type2-em-report-contract.md).
+- Report variables are owned by `sdd/architecture/type2-em-report-contract.md`.
 
 ## Invariants / fail-fast
 - PyAEDT false returns fail immediately.
@@ -41,7 +42,11 @@ tags:
 - TxRx report setup filters to the active TxRx variable contract and requires every active TxRx variable to be present.
 - Solve-enabled setup must not release the desktop before analysis/report export completes.
 
-## Collaborators
-- [type2_step_em_input.py](type2_step_em_input.py.md)
-- [type2_step_port_assignment.py](type2_step_port_assignment.py.md)
-- [type2_step_em_solve.py](type2_step_em_solve.py.md)
+## Graph links
+- Primary owner: [type2-em-setup-boundary](../../../../../architecture/type2-em-setup-boundary.md)
+- Exceptional import handoff: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
+- Direct handoff: [type2_step_em_input.py](type2_step_em_input.py.md)
+- Direct handoff: [type2_step_port_assignment.py](type2_step_port_assignment.py.md)
+- Direct handoff: [type2_step_em_solve.py](type2_step_em_solve.py.md)
+- Exceptional contract: [type2-em-report-contract](../../../../../architecture/type2-em-report-contract.md)
+- Representative verification: [test_type2_step_setup_ready.py](../../../../tests/backend_em/test_type2_step_setup_ready.py.md)

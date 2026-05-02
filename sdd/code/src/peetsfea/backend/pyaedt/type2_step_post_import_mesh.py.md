@@ -1,7 +1,7 @@
 ---
 title: type2_step_post_import_mesh.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-29 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - em
   - pyaedt
@@ -13,6 +13,7 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_post_import_mesh.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_post_import_mesh.py.md`
 - Status: active
+- Primary graph owner: [type2-em-setup-boundary](../../../../../architecture/type2-em-setup-boundary.md)
 
 ## 역할
 - STEP import 후 setup-ready mesh operation을 적용한다.
@@ -34,6 +35,6 @@ tags:
 - PyAEDT mesh assignment false returns fail immediately.
 - RxOnly must not include TX bodies in the mesh payload.
 
-## Collaborators
-- [type2_step_em_input.py](type2_step_em_input.py.md)
-- [type2-step-to-em-validate-pipeline](../../../../../architecture/type2-step-to-em-validate-pipeline.md)
+## Graph links
+- Primary owner: [type2-em-setup-boundary](../../../../../architecture/type2-em-setup-boundary.md)
+- Direct handoff: [type2_step_em_input.py](type2_step_em_input.py.md)

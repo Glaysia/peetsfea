@@ -1,7 +1,7 @@
 ---
 title: type2_modeled_import_adapter.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-30 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - import
   - pyaedt
@@ -13,6 +13,7 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_modeled_import_adapter.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_modeled_import_adapter.py.md`
 - Status: active
+- Primary graph owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
 
 ## 역할
 - Export ledger modeled metadata를 import/setup-ready friendly structure로 변환한다.
@@ -35,6 +36,7 @@ tags:
 - Unsupported modeled roles fail before imported ledger construction; the supported role literal list includes `tx_outer_single_coil`.
 - tx_outer canonical tilt metadata is validated as canonical scalar metadata, not silently dropped; unsupported shapes/negative values fail fast at parse time.
 
-## Collaborators
-- [type2_step_import_core.py](type2_step_import_core.py.md)
-- [type2-em-report-contract](../../../../../architecture/type2-em-report-contract.md)
+## Graph links
+- Primary owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
+- Direct handoff: [type2_step_import_core.py](type2_step_import_core.py.md)
+- Exceptional contract: [type2-em-report-contract](../../../../../architecture/type2-em-report-contract.md)

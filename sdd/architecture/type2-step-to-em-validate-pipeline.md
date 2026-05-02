@@ -1,7 +1,7 @@
 ---
 title: Type2 STEP to EM Validate Pipeline
 created: 2026-04-17 @ 09:09
-updated: 2026-04-28 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - step-export
   - sdd
@@ -12,6 +12,12 @@ tags:
 이 문서는 current type2 runtime split과 RxOnly setup-ready 계약을 설명한다.
 TX 형상은 재설계 예정이므로 현 SDD에서 shape contract를 제거하고, `tx_region`만 future placement guide로 보존한다.
 
+## Graph Owners
+- Raw AEDT/PyAEDT wrapper and session access: [pyaedt-boundary](pyaedt-boundary.md)
+- Import-only STEP-to-HFSS handoff: [type2-step-import-boundary](type2-step-import-boundary.md)
+- Setup-ready and solve-ready HFSS handoff: [type2-em-setup-boundary](type2-em-setup-boundary.md)
+- EM report variable contract: [type2-em-report-contract](type2-em-report-contract.md)
+
 ## Current Split
 - sampled/build owner:
   - entry: `entry/sample.py`
@@ -19,9 +25,11 @@ TX 형상은 재설계 예정이므로 현 SDD에서 shape contract를 제거하
 - import-only owner:
   - entry: [import_type2_step.py](../code/entry/import_type2_step.py.md)
   - runtime: [type2_step_import_pipeline.py](../code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py.md)
+  - graph owner: [type2-step-import-boundary](type2-step-import-boundary.md)
 - setup-ready owner:
   - entry: [setup_type2_step.py](../code/entry/setup_type2_step.py.md)
   - runtime: [type2_step_setup_ready.py](../code/src/peetsfea/backend/pyaedt/type2_step_setup_ready.py.md)
+  - graph owner: [type2-em-setup-boundary](type2-em-setup-boundary.md)
 - active setup-ready owner는 RxOnly mode에서 RX port/report만 만든다.
 - import-only helper는 geometry inspection / import-only surface다. active default build owner가 아니다.
 - notebook `hfss_sampled.ipynb`는 sampled/build output artifact를 읽는 thin manual consumer다.
@@ -83,12 +91,11 @@ TX 형상은 재설계 예정이므로 현 SDD에서 shape contract를 제거하
 - RxOnly mode must not create TX ports or TX output variables.
 - generic `SOLID*` drift in modeled RX conductor import is an export-side contract failure.
 
-## Supporting Modules
-- import body assembly: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py.md`
-- post-import mesh/setup: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_post_import_mesh.py.md`
-- EM input assembly: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_em_input.py.md`
-- explicit port assignment: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_port_assignment.py.md`
-- report variables: [type2-em-report-contract](type2-em-report-contract.md)
+## Supporting Boundaries
+- Import body assembly and imported ledger: [type2-step-import-boundary](type2-step-import-boundary.md)
+- Post-import mesh, EM input, port assignment, solve/report export: [type2-em-setup-boundary](type2-em-setup-boundary.md)
+- Raw PyAEDT wrapper/protocol surface: [pyaedt-boundary](pyaedt-boundary.md)
+- Report variables: [type2-em-report-contract](type2-em-report-contract.md)
 
 ## Related
 - Diagram: [type2-step-to-em-validate-flow](../diagrams/type2-step-to-em-validate-flow.md)

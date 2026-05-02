@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_setup_ready.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-29 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - test
   - em
@@ -13,6 +13,7 @@ tags:
 - Path: `tests/backend_em/test_type2_step_setup_ready.py`
 - Code note path: `sdd/code/tests/backend_em/test_type2_step_setup_ready.py.md`
 - Status: active
+- Primary graph owner: [type2-em-setup-boundary](../../../architecture/type2-em-setup-boundary.md)
 
 ## 역할
 - setup-ready runtime의 import, mesh, boundary, RX port, RX report assembly behavior를 검증한다.
@@ -27,13 +28,14 @@ tags:
 - 포트 할당 단위 테스트에 `tx_inner_single_coil` paired mode (`tx_inner_single_coil` + `rx_single_coil`)를 추가로 검증한다.
 - The active full setup-ready happy path uses a single `rx_single_coil` modeled entry.
 - TxRx full setup-ready happy path는 `tx_outer_single_coil`이 함께 존재해도 최종 `ports`, `mesh`, `analysis` 입력 계산은 기하 전용 tx_outer를 필터링한 결과만 반영해야 한다.
-- Future two-terminal report names are documented in [type2-em-report-contract](../../../architecture/type2-em-report-contract.md) but are not active RxOnly assertions.
+- Future two-terminal report names are documented in `sdd/architecture/type2-em-report-contract.md` but are not active RxOnly assertions.
 - Solve/export tests use the same active output-variable report created by setup-ready generation.
 
 ## Invariants / fail-fast
 - PyAEDT false-return handling remains fail-fast.
 - Missing RX/TX terminal metadata or unsupported role pairings must fail with context.
 
-## Collaborators
-- [type2_step_setup_ready.py](../../src/peetsfea/backend/pyaedt/type2_step_setup_ready.py.md)
-- [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)
+## Graph links
+- Primary owner: [type2-em-setup-boundary](../../../architecture/type2-em-setup-boundary.md)
+- Direct verification: [type2_step_setup_ready.py](../../src/peetsfea/backend/pyaedt/type2_step_setup_ready.py.md)
+- Exceptional contract: [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)

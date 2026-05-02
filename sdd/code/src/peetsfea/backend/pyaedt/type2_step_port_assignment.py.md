@@ -1,7 +1,7 @@
 ---
 title: type2_step_port_assignment.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-29 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - em
   - pyaedt
@@ -13,6 +13,7 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_port_assignment.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_port_assignment.py.md`
 - Status: active
+- Primary graph owner: [type2-em-setup-boundary](../../../../../architecture/type2-em-setup-boundary.md)
 
 ## 역할
 - setup-ready runtime에서 explicit lumped port를 만든다.
@@ -39,7 +40,8 @@ tags:
 - 잘못된 역할/미지원 역할 조합은 즉시 ValueError.
 - 포트 시트/도체 이름은 `imported_object_names`에서 정확 일치하지 않으면 즉시 실패.
 
-## Collaborators
-- [type2_step_em_input.py](type2_step_em_input.py.md)
-- [type2_step_setup_ready.py](type2_step_setup_ready.py.md)
-- [type2-em-report-contract](../../../../../architecture/type2-em-report-contract.md)
+## Graph links
+- Primary owner: [type2-em-setup-boundary](../../../../../architecture/type2-em-setup-boundary.md)
+- Direct handoff: [type2_step_em_input.py](type2_step_em_input.py.md)
+- Direct handoff: [type2_step_setup_ready.py](type2_step_setup_ready.py.md)
+- Exceptional contract: [type2-em-report-contract](../../../../../architecture/type2-em-report-contract.md)

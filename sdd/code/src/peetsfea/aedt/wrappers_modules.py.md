@@ -1,7 +1,7 @@
 ---
 title: wrappers_modules.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-05-03 @ 00:00
 tags:
   - aedt
 ---
@@ -12,7 +12,8 @@ tags:
 - Path: `src/peetsfea/aedt/wrappers_modules.py`
 - Code note path: `sdd/code/src/peetsfea/aedt/wrappers_modules.py.md`
 - Status: planned split target; source file is not created yet.
-- Related plan: [0.2.22-src-entry-800-line-refactor-threshold](../../../../plans/0.2.22-src-entry-800-line-refactor-threshold.md)
+- Primary graph owner: [pyaedt-boundary](../../../../architecture/pyaedt-boundary.md)
+- Planning context: `sdd/plans/0.2.22-src-entry-800-line-refactor-threshold.md`
 
 ## 역할
 - lightweight AEDT module wrappers (`Object3d`, `BoundaryModule`, `Desktop`, `Materials`, `Design`, setup/report/solutions modules)를 담당한다.
@@ -29,10 +30,10 @@ tags:
 - generic silent fallback to raw object access is forbidden
 
 ## 직접 의존
-- [wrappers_common.py](wrappers_common.py.md)
+- `sdd/code/src/peetsfea/aedt/wrappers_common.py.md`
 
 ## 이 파일을 쓰는 곳
-- [wrappers_hfss.py](wrappers_hfss.py.md)
+- `sdd/code/src/peetsfea/aedt/wrappers_hfss.py.md`
 - facade `wrappers.py`
 
 ## 관련 테스트
@@ -41,6 +42,7 @@ tags:
 ## 변경 시 주의점
 - lightweight wrappers와 heavy `Hfss`/`Modeler3D` wrapper methods를 다시 한 file에 모으지 않는다.
 
-## Links
-- [wrappers_common.py](wrappers_common.py.md)
-- [wrappers_hfss.py](wrappers_hfss.py.md)
+## Graph links
+- Primary owner: [pyaedt-boundary](../../../../architecture/pyaedt-boundary.md)
+- Direct handoff: [wrappers_common.py](wrappers_common.py.md)
+- Direct handoff: [wrappers_hfss.py](wrappers_hfss.py.md)

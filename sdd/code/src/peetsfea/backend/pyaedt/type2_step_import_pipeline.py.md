@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_pipeline.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-28 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - import
   - pyaedt
@@ -13,6 +13,7 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py.md`
 - Status: active
+- Primary graph owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
 
 ## 역할
 - Import-only CLI/runtime facade다.
@@ -25,5 +26,7 @@ tags:
 ## Invariants / fail-fast
 - Import failures and PyAEDT false returns fail immediately.
 
-## Collaborators
-- [type2_step_import_core.py](type2_step_import_core.py.md)
+## Graph links
+- Primary owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
+- Direct handoff: [type2_step_import_core.py](type2_step_import_core.py.md)
+- Representative verification: [test_type2_step_import_pipeline.py](../../../../tests/backend_em/test_type2_step_import_pipeline.py.md)

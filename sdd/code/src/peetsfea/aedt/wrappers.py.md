@@ -1,7 +1,7 @@
 ---
 title: wrappers.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-22 @ 04:55
+updated: 2026-05-03 @ 00:00
 tags:
   - aedt
 ---
@@ -11,9 +11,7 @@ tags:
 ## Source
 - Path: `src/peetsfea/aedt/wrappers.py`
 - Code note path: `sdd/code/src/peetsfea/aedt/wrappers.py.md`
-- Related plan: [0.2.22-type2-step-to-em-validate-pipeline](../../../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)
-- Related umbrella plan: [0.2.22-type2-step-to-em-validate-pipeline](../../../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)
-- Related type2 architecture: [type2-step-to-em-validate-pipeline](../../../../architecture/type2-step-to-em-validate-pipeline.md)
+- Primary graph owner: [pyaedt-boundary](../../../../architecture/pyaedt-boundary.md)
 
 ## 역할
 - Raw PyAEDT `Hfss`, `Modeler3D`, `Object3d` boundary를 repository fail-fast wrapper로 감싼다.
@@ -47,10 +45,10 @@ tags:
 ## 이 파일을 쓰는 곳
 - `peetsfea.aedt` top-level exports
 - backend geometry and EM pipeline code that imports `Hfss`, `Modeler3D`, `Object3d`
-- [import_non_model_step_to_hfss.py](../../../entry/import_non_model_step_to_hfss.py.md)
+- `sdd/code/entry/import_non_model_step_to_hfss.py.md`
 
 ## 관련 테스트
-- [test_type2_step_import_smoke.py](../../../tests/backend_em/test_type2_step_import_smoke.py.md)
+- `sdd/code/tests/backend_em/test_type2_step_import_smoke.py.md`
 - `tests/backend_em/test_aedt_sidecar_modeler.py`
 - `tests/backend_em/test_aedt_sidecar_session.py`
 
@@ -58,3 +56,8 @@ tags:
 - allowlist를 넓힐 때마다 fail-fast validation과 false-return handling을 같이 추가한다.
 - PyAEDT version/API drift가 있으면 wrapper signature, protocol, tests, related SDD plan을 같이 갱신한다.
 - raw object method를 fallback으로 직접 노출하면 `CODE_COMMANDMENTS.md`의 boundary fail-fast 의도를 약화시킬 수 있다.
+
+## Graph links
+- Primary owner: [pyaedt-boundary](../../../../architecture/pyaedt-boundary.md)
+- Direct handoff: [protocols.py](protocols.py.md)
+- Representative verification: [test_type2_step_import_smoke.py](../../../tests/backend_em/test_type2_step_import_smoke.py.md)

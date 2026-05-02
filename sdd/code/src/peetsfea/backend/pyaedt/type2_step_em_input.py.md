@@ -1,7 +1,7 @@
 ---
 title: type2_step_em_input.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-29 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - em
   - pyaedt
@@ -13,6 +13,7 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_em_input.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_em_input.py.md`
 - Status: active
+- Primary graph owner: [type2-em-setup-boundary](../../../../../architecture/type2-em-setup-boundary.md)
 
 ## 역할
 - imported ledger와 setup-ready runtime state에서 EM pipeline input을 조립한다.
@@ -27,7 +28,7 @@ tags:
 ## Canonical state
 - RxOnly payload contains RX conductor, RX port, RX source/report context only.
 - TX guide objects may be present in imported geometry but are not EM input targets.
-- report variable surface is owned by [type2-em-report-contract](../../../../../architecture/type2-em-report-contract.md).
+- report variable surface is owned by `sdd/architecture/type2-em-report-contract.md`.
 
 ## Invariants / fail-fast
 - Missing RX/TX conductor or terminal metadata fails immediately with role context.
@@ -35,7 +36,8 @@ tags:
 - RxOnly must not synthesize TX conductors, TX ports, or TX output variables.
 - Imported guide/context bodies are not conductor mesh targets.
 
-## Collaborators
-- [type2_step_import_ledger.py](type2_step_import_ledger.py.md)
-- [type2_step_port_assignment.py](type2_step_port_assignment.py.md)
-- [type2-em-report-contract](../../../../../architecture/type2-em-report-contract.md)
+## Graph links
+- Primary owner: [type2-em-setup-boundary](../../../../../architecture/type2-em-setup-boundary.md)
+- Direct handoff: [type2_step_port_assignment.py](type2_step_port_assignment.py.md)
+- Exceptional artifact handoff: [type2_step_import_ledger.py](type2_step_import_ledger.py.md)
+- Exceptional contract: [type2-em-report-contract](../../../../../architecture/type2-em-report-contract.md)

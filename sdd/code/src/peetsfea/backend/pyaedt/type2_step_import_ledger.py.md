@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_ledger.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-30 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - import
   - pyaedt
@@ -13,6 +13,7 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_import_ledger.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_ledger.py.md`
 - Status: active
+- Primary graph owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
 
 ## 역할
 - STEP import 결과를 imported ledger로 직렬화한다.
@@ -37,6 +38,7 @@ tags:
 - RxOnly imported ledger may record geometry-only TX inner/outer entries, but setup-ready must filter them before active EM input construction.
 - Outer TX outer canonical tilt metadata with wrong key set or negative values fails fast during step-ledger validation.
 
-## Collaborators
-- [type2_step_import_core.py](type2_step_import_core.py.md)
-- [type2_step_ledger.py](../../type2_step_ledger.py.md)
+## Graph links
+- Primary owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
+- Direct handoff: [type2_step_import_core.py](type2_step_import_core.py.md)
+- Exceptional artifact handoff: [type2_step_ledger.py](../../type2_step_ledger.py.md)

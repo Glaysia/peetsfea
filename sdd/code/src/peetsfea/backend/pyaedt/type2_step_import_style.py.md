@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_style.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-30 @ 23:59
+updated: 2026-05-03 @ 00:00
 tags:
   - import
   - pyaedt
@@ -13,6 +13,7 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_import_style.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_style.py.md`
 - Status: active
+- Primary graph owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
 
 ## 역할
 - Imported RX conductor/context objects에 material/color/name styling을 적용한다.
@@ -43,6 +44,7 @@ tags:
 - `tx_outer_single_coil` must not silently become an active port/source/report participant; setup-ready filters it before active EM input construction.
 - `tx_outer_single_coil` protrusion allowance is role-specific and must not weaken RX or TX inner bounds validation.
 
-## Collaborators
-- [type2_step_import_core.py](type2_step_import_core.py.md)
-- [type2_step_port_assignment.py](type2_step_port_assignment.py.md)
+## Graph links
+- Primary owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
+- Direct handoff: [type2_step_import_core.py](type2_step_import_core.py.md)
+- Exceptional handoff: [type2_step_port_assignment.py](type2_step_port_assignment.py.md)

@@ -1,7 +1,7 @@
 ---
 title: test_type2_modeled_import_adapter.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-28 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - test
   - import
@@ -13,6 +13,7 @@ tags:
 - Path: `tests/backend_em/test_type2_modeled_import_adapter.py`
 - Code note path: `sdd/code/tests/backend_em/test_type2_modeled_import_adapter.py.md`
 - Status: active
+- Primary graph owner: [type2-step-import-boundary](../../../architecture/type2-step-import-boundary.md)
 
 ## 역할
 - Modeled import adapter의 RX metadata validation을 검증한다.
@@ -24,5 +25,6 @@ tags:
 ## Invariants / fail-fast
 - Missing RX terminal metadata fails immediately.
 
-## Collaborators
-- [type2_modeled_import_adapter.py](../../src/peetsfea/backend/pyaedt/type2_modeled_import_adapter.py.md)
+## Graph links
+- Primary owner: [type2-step-import-boundary](../../../architecture/type2-step-import-boundary.md)
+- Direct verification: [type2_modeled_import_adapter.py](../../src/peetsfea/backend/pyaedt/type2_modeled_import_adapter.py.md)

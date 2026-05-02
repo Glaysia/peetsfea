@@ -33,7 +33,7 @@ tags:
 - module-level mutable state는 없다.
 - canonical report contract는 `OutputsSpec` 한 shape로 고정한다.
 - canonical active output mode 집합은 `{"RxOnly","TxRx"}`로 고정한다.
-- 모드별 canonical 변수 집합은 [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)의 활성 계약과 일치한다.
+- 모드별 canonical 변수 집합은 [type2-em-report-contract](../../../../architecture/type2-em-report-contract.md)의 활성 계약과 일치한다.
 - active type2와 retained step ledger는 같은 parser/validator를 공유한다.
 
 ## Invariants / fail-fast

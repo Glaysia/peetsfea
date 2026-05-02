@@ -1,7 +1,7 @@
 ---
 title: test_tx_rect_void_step_import_smoke.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-05-03 @ 00:00
 tags:
   - tx-rect-void
   - hfss-import
@@ -12,9 +12,7 @@ tags:
 ## Source
 - Path: `tests/backend_em/test_tx_rect_void_step_import_smoke.py`
 - Code note path: `sdd/code/tests/backend_em/test_tx_rect_void_step_import_smoke.py.md`
-- Related plan: [0.2.22-type2-step-to-em-validate-pipeline](../../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)
-- Related umbrella plan: [0.2.22-type2-step-to-em-validate-pipeline](../../../plans/0.2.22-type2-step-to-em-validate-pipeline.md)
-- Related type2 architecture: [type2-step-to-em-validate-pipeline](../../../architecture/type2-step-to-em-validate-pipeline.md)
+- Primary graph owner: [pyaedt-boundary](../../../architecture/pyaedt-boundary.md)
 
 ## 역할
 - `import_tx_rect_void_step_to_hfss` modeled import smoke path를 AEDT launch 없이 fake sessions로 검증한다.
@@ -49,8 +47,12 @@ tags:
 - default/test command path only.
 
 ## 관련 테스트
-- This file is the direct test note target for [import_tx_rect_void_step_to_hfss.py](../../entry/import_tx_rect_void_step_to_hfss.py.md).
+- This file is the direct test note target for `entry/import_tx_rect_void_step_to_hfss.py`.
 
 ## 변경 시 주의점
 - real AEDT launch를 추가하면 pure-Python smoke 역할을 깨므로 금지한다.
 - adapter contract가 변하면 fake adapter payload와 assertions를 함께 갱신해야 한다.
+
+## Graph links
+- Primary owner: [pyaedt-boundary](../../../architecture/pyaedt-boundary.md)
+- Representative verification: [wrappers.py](../../src/peetsfea/aedt/wrappers.py.md)

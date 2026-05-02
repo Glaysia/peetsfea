@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_core.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-28 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - import
   - pyaedt
@@ -13,6 +13,7 @@ tags:
 - Path: `src/peetsfea/backend/pyaedt/type2_step_import_core.py`
 - Code note path: `sdd/code/src/peetsfea/backend/pyaedt/type2_step_import_core.py.md`
 - Status: active
+- Primary graph owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
 
 ## 역할
 - STEP import, ownership partition, styling handoff, imported ledger assembly를 조율한다.
@@ -32,7 +33,9 @@ tags:
 - Missing RX bodies or generic name drift fails immediately.
 - RxOnly import must not require TX modeled geometry or TX port sheets.
 
-## Collaborators
+## Graph links
+- Primary owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
 - [type2_step_import_partition.py](type2_step_import_partition.py.md)
 - [type2_step_import_style.py](type2_step_import_style.py.md)
 - [type2_step_import_ledger.py](type2_step_import_ledger.py.md)
+- Representative verification: [test_type2_step_import_pipeline.py](../../../../tests/backend_em/test_type2_step_import_pipeline.py.md)
