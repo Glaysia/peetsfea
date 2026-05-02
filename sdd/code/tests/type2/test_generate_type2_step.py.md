@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-30 @ 23:59
+updated: 2026-05-03 @ 00:00
 tags:
   - test
   - step-export
@@ -23,7 +23,7 @@ tags:
 - Tests cover the `tx_outer_region` non-modeled guide prism derived from semantic `tx_region` and `tx_inner_region` edges.
 - Tests cover derived `tx_outer_single_coil` modeled geometry emitted from the inner TX spec and fixed `A_cw_to_a` outer terminal selector.
 - Tests cover the rigid tilt contract: outer TX modeled body normals follow `tx_outer_region_prism`, while inner TX remains axis-aligned.
-- Tests cover `tx_inner_actual_region` as a non-modeled coil-fit envelope derived before modeled coil construction.
+- Tests cover `tx_inner_actual_region` and `tx_outer_actual_region` as non-modeled coil-fit envelopes derived before modeled coil construction.
 
 ## Canonical state
 - RX exported body names/counts and terminal metadata remain deterministic.
@@ -51,7 +51,7 @@ tags:
 - `_world_terminal_stub_boxes` now resolves placement-owner specs before modeled-box rendering, and for `tx_inner_single_coil`/`tx_single_coil` it uses synthetic bus-aligned owner boxes so the world-stub geometry is validated via balanced start/end bus contract while preserving existing owner-relative semantics.
 - Example mutation tests should edit parsed TOML data and re-render it instead of brittle adjacent-line string replacement, because official range owners may carry `description` metadata beside `range`.
 - `tx_outer_region` must follow source-region semantic `+X/+Z` edges and resolved TX inner stack height, without fixed example-coordinate coupling or clipping to `tx_region`.
-- `tx_inner_actual_region` must match the resolved TX inner design outer box for the same TOML and seed while leaving `tx_inner_region` as the larger guide region. The modeled material/body bbox must be contained in X/Y, not equal.
+- `tx_inner_actual_region` and `tx_outer_actual_region` must match the resolved TX design outer boxes for the same TOML and seed while leaving guide regions larger. The modeled material/body bbox must be contained in X/Y, not equal for axis-aligned inner; outer actual bounds follow the outer source fit envelope projected into the guide contract.
 
 ## Invariants / fail-fast
 - Exported body drift and generic names fail.

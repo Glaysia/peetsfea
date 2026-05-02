@@ -24,6 +24,7 @@ from peetsfea.type2_step_ledger import TxInnerRegionReferenceLineProvenance
 from peetsfea.type2_step_ledger import TxOuterRegionPrismProvenance
 from peetsfea.type2_step_spec import ModeledObjectSpec
 from peetsfea.type2_step_spec import ModeledTxInnerSingleCoilSpec
+from peetsfea.type2_step_spec import ModeledTxOuterSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import NonModelDerivedSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
@@ -47,6 +48,8 @@ _TX_ACTUAL_REGION_PROVENANCE_BY_OBJECT_ID: dict[str, TxActualRegionProvenance] =
 _TX_OUTER_REGION_OBJECT_ID = "tx_outer_region"
 _TX_OUTER_REGION_KIND = "tx_outer_region"
 _TX_OUTER_REGION_PROVENANCE_BY_OBJECT_ID: dict[str, TxOuterRegionPrismProvenance] = {}
+_TX_OUTER_ACTUAL_REGION_OBJECT_ID = "tx_outer_actual_region"
+_TX_OUTER_ACTUAL_REGION_KIND = "tx_outer_actual_region"
 
 
 @dataclass(frozen=True)
@@ -371,6 +374,15 @@ def _non_model_group_specs(
                         (_TX_OUTER_REGION_OBJECT_ID,),
                     )
                 )
+                if _contains_non_model_object_spec(specs, object_id=_TX_OUTER_ACTUAL_REGION_OBJECT_ID):
+                    visible_groups.append(
+                        (
+                            _TX_OUTER_ACTUAL_REGION_OBJECT_ID,
+                            _TX_OUTER_ACTUAL_REGION_OBJECT_ID,
+                            "XY",
+                            (_TX_OUTER_ACTUAL_REGION_OBJECT_ID,),
+                        )
+                    )
     if _contains_non_model_object_spec(specs, object_id=_TX_INNER_REGION_OBJECT_ID):
         tx_inner_group_count = sum(1 for group in visible_groups if group[0] == _TX_INNER_REGION_OBJECT_ID)
         if tx_inner_group_count != 1:
@@ -393,6 +405,15 @@ def _non_model_group_specs(
             raise RuntimeError(
                 "tx_outer_region visible group must be inserted exactly once "
                 f"(actual={tx_outer_group_count})"
+            )
+    if _contains_non_model_object_spec(specs, object_id=_TX_OUTER_ACTUAL_REGION_OBJECT_ID):
+        tx_outer_actual_group_count = sum(
+            1 for group in visible_groups if group[0] == _TX_OUTER_ACTUAL_REGION_OBJECT_ID
+        )
+        if tx_outer_actual_group_count != 1:
+            raise RuntimeError(
+                "tx_outer_actual_region visible group must be inserted exactly once "
+                f"(actual={tx_outer_actual_group_count})"
             )
     for object_id, role, plane, member_ids in visible_groups:
         group_specs = tuple(require_non_model_object_spec(specs, object_id=member_id) for member_id in member_ids)
@@ -529,6 +550,11 @@ def resolve_non_model_scene_specs(
             "tx_inner_actual_region must be resolved from tx_inner_region and tx_inner_single_coil sizing; "
             "base non-model box specs for tx_inner_actual_region are unsupported"
         )
+    if _contains_non_model_object_spec(base_specs, object_id=_TX_OUTER_ACTUAL_REGION_OBJECT_ID):
+        raise RuntimeError(
+            "tx_outer_actual_region must be resolved from tx_outer_region and tx_outer_single_coil sizing; "
+            "base non-model box specs for tx_outer_actual_region are unsupported"
+        )
     resolved_specs = list(base_specs)
     tx_region_spec = require_non_model_object_spec(base_specs, object_id=_TX_INNER_REGION_SOURCE_REGION_ID)
     tx_inner_region_resolved = isinstance(tx_region_spec, NonModelTxRegionSpec)
@@ -554,14 +580,29 @@ def resolve_non_model_scene_specs(
                     seed=seed,
                 )
             )
-            resolved_specs.append(
-                _resolved_tx_outer_region_spec_from_source_regions(
-                    tx_region_spec=tx_region_spec,
-                    tx_inner_region_spec=tx_inner_region_spec,
-                    modeled_specs=modeled_specs,
-                    seed=seed,
-                )
+            tx_outer_region_spec = _resolved_tx_outer_region_spec_from_source_regions(
+                tx_region_spec=tx_region_spec,
+                tx_inner_region_spec=tx_inner_region_spec,
+                modeled_specs=modeled_specs,
+                seed=seed,
             )
+            resolved_specs.append(tx_outer_region_spec)
+            tx_outer_single_coil_specs = tuple(
+                modeled_spec for modeled_spec in modeled_specs if isinstance(modeled_spec, ModeledTxOuterSingleCoilSpec)
+            )
+            if len(tx_outer_single_coil_specs) > 1:
+                raise RuntimeError(
+                    "tx_outer_actual_region requires exactly one tx_outer_single_coil modeled spec when TX outer coils exist "
+                    f"(actual={len(tx_outer_single_coil_specs)})"
+                )
+            if len(tx_outer_single_coil_specs) == 1:
+                resolved_specs.append(
+                    _resolved_tx_outer_actual_region_spec_from_tx_outer_region(
+                        tx_outer_region_spec=tx_outer_region_spec,
+                        tx_outer_single_coil_spec=tx_outer_single_coil_specs[0],
+                        seed=seed,
+                    )
+                )
     tx_region_actual_specs: tuple[NonModelBoxSpec, ...] = ()
     for derived_spec in derived_specs:
         if isinstance(derived_spec, NonModelTxRegionActualStackSpaceSpec):
@@ -748,6 +789,84 @@ def _resolved_tx_inner_actual_region_spec_from_tx_inner_region(
         non_model=True,
         material=tx_inner_region_spec.material,
         plane=tx_inner_region_spec.plane,
+        origin_xyz=canonical_bounds["min_xyz"],
+        size_xyz=canonical_bounds["size_xyz"],
+    )
+
+
+def _resolved_tx_outer_actual_region_spec_from_tx_outer_region(
+    *,
+    tx_outer_region_spec: NonModelBoxSpec,
+    tx_outer_single_coil_spec: ModeledTxOuterSingleCoilSpec,
+    seed: int,
+) -> NonModelBoxSpec:
+    if tx_outer_region_spec.object_id != _TX_OUTER_REGION_OBJECT_ID:
+        raise RuntimeError(
+            "tx_outer_actual_region requires tx_outer_region guide source "
+            f"(actual={tx_outer_region_spec.object_id})"
+        )
+    fit_envelope = resolve_modeled_single_coil_fit_envelope(
+        tx_outer_single_coil_spec,
+        owner_spec=tx_outer_region_spec,
+        seed=seed,
+    )
+    x_usage_ratio_owner_path = f"modeled_objects.{tx_outer_single_coil_spec.object_id}.outer_x_usage_ratio"
+    y_usage_ratio_owner_path = f"modeled_objects.{tx_outer_single_coil_spec.object_id}.outer_y_usage_ratio"
+    x_usage_ratio = _validated_tx_actual_region_usage_ratio(
+        ratio=_selected_float_candidate(
+            range_spec=tx_outer_single_coil_spec.outer_x_usage_ratio,
+            owner_path=x_usage_ratio_owner_path,
+            seed=seed,
+        ),
+        owner_path=x_usage_ratio_owner_path,
+    )
+    y_usage_ratio = _validated_tx_actual_region_usage_ratio(
+        ratio=_selected_float_candidate(
+            range_spec=tx_outer_single_coil_spec.outer_y_usage_ratio,
+            owner_path=y_usage_ratio_owner_path,
+            seed=seed,
+        ),
+        owner_path=y_usage_ratio_owner_path,
+    )
+    fit_bounds = _tx_actual_region_bounds_from_min_max(
+        min_xyz=fit_envelope.outer_bounds_min_xyz,
+        max_xyz=fit_envelope.outer_bounds_max_xyz,
+    )
+    guide_bounds = _tx_actual_region_bounds(
+        min_xyz=tx_outer_region_spec.origin_xyz,
+        size_xyz=tx_outer_region_spec.size_xyz,
+    )
+    guide_min_x, guide_min_y, _guide_min_z = guide_bounds["min_xyz"]
+    guide_size_x, guide_size_y, _guide_size_z = guide_bounds["size_xyz"]
+    fit_min_z = fit_bounds["min_xyz"][2]
+    fit_size_z = fit_bounds["size_xyz"][2]
+    design_size_x = guide_size_x * x_usage_ratio
+    design_size_y = guide_size_y * y_usage_ratio
+    design_min_x = guide_min_x + ((guide_size_x - design_size_x) / 2.0)
+    design_min_y = guide_min_y + ((guide_size_y - design_size_y) / 2.0)
+    canonical_bounds = _tx_actual_region_bounds(
+        min_xyz=(design_min_x, design_min_y, fit_min_z),
+        size_xyz=(design_size_x, design_size_y, fit_size_z),
+    )
+    _TX_ACTUAL_REGION_PROVENANCE_BY_OBJECT_ID[_TX_OUTER_ACTUAL_REGION_OBJECT_ID] = {
+        "source_guide_id": tx_outer_region_spec.object_id,
+        "modeled_source_id": tx_outer_single_coil_spec.object_id,
+        "x_usage_ratio_owner_path": x_usage_ratio_owner_path,
+        "y_usage_ratio_owner_path": y_usage_ratio_owner_path,
+        "x_usage_ratio": x_usage_ratio,
+        "y_usage_ratio": y_usage_ratio,
+        "guide_bounds": guide_bounds,
+        "actual_region_bounds": canonical_bounds,
+        "physical_modeled_body_bounds": fit_bounds,
+    }
+    return NonModelBoxSpec(
+        object_id=_TX_OUTER_ACTUAL_REGION_OBJECT_ID,
+        kind=_TX_OUTER_ACTUAL_REGION_KIND,
+        primitive="box",
+        present=True,
+        non_model=True,
+        material=tx_outer_region_spec.material,
+        plane=tx_outer_region_spec.plane,
         origin_xyz=canonical_bounds["min_xyz"],
         size_xyz=canonical_bounds["size_xyz"],
     )
@@ -1253,6 +1372,40 @@ def _non_model_scene_members(specs: tuple[NonModelBoxSpec, ...]) -> tuple[NonMod
                     "plane": tx_outer_region_spec.plane,
                     "non_model": True,
                     "tx_outer_region_prism": tx_outer_region_prism,
+                }
+            )
+            continue
+        if object_id == _TX_OUTER_ACTUAL_REGION_OBJECT_ID:
+            if len(group_specs) != 1:
+                raise RuntimeError(
+                    "tx_outer_actual_region scene member must derive from one source spec "
+                    f"(object_id={object_id}, source_count={len(group_specs)})"
+                )
+            tx_outer_actual_region_spec = group_specs[0]
+            if tx_outer_actual_region_spec.kind != _TX_OUTER_ACTUAL_REGION_KIND:
+                raise RuntimeError(
+                    "tx_outer_actual_region concrete scene member must preserve tx_outer_actual_region kind "
+                    f"(object_id={tx_outer_actual_region_spec.object_id}, kind={tx_outer_actual_region_spec.kind})"
+                )
+            if tx_outer_actual_region_spec.object_id not in _TX_ACTUAL_REGION_PROVENANCE_BY_OBJECT_ID:
+                raise RuntimeError(
+                    "tx_outer_actual_region ledger member requires creation-time actual-region provenance "
+                    f"(object_id={tx_outer_actual_region_spec.object_id})"
+                )
+            assert tx_outer_actual_region_spec.object_id in _TX_ACTUAL_REGION_PROVENANCE_BY_OBJECT_ID
+            tx_actual_region = _TX_ACTUAL_REGION_PROVENANCE_BY_OBJECT_ID[tx_outer_actual_region_spec.object_id]
+            members.append(
+                {
+                    "object_id": _TX_OUTER_ACTUAL_REGION_OBJECT_ID,
+                    "role": _TX_OUTER_ACTUAL_REGION_OBJECT_ID,
+                    "material": tx_outer_actual_region_spec.material,
+                    "model_state": False,
+                    "canonical_coordinates": _canonical_from_tx_actual_region_bounds(
+                        tx_actual_region["actual_region_bounds"]
+                    ),
+                    "plane": tx_outer_actual_region_spec.plane,
+                    "non_model": True,
+                    "tx_actual_region": tx_actual_region,
                 }
             )
             continue

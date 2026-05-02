@@ -1,7 +1,7 @@
 ---
 title: type2_non_model_scene.py
 created: 2026-04-28 @ 00:00
-updated: 2026-04-30 @ 23:59
+updated: 2026-05-03 @ 00:00
 tags:
   - step-export
   - type2
@@ -20,7 +20,7 @@ tags:
 - Resolve `tx_inner_region` from a parsed `tx_region.tx_reference_line` when that reference-line spec is present.
 - Resolve `tx_inner_actual_region` as the non-modeled coil design outer box derived from `tx_inner_region`, `tx_inner_single_coil` sizing values, and seed.
 - Resolve `tx_outer_region` as a slanted non-modeled guide prism from semantic `tx_region` and `tx_inner_region` top `+X/+Z` edges.
-- Reserve `tx_outer_actual_region` for the future outer TX coil-fit envelope; it must not be emitted as a guide-region placeholder.
+- Resolve `tx_outer_actual_region` as the non-modeled outer TX coil design outer box derived from `tx_outer_region`, `tx_outer_single_coil` sizing values, and seed.
 - Expose a fail-fast accessor for creation-time `tx_outer_region` provenance so modeled placement can consume semantic coordinates directly.
 - Provide a pure tilt-frame math helper from provenance semantic top-edge points without rebuilding or warping geometry.
 
@@ -38,10 +38,10 @@ tags:
 - `tx_inner_actual_region` is a visible non-modeled body resolved before modeled coil construction and sized to the TX inner design `outer_x_mm`/`outer_y_mm` box.
 - `tx_outer_region` is a visible non-modeled guide body resolved from creation-time semantic edges, not from sorted vertices or imported geometry.
 - `tx_outer_region` prism provenance is also the canonical source for the tilted outer TX modeled frame; modeled placement must read it through an explicit fail-fast accessor.
-- `tx_outer_actual_region` is emitted only when a concrete outer TX modeled source exists.
+- `tx_outer_actual_region` is a visible non-modeled body emitted only when a concrete outer TX modeled source exists.
 - `tx_region_actual` and `tx_region_actual_stack_space` derived specs are inactive for RxOnly scene export.
 - `tx_inner_region` reference-line ratios and resolved line endpoints are retained in a module-level provenance registry between resolution and ledger construction.
-- `tx_inner_actual_region` guide bounds, design outer-box bounds, optional physical modeled body bounds, selected usage ratios, and modeled source id are retained in a module-level provenance registry between resolution and ledger construction.
+- TX actual-region guide bounds, design outer-box bounds, physical modeled body bounds, selected usage ratios, and modeled source ids are retained in a module-level provenance registry between resolution and ledger construction.
 - `tx_outer_region` vertices, resolved stack height, and source ids are retained in a module-level provenance registry between resolution, shape construction, and ledger construction.
 - `resolve_tx_outer_region_tilt_frame` returns rigid local axes derived only from `TxOuterRegionPrismProvenance` semantic points.
 
@@ -58,7 +58,7 @@ tags:
 - `resolve_tx_outer_region_tilt_frame` rejects non-finite or zero-length top edges and computes a deterministic local axis triad.
 - `tx_outer_region` top edges must come from semantic `+X/+Z` edges of `tx_region` and `tx_inner_region`; containment inside `tx_region` is not required.
 - `tx_outer_region` top inner/outer edge pairs define the rigid tilted frame for `tx_outer_single_coil`; downstream code must not infer that frame from sorted STEP vertices.
-- `tx_outer_actual_region` must fail fast or remain absent when no real outer TX modeled source exists; copying `tx_outer_region` as a placeholder is forbidden.
+- `tx_outer_actual_region` requires exactly one `tx_outer_single_coil` modeled spec when emitted and must use selected `outer_x_usage_ratio`/`outer_y_usage_ratio` exactly once to compute the centered design outer box from `tx_outer_region`. It must fail fast or remain absent when no real outer TX modeled source exists; copying `tx_outer_region` as a placeholder is forbidden.
 - Derived TX actual placement helpers remain fail-fast if called by unsupported paths.
 
 ## Size Note

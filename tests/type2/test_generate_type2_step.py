@@ -2849,9 +2849,10 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
         "tx_inner_region",
         "tx_inner_actual_region",
         "tx_outer_region",
+        "tx_outer_actual_region",
         "rx_region_max",
     )
-    member_objects = non_model_entry["member_objects"]
+    member_objects = cast(Sequence[dict[str, object]], non_model_entry["member_objects"])
     tx_region_member = next(member for member in member_objects if cast(str, member["object_id"]) == "tx_region")
     assert tx_region_member["model_state"] is False
     assert tx_region_member["non_model"] is True
@@ -2861,7 +2862,13 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
         member for member in member_objects if cast(str, member["role"]) == "tx_region_actual_stack_space"
     ]
     assert tx_region_actual_stack_space_members == []
-    assert not any(member["object_id"] == "tx_outer_actual_region" for member in member_objects)
+    tx_outer_actual_member = next(member for member in member_objects if member["object_id"] == "tx_outer_actual_region")
+    assert tx_outer_actual_member["role"] == "tx_outer_actual_region"
+    assert tx_outer_actual_member["model_state"] is False
+    assert tx_outer_actual_member["non_model"] is True
+    tx_outer_actual_provenance = cast(dict[str, object], tx_outer_actual_member["tx_actual_region"])
+    assert tx_outer_actual_provenance["source_guide_id"] == "tx_outer_region"
+    assert tx_outer_actual_provenance["modeled_source_id"] == "tx_outer_rect_void_coil"
     assert tuple(entry["object_id"] for entry in ledger["modeled_objects"]) == (
         "tx_inner_rect_void_coil",
         "rx_rect_void_coil",
@@ -2895,7 +2902,7 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     assert "tx_inner_region" in scene_shapes_by_label
     assert "tx_inner_actual_region" in scene_shapes_by_label
     assert "tx_outer_region" in scene_shapes_by_label
-    assert "tx_outer_actual_region" not in scene_shapes_by_label
+    assert "tx_outer_actual_region" in scene_shapes_by_label
     assert "tx_region_actual" not in scene_shapes_by_label
     assert "tx_region_actual_stack_space" not in scene_shapes_by_label
 
@@ -2953,16 +2960,19 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
         "tx_inner_region",
         "tx_inner_actual_region",
         "tx_outer_region",
+        "tx_outer_actual_region",
         "rx_region_max",
     }
     assert member_object_ids.index("tx_region") < member_object_ids.index("tx_inner_region")
     assert member_object_ids.index("tx_inner_region") < member_object_ids.index("tx_inner_actual_region")
     assert member_object_ids.index("tx_inner_actual_region") < member_object_ids.index("tx_outer_region")
+    assert member_object_ids.index("tx_outer_region") < member_object_ids.index("tx_outer_actual_region")
     member_objects = cast(Sequence[dict[str, object]], non_model_entry["member_objects"])
     tx_region_member = next(member for member in member_objects if member["object_id"] == "tx_region")
     tx_inner_member = next(member for member in member_objects if member["object_id"] == "tx_inner_region")
     tx_inner_actual_member = next(member for member in member_objects if member["object_id"] == "tx_inner_actual_region")
     tx_outer_member = next(member for member in member_objects if member["object_id"] == "tx_outer_region")
+    tx_outer_actual_member = next(member for member in member_objects if member["object_id"] == "tx_outer_actual_region")
     assert tx_inner_member["role"] == "tx_inner_region"
     assert tx_inner_member["model_state"] is False
     assert tx_inner_member["non_model"] is True
@@ -2975,7 +2985,10 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert tx_outer_member["model_state"] is False
     assert tx_outer_member["non_model"] is True
     assert tx_outer_member["material"] == "vacuum"
-    assert not any(member["object_id"] == "tx_outer_actual_region" for member in member_objects)
+    assert tx_outer_actual_member["role"] == "tx_outer_actual_region"
+    assert tx_outer_actual_member["model_state"] is False
+    assert tx_outer_actual_member["non_model"] is True
+    assert tx_outer_actual_member["material"] == "vacuum"
 
     canonical_coordinates = cast(dict[str, object], tx_inner_member["canonical_coordinates"])
     assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx((0.0, -140.0, 0.0))
@@ -3021,6 +3034,8 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     tx_inner_model_size_xyz = cast(tuple[float, float, float], tx_inner_model_canonical["outer_bounds_size_xyz"])
     tx_inner_actual_bounds = _canonical_bounds(tx_inner_actual_member)
     tx_inner_model_bounds = _canonical_bounds(cast(dict[str, object], tx_inner_entry))
+    tx_outer_actual_bounds = _canonical_bounds(tx_outer_actual_member)
+    tx_outer_model_bounds = _canonical_bounds(cast(dict[str, object], tx_outer_entry))
     tx_inner_actual_min_xyz, tx_inner_actual_max_xyz, tx_inner_actual_size_xyz = tx_inner_actual_bounds
     model_min_xyz, model_max_xyz, model_size_xyz = tx_inner_model_bounds
     assert tx_inner_actual_min_xyz[0] == pytest.approx(14.0)
@@ -3041,6 +3056,23 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert tx_inner_model_min_xyz[1] == pytest.approx(
         tx_inner_region_min_xyz[1] + (tx_inner_region_size_xyz[1] - tx_inner_model_size_xyz[1]) / 2.0
     )
+    tx_outer_actual_min_xyz, tx_outer_actual_max_xyz, tx_outer_actual_size_xyz = tx_outer_actual_bounds
+    tx_outer_model_min_xyz, tx_outer_model_max_xyz, tx_outer_model_size_xyz = tx_outer_model_bounds
+    assert tx_outer_actual_min_xyz[0] == pytest.approx(82.0)
+    assert tx_outer_actual_min_xyz[1] == pytest.approx(-84.0)
+    assert tx_outer_actual_size_xyz[0] == pytest.approx(52.0)
+    assert tx_outer_actual_size_xyz[1] == pytest.approx(168.0)
+    assert tx_outer_actual_min_xyz[0] <= tx_outer_model_min_xyz[0]
+    assert tx_outer_model_max_xyz[0] <= tx_outer_actual_max_xyz[0]
+    assert tx_outer_actual_min_xyz[1] <= tx_outer_model_min_xyz[1]
+    assert tx_outer_model_max_xyz[1] <= tx_outer_actual_max_xyz[1]
+    assert tx_outer_actual_min_xyz[0] != pytest.approx(tx_outer_model_min_xyz[0])
+    assert tx_outer_actual_size_xyz[0] != pytest.approx(tx_outer_model_size_xyz[0])
+    assert tx_outer_actual_min_xyz[1] != pytest.approx(tx_outer_model_min_xyz[1])
+    assert tx_outer_actual_size_xyz[1] != pytest.approx(tx_outer_model_size_xyz[1])
+    tx_outer_actual_provenance = cast(dict[str, object], tx_outer_actual_member["tx_actual_region"])
+    assert tx_outer_actual_provenance["source_guide_id"] == "tx_outer_region"
+    assert tx_outer_actual_provenance["modeled_source_id"] == "tx_outer_rect_void_coil"
     assert tx_inner_entry["expected_exported_body_names"] == (
         "tx_inner_pcb_l0",
         "tx_inner_pcb_l1",
@@ -3097,7 +3129,7 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert "tx_inner_region" in scene_shapes_by_label
     assert "tx_inner_actual_region" in scene_shapes_by_label
     assert "tx_outer_region" in scene_shapes_by_label
-    assert "tx_outer_actual_region" not in scene_shapes_by_label
+    assert "tx_outer_actual_region" in scene_shapes_by_label
     assert "tx_region_actual" not in scene_shapes_by_label
     assert "tx_region_actual_stack_space" not in scene_shapes_by_label
 
