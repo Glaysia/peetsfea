@@ -1,7 +1,7 @@
 ---
 title: tx_rect_void.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-28 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - geometry
   - rx
@@ -13,6 +13,7 @@ tags:
 - Path: `src/peetsfea/tx_rect_void.py`
 - Code note path: `sdd/code/src/peetsfea/tx_rect_void.py.md`
 - Status: active
+- Primary graph owner: [type2-rect-void-boundary](../../../architecture/type2-rect-void-boundary.md)
 
 ## 역할
 - Historical module name aside, this note now documents the reusable rectangular void single-coil core for RX use.
@@ -30,7 +31,9 @@ tags:
 - Invalid dimensions, unsupported turn counts, and geometry self-overlap fail immediately.
 - Do not restore TX multilayer or TX bus shape contracts here while the reset is active.
 
-## Collaborators
-- [tx_rect_void_spec.py](tx_rect_void_spec.py.md)
-- [tx_rect_void_geometry.py](tx_rect_void_geometry.py.md)
-- [type2_step_export.py](type2_step_export.py.md)
+## Graph links
+- Primary owner: [type2-rect-void-boundary](../../../architecture/type2-rect-void-boundary.md)
+- Direct child: [tx_rect_void_spec.py](tx_rect_void_spec.py.md)
+- Direct child: [tx_rect_void_geometry.py](tx_rect_void_geometry.py.md)
+- Export handoff: [tx_rect_void_export.py](tx_rect_void_export.py.md)
+- Runtime consumer: [type2_step_export.py](type2_step_export.py.md)

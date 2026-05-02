@@ -1,7 +1,7 @@
 ---
 title: tx_rect_void_spec.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-20 @ 23:59
+updated: 2026-05-03 @ 00:00
 tags:
   - tx-rect-void
 ---
@@ -12,8 +12,7 @@ tags:
 - Path: `src/peetsfea/tx_rect_void_spec.py`
 - Code note path: `sdd/code/src/peetsfea/tx_rect_void_spec.py.md`
 - Status: planned split target; source file is not created yet.
-- Related plan: [0.2.22-src-entry-800-line-refactor-threshold](../../../plans/0.2.22-src-entry-800-line-refactor-threshold.md)
-- Parent note: [tx_rect_void.py](tx_rect_void.py.md)
+- Primary graph owner: [type2-rect-void-boundary](../../../architecture/type2-rect-void-boundary.md)
 
 ## 역할
 - rect/void TOML parsing, range validation, sampled realization을 담당한다.
@@ -49,13 +48,15 @@ tags:
 - compatibility facade `tx_rect_void.py`
 
 ## 관련 테스트
-- [test_tx_rect_void.py](../../tests/tx_rect_void/test_tx_rect_void.py.md)
+- `tests/tx_rect_void/test_tx_rect_void.py`
 
 ## 변경 시 주의점
 - parser shape를 바꾸면 active RX/reusable code notes와 type2 export path를 같이 갱신해야 한다.
 - realization formula나 profile-specific validation cap을 바꾸면 centerline/export/import 계약이 모두 흔들린다.
 
-## Links
-- [tx_rect_void_types.py](tx_rect_void_types.py.md)
-- [tx_rect_void_centerline.py](tx_rect_void_centerline.py.md)
-- [tx_rect_void_export.py](tx_rect_void_export.py.md)
+## Graph links
+- Primary owner: [type2-rect-void-boundary](../../../architecture/type2-rect-void-boundary.md)
+- Parent facade: [tx_rect_void.py](tx_rect_void.py.md)
+- Direct type contract: [tx_rect_void_types.py](tx_rect_void_types.py.md)
+- Centerline handoff: [tx_rect_void_centerline.py](tx_rect_void_centerline.py.md)
+- Export handoff: [tx_rect_void_export.py](tx_rect_void_export.py.md)

@@ -1,7 +1,7 @@
 ---
 title: tx_rect_void_geometry.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-21 @ 14:00
+updated: 2026-05-03 @ 00:00
 tags:
   - tx-rect-void
 ---
@@ -11,11 +11,7 @@ tags:
 ## Source
 - Path: `src/peetsfea/tx_rect_void_geometry.py`
 - Code note path: `sdd/code/src/peetsfea/tx_rect_void_geometry.py.md`
-- Parent orchestrator: [tx_rect_void.py](tx_rect_void.py.md)
-- Related plans:
-  - [0.2.22-type2-single-coil-corner-relief](../../../plans/0.2.22-type2-single-coil-corner-relief.md)
-  - [0.2.23-rect-void-fast-face-export](../../../plans/0.2.23-rect-void-fast-face-export.md)
-- Related tests: [test_tx_rect_void.py](../../tests/tx_rect_void/test_tx_rect_void.py.md)
+- Primary graph owner: [type2-rect-void-boundary](../../../architecture/type2-rect-void-boundary.md)
 
 ## 역할
 - Type2 single-coil blunt corner authoring과 footprint path에 필요한 point/polygon helper와 copper primitive dataclass를 한곳에 모은다.
@@ -49,8 +45,15 @@ tags:
 - [tx_rect_void_export.py](tx_rect_void_export.py.md)
 
 ## 관련 테스트
-- [test_tx_rect_void.py](../../tests/tx_rect_void/test_tx_rect_void.py.md)
+- `tests/tx_rect_void/test_tx_rect_void.py`
 
 ## 변경 시 주의점
 - `trace_outline_polygon()`은 `_segment_joined_polygon()`을 제거하지 않고 추가되는 보조 출력이다.
 - `_segment_joined_polygon()`의 기존 의미를 유지하고, fallback 없는 fail-fast(예외 즉시 중단) 경로를 준수해야 한다.
+
+## Graph links
+- Primary owner: [type2-rect-void-boundary](../../../architecture/type2-rect-void-boundary.md)
+- Parent facade: [tx_rect_void.py](tx_rect_void.py.md)
+- Centerline collaborator: [tx_rect_void_centerline.py](tx_rect_void_centerline.py.md)
+- Export handoff: [tx_rect_void_export.py](tx_rect_void_export.py.md)
+- Representative verification: [test_tx_rect_void.py](../../tests/tx_rect_void/test_tx_rect_void.py.md)
