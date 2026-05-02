@@ -244,26 +244,47 @@ def sample_type2(
         make_step_on_sample=make_step_on_sample,
         aedt_builder_n=aedt_builder_n,
     )
-    attempts = generate_sample_manifest_attempts(
-        source_toml_path=source_toml_path,
-        output_dir=output_dir,
-        seed_start=seed_first,
-        count=seed_n,
-        jobs=sampler_n,
-        make_step_on_sample=make_step_on_sample,
-        exporter=exporter,
-        report_progress=lambda completed, total, entry: _report_sample_progress(
-            status_line,
-            completed,
-            total,
-            entry,
-        ),
-        report_step_stage=lambda phase, entry: _report_sample_step_stage(
-            status_line,
-            phase,
-            entry,
-        ),
-    )
+    if exporter is export_type2_step_artifacts:
+        attempts = generate_sample_manifest_attempts(
+            source_toml_path=source_toml_path,
+            output_dir=output_dir,
+            seed_start=seed_first,
+            count=seed_n,
+            jobs=sampler_n,
+            make_step_on_sample=make_step_on_sample,
+            report_progress=lambda completed, total, entry: _report_sample_progress(
+                status_line,
+                completed,
+                total,
+                entry,
+            ),
+            report_step_stage=lambda phase, entry: _report_sample_step_stage(
+                status_line,
+                phase,
+                entry,
+            ),
+        )
+    else:
+        attempts = generate_sample_manifest_attempts(
+            source_toml_path=source_toml_path,
+            output_dir=output_dir,
+            seed_start=seed_first,
+            count=seed_n,
+            jobs=sampler_n,
+            make_step_on_sample=make_step_on_sample,
+            exporter=exporter,
+            report_progress=lambda completed, total, entry: _report_sample_progress(
+                status_line,
+                completed,
+                total,
+                entry,
+            ),
+            report_step_stage=lambda phase, entry: _report_sample_step_stage(
+                status_line,
+                phase,
+                entry,
+            ),
+        )
     if not isinstance(attempts, dict):
         raise TypeError("generate_sample_manifest_attempts result must be a dict")
     if "entries" not in attempts:

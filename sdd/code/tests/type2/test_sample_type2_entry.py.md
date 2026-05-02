@@ -34,6 +34,7 @@ tags:
 - Sampled owner discovery must preserve canonical `modeled_objects.tx_inner_rect_void_coil.*` owners while excluding `modeled_objects.tx_outer_rect_void_coil.*`.
 - TX modeled-role fixtures assert parser/sampling fail-fast behavior instead of sampled manifest success.
 - TX inner trace-width feasibility is validated as a sample-time constraint so retry occurs before STEP export.
+- Default `--build-step`/sample API usage must preserve the parallel worker path by not passing the entrypoint exporter as a custom callback.
 - Lightweight spec tools must import without CAD/AEDT modules.
 
 ## Collaborators

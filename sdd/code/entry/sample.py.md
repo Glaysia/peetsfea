@@ -43,6 +43,7 @@ tags:
 - default operator task samples the configured `SEED_N` designs and writes STEP artifacts when `MAKE_STEP_ON_SAMPLE=True`.
 - manifest top-level `config`는 downstream build runtime contract를 보존한다.
 - `SAMPLER_N`은 sampled TOML owner worker count다. `MAKE_STEP_ON_SAMPLE=True`일 때만 same-worker STEP export까지 맡는다.
+- CLI/default `--build-step` uses the built-in sample exporter without passing it as a custom callback, so the type2 sampled worker pool remains active.
 - `MAKE_STEP_ON_SAMPLE`이 sample-side STEP ownership toggle이다.
 - `MAKE_STEP_ON_SAMPLE=False` is the default so ordinary sampling writes sampled TOML/manifest only.
 - CLI `--build-step` overrides the default for one process and must be reflected in `manifest.config.make_step_on_sample`.
@@ -63,6 +64,7 @@ tags:
 - `MAKE_STEP_ON_SAMPLE=False`면 sample 단계는 STEP export를 호출하지 않아야 한다.
 - `--build-step` is an opt-in flag; absent means sample-only.
 - STEP stage reporting은 manifest data contract가 아니라 operator-facing stdout contract다.
+- Custom injected exporters remain an in-process test/runtime hook; they are not the default CLI build-step path.
 - skip reporting is operator-facing stdout plus manifest `skipped`; it must not create sampled or STEP artifacts for failed attempts.
 - `.aedt`는 만들지 않는다.
 - manifest object shape는 list fallback 없이 고정한다.

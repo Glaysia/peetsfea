@@ -367,6 +367,72 @@ def test_run_sample_cli_build_step_flag_enables_step_export(monkeypatch: pytest.
     assert calls == [True]
 
 
+def test_sample_type2_default_build_step_omits_exporter_for_worker_pool(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def _generate_sample_manifest_attempts(**kwargs: object) -> dict[str, list[object]]:
+        calls.append(dict(kwargs))
+        return {"entries": [], "skipped": []}
+
+    monkeypatch.setattr(sample_entry, "generate_sample_manifest_attempts", _generate_sample_manifest_attempts)
+
+    document = sample_type2(
+        source_toml_path=tmp_path / "type2_sweep.toml",
+        output_dir=tmp_path / "sampled",
+        manifest_path=tmp_path / "manifest.json",
+        seed_first=4,
+        seed_n=3,
+        sampler_n=2,
+        aedt_builder_n=6,
+        make_step_on_sample=True,
+    )
+
+    assert document["entries"] == []
+    assert document["skipped"] == []
+    assert len(calls) == 1
+    assert calls[0]["make_step_on_sample"] is True
+    assert calls[0]["jobs"] == 2
+    assert "exporter" not in calls[0]
+
+
+def test_sample_type2_custom_exporter_is_forwarded_as_in_process_hook(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def _generate_sample_manifest_attempts(**kwargs: object) -> dict[str, list[object]]:
+        calls.append(dict(kwargs))
+        return {"entries": [], "skipped": []}
+
+    def _exporter(**kwargs: object) -> object:
+        raise AssertionError("custom exporter should be forwarded, not called by sample_type2")
+
+    monkeypatch.setattr(sample_entry, "generate_sample_manifest_attempts", _generate_sample_manifest_attempts)
+
+    document = sample_type2(
+        source_toml_path=tmp_path / "type2_sweep.toml",
+        output_dir=tmp_path / "sampled",
+        manifest_path=tmp_path / "manifest.json",
+        seed_first=4,
+        seed_n=3,
+        sampler_n=2,
+        aedt_builder_n=6,
+        make_step_on_sample=True,
+        exporter=_exporter,
+    )
+
+    assert document["entries"] == []
+    assert document["skipped"] == []
+    assert len(calls) == 1
+    assert calls[0]["make_step_on_sample"] is True
+    assert calls[0]["jobs"] == 2
+    assert calls[0]["exporter"] is _exporter
+
+
 def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

@@ -30,6 +30,7 @@ tags:
 - `retry_number` records the first constraint-satisfying retry attempt and remains part of the `design_id`.
 - manifest `entries` contains only successful sampled designs; validation/infeasible attempts are recorded in top-level `skipped`.
 - stage reporting is runtime visibility only and is not canonical sampled state.
+- Omitting the exporter uses the process-safe built-in STEP exporter and may use the worker pool; explicit custom exporters stay in-process so tests and injected callbacks remain deterministic.
 
 ## Invariants / fail-fast
 - sampled metadata owner list must exactly match the source exportable sampled owner set.
@@ -39,6 +40,7 @@ tags:
 - type2 constraints must be evaluated before sampled TOML is written.
 - constraint retry budget is fixed; exhausted candidates are recorded as skipped only for expected validation/infeasible failures.
 - STEP/CAD export dependencies are imported only by orchestration paths that actually build STEP artifacts.
+- `make_step_on_sample=True` with the built-in exporter must not be forced into the serial custom-exporter path.
 - non-validation exceptions remain fail-fast.
 
 ## Collaborators
