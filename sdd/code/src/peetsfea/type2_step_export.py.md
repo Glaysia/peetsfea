@@ -1,7 +1,7 @@
 ---
 title: type2_step_export.py
 created: 2026-04-28 @ 00:00
-updated: 2026-04-30 @ 00:00
+updated: 2026-04-30 @ 23:59
 tags:
   - step-export
   - type2
@@ -34,6 +34,7 @@ tags:
 - `tx_inner_single_coil` may be exported as modeled geometry, but not consumed for active TX ports, sources, or reports.
 - `tx_inner_single_coil` geometry and terminal metadata validation use centered X/Y placement inside `tx_inner_region`.
 - `tx_outer_single_coil` may be exported as modeled geometry by deriving numeric ranges from the inner TX modeled spec and placing the body in `tx_outer_region`.
+- `tx_outer_single_coil` export must call the tilted outer placement path and include tilt provenance in modeled canonical metadata.
 - `tx_outer_single_coil` terminal metadata is independently fixed to `A_cw_to_a`; sampling ownership remains under `tx_inner_rect_void_coil`.
 - Generic `tx_single_coil`, `tx_plate_stack`, and `tx_rect_void_columns` remain unsupported in active RxOnly export.
 
@@ -43,6 +44,7 @@ tags:
 - `tx_outer_region` height uses resolved modeled `tx_inner_single_coil` layer parameters and must not use literal example coordinates.
 - `tx_inner_actual_region` sizing must match modeled `tx_inner_single_coil` sizing for the same seed and must not create active EM setup changes.
 - `tx_outer_actual_region`, once emitted, must match modeled `tx_outer_single_coil` sizing for the same seed and must not be populated from guide-only data.
+- The STEP scene must keep `tx_inner_single_coil` axis-aligned while `tx_outer_single_coil` is tilted by the semantic prism frame.
 - STEP export must return `True`.
 - Scene body labels must be unique.
 - RX terminal metadata must match the geometry contract.

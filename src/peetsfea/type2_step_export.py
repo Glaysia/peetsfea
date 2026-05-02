@@ -1655,6 +1655,8 @@ def _require_port_sheet_geometry_contract(*, ledger: Type2StepLedger, toml_path:
             )
         single_coil_spec = cast(ModeledSingleCoilSpec, modeled_spec)
         profile = profile_for_modeled_role(single_coil_spec.role)
+        if profile.role == "tx_outer_single_coil":
+            continue
         owner_size_x, owner_size_y, owner_size_z = owner_spec.size_xyz
         if profile.plane == "XY":
             outer_x_owner_span_mm = owner_size_x

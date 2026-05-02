@@ -73,6 +73,13 @@ def _canonical_from_shape(shape: Shape) -> CanonicalCoordinates:
     }
 
 
+def _canonical_from_scene_children(children: tuple[Shape, ...]) -> CanonicalCoordinates:
+    if len(children) == 0:
+        raise RuntimeError("type2 modeled scene canonical coordinates require at least one child shape")
+    compound = bd.Compound(children=children, label="canonical_bounds")
+    return _canonical_from_shape(cast(Shape, compound))
+
+
 def single_coil_placement_offset(
     *,
     owner_spec: NonModelBoxSpec,
@@ -341,6 +348,21 @@ def _transform_modeled_box_spec(
         origin_xyz=profile.world_point(box_spec.origin_xyz, frame_origin_xyz=frame_origin_xyz),
         size_xyz=profile.world_size(box_spec.size_xyz),
     )
+
+
+def _rotate_shape_about_world_y_then_move(
+    shape: Shape,
+    *,
+    angle_deg: float,
+    frame_origin_xyz: Point3,
+) -> Shape:
+    if abs(angle_deg) <= 1e-12:
+        rotated_shape = shape
+    else:
+        rotated_shape = cast(Shape, shape.rotate(bd.Axis((0.0, 0.0, 0.0), (0.0, 1.0, 0.0)), angle_deg))
+    moved_shape = cast(Shape, rotated_shape.moved(bd.Location(frame_origin_xyz)))
+    moved_shape.label = shape.label
+    return moved_shape
 
 
 def _local_terminal_plane_points(
@@ -761,6 +783,116 @@ def _modeled_canonical_coordinates(
     }
 
 
+def _tx_outer_virtual_owner_spec(
+    *,
+    owner_spec: NonModelBoxSpec,
+    top_edge_length_mm: float,
+    y_span_mm: float,
+) -> NonModelBoxSpec:
+    if top_edge_length_mm <= 0.0 or not math.isfinite(top_edge_length_mm):
+        raise RuntimeError(f"tx_outer_single_coil top edge length must be finite and > 0 (actual={top_edge_length_mm})")
+    if y_span_mm <= 0.0 or not math.isfinite(y_span_mm):
+        raise RuntimeError(f"tx_outer_single_coil y span must be finite and > 0 (actual={y_span_mm})")
+    return replace(
+        owner_spec,
+        origin_xyz=(0.0, 0.0, -owner_spec.size_xyz[2]),
+        size_xyz=(top_edge_length_mm, y_span_mm, owner_spec.size_xyz[2]),
+    )
+
+
+def _build_tx_outer_single_coil_scene_data(
+    spec: ModeledSingleCoilSpec,
+    *,
+    owner_spec: NonModelBoxSpec,
+    seed: int,
+) -> tuple[tuple[Shape, ...], ModeledObjectSceneData]:
+    from peetsfea.type2_non_model_scene import require_tx_outer_region_prism_provenance
+    from peetsfea.type2_non_model_scene import resolve_tx_outer_region_tilt_frame
+
+    profile = _profile_for_modeled_single_coil_role(spec.role)
+    if profile.role != "tx_outer_single_coil":
+        raise RuntimeError(f"outer tilted scene builder requires tx_outer_single_coil (actual={profile.role})")
+    provenance = require_tx_outer_region_prism_provenance(object_id="tx_outer_region")
+    tilt_frame = resolve_tx_outer_region_tilt_frame(provenance=provenance)
+    top_inner_start_xyz = provenance["top_inner_start_xyz"]
+    top_inner_end_xyz = provenance["top_inner_end_xyz"]
+    y_span_mm = top_inner_end_xyz[1] - top_inner_start_xyz[1]
+    if y_span_mm <= 0.0:
+        raise RuntimeError(
+            "tx_outer_single_coil tilt frame requires positive semantic Y span "
+            f"(start={top_inner_start_xyz}, end={top_inner_end_xyz})"
+        )
+    virtual_owner_spec = _tx_outer_virtual_owner_spec(
+        owner_spec=owner_spec,
+        top_edge_length_mm=tilt_frame.top_edge_length_xyz,
+        y_span_mm=y_span_mm,
+    )
+    fit_envelope = resolve_modeled_single_coil_fit_envelope(spec, owner_spec=virtual_owner_spec, seed=seed)
+    centerline = build_tx_rect_void_centerline(fit_envelope.realized)
+    virtual_modeled_scene = build_tx_rect_void_step_scene(
+        fit_envelope.realized,
+        fit_envelope.transformed_boxes,
+        profile=profile,
+        frame_origin_xyz=fit_envelope.frame_origin_xyz,
+    )
+    port_sheet_label = port_sheet_label_for_profile(profile)
+    virtual_base_scene_children = tuple(shape for shape in virtual_modeled_scene.children if shape.label != port_sheet_label)
+    if len(virtual_base_scene_children) == 0:
+        raise RuntimeError(f"type2 modeled scene must expose child bodies: {spec.object_id}")
+    angle_deg = math.degrees(math.atan2(-tilt_frame.local_x_axis_xyz[2], tilt_frame.local_x_axis_xyz[0]))
+    scene_children = tuple(
+        _rotate_shape_about_world_y_then_move(
+            cast(Shape, shape),
+            angle_deg=angle_deg,
+            frame_origin_xyz=tilt_frame.frame_origin_xyz,
+        )
+        for shape in virtual_base_scene_children
+    )
+    canonical_coordinates: dict[str, object] = dict(_canonical_from_scene_children(scene_children))
+    virtual_canonical = _modeled_canonical_coordinates(
+        transformed_boxes=fit_envelope.transformed_boxes,
+        profile=profile,
+        frame_origin_xyz=fit_envelope.frame_origin_xyz,
+    )
+    canonical_coordinates["pcb_layer_z_positions_mm"] = virtual_canonical["pcb_layer_z_positions_mm"]
+    canonical_coordinates["copper_layer_z_positions_mm"] = virtual_canonical["copper_layer_z_positions_mm"]
+    owner_max_x = owner_spec.origin_xyz[0] + owner_spec.size_xyz[0]
+    bounds_max_xyz = cast(Point3, canonical_coordinates["outer_bounds_max_xyz"])
+    max_world_x_protrusion_mm = max(0.0, bounds_max_xyz[0] - owner_max_x)
+    canonical_coordinates["outer_tilt_metadata"] = {
+        "max_world_x_protrusion_mm": max_world_x_protrusion_mm,
+    }
+    terminal_metadata = modeled_terminal_metadata(
+        terminal_path=fit_envelope.realized.terminal_path,
+        centerline=centerline,
+        profile=profile,
+        frame_origin_xyz=fit_envelope.frame_origin_xyz,
+        transformed_boxes=fit_envelope.transformed_boxes,
+    )
+    expected_exported_body_names = tuple(shape.label for shape in scene_children)
+    if len(set(expected_exported_body_names)) != len(expected_exported_body_names):
+        raise RuntimeError(
+            "type2 modeled scene body names must be unique "
+            f"(object_id={spec.object_id}, names={expected_exported_body_names})"
+        )
+    return (
+        scene_children,
+        {
+            "object_id": spec.object_id,
+            "role": spec.role,
+            "plane": cast(Literal["XY", "YZ"], profile.plane),
+            "placement_owner_id": profile.placement_owner_id,
+            "material": spec.material,
+            "model_state": True,
+            "expected_exported_body_names": expected_exported_body_names,
+            "expected_exported_body_count": len(expected_exported_body_names),
+            "expected_exported_body_groups": (),
+            "canonical_coordinates": canonical_coordinates,
+            "terminal_metadata": terminal_metadata,
+        },
+    )
+
+
 def build_modeled_single_coil_scene_data(
     spec: ModeledSingleCoilSpec,
     *,
@@ -768,6 +900,8 @@ def build_modeled_single_coil_scene_data(
     seed: int,
 ) -> tuple[tuple[Shape, ...], ModeledObjectSceneData]:
     profile = _profile_for_modeled_single_coil_role(spec.role)
+    if profile.role == "tx_outer_single_coil":
+        return _build_tx_outer_single_coil_scene_data(spec, owner_spec=owner_spec, seed=seed)
     fit_envelope = resolve_modeled_single_coil_fit_envelope(spec, owner_spec=owner_spec, seed=seed)
     centerline = build_tx_rect_void_centerline(fit_envelope.realized)
     modeled_scene = build_tx_rect_void_step_scene(

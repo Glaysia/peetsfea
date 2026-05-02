@@ -7,6 +7,7 @@ from typing import Literal
 from typing import cast
 
 import build123d as bd
+from build123d.topology import Shape
 
 from peetsfea.type2_single_coil_scene import resolve_modeled_single_coil_fit_envelope
 from peetsfea.type2_scene_geometry import build_non_model_box_shape
@@ -54,6 +55,79 @@ class TxRegionActualStackSpaceTiltTransform:
     rotation_axis: Point3
     rotation_angle_deg: float
     shift_delta_z: float
+
+
+@dataclass(frozen=True)
+class TxOuterRegionPrismTiltFrame:
+    frame_origin_xyz: Point3
+    local_x_axis_xyz: Point3
+    local_y_axis_xyz: Point3
+    local_z_axis_xyz: Point3
+    top_edge_length_xyz: float
+
+
+def require_tx_outer_region_prism_provenance(
+    object_id: Literal["tx_outer_region"],
+) -> TxOuterRegionPrismProvenance:
+    if object_id != _TX_OUTER_REGION_OBJECT_ID:
+        raise RuntimeError(
+            "tx_outer_region prism provenance requires exactly tx_outer_region object id "
+            f"(actual={object_id!r})"
+        )
+    if object_id not in _TX_OUTER_REGION_PROVENANCE_BY_OBJECT_ID:
+        raise RuntimeError(
+            "tx_outer_region prism provenance is unavailable; resolve tx_outer_region first "
+            f"(object_id={object_id})"
+        )
+    assert object_id in _TX_OUTER_REGION_PROVENANCE_BY_OBJECT_ID
+    return _TX_OUTER_REGION_PROVENANCE_BY_OBJECT_ID[object_id]
+
+
+def resolve_tx_outer_region_tilt_frame(
+    *,
+    provenance: TxOuterRegionPrismProvenance,
+) -> TxOuterRegionPrismTiltFrame:
+    top_inner_start_xyz = provenance["top_inner_start_xyz"]
+    top_outer_start_xyz = provenance["top_outer_start_xyz"]
+    local_x_axis_xyz = _subtract_points(top_outer_start_xyz, top_inner_start_xyz)
+    top_edge_length_xyz = math.sqrt(
+        (local_x_axis_xyz[0] * local_x_axis_xyz[0])
+        + (local_x_axis_xyz[1] * local_x_axis_xyz[1])
+        + (local_x_axis_xyz[2] * local_x_axis_xyz[2])
+    )
+    if not math.isfinite(top_edge_length_xyz):
+        raise RuntimeError(
+            "tx_outer_region top-edge length must be finite "
+            f"(top_inner_start={top_inner_start_xyz}, top_outer_start={top_outer_start_xyz})"
+        )
+    if top_edge_length_xyz <= 0.0:
+        raise RuntimeError(
+            "tx_outer_region top-edge length must be > 0 to derive rigid tilt frame "
+            f"(top_inner_start={top_inner_start_xyz}, top_outer_start={top_outer_start_xyz})"
+        )
+    local_x_axis_unit = (
+        local_x_axis_xyz[0] / top_edge_length_xyz,
+        local_x_axis_xyz[1] / top_edge_length_xyz,
+        local_x_axis_xyz[2] / top_edge_length_xyz,
+    )
+    local_y_axis_xyz = (0.0, 1.0, 0.0)
+    local_z_axis_xyz = _normalize_vector(
+        _cross_vector(local_x_axis_unit, local_y_axis_xyz),
+        context="tx_outer_region prism top-edge to world +Y tilt frame",
+    )
+    local_z_axis_component = local_z_axis_xyz[2]
+    if not math.isfinite(local_z_axis_component):
+        raise RuntimeError(
+            "tx_outer_region tilt frame z-axis must be finite "
+            f"(local_x_axis_unit={local_x_axis_unit}, local_y_axis={local_y_axis_xyz})"
+        )
+    return TxOuterRegionPrismTiltFrame(
+        frame_origin_xyz=top_inner_start_xyz,
+        local_x_axis_xyz=local_x_axis_unit,
+        local_y_axis_xyz=local_y_axis_xyz,
+        local_z_axis_xyz=local_z_axis_xyz,
+        top_edge_length_xyz=top_edge_length_xyz,
+    )
 
 
 def _normalize_vector(vector: Point3, *, context: str) -> Point3:
@@ -123,7 +197,7 @@ def parent_tx_region_actual_object_id_for_stack_space_object_id(*, object_id: st
 
 def resolve_tx_region_actual_stack_space_tilt_transform(
     *,
-    shape_for_shift: bd.Shape,
+    shape_for_shift: Shape,
     rotation_basis_center: Point3,
     rx_center: Point3,
     tile_bottom_z: float,
@@ -182,9 +256,9 @@ def resolve_tx_region_actual_stack_space_tilt_transform(
 
 def apply_tx_region_actual_stack_space_tilt_transform(
     *,
-    shape: bd.Shape,
+    shape: Shape,
     transform: TxRegionActualStackSpaceTiltTransform,
-) -> bd.Shape:
+) -> Shape:
     if abs(transform.rotation_angle_deg) <= 1e-12:
         rotated_shape = shape
     else:
@@ -202,12 +276,12 @@ def apply_tx_region_actual_stack_space_tilt_transform(
 
 def _rotate_tx_region_actual_stack_space_shape_toward_center(
     *,
-    shape: bd.Shape,
+    shape: Shape,
     final_body_center: Point3,
     rx_center: Point3,
     tile_bottom_z: float,
     tile_top_z: float,
-) -> tuple[bd.Shape, CanonicalCoordinates]:
+) -> tuple[Shape, CanonicalCoordinates]:
     transform = resolve_tx_region_actual_stack_space_tilt_transform(
         shape_for_shift=shape,
         rotation_basis_center=final_body_center,
@@ -663,8 +737,8 @@ def _resolved_tx_inner_actual_region_spec_from_tx_inner_region(
         "x_usage_ratio": x_usage_ratio,
         "y_usage_ratio": y_usage_ratio,
         "guide_bounds": guide_bounds,
-        "fit_bounds": fit_bounds,
-        "canonical_bounds": canonical_bounds,
+        "actual_region_bounds": canonical_bounds,
+        "physical_modeled_body_bounds": fit_bounds,
     }
     return NonModelBoxSpec(
         object_id=_TX_INNER_ACTUAL_REGION_OBJECT_ID,
@@ -1030,13 +1104,7 @@ def _build_tx_outer_region_shape(*, spec: NonModelBoxSpec):
             "tx_outer_region shape requires concrete tx_outer_region spec "
             f"(object_id={spec.object_id}, kind={spec.kind})"
         )
-    if spec.object_id not in _TX_OUTER_REGION_PROVENANCE_BY_OBJECT_ID:
-        raise RuntimeError(
-            "tx_outer_region shape requires creation-time prism provenance "
-            f"(object_id={spec.object_id})"
-        )
-    assert spec.object_id in _TX_OUTER_REGION_PROVENANCE_BY_OBJECT_ID
-    provenance = _TX_OUTER_REGION_PROVENANCE_BY_OBJECT_ID[spec.object_id]
+    provenance = require_tx_outer_region_prism_provenance(cast(Literal["tx_outer_region"], spec.object_id))
     top_wire = bd.Wire.make_polygon(
         (
             provenance["top_inner_start_xyz"],
@@ -1067,7 +1135,7 @@ def _build_tx_outer_region_shape(*, spec: NonModelBoxSpec):
     return solid
 
 
-def _build_non_model_group_shape(*, object_id: str, specs: tuple[NonModelBoxSpec, ...]) -> bd.Shape:
+def _build_non_model_group_shape(*, object_id: str, specs: tuple[NonModelBoxSpec, ...]) -> Shape:
     if not specs:
         raise ValueError(f"non-model group shape requires at least one spec ({object_id})")
     if object_id == _TX_OUTER_REGION_OBJECT_ID:
@@ -1079,7 +1147,7 @@ def _build_non_model_group_shape(*, object_id: str, specs: tuple[NonModelBoxSpec
         return _build_tx_outer_region_shape(spec=specs[0])
     fused_shape = build_non_model_box_shape(specs[0])
     for spec in specs[1:]:
-        fused_shape = cast(bd.Shape, fused_shape.fuse(build_non_model_box_shape(spec)))
+        fused_shape = cast(Shape, fused_shape.fuse(build_non_model_box_shape(spec)))
     solids = tuple(fused_shape.solids())
     if len(solids) != 1:
         raise RuntimeError(
@@ -1152,7 +1220,7 @@ def _non_model_scene_members(specs: tuple[NonModelBoxSpec, ...]) -> tuple[NonMod
                     "material": tx_inner_actual_region_spec.material,
                     "model_state": False,
                     "canonical_coordinates": _canonical_from_tx_actual_region_bounds(
-                        tx_actual_region["canonical_bounds"]
+                        tx_actual_region["actual_region_bounds"]
                     ),
                     "plane": tx_inner_actual_region_spec.plane,
                     "non_model": True,
@@ -1172,13 +1240,9 @@ def _non_model_scene_members(specs: tuple[NonModelBoxSpec, ...]) -> tuple[NonMod
                     "tx_outer_region concrete scene member must preserve tx_outer_region kind "
                     f"(object_id={tx_outer_region_spec.object_id}, kind={tx_outer_region_spec.kind})"
                 )
-            if tx_outer_region_spec.object_id not in _TX_OUTER_REGION_PROVENANCE_BY_OBJECT_ID:
-                raise RuntimeError(
-                    "tx_outer_region ledger member requires creation-time prism provenance "
-                    f"(object_id={tx_outer_region_spec.object_id})"
-                )
-            assert tx_outer_region_spec.object_id in _TX_OUTER_REGION_PROVENANCE_BY_OBJECT_ID
-            tx_outer_region_prism = _TX_OUTER_REGION_PROVENANCE_BY_OBJECT_ID[tx_outer_region_spec.object_id]
+            tx_outer_region_prism = require_tx_outer_region_prism_provenance(
+                cast(Literal["tx_outer_region"], tx_outer_region_spec.object_id)
+            )
             members.append(
                 {
                     "object_id": _TX_OUTER_REGION_OBJECT_ID,
@@ -1251,8 +1315,8 @@ def _non_model_scene_members(specs: tuple[NonModelBoxSpec, ...]) -> tuple[NonMod
     return tuple(members)
 
 
-def build_non_model_scene_shapes(specs: tuple[NonModelBoxSpec, ...]) -> tuple[bd.Shape, ...]:
-    scene_shapes: list[bd.Shape] = []
+def build_non_model_scene_shapes(specs: tuple[NonModelBoxSpec, ...]) -> tuple[Shape, ...]:
+    scene_shapes: list[Shape] = []
     for object_id, _role, _plane, group_specs in _non_model_group_specs(specs):
         scene_shapes.append(_build_non_model_group_shape(object_id=object_id, specs=group_specs))
     return tuple(scene_shapes)
@@ -1284,10 +1348,13 @@ def build_non_model_scene_entry(specs: tuple[NonModelBoxSpec, ...]) -> NonModelO
 
 __all__ = [
     "TxRegionActualStackSpaceTiltTransform",
+    "TxOuterRegionPrismTiltFrame",
     "apply_tx_region_actual_stack_space_tilt_transform",
     "build_non_model_scene_entry",
     "build_non_model_scene_shapes",
+    "resolve_tx_outer_region_tilt_frame",
     "is_concrete_tx_region_actual_stack_space_object_id",
+    "require_tx_outer_region_prism_provenance",
     "parent_tx_region_actual_object_id_for_stack_space_object_id",
     "require_non_model_object_spec",
     "resolve_non_model_scene_specs",

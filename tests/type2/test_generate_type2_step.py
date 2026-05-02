@@ -859,6 +859,69 @@ def _face_normal_closest_to_direction(
     return best_normal
 
 
+def _cross_product_xyz(
+    first: tuple[float, float, float],
+    second: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    return (
+        (first[1] * second[2]) - (first[2] * second[1]),
+        (first[2] * second[0]) - (first[0] * second[2]),
+        (first[0] * second[1]) - (first[1] * second[0]),
+    )
+
+
+def _prism_top_face_normal(
+    tx_outer_prism: dict[str, object],
+) -> tuple[float, float, float]:
+    top_inner_start_xyz = cast(tuple[float, float, float], tx_outer_prism["top_inner_start_xyz"])
+    top_outer_start_xyz = cast(tuple[float, float, float], tx_outer_prism["top_outer_start_xyz"])
+    top_inner_end_xyz = cast(tuple[float, float, float], tx_outer_prism["top_inner_end_xyz"])
+    top_edge_a = (
+        top_outer_start_xyz[0] - top_inner_start_xyz[0],
+        top_outer_start_xyz[1] - top_inner_start_xyz[1],
+        top_outer_start_xyz[2] - top_inner_start_xyz[2],
+    )
+    top_edge_b = (
+        top_inner_end_xyz[0] - top_inner_start_xyz[0],
+        top_inner_end_xyz[1] - top_inner_start_xyz[1],
+        top_inner_end_xyz[2] - top_inner_start_xyz[2],
+    )
+    normal = _cross_product_xyz(top_edge_a, top_edge_b)
+    return _normalize_vector_xyz(normal)
+
+
+def _assert_shape_has_face_normal_parallel_to(
+    *,
+    shape: Shape,
+    target_normal_xyz: tuple[float, float, float],
+    face_label: str,
+    min_dot: float = 0.995,
+    min_abs_target_x_component_ratio: float = 0.0,
+) -> None:
+    faces = tuple(shape.faces())
+    assert len(faces) > 0
+    target = _normalize_vector_xyz(target_normal_xyz)
+    neg_target = (-target[0], -target[1], -target[2])
+    best_score = -2.0
+    best_normal = (0.0, 0.0, 0.0)
+    for face in faces:
+        normal = face.normal_at()
+        candidate = _normalize_vector_xyz((normal.X, normal.Y, normal.Z))
+        score = max(_dot_xyz(candidate, target), _dot_xyz(candidate, neg_target))
+        if score > best_score:
+            best_score = score
+            best_normal = candidate
+    assert min_dot <= 1.0
+    assert min_abs_target_x_component_ratio >= 0.0
+    assert best_score >= min_dot, f"no face in {face_label} is parallel to target normal: {target_normal_xyz}"
+    if min_abs_target_x_component_ratio > 0.0:
+        required_abs_x = abs(target[0]) * min_abs_target_x_component_ratio
+        assert abs(best_normal[0]) >= required_abs_x - 1e-9, (
+            f"no face in {face_label} preserves tilted-frame X component: "
+            f"target={target_normal_xyz}, best={best_normal}"
+        )
+
+
 def _assert_shape_faces_axis_aligned(shape: Shape) -> None:
     for face in shape.faces():
         normal = face.normal_at()
@@ -867,6 +930,32 @@ def _assert_shape_faces_axis_aligned(shape: Shape) -> None:
         minor_components = sum(1 for component in normal_xyz if component < 1e-9)
         assert dominant_components == 1
         assert minor_components == 2
+
+
+def _assert_shape_has_no_face_normal_parallel_to(
+    *,
+    shape: Shape,
+    target_normal_xyz: tuple[float, float, float],
+    face_label: str,
+    max_dot: float = 0.995,
+) -> None:
+    faces = tuple(shape.faces())
+    assert len(faces) > 0
+    target = _normalize_vector_xyz(target_normal_xyz)
+    neg_target = (-target[0], -target[1], -target[2])
+    best_score = -2.0
+    best_normal = (0.0, 0.0, 0.0)
+    for face in faces:
+        normal = face.normal_at()
+        candidate = _normalize_vector_xyz((normal.X, normal.Y, normal.Z))
+        score = max(_dot_xyz(candidate, target), _dot_xyz(candidate, neg_target))
+        if score > best_score:
+            best_score = score
+            best_normal = candidate
+    assert best_score < max_dot, (
+        f"face in {face_label} unexpectedly aligns to target normal: "
+        f"target={target_normal_xyz}, best={best_normal}, score={best_score}"
+    )
 
 
 def _iter_shape_tree(shape: Shape) -> tuple[Shape, ...]:
@@ -2929,6 +3018,23 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert "tx_region_actual" not in scene_shapes_by_label
     assert "tx_region_actual_stack_space" not in scene_shapes_by_label
 
+    tx_outer_top_face_normal = _prism_top_face_normal(tx_outer_prism=cast(dict[str, object], tx_outer_member["tx_outer_region_prism"]))
+    for body_name in cast(tuple[str, ...], tx_outer_entry["expected_exported_body_names"]):
+        tx_outer_body_shape = scene_shapes_by_label[body_name]
+        _assert_shape_has_face_normal_parallel_to(
+            shape=tx_outer_body_shape,
+            target_normal_xyz=tx_outer_top_face_normal,
+            face_label=body_name,
+            min_dot=0.995,
+            min_abs_target_x_component_ratio=0.6,
+        )
+    for body_name in cast(tuple[str, ...], tx_inner_entry["expected_exported_body_names"]):
+        _assert_shape_has_no_face_normal_parallel_to(
+            shape=scene_shapes_by_label[body_name],
+            target_normal_xyz=tx_outer_top_face_normal,
+            face_label=body_name,
+        )
+
 
 def test_export_type2_step_artifacts_centers_tx_inner_region_y_usage_ratio(
     tmp_path: Path,
@@ -3052,6 +3158,12 @@ def test_export_type2_step_artifacts_derives_tx_outer_region_from_moved_tx_regio
     tx_region_min_xyz, tx_region_size_xyz = _canonical_min_size(tx_region_member)
     tx_inner_min_xyz, tx_inner_size_xyz = _canonical_min_size(tx_inner_member)
     tx_outer_prism = cast(dict[str, object], tx_outer_member["tx_outer_region_prism"])
+    tx_outer_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_outer_rect_void_coil")
+    scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
+    tx_outer_top_face_normal = _prism_top_face_normal(tx_outer_prism=tx_outer_prism)
+    tx_outer_region_canonical = cast(dict[str, object], tx_outer_member["canonical_coordinates"])
+    tx_outer_region_min_xyz = cast(tuple[float, float, float], tx_outer_region_canonical["outer_bounds_min_xyz"])
+    tx_outer_region_max_xyz = cast(tuple[float, float, float], tx_outer_region_canonical["outer_bounds_max_xyz"])
 
     assert tx_region_min_xyz == pytest.approx((12.0, -120.0, 20.0))
     assert tx_region_size_xyz == pytest.approx((220.0, 240.0, 80.0))
@@ -3062,6 +3174,30 @@ def test_export_type2_step_artifacts_derives_tx_outer_region_from_moved_tx_regio
         tx_inner_min_xyz=tx_inner_min_xyz,
         tx_inner_size_xyz=tx_inner_size_xyz,
     )
+    tx_outer_region_size_y = tx_outer_region_max_xyz[1] - tx_outer_region_min_xyz[1]
+    assert set(tx_outer_entry["expected_exported_body_names"]) <= set(scene_shapes_by_label)
+    for body_name in cast(tuple[str, ...], tx_outer_entry["expected_exported_body_names"]):
+        outer_body_shape = scene_shapes_by_label[body_name]
+        _assert_shape_has_face_normal_parallel_to(
+            shape=outer_body_shape,
+            target_normal_xyz=tx_outer_top_face_normal,
+            face_label=body_name,
+            min_dot=0.995,
+            min_abs_target_x_component_ratio=0.6,
+        )
+        outer_body_bbox = outer_body_shape.bounding_box()
+        outer_body_min_xyz = (outer_body_bbox.min.X, outer_body_bbox.min.Y, outer_body_bbox.min.Z)
+        outer_body_max_xyz = (outer_body_bbox.max.X, outer_body_bbox.max.Y, outer_body_bbox.max.Z)
+        outer_body_span_y = outer_body_max_xyz[1] - outer_body_min_xyz[1]
+        outer_body_span_x_margin = (tx_outer_region_size_y - outer_body_span_y) / 2.0
+        assert outer_body_min_xyz[1] == pytest.approx(
+            tx_outer_region_min_xyz[1] + outer_body_span_x_margin,
+        )
+        assert outer_body_max_xyz[1] == pytest.approx(
+            tx_outer_region_max_xyz[1] - outer_body_span_x_margin,
+        )
+        assert outer_body_min_xyz[2] >= tx_outer_region_min_xyz[2] - 1e-6
+        assert outer_body_max_xyz[2] <= tx_outer_region_max_xyz[2] + 1e-6
 
 
 @pytest.mark.parametrize(
