@@ -9,6 +9,7 @@ from typing import cast
 from peetsfea.spec.loader import TOMLTable, TOMLValue, load_toml_bytes
 from peetsfea.spec.toml_render import toml_dumps
 from peetsfea.type2_sampled_sampling import _parse_constraints
+from peetsfea.type2_sampled_sampling import _all_range_owner_specs
 from peetsfea.type2_sampled_sampling import _range_spec_for_owner_path
 from peetsfea.type2_sampled_sampling import _require_constraints_satisfied
 from peetsfea.type2_sampled_sampling import exportable_sampled_owner_paths
@@ -22,6 +23,23 @@ _SAMPLED_METADATA_TABLE = "sampled"
 
 def validate_type2_toml(path: Path) -> Type2StepSpec:
     return load_type2_step_spec(path)
+
+
+def type2_range_owner_descriptions(path: Path) -> dict[str, str]:
+    spec = validate_type2_toml(path)
+    raw_spec, _ = load_toml_bytes(path)
+    descriptions: dict[str, str] = {}
+    for owner_path, _range_spec in _all_range_owner_specs(spec):
+        owner_field = _owner_range_field_table(raw_spec, owner_path=owner_path)
+        if "description" not in owner_field:
+            raise ValueError(f"{path}: {owner_path} must provide a non-empty description")
+        raw_description = owner_field["description"]
+        if not isinstance(raw_description, str):
+            raise TypeError(f"{path}:{owner_path}.description must be str")
+        if raw_description == "":
+            raise ValueError(f"{path}:{owner_path}.description must be non-empty")
+        descriptions[owner_path] = raw_description
+    return descriptions
 
 
 def extract_type2_constraints(path: Path) -> tuple[Type2ConstraintRule, ...]:
@@ -165,19 +183,15 @@ def _non_model_object_table(raw_spec: TOMLTable, *, object_id: str) -> TOMLTable
     return matches[0]
 
 
-def _freeze_owner_range_in_raw_spec(
+def _owner_range_field_table(
     raw_spec: TOMLTable,
     *,
     owner_path: str,
-    value: SampledScalar,
-    source_spec: Type2StepSpec,
-) -> None:
-    range_spec = _range_spec_for_owner_path(source_spec, owner_path)
+) -> TOMLTable:
     owner_parts = owner_path.split(".")
     if len(owner_parts) < 3:
         raise ValueError(f"Unsupported type2 sampled owner path: {owner_path}")
     owner_root, object_id = owner_parts[0], owner_parts[1]
-    owner_table: TOMLTable
     if owner_root == "modeled_objects":
         owner_table = _modeled_object_table(raw_spec, object_id=object_id)
     elif owner_root == "non_model_objects":
@@ -197,11 +211,23 @@ def _freeze_owner_range_in_raw_spec(
     raw_field = owner_table[field_name]
     if not isinstance(raw_field, dict):
         raise TypeError(f"{owner_path} must be a table containing range")
+    return cast(TOMLTable, raw_field)
+
+
+def _freeze_owner_range_in_raw_spec(
+    raw_spec: TOMLTable,
+    *,
+    owner_path: str,
+    value: SampledScalar,
+    source_spec: Type2StepSpec,
+) -> None:
+    range_spec = _range_spec_for_owner_path(source_spec, owner_path)
+    owner_field = _owner_range_field_table(raw_spec, owner_path=owner_path)
     if range_spec.is_integer:
         frozen_scalar: TOMLValue = int(value)
     else:
         frozen_scalar = float(value)
-    raw_field["range"] = [range_spec.is_integer, frozen_scalar, frozen_scalar, 1]
+    owner_field["range"] = [range_spec.is_integer, frozen_scalar, frozen_scalar, 1]
 
 
 def _sampled_toml_table(
@@ -243,6 +269,7 @@ def _validate_rendered_sampled_toml(sampled_toml_text: str) -> None:
 __all__ = [
     "extract_type2_constraints",
     "type2_sampled_owner_paths",
+    "type2_range_owner_descriptions",
     "type2_sampled_toml_from_values",
     "validate_type2_toml",
 ]

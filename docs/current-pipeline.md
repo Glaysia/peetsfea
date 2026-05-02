@@ -14,6 +14,7 @@ tags:
 - The canonical sampled authoring input is `examples/type2_sweep.toml`.
 - `examples/type2_fixed.toml` is one fixed realization of `examples/type2_sweep.toml` and must keep the same public field surface.
 - Type2 TOML owns the STEP authoring registry and the EM report/output-variable contract.
+- Public type2 range owner tables may carry `description` metadata beside `range`; official examples keep this metadata complete for every public range owner.
 - Active type2 setup-ready generation uses RX modeled geometry only for EM mesh, port, source, and reports.
 - `tx_inner_single_coil` may be present as geometry-only TX STEP/ledger context.
 - Transmitter ports, transmitter sources, transmitter mesh ownership, and transmitter output variables are not active type2 contracts.

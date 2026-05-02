@@ -226,12 +226,15 @@ size_xyz = [160.0, 280.0, 90.0]
 # Ratios are sampled strictly inside tx_region and do not activate TX modeled geometry.
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.2, 0.8, 13]
+description = "TX guide 영역 안에서 reference line의 X 위치 비율"
 
 [non_model_objects.tx_reference_line.y_usage_ratio]
 range = [false, 0.2, 1.0, 17]
+description = "TX guide reference line의 Y 방향 사용 비율"
 
 [non_model_objects.tx_reference_line.z_ratio]
 range = [false, 0.2, 0.9, 13]
+description = "TX guide 영역 안에서 reference line의 Z 위치 비율"
 
 [[non_model_objects]]
 id = "rx_region_max"
@@ -259,26 +262,36 @@ copper_thickness_mm = 0.035
 [modeled_objects.outer_x_usage_ratio]
 # TX inner coil X size ratio against resolved tx_inner_region.
 range = [false, 0.2, 0.9, 15]
+description = "TX inner 배치 영역 대비 local X 방향 외곽 크기 비율"
 [modeled_objects.outer_y_usage_ratio]
 # TX inner coil Y size ratio against resolved tx_inner_region.
 range = [false, 0.2, 0.9, 15]
+description = "TX inner 배치 영역 대비 local Y 방향 외곽 크기 비율"
 [modeled_objects.turn_count]
 range = [true, 1, 4, 4]
+description = "TX inner spiral turn 수"
 [modeled_objects.layer_count]
 range = [true, 1, 8, 8]
+description = "TX inner coil 적층 layer 수"
 [modeled_objects.underlay_repeat_count]
 # TX inner coil v1 has no underlay/ferrite.
 range = [true, 0, 0, 1]
+description = "TX inner underlay 반복 개수"
 [modeled_objects.layer_gap_mm]
 range = [false, 3, 3, 1]
+description = "TX inner layer 사이 z 방향 간격(mm)"
 [modeled_objects.terminal_stub_length_mm]
 range = [false, 5, 5, 1]
+description = "TX inner terminal stub 길이(mm)"
 [modeled_objects.void_usage_ratio]
 range = [false, 0.2, 0.8, 25]
+description = "TX inner 중앙 void keepout의 X/Y 공통 크기 비율"
 [modeled_objects.margin_ratio]
 range = [false, 0.05, 0.05, 1]
+description = "TX inner void와 외곽 사이 최소 margin 비율"
 [modeled_objects.metal_fill_factor]
 range = [false, 0.2, 0.6, 15]
+description = "TX inner trace/gap pitch 안에서 copper가 차지하는 비율"
 [modeled_objects.terminal_path]
 value = "B_cw_to_b"
 [modeled_objects.tx_outer_terminal_path]
@@ -296,33 +309,43 @@ copper_thickness_mm = 0.035
 [modeled_objects.outer_x_usage_ratio]
 # RX placement owner span 대비 local X outer size ratio.
 range = [false, 0.1, 0.6, 17]
+description = "RX 배치 영역 대비 local X 방향 외곽 크기 비율"
 [modeled_objects.outer_y_usage_ratio]
 # RX placement owner span 대비 local Y outer size ratio.
 range = [false, 0.1, 0.6, 17]
+description = "RX 배치 영역 대비 local Y 방향 외곽 크기 비율"
 [modeled_objects.turn_count]
 # RX spiral turn count. RX single-coil은 현재 layer_count=1만 지원한다.
 range = [true, 1, 4, 4]
+description = "RX spiral turn 수"
 [modeled_objects.layer_count]
 # RX multilayer는 아직 지원하지 않으므로 1로 고정한다.
 range = [true, 1, 1, 1]
+description = "RX coil 적층 layer 수"
 [modeled_objects.underlay_repeat_count]
 # RX full backing underlay repeat owner. 현재 기본 sweep은 full backing으로 고정한다.
 range = [true, 8, 8, 1]
+description = "RX full backing underlay 반복 개수"
 [modeled_objects.layer_gap_mm]
 # RX layer_count가 1이라 geometry에는 실질 영향이 없지만 public field shape를 유지한다.
 range = [false, 2, 2, 1]
+description = "RX layer 사이 z 방향 간격(mm)"
 [modeled_objects.terminal_stub_length_mm]
 # RX terminal stub length.
 range = [false, 5, 5, 1]
+description = "RX terminal stub 길이(mm)"
 [modeled_objects.void_usage_ratio]
 # centered void keepout의 X/Y 공통 size ratio다.
 range = [false, 0.2, 0.8, 25]
+description = "중앙 void keepout의 X/Y 공통 크기 비율"
 [modeled_objects.margin_ratio]
 # void-to-outer minimum margin ratio.
 range = [false, 0.05, 0.05, 1]
+description = "void와 외곽 사이 최소 margin 비율"
 [modeled_objects.metal_fill_factor]
 # trace/gap pitch 안에서 copper가 차지하는 비율.
 range = [false, 0.2, 0.6, 15]
+description = "trace/gap pitch 안에서 copper가 차지하는 비율"
 [modeled_objects.terminal_path]
 # terminal path는 same-corner format '<outer>_<cw|ccw>_to_<inner>'를 사용한다.
 value = "A_cw_to_a"

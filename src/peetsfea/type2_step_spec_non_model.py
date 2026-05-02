@@ -99,8 +99,14 @@ def _require_range(
 ) -> RangeSpec:
     raw_node = _require_key(table, key, context)
     node = _require_table(raw_node, f"{context}.{key}")
-    if set(node.keys()) != {"range"}:
-        raise ValueError(f"{context}.{key} must contain only ['range']")
+    if set(node.keys()) not in ({"range"}, {"range", "description"}):
+        raise ValueError(f"{context}.{key} must contain only ['range'] or ['range', 'description']")
+    if "description" in node:
+        description = node["description"]
+        if not isinstance(description, str):
+            raise TypeError(f"{context}.{key}.description must be str")
+        if description == "":
+            raise ValueError(f"{context}.{key}.description must be non-empty")
     raw_range = node["range"]
     if not isinstance(raw_range, list):
         raise TypeError(f"{context}.{key}.range must be [is_integer, start, end, count]")

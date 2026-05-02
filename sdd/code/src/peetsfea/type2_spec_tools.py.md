@@ -17,6 +17,7 @@ tags:
 
 ## Responsibility
 - Expose lightweight type2 TOML validation, constraint extraction, sampled owner discovery, and datapoint-to-TOML rendering APIs.
+- Expose TOML-backed range owner descriptions for notebooks and external inspection tools.
 - Support plain `peetsfea` installation without importing CAD/AEDT modules.
 
 ## Inputs / outputs
@@ -26,9 +27,11 @@ tags:
 ## Canonical state
 - Public owner values must exactly match exportable sampled owner paths.
 - Rendered sampled TOML freezes owner ranges and includes deterministic sampled metadata.
+- Range owner descriptions are read from TOML metadata and are not duplicated as Python hardcoded display dictionaries.
 
 ## Invariants / fail-fast
 - Missing or extra owner paths raise immediately.
+- Missing, empty, or non-string range owner descriptions raise in the description helper.
 - Constraint failures raise before TOML text is returned.
 - TX inner and RX rect/void trace-width constraint functions are evaluated in pure Python.
 - Generated TOML is reloaded through the lightweight validator from in-memory text before return.
@@ -41,6 +44,8 @@ tags:
 
 ## Related tests
 - [test_sample_type2_entry.py](../../tests/type2/test_sample_type2_entry.py.md)
+- [test_type2_spec_tools.py](../../tests/type2/test_type2_spec_tools.py.md)
+- [0.2.24-type2-range-owner-descriptions](../../../plans/0.2.24-type2-range-owner-descriptions.md)
 
 ## Change hazards
 - Keep this public surface stable for surrogate/MOO workflows.

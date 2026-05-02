@@ -51,3 +51,13 @@ def test_fixed_viewer_refresh_fixture_is_rx_only() -> None:
         variable = cast(dict[str, object], raw_variable)
         assert not cast(str, variable["name"]).startswith(("Ltx", "Qtx", "Rtx", "Xtx", "Gtx", "Btx"))
         assert "TX_TML" not in cast(str, variable["expression"])
+
+
+def test_view_step_notebook_uses_toml_owner_descriptions() -> None:
+    notebook_path = Path(__file__).resolve().parents[2] / "notebooks" / "view_step_files.ipynb"
+    notebook_text = notebook_path.read_text(encoding="utf-8")
+
+    assert "_OWNER_DESCRIPTIONS" not in notebook_text
+    assert "type2_range_owner_descriptions" in notebook_text
+    assert "from peetsfea.type2_spec_tools import type2_range_owner_descriptions" in notebook_text
+    assert "type2_range_owner_descriptions(sampled_toml_path)" in notebook_text

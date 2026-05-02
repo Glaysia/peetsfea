@@ -17,25 +17,30 @@ tags:
 - viewer refresh input fixture인 active fixed example이 RxOnly viewer/setup surface를 유지하는지 검증한다.
 - fixed example에서 geometry-only TX inner modeled object는 허용하되, TX sampled-owner block, TX output variable,
   `TX_TML` EM surface가 다시 생기면 실패한다.
+- `notebooks/view_step_files.ipynb`가 notebook-local owner description dictionary 대신 TOML-backed description helper를 쓰는지 정적으로 검증한다.
 
 ## 입력 / 출력
 - 입력:
-  - active `examples/type2_fixed.toml`
+- active `examples/type2_fixed.toml`
+- `notebooks/view_step_files.ipynb`
 - 출력:
   - parsed fixed example assertions
 
 ## Canonical state
 - active fixed example TOML payload가 canonical assertion surface다.
+- viewer notebook owner description text must come from TOML metadata through `type2_range_owner_descriptions`.
 
 ## Invariants / fail-fast
 - fixed example keeps `tx_region` as guide context and derives `tx_inner_region` geometry context.
 - fixed example keeps `tx_inner_rect_void_coil` as geometry-only TX inner modeled input with fixed zero underlay.
 - fixed example keeps `rx_region_max` and the RX modeled object as active EM geometry inputs.
 - fixed example has no TX sampled-owner blocks and no output expression referencing `TX_TML`.
+- viewer notebook must not contain `_OWNER_DESCRIPTIONS`; it must import and call `type2_range_owner_descriptions`.
 
 ## 직접 의존
 - [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)
 - [0.2.24-type2-rxonly-tx-removal](../../../plans/0.2.24-type2-rxonly-tx-removal.md)
+- [0.2.24-type2-range-owner-descriptions](../../../plans/0.2.24-type2-range-owner-descriptions.md)
 
 ## 이 파일을 쓰는 곳
 - default pure-Python regression suite.

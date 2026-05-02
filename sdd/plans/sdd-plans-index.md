@@ -28,6 +28,7 @@ tags:
 - `sdd/plans/0.2.22-type2-step-spec-split.md`
 - `sdd/plans/0.2.22-type2-toml-unification.md`
 - `sdd/plans/0.2.22-type2-build123d-non-model-step.md`
+- [0.2.24-type2-range-owner-descriptions](0.2.24-type2-range-owner-descriptions.md)
 
 ## 0.2.24 Reset Note
 - TX shape-specifying SDD has been pruned.

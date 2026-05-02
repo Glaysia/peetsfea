@@ -30,6 +30,7 @@ tags:
 
 ## Invariants / fail-fast
 - Missing required non-model context or unsupported object ids fail immediately.
+- Range owner tables may carry optional `description` metadata next to `range`; malformed descriptions fail immediately but do not become runtime spec state.
 - `tx_region` must contain `tx_reference_line` and that table must contain only `x_ratio`, `y_usage_ratio`, and `z_ratio`.
 - TX reference-line X/Z ratio ranges must be float ranges whose realized candidates are strictly inside `(0, 1)`.
 - TX inner Y usage ratio range must be a float range whose realized candidates are in `(0, 1]`.
@@ -38,3 +39,4 @@ tags:
 ## Collaborators
 - [type2_step_spec.py](type2_step_spec.py.md)
 - [type2_step_spec_types.py](type2_step_spec_types.py.md)
+- [0.2.24-type2-range-owner-descriptions](../../../plans/0.2.24-type2-range-owner-descriptions.md)
