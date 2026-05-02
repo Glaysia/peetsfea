@@ -18,6 +18,7 @@ tags:
 ## Responsibility
 - Verify the lightweight `peetsfea.type2_spec_tools` import and sampled-TOML rendering API.
 - Verify TOML-backed type2 range owner descriptions for official examples.
+- Verify TX inner `terminal_stub_length_mm` is TOML-owned fixed `7.5` mm in both official example manifests.
 - Cover type2 constraint owner/function validation and public sample retry behavior without STEP export.
 
 ## Inputs / outputs
@@ -28,6 +29,7 @@ tags:
 - `peetsfea.type2_spec_tools` must remain usable without importing CAD/AEDT modules.
 - Public sampled owner mappings must match the active exportable sampled owner set exactly.
 - Official type2 examples must describe every discovered range owner path.
+- TX inner `terminal_stub_length_mm` in `examples/type2_sweep.toml` and `examples/type2_fixed.toml` must remain a fixed range with value `7.5` for deterministic ownership.
 - Constraint validation must reject unknown owner paths and unsupported functions through normal TOML loading.
 - Public sampling retries must happen before STEP export when constraints initially fail.
 

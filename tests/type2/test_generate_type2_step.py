@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 import json
 import math
 import re
@@ -13,6 +14,8 @@ from build123d.topology import Shape
 import pytest
 
 import peetsfea.type2_plate_stack as type2_plate_stack_module
+from peetsfea.spec.loader import load_toml_bytes
+from peetsfea.spec.toml_render import toml_dumps
 from peetsfea.type2_plate_stack import expected_plate_stack_body_names
 from peetsfea.type2_plate_stack import total_plate_stack_thickness_mm
 from peetsfea.type2_step_ledger import ExportedBodyGroup
@@ -1563,6 +1566,7 @@ def _assert_plate_stack_united_copper_group_contract(
 
 def _single_coil_placement_offset_from_local_bounds(
     *,
+    owner_object_id: str,
     owner_origin_xyz: tuple[float, float, float],
     owner_size_xyz: tuple[float, float, float],
     local_bounds_min_xyz: tuple[float, float, float],
@@ -1573,8 +1577,13 @@ def _single_coil_placement_offset_from_local_bounds(
     world_size_xyz = profile.world_size(local_size_xyz)
     world_min_delta = profile.world_delta(local_bounds_min_xyz)
     if plane == "XY":
+        target_world_min_x = (
+            owner_origin_xyz[0]
+            if owner_object_id == "tx_region"
+            else owner_origin_xyz[0] + (owner_size_xyz[0] - world_size_xyz[0]) / 2.0
+        )
         target_world_min_xyz = (
-            owner_origin_xyz[0],
+            target_world_min_x,
             owner_origin_xyz[1] + (owner_size_xyz[1] - world_size_xyz[1]) / 2.0,
             owner_origin_xyz[2] + owner_size_xyz[2] - world_size_xyz[2],
         )
@@ -1642,24 +1651,60 @@ def _world_terminal_stub_boxes(
 ) -> tuple[tuple[tuple[float, float, float], tuple[float, float, float]], ...]:
     type2_spec = load_type2_step_spec(source_toml)
     modeled_spec = next(entry for entry in type2_spec.modeled_objects if entry.object_id == object_id)
-    assert modeled_spec.role in ("tx_single_coil", "rx_single_coil")
-    profile = profile_for_modeled_role(cast(Literal["tx_single_coil", "rx_single_coil"], modeled_spec.role))
-    owner_spec = next(spec for spec in type2_spec.non_model_objects if spec.object_id == profile.placement_owner_id)
+    assert modeled_spec.role in ("tx_single_coil", "tx_inner_single_coil", "rx_single_coil")
+    profile = profile_for_modeled_role(
+        cast(Literal["tx_single_coil", "tx_inner_single_coil", "rx_single_coil"], modeled_spec.role)
+    )
+    resolved_non_model_specs = resolve_non_model_scene_specs(
+        base_specs=type2_spec.non_model_objects,
+        derived_specs=type2_spec.non_model_derived_objects,
+        seed=seed,
+    )
+    owner_spec = next(
+        spec for spec in resolved_non_model_specs if spec.object_id == profile.placement_owner_id
+    )
+    resolved_modeled_spec = cast(ModeledSingleCoilSpec, modeled_spec)
+    if profile.role != "tx_outer_single_coil":
+        if profile.plane == "XY":
+            owner_span_x_mm = owner_spec.size_xyz[0]
+            owner_span_y_mm = owner_spec.size_xyz[1]
+        else:
+            owner_span_x_mm = owner_spec.size_xyz[1]
+            owner_span_y_mm = owner_spec.size_xyz[2]
+        resolved_modeled_spec = replace(
+            resolved_modeled_spec,
+            outer_x_mm=RangeSpec(
+                is_integer=False,
+                start=resolved_modeled_spec.outer_x_usage_ratio.start * owner_span_x_mm,
+                end=resolved_modeled_spec.outer_x_usage_ratio.end * owner_span_x_mm,
+                count=resolved_modeled_spec.outer_x_usage_ratio.count,
+            ),
+            outer_y_mm=RangeSpec(
+                is_integer=False,
+                start=resolved_modeled_spec.outer_y_usage_ratio.start * owner_span_y_mm,
+                end=resolved_modeled_spec.outer_y_usage_ratio.end * owner_span_y_mm,
+                count=resolved_modeled_spec.outer_y_usage_ratio.count,
+            ),
+        )
     with tempfile.TemporaryDirectory() as temp_dir:
         tx_rect_void_toml_path = Path(temp_dir) / f"{object_id}.toml"
-        tx_rect_void_toml_path.write_text(render_tx_rect_void_toml(cast(ModeledSingleCoilSpec, modeled_spec)), encoding="utf-8")
+        tx_rect_void_toml_path.write_text(
+            render_tx_rect_void_toml(resolved_modeled_spec),
+            encoding="utf-8",
+        )
         tx_rect_void_spec = load_tx_rect_void_spec(tx_rect_void_toml_path)
         realized = realize_tx_rect_void_spec(tx_rect_void_spec, seed=seed, profile=profile)
     local_boxes = build_tx_rect_void_box_specs(realized, profile=profile)
     local_bounds_min_xyz, _local_bounds_max_xyz, local_size_xyz = modeled_body_bounds_from_boxes(local_boxes)
     frame_origin_xyz = _single_coil_placement_offset_from_local_bounds(
+        owner_object_id=owner_spec.object_id,
         owner_origin_xyz=owner_spec.origin_xyz,
         owner_size_xyz=owner_spec.size_xyz,
         local_bounds_min_xyz=local_bounds_min_xyz,
         local_size_xyz=local_size_xyz,
         profile=profile,
     )
-    if profile.role == "tx_single_coil":
+    if profile.role in ("tx_single_coil", "tx_inner_single_coil"):
         terminal_stub_boxes = _synthetic_tx_bus_owner_boxes(local_boxes=local_boxes)
     else:
         terminal_stub_boxes = tuple(box for box in local_boxes if box.feature == "terminal_stub")
@@ -1904,6 +1949,7 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     assert tx_inner_entry.underlay_repeat_count.end == pytest.approx(0.0)
     assert tx_inner_entry.underlay_repeat_count.count == 1
     assert tx_inner_entry.terminal_path == "B_cw_to_b"
+    assert tx_inner_entry.terminal_stub_length_mm == RangeSpec(False, 7.5, 7.5, 1)
     tx_inner_profile = profile_for_modeled_role(cast(Literal["tx_inner_single_coil"], tx_inner_entry.role))
     assert tx_inner_profile.plane == "XY"
     assert tx_inner_profile.object_id == "tx_inner_rect_void_coil"
@@ -3003,7 +3049,44 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert tx_inner_entry["expected_exported_body_count"] == 3
     assert tx_inner_entry["expected_exported_body_groups"] == ()
     tx_inner_terminal_metadata = cast(dict[str, object], tx_inner_entry["terminal_metadata"])
+    tx_inner_model_canonical = cast(dict[str, object], tx_inner_entry["canonical_coordinates"])
+    tx_inner_terminal_pcb_layer_z_positions = cast(
+        tuple[float, ...], tx_inner_model_canonical["pcb_layer_z_positions_mm"]
+    )
+    tx_inner_outer_bounds_min_xyz = cast(
+        tuple[float, float, float], tx_inner_model_canonical["outer_bounds_min_xyz"]
+    )
+    assert tx_inner_terminal_metadata["path"] == "B_cw_to_b"
     assert tx_inner_terminal_metadata["port_sheet_vertices_xyz"]
+    assert tx_inner_outer_bounds_min_xyz[2] == pytest.approx(
+        tx_inner_terminal_pcb_layer_z_positions[0] - 7.5
+    )
+    tx_inner_terminal_stub_boxes = _world_terminal_stub_boxes(
+        source_toml=source_toml,
+        object_id="tx_inner_rect_void_coil",
+        seed=0,
+    )
+    assert tx_inner_terminal_stub_boxes
+    tx_inner_layer0_stub_z = tx_inner_terminal_pcb_layer_z_positions[0] - 7.5
+    tx_inner_terminal_stub_layer0_boxes = tuple(
+        box
+        for box in tx_inner_terminal_stub_boxes
+        if abs(box[0][2] - tx_inner_layer0_stub_z) <= 1e-9
+    )
+    assert len(tx_inner_terminal_stub_layer0_boxes) == 2
+    assert {
+        tuple(round(component, 8) for component in vertex)
+        for vertex in cast(
+            list[list[float]],
+            tx_inner_terminal_metadata["port_sheet_vertices_xyz"],
+        )
+    } == {
+        tuple(round(component, 8) for component in vertex)
+        for vertex in _widest_stub_bottom_face_diagonal_vertices(
+            terminal_stub_boxes=tx_inner_terminal_stub_layer0_boxes,
+            plane="XY",
+        )
+    }
     rx_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "rx_rect_void_coil")
     assert cast(dict[str, object], rx_entry["terminal_metadata"])["port_sheet_vertices_xyz"]
     assert ledger["outputs"]["mode"] == "TxRx"
@@ -3081,14 +3164,20 @@ def test_export_type2_step_artifacts_resizes_tx_inner_actual_region_without_resi
     tmp_path: Path,
 ) -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    source_text = (repo_root / "examples" / "type2_fixed.toml").read_text(encoding="utf-8")
-    changed_text = source_text.replace(
-        "[modeled_objects.outer_x_usage_ratio]\nrange = [false, 0.5, 0.5, 1]\n"
-        "[modeled_objects.outer_y_usage_ratio]\nrange = [false, 0.6, 0.6, 1]",
-        "[modeled_objects.outer_x_usage_ratio]\nrange = [false, 0.25, 0.25, 1]\n"
-        "[modeled_objects.outer_y_usage_ratio]\nrange = [false, 0.3, 0.3, 1]",
-        1,
+    source_toml = repo_root / "examples" / "type2_fixed.toml"
+    source_text = source_toml.read_text(encoding="utf-8")
+    changed_spec, _source_bytes = load_toml_bytes(source_toml)
+    modeled_objects = cast(list[dict[str, object]], changed_spec["modeled_objects"])
+    tx_inner_object = next(
+        modeled_object
+        for modeled_object in modeled_objects
+        if modeled_object["object_id"] == "tx_inner_rect_void_coil"
     )
+    outer_x_usage_ratio = cast(dict[str, object], tx_inner_object["outer_x_usage_ratio"])
+    outer_y_usage_ratio = cast(dict[str, object], tx_inner_object["outer_y_usage_ratio"])
+    outer_x_usage_ratio["range"] = [False, 0.25, 0.25, 1]
+    outer_y_usage_ratio["range"] = [False, 0.3, 0.3, 1]
+    changed_text = toml_dumps(changed_spec)
     assert changed_text != source_text
     baseline_dir = tmp_path / "baseline"
     changed_dir = tmp_path / "changed"

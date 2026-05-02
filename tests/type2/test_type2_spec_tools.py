@@ -214,6 +214,16 @@ def test_type2_range_owner_descriptions_for_fixed_official_example() -> None:
     _assert_complete_range_owner_descriptions(TYPE2_FIXED_TOML)
 
 
+@pytest.mark.parametrize("example_toml", (TYPE2_SWEEP_TOML, TYPE2_FIXED_TOML))
+def test_tx_inner_terminal_stub_length_mm_is_fixed_to_7_5_mm(example_toml: Path) -> None:
+    spec, _ = load_toml_bytes(example_toml)
+    terminal_stub = _range_owner_field_from_path(
+        spec,
+        owner_path="modeled_objects.tx_inner_rect_void_coil.terminal_stub_length_mm",
+    )
+    assert terminal_stub["range"] == [False, 7.5, 7.5, 1]
+
+
 @pytest.mark.parametrize(
     "owner_path,mutation,expected_exc,expected_msg",
     (

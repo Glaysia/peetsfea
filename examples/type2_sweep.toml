@@ -281,7 +281,7 @@ description = "TX inner underlay 반복 개수"
 range = [false, 3, 3, 1]
 description = "TX inner layer 사이 z 방향 간격(mm)"
 [modeled_objects.terminal_stub_length_mm]
-range = [false, 5, 5, 1]
+range = [false, 7.5, 7.5, 1]
 description = "TX inner terminal stub 길이(mm)"
 [modeled_objects.void_usage_ratio]
 range = [false, 0.2, 0.8, 25]

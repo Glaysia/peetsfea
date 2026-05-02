@@ -19,7 +19,9 @@ tags:
 - 0.2.24 SDD 기준 RX/reusable core only.
 
 ## Invariants / fail-fast
+- `tx_coil.terminal_stub_length_mm` is treated as TOML-owned when present in the sampled range, and realization must use the selected value directly.
 - Invalid geometry fails immediately.
+- `tx_coil.terminal_stub_length_mm` resolve must be finite and > 0; non-positive values fail fast at realization.
 - TX underlay/multilayer contracts are not covered by this note.
 
 ## Collaborators

@@ -17,6 +17,7 @@ tags:
 
 ## 역할
 - rect/void TOML parsing, range validation, sampled realization을 담당한다.
+- TX terminal stub 길이는 `tx_coil.terminal_stub_length_mm` 샘플 범위에서 단일 소유자로 선정한다.
 
 ## 입력 / 출력
 - 입력: TOML path, integer seed, role profile.
@@ -26,11 +27,14 @@ tags:
 - module-level mutable state는 없다.
 - canonical realized geometry inputs는 `SingleCoilRectVoidSpec`와 `RealizedSingleCoilRectVoid`다.
 - void keepout size is TOML-owned by canonical `void_usage_ratio`; realization applies the selected value to both local X and local Y while keeping the void centered.
+- `terminal_stub_length_mm`는 TOML `tx_coil.terminal_stub_length_mm` range에서 `_select_range_value`로 결정되며,
+  `layer_gap_mm` 계산식(기존 `* 0.8`)은 사용하지 않는다.
 
 ## Invariants / fail-fast
 - `design.units`는 `mm`여야 한다.
 - range table shape/count/type 위반은 즉시 raise한다.
-- `terminal_stub_length_mm` runtime ownership은 derived `layer_gap_mm * 0.8` 규칙을 따른다.
+- `terminal_stub_length_mm` runtime ownership은 TOML range(`tx_coil.terminal_stub_length_mm`)에 기반한다.
+- 선택된 `terminal_stub_length_mm`는 유한한 값이고 0보다 커야 하며, 아니면 즉시 실패한다.
 - TOML legacy split/centered `void_*` keys are unsupported and fail immediately instead of changing geometry.
 - `void_usage_ratio` must realize to `0 < ratio < 1`; invalid candidates fail before geometry construction.
 - `turn_count` resolved value는 active `SingleCoilProfile.max_turn_count` 이하여야 하며 범위를 벗어나면 즉시 raise한다. Public single-coil profiles keep max 6; internal type2 TX columns profile may allow the TOML-owned allocation range up to 36.

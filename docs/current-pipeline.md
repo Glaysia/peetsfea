@@ -19,6 +19,7 @@ tags:
 - `tx_inner_single_coil` may be present as geometry-only TX STEP/ledger context.
 - Transmitter ports, transmitter sources, transmitter mesh ownership, and transmitter output variables are not active type2 contracts.
 - `tx_region` and derived `tx_inner_region` remain non-modeled placement guide context.
+- TX inner `terminal_stub_length_mm` is TOML-owned and fixed to `7.5` mm in official type2 examples (`examples/type2_sweep.toml`, `examples/type2_fixed.toml`).
 - The active runtime flow is:
   1. `entry/sample.py`
   2. `entry/build.py`

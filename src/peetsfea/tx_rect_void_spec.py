@@ -274,14 +274,11 @@ def _validate_void_inside_outer(
         )
 
 
-def _derived_terminal_stub_length_mm(*, layer_gap_mm: float) -> float:
-    stub_length_mm = layer_gap_mm * 0.8
-    if stub_length_mm <= 0.0:
-        raise ValueError(
-            "derived tx rect/void terminal stub length must be > 0 "
-            f"(layer_gap_mm={layer_gap_mm}, stub_length_mm={stub_length_mm})"
-        )
-    return stub_length_mm
+def _validate_finite_positive(value: Number, *, path: str) -> float:
+    resolved_value = float(value)
+    if not math.isfinite(resolved_value) or resolved_value <= 0.0:
+        raise ValueError(f"{path} must be finite and > 0 (actual={value})")
+    return resolved_value
 
 
 def realize_tx_rect_void_spec(
@@ -303,6 +300,10 @@ def realize_tx_rect_void_spec(
     void_center_y_ratio = _FIXED_VOID_CENTER_Y_OVER_OUTER_Y_RATIO
     margin_ratio = float(_select_range_value(coil.margin_ratio, seed=seed))
     metal_fill_factor = float(_select_range_value(coil.metal_fill_factor, seed=seed))
+    terminal_stub_length_mm = _validate_finite_positive(
+        _select_range_value(coil.terminal_stub_length_mm, seed=seed),
+        path="tx_coil.terminal_stub_length_mm",
+    )
     if outer_x_mm <= 0.0:
         raise ValueError(f"tx_coil.outer_x_mm must resolve to > 0 (actual={outer_x_mm})")
     if outer_y_mm <= 0.0:
@@ -323,7 +324,6 @@ def realize_tx_rect_void_spec(
         )
     if layer_gap_mm < 2.0:
         raise ValueError(f"tx_coil.layer_gap_mm must be >= 2.0 (actual={layer_gap_mm})")
-    terminal_stub_length_mm = _derived_terminal_stub_length_mm(layer_gap_mm=layer_gap_mm)
     _validate_ratio(void_usage_ratio, path="tx_coil.void_usage_ratio")
     _validate_ratio(margin_ratio, path="tx_coil.margin_ratio")
     _validate_ratio(metal_fill_factor, path="tx_coil.metal_fill_factor")

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import build123d as bd
 import pytest
+from build123d.topology import Shape
 
 import peetsfea.tx_rect_void_geometry as tx_rect_void_geometry_module
 from peetsfea.tx_rect_void import (
@@ -291,12 +292,12 @@ def _union_xy_bounds(boxes: list[BoxSpec]) -> RectBounds:
 
 
 def _assert_zero_intersection_volume(first: object, second: object) -> None:
-    assert isinstance(first, bd.Shape)
-    assert isinstance(second, bd.Shape)
+    assert isinstance(first, Shape)
+    assert isinstance(second, Shape)
     shared_shape = first.intersect(second)
     if shared_shape is None:
         return
-    assert isinstance(shared_shape, bd.Shape)
+    assert isinstance(shared_shape, Shape)
     shared_solids = tuple(shared_shape.solids())
     if len(shared_solids) == 0:
         return
@@ -304,7 +305,7 @@ def _assert_zero_intersection_volume(first: object, second: object) -> None:
     assert shared_volume == pytest.approx(0.0, abs=1e-9)
 
 
-def _scene_child_by_label(scene: bd.Compound, *, label: str) -> bd.Shape:
+def _scene_child_by_label(scene: bd.Compound, *, label: str) -> Shape:
     matches = [shape for shape in scene.children if shape.label == label]
     assert len(matches) == 1
     return matches[0]
@@ -332,7 +333,11 @@ def _assert_port_sheet_is_metadata_only(*, scene: bd.Compound, profile: SingleCo
 
 
 def test_load_and_realize_valid_spec_is_deterministic(tmp_path: Path) -> None:
-    toml_path = _write_spec(tmp_path, _spec_text(layer_gap=3.0, terminal_stub_length=99.0))
+    terminal_stub_length = 99.0
+    toml_path = _write_spec(
+        tmp_path,
+        _spec_text(layer_gap=3.0, terminal_stub_length=terminal_stub_length),
+    )
     spec = load_tx_rect_void_spec(toml_path)
 
     first = realize_tx_rect_void_spec(spec, seed=10)
@@ -341,7 +346,7 @@ def test_load_and_realize_valid_spec_is_deterministic(tmp_path: Path) -> None:
     assert first == second
     assert first.outer_y_mm == pytest.approx(100.0)
     assert first.layer_count == 1
-    assert first.terminal_stub_length_mm == pytest.approx(first.layer_gap_mm * 0.8)
+    assert first.terminal_stub_length_mm == pytest.approx(terminal_stub_length)
     assert first.void_x_over_outer_x == pytest.approx(0.2)
     assert first.void_y_over_outer_y == pytest.approx(0.2)
     assert first.void_center_x_over_outer_x == pytest.approx(0.0)
@@ -353,13 +358,28 @@ def test_load_and_realize_valid_spec_is_deterministic(tmp_path: Path) -> None:
     assert first.side_geometry.left.trace_mm == pytest.approx(first.side_geometry.right.trace_mm)
 
 
-def test_terminal_stub_length_is_derived_from_layer_gap(tmp_path: Path) -> None:
-    toml_path = _write_spec(tmp_path, _spec_text(layer_gap=2.5, terminal_stub_length=99.0))
+def test_terminal_stub_length_uses_specified_value(tmp_path: Path) -> None:
+    terminal_stub_length = 99.0
+    toml_path = _write_spec(
+        tmp_path,
+        _spec_text(layer_gap=2.5, terminal_stub_length=terminal_stub_length),
+    )
 
     realized = realize_tx_rect_void_spec(load_tx_rect_void_spec(toml_path), seed=0)
 
     assert realized.layer_gap_mm == pytest.approx(2.5)
-    assert realized.terminal_stub_length_mm == pytest.approx(2.0)
+    assert realized.terminal_stub_length_mm == pytest.approx(terminal_stub_length)
+
+
+@pytest.mark.parametrize("terminal_stub_length", (0.0, -2.5))
+def test_non_positive_terminal_stub_length_fails(tmp_path: Path, terminal_stub_length: float) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _spec_text(layer_gap=2.5, terminal_stub_length=terminal_stub_length),
+    )
+
+    with pytest.raises(ValueError, match=r"tx_coil\.terminal_stub_length_mm must be finite and > 0"):
+        realize_tx_rect_void_spec(load_tx_rect_void_spec(toml_path), seed=0)
 
 
 def test_missing_required_key_fails(tmp_path: Path) -> None:
@@ -757,9 +777,10 @@ def test_layer_gap_below_minimum_fails(tmp_path: Path) -> None:
 
 
 def test_tx_multilayer_coil_builds_per_layer_bodies_and_union_bounds(tmp_path: Path) -> None:
+    terminal_stub_length = 99.0
     toml_path = _write_spec(
         tmp_path,
-        _spec_text(layer_count=2, layer_gap=2.5, terminal_stub_length=99.0, turn_count=2),
+        _spec_text(layer_count=2, layer_gap=2.5, terminal_stub_length=terminal_stub_length, turn_count=2),
     )
 
     realized = realize_tx_rect_void_spec(load_tx_rect_void_spec(toml_path), seed=0)
@@ -776,7 +797,7 @@ def test_tx_multilayer_coil_builds_per_layer_bodies_and_union_bounds(tmp_path: P
     modeled_min_xyz, modeled_max_xyz, modeled_size_xyz = modeled_body_bounds_from_boxes(boxes)
 
     assert realized.layer_count == 2
-    assert realized.terminal_stub_length_mm == pytest.approx(realized.layer_gap_mm * 0.8)
+    assert realized.terminal_stub_length_mm == pytest.approx(terminal_stub_length)
     assert tuple(box.label for box in pcb_boxes) == ("tx_pcb_l0", "tx_pcb_l1")
     assert len(pcb_boxes) == realized.layer_count
     assert {box.layer_index for box in copper_boxes} == {0, 1}

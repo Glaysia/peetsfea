@@ -31,6 +31,7 @@ tags:
 - RX full-backing thickness assertions derive the active coil stack thickness from exported PCB/copper bounds.
 - TX inner active example geometry uses `pcb_thickness_mm = 0.3` and one-ounce `copper_thickness_mm = 0.035`.
 - TX inner terminal metadata remains deterministic and can drive `tx_inner_port_sheet` for `TxRx`.
+- Fixed example parsing now asserts `tx_inner_rect_void_coil.terminal_stub_length_mm == [false, 7.5, 7.5, 1]` and `tx_inner` TX export tests assert the canonical `outer_bounds_min_xyz[2]` offset is exactly 7.5 mm above the first PCB layer `z`.
 - `tx_inner_rect_void_coil` is modeled geometry-only with expected bodies `tx_inner_pcb_l0`,
   `tx_inner_pcb_l1`, and `tx_inner_copper_stack`; it must not create `TX_TML`.
 - Multilayer TX inner tests must include the active sweep upper bound: fixed `layer_count=8` exports
@@ -47,6 +48,8 @@ tags:
 - `tx_reference_line` ratio inputs, including centered `y_usage_ratio`, are expected to derive a visible non-modeled
   `tx_inner_region` STEP and retained ledger member without activating TX
   modeled geometry.
+- `_world_terminal_stub_boxes` now resolves placement-owner specs before modeled-box rendering, and for `tx_inner_single_coil`/`tx_single_coil` it uses synthetic bus-aligned owner boxes so the world-stub geometry is validated via balanced start/end bus contract while preserving existing owner-relative semantics.
+- Example mutation tests should edit parsed TOML data and re-render it instead of brittle adjacent-line string replacement, because official range owners may carry `description` metadata beside `range`.
 - `tx_outer_region` must follow source-region semantic `+X/+Z` edges and resolved TX inner stack height, without fixed example-coordinate coupling or clipping to `tx_region`.
 - `tx_inner_actual_region` must match the resolved TX inner design outer box for the same TOML and seed while leaving `tx_inner_region` as the larger guide region. The modeled material/body bbox must be contained in X/Y, not equal.
 
@@ -63,6 +66,9 @@ tags:
 - TX actual-region assertions must compare against shared sizing/placement math, not post-hoc imported geometry inference.
 - `tx_outer_rect_void_coil` acceptance permits world-space +X spillover from the owner bbox, but requires:
   semantic Y span centering and Z containment inside `tx_outer_region`.
+- TX stub contract for `tx_inner_single_coil` now requires:
+  fixed-term stub span checks in helper-derived world coordinates and canonical metadata to be equal:
+  no fallback to non-owner-aligned local boxes and no change in existing balanced start/end stub expectation.
 
 ## Collaborators
 - [generate_type2_step.py](../../entry/generate_type2_step.py.md)
