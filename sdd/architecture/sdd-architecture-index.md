@@ -16,6 +16,7 @@ tags:
 - [pyaedt-boundary](pyaedt-boundary.md)
 - [type2-step-import-boundary](type2-step-import-boundary.md)
 - [type2-em-setup-boundary](type2-em-setup-boundary.md)
+- [type2-spec-boundary](type2-spec-boundary.md)
 - [type2-em-report-contract](type2-em-report-contract.md)
 
 ## 규칙

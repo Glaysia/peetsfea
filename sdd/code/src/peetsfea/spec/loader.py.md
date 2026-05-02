@@ -1,7 +1,7 @@
 ---
 title: src/peetsfea/spec/loader.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-05-03 @ 00:00
 tags:
   - sdd
 ---
@@ -10,9 +10,7 @@ tags:
 
 - Source path: `src/peetsfea/spec/loader.py`
 - Code note path: `sdd/code/src/peetsfea/spec/loader.py.md`
-- Related plan: [0.2.22-sdd-adoption](../../../../plans/0.2.22-sdd-adoption.md)
-- Related architecture: [current-pipeline-sdd-view](../../../../architecture/current-pipeline-sdd-view.md)
-- Related diagram: [sample-build-flow](../../../../diagrams/sample-build-flow.md)
+- Primary graph owner: [type2-spec-boundary](../../../../architecture/type2-spec-boundary.md)
 
 ## 역할
 - TOML 파일을 UTF-8 bytes에서 fail-fast로 로드하고, parsed table과 raw bytes를 함께 반환한다.
@@ -46,7 +44,7 @@ tags:
 - 여러 pipeline/spec test modules
 
 ## 관련 테스트
-- [test_sampling_registry.py](../../../tests/spec_resolver/test_sampling_registry.py.md)
+- `tests/spec_resolver/test_sampling_registry.py`
 - `tests/spec_resolver/test_selection_result.py`
 - `tests/pipeline_runs/test_manifest_validation.py`
 - `tests/pipeline_outputs/test_selection_snapshot_exports.py`
@@ -54,4 +52,8 @@ tags:
 ## 변경 시 주의점
 - 반환 shape를 바꾸면 selection, replay, hashing, snapshot 흐름이 같이 깨질 수 있다.
 - validator semantics를 완화하면 `CODE_COMMANDMENTS.md`의 fail-fast 방향과 충돌할 수 있다.
-- 이 파일을 바꾸면 관련 테스트와 [current-pipeline-sdd-view](../../../../architecture/current-pipeline-sdd-view.md)를 같이 확인한다.
+- 이 파일을 바꾸면 관련 테스트와 `sdd/architecture/current-pipeline-sdd-view.md`를 같이 확인한다.
+
+## Graph links
+- Primary owner: [type2-spec-boundary](../../../../architecture/type2-spec-boundary.md)
+- Direct collaborator: [toml_render.py](toml_render.py.md)

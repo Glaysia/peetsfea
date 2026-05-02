@@ -1,7 +1,7 @@
 ---
 title: Type2 EM Report Contract
 created: 2026-04-28 @ 00:00
-updated: 2026-04-29 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - em
   - sdd
@@ -11,6 +11,11 @@ tags:
 
 이 문서는 type2 setup-ready EM 출력 변수의 shape-independent 계약이다.
 현재 active runtime은 `RxOnly`와 `TxRx` 두 모드를 지원한다. `TxRx`의 활성 TX 형상은 `tx_inner_single_coil` 하나로 제한한다.
+
+## Graph Position
+- Parser enforcement owner: [type2-spec-boundary](type2-spec-boundary.md)
+- Setup/report runtime owner: [type2-em-setup-boundary](type2-em-setup-boundary.md)
+- Pipeline context owner: [type2-step-to-em-validate-pipeline](type2-step-to-em-validate-pipeline.md)
 
 ## Active Modes
 - `RxOnly` assigns only `RX_TML`, reports RX self terms, and rejects TX or transfer expressions.
@@ -77,6 +82,5 @@ tags:
 - Generic TX roles are not implied by the `TxRx` mode; only `tx_inner_single_coil` is active in this plan.
 
 ## Related
-- [type2-step-to-em-validate-pipeline](type2-step-to-em-validate-pipeline.md)
-- [type2-step-to-em-validate-flow](../diagrams/type2-step-to-em-validate-flow.md)
-- [0.2.24-type2-txrx-tx-inner-em](../plans/0.2.24-type2-txrx-tx-inner-em.md)
+- Direct diagram: [type2-step-to-em-validate-flow](../diagrams/type2-step-to-em-validate-flow.md)
+- Direct plan: [0.2.24-type2-txrx-tx-inner-em](../plans/0.2.24-type2-txrx-tx-inner-em.md)

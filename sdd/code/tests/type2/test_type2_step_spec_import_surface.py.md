@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_spec_import_surface.py
 created: 2026-04-21 @ 17:45
-updated: 2026-04-29 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - tests
   - type2
@@ -14,6 +14,7 @@ tags:
 - Path: `tests/type2/test_type2_step_spec_import_surface.py`
 - Code note path: `sdd/code/tests/type2/test_type2_step_spec_import_surface.py.md`
 - Direct owner: [type2_step_spec.py](../../src/peetsfea/type2_step_spec.py.md)
+- Primary graph owner: [type2-spec-boundary](../../../architecture/type2-spec-boundary.md)
 
 ## 역할
 - verify `peetsfea.type2_step_spec` exposes the expected split-facing import surface via `__all__`
@@ -45,3 +46,8 @@ tags:
 ## 변경 시 주의점
 - keep the expected surface list synchronized if split ownership intentionally changes
 - do not relax to fallback assertions; missing or renamed public symbols must fail this test immediately
+
+## Graph links
+- Primary owner: [type2-spec-boundary](../../../architecture/type2-spec-boundary.md)
+- Direct owner: [type2_step_spec.py](../../src/peetsfea/type2_step_spec.py.md)
+- Direct parser contract: [outputs.py](../../src/peetsfea/spec/outputs.py.md)

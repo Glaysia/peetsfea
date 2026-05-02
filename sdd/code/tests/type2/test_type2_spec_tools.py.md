@@ -1,7 +1,7 @@
 ---
 title: test_type2_spec_tools.py
 created: 2026-04-29 @ 00:00
-updated: 2026-04-29 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - test
   - type2
@@ -14,6 +14,7 @@ tags:
 - Path: `tests/type2/test_type2_spec_tools.py`
 - Code note path: `sdd/code/tests/type2/test_type2_spec_tools.py.md`
 - Status: active
+- Primary graph owner: [type2-spec-boundary](../../../architecture/type2-spec-boundary.md)
 
 ## Responsibility
 - Verify the lightweight `peetsfea.type2_spec_tools` import and sampled-TOML rendering API.
@@ -48,10 +49,15 @@ tags:
 - [type2_step_spec_constraints.py](../../src/peetsfea/type2_step_spec_constraints.py.md)
 
 ## Related Tests
-- [test_sample_type2_entry.py](test_sample_type2_entry.py.md)
-- [test_type2_step_spec_import_surface.py](test_type2_step_spec_import_surface.py.md)
-- [0.2.24-type2-range-owner-descriptions](../../../plans/0.2.24-type2-range-owner-descriptions.md)
+- `tests/type2/test_sample_type2_entry.py`
+- `tests/type2/test_type2_step_spec_import_surface.py`
+- `sdd/plans/0.2.24-type2-range-owner-descriptions.md`
 
 ## Change Hazards
 - Keep this module focused; do not move these assertions into existing large test files.
 - If the lightweight public API signature changes intentionally, update these tests and this note together.
+
+## Graph links
+- Primary owner: [type2-spec-boundary](../../../architecture/type2-spec-boundary.md)
+- Direct verification: [toml_render.py](../../src/peetsfea/spec/toml_render.py.md)
+- Direct verification: [test_type2_step_spec_import_surface.py](test_type2_step_spec_import_surface.py.md)

@@ -1,7 +1,7 @@
 ---
 title: toml_render.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-05-03 @ 00:00
 tags:
   - spec
   - toml
@@ -12,7 +12,7 @@ tags:
 ## Source
 - Path: `src/peetsfea/spec/toml_render.py`
 - Code note path: `sdd/code/src/peetsfea/spec/toml_render.py.md`
-- Related plan: [0.2.22-type2-sampled-build-split](../../../../plans/0.2.22-type2-sampled-build-split.md)
+- Primary graph owner: [type2-spec-boundary](../../../../architecture/type2-spec-boundary.md)
 
 ## 역할
 - active path에서 사용할 generic TOML serializer를 제공한다.
@@ -35,7 +35,12 @@ tags:
 
 ## 관련 테스트
 - indirect coverage:
-  - [test_sample_type2_entry.py](../../../tests/type2/test_sample_type2_entry.py.md)
+  - `tests/type2/test_sample_type2_entry.py`
 
 ## 변경 시 주의점
 - active type2가 legacy type1 TOML dump helper를 다시 직접 의존하게 만들지 않는다.
+
+## Graph links
+- Primary owner: [type2-spec-boundary](../../../../architecture/type2-spec-boundary.md)
+- Direct collaborator: [loader.py](loader.py.md)
+- Representative verification: [test_type2_spec_tools.py](../../../tests/type2/test_type2_spec_tools.py.md)

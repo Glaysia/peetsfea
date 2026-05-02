@@ -1,7 +1,7 @@
 ---
 title: outputs.py
 created: 2026-04-18 @ 13:45
-updated: 2026-04-29 @ 00:00
+updated: 2026-05-03 @ 00:00
 tags:
   - spec
   - em
@@ -13,6 +13,7 @@ tags:
 - Path: `src/peetsfea/spec/outputs.py`
 - Code note path: `sdd/code/src/peetsfea/spec/outputs.py.md`
 - Status: active
+- Primary graph owner: [type2-spec-boundary](../../../../architecture/type2-spec-boundary.md)
 
 ## 역할
 - active/shared EM report/output-variable contract parser를 제공한다.
@@ -45,16 +46,22 @@ tags:
 - empty string expression/name, unsupported key, missing key는 즉시 실패다.
 
 ## 직접 의존
-- [manifest.py](../types/manifest.py.md)
+- `src/peetsfea/types/manifest.py`
 
 ## 이 파일을 쓰는 곳
-- [type2_step_spec.py](../type2_step_spec.py.md)
-- [type2_step_import_ledger.py](../backend/pyaedt/type2_step_import_ledger.py.md)
+- `src/peetsfea/type2_step_spec.py`
+- `src/peetsfea/backend/pyaedt/type2_step_import_ledger.py`
 
 ## 관련 테스트
-- [test_generate_type2_step.py](../../../tests/type2/test_generate_type2_step.py.md)
-- [test_type2_step_setup_ready.py](../../../tests/backend_em/test_type2_step_setup_ready.py.md)
+- `tests/type2/test_generate_type2_step.py`
+- `tests/backend_em/test_type2_step_setup_ready.py`
 
 ## 변경 시 주의점
 - legacy parser를 active path의 hidden dependency로 다시 끌어오지 않는다.
 - report contract drift는 type2 TOML, ledger handoff, setup-ready tests를 함께 갱신한다.
+
+## Graph links
+- Primary owner: [type2-spec-boundary](../../../../architecture/type2-spec-boundary.md)
+- Exceptional contract: [type2-em-report-contract](../../../../architecture/type2-em-report-contract.md)
+- Runtime handoff: [type2_step_import_ledger.py](../backend/pyaedt/type2_step_import_ledger.py.md)
+- Representative verification: [test_type2_step_spec_import_surface.py](../../../tests/type2/test_type2_step_spec_import_surface.py.md)
