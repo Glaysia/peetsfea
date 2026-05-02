@@ -22,13 +22,23 @@ _INNER_CORNERS: frozenset[str] = frozenset({"a", "b", "c", "d"})
 _PATH_DIRECTIONS: frozenset[str] = frozenset({"cw", "ccw"})
 
 
-class ImportedModeledObjectCanonicalCoordinates(TypedDict):
+class ImportedModeledObjectCanonicalCoordinatesRequired(TypedDict):
     frame_origin_xyz: tuple[float, float, float]
     outer_bounds_min_xyz: tuple[float, float, float]
     outer_bounds_max_xyz: tuple[float, float, float]
     outer_bounds_size_xyz: tuple[float, float, float]
     pcb_layer_z_positions_mm: tuple[float, ...]
     copper_layer_z_positions_mm: tuple[float, ...]
+
+
+class ImportedModeledObjectCanonicalCoordinates(ImportedModeledObjectCanonicalCoordinatesRequired, total=False):
+    # Present when the source emitter records rigid-tilt provenance for tx_outer_single_coil.
+    outer_tilt_metadata: "ImportedTxOuterCanonicalTiltMetadata"
+
+
+class ImportedTxOuterCanonicalTiltMetadata(TypedDict, total=False):
+    # Maximum accepted protrusion beyond the outer region in world +X for rigid-tilt stack placement.
+    max_world_x_protrusion_mm: float
 
 
 class ImportedSingleCoilTerminalMetadataBase(TypedDict):
@@ -92,6 +102,30 @@ class ImportedModeledObjectEntry(TypedDict):
     canonical_coordinates: ImportedModeledObjectCanonicalCoordinates
     terminal_metadata: ImportedSingleCoilTerminalMetadata | ImportedPlateStackTerminalMetadata | ImportedTxRectVoidColumnsTerminalMetadata
     imported_object_names: tuple[str, ...]
+
+
+def _require_positive_float_or_zero(value: object, *, context: str) -> float:
+    checked_value = _require_float(value, context=context)
+    if checked_value < 0:
+        raise ValueError(f"{context} must be >= 0")
+    return checked_value
+
+
+def _parse_outer_tilt_metadata(value: object, *, context: str) -> ImportedTxOuterCanonicalTiltMetadata:
+    node = _require_table(value, context=context)
+    allowed_keys = ("max_world_x_protrusion_mm",)
+    raw_keys = sorted(node.keys())
+    if raw_keys != list(allowed_keys):
+        raise ValueError(
+            f"{context} must only expose keys {allowed_keys} "
+            f"(actual={raw_keys})"
+        )
+    return {
+        "max_world_x_protrusion_mm": _require_positive_float_or_zero(
+            _require_key(node, key="max_world_x_protrusion_mm", context=context),
+            context=f"{context}.max_world_x_protrusion_mm",
+        )
+    }
 
 
 def _require_key(table: dict[str, object], *, key: str, context: str) -> object:
@@ -217,7 +251,7 @@ def _require_terminal_direction(value: object) -> Literal["cw", "ccw"]:
 
 def _parse_canonical_coordinates(value: object) -> ImportedModeledObjectCanonicalCoordinates:
     node = _require_table(value, context="modeled_object.canonical_coordinates")
-    return {
+    parsed_coordinates: ImportedModeledObjectCanonicalCoordinates = {
         "frame_origin_xyz": _require_float_triplet(
             _require_key(node, key="frame_origin_xyz", context="modeled_object.canonical_coordinates"),
             context="modeled_object.canonical_coordinates.frame_origin_xyz",
@@ -243,6 +277,12 @@ def _parse_canonical_coordinates(value: object) -> ImportedModeledObjectCanonica
             context="modeled_object.canonical_coordinates.copper_layer_z_positions_mm",
         ),
     }
+    if "outer_tilt_metadata" in node:
+        parsed_coordinates["outer_tilt_metadata"] = _parse_outer_tilt_metadata(
+            node["outer_tilt_metadata"],
+            context="modeled_object.canonical_coordinates.outer_tilt_metadata",
+        )
+    return parsed_coordinates
 
 
 def _parse_single_coil_terminal_metadata(value: object) -> ImportedSingleCoilTerminalMetadata:

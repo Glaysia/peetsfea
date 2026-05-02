@@ -27,11 +27,13 @@ tags:
 - RX terminal metadata is required for RxOnly port assignment.
 - TX terminal metadata names are dormant future two-terminal context only.
 - `tx_outer_single_coil` preserves its explicit role/object/terminal metadata without enabling a TX outer port/source/report contract.
+- `tx_outer_single_coil` may carry `canonical_coordinates.outer_tilt_metadata.max_world_x_protrusion_mm` to describe rigid-tilt +X protrusion; parsing validates the key is present and non-negative when supplied.
 
 ## Invariants / fail-fast
 - Missing RX terminal metadata fails immediately.
 - RxOnly adapter output must not require TX modeled metadata.
 - Unsupported modeled roles fail before imported ledger construction; the supported role literal list includes `tx_outer_single_coil`.
+- tx_outer canonical tilt metadata is validated as canonical scalar metadata, not silently dropped; unsupported shapes/negative values fail fast at parse time.
 
 ## Collaborators
 - [type2_step_import_core.py](type2_step_import_core.py.md)

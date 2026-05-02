@@ -17,6 +17,7 @@ tags:
 ## 역할
 - type2 STEP import-only pipeline behavior를 검증한다.
 - 0.2.24 SDD 기준 RX modeled import and non-modeled guide/context import are active.
+- `tx_outer_single_coil`의 world +X rigid-tilt protrusion 허용 조건과 관련된 바운드 검증 회로를 커버한다.
 
 ## Canonical state
 - Import ledger preserves source paths, seed, imported ownership, and imported object names.
@@ -24,10 +25,13 @@ tags:
 - `tx_region` may be carried as guide context only.
 - Geometry-only `tx_inner_single_coil` import partition accepts an empty body-group contract.
 - Ledger fixtures declare `outputs.mode = "RxOnly"` and only active RX output variables.
+- `tx_outer_single_coil`의 +X protrusion metadata는 `canonical_coordinates.outer_tilt_metadata.max_world_x_protrusion_mm` 키로만 제공되며, 값은 0 이상의 숫자여야 한다.
 
 ## Invariants / fail-fast
 - Missing RX imported bodies and generic imported names fail.
 - RxOnly import tests must not require TX modeled bodies.
+- `tx_outer_single_coil` without `outer_tilt_metadata` must fail strict X-overrun check.
+- `tx_outer_single_coil` malformed or negative `outer_tilt_metadata` must fail parsing/validation with no fallback.
 
 ## Collaborators
 - [type2_step_import_pipeline.py](../../src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py.md)

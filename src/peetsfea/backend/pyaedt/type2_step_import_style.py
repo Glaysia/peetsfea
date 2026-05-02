@@ -157,6 +157,43 @@ def _is_air_family_name(name: str) -> bool:
     ) or _is_tx_branch_stack_member(name, suffix="_stack_air")
 
 
+def _require_non_negative_float(value: object, *, context: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"{context} must be number")
+    checked_value = float(value)
+    if checked_value < 0.0:
+        raise ValueError(f"{context} must be >= 0")
+    return checked_value
+
+
+def _tx_outer_x_protrusion_allowance_mm(*, modeled_entry: dict[str, object], context: str) -> float:
+    raw_canonical_coordinates = require_key(
+        modeled_entry,
+        key="canonical_coordinates",
+        context=context,
+    )
+    if not isinstance(raw_canonical_coordinates, dict):
+        raise TypeError(f"{context}.canonical_coordinates must be an object/table")
+    if "outer_tilt_metadata" not in raw_canonical_coordinates:
+        return 0.0
+    raw_outer_tilt_metadata = require_key(
+        raw_canonical_coordinates,
+        key="outer_tilt_metadata",
+        context=f"{context}.canonical_coordinates",
+    )
+    if not isinstance(raw_outer_tilt_metadata, dict):
+        raise TypeError(f"{context}.canonical_coordinates.outer_tilt_metadata must be an object/table")
+    raw_max_world_x_protrusion_mm = require_key(
+        raw_outer_tilt_metadata,
+        key="max_world_x_protrusion_mm",
+        context=f"{context}.canonical_coordinates.outer_tilt_metadata",
+    )
+    return _require_non_negative_float(
+        raw_max_world_x_protrusion_mm,
+        context=f"{context}.canonical_coordinates.outer_tilt_metadata.max_world_x_protrusion_mm",
+    )
+
+
 def _unwrap_raw(value: object, *, context: str) -> object:
     if hasattr(value, "_raw"):
         raw_value = object.__getattribute__(value, "_raw")
@@ -891,14 +928,23 @@ def validate_modeled_bounds_against_owner(
     allowed_modeled_size_y = (
         owner_size_y + _PLATE_STACK_STUB_LENGTH_MM if role in ("tx_plate_stack", "rx_plate_stack") else owner_size_y
     )
+    if role == "tx_outer_single_coil":
+        allowed_modeled_size_x = (
+            owner_size_x + _tx_outer_x_protrusion_allowance_mm(modeled_entry=modeled_entry, context=context)
+        )
+    else:
+        allowed_modeled_size_x = owner_size_x
     if modeled_size_y > allowed_modeled_size_y or modeled_size_z > owner_size_z or (
-        not is_tx_array_mode and modeled_size_x > owner_size_x
+        not is_tx_array_mode and modeled_size_x > allowed_modeled_size_x
     ):
-        raise ValueError(
+        message = (
             f"{context} outer bounds must fit inside {owner_id} "
             f"(modeled_size={(modeled_size_x, modeled_size_y, modeled_size_z)}, "
-            f"owner_size={(owner_size_x, allowed_modeled_size_y, owner_size_z)})"
+            f"owner_size={(allowed_modeled_size_x, allowed_modeled_size_y, owner_size_z)})"
         )
+        if role == "tx_outer_single_coil":
+            message = f"tx_outer_single_coil outer bounds must fit inside {owner_id}"
+        raise ValueError(message)
     if role == "tx_plate_stack":
         if owner_id != "tx_region":
             raise ValueError(
@@ -1001,9 +1047,10 @@ def validate_modeled_bounds_against_owner(
             )
         if plane != "XY":
             raise ValueError(f"{context}.plane must be 'XY' for tx_outer_single_coil geometry (actual={plane!r})")
+        protrusion_allowance_mm = _tx_outer_x_protrusion_allowance_mm(modeled_entry=modeled_entry, context=context)
         if (
             modeled_min_x < owner_min_x - _PLACEMENT_TOLERANCE
-            or modeled_max_x > owner_max_x + _PLACEMENT_TOLERANCE
+            or modeled_max_x > owner_max_x + protrusion_allowance_mm + _PLACEMENT_TOLERANCE
             or modeled_min_y < owner_min_y - _PLACEMENT_TOLERANCE
             or modeled_max_y > owner_max_y + _PLACEMENT_TOLERANCE
             or modeled_min_z < owner_min_z - _PLACEMENT_TOLERANCE

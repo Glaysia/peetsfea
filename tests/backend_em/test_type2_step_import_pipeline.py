@@ -255,6 +255,64 @@ def _modeled_entry(
     }
 
 
+def _tx_outer_single_coil_entry(
+    *,
+    object_id: str = "tx_outer_rect_void_coil",
+    origin_xyz: tuple[float, float, float] = (0.0, -140.0, 0.0),
+    size_xyz: tuple[float, float, float] = (90.0, 30.0, 2.8),
+    outer_tilt_protrusion_mm: float | None = None,
+) -> dict[str, object]:
+    modeled_object = _modeled_entry(
+        object_id=object_id,
+        role="tx_outer_single_coil",
+        plane="XY",
+        placement_owner_id="tx_outer_region",
+        origin_xyz=origin_xyz,
+        size_xyz=size_xyz,
+        expected_names=["tx_outer_pcb_l0", "tx_outer_copper_l0"],
+    )
+    canonical_coordinates = cast(dict[str, object], modeled_object["canonical_coordinates"])
+    if outer_tilt_protrusion_mm is not None:
+        canonical_coordinates["outer_tilt_metadata"] = {"max_world_x_protrusion_mm": outer_tilt_protrusion_mm}
+    return modeled_object
+
+
+def _non_model_entry_with_tx_outer_region(
+    *,
+    outer_region_origin_xyz: tuple[float, float, float] = (0.0, -140.0, 0.0),
+    outer_region_size_xyz: tuple[float, float, float] = (80.0, 280.0, 90.0),
+) -> dict[str, object]:
+    non_model_object = _non_model_entry()
+    outer_region_origin_x, outer_region_origin_y, outer_region_origin_z = outer_region_origin_xyz
+    outer_region_size_x, outer_region_size_y, outer_region_size_z = outer_region_size_xyz
+    outer_region_member = {
+        "object_id": "tx_outer_region",
+        "role": "tx_outer_region",
+        "material": "vacuum",
+        "model_state": False,
+        "canonical_coordinates": {
+            "frame_origin_xyz": list(outer_region_origin_xyz),
+            "outer_bounds_min_xyz": list(outer_region_origin_xyz),
+            "outer_bounds_max_xyz": [
+                outer_region_origin_x + outer_region_size_x,
+                outer_region_origin_y + outer_region_size_y,
+                outer_region_origin_z + outer_region_size_z,
+            ],
+            "outer_bounds_size_xyz": list(outer_region_size_xyz),
+        },
+        "plane": "YZ",
+        "non_model": True,
+        "member_object_ids": ("tx_outer_region",),
+    }
+    member_object_ids = list(cast(tuple[str, ...], non_model_object["member_object_ids"]))
+    member_object_ids.append("tx_outer_region")
+    non_model_object["member_object_ids"] = tuple(member_object_ids)
+    member_objects = list(cast(list[dict[str, object]], non_model_object["member_objects"]))
+    member_objects.append(outer_region_member)
+    non_model_object["member_objects"] = member_objects
+    return non_model_object
+
+
 def _tx_rect_void_columns_terminal_metadata_for_import() -> dict[str, object]:
     return {
         "kind": "parallel_collector_tabs",
@@ -2040,6 +2098,171 @@ def test_import_type2_step_ledger_fails_when_modeled_tx_is_not_top_aligned_to_tx
     session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[("environment", "tx_region", *_tx_region_actual_member_names(), "rx_region_max", "tx_pcb_l0", "tx_copper_l0")]))
 
     with pytest.raises(ValueError, match=r"outer bounds max_z must already touch tx_region max_z"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            design_name="fake_type2_import",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
+
+
+def test_import_type2_step_ledger_accepts_tx_outer_single_coil_outer_x_protrusion_with_outer_tilt_metadata(
+    tmp_path: Path,
+) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry_with_tx_outer_region()],
+        modeled_objects=[
+            _tx_outer_single_coil_entry(
+                outer_tilt_protrusion_mm=10.0,
+                size_xyz=(90.0, 30.0, 2.8),
+            )
+        ],
+    )
+    session = _FakeHfss(
+        modeler=_FakeModeler(
+            imported_name_batches=[(
+                "environment",
+                "tx_region",
+                *_tx_region_actual_member_names(),
+                "rx_region_max",
+                "tx_outer_region",
+                "tx_outer_pcb_l0",
+                "tx_outer_copper_l0",
+            )]
+        )
+    )
+
+    result = import_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+        imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+        design_name="fake_type2_import",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    modeled_entry = cast(dict[str, object], modeled_by_id["tx_outer_rect_void_coil"])
+    assert modeled_entry["placement_owner_id"] == "tx_outer_region"
+    assert modeled_entry["role"] == "tx_outer_single_coil"
+
+
+def test_import_type2_step_ledger_rejects_tx_outer_single_coil_outer_x_protrusion_without_tilt_metadata(
+    tmp_path: Path,
+) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry_with_tx_outer_region()],
+        modeled_objects=[
+            _tx_outer_single_coil_entry(
+                outer_tilt_protrusion_mm=None,
+                size_xyz=(90.0, 30.0, 2.8),
+            )
+        ],
+    )
+    session = _FakeHfss(
+        modeler=_FakeModeler(
+            imported_name_batches=[(
+                "environment",
+                "tx_region",
+                *_tx_region_actual_member_names(),
+                "rx_region_max",
+                "tx_outer_region",
+                "tx_outer_pcb_l0",
+                "tx_outer_copper_l0",
+            )]
+        )
+    )
+
+    with pytest.raises(ValueError, match=r"tx_outer_single_coil outer bounds must fit inside tx_outer_region"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            design_name="fake_type2_import",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
+
+
+def test_import_type2_step_ledger_rejects_tx_outer_single_coil_invalid_outer_tilt_metadata(
+    tmp_path: Path,
+) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    modeled_entry = _tx_outer_single_coil_entry(
+        outer_tilt_protrusion_mm=0.0,
+        size_xyz=(20.0, 30.0, 2.8),
+    )
+    canonical_coordinates = cast(dict[str, object], modeled_entry["canonical_coordinates"])
+    canonical_coordinates["outer_tilt_metadata"] = {"max_world_x_protrusion_mm": -5.0}
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry_with_tx_outer_region()],
+        modeled_objects=[modeled_entry],
+    )
+    session = _FakeHfss(
+        modeler=_FakeModeler(
+            imported_name_batches=[(
+                "environment",
+                "tx_region",
+                *_tx_region_actual_member_names(),
+                "rx_region_max",
+                "tx_outer_region",
+                "tx_outer_pcb_l0",
+                "tx_outer_copper_l0",
+            )]
+        )
+    )
+
+    with pytest.raises(ValueError, match=r"must be >= 0"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            design_name="fake_type2_import",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
+
+
+def test_import_type2_step_ledger_rejects_tx_inner_single_coil_outer_x_beyond_tx_region(
+    tmp_path: Path,
+) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=[
+            _modeled_entry(
+                role="tx_inner_single_coil",
+                object_id="tx_inner_rect_void_coil",
+                placement_owner_id="tx_region",
+                expected_names=["tx_inner_pcb_l0", "tx_inner_copper_l0"],
+                origin_xyz=(0.0, -15.0, 87.2),
+                size_xyz=(170.0, 30.0, 2.8),
+                expected_groups=[],
+            )
+        ],
+    )
+    session = _FakeHfss(
+        modeler=_FakeModeler(
+            imported_name_batches=[(
+                "environment",
+                "tx_region",
+                *_tx_region_actual_member_names(),
+                "rx_region_max",
+                "tx_inner_pcb_l0",
+                "tx_inner_copper_l0",
+            )]
+        )
+    )
+
+    with pytest.raises(ValueError, match=r"outer bounds must fit inside tx_region"):
         import_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",

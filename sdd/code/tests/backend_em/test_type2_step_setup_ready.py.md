@@ -18,6 +18,7 @@ tags:
 - setup-ready runtime의 import, mesh, boundary, RX port, RX report assembly behavior를 검증한다.
 - 0.2.24 SDD 기준 `RxOnly` and `TxRx` behavior are active documented targets.
 - solve-enabled setup tests verify analysis and report CSV export before desktop release.
+- TxTx geometry-only optional role(`tx_outer_single_coil`) 포함 조합에서 setup-ready가 active EM path를 tx_inner/rx 쪽으로만 유지하는지를 검증한다.
 
 ## Canonical state
 - Tests should verify RX conductor mesh and one RX lumped port.
@@ -25,6 +26,7 @@ tags:
 - Tests should verify TxRx keeps TX inner + RX ledger entries, creates TX/RX port assignments, assembles two-terminal report variables, and meshes TX inner + RX conductors.
 - 포트 할당 단위 테스트에 `tx_inner_single_coil` paired mode (`tx_inner_single_coil` + `rx_single_coil`)를 추가로 검증한다.
 - The active full setup-ready happy path uses a single `rx_single_coil` modeled entry.
+- TxRx full setup-ready happy path는 `tx_outer_single_coil`이 함께 존재해도 최종 `ports`, `mesh`, `analysis` 입력 계산은 기하 전용 tx_outer를 필터링한 결과만 반영해야 한다.
 - Future two-terminal report names are documented in [type2-em-report-contract](../../../architecture/type2-em-report-contract.md) but are not active RxOnly assertions.
 - Solve/export tests use the same active output-variable report created by setup-ready generation.
 

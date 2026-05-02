@@ -204,6 +204,13 @@ def _require_positive_float(value: object, *, context: str) -> float:
     return checked_value
 
 
+def _require_non_negative_float(value: object, *, context: str) -> float:
+    checked_value = _require_float(value, context=context)
+    if checked_value < 0.0:
+        raise ValueError(f"{context} must be >= 0")
+    return checked_value
+
+
 def _require_entry_list(value: object, *, context: str) -> list[dict[str, object]]:
     if not isinstance(value, list):
         raise TypeError(f"{context} must be a list")
@@ -332,6 +339,24 @@ def _validated_plate_stack_terminal_metadata(
     _require_float_triplet_sequence(
         require_key(terminal_metadata, key="port_sheet_vertices_xyz", context=f"{context}.terminal_metadata"),
         context=f"{context}.terminal_metadata.port_sheet_vertices_xyz",
+    )
+
+
+def _validated_outer_tilt_metadata(
+    raw_outer_tilt_metadata: object,
+    *,
+    context: str,
+) -> None:
+    outer_tilt_metadata = _require_table(raw_outer_tilt_metadata, context=context)
+    expected_keys = {"max_world_x_protrusion_mm"}
+    if set(outer_tilt_metadata) != expected_keys:
+        raise ValueError(
+            f"{context} must match tx outer canonical tilt metadata contract "
+            f"(actual_keys={sorted(outer_tilt_metadata)})"
+        )
+    _require_non_negative_float(
+        require_key(outer_tilt_metadata, key="max_world_x_protrusion_mm", context=context),
+        context=f"{context}.max_world_x_protrusion_mm",
     )
 
 
@@ -725,6 +750,20 @@ def _validated_modeled_entry(
             raise ValueError(
                 f"{context}.terminal_metadata.kind {kind!r} is unsupported for coil import; "
                 "coil roles require explicit terminal geometry metadata"
+            )
+    if role == "tx_outer_single_coil":
+        raw_canonical_coordinates = _require_table(
+            require_key(entry, key="canonical_coordinates", context=context),
+            context=f"{context}.canonical_coordinates",
+        )
+        if "outer_tilt_metadata" in raw_canonical_coordinates:
+            _validated_outer_tilt_metadata(
+                require_key(
+                    raw_canonical_coordinates,
+                    key="outer_tilt_metadata",
+                    context=f"{context}.canonical_coordinates",
+                ),
+                context=f"{context}.canonical_coordinates.outer_tilt_metadata",
             )
     require_non_empty_str(
         require_key(entry, key="source_metadata_path", context=context),

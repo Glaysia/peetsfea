@@ -28,12 +28,14 @@ tags:
 - `tx_region` may appear as a non-modeled guide object; it is not TX modeled geometry.
 - `tx_inner_single_coil` may appear as modeled geometry with `tx_inner_region` placement ownership.
 - `tx_outer_single_coil` may appear as modeled geometry with `tx_outer_region` placement ownership, but remains setup-inactive until a later plan defines explicit outer TX excitation semantics.
+- `tx_outer_single_coil` canonical ownership metadata may include `canonical_coordinates.outer_tilt_metadata.max_world_x_protrusion_mm` only; this numeric non-negative contract is required for strict provenance and is validated when the outer role is present.
 
 ## Invariants / fail-fast
 - Missing required RX imported bodies fail immediately.
 - Missing required `tx_inner_single_coil` or `tx_outer_single_coil` imported bodies fail immediately when declared by the source ledger.
 - Generic imported-name drift is a contract failure.
 - RxOnly imported ledger may record geometry-only TX inner/outer entries, but setup-ready must filter them before active EM input construction.
+- Outer TX outer canonical tilt metadata with wrong key set or negative values fails fast during step-ledger validation.
 
 ## Collaborators
 - [type2_step_import_core.py](type2_step_import_core.py.md)

@@ -35,6 +35,7 @@ from tests.backend_em.test_type2_step_import_pipeline import (
     _plate_stack_imported_name_batch,
     _plate_stack_modeled_objects,
     _plate_stack_non_model_entry,
+    _non_model_entry_with_tx_outer_region,
     _rx_single_coil_entry,
     _rx_plate_stack_entry,
     _rx_plate_stack_expected_names,
@@ -46,6 +47,7 @@ from tests.backend_em.test_type2_step_import_pipeline import (
     _tx_plate_stack_array_expected_groups,
     _tx_plate_stack_array_expected_names,
     _tx_region_actual_member_names,
+    _tx_outer_single_coil_entry,
     _source_paths,
     _write_ledger,
 )
@@ -414,6 +416,23 @@ def _tx_inner_rx_imported_name_batch() -> tuple[str, ...]:
         "tx_region",
         *tx_region_actual_member_names,
         "rx_region_max",
+        "tx_inner_pcb_l0",
+        "tx_inner_copper_l0",
+        "rx_pcb_l0",
+        "rx_copper_l0",
+    )
+
+
+def _tx_inner_outer_rx_imported_name_batch() -> tuple[str, ...]:
+    tx_region_actual_member_names = _tx_region_actual_member_names()
+    return (
+        "environment",
+        "tx_region",
+        *tx_region_actual_member_names,
+        "rx_region_max",
+        "tx_outer_region",
+        "tx_outer_pcb_l0",
+        "tx_outer_copper_l0",
         "tx_inner_pcb_l0",
         "tx_inner_copper_l0",
         "rx_pcb_l0",
@@ -863,6 +882,48 @@ def test_setup_type2_step_ledger_builds_mesh_boundary_ports_analysis_and_validat
     assert "mesh" not in imported_payload
     assert "boundary" not in imported_payload
     assert imported_payload["aedt_path"] == str(output_aedt_path)
+
+
+def test_setup_type2_step_ledger_keeps_tx_outer_single_coil_geometry_only_in_txrx_mode(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    modeled_objects = _tx_inner_rx_modeled_objects_with_imported_names(tmp_path)
+    tx_outer_entry = _tx_outer_single_coil_entry(outer_tilt_protrusion_mm=10.0)
+    tx_outer_entry["imported_object_names"] = ["tx_outer_pcb_l0", "tx_outer_copper_l0"]
+    modeled_objects.append(tx_outer_entry)
+    _write_txrx_step_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry_with_tx_outer_region()],
+        modeled_objects=modeled_objects,
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_setup_ready.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _SetupReadyHfss(
+        modeler=_SetupReadyModeler(imported_name_batches=[_tx_inner_outer_rx_imported_name_batch()])
+    )
+
+    result = cast(
+        Type2SetupReadyResult,
+        setup_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=output_aedt_path,
+            imported_ledger_path=imported_ledger_path,
+            design_name="fake_type2_setup_ready",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        ),
+    )
+
+    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload(tx_object_name="tx_inner_copper_l0")]
+    assert session._excitation_names == ["1_T1", "2_T1"]
+    assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
+    assert result["mesh"]["objects"] == ["tx_inner_copper_l0", "rx_copper_l0"]
+    imported_payload = _imported_ledger_payload(imported_ledger_path)
+    imported_modeled_objects = cast(list[dict[str, str]], imported_payload["modeled_objects"])
+    assert sorted(entry["role"] for entry in imported_modeled_objects) == [
+        "rx_single_coil",
+        "tx_inner_single_coil",
+        "tx_outer_single_coil",
+    ]
 
 
 def test_setup_type2_step_ledger_assigns_requested_design_variables_before_save(tmp_path: Path) -> None:
