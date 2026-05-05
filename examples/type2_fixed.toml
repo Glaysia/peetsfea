@@ -1,0 +1,337 @@
+# Unified type2 fixed authoring input.
+# ----------------------------------------------------------------------------
+# This file is one frozen realization of examples/type2_sweep.toml.
+# It must keep the same public field surface as the sweep SSOT.
+# Active setup is TxRx: TX-inner and RX modeled coils with two-terminal EM outputs.
+
+spec_version = "0.2.22"
+schema_id = "peetsfea.type2.step.v8"
+runtime_compatible = false
+
+[design]
+units = "mm"
+
+[backend]
+authoring_tool = "build123d"
+solver_tool = "hfss"
+interchange_format = "step"
+
+[simulation]
+radiation_margin_mm = 3500.0
+
+[outputs]
+# Active TxRx setup creates TX inner + RX report variables.
+mode = "TxRx"
+report_name = "Output Variables Table1"
+solution_name = "Setup1 : LastAdaptive"
+primary_sweep = "Freq"
+report_category = "Terminal Solution Data"
+plot_type = "Data Table"
+
+[[outputs.variables]]
+name = "Ltx_uH"
+expression = "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"
+
+[[outputs.variables]]
+name = "Lrx_uH"
+expression = "im(Zt(RX_TML,RX_TML))/2/pi/freq*1e6"
+
+[[outputs.variables]]
+name = "M_uH"
+expression = "abs(im(Zt(TX_TML,RX_TML))/2/pi/freq*1e6)"
+
+[[outputs.variables]]
+name = "k_ratio"
+expression = "M_uH/sqrt(Ltx_uH*Lrx_uH)"
+
+[[outputs.variables]]
+name = "Qtx_ratio"
+expression = "im(Zt(TX_TML,TX_TML))/re(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Qrx_ratio"
+expression = "im(Zt(RX_TML,RX_TML))/re(Zt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "FOM_ratio"
+expression = "k_ratio*sqrt(Qtx_ratio*Qrx_ratio)"
+
+[[outputs.variables]]
+name = "Rtx_ac_ohm"
+expression = "re(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Rrx_ac_ohm"
+expression = "re(Zt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "Xtx_ohm"
+expression = "im(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Xrx_ohm"
+expression = "im(Zt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "M_over_Ltx_ratio"
+expression = "M_uH/Ltx_uH"
+
+[[outputs.variables]]
+name = "M_over_Lrx_ratio"
+expression = "M_uH/Lrx_uH"
+
+[[outputs.variables]]
+name = "Gtx_S"
+expression = "re(Yt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Btx_S"
+expression = "im(Yt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Grx_S"
+expression = "re(Yt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "Brx_S"
+expression = "im(Yt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S11_mag_ratio"
+expression = "mag(S(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "S21_mag_ratio"
+expression = "mag(S(TX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S21_phase_deg"
+expression = "ang_deg_val(S(TX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S22_mag_ratio"
+expression = "mag(S(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "eta_s21_power_ratio"
+expression = "S21_mag_ratio*S21_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_tx_accept_ratio"
+expression = "1-S11_mag_ratio*S11_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_rx_accept_ratio"
+expression = "1-S22_mag_ratio*S22_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_match_product_ratio"
+expression = "eta_tx_accept_ratio*eta_rx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_from_tx_accept_ratio"
+expression = "eta_s21_power_ratio/eta_tx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_from_rx_accept_ratio"
+expression = "eta_s21_power_ratio/eta_rx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_two_sided_norm_ratio"
+expression = "eta_s21_power_ratio/(eta_tx_accept_ratio*eta_rx_accept_ratio)"
+
+[[outputs.variables]]
+name = "eta_fom_max_ratio"
+expression = "(FOM_ratio*FOM_ratio)/((1+sqrt(1+FOM_ratio*FOM_ratio))*(1+sqrt(1+FOM_ratio*FOM_ratio)))"
+
+[coordinate_system]
+origin = [0.0, 0.0, 0.0]
+x_axis = "+right_from_wall"
+y_axis = "+screen_horizontal"
+z_axis = "+up"
+
+# ----------------------------------------------------------------------------
+# Non-model object registry
+# ----------------------------------------------------------------------------
+
+[[non_model_objects]]
+id = "floor"
+kind = "floor"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "XY"
+origin_xyz = [0.0, -2500.0, -761.0]
+size_xyz = [5000.0, 5000.0, 300.0]
+
+[[non_model_objects]]
+id = "shelf"
+kind = "shelf"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "XY"
+origin_xyz = [0.0, -921.0, -461.0]
+size_xyz = [400.0, 1842.0, 461.0]
+
+[[non_model_objects]]
+id = "wall"
+kind = "wall"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [-200.0, -2000.0, -461.0]
+size_xyz = [200.0, 4000.0, 3000.0]
+
+[[non_model_objects]]
+id = "tv"
+kind = "tv"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [0.0, -921.0, 139.0]
+size_xyz = [9.0, 1842.0, 1055.0]
+
+[[non_model_objects]]
+id = "tx_region"
+kind = "tx_region"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "XY"
+# Guide-only future TX placement context. RxOnly does not derive sampled TX owners from it.
+origin_xyz = [0.0, -140.0, 0.0]
+size_xyz = [160.0, 280.0, 90.0]
+
+# TX guide-only reference line used to derive retained tx_inner_region STEP context.
+# Ratios are strictly inside tx_region and do not activate TX modeled geometry.
+[non_model_objects.tx_reference_line.x_ratio]
+range = [false, 0.35, 0.35, 1]
+description = "TX guide 영역 안에서 reference line의 X 위치 비율"
+
+[non_model_objects.tx_reference_line.y_usage_ratio]
+range = [false, 1.0, 1.0, 1]
+description = "TX guide reference line의 Y 방향 사용 비율"
+
+[non_model_objects.tx_reference_line.z_ratio]
+range = [false, 0.65, 0.65, 1]
+description = "TX guide 영역 안에서 reference line의 Z 위치 비율"
+
+[[non_model_objects]]
+id = "rx_region_max"
+kind = "rx_region_max"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [0.0, -280.0, 139.0]
+size_xyz = [5.0, 560.0, 360.0]
+
+# ----------------------------------------------------------------------------
+# Modeled object registry
+# ----------------------------------------------------------------------------
+
+[[modeled_objects]]
+object_id = "tx_inner_rect_void_coil"
+role = "tx_inner_single_coil"
+material = "composite"
+model_state = true
+pcb_thickness_mm = 0.3
+copper_thickness_mm = 0.035
+[modeled_objects.outer_x_usage_ratio]
+range = [false, 0.5, 0.5, 1]
+description = "TX inner 배치 영역 대비 local X 방향 외곽 크기 비율"
+[modeled_objects.outer_y_usage_ratio]
+range = [false, 0.6, 0.6, 1]
+description = "TX inner 배치 영역 대비 local Y 방향 외곽 크기 비율"
+[modeled_objects.x_position_ratio]
+range = [false, 0.0, 0.0, 1]
+description = "TX inner 배치 영역 안에서 local X 방향 위치 비율"
+[modeled_objects.turn_count]
+range = [true, 2, 2, 1]
+description = "TX inner spiral turn 수"
+[modeled_objects.layer_count]
+range = [true, 2, 2, 1]
+description = "TX inner coil 적층 layer 수"
+[modeled_objects.underlay_repeat_count]
+range = [true, 4, 4, 1]
+description = "TX inner underlay 반복 개수"
+[modeled_objects.underlay_pet_psa_thickness_mm]
+range = [false, 0.5, 0.5, 1]
+description = "TX inner PET_PSA underlay thickness(mm)"
+[modeled_objects.underlay_ferrite_thickness_mm]
+range = [false, 0.5, 0.5, 1]
+description = "TX inner ferrite underlay thickness(mm)"
+[modeled_objects.layer_gap_mm]
+range = [false, 2, 2, 1]
+description = "TX inner layer 사이 z 방향 간격(mm)"
+[modeled_objects.terminal_stub_length_mm]
+range = [false, 7.5, 7.5, 1]
+description = "TX inner terminal stub 길이(mm)"
+[modeled_objects.void_usage_ratio]
+range = [false, 0.2, 0.2, 1]
+description = "TX inner 중앙 void keepout의 X/Y 공통 크기 비율"
+[modeled_objects.margin_ratio]
+range = [false, 0.05, 0.05, 1]
+description = "TX inner void와 외곽 사이 최소 margin 비율"
+[modeled_objects.metal_fill_factor]
+range = [false, 0.5, 0.5, 1]
+description = "TX inner trace/gap pitch 안에서 copper가 차지하는 비율"
+[modeled_objects.terminal_path]
+value = "B_cw_to_b"
+[modeled_objects.tx_outer_terminal_path]
+value = "A_cw_to_a"
+[modeled_objects.tx_outer_x_position_ratio]
+range = [false, 0.0, 0.0, 1]
+description = "TX outer 배치 영역 안에서 local X 방향 위치 비율"
+
+[[modeled_objects]]
+object_id = "rx_rect_void_coil"
+role = "rx_single_coil"
+material = "composite"
+model_state = true
+pcb_thickness_mm = 3.965
+copper_thickness_mm = 0.035
+[modeled_objects.outer_x_usage_ratio]
+range = [false, 0.3, 0.3, 1]
+description = "RX 배치 영역 대비 local X 방향 외곽 크기 비율"
+[modeled_objects.outer_y_usage_ratio]
+range = [false, 0.3, 0.3, 1]
+description = "RX 배치 영역 대비 local Y 방향 외곽 크기 비율"
+[modeled_objects.x_position_ratio]
+range = [false, 0.0, 0.0, 1]
+description = "RX 배치 영역 안에서 local X 방향 위치 비율"
+[modeled_objects.turn_count]
+range = [true, 3, 3, 1]
+description = "RX spiral turn 수"
+[modeled_objects.layer_count]
+range = [true, 1, 1, 1]
+description = "RX coil 적층 layer 수"
+[modeled_objects.underlay_repeat_count]
+range = [true, 8, 8, 1]
+description = "RX full backing underlay 반복 개수"
+[modeled_objects.layer_gap_mm]
+range = [false, 2, 2, 1]
+description = "RX layer 사이 z 방향 간격(mm)"
+[modeled_objects.terminal_stub_length_mm]
+range = [false, 5, 5, 1]
+description = "RX terminal stub 길이(mm)"
+[modeled_objects.void_usage_ratio]
+range = [false, 0.2, 0.2, 1]
+description = "중앙 void keepout의 X/Y 공통 크기 비율"
+[modeled_objects.margin_ratio]
+range = [false, 0.05, 0.05, 1]
+description = "void와 외곽 사이 최소 margin 비율"
+[modeled_objects.metal_fill_factor]
+range = [false, 0.5, 0.5, 1]
+description = "trace/gap pitch 안에서 copper가 차지하는 비율"
+[modeled_objects.terminal_path]
+value = "A_cw_to_a"

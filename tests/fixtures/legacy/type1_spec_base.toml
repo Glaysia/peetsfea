@@ -1,0 +1,538 @@
+spec_version = "0.2.22"
+
+[design]
+units = "mm"
+
+[backend]
+tool = "hfss"
+
+[simulation]
+radiation_margin_mm = 3500.0
+setup_frequency_hz = 6.78e6
+sweep_start_hz = 1.0e6
+sweep_stop_hz = 45.0e6
+validation_gate = "hard_fail"
+max_delta_s = 0.007
+maximum_passes = 10
+minimum_passes = 8
+minimum_converged_passes = 10
+percent_refinement = 22
+basis_order = 1
+port_accuracy = 2
+
+[outputs]
+report_name = "Output Variables Table1"
+solution_name = "Setup1 : LastAdaptive"
+primary_sweep = "Freq"
+report_category = "Terminal Solution Data"
+plot_type = "Data Table"
+
+[[outputs.variables]]
+name = "Ltx_uH"
+expression = "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"
+
+[[outputs.variables]]
+name = "Lrx_uH"
+expression = "im(Zt(RX_TML,RX_TML))/2/pi/freq*1e6"
+
+[[outputs.variables]]
+name = "M_uH"
+expression = "abs(im(Zt(TX_TML,RX_TML))/2/pi/freq*1e6)"
+
+[[outputs.variables]]
+name = "k_ratio"
+expression = "M_uH/sqrt(Ltx_uH*Lrx_uH)"
+
+[[outputs.variables]]
+name = "Qtx_ratio"
+expression = "im(Zt(TX_TML,TX_TML))/re(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Qrx_ratio"
+expression = "im(Zt(RX_TML,RX_TML))/re(Zt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "FOM_ratio"
+expression = "k_ratio*sqrt(Qtx_ratio*Qrx_ratio)"
+
+[[outputs.variables]]
+name = "Rtx_ac_ohm"
+expression = "re(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Rrx_ac_ohm"
+expression = "re(Zt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "Xtx_ohm"
+expression = "im(Zt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Xrx_ohm"
+expression = "im(Zt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "M_over_Ltx_ratio"
+expression = "M_uH/Ltx_uH"
+
+[[outputs.variables]]
+name = "M_over_Lrx_ratio"
+expression = "M_uH/Lrx_uH"
+
+[[outputs.variables]]
+name = "Gtx_S"
+expression = "re(Yt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Btx_S"
+expression = "im(Yt(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "Grx_S"
+expression = "re(Yt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "Brx_S"
+expression = "im(Yt(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S11_mag_ratio"
+expression = "mag(S(TX_TML,TX_TML))"
+
+[[outputs.variables]]
+name = "S21_mag_ratio"
+expression = "mag(S(TX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S21_phase_deg"
+expression = "ang_deg_val(S(TX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "S22_mag_ratio"
+expression = "mag(S(RX_TML,RX_TML))"
+
+[[outputs.variables]]
+name = "eta_s21_power_ratio"
+expression = "S21_mag_ratio*S21_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_tx_accept_ratio"
+expression = "1-S11_mag_ratio*S11_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_rx_accept_ratio"
+expression = "1-S22_mag_ratio*S22_mag_ratio"
+
+[[outputs.variables]]
+name = "eta_match_product_ratio"
+expression = "eta_tx_accept_ratio*eta_rx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_from_tx_accept_ratio"
+expression = "eta_s21_power_ratio/eta_tx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_from_rx_accept_ratio"
+expression = "eta_s21_power_ratio/eta_rx_accept_ratio"
+
+[[outputs.variables]]
+name = "eta_s21_two_sided_norm_ratio"
+expression = "eta_s21_power_ratio/(eta_tx_accept_ratio*eta_rx_accept_ratio)"
+
+[[outputs.variables]]
+name = "eta_fom_max_ratio"
+expression = "(FOM_ratio*FOM_ratio)/((1+sqrt(1+FOM_ratio*FOM_ratio))*(1+sqrt(1+FOM_ratio*FOM_ratio)))"
+
+[tv.width_mm]
+range = [false, 1200.0, 1200.0, 1]
+[tv.height_mm]
+range = [false, 700.0, 700.0, 1]
+[tv.thickness_mm]
+range = [false, 9.0, 9.0, 1]
+[tv.base_z_mm]
+range = [false, 700.0, 700.0, 1]
+
+[tx.region.outer_w_mm]
+range = [false, 300.0, 300.0, 1]
+[tx.region.outer_h_mm]
+range = [false, __TX_REGION_H__, __TX_REGION_H__, 1]
+[tx.region.thickness_mm]
+range = [false, 20.0, 20.0, 1]
+[tx.region.z_parts.vertical_z_mm]
+range = [false, 8.0, 8.0, 1]
+[tx.region.z_parts.dd_z_mm]
+range = [false, 7.0, 7.0, 1]
+
+[rx.region.outer_w_mm]
+range = [false, 280.0, 280.0, 1]
+[rx.region.outer_h_mm]
+range = [false, 180.0, 180.0, 1]
+[rx.region.thickness_mm]
+range = [false, 4.0, 4.0, 1]
+
+[wall.thickness_mm]
+range = [false, 200.0, 200.0, 1]
+[wall.size_y_mm]
+range = [false, 4000.0, 4000.0, 1]
+[wall.size_z_mm]
+range = [false, 3000.0, 3000.0, 1]
+
+[floor.thickness_mm]
+range = [false, 300.0, 300.0, 1]
+[floor.size_x_mm]
+range = [false, 5000.0, 5000.0, 1]
+[floor.size_y_mm]
+range = [false, 5000.0, 5000.0, 1]
+
+[ferrite.present]
+range = [true, 0, 1, 2]
+[ferrite.rx_thickness_mm]
+range = [false, 2.0, 2.0, 1]
+[ferrite.tx_thickness_mm]
+range = [false, 2.0, 2.0, 1]
+[ferrite.tx_gap_mm]
+range = [false, 3.1, 12.0, 8]
+[ferrite.relative_permeability]
+range = [false, 500.0, 500.0, 1]
+
+[coil_shape.neo_tx_dd.outer_x]
+range = [false, __TX_DD_OUTER_X__, __TX_DD_OUTER_X__, 1]
+[coil_shape.neo_tx_dd.outer_y]
+range = [false, __OUTER_Y__, __OUTER_Y__, 1]
+[coil_shape.neo_tx_vertical.outer_x]
+range = [false, -1, -1, -1]
+[coil_shape.neo_tx_vertical.outer_y]
+range = [false, __OUTER_Y__, __OUTER_Y__, 1]
+[coil_shape.rx_dd.outer_x]
+range = [false, 100.0, 100.0, 1]
+[coil_shape.rx_dd.outer_y]
+range = [false, __OUTER_Y__, __OUTER_Y__, 1]
+[coil_shape.corner_mode]
+range = [true, 0, 0, 1]
+[coil_spacing.neo_tx_dd_pair_spacing_ratio]
+range = [false, 0.01, 0.12, 25]
+[coil_spacing.rx_dd_pair_spacing_ratio]
+range = [false, 0.01, 0.03, 25]
+[coil_spacing.tx_vertical_center_gap_mm]
+range = [false, 1.62, 15.0, 8]
+
+[coil_groups_params.neo_tx_dd.turn_count]
+range = [true, 1, 4, 4]
+[coil_groups_params.neo_tx_dd.band_ratio]
+range = [false, 0.1, 0.35, 20]
+[coil_groups_params.neo_tx_dd.metal_ratio]
+range = [false, 0.15, 0.60, 25]
+
+[coil_groups_params.neo_tx_vertical.turn_count]
+range = [true, 1, 4, 4]
+[coil_groups_params.neo_tx_vertical.band_ratio]
+range = [false, 0.35, 0.5, 20]
+[coil_groups_params.neo_tx_vertical.metal_ratio]
+range = [false, 0.45, 0.75, 25]
+
+[coil_groups_params.rx_dd.turn_count]
+range = [true, 1, 4, 4]
+[coil_groups_params.rx_dd.band_ratio]
+range = [false, 0.1, 0.35, 20]
+[coil_groups_params.rx_dd.metal_ratio]
+range = [false, 0.40, 0.90, 25]
+
+[coil_material.via_diameter_mm]
+range = [false, 0.5, 0.5, 1]
+[coil_material.pcb_thickness_mm]
+range = [false, 1.6, 1.6, 1]
+[coil_material.cu_thickness_mm]
+range = [false, 0.035, 0.035, 1]
+[coil_material.fr4_er]
+range = [false, 4.4, 4.4, 1]
+
+[scene_anchor.shelf_height_mm]
+range = [false, 400.0, 400.0, 1]
+[scene_anchor.shelf_min_size_x_mm]
+range = [false, 350.0, 350.0, 1]
+[scene_anchor.rx_region_bottom_from_tv_mm]
+range = [false, 1.0, 1.0, 1]
+
+[coil_placement.neo_tx_dd_top_offset_ratio]
+range = [false, 0.0, 0.3, 10]
+[coil_placement.tx_vertical_orientation_mode]
+range = [true, 0, 0, 1]
+[coil_placement.rx_face_clearance_mm]
+range = [false, 0.0, 0.0, 1]
+[coil_placement.dd_mirror_plane]
+value = "XZ"
+[coil_placement.rx_plane]
+value = "YZ"
+# neo coil terminal-path 계약 묶음.
+# 모든 path 값은 `<start>_<cw|ccw>_to_<end>` 형식을 사용한다.
+# tx_vertical neo migration도 같은 블록에서 관리한다.
+[coil_placement.neo_tx_dd_right_terminal_path]
+value = "D_ccw_to_d"
+[coil_placement.neo_tx_dd_left_terminal_path]
+value = "a_cw_to_A"
+# ZX/XZ legacy tx_vertical terminal-path contract.
+# viewing convention:
+# - view direction: +Y
+# - up: +Z
+# - left: +X
+# canonical default under that convention: `B_ccw_to_c`
+# plane is still owned by existing tx_vertical placement/orientation rules;
+# do not add a separate neo-only plane key.
+[coil_placement.neo_tx_vertical_zx_terminal_path]
+value = "B_ccw_to_c"
+
+[pcb_spacing.tx_main_1_z_from_tx_main_0_mm]
+range = [false, 3.0, 10.0, 5]
+
+[constraints]
+[[constraints.rules]]
+id = "outer_x_positive"
+kind = "comparison"
+message = "outer_x must be > 0"
+lhs = { path = "outer_x" }
+op = ">"
+rhs = { value = 0.0 }
+
+[[constraints.rules]]
+id = "outer_y_positive"
+kind = "comparison"
+message = "outer_y must be > 0"
+lhs = { path = "outer_y" }
+op = ">"
+rhs = { value = 0.0 }
+
+[[constraints.rules]]
+id = "tx_dd_spacing_positive"
+kind = "comparison"
+message = "tx_dd_pair_spacing_ratio must be >= 0"
+lhs = { path = "tx_dd_pair_spacing_ratio" }
+op = ">="
+rhs = { value = 0.0 }
+
+[[constraints.rules]]
+id = "tx_dd_spacing_ratio_upper_bound"
+kind = "comparison"
+message = "tx_dd_pair_spacing_ratio must be <= 0.12"
+lhs = { path = "tx_dd_pair_spacing_ratio" }
+op = "<="
+rhs = { value = 0.12 }
+
+[[constraints.rules]]
+id = "rx_dd_spacing_positive"
+kind = "comparison"
+message = "rx_dd_pair_spacing_ratio must be >= 0"
+lhs = { path = "rx_dd_pair_spacing_ratio" }
+op = ">="
+rhs = { value = 0.0 }
+
+[[constraints.rules]]
+id = "rx_dd_spacing_ratio_upper_bound"
+kind = "comparison"
+message = "rx_dd_pair_spacing_ratio must be <= 0.03"
+lhs = { path = "rx_dd_pair_spacing_ratio" }
+op = "<="
+rhs = { value = 0.03 }
+
+[[constraints.rules]]
+id = "tx_vertical_center_gap_range"
+kind = "range"
+message = "tx_vertical_center_gap_mm must be in [1.62,15]"
+target = { path = "tx_vertical_center_gap_mm" }
+min = { value = 1.62 }
+max = { value = 15.0 }
+inclusive_min = true
+inclusive_max = true
+
+[[constraints.rules]]
+id = "tx_vertical_orientation_mode_supported"
+kind = "range"
+message = "tx_vertical_orientation_mode must be in [0,1]"
+target = { path = "tx_vertical_orientation_mode" }
+min = { value = 0.0 }
+max = { value = 1.0 }
+inclusive_min = true
+inclusive_max = true
+
+[[constraints.rules]]
+id = "coil_outer_x_fits_tx_region"
+kind = "comparison"
+message = "TX coil outer_x must be < tx.region.outer_w_mm"
+lhs = { path = "outer_x" }
+op = "<"
+rhs = { path = "tx_region_outer_w_mm" }
+
+[[constraints.rules]]
+id = "tx_dd_pair_fits_region"
+kind = "comparison"
+message = "2*tx_dd_outer_y + tx_dd_pair_spacing_mm must be <= tx_region_outer_h_mm"
+lhs = { func = "add(mul(2,tx_dd_outer_y),tx_dd_pair_spacing_mm)" }
+op = "<="
+rhs = { path = "tx_region_outer_h_mm" }
+
+[[constraints.rules]]
+id = "rx_dd_pair_fits_region"
+kind = "comparison"
+message = "2*rx_dd_outer_x + rx_dd_pair_spacing_mm must be <= rx_region_outer_w_mm"
+lhs = { func = "add(mul(2,rx_dd_outer_x),rx_dd_pair_spacing_mm)" }
+op = "<="
+rhs = { path = "rx_region_outer_w_mm" }
+
+[[constraints.rules]]
+id = "tx_vertical_turn_count_within_feasible_max"
+kind = "comparison"
+message = "tx_vertical turn_count must be <= feasible_turns_max under capped vertical zone"
+lhs = { path = "selected_group_geometry.tx_vertical.turn_count" }
+op = "<="
+rhs = { func = "feasible_turns_max(tx_vertical,outer_x,outer_y,tx_region_vertical_z_mm)" }
+
+[[constraints.rules]]
+id = "tx_dd_turn_count_within_feasible_max"
+kind = "comparison"
+message = "tx_dd turn_count must be <= feasible_turns_max"
+lhs = { path = "selected_group_geometry.tx_dd.turn_count" }
+op = "<="
+rhs = { func = "feasible_turns_max(tx_dd,outer_x,outer_y,outer_y)" }
+
+[[constraints.rules]]
+id = "tx_dd_trace_width_vs_via_diameter"
+kind = "comparison"
+message = "tx_dd trace width must be >= via_diameter_mm"
+lhs = { func = "mul(min(outer_x,outer_y),selected_group_geometry.tx_dd.band_ratio,selected_group_geometry.tx_dd.metal_ratio)" }
+op = ">="
+rhs = { func = "mul(via_diameter_mm,selected_group_geometry.tx_dd.turn_count)" }
+
+[[constraints.rules]]
+id = "rx_dd_turn_count_within_feasible_max"
+kind = "comparison"
+message = "rx_dd turn_count must be <= feasible_turns_max"
+lhs = { path = "selected_group_geometry.rx_dd.turn_count" }
+op = "<="
+rhs = { func = "feasible_turns_max(rx_dd,outer_x,outer_y,outer_y)" }
+
+[[constraints.rules]]
+id = "max_total_selected_coils"
+kind = "aggregate"
+message = "Total selected coil count must be <= 10"
+agg = "sum_group_selected_count"
+op = "<="
+rhs = { value = 10.0 }
+
+[[coil_groups]]
+kind = "tx_dd"
+stacked_mode = [true, 0, 1, 2]
+instance_transforms = [{ dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 }]
+
+[[coil_groups]]
+kind = "tx_vertical"
+count_range = [true, 1, 6, 6]
+instance_transforms = [{ dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 0.0 }]
+
+[[coil_groups]]
+kind = "rx_dd"
+count_fixed = [true, 2, 2, 1]
+instance_transforms = [{ dx = 0.0, dy = 0.0, dz = 0.0, rot_deg = 180.0 }]
+
+[[pcbs]]
+id = "tx_main_0"
+role = "tx"
+position = [0.0, 0.0, 0.0]
+rotation_deg = 0.0
+present = [true, 1, 1, 1]
+z_mode = "absolute"
+[[pcbs.mounts]]
+kind = "tx_dd"
+selector_mode = "index"
+selector_index = 0
+[[pcbs.mounts]]
+kind = "tx_dd"
+selector_mode = "index"
+selector_index = 1
+
+[[pcbs]]
+id = "tx_main_1"
+role = "tx"
+position = [0.0, 0.0, 0.0]
+rotation_deg = 0.0
+present = [true, 1, 1, 1]
+z_mode = "relative_to_pcb"
+z_relative_base_id = "tx_main_0"
+z_delta_path = "pcb_spacing.tx_main_1_z_from_tx_main_0_mm"
+[[pcbs.mounts]]
+kind = "tx_dd"
+selector_mode = "index"
+selector_index = 2
+[[pcbs.mounts]]
+kind = "tx_dd"
+selector_mode = "index"
+selector_index = 3
+
+[[pcbs]]
+id = "tx_vertical_0"
+role = "tx"
+position = [0.0, 0.0, 0.0]
+rotation_deg = 0.0
+present = [true, 1, 1, 1]
+z_mode = "absolute"
+[[pcbs.mounts]]
+kind = "tx_vertical"
+selector_mode = "all"
+
+[[pcbs]]
+id = "rx_main_0"
+role = "rx"
+position = [0.0, 0.0, 110.0]
+rotation_deg = 0.0
+present = [true, 1, 1, 1]
+z_mode = "absolute"
+[[pcbs.mounts]]
+kind = "rx_dd"
+selector_mode = "index"
+selector_index = 0
+
+[[pcbs]]
+id = "rx_main_1"
+role = "rx"
+position = [0.0, 0.0, 112.0]
+rotation_deg = 0.0
+present = [true, 1, 1, 1]
+z_mode = "absolute"
+[[pcbs.mounts]]
+kind = "rx_dd"
+selector_mode = "index"
+selector_index = 1
+
+[[pcbs]]
+id = "tx_opt_0"
+role = "tx"
+position = [40.0, 0.0, 0.0]
+rotation_deg = 0.0
+present = [true, 0, 0, 1]
+z_mode = "absolute"
+mounts = []
+
+[[pcbs]]
+id = "tx_opt_1"
+role = "tx"
+position = [-40.0, 0.0, 0.0]
+rotation_deg = 0.0
+present = [true, 0, 0, 1]
+z_mode = "absolute"
+mounts = []
+
+[[pcbs]]
+id = "rx_opt_0"
+role = "rx"
+position = [40.0, 0.0, 110.0]
+rotation_deg = 0.0
+present = [true, 0, 0, 1]
+z_mode = "absolute"
+mounts = []
+
+[[pcbs]]
+id = "rx_opt_1"
+role = "rx"
+position = [-40.0, 0.0, 110.0]
+rotation_deg = 0.0
+present = [true, 0, 0, 1]
+z_mode = "absolute"
+mounts = []

@@ -1,0 +1,236 @@
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+
+import peetsfea.legacy.type1.pipeline.run_design as runner
+from peetsfea.identity.hashing import compute_toml_hash, compute_toml_space_hash
+from peetsfea.spec.loader import load_toml_bytes
+from peetsfea.legacy.type1.spec.resolver import SelectionConstraintError, build_candidates, resolve_selection
+from peetsfea.types.runtime_selection import coil_group_selected_count
+from tests.fixtures.legacy.type1_spec import write_type1_toml
+
+
+def test_build_candidates_integer_round_and_dedup() -> None:
+    values = build_candidates(is_integer=True, start=0.0, end=1.0, count=5)
+    assert list(values) == [0, 1]
+
+
+def test_build_candidates_float() -> None:
+    values = build_candidates(is_integer=False, start=0.0, end=1.0, count=3)
+    assert list(values) == [0.0, 0.5, 1.0]
+
+
+def _find_seed_with_retry(spec_path: Path, *, seed_end: int = 64, max_attempts: int = 16) -> tuple[int, int]:
+    spec, _ = load_toml_bytes(spec_path)
+    for seed in range(seed_end):
+        for attempt in range(max_attempts):
+            try:
+                resolve_selection(spec=spec, seed=seed, attempt=attempt)
+                if attempt > 0:
+                    return seed, attempt
+                break
+            except SelectionConstraintError:
+                continue
+    raise AssertionError("Expected at least one seed that requires retry")
+
+
+def test_run_creates_manifest_and_is_deterministic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "spec.toml"
+    write_type1_toml(toml_path)
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("a" * 40))
+
+    config = runner.RunConfig("/bin/ansysedt", str(tmp_path / "run"), str(toml_path), seed=7, backend="hfss")
+    first_result = runner.run(config)
+    second_result = runner.run(config)
+    first = first_result["manifest"]
+    second = second_result["manifest"]
+
+    assert first["design_id"] == second["design_id"]
+    assert first["selected_parameters"] == second["selected_parameters"]
+    assert first["selected_group_geometry"] == second["selected_group_geometry"]
+    assert first["selected_coil_groups"] == second["selected_coil_groups"]
+    assert first["selected_pcbs"] == second["selected_pcbs"]
+    assert first_result["source_toml_bytes"] == second_result["source_toml_bytes"]
+    assert first_result["repro_snapshot"]["toml_bytes"] == second_result["repro_snapshot"]["toml_bytes"]
+    assert first_result["dataset_snapshot"]["toml_bytes"] == second_result["dataset_snapshot"]["toml_bytes"]
+
+    assert first["selected_parameters"]["tx_vertical_outer_x"] == first["selected_parameters"]["tx_dd_outer_x"]
+    pcbs_by_id = {pcb["id"]: pcb for pcb in first["selected_pcbs"]}
+    tx_z_delta = float(pcbs_by_id["tx_main_1"]["position"][2]) - float(pcbs_by_id["tx_main_0"]["position"][2])
+    assert tx_z_delta in (3.0, 4.75, 6.5, 8.25, 10.0)
+    assert tx_z_delta >= 3.0
+    assert first["retry_attempt"] >= 0
+    assert first["retry_count"] == first["retry_attempt"]
+    assert first["design_id"].split("_")[-1] == str(first["retry_attempt"])
+    assert first["toml_hash"] == compute_toml_hash(first_result["source_toml_bytes"])
+    assert len(first["selected_group_geometry"]) == 3
+    assert {entry["kind"] for entry in first["selected_group_geometry"]} == {"tx_dd", "tx_vertical", "rx_dd"}
+    assert first["manifest_path"] is None
+    assert re.fullmatch(r"-?[0-9]{6,}_[0-9a-f]{4}_[0-9a-f]{4}_[0-9]+", first["design_id"]) is not None
+
+
+def test_seed_changes_group_geometry_and_hash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "spec.toml"
+    write_type1_toml(toml_path)
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("b" * 40))
+
+    m1 = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))["manifest"]
+    m2 = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=2, backend="hfss"))["manifest"]
+
+    assert m1["design_id"] != m2["design_id"]
+    assert m1["selected_group_geometry"] != m2["selected_group_geometry"]
+
+
+def test_retry_attempt_advances_until_constraint_satisfied(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "retry.toml"
+    write_type1_toml(toml_path, outer_x=140.0)
+    raw = toml_path.read_text(encoding="utf-8").replace(
+        "[coil_shape.neo_tx_dd.outer_x]\nrange = [false, 140.0, 140.0, 1]",
+        "[coil_shape.neo_tx_dd.outer_x]\nrange = [false, 120.0, 320.0, 2]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.turn_count]\nrange = [true, 1, 3, 3]",
+        "[coil_groups_params.tx_vertical.turn_count]\nrange = [true, 1, 1, 1]",
+        1,
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("2" * 40))
+
+    seed, expected_attempt = _find_seed_with_retry(toml_path)
+    manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=seed, backend="hfss"))["manifest"]
+    assert manifest["retry_attempt"] == expected_attempt
+    assert manifest["retry_count"] == manifest["retry_attempt"]
+    assert manifest["design_id"].split("_")[-1] == str(manifest["retry_attempt"])
+
+
+def test_same_source_spec_keeps_space_hash_while_unique_hash_can_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "space.toml"
+    write_type1_toml(toml_path)
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("3" * 40))
+
+    first = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=1, backend="hfss"))["manifest"]
+    second = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=2, backend="hfss"))["manifest"]
+
+    expected_space_hash = compute_toml_space_hash(compute_toml_hash(toml_path.read_bytes()))
+    assert first["toml_space_hash"] == expected_space_hash
+    assert second["toml_space_hash"] == expected_space_hash
+    assert first["design_id"].split("_")[2] == expected_space_hash
+    assert second["design_id"].split("_")[2] == expected_space_hash
+    assert first["design_unique_hash"] != second["design_unique_hash"]
+
+
+def test_feasibility_constraint_allows_retry_to_find_valid_case(tmp_path: Path) -> None:
+    toml_path = tmp_path / "feasibility_retry.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.turn_count]\nrange = [true, 1, 3, 3]",
+        "[coil_groups_params.tx_vertical.turn_count]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.neo_tx_dd.turn_count]\nrange = [true, 1, 3, 3]",
+        "[coil_groups_params.neo_tx_dd.turn_count]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.neo_tx_dd.band_ratio]\nrange = [false, 0.1, 0.35, 20]",
+        "[coil_groups_params.neo_tx_dd.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.neo_tx_dd.metal_ratio]\nrange = [false, 0.15, 0.60, 25]",
+        "[coil_groups_params.neo_tx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.turn_count]\nrange = [true, 1, 3, 3]",
+        "[coil_groups_params.rx_dd.turn_count]\nrange = [true, 1, 1, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.band_ratio]\nrange = [false, 0.1, 0.35, 20]",
+        "[coil_groups_params.rx_dd.band_ratio]\nrange = [false, 0.2, 0.2, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.rx_dd.metal_ratio]\nrange = [false, 0.40, 0.90, 25]",
+        "[coil_groups_params.rx_dd.metal_ratio]\nrange = [false, 0.5, 0.5, 1]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.band_ratio]\nrange = [false, 0.35, 0.5, 20]",
+        "[coil_groups_params.tx_vertical.band_ratio]\nrange = [false, 0.2, 0.9, 2]",
+    )
+    raw = raw.replace(
+        "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.45, 0.75, 25]",
+        "[coil_groups_params.tx_vertical.metal_ratio]\nrange = [false, 0.85, 0.85, 1]",
+    )
+    raw = raw.replace("count_range = [true, 1, 6, 6]", "count_range = [true, 1, 1, 1]")
+    raw += (
+        "\n[[constraints.rules]]\n"
+        'id = "tx_vertical_feasible_turns_for_active_group"\n'
+        'kind = "comparison"\n'
+        'message = "tx_vertical active group must support >=1 feasible turn in capped vertical zone"\n'
+        'lhs = { func = "feasible_turns(tx_vertical,outer_x,outer_y,tx_region_vertical_z_mm)" }\n'
+        'op = ">="\n'
+        'rhs = { func = "active_group(tx_vertical)" }\n'
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+
+    spec, _ = load_toml_bytes(toml_path)
+    seed, first_feasible_attempt = _find_seed_with_retry(toml_path)
+    for attempt in range(first_feasible_attempt):
+        with pytest.raises(SelectionConstraintError):
+            resolve_selection(spec=spec, seed=seed, attempt=attempt)
+
+    selected, _, groups, geometries, _ = resolve_selection(spec=spec, seed=seed, attempt=first_feasible_attempt)
+    groups_by_kind = {group["kind"]: group for group in groups}
+    assert coil_group_selected_count(groups_by_kind["tx_vertical"]) == 1
+    geom_by_kind = {geom["kind"]: geom for geom in geometries}
+    assert float(geom_by_kind["tx_vertical"]["band_ratio"]) == pytest.approx(0.2)
+    assert float(selected["tx_region_vertical_z_mm"]) > 0.0
+
+
+def test_repro_mode_sampled_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "sampled.toml"
+    write_type1_toml(toml_path)
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("7" * 40))
+    manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=3, backend="hfss"))["manifest"]
+    assert manifest["repro_mode"] == "sampled_toml"
+
+
+def test_repro_mode_frozen_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "frozen.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = re.sub(
+        r"(range|stacked_mode|count_range|count_fixed|present) = \[(true|false), ([^,]+), [^,]+, [0-9]+\]",
+        lambda m: f"{m.group(1)} = [{m.group(2)}, {m.group(3)}, {m.group(3)}, 1]",
+        raw,
+    )
+    raw = raw.replace(
+        "[coil_shape.tx_vertical.outer_x]\nrange = [false, -1, -1, -1]",
+        "[coil_shape.tx_vertical.outer_x]\nrange = [false, -1, -1, -1]",
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("8" * 40))
+    manifest = runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=3, backend="hfss"))["manifest"]
+    assert manifest["repro_mode"] == "frozen_toml"
+
+
+def test_hidden_dimension_pcb_normalization_is_rejected_in_preflight(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    toml_path = tmp_path / "hidden_norm.toml"
+    write_type1_toml(toml_path)
+    raw = toml_path.read_text(encoding="utf-8")
+    raw = raw.replace(
+        "present = [true, 0, 0, 1]",
+        "present = [true, 0, 1, 2]",
+        4,
+    )
+    raw = raw.replace(
+        "mounts = []",
+        '[[pcbs.mounts]]\nkind = "tx_vertical"\nselector_mode = "all"',
+        1,
+    )
+    toml_path.write_text(raw, encoding="utf-8")
+    monkeypatch.setattr(runner, "get_git_commit", lambda _: ("d" * 40))
+
+    with pytest.raises(ValueError, match=r"normalized-away sampled field must be fixed with count=1: pcbs\[\d+\]\.present"):
+        runner.run(runner.RunConfig("/bin/ansysedt", str(tmp_path), str(toml_path), seed=17, backend="hfss"))
