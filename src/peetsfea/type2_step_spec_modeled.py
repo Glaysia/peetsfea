@@ -50,6 +50,7 @@ from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_R
 from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_END
 from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_START
 from peetsfea.type2_step_spec_types import _TX_UNDERLAY_GAP_MM_CANDIDATES
+from peetsfea.type2_step_spec_types import _TX_INNER_VOID_STACK_PRESENT_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES
 from peetsfea.type2_step_spec_non_model import _float_range_candidates
 from peetsfea.type2_step_spec_non_model import _integer_range_candidates
@@ -193,6 +194,30 @@ def _require_wall_parallel_stack_present_range(
     raise ValueError(
         f"{context}.wall_parallel_stack_present.range must be canonical [true, 0, 1, 2] "
         f"or fixed [true, b, b, 1] for b in {_TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES} for tx_single_coil "
+        f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
+    )
+
+
+def _require_tx_inner_void_stack_present_range(
+    table: dict[str, object],
+    *,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, "void_stack_present", context, expect_integer=True)
+    candidates = _integer_range_candidates(range_spec)
+    if candidates == _TX_INNER_VOID_STACK_PRESENT_CANDIDATES:
+        return range_spec
+    if (
+        range_spec.count == 1
+        and range_spec.start == range_spec.end
+        and len(candidates) == 1
+        and candidates[0] in _TX_INNER_VOID_STACK_PRESENT_CANDIDATES
+    ):
+        return range_spec
+    raise ValueError(
+        f"{context}.void_stack_present.range must be canonical [true, 0, 1, 2] "
+        f"or fixed [true, b, b, 1] for b in {_TX_INNER_VOID_STACK_PRESENT_CANDIDATES} "
+        "for tx_inner_single_coil "
         f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
     )
 
@@ -615,7 +640,11 @@ def _parse_modeled_single_coil(
         "metal_fill_factor",
         "terminal_path",
     }
-    tx_inner_allowed_keys = rx_allowed_keys | {"underlay_pet_psa_thickness_mm", "underlay_ferrite_thickness_mm"}
+    tx_inner_allowed_keys = rx_allowed_keys | {
+        "void_stack_present",
+        "underlay_pet_psa_thickness_mm",
+        "underlay_ferrite_thickness_mm",
+    }
     if modeled_role == "tx_single_coil":
         extra_keys = sorted(set(table.keys()) - tx_allowed_keys)
         if extra_keys:
@@ -662,6 +691,7 @@ def _parse_modeled_single_coil(
             key="underlay_ferrite_thickness_mm",
             context=context,
         )
+        void_stack_present = _require_tx_inner_void_stack_present_range(table, context=context)
         extra_keys = sorted(set(table.keys()) - tx_inner_allowed_keys)
         if extra_keys:
             raise ValueError(
@@ -683,6 +713,7 @@ def _parse_modeled_single_coil(
             turn_count=turn_count,
             layer_count=layer_count,
             underlay_repeat_count=underlay_repeat_count,
+            void_stack_present=void_stack_present,
             underlay_pet_psa_thickness_mm=underlay_pet_psa_thickness_mm,
             underlay_ferrite_thickness_mm=underlay_ferrite_thickness_mm,
             layer_gap_mm=layer_gap_mm,
@@ -1068,6 +1099,8 @@ def parse_modeled_object(
     context = f"modeled_objects[{index}]"
     table = _require_table(raw_object, context)
     role = _require_non_empty_str(table, "role", context)
+    if role == "tx_single_coil" and "void_stack_present" in table:
+        raise ValueError(f"{context} contains unsupported keys for tx_single_coil (actual=['void_stack_present'])")
     if role in ("tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"):
         raise ValueError(f"{context}.role is unsupported in active RxOnly type2 mode (actual={role!r})")
     if role == "tx_inner_single_coil":

@@ -39,7 +39,7 @@ tags:
 
 ## Invariants / fail-fast
 - fixed example keeps `tx_region` as guide context and derives `tx_inner_region` geometry context.
-- fixed example keeps `tx_inner_rect_void_coil` as the active TX inner modeled input with fixed 1-repeat actual-region underlay.
+- fixed example keeps `tx_inner_rect_void_coil` as the active TX inner modeled input with fixed 1-repeat actual-region underlay and fixed enabled void stack.
 - fixed example keeps `rx_region_max` and the RX modeled object as active EM geometry inputs.
 - fixed example has TxRx outputs with TX variables and output expressions referencing `TX_TML`.
 - viewer notebook must not contain `_OWNER_DESCRIPTIONS`; it must import and call `type2_range_owner_descriptions`.

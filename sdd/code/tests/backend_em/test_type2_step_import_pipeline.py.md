@@ -27,9 +27,11 @@ tags:
 - Geometry-only `tx_inner_single_coil` import partition accepts an empty body-group contract.
 - `tx_inner_single_coil` actual-underlay fixtures require `g_ferrite_tx` member order to match export order: `tx_underlay_pet_psa_u*` before `tx_underlay_ferrite_u*`.
 - `tx_inner_single_coil` void-stack fixtures require `g_ferrite_tx` member order to include `tx_void_ferrite_u*` and `tx_void_pet_psa_u*` exactly as export declares them.
+- Disabled `tx_inner_single_coil` void-stack fixtures require `g_ferrite_tx` to accept underlay-only membership while `tx_void_*` bodies are absent from expected, imported, and styled names.
 - STEP ledger load coverage verifies the same TX inner void-stack group contract before PyAEDT import begins.
 - TX inner underlay import fixtures include the non-modeled `tx_inner_region` owner and `tx_inner_actual_region` provenance before import-bound validation runs.
 - TX inner actual-region regression coverage preserves a large guide owner with a centered design/actual region and a smaller asymmetric physical modeled bbox, matching sampled TxRx debug failures.
+- TX inner import/style coverage must preserve enabled `tx_void_*` passive bodies and accept disabled void-stack ledgers that still include bottom `tx_underlay_*` bodies.
 - TX inner import fixtures include the derived non-modeled `tx_inner_actual_region` member with `tx_actual_region` provenance whenever `tx_inner_single_coil` validation requires the design/actual bounds contract.
 - `tx_inner_single_coil` bounds coverage accepts sampled owner-local X placement inside `tx_inner_region` while requiring physical modeled bounds provenance to match the modeled ledger entry.
 - TX inner actual-region regression coverage accepts centered design bounds at Y `[-84, 84]` when the recorded physical modeled bounds are smaller and asymmetric, such as `min_y=-84.0` and `size_y=164.07134831460672`.

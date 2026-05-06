@@ -22,6 +22,7 @@ _UNDERLAY_REPEAT_COUNT_CANDIDATES = (0, 2, 4, 6, 8)
 _UNDERLAY_REPEAT_COUNT_FIXED_CANDIDATES = (0, 1, 2, 4, 6, 8)
 _TX_UNDERLAY_GAP_MM_CANDIDATES = (1.0, 4.0, 7.0, 10.0)
 _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES = (0, 1)
+_TX_INNER_VOID_STACK_PRESENT_CANDIDATES = (0, 1)
 _TX_PLATE_STACK_COIL_COUNT_CANDIDATES = (1, 2, 3, 4)
 _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_START = 0.1
 _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_END = 0.6
@@ -192,6 +193,7 @@ class ModeledTxSingleCoilSpec(ModeledSingleCoilCommonSpec):
 @dataclass(frozen=True)
 class ModeledTxInnerSingleCoilSpec(ModeledSingleCoilCommonSpec):
     role: Literal["tx_inner_single_coil"]
+    void_stack_present: RangeSpec
     underlay_pet_psa_thickness_mm: RangeSpec
     underlay_ferrite_thickness_mm: RangeSpec
 

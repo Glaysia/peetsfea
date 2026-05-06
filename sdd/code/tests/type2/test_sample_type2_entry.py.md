@@ -29,12 +29,13 @@ tags:
 - RxOnly sampled-owner fixtures contain RX coil owners plus active count>1 non-modeled guide owners; TX derived non-model owners are absent.
 - Synthetic `ModeledTxInnerSingleCoilSpec` fixtures include fixed TX inner passive underlay defaults: repeat count `1`, PET/PSA `2.0 mm`, and ferrite `2.0 mm`.
 - `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` is a public sampled owner sourced and frozen directly on `tx_inner_rect_void_coil`.
+- Synthetic source TOML fixtures include sampled `modeled_objects.tx_inner_rect_void_coil.void_stack_present` so manifest metadata exercises the active TX inner void-stack owner.
 - `modeled_objects.tx_outer_rect_void_coil.*` paths are not active sampled owners.
 - Active sampled TOML must not preserve removed `tx_outer_terminal_path` or `tx_outer_x_position_ratio` fields.
 
 ## Invariants / fail-fast
 - Unknown owner paths fail immediately.
-- `sampled_owner_paths` must include every active `count > 1` range owner, including non-modeled Y/Z guide ranges, and exclude fixed singleton X guide ranges.
+- `sampled_owner_paths` must include every active `count > 1` range owner, including non-modeled Y/Z guide ranges and TX inner `void_stack_present`, and exclude fixed singleton X guide ranges.
 - RxOnly sampling tests must not require TX modeled owners.
 - RxOnly sampling tests must not require `tx_region_actual` or `tx_region_actual_stack_space`.
 - Fixed TX inner underlay thickness fields are not sampled owner paths because their ranges are fixed singleton values.

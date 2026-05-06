@@ -26,7 +26,7 @@ tags:
 - `tx_inner_single_coil` 하위층 하부 적층 바디를 생성한다. `-Z` 방향으로 각 반복마다 `PET_PSA`(상단)→`MULL12060ferrite`(하단) 순으로 쌓으며 `tx_underlay_pet_psa_u{n}` / `tx_underlay_ferrite_u{n}` 라벨을 붙인다.
 - `tx_inner_single_coil` 페라이트/언더레이 그룹 이름을 `g_ferrite_tx`로 반환해 export ledger에 반영한다.
 - 스택의 상단 Z(첫 PET의 MAX Z)는 `fit_envelope.outer_bounds_min_z`와 정렬한다.
-- `tx_inner_single_coil` void 내부 YZ 스택을 생성한다. body prefix는 `tx_void_ferrite_u{n}` / `tx_void_pet_psa_u{n}`이며 X방향으로 최대 적층하고, Y는 scene layer에서 계산한 central corridor bounds를 따른다.
+- `tx_inner_single_coil` void 내부 YZ 스택을 생성한다. body prefix는 `tx_void_ferrite_u{n}` / `tx_void_pet_psa_u{n}`이며 X방향으로 최대 적층하고, Y는 scene layer에서 계산한 central corridor bounds를 따른다. 생성 여부는 scene layer의 `void_stack_present` 판정이 소유한다.
 - ordered scene child tuple에서 ferrite/PET_PSA tool과 PCB/FR4 blank를 식별하고, build123d/OCC cut으로 PCB/FR4 blank만 절단한 새 ordered tuple을 반환한다.
 - `tx_outer_single_coil` void 내부 prism-local 스택을 생성한다. body prefix는 `tx_outer_void_ferrite_u{n}` / `tx_outer_void_pet_psa_u{n}`이며 raw top을 prism-local top보다 위로 뻗긴 뒤 outer scene builder가 top-face clipping과 tilt transform을 적용한다.
 - `tx_outer_single_coil` 하부 prism-local 스택을 생성한다. body prefix는 `tx_outer_underlay_pet_psa_u{n}` / `tx_outer_underlay_ferrite_u{n}`이며 inner underlay와 같은 PET/PSA→ferrite ordering을 사용한다.

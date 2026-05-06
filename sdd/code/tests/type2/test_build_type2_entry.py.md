@@ -29,7 +29,8 @@ tags:
 - Synthetic TX guide fixtures mirror the active sweep Z reference range `[false, 0.5, 1.0, 13]`.
 - Fake RxOnly specs used by entry tests mirror the current `Type2StepSpec` shape, including `non_model_objects`.
 - `config.make_step_on_sample=false` manifest는 build-time STEP generation path를 대표한다.
-- Expected sampled owner/design-variable order includes `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` before RX coil sampled owners.
+- Expected sampled owner/design-variable order includes TX inner sampled owners, including `modeled_objects.tx_inner_rect_void_coil.void_stack_present`, before RX coil sampled owners.
+- Synthetic source TOML and `ModeledTxInnerSingleCoilSpec` fixtures must expose `void_stack_present` as a sampled integer owner when build design-variable handoff is under test.
 - Fixed singleton TX guide X ratio must not become a build design variable, while sampled TX guide Y ratio remains exported when `count > 1`.
 - Build design variables must not include `modeled_objects_tx_outer_rect_void_coil_*`.
 

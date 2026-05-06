@@ -29,6 +29,7 @@ _EXPECTED_SAMPLED_OWNER_PATHS = [
     "non_model_objects.tx_region.tx_reference_line.z_ratio",
     "modeled_objects.tx_inner_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.tx_inner_rect_void_coil.x_position_ratio",
+    "modeled_objects.tx_inner_rect_void_coil.void_stack_present",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
@@ -54,6 +55,7 @@ def _range_spec(is_integer: bool, start: float, end: float, count: int) -> Range
 
 def _tx_inner_single_coil_spec() -> ModeledTxInnerSingleCoilSpec:
     fixed_one = _range_spec(True, 1.0, 1.0, 1)
+    fixed_void_stack_present = _range_spec(True, 1.0, 1.0, 1)
     fixed_two_mm = _range_spec(False, 2.0, 2.0, 1)
     fixed_float = _range_spec(False, 1.0, 1.0, 1)
     return ModeledTxInnerSingleCoilSpec(
@@ -71,6 +73,7 @@ def _tx_inner_single_coil_spec() -> ModeledTxInnerSingleCoilSpec:
         turn_count=_range_spec(True, 2.0, 6.0, 5),
         layer_count=_range_spec(True, 2.0, 2.0, 1),
         underlay_repeat_count=fixed_one,
+        void_stack_present=fixed_void_stack_present,
         underlay_pet_psa_thickness_mm=fixed_two_mm,
         underlay_ferrite_thickness_mm=fixed_two_mm,
         layer_gap_mm=_range_spec(False, 2.0, 2.0, 1),
@@ -159,6 +162,7 @@ def _patch_rx_only_spec_loader(
                 turn_count=RangeSpec(is_integer=True, start=2.0, end=2.0, count=1),
                 layer_count=RangeSpec(is_integer=True, start=2.0, end=2.0, count=1),
                 underlay_repeat_count=RangeSpec(is_integer=True, start=1.0, end=1.0, count=1),
+                void_stack_present=RangeSpec(is_integer=True, start=0.0, end=1.0, count=2),
                 underlay_pet_psa_thickness_mm=tx_inner_underlay_thickness,
                 underlay_ferrite_thickness_mm=tx_inner_underlay_thickness,
                 layer_gap_mm=RangeSpec(is_integer=False, start=2.0, end=2.0, count=1),
@@ -323,6 +327,8 @@ size_xyz = [10.0, 200.0, 200.0]
     range = [true, 2, 2, 1]
     [modeled_objects.underlay_repeat_count]
     range = [true, 0, 0, 1]
+    [modeled_objects.void_stack_present]
+    range = [true, 0, 1, 2]
     [modeled_objects.layer_gap_mm]
     range = [false, 2, 2, 1]
     [modeled_objects.terminal_stub_length_mm]

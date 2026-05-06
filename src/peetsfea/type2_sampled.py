@@ -45,6 +45,7 @@ _INTEGER_RANGE_FIELD_NAMES = (
     "connection_mode",
     "layer_count",
     "underlay_repeat_count",
+    "void_stack_present",
     "wall_parallel_stack_present",
     "tx_coil_count",
     "x_division_count",

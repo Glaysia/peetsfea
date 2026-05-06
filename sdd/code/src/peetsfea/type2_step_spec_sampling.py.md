@@ -26,12 +26,14 @@ tags:
 - Owner paths remain deterministic and source-order stable.
 - `tx_region` is fixed guide context, not sampled TX geometry.
 - `tx_inner_single_coil` underlay repeat count is resolved through the shared scalar resolver. Canonical sampled candidates remain `(0, 2, 4, 6, 8)`, while fixed supported candidates include `1` for the coarsened active TX inner stack.
+- `tx_inner_single_coil.void_stack_present` resolves independently from bottom underlay count with canonical candidates `(0, 1)` and fixed singleton support.
 - `tx_inner_single_coil` underlay PET/PSA/ferrite thickness fields are separately resolved as fixed positive scalars.
 
 ## Invariants / fail-fast
 - Unknown owner paths fail immediately.
 - RxOnly sampled owner discovery must not require TX modeled paths.
 - `tx_inner_single_coil` PET/PSA/ferrite underlay thickness resolver contracts reject non-fixed or non-positive values.
+- `void_stack_present` resolver must reject non-integer, non-canonical, or unsupported singleton values immediately.
 - Underlay repeat count resolution rejects non-canonical multi-candidate ranges and fixed values outside the supported fixed candidate set.
 
 ## Collaborators

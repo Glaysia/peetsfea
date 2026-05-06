@@ -36,6 +36,7 @@ _INTEGER_RANGE_FIELD_NAMES = (
     "connection_mode",
     "layer_count",
     "underlay_repeat_count",
+    "void_stack_present",
     "wall_parallel_stack_present",
     "tx_coil_count",
     "x_division_count",
@@ -823,6 +824,10 @@ def _single_coil_range_owner_specs(
     if isinstance(modeled_spec, ModeledTxInnerSingleCoilSpec):
         owner_specs.extend(
             (
+                (
+                    f"modeled_objects.{modeled_spec.object_id}.void_stack_present",
+                    modeled_spec.void_stack_present,
+                ),
                 (
                     f"modeled_objects.{modeled_spec.object_id}.underlay_pet_psa_thickness_mm",
                     modeled_spec.underlay_pet_psa_thickness_mm,

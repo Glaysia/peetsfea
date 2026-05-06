@@ -37,8 +37,9 @@ tags:
 - `tx_inner_actual_region` remains non-modeled context and mirrors the TX inner coil-fit envelope without becoming the modeled coil placement owner.
 - `tx_inner_single_coil` may be exported as modeled geometry, but not consumed for active TX ports, sources, or reports.
 - `tx_inner_single_coil` geometry and terminal metadata validation use sampled owner-local X placement inside `tx_inner_region` and centered Y placement.
-- `tx_inner_single_coil` expected body validation includes actual-region underlay members in PET/PSA then ferrite order when its repeat count is positive.
-- `tx_inner_single_coil` expected body validation also includes the generated YZ void-stack members (`tx_void_ferrite_u*` / `tx_void_pet_psa_u*`) when its repeat count is positive.
+- `tx_inner_single_coil` expected body validation includes actual-region bottom-underlay members in PET/PSA then ferrite order when its repeat count is positive.
+- `tx_inner_single_coil` expected body validation includes generated YZ void-stack members (`tx_void_ferrite_u*` / `tx_void_pet_psa_u*`) only when `void_stack_present` resolves true.
+- `tx_inner_single_coil` expected validation derives `tx_void_*` members from actual exported ledger names, then cross-checks those names against the resolved `void_stack_present` boolean.
 - `tx_region.max_z` is resolved once from non-modeled scene state and passed into modeled scene construction/validation so TX inner void-stack sheets fill to the TX region top.
 - `tx_outer_single_coil` specs, if still present from an in-flight loader during the removal work, are filtered out before non-model resolution, modeled scene construction, ledger creation, and terminal contract validation.
 - Post-export terminal metadata validation uses the first-pass `ModeledObjectSceneData` keyed by object ID as canonical expected state for the same export call.

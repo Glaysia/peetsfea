@@ -46,6 +46,7 @@ from peetsfea.type2_step_spec import load_type2_step_spec
 from peetsfea.type2_step_spec import placement_owner_id_for_role
 from peetsfea.type2_step_spec import resolve_modeled_plate_stack_turn_count
 from peetsfea.type2_step_spec import resolve_modeled_tx_coil_count
+from peetsfea.type2_step_spec import resolve_modeled_tx_inner_void_stack_present
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
 from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
 from peetsfea.type2_tx_rect_void_collectors import TxRectVoidCollectorBranchBalanceAudit
@@ -1687,6 +1688,17 @@ def _require_modeled_expected_body_contract(
             tx_inner_void_names = _tx_inner_void_expected_body_names_from_exported(
                 expected_body_names=expected_body_names
             )
+            tx_inner_void_stack_present = resolve_modeled_tx_inner_void_stack_present(modeled_spec, seed=seed)
+            if tx_inner_void_stack_present and len(tx_inner_void_names) == 0:
+                raise ValueError(
+                    "type2 tx_inner expected body contract requires tx_void_* names when void_stack_present is true "
+                    f"(object_id={object_id})"
+                )
+            if not tx_inner_void_stack_present and len(tx_inner_void_names) != 0:
+                raise ValueError(
+                    "type2 tx_inner expected body contract forbids tx_void_* names when void_stack_present is false "
+                    f"(object_id={object_id}, tx_void_names={tuple(tx_inner_void_names)})"
+                )
             expected_names.extend(tx_inner_underlay_names)
             expected_names.extend(tx_inner_void_names)
             expected_groups = (
