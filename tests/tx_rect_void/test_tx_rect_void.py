@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import importlib
+import inspect
 import json
 import math
 from pathlib import Path
+from typing import Callable, cast
 
 import build123d as bd
 import pytest
@@ -16,6 +19,7 @@ from peetsfea.tx_rect_void import (
     RX_SINGLE_COIL_PROFILE,
     SingleCoilProfile,
     TX_SINGLE_COIL_PROFILE,
+    TX_INNER_SINGLE_COIL_PROFILE,
     _copper_primitives_for_layer,
     _offset_join_point,
     _polygon_bounds,
@@ -332,6 +336,90 @@ def _assert_port_sheet_is_metadata_only(*, scene: bd.Compound, profile: SingleCo
     assert port_sheet_label not in tuple(shape.label for shape in scene.children)
 
 
+_CENTRAL_CORRIDOR_HELPER_NAMES = (
+    "central_corridor_y_bounds_for_rect_void",
+    "central_corridor_y_bounds",
+    "tx_rect_void_central_corridor_y_bounds",
+    "derive_tx_rect_void_central_corridor_y_bounds",
+    "derive_central_corridor_y_bounds",
+)
+
+
+def _central_corridor_y_bounds_helper() -> Callable[..., RectBounds]:
+    tx_rect_void_module = importlib.import_module("peetsfea.tx_rect_void")
+    for helper_name in _CENTRAL_CORRIDOR_HELPER_NAMES:
+        if hasattr(tx_rect_void_module, helper_name):
+            helper = getattr(tx_rect_void_module, helper_name)
+            assert callable(helper)
+            return cast(Callable[..., RectBounds], helper)
+    raise AssertionError(
+        "peetsfea.tx_rect_void must expose a central corridor Y-bounds helper; "
+        f"looked for {', '.join(_CENTRAL_CORRIDOR_HELPER_NAMES)}"
+    )
+
+
+def _fixed_like_tx_inner_realized_with_copper_primitives(
+    tmp_path: Path,
+) -> tuple[RealizedSingleCoilRectVoid, tuple[CopperPrimitive, ...]]:
+    toml_path = _write_spec(
+        tmp_path,
+        _spec_text(
+            outer_x=100.0,
+            outer_y=100.0,
+            turn_count=2,
+            terminal_path="D_ccw_to_d",
+            void_usage_ratio=0.2,
+            margin_ratio=0.05,
+            metal_fill_factor=0.5,
+        ),
+    )
+    realized = realize_tx_rect_void_spec(
+        load_tx_rect_void_spec(toml_path),
+        seed=0,
+        profile=TX_INNER_SINGLE_COIL_PROFILE,
+    )
+    centerline = build_tx_rect_void_centerline(realized)
+    copper_primitives = _copper_primitives_for_layer(
+        realized=realized,
+        centerline=centerline,
+        layer_index=0,
+        pcb_z=0.0,
+        profile=TX_INNER_SINGLE_COIL_PROFILE,
+    )
+    return realized, copper_primitives
+
+
+def _call_central_corridor_y_bounds_helper(
+    helper: Callable[..., RectBounds],
+    *,
+    realized: RealizedSingleCoilRectVoid,
+    copper_primitives: tuple[CopperPrimitive, ...],
+) -> RectBounds:
+    signature = inspect.signature(helper)
+    parameter_names = tuple(signature.parameters)
+    if "realized" in parameter_names and "copper_primitives" in parameter_names:
+        return helper(realized=realized, copper_primitives=copper_primitives)
+    if "realized" in parameter_names and "primitives" in parameter_names:
+        return helper(realized=realized, primitives=copper_primitives)
+    if "realized" in parameter_names:
+        return helper(realized=realized)
+    if len(parameter_names) == 2:
+        return helper(realized, copper_primitives)
+    if len(parameter_names) == 1:
+        return helper(realized)
+    raise AssertionError(f"unsupported central corridor helper signature: {signature}")
+
+
+def _central_corridor_helper_accepts_primitives(helper: Callable[..., RectBounds]) -> bool:
+    signature = inspect.signature(helper)
+    parameter_names = tuple(signature.parameters)
+    return (
+        "copper_primitives" in parameter_names
+        or "primitives" in parameter_names
+        or len(parameter_names) == 2
+    )
+
+
 def test_load_and_realize_valid_spec_is_deterministic(tmp_path: Path) -> None:
     terminal_stub_length = 99.0
     toml_path = _write_spec(
@@ -613,6 +701,62 @@ def test_outline_box_matches_planar_outline_bounds(tmp_path: Path) -> None:
     assert first_bounds.max_x == pytest.approx(expected_bounds.max_x)
     assert first_bounds.min_y == pytest.approx(expected_bounds.min_y)
     assert first_bounds.max_y == pytest.approx(expected_bounds.max_y)
+
+
+def test_central_corridor_y_bounds_contain_and_exceed_void_for_tx_inner_fixed_like_geometry(
+    tmp_path: Path,
+) -> None:
+    helper = _central_corridor_y_bounds_helper()
+    realized, copper_primitives = _fixed_like_tx_inner_realized_with_copper_primitives(tmp_path)
+
+    corridor_bounds = _call_central_corridor_y_bounds_helper(
+        helper,
+        realized=realized,
+        copper_primitives=copper_primitives,
+    )
+
+    assert corridor_bounds.min_y <= realized.void_bounds.min_y
+    assert corridor_bounds.max_y >= realized.void_bounds.max_y
+    assert (
+        corridor_bounds.min_y < realized.void_bounds.min_y
+        or corridor_bounds.max_y > realized.void_bounds.max_y
+    )
+    assert corridor_bounds.max_y - corridor_bounds.min_y > realized.void_y_mm
+
+
+def test_central_corridor_y_bounds_are_deterministic_and_finite(tmp_path: Path) -> None:
+    helper = _central_corridor_y_bounds_helper()
+    realized, copper_primitives = _fixed_like_tx_inner_realized_with_copper_primitives(tmp_path)
+
+    first_bounds = _call_central_corridor_y_bounds_helper(
+        helper,
+        realized=realized,
+        copper_primitives=copper_primitives,
+    )
+    second_bounds = _call_central_corridor_y_bounds_helper(
+        helper,
+        realized=realized,
+        copper_primitives=copper_primitives,
+    )
+
+    assert first_bounds == second_bounds
+    assert math.isfinite(first_bounds.min_y)
+    assert math.isfinite(first_bounds.max_y)
+    assert first_bounds.min_y < first_bounds.max_y
+
+
+def test_central_corridor_y_bounds_fail_fast_without_copper_primitives(tmp_path: Path) -> None:
+    helper = _central_corridor_y_bounds_helper()
+    if not _central_corridor_helper_accepts_primitives(helper):
+        pytest.skip("central corridor helper does not expose a simple invalid primitive input path")
+    realized, _copper_primitives = _fixed_like_tx_inner_realized_with_copper_primitives(tmp_path)
+
+    with pytest.raises((AssertionError, ValueError), match=r"corridor|copper|primitive|positive|blocker"):
+        _call_central_corridor_y_bounds_helper(
+            helper,
+            realized=realized,
+            copper_primitives=(),
+        )
 
 
 def test_trace_outline_polygon_returns_simple_polygon_for_single_segment() -> None:

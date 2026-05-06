@@ -5,8 +5,10 @@ from peetsfea.tx_rect_void_export import (
     _copper_primitives_for_layer,
     build_tx_rect_void_box_specs,
     build_tx_rect_void_step_scene,
+    central_corridor_y_bounds,
     export_tx_rect_void_step,
     export_tx_rect_void_step_from_spec,
+    local_central_void_corridor_y_bounds,
     modeled_body_bounds_from_boxes,
 )
 from peetsfea.tx_rect_void_geometry import (
@@ -61,8 +63,10 @@ __all__ = [
     "build_tx_rect_void_box_specs",
     "build_tx_rect_void_centerline",
     "build_tx_rect_void_step_scene",
+    "central_corridor_y_bounds",
     "export_tx_rect_void_step",
     "export_tx_rect_void_step_from_spec",
+    "local_central_void_corridor_y_bounds",
     "load_tx_rect_void_spec",
     "modeled_body_bounds_from_boxes",
     "profile_for_modeled_role",

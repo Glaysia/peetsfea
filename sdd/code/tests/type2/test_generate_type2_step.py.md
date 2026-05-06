@@ -42,7 +42,8 @@ tags:
   `tx_inner_pcb_l0` through `tx_inner_pcb_l7` plus `tx_inner_copper_stack`.
 - `tx_inner_rect_void_coil` must use `x_position_ratio` for owner-local design-outer X placement and centered owner-local Y placement.
 - TX inner actual-underlay tests must verify only `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0` are emitted, share `tx_inner_actual_region` X/Y bounds, and stack downward in 2.0 mm PET/PSA then 2.0 mm ferrite order.
-- TX inner void-stack tests must verify only `tx_void_ferrite_u0`, `tx_void_pet_psa_u0`, and `tx_void_ferrite_u1` are emitted, fill the fixed 5.6 mm realized void X range with widths 2.0, 2.0, and 1.6 mm, share void Y bounds, span from `tx_inner_actual_region.min_z` to `tx_region.max_z`, and use the shortened final ferrite sheet.
+- TX inner void-stack tests must verify the fixed 15.84 mm realized void X range is filled by 8 alternating 2.0 mm nominal sheets with a shortened final 1.84 mm PET/PSA sheet, while Y spans the computed copper-free central corridor rather than the smaller central rectangular void.
+- TX inner void-stack tests must assert every void ferrite/PET_PSA body spans from `tx_inner_actual_region.min_z` to `tx_region.max_z` and remains in the `g_ferrite_tx` group after the underlay members.
 - TX inner ferrite-family clearance tests must verify the `g_ferrite_tx` member order remains the exported PET_PSA/ferrite underlay members followed by void-stack ferrite/PET_PSA members while every ferrite-family body and every PCB body remains a positive-volume solid.
 - Active generation regressions must verify no `tx_outer_region`, `tx_outer_void_*`, `tx_outer_underlay_*`, `tx_outer_pcb_*`, `tx_outer_copper_*`, `tx_outer_actual_region`, `g_ferrite_tx_outer`, or TX inner/outer bridge members are emitted.
 - Parser tests must reject missing, non-positive, non-fixed, and integer-flagged TX inner underlay thickness ranges.

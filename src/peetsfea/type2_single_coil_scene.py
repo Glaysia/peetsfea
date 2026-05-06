@@ -17,6 +17,7 @@ from peetsfea.tx_rect_void import TX_PARALLEL_SINGLE_COIL_ROLES
 from peetsfea.tx_rect_void import build_tx_rect_void_box_specs
 from peetsfea.tx_rect_void import build_tx_rect_void_centerline
 from peetsfea.tx_rect_void import build_tx_rect_void_step_scene
+from peetsfea.tx_rect_void import local_central_void_corridor_y_bounds
 from peetsfea.tx_rect_void import load_tx_rect_void_spec
 from peetsfea.tx_rect_void import modeled_body_bounds_from_boxes
 from peetsfea.tx_rect_void import profile_for_modeled_role
@@ -1502,12 +1503,16 @@ def build_modeled_single_coil_scene_data(
                 ferrite_thickness_mm=ferrite_thickness_mm,
             )
             void_bounds = fit_envelope.realized.void_bounds
+            local_corridor_min_y, local_corridor_max_y = local_central_void_corridor_y_bounds(
+                fit_envelope.realized,
+                profile=profile,
+            )
             frame_origin_x, frame_origin_y, _frame_origin_z = fit_envelope.frame_origin_xyz
             tx_inner_void_stack_descriptor = resolve_tx_inner_single_coil_void_stack_placement_descriptor(
                 void_min_x=frame_origin_x + void_bounds.min_x,
                 void_max_x=frame_origin_x + void_bounds.max_x,
-                void_min_y=frame_origin_y + void_bounds.min_y,
-                void_max_y=frame_origin_y + void_bounds.max_y,
+                void_min_y=frame_origin_y + local_corridor_min_y,
+                void_max_y=frame_origin_y + local_corridor_max_y,
                 z_bottom=fit_envelope.outer_bounds_min_xyz[2],
                 z_top=tx_region_max_z,
                 pet_psa_thickness_mm=pet_psa_thickness_mm,

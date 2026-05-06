@@ -3584,20 +3584,26 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     tx_inner_model_frame_origin_xyz = cast(tuple[float, float, float], tx_inner_model_canonical["frame_origin_xyz"])
     expected_void_min_x = tx_inner_model_frame_origin_xyz[0] + realized_tx_inner.void_bounds.min_x
     expected_void_max_x = tx_inner_model_frame_origin_xyz[0] + realized_tx_inner.void_bounds.max_x
-    expected_void_min_y = tx_inner_model_frame_origin_xyz[1] + realized_tx_inner.void_bounds.min_y
-    expected_void_max_y = tx_inner_model_frame_origin_xyz[1] + realized_tx_inner.void_bounds.max_y
+    central_rect_void_min_y = tx_inner_model_frame_origin_xyz[1] + realized_tx_inner.void_bounds.min_y
+    central_rect_void_max_y = tx_inner_model_frame_origin_xyz[1] + realized_tx_inner.void_bounds.max_y
     assert expected_void_max_x - expected_void_min_x == pytest.approx(15.84)
-    assert expected_void_max_y > expected_void_min_y
+    assert central_rect_void_max_y > central_rect_void_min_y
     tx_region_min_xyz, tx_region_size_xyz = _canonical_min_size(tx_region_member)
     tx_region_top_z = tx_region_min_xyz[2] + tx_region_size_xyz[2]
 
     expected_void_widths = (2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.84)
     previous_max_x = expected_void_min_x
+    first_void_bbox = scene_shapes_by_label[expected_tx_inner_void_names[0]].bounding_box()
+    expected_corridor_min_y = first_void_bbox.min.Y
+    expected_corridor_max_y = first_void_bbox.max.Y
+    assert expected_corridor_max_y - expected_corridor_min_y > central_rect_void_max_y - central_rect_void_min_y
+    assert expected_corridor_min_y != pytest.approx(central_rect_void_min_y)
+    assert expected_corridor_max_y != pytest.approx(central_rect_void_max_y)
     for body_index, body_name in enumerate(expected_tx_inner_void_names):
         body_bbox = scene_shapes_by_label[body_name].bounding_box()
         assert body_bbox.min.X == pytest.approx(previous_max_x)
-        assert body_bbox.min.Y == pytest.approx(expected_void_min_y)
-        assert body_bbox.max.Y == pytest.approx(expected_void_max_y)
+        assert body_bbox.min.Y == pytest.approx(expected_corridor_min_y)
+        assert body_bbox.max.Y == pytest.approx(expected_corridor_max_y)
         assert body_bbox.min.Z == pytest.approx(tx_inner_actual_min_xyz[2])
         assert body_bbox.max.Z == pytest.approx(tx_region_top_z)
         expected_width = expected_void_widths[body_index]
