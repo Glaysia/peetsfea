@@ -52,6 +52,7 @@ from peetsfea.type2_step_spec_types import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledSingleCoilCommonSpec
 from peetsfea.type2_step_spec_types import ModeledSingleCoilRole
 from peetsfea.type2_step_spec_types import ModeledSingleCoilSpec
+from peetsfea.type2_step_spec_types import ModeledTvAluminumPlateSpec
 from peetsfea.type2_step_spec_types import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec_types import ModeledTxInnerSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledTxRectVoidColumnsSpec
@@ -151,6 +152,7 @@ __all__ = [
     "ModeledTxPlateStackSpec",
     "ModeledTxSingleCoilSpec",
     "ModeledTxRectVoidColumnsSpec",
+    "ModeledTvAluminumPlateSpec",
     "Type2ConstraintComparisonOperator",
     "Type2ConstraintFuncRef",
     "Type2ConstraintPathRef",

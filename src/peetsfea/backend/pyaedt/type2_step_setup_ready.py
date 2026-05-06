@@ -43,6 +43,7 @@ DEFAULT_DESIGN_NAME = "type2_step_setup_ready"
 _RX_SINGLE_COIL_ROLE: str = "rx_single_coil"
 _TX_INNER_SINGLE_COIL_ROLE: str = "tx_inner_single_coil"
 _TX_OUTER_SINGLE_COIL_ROLE: str = "tx_outer_single_coil"
+_TV_ALUMINUM_PLATE_ROLE: str = "tv_aluminum_plate"
 _SETUP_BRANCH_RX_SINGLE_READY = "rx_single_ready"
 _SETUP_BRANCH_TXRX_READY = "txrx_ready"
 _ACTIVE_RX_ONLY_OUTPUT_VARIABLE_NAMES: frozenset[str] = frozenset(
@@ -255,16 +256,17 @@ def _resolve_setup_branch(ledger: ValidatedStepLedger) -> str:
     if _TX_OUTER_SINGLE_COIL_ROLE in modeled_roles:
         raise ValueError(
             "type2 setup-ready rejects inactive modeled role 'tx_outer_single_coil'; "
-            "active setup supports rx_single_coil and tx_inner_single_coil only "
+            "active setup supports rx_single_coil, tx_inner_single_coil, and passive tv_aluminum_plate only "
             f"(roles={modeled_roles})"
         )
 
     if output_mode == "RxOnly":
         if modeled_roles.count(_RX_SINGLE_COIL_ROLE) == 1 and all(
-            role in {_RX_SINGLE_COIL_ROLE, _TX_INNER_SINGLE_COIL_ROLE}
+            role in {_RX_SINGLE_COIL_ROLE, _TX_INNER_SINGLE_COIL_ROLE, _TV_ALUMINUM_PLATE_ROLE}
             for role in modeled_roles
         ) and (
             modeled_roles.count(_TX_INNER_SINGLE_COIL_ROLE) <= 1
+            and modeled_roles.count(_TV_ALUMINUM_PLATE_ROLE) <= 1
         ):
             return _SETUP_BRANCH_RX_SINGLE_READY
         if len(modeled_entries) == 1:
@@ -279,14 +281,16 @@ def _resolve_setup_branch(ledger: ValidatedStepLedger) -> str:
         )
 
     if output_mode == "TxRx":
-        allowed_txrx_roles = frozenset({_TX_INNER_SINGLE_COIL_ROLE, _RX_SINGLE_COIL_ROLE})
+        allowed_txrx_roles = frozenset({_TX_INNER_SINGLE_COIL_ROLE, _RX_SINGLE_COIL_ROLE, _TV_ALUMINUM_PLATE_ROLE})
         if all(role in allowed_txrx_roles for role in modeled_roles) and (
             modeled_roles.count(_TX_INNER_SINGLE_COIL_ROLE) == 1
             and modeled_roles.count(_RX_SINGLE_COIL_ROLE) == 1
+            and modeled_roles.count(_TV_ALUMINUM_PLATE_ROLE) <= 1
         ):
             return _SETUP_BRANCH_TXRX_READY
         raise ValueError(
             "type2 setup mode 'TxRx' supports only ['tx_inner_single_coil', 'rx_single_coil'] "
+            "plus optional passive 'tv_aluminum_plate' "
             f"for setup-ready orchestration (roles={modeled_roles})"
         )
 

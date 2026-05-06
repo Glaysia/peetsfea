@@ -26,7 +26,8 @@ tags:
 ## Canonical state
 - RxOnly build path does not require TX modeled geometry.
 - `tx_region` may flow as non-modeled guide context only.
-- Setup-ready role validation accepts the active RX modeled role set and the active RX plus `tx_inner_single_coil` set.
+- Setup-ready role validation accepts the active RX modeled role set, the active RX plus `tx_inner_single_coil`
+  set, and either set with one passive `tv_aluminum_plate` modeled body.
 - Build prep must not pass TX modeled sampled design variables to the backend.
 - EM solve mode uses the same prepared build and setup-ready runner, then exports the active RX output report.
 - A manifest entry's `step_ledger_path` is canonical for build input; if it exists, validate and reuse it, and if it is missing, regenerate it from the sampled TOML.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import cast
 
 from build123d.topology import Shape
@@ -12,11 +13,14 @@ from peetsfea.type2_plate_stack import build_plate_stack_scene_data
 from peetsfea.type2_single_coil_scene import build_modeled_single_coil_scene_data
 from peetsfea.type2_single_coil_scene import single_coil_placement_offset
 from peetsfea.type2_step_ledger import ModeledObjectSceneData
+from peetsfea.type2_scene_geometry import canonical_from_shape
+from peetsfea.type2_scene_geometry import build_labeled_solid_box
 from peetsfea.type2_step_spec import ModeledObjectSpec
 from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
+from peetsfea.type2_step_spec import ModeledTvAluminumPlateSpec
 from peetsfea.type2_step_spec import ModeledTxInnerSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
@@ -42,6 +46,55 @@ def build_modeled_scene_data(
             role=spec.role,
             context="type2 modeled scene generation",
         )
+    if spec.role == "tv_aluminum_plate":
+        if not isinstance(spec, ModeledTvAluminumPlateSpec):
+            raise TypeError(
+                "type2 tv_aluminum_plate modeled object must parse as ModeledTvAluminumPlateSpec"
+                f" (object_id={spec.object_id}, role={spec.role})"
+            )
+        if owner_spec.object_id != "tv":
+            raise ValueError(
+                "type2 tv_aluminum_plate modeled geometry requires non-model source owner 'tv' "
+                f"(object_id={spec.object_id}, owner_id={owner_spec.object_id})"
+            )
+        origin_x, origin_y, origin_z = owner_spec.origin_xyz
+        size_x, size_y, size_z = owner_spec.size_xyz
+        if not math.isfinite(origin_x) or not math.isfinite(origin_y) or not math.isfinite(origin_z):
+            raise ValueError(f"tv source non-model geometry origin must be finite (object_id={owner_spec.object_id})")
+        if not math.isfinite(size_x) or not math.isfinite(size_y) or not math.isfinite(size_z):
+            raise ValueError(f"tv source non-model geometry size must be finite (object_id={owner_spec.object_id})")
+        if size_x <= 0.0 or size_y <= 0.0 or size_z <= 0.0:
+            raise ValueError(f"tv source non-model geometry size must be positive (object_id={owner_spec.object_id})")
+        thickness_mm = spec.thickness_mm
+        if not math.isfinite(thickness_mm):
+            raise ValueError(f"tv_aluminum_plate thickness must be finite (object_id={spec.object_id})")
+        if thickness_mm <= 0.0:
+            raise ValueError(f"tv_aluminum_plate thickness must be positive (object_id={spec.object_id})")
+        tv_origin_xyz = (origin_x + size_x, owner_spec.origin_xyz[1], owner_spec.origin_xyz[2])
+        tv_size_xyz = (thickness_mm, size_y, size_z)
+        shape = build_labeled_solid_box(
+            label=spec.object_id,
+            origin_xyz=tv_origin_xyz,
+            size_xyz=tv_size_xyz,
+        )
+        canonical_coordinates = canonical_from_shape(shape)
+        scene_data = cast(
+            ModeledObjectSceneData,
+            {
+                "object_id": spec.object_id,
+                "role": "tv_aluminum_plate",
+                "plane": "YZ",
+                "placement_owner_id": owner_spec.object_id,
+                "material": "aluminum",
+                "model_state": True,
+                "expected_exported_body_names": (spec.object_id,),
+                "expected_exported_body_count": 1,
+                "expected_exported_body_groups": (),
+                "canonical_coordinates": canonical_coordinates,
+                "terminal_metadata": {},
+            },
+        )
+        return (cast(tuple[Shape, ...], tuple((shape,))), scene_data)
     if isinstance(spec, ModeledRxPlateStackSpec):
         return build_plate_stack_scene_data(spec, owner_spec=owner_spec, seed=seed)
     if isinstance(spec, ModeledTxInnerSingleCoilSpec):

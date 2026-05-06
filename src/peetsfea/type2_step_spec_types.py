@@ -17,6 +17,7 @@ ModeledObjectRole = Literal[
     "tx_rect_void_columns",
     "tx_plate_stack",
     "rx_plate_stack",
+    "tv_aluminum_plate",
 ]
 _UNDERLAY_REPEAT_COUNT_CANDIDATES = (0, 2, 4, 6, 8)
 _UNDERLAY_REPEAT_COUNT_FIXED_CANDIDATES = (0, 1, 2, 4, 6, 8)
@@ -251,9 +252,23 @@ class ModeledTxRectVoidColumnsSpec:
     turn_weight_c: RangeSpec
 
 
+@dataclass(frozen=True)
+class ModeledTvAluminumPlateSpec:
+    object_id: str
+    role: Literal["tv_aluminum_plate"]
+    primitive: Literal["box"]
+    material: Literal["aluminum"]
+    model_state: Literal[True]
+    source_non_model_object_id: str
+    face: Literal["+x"]
+    thickness_mm: float
+
+
 ModeledSingleCoilSpec = ModeledTxSingleCoilSpec | ModeledTxInnerSingleCoilSpec | ModeledRxSingleCoilSpec
 ModeledPlateStackSpec = ModeledTxPlateStackSpec | ModeledRxPlateStackSpec
-ModeledObjectSpec = ModeledSingleCoilSpec | ModeledPlateStackSpec | ModeledTxRectVoidColumnsSpec
+ModeledObjectSpec = (
+    ModeledSingleCoilSpec | ModeledPlateStackSpec | ModeledTxRectVoidColumnsSpec | ModeledTvAluminumPlateSpec
+)
 
 
 @dataclass(frozen=True)
@@ -280,6 +295,8 @@ def modeled_object_id_for_role(role: ModeledObjectRole) -> str:
         return "tx_plate_stack"
     if role == "rx_plate_stack":
         return "rx_plate_stack"
+    if role == "tv_aluminum_plate":
+        return "tv_aluminum_plate"
     raise RuntimeError(f"unsupported modeled object role for object_id resolution: {role}")
 
 
@@ -290,6 +307,8 @@ def placement_owner_id_for_role(role: ModeledObjectRole) -> str:
         return "tx_inner_region"
     if role in ("rx_single_coil", "rx_plate_stack"):
         return "rx_region_max"
+    if role == "tv_aluminum_plate":
+        return "tv"
     raise RuntimeError(f"unsupported modeled object role for placement owner resolution: {role}")
 
 
@@ -301,6 +320,8 @@ def modeled_plane_for_role(role: ModeledObjectRole) -> Literal["XY", "YZ"]:
     if role == "tx_plate_stack":
         return "YZ"
     if role in ("rx_single_coil", "rx_plate_stack"):
+        return "YZ"
+    if role == "tv_aluminum_plate":
         return "YZ"
     raise RuntimeError(f"unsupported modeled object role for plane resolution: {role}")
 
@@ -318,6 +339,7 @@ __all__ = [
     "ModeledTxRectVoidColumnsSpec",
     "ModeledTxInnerSingleCoilSpec",
     "ModeledTxSingleCoilSpec",
+    "ModeledTvAluminumPlateSpec",
     "NonModelBoxSpec",
     "NonModelDerivedSpec",
     "NonModelTxReferenceLineSpec",

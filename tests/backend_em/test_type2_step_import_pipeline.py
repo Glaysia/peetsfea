@@ -63,6 +63,65 @@ _RX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES: tuple[str, ...] = (
     "rx_stack_ferrite",
     "rx_stack_air",
 )
+_TV_ALUMINUM_PLATE_OBJECT_ID = "tv_aluminum_plate"
+_TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
+_TV_ALUMINUM_PLATE_CANONICAL_MIN_XYZ = (9.0, -921.0, 170.0)
+_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ = (0.04, 1842.0, 1055.0)
+
+
+def _assert_tv_aluminum_plate_ledger_contract(*, entry: dict[str, object]) -> None:
+    assert entry["object_id"] == _TV_ALUMINUM_PLATE_OBJECT_ID
+    assert entry["role"] == _TV_ALUMINUM_PLATE_ROLE
+    assert entry["material"] == "aluminum"
+    assert entry["model_state"] is True
+    assert entry["placement_owner_id"] == "tv"
+    canonical_coordinates = cast(dict[str, object], entry["canonical_coordinates"])
+    assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_MIN_XYZ)
+    assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ)
+
+
+def _non_model_entry_without_tv_member(
+    *,
+    object_id: str = "type2_non_model_scene",
+    tx_region_actual_x_division_count: int = 1,
+    tx_region_actual_y_division_count: int = 1,
+) -> dict[str, object]:
+    non_model_object = _non_model_entry(
+        object_id=object_id,
+        tx_region_actual_x_division_count=tx_region_actual_x_division_count,
+        tx_region_actual_y_division_count=tx_region_actual_y_division_count,
+    )
+    tv_member = _non_model_member_entry(
+        object_id="tv",
+        role="tv",
+        origin_xyz=(0.0, -921.0, 170.0),
+        size_xyz=(9.0, 1842.0, 1055.0),
+        plane="YZ",
+    )
+    non_model_object["member_object_ids"] = (
+        *cast(tuple[str, ...], non_model_object["member_object_ids"]),
+        "tv",
+    )
+    non_model_object["member_objects"] = [*cast(list[dict[str, object]], non_model_object["member_objects"]), tv_member]
+    return non_model_object
+
+
+def _tv_aluminum_plate_entry(
+    tmp_path: Path,
+) -> dict[str, object]:
+    entry = _modeled_entry(
+        object_id=_TV_ALUMINUM_PLATE_OBJECT_ID,
+        role=_TV_ALUMINUM_PLATE_ROLE,
+        plane="YZ",
+        placement_owner_id="tv",
+        origin_xyz=_TV_ALUMINUM_PLATE_CANONICAL_MIN_XYZ,
+        size_xyz=_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ,
+        source_metadata_path=str(tmp_path / "tv_aluminum_plate.metadata.json"),
+        expected_names=[_TV_ALUMINUM_PLATE_OBJECT_ID],
+    )
+    entry["material"] = "aluminum"
+    entry["terminal_metadata"] = {}
+    return entry
 
 
 def _write_step(path: Path) -> Path:
@@ -947,6 +1006,17 @@ def _single_layer_imported_name_batch_with_tx_region_actual_divisions(
         "rx_pcb_l0",
         "rx_copper_l0",
     )
+
+
+def _single_layer_imported_name_batch_with_tv_aluminum_plate(
+    *,
+    include_tv_aluminum_plate: bool = True,
+) -> tuple[str, ...]:
+    names = list(_single_layer_imported_name_batch())
+    names.insert(4, "tv")
+    if include_tv_aluminum_plate:
+        names.append(_TV_ALUMINUM_PLATE_OBJECT_ID)
+    return tuple(names)
 
 
 def _tx_wall_expected_names(*, repeat_count: int) -> list[str]:
@@ -1869,6 +1939,78 @@ def test_import_type2_step_ledger_imports_single_scene_and_writes_partitioned_le
     modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
     assert modeled_by_id["tx_rect_void_coil"]["imported_object_names"] == ["tx_pcb_l0", "tx_copper_l0", "tx_port_sheet"]
     assert modeled_by_id["rx_rect_void_coil"]["imported_object_names"] == ["rx_pcb_l0", "rx_copper_l0", "rx_port_sheet"]
+    written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
+    assert written == result
+
+
+def test_import_type2_step_ledger_imports_tv_aluminum_plate_modeled_object(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry_without_tv_member()],
+        modeled_objects=[_tv_aluminum_plate_entry(tmp_path), *_single_layer_modeled_objects(tmp_path)],
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _FakeHfss(
+        modeler=_FakeModeler(imported_name_batches=[_single_layer_imported_name_batch_with_tv_aluminum_plate()])
+    )
+
+    result = import_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        design_name="fake_type2_import",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    assert session.modeler.import_calls == [scene_step]
+    assert session.modeler.import_kwargs_calls == [{"import_free_surfaces": False, "create_group": False}]
+    tx_region_actual_member_names = _tx_region_actual_member_names()
+    assert session.modeler.model_state_calls == [
+        ("environment", False),
+        ("tx_region", False),
+        *((name, False) for name in tx_region_actual_member_names),
+        ("rx_region_max", False),
+        ("tv", False),
+        (_TV_ALUMINUM_PLATE_OBJECT_ID, True),
+        ("tx_pcb_l0", True),
+        ("tx_copper_l0", True),
+        ("tx_port_sheet", True),
+        ("rx_pcb_l0", True),
+        ("rx_copper_l0", True),
+        ("rx_port_sheet", True),
+    ]
+    assert session.modeler.objects["tx_copper_l0"].material_name == "copper"
+    assert session.modeler.objects["rx_copper_l0"].material_name == "copper"
+    assert session.modeler.objects[_TV_ALUMINUM_PLATE_OBJECT_ID].material_name == "aluminum"
+    assert session.design.import_dataset_calls == []
+    assert session.oproject.add_dataset_calls == []
+    assert session.oproject.definition_manager.add_material_calls == []
+    assert session.design.get_module_calls == []
+    assert session.mesh_module.assign_length_op_calls == []
+    assert session.modeler.created_region_name == ""
+    assert session.radiation_boundary_calls == []
+    assert session.save_project_calls == [str(output_aedt_path)]
+    assert session.desktop_class.release_calls == [(True, True)]
+    assert "mesh" not in result
+    assert "boundary" not in result
+    assert "radiation_boundary" not in result
+    modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    assert modeled_by_id["tx_rect_void_coil"]["imported_object_names"] == ["tx_pcb_l0", "tx_copper_l0", "tx_port_sheet"]
+    assert modeled_by_id["rx_rect_void_coil"]["imported_object_names"] == ["rx_pcb_l0", "rx_copper_l0", "rx_port_sheet"]
+    assert modeled_by_id[_TV_ALUMINUM_PLATE_OBJECT_ID]["imported_object_names"] == [_TV_ALUMINUM_PLATE_OBJECT_ID]
+    _assert_tv_aluminum_plate_ledger_contract(entry=cast(dict[str, object], modeled_by_id[_TV_ALUMINUM_PLATE_OBJECT_ID]))
+    non_model_by_id = {entry["object_id"]: entry for entry in result["non_model_objects"]}
+    imported_non_model_entry = cast(dict[str, object], non_model_by_id["type2_non_model_scene"])
+    non_model_member_object_ids = cast(list[str], imported_non_model_entry["member_object_ids"])
+    assert _TV_ALUMINUM_PLATE_OBJECT_ID not in non_model_member_object_ids
+    assert set(modeled["object_id"] for modeled in result["modeled_objects"]) == {
+        "tx_rect_void_coil",
+        "rx_rect_void_coil",
+        _TV_ALUMINUM_PLATE_OBJECT_ID,
+    }
     written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
     assert written == result
 

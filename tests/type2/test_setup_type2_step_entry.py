@@ -16,6 +16,8 @@ _SAMPLED_TX_REGION_ORIGIN_XYZ = [0.0, -600.0, 0.0]
 _SAMPLED_TX_REGION_SIZE_XYZ = [720.0, 1200.0, 90.0]
 _FIXED_TX_REFERENCE_LINE_RATIOS = (0.99, 1.0, 0.9)
 _SAMPLED_TX_REFERENCE_LINE_RANGES = ((0.99, 0.99, 1), (0.2, 1.0, 85), (0.75, 1.0, 65))
+_TV_ALUMINUM_PLATE_OBJECT_ID = "tv_aluminum_plate"
+_TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
 _FIXED_TURN_COUNT_RANGE = [True, 1, 1, 1]
 _SAMPLED_TURN_COUNT_RANGE = [True, 1, 3, 3]
 
@@ -100,7 +102,8 @@ def _assert_txrx_payload(payload: dict[str, object], *, example_name: str) -> No
 
     modeled_objects = _tables(payload, "modeled_objects")
     modeled_roles = tuple(cast(str, table["role"]) for table in modeled_objects)
-    assert modeled_roles == ("tx_inner_single_coil", "rx_single_coil")
+    assert len(modeled_roles) == 3
+    assert frozenset(modeled_roles) == {"tx_inner_single_coil", "rx_single_coil", _TV_ALUMINUM_PLATE_ROLE}
     assert not _TX_MODELED_ROLES.intersection(modeled_roles)
     modeled_by_id = {cast(str, table["object_id"]): table for table in modeled_objects}
     tx_inner = modeled_by_id["tx_inner_rect_void_coil"]
@@ -124,7 +127,13 @@ def _assert_txrx_payload(payload: dict[str, object], *, example_name: str) -> No
     assert "tx_region" in non_model_ids
     assert "tx_inner_region" not in non_model_ids
     assert "rx_region_max" in non_model_ids
+    assert _TV_ALUMINUM_PLATE_OBJECT_ID not in non_model_ids
     assert not _TX_SAMPLED_OWNER_IDS.intersection(non_model_ids)
+    tv_aluminum_plate = modeled_by_id[_TV_ALUMINUM_PLATE_OBJECT_ID]
+    assert tv_aluminum_plate["role"] == _TV_ALUMINUM_PLATE_ROLE
+    assert tv_aluminum_plate["material"] == "aluminum"
+    assert tv_aluminum_plate["model_state"] is True
+    assert tv_aluminum_plate["source_non_model_object_id"] == "tv"
 
 
 def _assert_tx_region_payload(payload: dict[str, object], *, example_name: str) -> None:

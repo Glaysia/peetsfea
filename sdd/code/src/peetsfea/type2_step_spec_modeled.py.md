@@ -31,6 +31,8 @@ tags:
 - `tx_inner_single_coil` requires `x_position_ratio` only as fixed-zero compatibility source state; it is not an effective sampled placement owner.
 - `tx_outer_terminal_path` and `tx_outer_x_position_ratio` are no longer active fields on `tx_inner_single_coil`; declaring either must fail as unsupported schema state.
 - `tx_region` remains outside modeled parsing as future guide context.
+- `tv_aluminum_plate` is parsed as a fixed, non-sampled modeled geometry block with required fields
+  (`primitive=box`, `material=aluminum`, `model_state=true`, `source_non_model_object_id=tv`, `face=+x`, `thickness_mm>0`).
 
 ## Invariants / fail-fast
 - Unsupported modeled roles/fields fail during parse.
@@ -42,6 +44,7 @@ tags:
 - Usage ratios and position ratios accept mathematically inclusive `1.0` endpoints when range candidate generation produces a binary floating-point value within `1e-12` above `1.0`; values outside that tolerance still fail before specs are bound.
 - `tx_outer_terminal_path` and `tx_outer_x_position_ratio` must fail through unsupported-key validation, not by deriving a companion object.
 - RxOnly must parse without requiring TX modeled roles.
+- `tv_aluminum_plate` role parsing fails immediately for any invalid source owner, face, primitive, material, model state, or thickness.
 
 ## Collaborators
 - [type2_step_spec.py](type2_step_spec.py.md)

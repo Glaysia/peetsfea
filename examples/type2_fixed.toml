@@ -333,3 +333,13 @@ range = [false, 0.5142857142857142, 0.5142857142857142, 1]
 description = "trace/gap pitch 안에서 copper가 차지하는 비율"
 [modeled_objects.terminal_path]
 value = "A_cw_to_a"
+
+[[modeled_objects]]
+object_id = "tv_aluminum_plate"
+role = "tv_aluminum_plate"
+primitive = "box"
+material = "aluminum"
+model_state = true
+source_non_model_object_id = "tv"
+face = "+x"
+thickness_mm = 0.04

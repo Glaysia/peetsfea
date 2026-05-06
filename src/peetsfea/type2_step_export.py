@@ -42,6 +42,7 @@ from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import Point3
+from peetsfea.type2_step_spec import ModeledTvAluminumPlateSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 from peetsfea.type2_step_spec import placement_owner_id_for_role
 from peetsfea.type2_step_spec import resolve_modeled_plate_stack_turn_count
@@ -138,6 +139,7 @@ def _active_step_export_modeled_specs(
     | ModeledRxSingleCoilSpec
     | ModeledTxInnerSingleCoilSpec
     | ModeledTxPlateStackSpec
+    | ModeledTvAluminumPlateSpec
     | ModeledTxRectVoidColumnsSpec
     | ModeledTxSingleCoilSpec,
     ...,
@@ -1761,6 +1763,9 @@ def _require_modeled_expected_body_contract(
                 cast(tuple[str, ...], modeled_entry["expected_exported_body_names"])
             )
             expected_groups = []
+        elif role == "tv_aluminum_plate":
+            expected_names = ["tv_aluminum_plate"]
+            expected_groups = []
         else:
             raise ValueError(f"unsupported modeled object role in type2 ledger: {role}")
         if list(expected_body_names) != expected_names:
@@ -1788,6 +1793,7 @@ def _require_port_sheet_geometry_contract(
         | ModeledRxSingleCoilSpec
         | ModeledTxInnerSingleCoilSpec
         | ModeledTxPlateStackSpec
+        | ModeledTvAluminumPlateSpec
         | ModeledTxRectVoidColumnsSpec
         | ModeledTxSingleCoilSpec,
         ...,
@@ -2015,10 +2021,13 @@ def export_type2_step_artifacts(
     modeled_scene_shapes: list[Shape] = []
     modeled_entries = []
     for modeled_spec in active_modeled_specs:
-        owner_spec = require_non_model_object_spec(
-            resolved_non_model_specs,
-            object_id=placement_owner_id_for_role(modeled_spec.role),
-        )
+        if modeled_spec.role == "tv_aluminum_plate":
+            owner_spec = require_non_model_object_spec(resolved_non_model_specs, object_id="tv")
+        else:
+            owner_spec = require_non_model_object_spec(
+                resolved_non_model_specs,
+                object_id=placement_owner_id_for_role(modeled_spec.role),
+            )
         metadata_path = object_metadata_dir / f"{modeled_spec.object_id}.metadata.json"
         current_modeled_scene_shapes, scene_data = build_modeled_scene_data(
             modeled_spec,

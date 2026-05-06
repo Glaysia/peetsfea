@@ -29,12 +29,14 @@ tags:
 - Active constraint rule shape requires `id`, `kind`, `message`, `enabled`, `lhs`, `op`, and `rhs`.
 - Constraint operands are limited to `path`, `value`, and `func` payload tables with a single key each.
 - Constraint owner-path validation includes sampled `tx_region.tx_reference_line.*` owners, derived non-model owners, and modeled owners.
+- Constraint owner-path validation now allows fixed modeled geometry `ModeledTvAluminumPlateSpec` without emitting sampled owner paths.
 
 ## Invariants / fail-fast
 - Malformed rules, duplicate rule ids, unsupported operators, unsupported functions, and unknown owner paths must raise immediately.
 - Supported function forms are loader-validated explicitly; `sum(...)` handles scalar owner arithmetic, while `tx_inner_min_trace_width_mm(tx_inner_rect_void_coil)` and `rx_min_trace_width_mm(rx_rect_void_coil)` handle type2 rect/void trace feasibility.
 - Trace-width functions must name exactly one modeled object with the expected single-coil role.
 - Constraint path validation only accepts paths present in the realized step spec owner-path registry.
+- Modeled TV plate role has no constraint-owner fields and therefore contributes no constraint paths.
 
 ## Collaborators
 - [type2_step_spec.py](type2_step_spec.py.md)

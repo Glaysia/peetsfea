@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_core.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-04 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - import
   - pyaedt
@@ -32,6 +32,7 @@ tags:
   `tx_inner_actual_region` only for that role so RX, plate-stack, and `tx_outer_single_coil`
   owner validation remains unchanged.
 - Import core does not heal or infer missing geometry.
+- `tv_aluminum_plate` uses the backend ledger/partition/style validation path and is merged into the imported ledger directly as one modeled aluminum body; it does not use coil/plate-stack terminal adapter parsing.
 
 ## Invariants / fail-fast
 - `import_3d_cad`, save, or PyAEDT false returns fail immediately.
@@ -40,6 +41,7 @@ tags:
 - Missing `tx_inner_actual_region` for a `tx_inner_single_coil` ledger entry fails during
   strict import validation; no fallback to recentering physical modeled bounds inside
   `tx_inner_region` is allowed.
+- TV aluminum plate import fails when `tv` ownership, bounds, material, model state, or exact imported object name drift.
 
 ## Graph links
 - Primary owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
@@ -47,3 +49,4 @@ tags:
 - [type2_step_import_style.py](type2_step_import_style.py.md)
 - [type2_step_import_ledger.py](type2_step_import_ledger.py.md)
 - Representative verification: [test_type2_step_import_pipeline.py](../../../../tests/backend_em/test_type2_step_import_pipeline.py.md)
+- Related plan: [0.2.24 Type2 TV Aluminum Plate](../../../../../plans/0.2.24-type2-tv-aluminum-plate.md)

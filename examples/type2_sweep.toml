@@ -362,6 +362,16 @@ description = "trace/gap pitch 안에서 copper가 차지하는 비율"
 # terminal path는 same-corner format '<outer>_<cw|ccw>_to_<inner>'를 사용한다.
 value = "A_cw_to_a"
 
+[[modeled_objects]]
+object_id = "tv_aluminum_plate"
+role = "tv_aluminum_plate"
+primitive = "box"
+material = "aluminum"
+model_state = true
+source_non_model_object_id = "tv"
+face = "+x"
+thickness_mm = 0.04
+
 [constraints]
 
 [[constraints.rules]]

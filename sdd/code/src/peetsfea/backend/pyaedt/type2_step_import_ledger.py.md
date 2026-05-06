@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_ledger.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - import
   - pyaedt
@@ -30,6 +30,7 @@ tags:
 - `tx_inner_single_coil` may appear as modeled geometry with `tx_inner_region` placement ownership.
 - `tx_inner_single_coil` ferrite-family group validation includes both actual-region underlay members and void-stack members in the exact export order declared by the ledger.
 - `tx_outer_single_coil` is not an active modeled ledger role; ledgers containing it fail validation before import.
+- `tv_aluminum_plate` is a one-body modeled role owned by non-modeled member `tv`, with `plane = "YZ"`, `material = "aluminum"`, `model_state = true`, and no exported body groups or terminal metadata.
 
 ## Invariants / fail-fast
 - Missing required RX imported bodies fail immediately.
@@ -38,9 +39,11 @@ tags:
 - RxOnly imported ledger may record geometry-only TX inner entries, but setup-ready must filter them before active EM input construction.
 - Any source ledger that still declares `tx_outer_single_coil` fails fast as unsupported active Type2 state.
 - Tx inner void-stack group/member ordering drift fails during step-ledger validation before AEDT import.
+- `tv_aluminum_plate` ledgers fail immediately if the owner is not `tv`, the plane is not `YZ`, material/model state drift, the expected body list is not exactly `["tv_aluminum_plate"]`, groups are non-empty, or terminal metadata is non-empty.
 
 ## Graph links
 - Primary owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
 - Direct handoff: [type2_step_import_core.py](type2_step_import_core.py.md)
 - Exceptional artifact handoff: [type2_step_ledger.py](../../type2_step_ledger.py.md)
 - Related plan: [0.2.24 Type2 TX Outer Void Stack](../../../../../plans/0.2.24-type2-tx-outer-void-stack.md)
+- Related plan: [0.2.24 Type2 TV Aluminum Plate](../../../../../plans/0.2.24-type2-tv-aluminum-plate.md)

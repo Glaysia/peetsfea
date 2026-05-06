@@ -17,11 +17,14 @@ _SUPPORTED_MODELED_ROLES: frozenset[str] = frozenset(
         "tx_plate_stack",
         "rx_plate_stack",
         "tx_rect_void_columns",
+        "tv_aluminum_plate",
     }
 )
 _SUPPORTED_MODELED_PLANES: frozenset[str] = frozenset({"XY", "YZ"})
 _PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
 _TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
+_TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
+_TV_ALUMINUM_PLATE_BODY_NAME = "tv_aluminum_plate"
 _TX_COPPER_GROUP_NAME = "g_copper_tx"
 _RX_COPPER_GROUP_NAME = "g_copper_rx"
 _TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
@@ -646,6 +649,18 @@ def _validate_modeled_ferrite_group_contract(
     validated_groups: list[dict[str, object]],
     context: str,
 ) -> None:
+    if role == _TV_ALUMINUM_PLATE_ROLE:
+        if expected_exported_body_names != [_TV_ALUMINUM_PLATE_BODY_NAME]:
+            raise ValueError(
+                f"{context}.expected_exported_body_names must be ['{_TV_ALUMINUM_PLATE_BODY_NAME}'] "
+                f"for {_TV_ALUMINUM_PLATE_ROLE} (actual={expected_exported_body_names})"
+            )
+        if len(validated_groups) != 0:
+            raise ValueError(
+                f"{context}.expected_exported_body_groups must be empty for {_TV_ALUMINUM_PLATE_ROLE} "
+                f"(actual_groups={len(validated_groups)})"
+            )
+        return
     expected_group_contract = _group_contract_for_role(
         role=role,
         expected_exported_body_names=expected_exported_body_names,
@@ -729,13 +744,26 @@ def _validated_modeled_entry(
         raise ValueError(f"{context}.plane must be 'YZ' for tx_plate_stack import-only geometry (actual={plane!r})")
     if role == "rx_plate_stack" and plane != "YZ":
         raise ValueError(f"{context}.plane must be 'YZ' for rx_plate_stack import-only geometry (actual={plane!r})")
-    require_non_empty_str(
+    placement_owner_id = require_non_empty_str(
         require_key(entry, key="placement_owner_id", context=context),
         context=f"{context}.placement_owner_id",
     )
-    require_non_empty_str(require_key(entry, key="material", context=context), context=f"{context}.material")
+    material = require_non_empty_str(require_key(entry, key="material", context=context), context=f"{context}.material")
     if _require_bool(require_key(entry, key="model_state", context=context), context=f"{context}.model_state") is not True:
         raise ValueError(f"{context}.model_state must be true")
+    if role == _TV_ALUMINUM_PLATE_ROLE:
+        if plane != "YZ":
+            raise ValueError(f"{context}.plane must be 'YZ' for tv_aluminum_plate modeled geometry (actual={plane!r})")
+        if placement_owner_id != "tv":
+            raise ValueError(
+                f"{context}.placement_owner_id must be 'tv' for tv_aluminum_plate modeled geometry "
+                f"(actual={placement_owner_id!r})"
+            )
+        if material != "aluminum":
+            raise ValueError(
+                f"{context}.material must be 'aluminum' for tv_aluminum_plate modeled geometry "
+                f"(actual={material!r})"
+            )
     _require_table(require_key(entry, key="canonical_coordinates", context=context), context=f"{context}.canonical_coordinates")
     expected_exported_body_names = validated_object_names(
         cast(
@@ -789,6 +817,13 @@ def _validated_modeled_entry(
             raw_terminal_metadata,
             context=context,
         )
+    elif role == _TV_ALUMINUM_PLATE_ROLE:
+        terminal_metadata = _require_table(raw_terminal_metadata, context=f"{context}.terminal_metadata")
+        if len(terminal_metadata) != 0:
+            raise ValueError(
+                f"{context}.terminal_metadata must be empty for tv_aluminum_plate modeled geometry "
+                f"(actual_keys={sorted(terminal_metadata)})"
+            )
     else:
         terminal_metadata = _require_table(raw_terminal_metadata, context=f"{context}.terminal_metadata")
         if "kind" in terminal_metadata:

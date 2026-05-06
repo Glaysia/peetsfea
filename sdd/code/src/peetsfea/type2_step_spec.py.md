@@ -44,6 +44,8 @@ tags:
 - RxOnly mode must not request TX report expressions.
 - TX reference-line parsing must remain guide-only and must not activate generic/legacy TX modeled roles through this facade.
 - malformed constraints, duplicate rule ids, unknown owner paths, unsupported functions, and unsupported operators fail during type2 source loading or sampling preflight.
+- Facade re-exports the fixed modeled plate type `ModeledTvAluminumPlateSpec` so downstream entrypoints can reference the fixed role type uniformly with other modeled spec classes.
+- Active modeled TOML parsing in this surface now accepts fixed `tv_aluminum_plate` modeled objects (object_id `tv_aluminum_plate`) through the modeled parser dependency without introducing sampled owner paths.
 
 ## Collaborators
 - [type2_step_spec_non_model.py](type2_step_spec_non_model.py.md)

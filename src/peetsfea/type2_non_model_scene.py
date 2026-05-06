@@ -35,7 +35,8 @@ from peetsfea.type2_step_spec import Point3
 from peetsfea.type2_step_spec import RangeSpec
 
 _BASE_NON_MODEL_VISIBLE_GROUPS: tuple[tuple[str, str, Literal["XY", "YZ", "ZX", "mixed"], tuple[str, ...]], ...] = (
-    ("environment", "environment", "mixed", ("floor", "shelf", "wall", "tv")),
+    ("environment", "environment", "mixed", ("floor", "shelf", "wall")),
+    ("tv", "tv", "YZ", ("tv",)),
     ("tx_region", "tx_region", "XY", ("tx_region",)),
     ("rx_region_max", "rx_region_max", "YZ", ("rx_region_max",)),
 )

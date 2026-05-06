@@ -772,6 +772,8 @@ def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpe
                 )
             )
             continue
+        if role == "tv_aluminum_plate":
+            continue
         if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
             owner_specs.extend(_plate_stack_range_owner_specs(cast(ModeledPlateStackSpec, modeled_spec)))
             continue
@@ -1148,6 +1150,8 @@ def sampled_owner_values(
                     retry_number=retry_number,
                 )
             )
+            continue
+        if role == "tv_aluminum_plate":
             continue
         if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
             sampled_values.extend(

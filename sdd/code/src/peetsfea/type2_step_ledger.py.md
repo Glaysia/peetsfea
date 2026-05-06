@@ -30,6 +30,7 @@ tags:
 - `tx_region` may be present as non-modeled future guide context.
 - `tx_inner_region`, when present, records canonical coordinates plus `tx_reference_line` provenance instead of requiring downstream geometry inference.
 - `tx_inner_actual_region`, when present, records canonical coordinates plus actual-region provenance instead of requiring downstream geometry inference; the actual-region bounds are the canonical/design outer-box bounds.
+- Modeled TV plate entries are represented as one modeled body (`tv_aluminum_plate`) with `placement_owner_id = "tv"` and `material = "aluminum"`, with no modeled body groups.
 - `tx_outer_region`, `tx_outer_rect_void_coil`, and `tx_outer_actual_region` are not active generated ledger members.
 - `tx_region_actual` and TX modeled bodies are not required ledger entries for RxOnly.
 - Mesh/boundary/port/report runtime summaries are not ledger-owned.

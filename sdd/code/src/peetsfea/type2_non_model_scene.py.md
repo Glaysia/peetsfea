@@ -32,7 +32,8 @@ tags:
   - `resolve_tx_outer_region_tilt_frame(provenance: TxOuterRegionPrismProvenance) -> TxOuterRegionPrismTiltFrame`
 
 ## Canonical State
-- `environment`, `tx_region`, and `rx_region_max` are the baseline visible non-modeled scene members.
+- `environment`, `tv`, `tx_region`, and `rx_region_max` are the baseline visible non-modeled scene members.
+- `tv` is a separate visible non-modeled member so modeled `tv_aluminum_plate` can use `placement_owner_id = "tv"` without depending on the broader `environment` fused body.
 - `tx_inner_region` is a visible non-modeled guide body resolved from `tx_region.tx_reference_line` ratios.
 - `tx_inner_actual_region` is a visible non-modeled body resolved before modeled coil construction and sized to the TX inner design `outer_x_mm`/`outer_y_mm` box.
 - `tx_outer_region` and `tx_outer_actual_region` are inactive remnants of the removed outer TX coil and must not appear in active generated non-model scene members.

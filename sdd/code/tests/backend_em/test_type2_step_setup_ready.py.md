@@ -35,7 +35,8 @@ tags:
   `tx_inner_single_coil` participates, so setup-ready fake import ledgers satisfy strict actual-region validation before AEDT setup operations run.
 - 포트 할당 단위 테스트에 `tx_inner_single_coil` paired mode (`tx_inner_single_coil` + `rx_single_coil`)를 추가로 검증한다.
 - The active full setup-ready happy path uses a single `rx_single_coil` modeled entry.
-- TxRx full setup-ready happy path uses only `tx_inner_single_coil` and `rx_single_coil`.
+- TxRx full setup-ready happy path uses `tx_inner_single_coil` and `rx_single_coil`; a passive
+  `tv_aluminum_plate` may also be imported and styled while staying out of mesh, ports, sources, and reports.
 - Active fixed/sweep setup-ready fixtures treat TX inner as layer-count one and must not expect `tx_inner_copper_stack`.
 - `non_model` 장면에서의 양극/음극 브릿지 멤버는 modeled coil/port payload에 포함되지 않고 `non_model_objects[*].imported_object_names`에 유지되어야 한다.
 - 단일 코일 TX 포트 할당 테스트는 `terminal_metadata.port_sheet_vertices_xyz` 기반 엣지 좌표가
@@ -58,6 +59,7 @@ tags:
 - Skipping AEDT `ValidateDesign()` must be opt-in only and must not affect default fail-fast validation tests.
 - Passive TX inner actual-underlay names must not become mesh targets or port/source/report participants.
 - Passive TX inner void-stack names must not become mesh targets or port/source/report participants, and extra void pairs such as `tx_void_ferrite_u1` / `tx_void_pet_psa_u1` must not appear in active fixed-example setup fixtures.
+- Passive `tv_aluminum_plate` must stay a modeled aluminum object without becoming a mesh target or port/source/report participant.
 - Any `tx_outer_single_coil` source ledger fixture must fail before HFSS setup operations.
 
 ## Graph links

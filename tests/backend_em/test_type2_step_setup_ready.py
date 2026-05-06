@@ -423,6 +423,41 @@ def _tx_inner_rx_imported_name_batch() -> tuple[str, ...]:
     )
 
 
+def _tv_member_entry() -> dict[str, object]:
+    return {
+        "object_id": "tv",
+        "role": "tv",
+        "material": "vacuum",
+        "model_state": False,
+        "non_model": True,
+        "plane": "YZ",
+        "canonical_coordinates": {
+            "frame_origin_xyz": [0.0, -921.0, 170.0],
+            "outer_bounds_min_xyz": [0.0, -921.0, 170.0],
+            "outer_bounds_max_xyz": [9.0, 921.0, 1225.0],
+            "outer_bounds_size_xyz": [9.0, 1842.0, 1055.0],
+        },
+    }
+
+
+def _non_model_entry_with_tv_and_tx_inner_region() -> dict[str, object]:
+    non_model_object = _non_model_entry_with_tx_inner_region()
+    member_object_ids = list(cast(tuple[str, ...], non_model_object["member_object_ids"]))
+    member_objects = list(cast(list[dict[str, object]], non_model_object["member_objects"]))
+    member_object_ids.insert(1, "tv")
+    member_objects.insert(1, _tv_member_entry())
+    non_model_object["member_object_ids"] = tuple(member_object_ids)
+    non_model_object["member_objects"] = member_objects
+    return non_model_object
+
+
+def _tx_inner_rx_imported_name_batch_with_tv_aluminum_plate() -> tuple[str, ...]:
+    names = list(_tx_inner_rx_imported_name_batch())
+    names.insert(1, "tv")
+    names.append("tv_aluminum_plate")
+    return tuple(names)
+
+
 def _tx_inner_outer_rx_imported_name_batch(*, include_tx_outer_void_stack: bool = False) -> tuple[str, ...]:
     tx_region_actual_member_names = _tx_region_actual_member_names()
     tx_outer_void_stack_names: tuple[str, ...] = ()
@@ -599,6 +634,24 @@ def _tx_inner_rx_modeled_objects_with_imported_names(tmp_path: Path) -> list[dic
         _tx_inner_single_coil_modeled_object_with_imported_names(tmp_path),
         _rx_single_coil_modeled_object_with_imported_names(tmp_path),
     ]
+
+
+def _tv_aluminum_plate_modeled_object_with_imported_names(tmp_path: Path) -> dict[str, object]:
+    modeled_object = _modeled_entry(
+        object_id="tv_aluminum_plate",
+        role="tv_aluminum_plate",
+        placement_owner_id="tv",
+        plane="YZ",
+        origin_xyz=(9.0, -921.0, 170.0),
+        size_xyz=(0.04, 1842.0, 1055.0),
+        expected_names=["tv_aluminum_plate"],
+        expected_groups=[],
+        source_metadata_path=str(tmp_path / "tv_aluminum_plate.metadata.json"),
+    )
+    modeled_object["material"] = "aluminum"
+    modeled_object["imported_object_names"] = ["tv_aluminum_plate"]
+    modeled_object["terminal_metadata"] = {}
+    return modeled_object
 
 
 def _tx_inner_rx_modeled_objects_with_tx_inner_underlay_imported_names(tmp_path: Path) -> list[dict[str, object]]:
@@ -984,6 +1037,42 @@ def test_setup_type2_step_ledger_builds_mesh_boundary_ports_analysis_and_validat
     assert "mesh" not in imported_payload
     assert "boundary" not in imported_payload
     assert imported_payload["aedt_path"] == str(output_aedt_path)
+
+
+def test_setup_type2_step_ledger_allows_passive_tv_aluminum_plate_in_txrx_mode(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_txrx_step_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry_with_tv_and_tx_inner_region()],
+        modeled_objects=[
+            *_tx_inner_rx_modeled_objects_with_imported_names(tmp_path),
+            _tv_aluminum_plate_modeled_object_with_imported_names(tmp_path),
+        ],
+        radiation_margin_mm=4123.0,
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_setup_ready.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _SetupReadyHfss(
+        modeler=_SetupReadyModeler(imported_name_batches=[_tx_inner_rx_imported_name_batch_with_tv_aluminum_plate()])
+    )
+
+    result = cast(
+        Type2SetupReadyResult,
+        setup_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=output_aedt_path,
+            imported_ledger_path=imported_ledger_path,
+            design_name="fake_type2_setup_ready",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        ),
+    )
+
+    assert session.modeler.objects["tv_aluminum_plate"].material_name == "aluminum"
+    assert result["mesh"]["objects"] == ["tx_inner_copper_l0", "rx_copper_l0"]
+    imported_payload = _imported_ledger_payload(imported_ledger_path)
+    imported_roles = [entry["role"] for entry in cast(list[dict[str, object]], imported_payload["modeled_objects"])]
+    assert imported_roles == ["tx_inner_single_coil", "rx_single_coil", "tv_aluminum_plate"]
 
 
 def test_setup_type2_step_ledger_rejects_tx_outer_single_coil_in_txrx_mode(tmp_path: Path) -> None:

@@ -40,6 +40,7 @@ tags:
 - Unsupported role sets fail before backend execution.
 - RxOnly build tests must not require EM-active TX modeled objects.
 - Geometry-only `tx_inner_single_coil` can accompany RX without activating removed TX outer modeled roles.
+- Passive `tv_aluminum_plate` can accompany the active RX/TX-inner role set without being treated as an EM target.
 - TX modeled build dependencies, including TX columns paired with RX, must not reach the setup-ready runner.
 - Prepared build validation must reject missing or nonzero TX inner X-position compatibility ranges before setup-ready execution.
 

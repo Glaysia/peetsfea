@@ -40,6 +40,8 @@ tags:
 - Ledger fixtures declare `outputs.mode = "RxOnly"` and only active RX output variables.
 - Tests preserve a fail-fast regression that any fixture declaring `tx_outer_single_coil` is unsupported.
 - Tx terminal bridge members are allowed as non-model scene members (`tx_pos_bridge_pcb`, `tx_pos_bridge_copper`, `tx_neg_bridge_pcb`, `tx_neg_bridge_copper`) and must stay in non-modeled buckets.
+- TV aluminum plate modeled import coverage requires modeled ledger entries with role/object_id `tv_aluminum_plate`, placement owner `tv`, canonical min/size contract, and import-time `imported_object_names` behavior.
+- The tv aluminum plate import regression is active and must pass without xfail: backend ledger, partition, bounds, styling, and imported ledger output all recognize the modeled one-body aluminum plate.
 
 ## Invariants / fail-fast
 - Missing RX imported bodies and generic imported names fail.
@@ -49,9 +51,11 @@ tags:
 - Void-stack ferrite/PET_PSA prefixes must resolve to passive material families (`MULL12060ferrite` for ferrite and `PET_PSA` for PET/PSA) without becoming copper/mesh/port ownership.
 - TX inner wall-side X placement tests must still fail when bounds escape `tx_inner_region` or when actual-region provenance no longer anchors at the lower-X owner side.
 - TX inner actual-region validation must fail when the actual/design region is not centered in `tx_inner_region` Y or when provenance no longer matches the modeled source/physical bounds contract.
+- tv aluminum plate modeled import assertions require non-modeled member `tv` to remain available as the placement owner while `tv_aluminum_plate` stays out of non-modeled ownership.
 
 ## Graph links
 - Primary owner: [type2-step-import-boundary](../../../architecture/type2-step-import-boundary.md)
 - Direct verification: [type2_step_import_pipeline.py](../../src/peetsfea/backend/pyaedt/type2_step_import_pipeline.py.md)
 - Direct verification: [type2_step_import_core.py](../../src/peetsfea/backend/pyaedt/type2_step_import_core.py.md)
 - Related plan: [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
+- Related plan: [0.2.24 Type2 TV Aluminum Plate](../../../plans/0.2.24-type2-tv-aluminum-plate.md)

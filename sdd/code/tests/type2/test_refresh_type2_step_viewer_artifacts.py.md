@@ -41,6 +41,7 @@ tags:
 - fixed example keeps `tx_region` as guide context and derives `tx_inner_region` geometry context.
 - fixed example keeps `tx_inner_rect_void_coil` as the active TX inner modeled input with fixed 1-repeat actual-region underlay and fixed disabled void stack.
 - fixed example keeps `rx_region_max` and the RX modeled object as active EM geometry inputs.
+- fixed example keeps `tv` as a non-modeled owner and `tv_aluminum_plate` as modeled aluminum geometry sourced by `source_non_model_object_id = "tv"`.
 - fixed example has TxRx outputs with TX variables and output expressions referencing `TX_TML`.
 - viewer notebook must not contain `_OWNER_DESCRIPTIONS`; it must import and call `type2_range_owner_descriptions`.
 - viewer notebook must not contain the removed canonical-to-raw owner mapping for
@@ -63,5 +64,6 @@ tags:
 ## 변경 시 주의점
 - notebook refresh output layout must not be tested by editing notebooks in this worker scope.
 - example type2 TOML의 modeled object registry or output mode가 바뀌면 TX inner/RX EM assertions를 같이 갱신한다.
+- TOML assertions must check the raw `source_non_model_object_id` field; backend ledgers translate that source into `placement_owner_id`.
 - removed canonical-to-raw notebook checks are intentionally static because this worker does not own notebook edits or generated sampled TOML artifacts.
 - notebook sample-index selector checks are static and must not execute AEDT.

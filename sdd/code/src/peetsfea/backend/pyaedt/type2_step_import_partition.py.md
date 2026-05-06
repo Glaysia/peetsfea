@@ -1,7 +1,7 @@
 ---
 title: type2_step_import_partition.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - import
   - pyaedt
@@ -28,12 +28,14 @@ tags:
 - `tx_region` is non-modeled guide context only.
 - `tx_inner_pcb_l*`, `tx_inner_copper_l*`, `tx_inner_copper_stack`, `tx_underlay_pet_psa_u*`, `tx_underlay_ferrite_u*`, `tx_void_pet_psa_u*`, and `tx_void_ferrite_u*` are recognized only for imported geometry ownership; setup-ready filtering decides whether they participate in EM.
 - `tx_inner_single_coil` may carry a `g_ferrite_tx` body group for actual-region underlay and void-stack members, with member order matching export order.
+- `tv_aluminum_plate` resolves as exactly one modeled imported body named `tv_aluminum_plate`; it is not PCB, copper, ferrite, PET/PSA, air, or a grouped body.
 
 ## Invariants / fail-fast
 - Missing required RX bodies fail immediately.
 - Missing required `tx_inner_single_coil` geometry bodies fail immediately when the ledger declares that geometry-only modeled object.
 - Unknown generic bodies fail immediately.
 - RxOnly partition may validate declared geometry-only TX inner bodies, but must not synthesize TX setup inputs.
+- TV aluminum plate partition rejects any extra/missing imported body names instead of applying family-prefix matching.
 
 ## Graph links
 - Primary owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
@@ -41,3 +43,4 @@ tags:
 - Related plan: [0.2.24 Type2 TX Inner Actual Underlay Stack](../../../../../plans/0.2.24-type2-tx-inner-actual-underlay-stack.md)
 - Related plan: [0.2.24 Type2 TX Inner Void YZ Stack](../../../../../plans/0.2.24-type2-tx-inner-void-yz-stack.md)
 - Related plan: [0.2.24 Type2 TX Outer Void Stack](../../../../../plans/0.2.24-type2-tx-outer-void-stack.md)
+- Related plan: [0.2.24 Type2 TV Aluminum Plate](../../../../../plans/0.2.24-type2-tv-aluminum-plate.md)

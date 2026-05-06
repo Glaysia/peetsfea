@@ -23,6 +23,11 @@ _TX_PCB_MATERIAL = "FR4_epoxy"
 _TX_COPPER_COLOR = (184, 115, 51)
 _TX_COPPER_TRANSPARENCY = 0.0
 _TX_COPPER_MATERIAL = "copper"
+_TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
+_TV_ALUMINUM_PLATE_BODY_NAME = "tv_aluminum_plate"
+_TV_ALUMINUM_PLATE_MATERIAL = "aluminum"
+_TV_ALUMINUM_PLATE_COLOR = (190, 195, 200)
+_TV_ALUMINUM_PLATE_TRANSPARENCY = 0.15
 _TX_UNDERLAY_FERRITE_NAME_PREFIX = "tx_underlay_ferrite_u"
 _TX_UNDERLAY_PET_PSA_NAME_PREFIX = "tx_underlay_pet_psa_u"
 _TX_UNDERLAY_AIR_NAME_PREFIX = "tx_underlay_air_u"
@@ -818,6 +823,8 @@ def _reconstruct_port_sheet_if_needed(
     role = require_non_empty_str(require_key(modeled_entry, key="role", context=context), context=f"{context}.role")
     if role == "tx_rect_void_columns":
         return []
+    if role == _TV_ALUMINUM_PLATE_ROLE:
+        return []
     if role == "tx_outer_single_coil":
         return []
     expected_port_sheet_name = _expected_port_sheet_name(modeled_entry, context=context)
@@ -1170,6 +1177,38 @@ def validate_modeled_bounds_against_owner(
                 f"owner_min={(owner_min_x, owner_min_y)}, owner_max={(owner_max_x, owner_max_y)})"
             )
         return
+    if role == _TV_ALUMINUM_PLATE_ROLE:
+        if owner_id != "tv":
+            raise ValueError(
+                f"{context}.placement_owner_id must be 'tv' for tv_aluminum_plate modeled geometry "
+                f"(actual={owner_id!r})"
+            )
+        if plane != "YZ":
+            raise ValueError(f"{context}.plane must be 'YZ' for tv_aluminum_plate modeled geometry (actual={plane!r})")
+        material = require_non_empty_str(require_key(modeled_entry, key="material", context=context), context=f"{context}.material")
+        if material != _TV_ALUMINUM_PLATE_MATERIAL:
+            raise ValueError(
+                f"{context}.material must be 'aluminum' for tv_aluminum_plate modeled geometry "
+                f"(actual={material!r})"
+            )
+        model_state = require_key(modeled_entry, key="model_state", context=context)
+        if model_state is not True:
+            raise ValueError(f"{context}.model_state must be true for tv_aluminum_plate modeled geometry")
+        expected_min_xyz = (owner_max_x, owner_min_y, owner_min_z)
+        expected_size_xyz = (0.04, owner_size_y, owner_size_z)
+        modeled_min_xyz = (modeled_min_x, modeled_min_y, modeled_min_z)
+        modeled_size_xyz = (modeled_size_x, modeled_size_y, modeled_size_z)
+        if any(abs(modeled_min_xyz[index] - expected_min_xyz[index]) > _PLACEMENT_TOLERANCE for index in range(3)):
+            raise ValueError(
+                "tv_aluminum_plate outer bounds min must touch tv +X face and copy tv min Y/Z "
+                f"(actual={modeled_min_xyz}, expected={expected_min_xyz})"
+            )
+        if any(abs(modeled_size_xyz[index] - expected_size_xyz[index]) > _PLACEMENT_TOLERANCE for index in range(3)):
+            raise ValueError(
+                "tv_aluminum_plate outer bounds size must be 0.04 mm thick and span full tv Y/Z "
+                f"(actual={modeled_size_xyz}, expected={expected_size_xyz})"
+            )
+        return
     allowed_modeled_size_y = (
         owner_size_y + _PLATE_STACK_STUB_LENGTH_MM if role in ("tx_plate_stack", "rx_plate_stack") else owner_size_y
     )
@@ -1381,6 +1420,21 @@ def style_imported_modeled_objects(
         raise ValueError(
             f"{context}.role tx_outer_single_coil is inactive and unsupported in active Type2 import styling"
         )
+    if role == _TV_ALUMINUM_PLATE_ROLE:
+        if imported_object_names != [_TV_ALUMINUM_PLATE_BODY_NAME]:
+            raise ValueError(
+                f"{context} requires exactly one imported tv aluminum plate body "
+                f"(expected={[_TV_ALUMINUM_PLATE_BODY_NAME]}, actual={imported_object_names})"
+            )
+        _apply_object_material_and_visual_state(
+            modeler=modeler,
+            object_name=_TV_ALUMINUM_PLATE_BODY_NAME,
+            material_name=_TV_ALUMINUM_PLATE_MATERIAL,
+            color=_TV_ALUMINUM_PLATE_COLOR,
+            transparency=_TV_ALUMINUM_PLATE_TRANSPARENCY,
+            context=f"{context}.tv_aluminum_plate[{_TV_ALUMINUM_PLATE_BODY_NAME}]",
+        )
+        return list(imported_object_names)
     resolved_body_names = resolve_modeled_body_names(
         modeled_entry=modeled_entry,
         imported_object_names=imported_object_names,

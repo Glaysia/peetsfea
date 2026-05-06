@@ -17,18 +17,21 @@ tags:
 
 ## Responsibility
 - Dispatch modeled scene-data construction for active Type2 RxOnly bodies.
+- Add modeled TV aluminum plate construction when role is `tv_aluminum_plate`.
 
 ## Inputs / Outputs
 - Inputs: modeled object spec, placement owner spec, resolved `tx_region.max_z`, deterministic seed.
-- Outputs: build123d shapes and `ModeledObjectSceneData` for supported RX modeled objects.
+- Outputs: build123d shapes and `ModeledObjectSceneData` for supported RX and modeled TV aluminum plate objects.
 
 ## Canonical State
 - RX modeled geometry is represented by returned shapes and scene data.
 - TX modeled geometry is not active runtime state.
+- TV aluminum plate geometry is represented by a single `tv_aluminum_plate` solid derived from `tv` owner bounds.
 
 ## Invariants / Fail-Fast
 - TX modeled roles fail immediately.
-- Supported modeled specs must produce scene data through the role-specific geometry builders.
+- Supported modeled specs must produce scene data through role-specific builders.
+- `tv_aluminum_plate` requires owner `tv`, and fails immediately if the owner is missing expected identity or has non-finite/non-positive geometry bounds.
 - `tx_inner_single_coil` and `tx_outer_single_coil` scene building receive `tx_region.max_z` explicitly so passive void-stack sheets can fill to the TX region top without inferring it from inner or outer guide owners.
 
 ## Collaborators

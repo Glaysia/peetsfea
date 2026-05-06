@@ -175,6 +175,7 @@ class ModeledObjectSceneData(TypedDict):
         "tx_rect_void_columns",
         "tx_plate_stack",
         "rx_plate_stack",
+        "tv_aluminum_plate",
     ]
     plane: Literal["XY", "YZ"]
     placement_owner_id: str

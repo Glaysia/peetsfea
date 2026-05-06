@@ -12,6 +12,7 @@ from peetsfea.type2_step_spec_types import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledSingleCoilCommonSpec
 from peetsfea.type2_step_spec_types import ModeledSingleCoilRole
 from peetsfea.type2_step_spec_types import ModeledSingleCoilSpec
+from peetsfea.type2_step_spec_types import ModeledTvAluminumPlateSpec
 from peetsfea.type2_step_spec_types import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec_types import ModeledTxInnerSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledTxRectVoidColumnsSpec
@@ -1127,6 +1128,85 @@ def _parse_modeled_tx_rect_void_columns(
     )
 
 
+def _parse_modeled_tv_aluminum_plate(
+    raw_object: object,
+    *,
+    index: int,
+    seen_object_ids: set[str],
+    non_model_specs_by_id: dict[str, NonModelBoxSpec],
+) -> ModeledTvAluminumPlateSpec:
+    context = f"modeled_objects[{index}]"
+    table = _require_table(raw_object, context)
+    object_id = _require_non_empty_str(table, "object_id", context)
+    if object_id in seen_object_ids:
+        raise ValueError(f"duplicate object id: {object_id}")
+    seen_object_ids.add(object_id)
+    role = _require_non_empty_str(table, "role", context)
+    if role != "tv_aluminum_plate":
+        raise ValueError(f"{context}.role must be 'tv_aluminum_plate' (actual={role!r})")
+    expected_object_id = modeled_object_id_for_role("tv_aluminum_plate")
+    if object_id != expected_object_id:
+        raise ValueError(
+            f"prototype modeled object_id must be '{expected_object_id}' for role tv_aluminum_plate "
+            f"(actual={object_id})"
+        )
+    raw_primitive = _require_non_empty_str(table, "primitive", context)
+    if raw_primitive != "box":
+        raise ValueError(f"{context}.primitive must be 'box' (actual={raw_primitive})")
+    material = _require_non_empty_str(table, "material", context)
+    if material != "aluminum":
+        raise ValueError(f"{context}.material must be 'aluminum' (actual={material})")
+    raw_model_state = _require_key(table, "model_state", context)
+    if not isinstance(raw_model_state, bool):
+        raise TypeError(f"{context}.model_state must be bool")
+    if raw_model_state is not True:
+        raise ValueError(f"{context}.model_state must be true")
+    source_non_model_object_id = _require_non_empty_str(table, "source_non_model_object_id", context)
+    if source_non_model_object_id != "tv":
+        raise ValueError(
+            f"{context}.source_non_model_object_id must be 'tv' (actual={source_non_model_object_id})"
+        )
+    if source_non_model_object_id not in non_model_specs_by_id:
+        raise ValueError(
+            f"{context} requires non-model source owner '{source_non_model_object_id}' for role tv_aluminum_plate"
+        )
+    source_non_model_spec = non_model_specs_by_id[source_non_model_object_id]
+    if source_non_model_spec.object_id != "tv":
+        raise ValueError(f"{context} source non-model owner must be object 'tv' (actual={source_non_model_spec.object_id})")
+    face = _require_non_empty_str(table, "face", context)
+    if face != "+x":
+        raise ValueError(f"{context}.face must be '+x' (actual={face})")
+    thickness_mm = _require_float_value(table, "thickness_mm", context)
+    if not math.isfinite(thickness_mm):
+        raise ValueError(f"{context}.thickness_mm must be finite")
+    if thickness_mm <= 0.0:
+        raise ValueError(f"{context}.thickness_mm must be > 0")
+    unsupported_keys = sorted(set(table.keys()) - {
+        "object_id",
+        "role",
+        "primitive",
+        "material",
+        "model_state",
+        "source_non_model_object_id",
+        "face",
+        "thickness_mm",
+    })
+    if unsupported_keys:
+        raise ValueError(
+            f"{context} contains unsupported keys for tv_aluminum_plate (actual={unsupported_keys})"
+        )
+    return ModeledTvAluminumPlateSpec(
+        object_id=object_id,
+        role="tv_aluminum_plate",
+        primitive="box",
+        material="aluminum",
+        model_state=True,
+        source_non_model_object_id=source_non_model_object_id,
+        face="+x",
+        thickness_mm=thickness_mm,
+    )
+
+
 def parse_modeled_object(
     raw_object: object,
     *,
@@ -1152,6 +1232,13 @@ def parse_modeled_object(
         return _parse_modeled_plate_stack(raw_object, index=index, seen_object_ids=seen_object_ids)
     if role == "rx_single_coil":
         return _parse_modeled_single_coil(
+            raw_object,
+            index=index,
+            seen_object_ids=seen_object_ids,
+            non_model_specs_by_id=non_model_specs_by_id,
+        )
+    if role == "tv_aluminum_plate":
+        return _parse_modeled_tv_aluminum_plate(
             raw_object,
             index=index,
             seen_object_ids=seen_object_ids,

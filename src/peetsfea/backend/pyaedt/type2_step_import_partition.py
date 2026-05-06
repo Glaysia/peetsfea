@@ -26,6 +26,8 @@ _SINGLE_COIL_ROLES: frozenset[str] = frozenset(
 _PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
 _TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
 _TX_RECT_VOID_COLUMNS_COPPER_NAME = "tx_rect_void_columns_copper"
+_TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
+_TV_ALUMINUM_PLATE_BODY_NAME = "tv_aluminum_plate"
 _TX_COPPER_GROUP_NAME = "g_copper_tx"
 _RX_COPPER_GROUP_NAME = "g_copper_rx"
 _TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
@@ -374,6 +376,13 @@ def _group_contract_for_role(
                 "for tx_rect_void_columns"
             )
         return []
+    if role == _TV_ALUMINUM_PLATE_ROLE:
+        if expected_names != [_TV_ALUMINUM_PLATE_BODY_NAME]:
+            raise ValueError(
+                f"{context}.expected_exported_body_names must be ['{_TV_ALUMINUM_PLATE_BODY_NAME}'] "
+                f"for {_TV_ALUMINUM_PLATE_ROLE} (actual={expected_names})"
+            )
+        return []
 
     if role == "tx_plate_stack":
         ferrite_member_names = tuple(
@@ -645,6 +654,25 @@ def resolve_modeled_body_names(
             f"{context}.role tx_outer_single_coil is inactive and unsupported in active Type2 import"
         )
     expected_names = expected_exported_body_names(modeled_entry, context=context)
+    if role == _TV_ALUMINUM_PLATE_ROLE:
+        if expected_names != [_TV_ALUMINUM_PLATE_BODY_NAME]:
+            raise ValueError(
+                f"{context}.expected_exported_body_names must be ['{_TV_ALUMINUM_PLATE_BODY_NAME}'] "
+                f"for {_TV_ALUMINUM_PLATE_ROLE} (actual={expected_names})"
+            )
+        _require_exact_name_contract(
+            expected_names=expected_names,
+            imported_object_names=imported_object_names,
+            context=context,
+            role_label="tv_aluminum_plate",
+        )
+        return {
+            "pcb_names": [],
+            "copper_names": [],
+            "underlay_ferrite_names": [],
+            "underlay_pet_psa_names": [],
+            "underlay_air_names": [],
+        }
     expected_roles = [_body_role_from_expected_name(name, context=context) for name in expected_names]
     if role in _SINGLE_COIL_ROLES:
         if expected_roles.count(_BODY_ROLE_PCB) < 1 or expected_roles.count(_BODY_ROLE_COPPER) != 1:

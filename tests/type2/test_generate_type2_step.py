@@ -32,6 +32,7 @@ from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_step_export import export_type2_tx_single_coil_artifact
 from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
+from peetsfea.type2_step_spec import ModeledTvAluminumPlateSpec
 from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import NonModelTxRegionSpec
@@ -48,6 +49,7 @@ from peetsfea.type2_step_spec import resolve_modeled_underlay_gap_mm
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
 from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
 from peetsfea.type2_tx_rect_void_columns import build_tx_rect_void_columns_axis_aligned_tile_scenes
+from peetsfea.type2_step_scene import build_modeled_scene_data
 
 _TX_UNDERLAY_FERRITE_THICKNESS_MM = 0.20
 _TX_UNDERLAY_PET_PSA_THICKNESS_MM = 0.15
@@ -105,6 +107,10 @@ _TX_POSITIVE_BRIDGE_ROLE = "tx_inner_outer_positive_bridge"
 _TX_NEGATIVE_BRIDGE_PCB_OBJECT_ID = "tx_neg_bridge_pcb"
 _TX_NEGATIVE_BRIDGE_COPPER_OBJECT_ID = "tx_neg_bridge_copper"
 _TX_NEGATIVE_BRIDGE_ROLE = "tx_inner_outer_negative_bridge"
+_TV_ALUMINUM_PLATE_OBJECT_ID = "tv_aluminum_plate"
+_TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
+_TV_ALUMINUM_PLATE_CANONICAL_MIN_XYZ = (9.0, -921.0, 170.0)
+_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ = (0.04, 1842.0, 1055.0)
 
 _OBSOLETE_GENERIC_TX_ACTIVE_RXONLY_TEST_NAME_PARTS = (
     "parses_tx_rect_void_columns_parser_surface",
@@ -208,6 +214,39 @@ def _canonical_bounds(
     max_xyz = cast(tuple[float, float, float], canonical_coordinates["outer_bounds_max_xyz"])
     size_xyz = cast(tuple[float, float, float], canonical_coordinates["outer_bounds_size_xyz"])
     return min_xyz, max_xyz, size_xyz
+
+
+def _make_tv_aluminum_plate_spec() -> ModeledTvAluminumPlateSpec:
+    return ModeledTvAluminumPlateSpec(
+        object_id="tv_aluminum_plate",
+        role="tv_aluminum_plate",
+        primitive="box",
+        material="aluminum",
+        model_state=True,
+        source_non_model_object_id="tv",
+        face="+x",
+        thickness_mm=0.04,
+    )
+
+
+def _assert_tv_aluminum_plate_spec_contract(*, spec: Type2StepSpec) -> None:
+    tv_entry = next(entry for entry in spec.modeled_objects if entry.object_id == _TV_ALUMINUM_PLATE_OBJECT_ID)
+    assert tv_entry.object_id == _TV_ALUMINUM_PLATE_OBJECT_ID
+    assert tv_entry.role == _TV_ALUMINUM_PLATE_ROLE
+    assert tv_entry.material == "aluminum"
+    assert tv_entry.model_state is True
+    assert tv_entry.source_non_model_object_id == "tv"
+
+
+def _assert_tv_aluminum_plate_ledger_contract(*, entry: dict[str, object]) -> None:
+    assert entry["object_id"] == _TV_ALUMINUM_PLATE_OBJECT_ID
+    assert entry["role"] == _TV_ALUMINUM_PLATE_ROLE
+    assert entry["material"] == "aluminum"
+    assert entry["model_state"] is True
+    assert entry["placement_owner_id"] == "tv"
+    canonical_coordinates = cast(dict[str, object], entry["canonical_coordinates"])
+    assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_MIN_XYZ)
+    assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ)
 
 
 def _max_x_z(min_xyz: tuple[float, float, float], size_xyz: tuple[float, float, float]) -> tuple[float, float]:
@@ -2202,7 +2241,8 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert spec.outputs["mode"] == "TxRx"
     assert tuple(variable["name"] for variable in spec.outputs["variables"]) == _TXRX_OUTPUT_NAMES
     assert len(spec.non_model_objects) == 6
-    assert len(spec.modeled_objects) == 2
+    assert len(spec.modeled_objects) == 3
+    assert _TV_ALUMINUM_PLATE_OBJECT_ID not in [entry.object_id for entry in spec.non_model_objects]
     tx_region_entry = next(entry for entry in spec.non_model_objects if entry.object_id == "tx_region")
     assert isinstance(tx_region_entry, NonModelTxRegionSpec)
     assert tx_region_entry.origin_xyz == pytest.approx((0.0, -900.0, 0.0))
@@ -2248,6 +2288,7 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert rx_entry.void_usage_ratio.end == pytest.approx(0.2)
     assert rx_entry.void_usage_ratio.count == 1
     assert rx_entry.metal_fill_factor.start == pytest.approx(0.5142857142857142)
+    _assert_tv_aluminum_plate_spec_contract(spec=spec)
 
 
 def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
@@ -2255,7 +2296,8 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     source_toml = repo_root / "examples" / "type2_fixed.toml"
     spec = load_type2_step_spec(source_toml)
 
-    assert len(spec.modeled_objects) == 2
+    assert len(spec.modeled_objects) == 3
+    assert _TV_ALUMINUM_PLATE_OBJECT_ID not in [entry.object_id for entry in spec.non_model_objects]
     tx_inner_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_inner_rect_void_coil")
     assert tx_inner_entry.object_id == "tx_inner_rect_void_coil"
     assert tx_inner_entry.role == "tx_inner_single_coil"
@@ -2292,6 +2334,7 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     assert rx_profile.plane == "YZ"
     assert rx_profile.object_id == "rx_rect_void_coil"
     assert rx_profile.placement_owner_id == "rx_region_max"
+    _assert_tv_aluminum_plate_spec_contract(spec=spec)
 
 
 def test_load_type2_step_spec_rejects_duplicate_object_id(tmp_path: Path) -> None:
@@ -2306,8 +2349,9 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     source_toml = repo_root / "examples" / "type2_sweep.toml"
     spec = load_type2_step_spec(source_toml)
 
-    assert len(spec.modeled_objects) == 2
+    assert len(spec.modeled_objects) == 3
     assert len(spec.non_model_objects) >= 2
+    assert _TV_ALUMINUM_PLATE_OBJECT_ID not in [entry.object_id for entry in spec.non_model_objects]
     tx_inner_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_inner_rect_void_coil")
     assert tx_inner_entry.role == "tx_inner_single_coil"
     assert tx_inner_entry.layer_count.start == pytest.approx(1.0)
@@ -2338,6 +2382,7 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     assert rx_entry.underlay_repeat_count.end == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.count == 1
     assert rx_entry.terminal_path == "A_cw_to_a"
+    _assert_tv_aluminum_plate_spec_contract(spec=spec)
 
 
 def test_load_type2_step_spec_rejects_unsupported_modeled_role(tmp_path: Path) -> None:
@@ -2345,6 +2390,75 @@ def test_load_type2_step_spec_rejects_unsupported_modeled_role(tmp_path: Path) -
 
     with pytest.raises(ValueError, match=r"unsupported modeled object role: bad_single_coil"):
         load_type2_step_spec(toml_path)
+
+
+def test_build_modeled_scene_data_fails_for_tv_aluminum_plate_when_owner_is_not_tv() -> None:
+    tv_plate_spec = _make_tv_aluminum_plate_spec()
+    non_tv_owner = NonModelBoxSpec(
+        object_id="some_other_owner",
+        kind="box",
+        primitive="box",
+        present=True,
+        non_model=True,
+        material="vacuum",
+        plane="XY",
+        origin_xyz=(0.0, 0.0, 0.0),
+        size_xyz=(1.0, 1.0, 1.0),
+    )
+
+    with pytest.raises(ValueError, match=r"requires non-model source owner 'tv'"):
+        build_modeled_scene_data(
+            tv_plate_spec,
+            owner_spec=non_tv_owner,
+            tx_region_max_z=100.0,
+            seed=0,
+        )
+
+
+def test_build_modeled_scene_data_fails_for_tv_aluminum_plate_when_owner_origin_is_non_finite() -> None:
+    tv_plate_spec = _make_tv_aluminum_plate_spec()
+    non_finite_owner = NonModelBoxSpec(
+        object_id="tv",
+        kind="box",
+        primitive="box",
+        present=True,
+        non_model=True,
+        material="vacuum",
+        plane="XY",
+        origin_xyz=(float("nan"), 0.0, 0.0),
+        size_xyz=(1.0, 1.0, 1.0),
+    )
+
+    with pytest.raises(ValueError, match=r"origin must be finite"):
+        build_modeled_scene_data(
+            tv_plate_spec,
+            owner_spec=non_finite_owner,
+            tx_region_max_z=100.0,
+            seed=0,
+        )
+
+
+def test_build_modeled_scene_data_fails_for_tv_aluminum_plate_when_owner_size_is_non_positive() -> None:
+    tv_plate_spec = _make_tv_aluminum_plate_spec()
+    non_positive_owner = NonModelBoxSpec(
+        object_id="tv",
+        kind="box",
+        primitive="box",
+        present=True,
+        non_model=True,
+        material="vacuum",
+        plane="XY",
+        origin_xyz=(0.0, 0.0, 0.0),
+        size_xyz=(1.0, -2.0, 1.0),
+    )
+
+    with pytest.raises(ValueError, match=r"size must be positive"):
+        build_modeled_scene_data(
+            tv_plate_spec,
+            owner_spec=non_positive_owner,
+            tx_region_max_z=100.0,
+            seed=0,
+        )
 
 
 @pytest.mark.parametrize(
@@ -3321,6 +3435,7 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     member_object_ids = tuple(cast(Sequence[str], non_model_entry["member_object_ids"]))
     required_guide_member_ids = (
         "environment",
+        "tv",
         "tx_region",
         "tx_inner_region",
         "tx_inner_actual_region",
@@ -3360,10 +3475,11 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     ]
     assert tx_region_actual_stack_space_members == []
     assert all(member["object_id"] != "tx_outer_actual_region" for member in member_objects)
-    assert tuple(entry["object_id"] for entry in ledger["modeled_objects"]) == (
+    assert set(cast(tuple[str, ...], tuple(entry["object_id"] for entry in ledger["modeled_objects"]))) == {
         "tx_inner_rect_void_coil",
         "rx_rect_void_coil",
-    )
+        _TV_ALUMINUM_PLATE_OBJECT_ID,
+    }
     assert ledger["outputs"]["mode"] == "TxRx"
     assert "TX_TML" in json.dumps(ledger["outputs"], sort_keys=True)
     tx_inner_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_inner_rect_void_coil")
@@ -3385,6 +3501,7 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     assert "tx_outer_actual_region" not in scene_shapes_by_label
     assert "tx_region_actual" not in scene_shapes_by_label
     assert "tx_region_actual_stack_space" not in scene_shapes_by_label
+    assert _TV_ALUMINUM_PLATE_OBJECT_ID in scene_shapes_by_label
     assert all(
         not name.startswith(("tx_outer_pcb_", "tx_outer_copper_", "tx_outer_void_", "tx_outer_underlay_"))
         for name in scene_shapes_by_label
@@ -3481,11 +3598,13 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     member_object_ids = tuple(cast(Sequence[str], non_model_entry["member_object_ids"]))
     assert set(member_object_ids) >= {
         "environment",
+        "tv",
         "tx_region",
         "tx_inner_region",
         "tx_inner_actual_region",
         "rx_region_max",
     }
+    assert _TV_ALUMINUM_PLATE_OBJECT_ID not in member_object_ids
     forbidden_member_ids = {
         "tx_outer_region",
         "tx_outer_actual_region",
@@ -3545,10 +3664,11 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
         tuple[float, float, float], tx_inner_actual_physical_bounds["size_xyz"]
     )
 
-    assert tuple(entry["object_id"] for entry in ledger["modeled_objects"]) == (
+    assert set(tuple(entry["object_id"] for entry in ledger["modeled_objects"])) == {
         "tx_inner_rect_void_coil",
         "rx_rect_void_coil",
-    )
+        _TV_ALUMINUM_PLATE_OBJECT_ID,
+    }
     tx_inner_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_inner_rect_void_coil")
     assert tx_inner_entry["role"] == "tx_inner_single_coil"
     assert tx_inner_entry["placement_owner_id"] == "tx_inner_region"
@@ -3580,6 +3700,10 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert tx_inner_actual_min_xyz[0] == pytest.approx(model_min_xyz[0])
     assert tx_inner_actual_size_xyz[0] == pytest.approx(model_size_xyz[0])
     assert tx_inner_actual_size_xyz[1] == pytest.approx(model_size_xyz[1])
+    tv_aluminum_plate_entry = next(
+        entry for entry in ledger["modeled_objects"] if entry["object_id"] == _TV_ALUMINUM_PLATE_OBJECT_ID
+    )
+    _assert_tv_aluminum_plate_ledger_contract(entry=cast(dict[str, object], tv_aluminum_plate_entry))
     _assert_owner_local_design_x_position_ratio(
         design_entry=tx_inner_actual_member,
         owner_entry=tx_inner_member,

@@ -8,6 +8,7 @@ from peetsfea.type2_step_spec_types import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec_types import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec_types import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledTxInnerSingleCoilSpec
+from peetsfea.type2_step_spec_types import ModeledTvAluminumPlateSpec
 from peetsfea.type2_step_spec_types import NonModelTxRegionSpec
 from peetsfea.type2_step_spec_types import NonModelTxRegionActualSpec
 from peetsfea.type2_step_spec_types import Type2ConstraintComparableRef
@@ -296,6 +297,8 @@ def _constraint_reference_paths(spec: Type2StepSpec) -> set[str]:
                     f"{base}.turn_weight_c",
                 )
             )
+            continue
+        if isinstance(modeled_spec, ModeledTvAluminumPlateSpec):
             continue
         raise RuntimeError(f"unsupported modeled object for constraint owner-path collection: {modeled_spec.object_id}")
     return paths

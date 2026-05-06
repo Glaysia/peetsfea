@@ -1341,6 +1341,51 @@ def test_build_prepared_type2_design_accepts_rx_with_tx_inner_and_outer_geometry
     assert runner_calls[0]["imported_ledger_path"] == imported_ledger_path
 
 
+def test_build_prepared_type2_design_accepts_passive_tv_aluminum_plate_with_txrx_roles(tmp_path: Path) -> None:
+    design_id = "design-rx-tx-inner-tv"
+    design_dir = tmp_path / design_id
+    design_dir.mkdir()
+    sampled_toml_path = design_dir / "sampled.toml"
+    sampled_toml_path.write_text("[sampled]\n", encoding="utf-8")
+    source_toml_path = tmp_path / "source.toml"
+    source_toml_path.write_text("[design]\n", encoding="utf-8")
+    scene_step_path = design_dir / "type2_scene.step"
+    scene_step_path.write_text("STEP", encoding="utf-8")
+    step_ledger_path = design_dir / "type2_step_ledger.json"
+    step_ledger_path.write_text(json.dumps({"scene_step_path": str(scene_step_path)}, indent=2), encoding="utf-8")
+    output_aedt_path = design_dir / f"{design_id}.aedt"
+    imported_ledger_path = design_dir / "type2_imported_ledger.json"
+    prepared_build = PreparedType2Build(
+        design_id=design_id,
+        seed=1,
+        source_toml_path=source_toml_path,
+        sampled_toml_path=sampled_toml_path,
+        design_dir=design_dir,
+        scene_step_path=scene_step_path,
+        step_ledger_path=step_ledger_path,
+        imported_ledger_path=imported_ledger_path,
+        aedt_path=output_aedt_path,
+        sampled_owner_paths=("modeled_objects.tx_inner_rect_void_coil.outer_x_usage_ratio",),
+        modeled_roles=("rx_single_coil", "tx_inner_single_coil", "tv_aluminum_plate"),
+        design_variables=(("tx_inner_outer_x_usage_ratio", "0.5"),),
+    )
+
+    runner_calls: list[dict[str, object]] = []
+
+    def _fake_runner(**kwargs: object) -> _Type2BuildRunnerResult:
+        runner_calls.append(dict(kwargs))
+        return {
+            "aedt_path": str(cast(Path, kwargs["output_aedt_path"])),
+            "source_step_ledger_path": str(cast(Path, kwargs["step_ledger_path"])),
+            "imported_ledger_path": str(cast(Path, kwargs["imported_ledger_path"])),
+        }
+
+    result = type2_runtime.build_prepared_type2_design(prepared_build, runner=_fake_runner)
+
+    assert result["design_id"] == design_id
+    assert len(runner_calls) == 1
+
+
 def test_build_prepared_type2_design_rejects_tx_only_modeled_role_before_runner(tmp_path: Path) -> None:
     design_id = "design-tx"
     design_dir = tmp_path / design_id

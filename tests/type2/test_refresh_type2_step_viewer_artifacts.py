@@ -65,10 +65,8 @@ def test_fixed_viewer_refresh_fixture_is_txrx() -> None:
     assert non_model_ids == ("floor", "shelf", "wall", "tv", "tx_region", "rx_region_max")
 
     modeled_objects = _tables(payload, "modeled_objects")
-    assert tuple(cast(str, table["object_id"]) for table in modeled_objects) == (
-        "tx_inner_rect_void_coil",
-        "rx_rect_void_coil",
-    )
+    modeled_object_ids = tuple(cast(str, table["object_id"]) for table in modeled_objects)
+    assert set(modeled_object_ids) == {"tx_inner_rect_void_coil", "rx_rect_void_coil", "tv_aluminum_plate"}
     modeled_by_id = {cast(str, table["object_id"]): table for table in modeled_objects}
     assert modeled_by_id["tx_inner_rect_void_coil"]["role"] == "tx_inner_single_coil"
     assert cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["underlay_repeat_count"])["range"] == [
@@ -85,6 +83,11 @@ def test_fixed_viewer_refresh_fixture_is_txrx() -> None:
     ]
     assert modeled_by_id["rx_rect_void_coil"]["role"] == "rx_single_coil"
 
+    tv_aluminum_plate = modeled_by_id["tv_aluminum_plate"]
+    assert tv_aluminum_plate["role"] == "tv_aluminum_plate"
+    assert tv_aluminum_plate["material"] == "aluminum"
+    assert tv_aluminum_plate["model_state"] is True
+    assert tv_aluminum_plate["source_non_model_object_id"] == "tv"
     outputs = cast(dict[str, object], payload["outputs"])
     assert outputs["mode"] == "TxRx"
     raw_variables = outputs["variables"]

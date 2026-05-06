@@ -28,7 +28,8 @@ tags:
 - The full imported ledger records all imported bodies; active setup resolves and caches a branch-specific modeled ledger for mesh, port assignment, EM input, sources, and reports.
 - `RxOnly` branch accepts only a single `rx_single_coil` modeled object.
 - `RxOnly` branch accepts exactly one active `rx_single_coil` modeled object and may carry one geometry-only `tx_inner_single_coil` entry that is filtered before active EM setup.
-- `TxRx` branch uses exact `tx_inner_single_coil` + `rx_single_coil` modeled objects for downstream passes.
+- `TxRx` branch uses exact `tx_inner_single_coil` + `rx_single_coil` modeled objects for downstream passes and
+  may carry one passive `tv_aluminum_plate` imported body that stays out of mesh, ports, sources, and reports.
 - Attached GUI debug setup may explicitly skip AEDT `ValidateDesign()` while keeping repository pipeline validation, setup construction, save, and fail-fast PyAEDT return checks active.
 - Report variables are owned by `sdd/architecture/type2-em-report-contract.md`.
 
@@ -37,6 +38,7 @@ tags:
 - RxOnly must not create TX ports or TX output variables.
 - `TxRx` must create TX and RX ports, TX+RX output variables, and two terminal groups.
 - Generic TX roles are rejected before setup-ready begins; there is no paired-mode fallback path.
+- `tv_aluminum_plate` is allowed only as passive modeled geometry; it must not become a mesh or port target.
 - Loaded ledgers containing `tx_outer_single_coil` fail before setup-ready import; there is no active outer TX geometry-only path.
 - Default setup-ready execution calls AEDT `ValidateDesign()`; only explicit `run_aedt_design_validation=False` attached-HFSS callers skip that AEDT call.
 - RxOnly report setup filters to the active RX variable contract and requires every active RX variable to be present.

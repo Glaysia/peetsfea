@@ -163,6 +163,10 @@ class Type2ImportedLedger(TypedDict):
     modeled_objects: list[dict[str, object]]
 
 
+_TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
+_TV_ALUMINUM_PLATE_BODY_NAME = "tv_aluminum_plate"
+
+
 def _require_plate_stack_merged_material_contract(*, modeled_entry: dict[str, object], context: str) -> None:
     role = require_non_empty_str(require_key(modeled_entry, key="role", context=context), context=f"{context}.role")
     if role not in ("tx_plate_stack", "rx_plate_stack"):
@@ -387,6 +391,29 @@ def _merge_modeled_adapter_entry(
     return merged
 
 
+def _merge_tv_aluminum_plate_entry(
+    *,
+    export_entry: dict[str, object],
+    imported_object_names: list[str],
+    imported_body_groups: list[ImportedBodyGroupEntry],
+    context: str,
+) -> dict[str, object]:
+    if imported_object_names != [_TV_ALUMINUM_PLATE_BODY_NAME]:
+        raise ValueError(
+            f"{context} requires exactly one imported tv aluminum plate body "
+            f"(expected={[_TV_ALUMINUM_PLATE_BODY_NAME]}, actual={imported_object_names})"
+        )
+    if imported_body_groups:
+        raise ValueError(
+            f"{context}.imported_body_groups must be empty for tv_aluminum_plate "
+            f"(actual={imported_body_groups})"
+        )
+    merged = dict(export_entry)
+    merged["imported_object_names"] = list(imported_object_names)
+    merged["imported_body_groups"] = []
+    return merged
+
+
 def _recreate_imported_body_groups(
     *,
     modeler: ModelerSession,
@@ -576,17 +603,27 @@ def build_imported_ledger(
             imported_object_names=final_imported_object_names,
             context=context,
         )
-        adapter_entry = build_single_imported_modeled_object_entry(
-            modeled_object=validated_entry["entry"],
-            imported_object_names=final_imported_object_names,
-        )
-        imported_modeled_objects.append(
-            _merge_modeled_adapter_entry(
-                export_entry=validated_entry["entry"],
-                adapter_entry=cast(dict[str, object], adapter_entry),
-                imported_body_groups=imported_body_groups,
+        if role == _TV_ALUMINUM_PLATE_ROLE:
+            imported_modeled_objects.append(
+                _merge_tv_aluminum_plate_entry(
+                    export_entry=validated_entry["entry"],
+                    imported_object_names=final_imported_object_names,
+                    imported_body_groups=imported_body_groups,
+                    context=context,
+                )
             )
-        )
+        else:
+            adapter_entry = build_single_imported_modeled_object_entry(
+                modeled_object=validated_entry["entry"],
+                imported_object_names=final_imported_object_names,
+            )
+            imported_modeled_objects.append(
+                _merge_modeled_adapter_entry(
+                    export_entry=validated_entry["entry"],
+                    adapter_entry=cast(dict[str, object], adapter_entry),
+                    imported_body_groups=imported_body_groups,
+                )
+            )
 
     return {
         "source_toml_path": ledger["source_toml_path"],

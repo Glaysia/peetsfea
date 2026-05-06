@@ -34,6 +34,7 @@ tags:
 - `ModeledSingleCoilCommonSpec.x_position_ratio` owns the local X placement ratio for modeled single-coil specs that still use ratio placement. The inner TX public source field `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` is fixed-zero compatibility state and does not drive placement.
 - Active spec/runtime unions no longer include a TX outer companion dataclass or `tx_outer_rect_void_coil` sampled owner.
 - Legacy/generic TX role constants remain unsupported for active EM setup unless a later two-terminal/parallel-wiring plan enables them.
+- Added fixed modeled surface `tv_aluminum_plate` (object/role `tv_aluminum_plate`) for a derived aluminum TV face plate.
 
 ## Invariants / fail-fast
 - Runtime state must be concrete and non-null.
@@ -43,6 +44,7 @@ tags:
 - X position ratio candidates must be unitless floats in the inclusive range `0.0 <= value <= 1.0`.
 - Canonical underlay repeat ranges and fixed underlay repeat values are distinct constants so parser and sampling code can keep existing sweep determinism while accepting fixed one-layer coarsening.
 - Canonical void-stack presence candidates are `(0, 1)` and fixed singleton values must stay in that set.
+- `tv_aluminum_plate` requires fixed `object_id="tv_aluminum_plate"`, `primitive="box"`, `material="aluminum"`, `model_state=true`, `source_non_model_object_id="tv"`, `face="+x"`, and `thickness_mm` positive finite.
 
 ## Collaborators
 - [type2_step_spec.py](type2_step_spec.py.md)
