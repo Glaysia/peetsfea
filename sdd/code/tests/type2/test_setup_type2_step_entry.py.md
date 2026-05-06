@@ -30,8 +30,10 @@ tags:
 
 ## Canonical state
 - active example TOML payload가 canonical assertion surface다.
-- active examples include fixed/sampled `tx_reference_line` ratio inputs, including `y_usage_ratio`, for
+- active examples fix `tx_reference_line.x_ratio = 0.99` while preserving fixed/sampled `y_usage_ratio` for
   retained non-modeled `tx_inner_region` guide export.
+- active examples set fixed non-modeled `tx_region` Y bounds to `origin_y=-900.0`, `size_y=1800.0`.
+- active examples preserve TX inner `outer_y_usage_ratio` as the actual-coil Y sizing ratio.
 - active example outputs use `TxRx` mode and the shared active TxRx output variable registry.
 - active example `tx_inner_single_coil` uses fixed `underlay_repeat_count = [true, 4, 4, 1]`,
   `underlay_pet_psa_thickness_mm = [false, 0.5, 0.5, 1]`, and
@@ -52,6 +54,7 @@ tags:
 - [0.2.24-type2-rxonly-tx-removal](../../../plans/0.2.24-type2-rxonly-tx-removal.md)
 - [0.2.24-type2-tx-inner-region-non-model-step](../../../plans/0.2.24-type2-tx-inner-region-non-model-step.md)
 - [0.2.24 Type2 TX Inner Actual Underlay Stack](../../../plans/0.2.24-type2-tx-inner-actual-underlay-stack.md)
+- [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
 
 ## 이 파일을 쓰는 곳
 - Default pure-Python test suite.

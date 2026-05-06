@@ -55,6 +55,7 @@ tags:
   each modeled outer body is validated to have a face whose normal is nearly parallel to the local normal of
   `tx_outer_region_prism.top_inner_start→top_outer_start` and whose frame `local_x` projection is non-zero.
 - `tx_region` may be present as guide context only.
+- Fixed examples must verify fixed non-modeled `tx_region` Y width `1800.0`, fixed `x_ratio=0.99`, preserved `y_usage_ratio`, and preserved TX inner `outer_y_usage_ratio=0.6`.
 - Deterministic tx_inner body-name contract is now explicitly covered for a fixed `layer_count=8` realization:
   expected exported bodies are `tx_inner_pcb_l0` through `tx_inner_pcb_l7` plus `tx_inner_copper_stack`.
 - STEP-only positive and negative inner/outer bridge geometry must be absent from active fixed-example TX paths.
@@ -89,6 +90,7 @@ tags:
   no fallback to non-owner-aligned local boxes and no change in existing balanced start/end stub expectation.
 - Fixed-example ledger assertions require `environment`, `tx_region`, `tx_inner_region`, `tx_inner_actual_region`,
   and `rx_region_max`; `tx_outer_region`, `tx_outer_actual_region`, and bridge members are forbidden.
+- Fixed singleton `tx_reference_line.x_ratio` remains required provenance, but must not be treated as a sampled-owner dimension in sample/build tests.
 - Ferrite/PET_PSA-priority clearance assertions fail if any exported ferrite-family member has positive-volume intersection with `tx_inner_pcb_l*`, if a PCB body is emptied, or if the `g_ferrite_tx` group drops/reorders members.
 
 ## Collaborators
@@ -101,3 +103,4 @@ tags:
 - [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
 - [0.2.24 Type2 STEP Export Scene Data Reuse](../../../plans/0.2.24-type2-step-export-scene-data-reuse.md)
 - [0.2.24 Type2 Ferrite FR4 Boolean Clearance](../../../plans/0.2.24-type2-ferrite-fr4-boolean-clearance.md)
+- [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
