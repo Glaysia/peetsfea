@@ -247,10 +247,10 @@ model_state = true
 pcb_thickness_mm = 0.3
 copper_thickness_mm = 0.035
 [modeled_objects.outer_x_usage_ratio]
-range = [false, 0.5, 0.5, 1]
+range = [false, 0.9, 0.9, 1]
 description = "TX inner 배치 영역 대비 local X 방향 외곽 크기 비율"
 [modeled_objects.outer_y_usage_ratio]
-range = [false, 0.6, 0.6, 1]
+range = [false, 0.9, 0.9, 1]
 description = "TX inner 배치 영역 대비 local Y 방향 외곽 크기 비율"
 [modeled_objects.x_position_ratio]
 range = [false, 0.0, 0.0, 1]
@@ -259,7 +259,7 @@ description = "TX inner 배치 영역 안에서 local X 방향 위치 비율"
 range = [true, 1, 1, 1]
 description = "TX inner spiral turn 수"
 [modeled_objects.layer_count]
-range = [true, 2, 2, 1]
+range = [true, 1, 1, 1]
 description = "TX inner coil 적층 layer 수"
 [modeled_objects.underlay_repeat_count]
 range = [true, 1, 1, 1]
@@ -296,10 +296,10 @@ model_state = true
 pcb_thickness_mm = 3.965
 copper_thickness_mm = 0.035
 [modeled_objects.outer_x_usage_ratio]
-range = [false, 0.6, 0.6, 1]
+range = [false, 1.0, 1.0, 1]
 description = "RX 배치 영역 대비 local X 방향 외곽 크기 비율"
 [modeled_objects.outer_y_usage_ratio]
-range = [false, 0.35, 0.35, 1]
+range = [false, 0.6, 0.6, 1]
 description = "RX 배치 영역 대비 local Y 방향 외곽 크기 비율"
 [modeled_objects.x_position_ratio]
 range = [false, 0.0, 0.0, 1]
