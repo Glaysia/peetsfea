@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_setup_ready.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - test
   - em
@@ -30,11 +30,13 @@ tags:
 - Tests should verify RxOnly does not create TX ports or TX output variables.
 - Tests should verify TxRx keeps TX inner + RX ledger entries, creates TX/RX port assignments, assembles two-terminal report variables, and meshes TX inner + RX conductors.
 - TxRx setup fixtures keep `tx_inner_single_coil` owned by `tx_inner_region`, matching the sampled owner-local X placement contract enforced during import styling.
+- Active `tx_inner_single_coil` setup fixtures use the current fixed/sweep exported names `tx_inner_pcb_l0` and `tx_inner_copper_l0`; multilayer copper-stack naming is reserved for explicit synthetic stack tests outside the active TX-inner fixture path.
 - TxRx setup fixtures include the `tx_inner_actual_region` non-model member and imported STEP name whenever
   `tx_inner_single_coil` participates, so setup-ready fake import ledgers satisfy strict actual-region validation before AEDT setup operations run.
 - 포트 할당 단위 테스트에 `tx_inner_single_coil` paired mode (`tx_inner_single_coil` + `rx_single_coil`)를 추가로 검증한다.
 - The active full setup-ready happy path uses a single `rx_single_coil` modeled entry.
 - TxRx full setup-ready happy path uses only `tx_inner_single_coil` and `rx_single_coil`.
+- Active fixed/sweep setup-ready fixtures treat TX inner as layer-count one and must not expect `tx_inner_copper_stack`.
 - `non_model` 장면에서의 양극/음극 브릿지 멤버는 modeled coil/port payload에 포함되지 않고 `non_model_objects[*].imported_object_names`에 유지되어야 한다.
 - 단일 코일 TX 포트 할당 테스트는 `terminal_metadata.port_sheet_vertices_xyz` 기반 엣지 좌표가
   `oboundary.AssignLumpedPort(..., Edges:=...)` 단계에서 그대로 반영되는지를 확인한다.

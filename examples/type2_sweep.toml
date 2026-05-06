@@ -274,7 +274,7 @@ description = "TX inner 배치 영역 안에서 local X 방향 위치 비율"
 range = [true, 1, 4, 4]
 description = "TX inner spiral turn 수"
 [modeled_objects.layer_count]
-range = [true, 1, 5, 5]
+range = [true, 1, 1, 1]
 description = "TX inner coil 적층 layer 수"
 [modeled_objects.underlay_repeat_count]
 range = [true, 1, 1, 1]

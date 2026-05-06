@@ -27,9 +27,10 @@ tags:
 - `tx_reference_line.y_usage_ratio` remains an effective sampled owner when its range has `count > 1`.
 - `tx_reference_line.z_ratio` remains an effective sampled owner with active sweep bounds `[false, 0.75, 1.0, 65]`.
 - RxOnly sampled-owner fixtures contain RX coil owners plus active count>1 non-modeled guide owners; TX derived non-model owners are absent.
-- Synthetic `ModeledTxInnerSingleCoilSpec` fixtures include fixed TX inner passive underlay defaults: repeat count `1`, PET/PSA `6.0 mm`, and ferrite `6.0 mm`.
+- Synthetic `ModeledTxInnerSingleCoilSpec` fixtures include active fixed TX inner `layer_count=1` plus passive underlay defaults: repeat count `1`, PET/PSA `6.0 mm`, and ferrite `6.0 mm`.
 - `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` is a public sampled owner sourced and frozen directly on `tx_inner_rect_void_coil`.
 - Synthetic source TOML fixtures include sampled `modeled_objects.tx_inner_rect_void_coil.void_stack_present` so manifest metadata exercises the active TX inner void-stack owner.
+- Active fixed/sweep source fixtures use `modeled_objects.tx_inner_rect_void_coil.layer_count = [true, 1, 1, 1]`.
 - `modeled_objects.tx_outer_rect_void_coil.*` paths are not active sampled owners.
 - Active sampled TOML must not preserve removed `tx_outer_terminal_path` or `tx_outer_x_position_ratio` fields.
 
@@ -39,6 +40,7 @@ tags:
 - RxOnly sampling tests must not require TX modeled owners.
 - RxOnly sampling tests must not require `tx_region_actual` or `tx_region_actual_stack_space`.
 - Fixed TX inner underlay thickness fields are not sampled owner paths because their ranges are fixed singleton values.
+- Fixed TX inner `layer_count=1` is not a sampled owner path.
 - Sampled owner discovery must preserve canonical `modeled_objects.tx_inner_rect_void_coil.x_position_ratio`.
 - Sampled owner discovery must exclude every `modeled_objects.tx_outer_rect_void_coil.*` path.
 - TX modeled-role fixtures assert parser/sampling fail-fast behavior instead of sampled manifest success.
