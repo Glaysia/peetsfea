@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 import build123d as bd
+from build123d.topology import Shape
 
 from peetsfea.tx_rect_void_centerline import _void_polygon, build_tx_rect_void_centerline
 from peetsfea.tx_rect_void_geometry import (
@@ -33,6 +34,7 @@ from peetsfea.tx_rect_void_types import (
     SingleCoilRectVoidExportResult,
     SingleCoilRectVoidSpec,
     SingleCoilProfile,
+    TX_INNER_SINGLE_COIL_PROFILE,
     TX_SINGLE_COIL_PROFILE,
     TX_PARALLEL_SINGLE_COIL_ROLES,
 )
@@ -327,6 +329,198 @@ def _validate_copper_primitives_do_not_short(copper_primitives: tuple[CopperPrim
                 )
 
 
+def _primitive_overlaps_x_strip(
+    *,
+    primitive: CopperPrimitive,
+    strip_min_x: float,
+    strip_max_x: float,
+) -> bool:
+    return len(
+        _primitive_x_strip_overlap_y_bounds(
+            primitive=primitive,
+            strip_min_x=strip_min_x,
+            strip_max_x=strip_max_x,
+        )
+    ) == 1
+
+
+def _append_unique_point(points: list[Point2], point_xy: Point2) -> None:
+    if points and abs(points[-1][0] - point_xy[0]) <= 1e-9 and abs(points[-1][1] - point_xy[1]) <= 1e-9:
+        return
+    points.append(point_xy)
+
+
+def _vertical_line_intersection(start_xy: Point2, end_xy: Point2, x_coord: float) -> Point2:
+    dx = end_xy[0] - start_xy[0]
+    if abs(dx) <= 1e-12:
+        raise ValueError(
+            "vertical strip clipping requires non-vertical crossing segment "
+            f"(start={start_xy}, end={end_xy}, x={x_coord})"
+        )
+    ratio = (x_coord - start_xy[0]) / dx
+    return (x_coord, start_xy[1] + ((end_xy[1] - start_xy[1]) * ratio))
+
+
+def _clip_polygon_min_x(polygon_xy: Polygon2, min_x: float) -> Polygon2:
+    clipped_points: list[Point2] = []
+    for start_xy, end_xy in zip(polygon_xy, polygon_xy[1:] + polygon_xy[:1], strict=True):
+        start_inside = start_xy[0] >= min_x - 1e-9
+        end_inside = end_xy[0] >= min_x - 1e-9
+        if start_inside and end_inside:
+            _append_unique_point(clipped_points, end_xy)
+        elif start_inside and not end_inside:
+            _append_unique_point(clipped_points, _vertical_line_intersection(start_xy, end_xy, min_x))
+        elif not start_inside and end_inside:
+            _append_unique_point(clipped_points, _vertical_line_intersection(start_xy, end_xy, min_x))
+            _append_unique_point(clipped_points, end_xy)
+    if len(clipped_points) > 1 and clipped_points[0] == clipped_points[-1]:
+        clipped_points.pop()
+    return tuple(clipped_points)
+
+
+def _clip_polygon_max_x(polygon_xy: Polygon2, max_x: float) -> Polygon2:
+    clipped_points: list[Point2] = []
+    for start_xy, end_xy in zip(polygon_xy, polygon_xy[1:] + polygon_xy[:1], strict=True):
+        start_inside = start_xy[0] <= max_x + 1e-9
+        end_inside = end_xy[0] <= max_x + 1e-9
+        if start_inside and end_inside:
+            _append_unique_point(clipped_points, end_xy)
+        elif start_inside and not end_inside:
+            _append_unique_point(clipped_points, _vertical_line_intersection(start_xy, end_xy, max_x))
+        elif not start_inside and end_inside:
+            _append_unique_point(clipped_points, _vertical_line_intersection(start_xy, end_xy, max_x))
+            _append_unique_point(clipped_points, end_xy)
+    if len(clipped_points) > 1 and clipped_points[0] == clipped_points[-1]:
+        clipped_points.pop()
+    return tuple(clipped_points)
+
+
+def _primitive_x_strip_overlap_y_bounds(
+    *,
+    primitive: CopperPrimitive,
+    strip_min_x: float,
+    strip_max_x: float,
+) -> tuple[RectBounds, ...]:
+    if strip_max_x <= strip_min_x:
+        raise ValueError(
+            "central corridor X strip requires positive width "
+            f"(min_x={strip_min_x}, max_x={strip_max_x})"
+        )
+    primitive_bounds = _polygon_bounds(primitive.polygon_xy)
+    if primitive_bounds.max_y <= primitive_bounds.min_y:
+        raise ValueError(
+            "central corridor copper blocker probe requires positive primitive Y bounds "
+            f"(label={primitive.label}, min_y={primitive_bounds.min_y}, max_y={primitive_bounds.max_y})"
+        )
+    if primitive_bounds.max_x <= strip_min_x or primitive_bounds.min_x >= strip_max_x:
+        return ()
+    clipped_polygon = _clip_polygon_max_x(
+        _clip_polygon_min_x(primitive.polygon_xy, strip_min_x),
+        strip_max_x,
+    )
+    if len(clipped_polygon) < 3 or abs(_polygon_area_xy(clipped_polygon)) <= 1e-9:
+        return ()
+    return (_polygon_bounds(clipped_polygon),)
+
+
+def _central_corridor_bounds_from_copper_primitives(
+    *,
+    realized: RealizedSingleCoilRectVoid,
+    copper_primitives: tuple[CopperPrimitive, ...],
+) -> RectBounds:
+    if len(copper_primitives) == 0:
+        raise ValueError("central corridor requires at least one copper primitive")
+    void_bounds = realized.void_bounds
+    if void_bounds.max_x <= void_bounds.min_x or void_bounds.max_y <= void_bounds.min_y:
+        raise ValueError(
+            "central corridor requires positive realized void strip bounds "
+            f"(void_bounds={void_bounds})"
+        )
+    _validate_copper_primitives_do_not_touch_void(realized, copper_primitives)
+    _validate_copper_primitives_do_not_short(copper_primitives)
+
+    below_blocker_max_y_values: list[float] = []
+    above_blocker_min_y_values: list[float] = []
+    for primitive in copper_primitives:
+        overlap_bounds = _primitive_x_strip_overlap_y_bounds(
+            primitive=primitive,
+            strip_min_x=void_bounds.min_x,
+            strip_max_x=void_bounds.max_x,
+        )
+        if len(overlap_bounds) == 0:
+            continue
+        primitive_bounds = overlap_bounds[0]
+        if primitive_bounds.max_y <= void_bounds.min_y:
+            below_blocker_max_y_values.append(primitive_bounds.max_y)
+        elif primitive_bounds.min_y >= void_bounds.max_y:
+            above_blocker_min_y_values.append(primitive_bounds.min_y)
+        else:
+            # Beveled corner primitives can have AABBs crossing the void Y interval
+            # while their actual polygons stay outside the void. They are side
+            # constraints, not above/below blockers for the central corridor.
+            continue
+
+    if len(below_blocker_max_y_values) == 0 or len(above_blocker_min_y_values) == 0:
+        raise ValueError(
+            "central corridor requires copper blockers above and below the realized void X strip "
+            f"(below_count={len(below_blocker_max_y_values)}, above_count={len(above_blocker_min_y_values)}, "
+            f"void_bounds={void_bounds})"
+        )
+    corridor_min_y = max(below_blocker_max_y_values)
+    corridor_max_y = min(above_blocker_min_y_values)
+    if corridor_max_y <= corridor_min_y:
+        raise ValueError(
+            "central corridor requires positive Y bounds between nearest copper blockers "
+            f"(min_y={corridor_min_y}, max_y={corridor_max_y}, void_bounds={void_bounds})"
+        )
+    corridor_bounds = RectBounds(
+        min_x=void_bounds.min_x,
+        max_x=void_bounds.max_x,
+        min_y=corridor_min_y,
+        max_y=corridor_max_y,
+    )
+    corridor_polygon = _rect_polygon_from_bounds(corridor_bounds)
+    for primitive in copper_primitives:
+        if _polygons_overlap_positive_area(primitive.polygon_xy, corridor_polygon):
+            raise ValueError(
+                "central corridor proof failed because copper overlaps derived corridor "
+                f"(label={primitive.label}, feature={primitive.feature}, "
+                f"corridor_y_bounds={(corridor_min_y, corridor_max_y)}, void_bounds={void_bounds})"
+            )
+    return corridor_bounds
+
+
+def central_corridor_y_bounds(
+    *,
+    realized: RealizedSingleCoilRectVoid,
+    copper_primitives: tuple[CopperPrimitive, ...],
+) -> RectBounds:
+    return _central_corridor_bounds_from_copper_primitives(
+        realized=realized,
+        copper_primitives=copper_primitives,
+    )
+
+
+def local_central_void_corridor_y_bounds(
+    realized: RealizedSingleCoilRectVoid,
+    *,
+    profile: SingleCoilProfile = TX_INNER_SINGLE_COIL_PROFILE,
+) -> tuple[float, float]:
+    centerline = build_tx_rect_void_centerline(realized)
+    copper_primitives = _copper_primitives_for_layer(
+        realized=realized,
+        centerline=centerline,
+        layer_index=0,
+        pcb_z=0.0,
+        profile=profile,
+    )
+    corridor_bounds = _central_corridor_bounds_from_copper_primitives(
+        realized=realized,
+        copper_primitives=copper_primitives,
+    )
+    return (corridor_bounds.min_y, corridor_bounds.max_y)
+
+
 def _face_from_polygon_xy(polygon_xy: Polygon2) -> bd.Face:
     with bd.BuildLine() as builder:
         bd.Polyline(*polygon_xy, close=True)
@@ -359,7 +553,7 @@ def _extrude_face_on_plane(
     frame_origin_xyz: tuple[float, float, float],
     local_z: float,
     amount: float,
-) -> bd.Shape:
+) -> Shape:
     if amount <= 0.0:
         raise ValueError(f"extrusion amount must be > 0 (actual={amount})")
     plane = _plane_for_local_z(profile=profile, frame_origin_xyz=frame_origin_xyz, local_z=local_z)
@@ -627,7 +821,7 @@ def build_tx_rect_void_box_specs(
     return tuple(boxes)
 
 
-def _build_box_shape(box_spec: BoxSpec) -> bd.Shape:
+def _build_box_shape(box_spec: BoxSpec) -> Shape:
     size_x, size_y, size_z = box_spec.size_xyz
     if size_x <= 0.0 or size_y <= 0.0 or size_z <= 0.0:
         raise ValueError(f"box size must be positive for STEP export (box={box_spec})")
@@ -668,13 +862,13 @@ def _expected_exported_body_names(
     return body_names
 
 
-def _single_shape_from_fuse_result(fuse_result: object, *, label: str, source_count: int) -> bd.Shape:
+def _single_shape_from_fuse_result(fuse_result: object, *, label: str, source_count: int) -> Shape:
     if isinstance(fuse_result, bd.ShapeList):
         raise RuntimeError(
             "build123d copper fuse returned multiple shapes "
             f"(label={label}, source_count={source_count}, result_count={len(fuse_result)})"
         )
-    if not isinstance(fuse_result, bd.Shape):
+    if not isinstance(fuse_result, Shape):
         raise TypeError(f"build123d copper fuse returned unsupported result type: {type(fuse_result).__name__}")
     solids = tuple(fuse_result.solids())
     if len(solids) != 1:
@@ -687,13 +881,13 @@ def _single_shape_from_fuse_result(fuse_result: object, *, label: str, source_co
     return solid
 
 
-def _single_shape_from_cut_result(cut_result: object, *, label: str, tool_label: str) -> bd.Shape:
+def _single_shape_from_cut_result(cut_result: object, *, label: str, tool_label: str) -> Shape:
     if isinstance(cut_result, bd.ShapeList):
         raise RuntimeError(
             "build123d pcb cut returned multiple shapes "
             f"(label={label}, tool_label={tool_label}, result_count={len(cut_result)})"
         )
-    if not isinstance(cut_result, bd.Shape):
+    if not isinstance(cut_result, Shape):
         raise TypeError(f"build123d pcb cut returned unsupported result type: {type(cut_result).__name__}")
     solids = tuple(cut_result.solids())
     if len(solids) != 1:
@@ -711,7 +905,7 @@ def _extrude_copper_primitive(
     primitive: CopperPrimitive,
     profile: SingleCoilProfile,
     frame_origin_xyz: tuple[float, float, float],
-) -> bd.Shape:
+) -> Shape:
     return _extrude_face_on_plane(
         face_xy=_face_from_polygon_xy(primitive.polygon_xy),
         profile=profile,
@@ -773,7 +967,7 @@ def _fused_copper_shape_from_primitives(
     label: str,
     profile: SingleCoilProfile,
     frame_origin_xyz: tuple[float, float, float],
-) -> bd.Shape:
+) -> Shape:
     if len(copper_primitives) == 0:
         raise ValueError(f"tx rect/void copper shape requires at least one primitive (label={label})")
     planar_primitives = tuple(
@@ -810,7 +1004,7 @@ def _fused_copper_shape_from_primitives(
     for primitive in tuple(
         primitive for primitive in copper_primitives if primitive.feature != "planar_segment"
     ):
-        fuse_result = cast(bd.Shape, fuse_result).fuse(
+        fuse_result = cast(Shape, fuse_result).fuse(
             _extrude_copper_primitive(
                 primitive=primitive,
                 profile=profile,
@@ -832,7 +1026,7 @@ def _build_copper_layer_shape(
     layer_index: int,
     profile: SingleCoilProfile,
     frame_origin_xyz: tuple[float, float, float],
-) -> bd.Shape:
+) -> Shape:
     _ = boxes
     pcb_z = float(layer_index) * (realized.pcb_thickness_mm + realized.layer_gap_mm)
     copper_primitives = _copper_primitives_for_layer(
@@ -860,10 +1054,10 @@ def _build_tx_multilayer_copper_stack_shape(
     centerline: tuple[tuple[float, float], ...],
     profile: SingleCoilProfile,
     frame_origin_xyz: tuple[float, float, float],
-) -> bd.Shape:
+) -> Shape:
     if not _is_tx_multilayer_parallel_stack(realized, profile=profile):
         raise ValueError("tx multilayer copper stack shape requires TX parallel single-coil multilayer realized state")
-    layer_copper_shapes: list[bd.Shape] = []
+    layer_copper_shapes: list[Shape] = []
     for layer_index in range(realized.layer_count):
         layer_copper_shapes.append(
             _build_copper_layer_shape(
@@ -915,7 +1109,7 @@ def _build_tx_multilayer_copper_stack_shape(
         )
     )
     for layer_shape in layer_copper_shapes:
-        fused_stack_shape = cast(bd.Shape, fused_stack_shape).fuse(layer_shape)
+        fused_stack_shape = cast(Shape, fused_stack_shape).fuse(layer_shape)
 
     return _single_shape_from_fuse_result(
         fused_stack_shape,
@@ -926,9 +1120,9 @@ def _build_tx_multilayer_copper_stack_shape(
 
 def _cut_pcb_shape_with_copper(
     *,
-    pcb_shape: bd.Shape,
-    copper_shape: bd.Shape,
-) -> bd.Shape:
+    pcb_shape: Shape,
+    copper_shape: Shape,
+) -> Shape:
     return _single_shape_from_cut_result(
         pcb_shape.cut(copper_shape),
         label=pcb_shape.label,
@@ -981,7 +1175,7 @@ def build_tx_rect_void_step_scene(
             layer_index: copper_shape
             for layer_index, copper_shape in zip(copper_layer_indices, copper_shapes, strict=True)
         }
-        cut_pcb_shapes_list: list[bd.Shape] = []
+        cut_pcb_shapes_list: list[Shape] = []
         for pcb_shape, pcb_box in zip(
             pcb_shapes,
             tuple(box for box in boxes if box.role == "pcb"),
@@ -1190,7 +1384,9 @@ def export_tx_rect_void_step(
 __all__ = [
     "build_tx_rect_void_box_specs",
     "build_tx_rect_void_step_scene",
+    "central_corridor_y_bounds",
     "export_tx_rect_void_step",
     "export_tx_rect_void_step_from_spec",
+    "local_central_void_corridor_y_bounds",
     "modeled_body_bounds_from_boxes",
 ]
