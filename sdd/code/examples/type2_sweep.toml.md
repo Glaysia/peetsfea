@@ -29,9 +29,11 @@ tags:
 - `modeled_objects.tx_inner_rect_void_coil.outer_y_usage_ratio` remains sampled at `[false, 0.2, 0.9, 150]`; it continues to size the actual TX coil inside `tx_inner_region`.
 - TX inner X placement source field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` with sweep default `[false, 0.0, 0.3, 45]`.
 - `modeled_objects.tx_inner_rect_void_coil` remains active with role `tx_inner_single_coil`.
+- `modeled_objects.tx_inner_rect_void_coil.turn_count` samples the official active sweep range `[true, 1, 3, 3]`.
 - TX inner passive stack defaults are coarsened for simulation speed: `underlay_repeat_count = [true, 1, 1, 1]`, PET_PSA thickness `2.0 mm`, and ferrite thickness `2.0 mm`.
 - `modeled_objects.tx_inner_rect_void_coil.void_stack_present` uses `[true, 0, 1, 2]` so sampled designs can include or omit the TX void YZ stack while keeping the bottom underlay present.
 - `modeled_objects.rx_rect_void_coil` remains active with role `rx_single_coil`.
+- `modeled_objects.rx_rect_void_coil.turn_count` samples the official active sweep range `[true, 1, 3, 3]`.
 - No active example field declares `tx_outer_terminal_path` or `tx_outer_x_position_ratio`.
 
 ## Invariants / fail-fast
@@ -44,3 +46,4 @@ tags:
 - [type2_step_spec_modeled.py](../src/peetsfea/type2_step_spec_modeled.py.md)
 - [type2_sampled_sampling.py](../src/peetsfea/type2_sampled_sampling.py.md)
 - [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
+- [0.2.24-type2-turn-count-sweep-upper-bound](../../plans/0.2.24-type2-turn-count-sweep-upper-bound.md)

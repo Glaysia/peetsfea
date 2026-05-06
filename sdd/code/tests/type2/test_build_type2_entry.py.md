@@ -31,6 +31,7 @@ tags:
 - `config.make_step_on_sample=false` manifest는 build-time STEP generation path를 대표한다.
 - Expected sampled owner/design-variable order includes TX inner sampled owners, including `modeled_objects.tx_inner_rect_void_coil.void_stack_present`, before RX coil sampled owners.
 - Synthetic source TOML and `ModeledTxInnerSingleCoilSpec` fixtures must expose `void_stack_present` as a sampled integer owner when build design-variable handoff is under test.
+- Active single-coil turn-count sweep fixtures cap sampled upper bounds at one below the former maximum: synthetic RX single-coil `turn_count` uses `2.0..5.0` with `count=4`, embedded sampled TOML uses `[true, 2, 5, 4]`, and non-`turn_count` owners remain unchanged; fixed singleton `turn_count` ranges remain unchanged.
 - Fixed singleton TX guide X ratio must not become a build design variable, while sampled TX guide Y ratio remains exported when `count > 1`.
 - Build design variables must not include `modeled_objects_tx_outer_rect_void_coil_*`.
 
@@ -48,3 +49,4 @@ tags:
 - [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
 - [0.2.24-view-step-gui-setup-ready](../../../plans/0.2.24-view-step-gui-setup-ready.md)
 - [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
+- [0.2.24-type2-turn-count-sweep-upper-bound](../../../plans/0.2.24-type2-turn-count-sweep-upper-bound.md)

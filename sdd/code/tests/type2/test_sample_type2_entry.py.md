@@ -1,7 +1,7 @@
 ---
 title: test_sample_type2_entry.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - test
   - sampling
@@ -28,6 +28,9 @@ tags:
 - `tx_reference_line.z_ratio` remains an effective sampled owner with active sweep bounds `[false, 0.75, 1.0, 65]`.
 - RxOnly sampled-owner fixtures contain RX coil owners plus active count>1 non-modeled guide owners; TX derived non-model owners are absent.
 - Synthetic `ModeledTxInnerSingleCoilSpec` fixtures include fixed TX inner passive underlay defaults: repeat count `1`, PET/PSA `6.0 mm`, and ferrite `6.0 mm`.
+- Synthetic sampled single-coil `turn_count` ranges use canonical active bounds `[true, 2, 5, 4]` / `RangeSpec(2.0, 5.0, count=4)`.
+- Non-`turn_count` owners such as generic TX column `layer_count` remain unchanged; fixed singleton `turn_count` ranges remain unchanged.
+- RX sampled `turn_count` manifest values are members of `{2, 3, 4, 5}`.
 - `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` is a public sampled owner sourced and frozen directly on `tx_inner_rect_void_coil`.
 - Synthetic source TOML fixtures include sampled `modeled_objects.tx_inner_rect_void_coil.void_stack_present` so manifest metadata exercises the active TX inner void-stack owner.
 - `modeled_objects.tx_outer_rect_void_coil.*` paths are not active sampled owners.
@@ -53,3 +56,4 @@ tags:
 - [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
 - [0.2.24 Type2 STEP Export Scene Data Reuse](../../../plans/0.2.24-type2-step-export-scene-data-reuse.md)
 - [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
+- [0.2.24 Type2 Turn Count Sweep Upper Bound](../../../plans/0.2.24-type2-turn-count-sweep-upper-bound.md)

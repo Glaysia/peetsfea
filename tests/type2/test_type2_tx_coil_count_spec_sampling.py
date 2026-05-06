@@ -107,7 +107,7 @@ model_state = true
 pcb_total_thickness_mm = 0.4
 copper_thickness_mm = 0.035
 [modeled_objects.turn_count]
-range = [true, 2, 5, 4]
+range = [true, 2, 4, 3]
 [modeled_objects.metal_fill_factor]
 range = [false, 0.2, 0.6, 15]
 [modeled_objects.z_usage_ratio]
@@ -127,7 +127,7 @@ model_state = true
 pcb_total_thickness_mm = 0.4
 copper_thickness_mm = 0.1
 [modeled_objects.turn_count]
-range = [true, 2, 5, 4]
+range = [true, 2, 4, 3]
 [modeled_objects.metal_fill_factor]
 range = [false, 0.2, 0.6, 15]
 [modeled_objects.z_usage_ratio]

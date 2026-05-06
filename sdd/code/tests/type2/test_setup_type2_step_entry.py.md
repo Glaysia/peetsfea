@@ -39,6 +39,7 @@ tags:
 - active example `tx_inner_single_coil` uses fixed `underlay_repeat_count = [true, 1, 1, 1]`,
   `underlay_pet_psa_thickness_mm = [false, 6.0, 6.0, 1]`, and
   `underlay_ferrite_thickness_mm = [false, 6.0, 6.0, 1]`.
+- active sweep examples assert TX inner and RX `turn_count` ranges as `[true, 1, 3, 3]`; fixed examples remain unchanged at `[true, 1, 1, 1]`.
 
 ## Invariants / fail-fast
 - `outputs.mode` must be `TxRx`.
@@ -46,6 +47,7 @@ tags:
 - active modeled objects must contain `tx_inner_single_coil` plus RX modeled object(s), and no generic
   TX modeled role.
 - active examples must not expose TX derived sampled owners such as `tx_region_actual`, `tx_region_actual_stack_space`, or TX modeled sampled fields.
+- fixed example `turn_count` ranges must stay singleton one-turn ranges while the official sweep upper bound stays at three turns.
 - `tx_reference_line.x_ratio`, `tx_reference_line.y_usage_ratio`, and `tx_reference_line.z_ratio` are guide-only
   inputs and may derive TX inner geometry context, but must not imply TX ports, reports, generic TX modeled roles,
   or active TX sampled owners.
@@ -56,6 +58,7 @@ tags:
 - [0.2.24-type2-tx-inner-region-non-model-step](../../../plans/0.2.24-type2-tx-inner-region-non-model-step.md)
 - [0.2.24 Type2 TX Inner Actual Underlay Stack](../../../plans/0.2.24-type2-tx-inner-actual-underlay-stack.md)
 - [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
+- [0.2.24-type2-turn-count-sweep-upper-bound](../../../plans/0.2.24-type2-turn-count-sweep-upper-bound.md)
 
 ## 이 파일을 쓰는 곳
 - Default pure-Python test suite.

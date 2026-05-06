@@ -26,6 +26,8 @@ tags:
 ## Canonical State
 - The active parser rejects generic modeled TX roles in RxOnly mode before these historical sampling contracts can execute.
 - `tx_inner_single_coil` is the supported geometry-only TX path for current type2 work.
+- Xfailed generic TX/RX plate-stack local TOML keeps fixed singleton fields unchanged while lowering historical `turn_count`
+  sweep ranges from `[true, 2, 5, 4]` to `[true, 2, 4, 3]`.
 
 ## Invariants
 - Do not route active RxOnly builds through generic TX plate-stack parser/export behavior.
@@ -38,6 +40,7 @@ tags:
 ## Collaborators
 - [type2_sampled.py](../../src/peetsfea/type2_sampled.py.md)
 - [type2_step_spec.py](../../src/peetsfea/type2_step_spec.py.md)
+- [0.2.24 Type2 Turn Count Sweep Upper Bound](../../../plans/0.2.24-type2-turn-count-sweep-upper-bound.md)
 
 ## Related Tests
 - [test_generate_type2_step.py](test_generate_type2_step.py.md)

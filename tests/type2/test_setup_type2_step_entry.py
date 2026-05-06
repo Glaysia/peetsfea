@@ -16,6 +16,8 @@ _SAMPLED_TX_REGION_ORIGIN_XYZ = [0.0, -600.0, 0.0]
 _SAMPLED_TX_REGION_SIZE_XYZ = [720.0, 1200.0, 90.0]
 _FIXED_TX_REFERENCE_LINE_RATIOS = (0.99, 1.0, 0.9)
 _SAMPLED_TX_REFERENCE_LINE_RANGES = ((0.99, 0.99, 1), (0.2, 1.0, 85), (0.75, 1.0, 65))
+_FIXED_TURN_COUNT_RANGE = [True, 1, 1, 1]
+_SAMPLED_TURN_COUNT_RANGE = [True, 1, 3, 3]
 
 
 def _repo_root() -> Path:
@@ -102,12 +104,17 @@ def _assert_txrx_payload(payload: dict[str, object], *, example_name: str) -> No
     assert not _TX_MODELED_ROLES.intersection(modeled_roles)
     modeled_by_id = {cast(str, table["object_id"]): table for table in modeled_objects}
     tx_inner = modeled_by_id["tx_inner_rect_void_coil"]
+    rx = modeled_by_id["rx_rect_void_coil"]
     assert tx_inner["role"] == "tx_inner_single_coil"
     assert cast(dict[str, object], tx_inner["underlay_repeat_count"])["range"] == [True, 1, 1, 1]
     if example_name == "type2_fixed.toml":
+        assert cast(dict[str, object], tx_inner["turn_count"])["range"] == _FIXED_TURN_COUNT_RANGE
+        assert cast(dict[str, object], rx["turn_count"])["range"] == _FIXED_TURN_COUNT_RANGE
         assert cast(dict[str, object], tx_inner["underlay_pet_psa_thickness_mm"])["range"] == [False, 2.0, 2.0, 1]
         assert cast(dict[str, object], tx_inner["underlay_ferrite_thickness_mm"])["range"] == [False, 2.0, 2.0, 1]
     elif example_name == "type2_sweep.toml":
+        assert cast(dict[str, object], tx_inner["turn_count"])["range"] == _SAMPLED_TURN_COUNT_RANGE
+        assert cast(dict[str, object], rx["turn_count"])["range"] == _SAMPLED_TURN_COUNT_RANGE
         assert cast(dict[str, object], tx_inner["underlay_pet_psa_thickness_mm"])["range"] == [False, 6.0, 6.0, 1]
         assert cast(dict[str, object], tx_inner["underlay_ferrite_thickness_mm"])["range"] == [False, 6.0, 6.0, 1]
     else:

@@ -2313,6 +2313,7 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     assert tx_inner_entry.layer_count.start == pytest.approx(1.0)
     assert tx_inner_entry.layer_count.end == pytest.approx(5.0)
     assert tx_inner_entry.layer_count.count == 5
+    assert tx_inner_entry.turn_count == RangeSpec(True, 1.0, 3.0, 3)
     assert tx_inner_entry.underlay_repeat_count.start == pytest.approx(1.0)
     assert tx_inner_entry.underlay_repeat_count.end == pytest.approx(1.0)
     assert tx_inner_entry.underlay_repeat_count.count == 1
@@ -2332,6 +2333,7 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     assert rx_entry.layer_count.start == pytest.approx(1.0)
     assert rx_entry.layer_count.end == pytest.approx(1.0)
     assert rx_entry.layer_count.count == 1
+    assert rx_entry.turn_count == RangeSpec(True, 1.0, 3.0, 3)
     assert rx_entry.underlay_repeat_count.start == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.end == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.count == 1

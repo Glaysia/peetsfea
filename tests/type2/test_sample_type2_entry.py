@@ -70,7 +70,7 @@ def _tx_inner_single_coil_spec() -> ModeledTxInnerSingleCoilSpec:
         outer_x_mm=_range_spec(False, 100.0, 100.0, 1),
         outer_y_mm=_range_spec(False, 80.0, 80.0, 1),
         void_usage_ratio=_range_spec(False, 0.3, 0.3, 1),
-        turn_count=_range_spec(True, 2.0, 6.0, 5),
+        turn_count=_range_spec(True, 2.0, 5.0, 4),
         layer_count=_range_spec(True, 2.0, 2.0, 1),
         underlay_repeat_count=fixed_one,
         void_stack_present=fixed_void_stack_present,
@@ -114,7 +114,7 @@ def _patch_rx_only_spec_loader(
     rx_void_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.6, count=17)
     rx_outer_x = RangeSpec(is_integer=False, start=20.0, end=120.0, count=17)
     rx_outer_y = RangeSpec(is_integer=False, start=20.0, end=120.0, count=17)
-    rx_turn_count = RangeSpec(is_integer=True, start=2.0, end=6.0, count=5)
+    rx_turn_count = RangeSpec(is_integer=True, start=2.0, end=5.0, count=4)
     rx_layer_count = RangeSpec(is_integer=True, start=1.0, end=1.0, count=1)
     rx_underlay_repeat_count = RangeSpec(is_integer=True, start=8.0, end=8.0, count=1)
     rx_layer_gap = RangeSpec(is_integer=False, start=2.0, end=2.0, count=1)
@@ -358,7 +358,7 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.void_usage_ratio]
     range = [false, 0.1, 0.6, 85]
     [modeled_objects.turn_count]
-    range = [true, 2, 6, 5]
+    range = [true, 2, 5, 4]
     [modeled_objects.layer_count]
     range = [true, 1, 1, 1]
     [modeled_objects.underlay_repeat_count]
@@ -755,7 +755,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert rx_turn_range[0] is True
     assert rx_turn_range[3] == 1
     assert rx_turn_range[1] == rx_turn_range[2]
-    assert rx_turn_range[1] in {2, 3, 4, 5, 6}
+    assert rx_turn_range[1] in {2, 3, 4, 5}
     rx_underlay_repeat_count = cast(dict[str, object], rx_modeled_object["underlay_repeat_count"])
     rx_underlay_repeat_count_range = cast(list[object], rx_underlay_repeat_count["range"])
     assert rx_underlay_repeat_count_range[0] is True
@@ -1110,7 +1110,7 @@ range = [false, 0.0, 0.0, 1]
 [modeled_objects.void_usage_ratio]
 range = [false, 0.1, 0.6, 17]
 [modeled_objects.turn_count]
-range = [true, 2, 6, 5]
+range = [true, 2, 5, 4]
 [modeled_objects.layer_count]
 range = [true, 1, 1, 1]
 [modeled_objects.underlay_repeat_count]
