@@ -4,6 +4,8 @@ import build123d as bd
 from build123d.topology import Shape
 import pytest
 
+from peetsfea.type2_single_coil_underlay import build_tx_inner_single_coil_void_stack_shapes
+from peetsfea.type2_single_coil_underlay import resolve_tx_inner_single_coil_void_stack_placement_descriptor
 from peetsfea.type2_single_coil_underlay import single_coil_scene_children_with_ferrite_pet_psa_clearance
 
 
@@ -33,6 +35,22 @@ def _intersection_volume(*, first: Shape, second: Shape) -> float:
         return 0.0
     assert isinstance(shared_shape, Shape)
     return _volume(shape=shared_shape)
+
+
+def _x_bounds(*, shape: Shape) -> tuple[float, float]:
+    solids = tuple(shape.solids())
+    assert len(solids) == 1
+    bounding_box = solids[0].bounding_box()
+    return (bounding_box.min.X, bounding_box.max.X)
+
+
+def _x_bound_values(*, shapes: tuple[Shape, ...]) -> tuple[float, ...]:
+    values: list[float] = []
+    for shape in shapes:
+        min_x, max_x = _x_bounds(shape=shape)
+        values.append(min_x)
+        values.append(max_x)
+    return tuple(values)
 
 
 def test_single_coil_clearance_cuts_fr4_blank_with_explicit_ferrite_group() -> None:
@@ -91,3 +109,90 @@ def test_single_coil_clearance_requires_non_empty_tools_for_expected_cut() -> No
             pcb_blank_labels=("tx_board_fr4",),
             context="test empty tool clearance",
         )
+
+
+def test_tx_inner_void_stack_uses_largest_equal_pair_count_that_fits() -> None:
+    descriptor = resolve_tx_inner_single_coil_void_stack_placement_descriptor(
+        void_min_x=10.0,
+        void_max_x=14.8,
+        void_min_y=1.0,
+        void_max_y=3.0,
+        z_bottom=-0.5,
+        z_top=0.5,
+        pet_psa_thickness_mm=0.4,
+        ferrite_thickness_mm=0.6,
+    )
+
+    shapes = build_tx_inner_single_coil_void_stack_shapes(descriptor)
+
+    assert tuple(shape.label for shape in shapes) == (
+        "tx_void_ferrite_u0",
+        "tx_void_pet_psa_u0",
+        "tx_void_ferrite_u1",
+        "tx_void_pet_psa_u1",
+        "tx_void_ferrite_u2",
+        "tx_void_pet_psa_u2",
+        "tx_void_ferrite_u3",
+        "tx_void_pet_psa_u3",
+    )
+    assert _x_bound_values(shapes=shapes) == pytest.approx(
+        (
+            10.0,
+            10.7,
+            10.7,
+            11.2,
+            11.2,
+            11.9,
+            11.9,
+            12.4,
+            12.4,
+            13.1,
+            13.1,
+            13.6,
+            13.6,
+            14.3,
+            14.3,
+            14.8,
+        )
+    )
+
+
+def test_tx_inner_void_stack_reduces_pair_count_when_four_pairs_do_not_fit() -> None:
+    descriptor = resolve_tx_inner_single_coil_void_stack_placement_descriptor(
+        void_min_x=0.0,
+        void_max_x=3.9,
+        void_min_y=0.0,
+        void_max_y=1.0,
+        z_bottom=0.0,
+        z_top=1.0,
+        pet_psa_thickness_mm=0.4,
+        ferrite_thickness_mm=0.6,
+    )
+
+    shapes = build_tx_inner_single_coil_void_stack_shapes(descriptor)
+
+    assert tuple(shape.label for shape in shapes) == (
+        "tx_void_ferrite_u0",
+        "tx_void_pet_psa_u0",
+        "tx_void_ferrite_u1",
+        "tx_void_pet_psa_u1",
+        "tx_void_ferrite_u2",
+        "tx_void_pet_psa_u2",
+    )
+    assert _x_bounds(shape=shapes[-1])[1] == pytest.approx(3.9)
+
+
+def test_tx_inner_void_stack_fails_when_minimum_pair_does_not_fit() -> None:
+    descriptor = resolve_tx_inner_single_coil_void_stack_placement_descriptor(
+        void_min_x=0.0,
+        void_max_x=0.9,
+        void_min_y=0.0,
+        void_max_y=1.0,
+        z_bottom=0.0,
+        z_top=1.0,
+        pet_psa_thickness_mm=0.4,
+        ferrite_thickness_mm=0.6,
+    )
+
+    with pytest.raises(RuntimeError, match=r"void stack width cannot fit one minimum .* pair"):
+        build_tx_inner_single_coil_void_stack_shapes(descriptor)

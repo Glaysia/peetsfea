@@ -27,7 +27,7 @@ tags:
 - `tx_reference_line.y_usage_ratio` remains an effective sampled owner when its range has `count > 1`.
 - `tx_reference_line.z_ratio` remains an effective sampled owner with active sweep bounds `[false, 0.5, 1.0, 13]`.
 - RxOnly sampled-owner fixtures contain RX coil owners plus active count>1 non-modeled guide owners; TX derived non-model owners are absent.
-- Synthetic `ModeledTxInnerSingleCoilSpec` fixtures include fixed TX inner passive underlay defaults: repeat count `1`, PET/PSA `2.0 mm`, and ferrite `2.0 mm`.
+- Synthetic `ModeledTxInnerSingleCoilSpec` fixtures include fixed TX inner passive underlay defaults: repeat count `1`, PET/PSA `6.0 mm`, and ferrite `6.0 mm`.
 - `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` is a public sampled owner sourced and frozen directly on `tx_inner_rect_void_coil`.
 - `modeled_objects.tx_outer_rect_void_coil.*` paths are not active sampled owners.
 - Active sampled TOML must not preserve removed `tx_outer_terminal_path` or `tx_outer_x_position_ratio` fields.

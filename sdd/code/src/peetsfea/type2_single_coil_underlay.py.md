@@ -1,7 +1,7 @@
 ---
 title: type2_single_coil_underlay.py
 created: 2026-04-20 @ 00:00
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-06 @ 01:00
 tags:
   - rx
   - non-model
@@ -26,7 +26,7 @@ tags:
 - `tx_inner_single_coil` 하위층 하부 적층 바디를 생성한다. `-Z` 방향으로 각 반복마다 `PET_PSA`(상단)→`MULL12060ferrite`(하단) 순으로 쌓으며 `tx_underlay_pet_psa_u{n}` / `tx_underlay_ferrite_u{n}` 라벨을 붙인다.
 - `tx_inner_single_coil` 페라이트/언더레이 그룹 이름을 `g_ferrite_tx`로 반환해 export ledger에 반영한다.
 - 스택의 상단 Z(첫 PET의 MAX Z)는 `fit_envelope.outer_bounds_min_z`와 정렬한다.
-- `tx_inner_single_coil` void 내부 YZ 스택을 생성한다. body prefix는 `tx_void_ferrite_u{n}` / `tx_void_pet_psa_u{n}`이며 X방향으로 최대 적층하고, Y는 scene layer에서 계산한 central corridor bounds를 따른다.
+- `tx_inner_single_coil` void 내부 YZ 스택을 생성한다. body prefix는 `tx_void_ferrite_u{n}` / `tx_void_pet_psa_u{n}`이며 X방향으로 최대 4개 ferrite/PET_PSA 쌍을 균등 pair span으로 배치하고, Y는 scene layer에서 계산한 central corridor bounds를 따른다.
 - ordered scene child tuple에서 ferrite/PET_PSA tool과 PCB/FR4 blank를 식별하고, build123d/OCC cut으로 PCB/FR4 blank만 절단한 새 ordered tuple을 반환한다.
 - `tx_outer_single_coil` void 내부 prism-local 스택을 생성한다. body prefix는 `tx_outer_void_ferrite_u{n}` / `tx_outer_void_pet_psa_u{n}`이며 raw top을 prism-local top보다 위로 뻗긴 뒤 outer scene builder가 top-face clipping과 tilt transform을 적용한다.
 - `tx_outer_single_coil` 하부 prism-local 스택을 생성한다. body prefix는 `tx_outer_underlay_pet_psa_u{n}` / `tx_outer_underlay_ferrite_u{n}`이며 inner underlay와 같은 PET/PSA→ferrite ordering을 사용한다.
@@ -44,7 +44,7 @@ tags:
 - `tx_inner_single_coil` underlay는 X/Y footprint를 `fit_envelope.outer_bounds_*`에서 가져오며, 물리적 모델링 bbox(physical modeled body bounds)에서 유도하지 않는다.
 - 쌓인 스택의 최하단 Z가 `tx_inner_region` bottom을 밑돌면 즉시 실패한다.
 - `tx_inner_single_coil`의 underlay는 페라이트 전용/하우스홀딩(air) 레이어 없이 PET+ferrite 2중 레이어만 생성한다.
-- void YZ stack은 `void.min_x`에서 ferrite로 시작해 PET/PSA와 교대하며, 마지막 layer는 남은 X 폭에 맞게 잘라 정확히 `void.max_x`에서 끝난다. Y span은 descriptor가 제공한 central corridor 전체를 사용한다.
+- inner void YZ stack은 `void.min_x`에서 ferrite로 시작해 PET/PSA가 `+X` 방향으로 뒤따르는 pair를 만든다. 1..4개 중 각 pair span이 최소 ferrite 두께+최소 PET/PSA 두께 이상인 가장 큰 pair 수를 선택하고, pair별 leftover X 폭을 ferrite/PET_PSA에 절반씩 더해 모든 pair가 균등 폭으로 정확히 `void.max_x`에서 끝난다. 어떤 1-pair 최소 스택도 들어가지 않으면 즉시 실패한다. Y span은 descriptor가 제공한 central corridor 전체를 사용한다.
 - outer void stack도 같은 sheet ordering and X truncation contract를 따르되, raw Z는 prism-local top을 한 PET/PSA+ferrite pair만큼 넘어선다. scene 조립 단계가 top-face clipping과 최종 회전/이동을 적용한다.
 - outer bottom underlay stack must use the outer design/actual footprint, stack downward in local `-Z`, and fail if its derived thickness cannot fit inside the virtual outer owner thickness.
 - 레이블 길이 제한(<=32), 볼륨 양의 값, 바디 수 일관성 등 기존 underlay 실패 규칙은 유지한다.

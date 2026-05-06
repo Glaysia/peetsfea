@@ -54,7 +54,7 @@ def _range_spec(is_integer: bool, start: float, end: float, count: int) -> Range
 
 def _tx_inner_single_coil_spec() -> ModeledTxInnerSingleCoilSpec:
     fixed_one = _range_spec(True, 1.0, 1.0, 1)
-    fixed_two_mm = _range_spec(False, 2.0, 2.0, 1)
+    fixed_tx_inner_underlay_thickness = _range_spec(False, 6.0, 6.0, 1)
     fixed_float = _range_spec(False, 1.0, 1.0, 1)
     return ModeledTxInnerSingleCoilSpec(
         object_id="tx_inner_rect_void_coil",
@@ -71,8 +71,8 @@ def _tx_inner_single_coil_spec() -> ModeledTxInnerSingleCoilSpec:
         turn_count=_range_spec(True, 2.0, 6.0, 5),
         layer_count=_range_spec(True, 2.0, 2.0, 1),
         underlay_repeat_count=fixed_one,
-        underlay_pet_psa_thickness_mm=fixed_two_mm,
-        underlay_ferrite_thickness_mm=fixed_two_mm,
+        underlay_pet_psa_thickness_mm=fixed_tx_inner_underlay_thickness,
+        underlay_ferrite_thickness_mm=fixed_tx_inner_underlay_thickness,
         layer_gap_mm=_range_spec(False, 2.0, 2.0, 1),
         terminal_stub_length_mm=_range_spec(False, 5.0, 5.0, 1),
         margin_ratio=_range_spec(False, 0.05, 0.05, 1),
@@ -118,7 +118,7 @@ def _patch_rx_only_spec_loader(
     rx_terminal_stub = RangeSpec(is_integer=False, start=5.0, end=5.0, count=1)
     rx_margin_ratio = RangeSpec(is_integer=False, start=0.05, end=0.05, count=1)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
-    tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=2.0, end=2.0, count=1)
+    tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=6.0, end=6.0, count=1)
     tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.99, end=0.99, count=1)
     tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
     tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.5, end=1.0, count=13)
@@ -204,7 +204,7 @@ def _patch_rx_only_spec_loader(
 
 
 def _source_type2_toml_text() -> str:
-    return f"""
+    return """
 spec_version = "0.2.22"
 schema_id = "peetsfea.type2.step.v8"
 runtime_compatible = false
@@ -839,7 +839,7 @@ def test_sample_type2_reports_step_skip_and_removes_partial_design_dir(
     ]
     assert [entry["seed"] for entry in document["entries"]] == [4, 6]
     assert "[sample] skip idx=1 seed=5 phase=step error=RuntimeError: simulated step validation failure" in captured.out
-    assert f"[sample] done count=2 skipped=1 attempted=3" in captured.out
+    assert "[sample] done count=2 skipped=1 attempted=3" in captured.out
     assert exporter_calls == [4, 5, 6]
 
     design_dir_paths = [Path(entry["design_dir"]) for entry in document["entries"]]
@@ -1032,7 +1032,7 @@ def test_sample_type2_can_write_manifest_without_step_artifacts(
 
 def _source_type2_toml_text_with_tx_rect_void_columns(
 ) -> str:
-    return f"""
+    return """
 spec_version = "0.2.22"
 schema_id = "peetsfea.type2.step.v8"
 runtime_compatible = false

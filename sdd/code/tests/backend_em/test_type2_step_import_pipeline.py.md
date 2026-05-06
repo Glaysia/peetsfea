@@ -26,7 +26,7 @@ tags:
 - `tx_region` may be carried as guide context only.
 - Geometry-only `tx_inner_single_coil` import partition accepts an empty body-group contract.
 - `tx_inner_single_coil` actual-underlay fixtures require `g_ferrite_tx` member order to match export order: `tx_underlay_pet_psa_u*` before `tx_underlay_ferrite_u*`.
-- `tx_inner_single_coil` void-stack fixtures require `g_ferrite_tx` member order to include `tx_void_ferrite_u*` and `tx_void_pet_psa_u*` exactly as export declares them.
+- `tx_inner_single_coil` void-stack fixtures require `g_ferrite_tx` member order to include bottom underlay members plus exactly the computed void pair members export declares; active fixed-example sizing is represented by `tx_void_ferrite_u0` and `tx_void_pet_psa_u0` only.
 - STEP ledger load coverage verifies the same TX inner void-stack group contract before PyAEDT import begins.
 - TX inner underlay import fixtures include the non-modeled `tx_inner_region` owner and `tx_inner_actual_region` provenance before import-bound validation runs.
 - TX inner actual-region regression coverage preserves a large guide owner with a centered design/actual region and a smaller asymmetric physical modeled bbox, matching sampled TxRx debug failures.
@@ -42,7 +42,7 @@ tags:
 - RxOnly import tests must not require TX modeled bodies.
 - Tx bridge member IDs must be claimed by `type2_non_model_scene` partitioning and cannot appear in modeled body assignments.
 - Tx positive and negative bridge member IDs must be claimed by `type2_non_model_scene` partitioning and cannot appear in modeled body assignments.
-- Void-stack ferrite/PET_PSA prefixes must resolve to passive material families without becoming copper/mesh/port ownership.
+- Void-stack ferrite/PET_PSA prefixes must resolve to passive material families (`MULL12060ferrite` for ferrite and `PET_PSA` for PET/PSA) without becoming copper/mesh/port ownership.
 - TX inner sampled X placement tests must still fail when bounds escape `tx_inner_region`.
 - TX inner actual-region validation must fail when the actual/design region is not centered in `tx_inner_region` Y or when provenance no longer matches the modeled source/physical bounds contract.
 

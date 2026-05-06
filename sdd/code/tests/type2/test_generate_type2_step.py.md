@@ -31,8 +31,8 @@ tags:
 - RX single-coil example geometry uses `pcb_thickness_mm = 3.965` and `copper_thickness_mm = 0.035`.
 - RX full-backing thickness assertions derive the active coil stack thickness from exported PCB/copper bounds.
 - TX inner active example geometry uses `pcb_thickness_mm = 0.3` and one-ounce `copper_thickness_mm = 0.035`.
-- TX inner fixed passive defaults are `underlay_repeat_count = 1`, `underlay_pet_psa_thickness_mm = 2.0`,
-  and `underlay_ferrite_thickness_mm = 2.0`; parsed example assertions should fail if those defaults drift.
+- TX inner fixed passive defaults are `underlay_repeat_count = 1`, `underlay_pet_psa_thickness_mm = 6.0`,
+  and `underlay_ferrite_thickness_mm = 6.0`; parsed example assertions should fail if those defaults drift.
 - TX inner terminal metadata remains deterministic and can drive `tx_inner_port_sheet` for `TxRx`.
 - Fixed example parsing now asserts `tx_inner_rect_void_coil.terminal_stub_length_mm == [false, 7.5, 7.5, 1]` and `tx_inner` TX export tests assert the canonical `outer_bounds_min_xyz[2]` offset is exactly 7.5 mm above the first PCB layer `z`.
 - `tx_inner_rect_void_coil` is modeled geometry-only with expected coil bodies `tx_inner_pcb_l0`,
@@ -41,8 +41,8 @@ tags:
 - Multilayer TX inner tests must include the active sweep upper bound: fixed `layer_count=8` exports
   `tx_inner_pcb_l0` through `tx_inner_pcb_l7` plus `tx_inner_copper_stack`.
 - `tx_inner_rect_void_coil` must use `x_position_ratio` for owner-local design-outer X placement and centered owner-local Y placement.
-- TX inner actual-underlay tests must verify only `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0` are emitted, share `tx_inner_actual_region` X/Y bounds, and stack downward in 2.0 mm PET/PSA then 2.0 mm ferrite order.
-- TX inner void-stack tests must verify the fixed 15.84 mm realized void X range is filled by 8 alternating 2.0 mm nominal sheets with a shortened final 1.84 mm PET/PSA sheet, while Y spans the computed copper-free central corridor rather than the smaller central rectangular void.
+- TX inner actual-underlay tests must verify only `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0` are emitted, share `tx_inner_actual_region` X/Y bounds, and stack downward in 6.0 mm PET/PSA then 6.0 mm ferrite order for a 12.0 mm total bottom underlay.
+- TX inner void-stack tests must verify the fixed 15.84 mm realized void X range selects the largest pair count in `1..4` whose pair span fits the fixed ferrite/PET_PSA minimums; the active 6.0/6.0 minimums select `pair_count = 1`, emit only `tx_void_ferrite_u0` and `tx_void_pet_psa_u0`, and split leftover width evenly across the ferrite and PET/PSA bodies while Y spans the computed copper-free central corridor rather than the smaller central rectangular void.
 - TX inner void-stack tests must assert every void ferrite/PET_PSA body spans from `tx_inner_actual_region.min_z` to `tx_region.max_z` and remains in the `g_ferrite_tx` group after the underlay members.
 - TX inner ferrite-family clearance tests must verify the `g_ferrite_tx` member order remains the exported PET_PSA/ferrite underlay members followed by void-stack ferrite/PET_PSA members while every ferrite-family body and every PCB body remains a positive-volume solid.
 - Active generation regressions must verify no `tx_outer_region`, `tx_outer_void_*`, `tx_outer_underlay_*`, `tx_outer_pcb_*`, `tx_outer_copper_*`, `tx_outer_actual_region`, `g_ferrite_tx_outer`, or TX inner/outer bridge members are emitted.
@@ -58,7 +58,7 @@ tags:
   each modeled outer body is validated to have a face whose normal is nearly parallel to the local normal of
   `tx_outer_region_prism.top_inner_start→top_outer_start` and whose frame `local_x` projection is non-zero.
 - `tx_region` may be present as guide context only.
-- Fixed examples must verify fixed non-modeled `tx_region` Y width `1800.0`, fixed `x_ratio=0.99`, preserved `y_usage_ratio`, preserved TX inner `outer_y_usage_ratio=0.6`, and one-turn fixed TX/RX coil counts.
+- Fixed examples must verify fixed non-modeled `tx_region` Y width `1800.0`, fixed `x_ratio=0.99`, fixed `z_ratio=0.9`, preserved `y_usage_ratio`, preserved TX inner `outer_y_usage_ratio=0.6`, and one-turn fixed TX/RX coil counts.
 - Deterministic tx_inner body-name contract is now explicitly covered for a fixed `layer_count=8` realization:
   expected exported bodies are `tx_inner_pcb_l0` through `tx_inner_pcb_l7` plus `tx_inner_copper_stack`.
 - STEP-only positive and negative inner/outer bridge geometry must be absent from active fixed-example TX paths.

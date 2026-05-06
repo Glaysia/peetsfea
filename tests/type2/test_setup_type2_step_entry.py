@@ -13,7 +13,7 @@ _TX_SAMPLED_OWNER_IDS = {"tx_region_actual", "tx_region_actual_stack_space"}
 _TX_REGION_ORIGIN_XYZ = [0.0, -900.0, 0.0]
 _TX_REGION_SIZE_XYZ = [160.0, 1800.0, 90.0]
 _FIXED_TX_REFERENCE_LINE_RATIOS = (0.99, 1.0, 0.9)
-_SAMPLED_TX_REFERENCE_LINE_RANGES = ((0.99, 0.99, 1), (0.2, 1.0, 17), (0.2, 0.9, 13))
+_SAMPLED_TX_REFERENCE_LINE_RANGES = ((0.99, 0.99, 1), (0.2, 1.0, 17), (0.5, 1.0, 13))
 
 
 def _repo_root() -> Path:
@@ -102,8 +102,8 @@ def _assert_txrx_payload(payload: dict[str, object]) -> None:
     tx_inner = modeled_by_id["tx_inner_rect_void_coil"]
     assert tx_inner["role"] == "tx_inner_single_coil"
     assert cast(dict[str, object], tx_inner["underlay_repeat_count"])["range"] == [True, 1, 1, 1]
-    assert cast(dict[str, object], tx_inner["underlay_pet_psa_thickness_mm"])["range"] == [False, 2.0, 2.0, 1]
-    assert cast(dict[str, object], tx_inner["underlay_ferrite_thickness_mm"])["range"] == [False, 2.0, 2.0, 1]
+    assert cast(dict[str, object], tx_inner["underlay_pet_psa_thickness_mm"])["range"] == [False, 6.0, 6.0, 1]
+    assert cast(dict[str, object], tx_inner["underlay_ferrite_thickness_mm"])["range"] == [False, 6.0, 6.0, 1]
 
     non_model_ids = tuple(cast(str, table["id"]) for table in _tables(payload, "non_model_objects"))
     assert "tx_region" in non_model_ids

@@ -1173,6 +1173,10 @@ def test_setup_type2_step_ledger_keeps_tx_inner_underlay_and_void_stack_passive_
         "tx_void_ferrite_u0",
         "tx_void_pet_psa_u0",
     )
+    forbidden_extra_void_names = (
+        "tx_void_ferrite_u1",
+        "tx_void_pet_psa_u1",
+    )
     scene_step, ledger_path = _source_paths(tmp_path)
     modeled_objects = _tx_inner_rx_modeled_objects_with_tx_inner_underlay_imported_names(tmp_path)
     tx_entry = cast(dict[str, object], modeled_objects[0])
@@ -1182,6 +1186,9 @@ def test_setup_type2_step_ledger_keeps_tx_inner_underlay_and_void_stack_passive_
     imported_name_batch = _tx_inner_rx_imported_name_batch_with_tx_inner_underlay()
     for passive_name in passive_names:
         assert passive_name in imported_name_batch
+    for forbidden_name in forbidden_extra_void_names:
+        assert forbidden_name not in tx_imported_names
+        assert forbidden_name not in imported_name_batch
     _write_txrx_step_ledger(
         ledger_path,
         scene_step_path=scene_step,
@@ -1223,6 +1230,8 @@ def test_setup_type2_step_ledger_keeps_tx_inner_underlay_and_void_stack_passive_
     for passive_name in passive_names:
         assert passive_name not in result["mesh"]["objects"]
         assert passive_name not in setup_participant_payload
+    for forbidden_name in forbidden_extra_void_names:
+        assert forbidden_name not in setup_participant_payload
 
 
 def test_setup_type2_step_ledger_into_hfss_auto_detaches_after_setup(tmp_path: Path) -> None:

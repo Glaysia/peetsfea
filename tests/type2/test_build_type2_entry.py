@@ -118,7 +118,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     rx_terminal_stub = RangeSpec(is_integer=False, start=5.0, end=5.0, count=1)
     rx_margin_ratio = RangeSpec(is_integer=False, start=0.05, end=0.05, count=1)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
-    tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=2.0, end=2.0, count=1)
+    tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=6.0, end=6.0, count=1)
     tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.99, end=0.99, count=1)
     tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
     tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.5, end=1.0, count=13)
@@ -349,7 +349,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _source_type2_toml_text() -> str:
-    return f"""
+    return """
 spec_version = "0.2.22"
 schema_id = "peetsfea.type2.step.v8"
 runtime_compatible = false
