@@ -25,9 +25,9 @@ from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 
 _EXPECTED_SAMPLED_OWNER_PATHS = [
-    "non_model_objects.tx_region.tx_reference_line.x_ratio",
     "non_model_objects.tx_region.tx_reference_line.y_usage_ratio",
     "non_model_objects.tx_region.tx_reference_line.z_ratio",
+    "modeled_objects.tx_inner_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.tx_inner_rect_void_coil.x_position_ratio",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
@@ -119,7 +119,7 @@ def _patch_rx_only_spec_loader(
     rx_margin_ratio = RangeSpec(is_integer=False, start=0.05, end=0.05, count=1)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
     tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=2.0, end=2.0, count=1)
-    tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.2, end=0.8, count=13)
+    tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.99, end=0.99, count=1)
     tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
     tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.2, end=0.9, count=13)
 
@@ -152,7 +152,7 @@ def _patch_rx_only_spec_loader(
                 pcb_thickness_mm=0.3,
                 copper_thickness_mm=0.035,
                 outer_x_usage_ratio=RangeSpec(is_integer=False, start=0.5, end=0.5, count=1),
-                outer_y_usage_ratio=RangeSpec(is_integer=False, start=0.6, end=0.6, count=1),
+                outer_y_usage_ratio=RangeSpec(is_integer=False, start=0.2, end=0.9, count=15),
                 outer_x_mm=RangeSpec(is_integer=False, start=100.0, end=100.0, count=1),
                 outer_y_mm=RangeSpec(is_integer=False, start=80.0, end=80.0, count=1),
                 void_usage_ratio=RangeSpec(is_integer=False, start=0.2, end=0.2, count=1),
@@ -287,7 +287,7 @@ plane = "YZ"
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
 [non_model_objects.tx_reference_line.x_ratio]
-range = [false, 0.2, 0.8, 13]
+range = [false, 0.99, 0.99, 1]
 [non_model_objects.tx_reference_line.y_usage_ratio]
 range = [false, 0.2, 1.0, 17]
 [non_model_objects.tx_reference_line.z_ratio]
@@ -314,7 +314,7 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.outer_x_usage_ratio]
     range = [false, 0.5, 0.5, 1]
     [modeled_objects.outer_y_usage_ratio]
-    range = [false, 0.6, 0.6, 1]
+    range = [false, 0.2, 0.9, 15]
     [modeled_objects.x_position_ratio]
     range = [false, 0.0, 0.3, 9]
     [modeled_objects.turn_count]
@@ -686,7 +686,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert tx_reference_line_x_range[0] is False
     assert tx_reference_line_x_range[3] == 1
     assert tx_reference_line_x_range[1] == tx_reference_line_x_range[2]
-    assert 0.2 <= float(cast(int | float, tx_reference_line_x_range[1])) <= 0.8
+    assert tx_reference_line_x_range[1] == 0.99
     tx_reference_line_y_range = cast(
         list[object], cast(dict[str, object], tx_reference_line["y_usage_ratio"])["range"]
     )
@@ -705,6 +705,12 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
         for modeled_object in cast(list[dict[str, object]], sampled_payload["modeled_objects"])
     }
     tx_inner_modeled_object = modeled_objects_by_id["tx_inner_rect_void_coil"]
+    tx_inner_outer_y = cast(dict[str, object], tx_inner_modeled_object["outer_y_usage_ratio"])
+    tx_inner_outer_y_range = cast(list[object], tx_inner_outer_y["range"])
+    assert tx_inner_outer_y_range[0] is False
+    assert tx_inner_outer_y_range[3] == 1
+    assert tx_inner_outer_y_range[1] == tx_inner_outer_y_range[2]
+    assert 0.2 <= float(cast(int | float, tx_inner_outer_y_range[1])) <= 0.9
     tx_inner_x_position = cast(dict[str, object], tx_inner_modeled_object["x_position_ratio"])
     tx_inner_x_position_range = cast(list[object], tx_inner_x_position["range"])
     assert tx_inner_x_position_range[0] is False
@@ -1065,7 +1071,7 @@ plane = "YZ"
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
 [non_model_objects.tx_reference_line.x_ratio]
-range = [false, 0.2, 0.8, 13]
+range = [false, 0.99, 0.99, 1]
 [non_model_objects.tx_reference_line.y_usage_ratio]
 range = [false, 0.2, 1.0, 17]
 [non_model_objects.tx_reference_line.z_ratio]

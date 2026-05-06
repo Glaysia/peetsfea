@@ -33,7 +33,6 @@ from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 
 _EXPECTED_SAMPLED_OWNER_PATHS = (
-    "non_model_objects.tx_region.tx_reference_line.x_ratio",
     "non_model_objects.tx_region.tx_reference_line.y_usage_ratio",
     "non_model_objects.tx_region.tx_reference_line.z_ratio",
     "modeled_objects.tx_inner_rect_void_coil.x_position_ratio",
@@ -64,7 +63,6 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
         cast(str, modeled_object["object_id"]): modeled_object for modeled_object in modeled_objects
     }
     tx_reference_line = cast(dict[str, object], non_model_by_id["tx_region"]["tx_reference_line"])
-    tx_reference_line_x_range = cast(list[object], cast(dict[str, object], tx_reference_line["x_ratio"])["range"])
     tx_reference_line_y_range = cast(
         list[object], cast(dict[str, object], tx_reference_line["y_usage_ratio"])["range"]
     )
@@ -88,15 +86,14 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
         list[object], cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["x_position_ratio"])["range"]
     )
     return (
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[0], str(float(cast(int | float, tx_reference_line_x_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, tx_reference_line_y_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(float(cast(int | float, tx_reference_line_z_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(float(cast(int | float, tx_inner_x_position_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, rx_outer_x_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, rx_outer_y_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(float(cast(int | float, rx_void_ratio_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[7], str(int(cast(int | float, rx_turn_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[8], str(float(cast(int | float, rx_fill_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[0], str(float(cast(int | float, tx_reference_line_y_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, tx_reference_line_z_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(float(cast(int | float, tx_inner_x_position_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(float(cast(int | float, rx_outer_x_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, rx_outer_y_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, rx_void_ratio_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(int(cast(int | float, rx_turn_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[7], str(float(cast(int | float, rx_fill_range[1])))),
     )
 
 
@@ -122,7 +119,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     rx_margin_ratio = RangeSpec(is_integer=False, start=0.05, end=0.05, count=1)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
     tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=2.0, end=2.0, count=1)
-    tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.2, end=0.8, count=13)
+    tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.99, end=0.99, count=1)
     tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
     tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.2, end=0.9, count=13)
     fake_spec = _FakeRxOnlyType2Spec(
@@ -135,8 +132,8 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 non_model=True,
                 material="vacuum",
                 plane="YZ",
-                origin_xyz=(0.0, -140.0, 0.0),
-                size_xyz=(160.0, 280.0, 90.0),
+                origin_xyz=(0.0, -900.0, 0.0),
+                size_xyz=(160.0, 1800.0, 90.0),
                 tx_reference_line=NonModelTxReferenceLineSpec(
                     x_ratio=tx_reference_line_x_ratio,
                     y_usage_ratio=tx_reference_line_y_usage_ratio,
@@ -235,8 +232,8 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                     non_model=True,
                     material="vacuum",
                     plane="YZ",
-                    origin_xyz=(0.0, -140.0, 0.0),
-                    size_xyz=(160.0, 280.0, 90.0),
+                    origin_xyz=(0.0, -900.0, 0.0),
+                    size_xyz=(160.0, 1800.0, 90.0),
                     tx_reference_line=NonModelTxReferenceLineSpec(
                         x_ratio=_range_from_tx_reference_line(payload, field_name="x_ratio"),
                         y_usage_ratio=_range_from_tx_reference_line(payload, field_name="y_usage_ratio"),
@@ -432,11 +429,11 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "YZ"
-origin_xyz = [0.0, -140.0, 0.0]
-size_xyz = [160.0, 280.0, 90.0]
+origin_xyz = [0.0, -900.0, 0.0]
+size_xyz = [160.0, 1800.0, 90.0]
 
 [non_model_objects.tx_reference_line.x_ratio]
-range = [false, 0.2, 0.8, 13]
+range = [false, 0.99, 0.99, 1]
 
 [non_model_objects.tx_reference_line.y_usage_ratio]
 range = [false, 0.2, 1.0, 17]

@@ -207,13 +207,13 @@ non_model = true
 material = "vacuum"
 plane = "XY"
 # Guide-only future TX placement context. RxOnly does not derive sampled TX owners from it.
-origin_xyz = [0.0, -140.0, 0.0]
-size_xyz = [160.0, 280.0, 90.0]
+origin_xyz = [0.0, -900.0, 0.0]
+size_xyz = [160.0, 1800.0, 90.0]
 
 # TX guide-only reference line used to derive retained tx_inner_region STEP context.
 # Ratios are strictly inside tx_region and do not activate TX modeled geometry.
 [non_model_objects.tx_reference_line.x_ratio]
-range = [false, 0.35, 0.35, 1]
+range = [false, 0.99, 0.99, 1]
 description = "TX guide 영역 안에서 reference line의 X 위치 비율"
 
 [non_model_objects.tx_reference_line.y_usage_ratio]

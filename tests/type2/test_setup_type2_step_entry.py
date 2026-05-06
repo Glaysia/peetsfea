@@ -10,8 +10,10 @@ from peetsfea.spec.outputs import ACTIVE_OUTPUT_VARIABLE_NAMES_BY_MODE
 
 _TX_MODELED_ROLES = {"tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"}
 _TX_SAMPLED_OWNER_IDS = {"tx_region_actual", "tx_region_actual_stack_space"}
-_FIXED_TX_REFERENCE_LINE_RATIOS = (0.35, 1.0, 0.65)
-_SAMPLED_TX_REFERENCE_LINE_RANGES = ((0.2, 0.8, 13), (0.2, 1.0, 17), (0.2, 0.9, 13))
+_TX_REGION_ORIGIN_XYZ = [0.0, -900.0, 0.0]
+_TX_REGION_SIZE_XYZ = [160.0, 1800.0, 90.0]
+_FIXED_TX_REFERENCE_LINE_RATIOS = (0.99, 1.0, 0.65)
+_SAMPLED_TX_REFERENCE_LINE_RANGES = ((0.99, 0.99, 1), (0.2, 1.0, 17), (0.2, 0.9, 13))
 
 
 def _repo_root() -> Path:
@@ -110,6 +112,12 @@ def _assert_txrx_payload(payload: dict[str, object]) -> None:
     assert not _TX_SAMPLED_OWNER_IDS.intersection(non_model_ids)
 
 
+def _assert_tx_region_payload(payload: dict[str, object]) -> None:
+    tx_region = next(table for table in _tables(payload, "non_model_objects") if table["id"] == "tx_region")
+    assert tx_region["origin_xyz"] == _TX_REGION_ORIGIN_XYZ
+    assert tx_region["size_xyz"] == _TX_REGION_SIZE_XYZ
+
+
 def _assert_tx_reference_line_payload(payload: dict[str, object], *, example_name: str) -> None:
     x_range = _tx_reference_line_ratio_range(payload, "x_ratio")
     y_range = _tx_reference_line_ratio_range(payload, "y_usage_ratio")
@@ -163,6 +171,7 @@ def _assert_rejects_tx_sampled_owner(payload: dict[str, object]) -> None:
 def test_active_type2_examples_are_txrx(example_name: str) -> None:
     payload = _example_payload(example_name)
     _assert_txrx_payload(payload)
+    _assert_tx_region_payload(payload)
     _assert_tx_reference_line_payload(payload, example_name=example_name)
 
 

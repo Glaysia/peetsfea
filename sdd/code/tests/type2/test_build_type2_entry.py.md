@@ -29,6 +29,7 @@ tags:
 - Fake RxOnly specs used by entry tests mirror the current `Type2StepSpec` shape, including `non_model_objects`.
 - `config.make_step_on_sample=false` manifest는 build-time STEP generation path를 대표한다.
 - Expected sampled owner/design-variable order includes `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` before RX coil sampled owners.
+- Fixed singleton TX guide X ratio must not become a build design variable, while sampled TX guide Y ratio remains exported when `count > 1`.
 - Build design variables must not include `modeled_objects_tx_outer_rect_void_coil_*`.
 
 ## Invariants / fail-fast
@@ -44,3 +45,4 @@ tags:
 - [type2_step_spec.py](../../src/peetsfea/type2_step_spec.py.md)
 - [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
 - [0.2.24-view-step-gui-setup-ready](../../../plans/0.2.24-view-step-gui-setup-ready.md)
+- [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
