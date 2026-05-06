@@ -295,7 +295,7 @@ description = "TX inner layer 사이 z 방향 간격(mm)"
 range = [false, 7.5, 7.5, 1]
 description = "TX inner terminal stub 길이(mm)"
 [modeled_objects.void_usage_ratio]
-range = [false, 0.2, 0.8, 125]
+range = [false, 0.08, 0.8, 125]
 description = "TX inner 중앙 void keepout의 X/Y 공통 크기 비율"
 [modeled_objects.margin_ratio]
 range = [false, 0.05, 0.05, 1]
@@ -348,7 +348,7 @@ range = [false, 5, 5, 1]
 description = "RX terminal stub 길이(mm)"
 [modeled_objects.void_usage_ratio]
 # centered void keepout의 X/Y 공통 size ratio다.
-range = [false, 0.2, 0.8, 125]
+range = [false, 0.08, 0.8, 125]
 description = "중앙 void keepout의 X/Y 공통 크기 비율"
 [modeled_objects.margin_ratio]
 # void-to-outer minimum margin ratio.

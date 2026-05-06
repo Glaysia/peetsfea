@@ -52,7 +52,7 @@ tags:
 - `tx_inner_rect_void_coil` fixed-example X placement must satisfy lower-X wall-side anchoring; the physical modeled body bbox is the placement authority for imported geometry.
 - TX outer X placement uses the `tx_outer_region_prism` local frame rather than post-tilt world-X AABB centering; tests validate the actual/design footprint against the prism-local center interval, including the `0.5942857142857143` regression ratio.
 - `tx_outer_rect_void_coil` must be validated in the `tx_outer_region_prism` local frame. Tests derive prism-local axes and X/Y bounds from the prism provenance vertices, then assert exported body vertices remain inside those local spans.
-- `examples/type2_sweep.toml` parsing must assert active TX inner and RX usage-ratio ranges, including RX inclusive `1.0` upper endpoints, remain parseable and scale to owner spans; it also asserts TX inner and RX `turn_count` sweep ranges are lowered to `RangeSpec(True, 1.0, 3.0, 3)`.
+- `examples/type2_sweep.toml` parsing must assert active TX inner and RX usage-ratio ranges, including RX inclusive `1.0` upper endpoints and shared `void_usage_ratio = [false, 0.08, 0.8, 125]`, remain parseable and scale to owner spans; it also asserts TX inner and RX `turn_count` sweep ranges are lowered to `RangeSpec(True, 1.0, 3.0, 3)`.
 - `tx_outer_rect_void_coil` may protrude slightly in world +X after tilted stacking; tests should assert prism-local containment, semantic tilt, and Y/Z consistency rather than clipping to the axis-aligned prism bbox.
 - `tx_outer_rect_void_coil` must preserve outer-frame tilt normals:
   each modeled outer body is validated to have a face whose normal is nearly parallel to the local normal of
