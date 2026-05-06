@@ -27,7 +27,7 @@ tags:
 - `non_model_objects.tx_region.tx_reference_line.y_usage_ratio` remains sampled at `[false, 0.2, 1.0, 85]`; it continues to size `tx_inner_region` inside fixed `tx_region`.
 - `non_model_objects.tx_region.tx_reference_line.z_ratio` remains sampled at `[false, 0.75, 1.0, 65]`; its lower bound keeps the maximum current TX inner stack closer to the TX guide top while staying below the resolved reference line.
 - `modeled_objects.tx_inner_rect_void_coil.outer_y_usage_ratio` remains sampled at `[false, 0.2, 0.9, 150]`; it continues to size the actual TX coil inside `tx_inner_region`.
-- TX inner X placement source field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` with sweep default `[false, 0.0, 0.3, 45]`.
+- TX inner X placement compatibility field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` with fixed zero range `[false, 0.0, 0.0, 1]`; lower-X wall-side anchoring is not sampled.
 - `modeled_objects.tx_inner_rect_void_coil` remains active with role `tx_inner_single_coil`.
 - `modeled_objects.tx_inner_rect_void_coil.turn_count` samples the official active sweep range `[true, 1, 3, 3]`.
 - Active sweep fixes `modeled_objects.tx_inner_rect_void_coil.layer_count` at `[true, 1, 1, 1]`; it is not a sampled owner.

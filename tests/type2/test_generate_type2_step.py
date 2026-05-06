@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from collections.abc import Sequence
-from dataclasses import replace
 import json
 import math
 import re
@@ -33,7 +32,6 @@ from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_step_export import export_type2_tx_single_coil_artifact
 from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
-from peetsfea.type2_step_spec import ModeledTxInnerSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import NonModelTxRegionSpec
@@ -3568,6 +3566,9 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert tx_inner_actual_physical_max_xyz == pytest.approx(tx_inner_actual_region_max_xyz)
     assert tx_inner_actual_physical_size_xyz == pytest.approx(tx_inner_actual_region_size_xyz)
     assert tx_inner_actual_min_xyz[0] == pytest.approx(0.0)
+    assert tx_inner_actual_min_xyz[0] == pytest.approx(tx_inner_region_min_xyz[0])
+    assert model_min_xyz[0] == pytest.approx(tx_inner_region_min_xyz[0])
+    assert model_min_xyz[0] == pytest.approx(tx_inner_actual_min_xyz[0])
     assert tx_inner_actual_min_xyz[1] == pytest.approx(-791.171320754717)
     assert tx_inner_actual_max_xyz[1] == pytest.approx(791.171320754717)
     assert tx_inner_actual_size_xyz[0] == pytest.approx(104.90264150943396)
@@ -3586,6 +3587,9 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     )
     assert tx_inner_actual_min_xyz[1] == pytest.approx(
         tx_inner_region_min_xyz[1] + (tx_inner_region_size_xyz[1] - tx_inner_actual_size_xyz[1]) / 2.0
+    )
+    assert tx_inner_actual_min_xyz[1] + (tx_inner_actual_size_xyz[1] / 2.0) == pytest.approx(
+        tx_inner_region_min_xyz[1] + (tx_inner_region_size_xyz[1] / 2.0)
     )
     assert tx_inner_entry["expected_exported_body_names"] == _tx_inner_expected_body_names(
         layer_count=1,
@@ -3654,7 +3658,6 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
         "tx_underlay_ferrite_u0",
     )
     assert all(name in scene_shapes_by_label for name in expected_tx_inner_underlay_names)
-    expected_tx_inner_void_names: tuple[str, ...] = ()
     assert all(not name.startswith("tx_void_") for name in scene_shapes_by_label)
     assert _normalized_body_groups(tx_inner_entry["expected_exported_body_groups"]) == _normalized_body_groups(
         (
@@ -4056,8 +4059,18 @@ def test_export_type2_step_artifacts_resizes_tx_inner_actual_region_without_resi
     assert changed_actual_size_xyz[0] == pytest.approx(baseline_actual_size_xyz[0] / 2.0)
     assert changed_actual_size_xyz[1] == pytest.approx(baseline_actual_size_xyz[1] / 2.0)
     assert changed_actual_size_xyz[2] == pytest.approx(baseline_actual_size_xyz[2])
+    assert baseline_actual_min_xyz[0] == pytest.approx(baseline_guide_min_xyz[0])
+    assert changed_actual_min_xyz[0] == pytest.approx(changed_guide_min_xyz[0])
+    assert baseline_inner_model_min_xyz[0] == pytest.approx(baseline_guide_min_xyz[0])
+    assert changed_inner_model_min_xyz[0] == pytest.approx(changed_guide_min_xyz[0])
     assert changed_actual_min_xyz[0] == pytest.approx(baseline_actual_min_xyz[0])
     assert changed_actual_min_xyz[1] != pytest.approx(baseline_actual_min_xyz[1])
+    assert baseline_actual_min_xyz[1] + (baseline_actual_size_xyz[1] / 2.0) == pytest.approx(
+        baseline_guide_min_xyz[1] + (baseline_guide_size_xyz[1] / 2.0)
+    )
+    assert changed_actual_min_xyz[1] + (changed_actual_size_xyz[1] / 2.0) == pytest.approx(
+        changed_guide_min_xyz[1] + (changed_guide_size_xyz[1] / 2.0)
+    )
     baseline_outer_guide_min_xyz, baseline_outer_guide_max_xyz, baseline_outer_guide_size_xyz = _canonical_bounds(
         baseline_outer_guide
     )

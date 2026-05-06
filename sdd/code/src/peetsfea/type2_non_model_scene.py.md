@@ -1,7 +1,7 @@
 ---
 title: type2_non_model_scene.py
 created: 2026-04-28 @ 00:00
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - step-export
   - type2
@@ -18,7 +18,7 @@ tags:
 ## Responsibility
 - Resolve and build non-modeled Type2 guide/context scene members.
 - Resolve `tx_inner_region` from a parsed `tx_region.tx_reference_line` when that reference-line spec is present.
-- Resolve `tx_inner_actual_region` as the non-modeled coil design outer box derived from the concrete `tx_inner_single_coil` fit-envelope placement, including selected `x_position_ratio`.
+- Resolve `tx_inner_actual_region` as the non-modeled coil design outer box derived from the concrete `tx_inner_single_coil` fit-envelope placement, with lower-X wall-side anchoring and centered Y placement.
 - Active Type2 export must not emit `tx_outer_region` or `tx_outer_actual_region`; those names are rejected as base non-model specs and remain absent from generated ledgers.
 - During 0.2.24 TX outer removal, avoid importing the removed active `ModeledTxOuterSingleCoilSpec`; dormant outer actual-region code identifies transitional outer specs by role string only.
 - Retain dormant `tx_outer_region` provenance and tilt-frame helpers for transitional callers without appending either outer guide to active Type2 scene resolution.
@@ -47,7 +47,7 @@ tags:
 - `tx_inner_region` X ratio must be finite and strictly inside `(0, 1)`, while Z and Y ratios must be finite and in `(0, 1]`.
 - `tx_inner_region` must derive from `tx_region`; a base box named `tx_inner_region` without reference-line provenance is rejected.
 - Ledger construction for `tx_inner_region` requires matching creation-time provenance in the registry.
-- `tx_inner_actual_region` requires exactly one `tx_inner_single_coil` modeled spec and must use the placement helper's design outer box so selected `outer_x_usage_ratio`/`outer_y_usage_ratio` and `x_position_ratio` are reflected exactly once. It must not use the smaller copper/PCB decomposed body bbox as canonical actual-region bounds.
+- `tx_inner_actual_region` requires exactly one `tx_inner_single_coil` modeled spec and must use the placement helper's design outer box so selected `outer_x_usage_ratio`/`outer_y_usage_ratio`, lower-X wall-side anchoring, and Y centering are reflected exactly once. It must not use the smaller copper/PCB decomposed body bbox as canonical actual-region bounds.
 - `tx_inner_actual_region.tx_actual_region.physical_modeled_body_bounds` must come from `fit_envelope.physical_modeled_body_bounds_*`, while `actual_region_bounds` remains the design outer box from `fit_envelope.design_outer_bounds_*`.
 - Active resolution must not append `tx_outer_region` after `tx_inner_actual_region`.
 - Base non-model specs named `tx_outer_region` or `tx_outer_actual_region` are unsupported and must raise immediately.

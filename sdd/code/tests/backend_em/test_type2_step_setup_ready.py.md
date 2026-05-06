@@ -29,7 +29,7 @@ tags:
 - Tests should verify RX conductor mesh and one RX lumped port.
 - Tests should verify RxOnly does not create TX ports or TX output variables.
 - Tests should verify TxRx keeps TX inner + RX ledger entries, creates TX/RX port assignments, assembles two-terminal report variables, and meshes TX inner + RX conductors.
-- TxRx setup fixtures keep `tx_inner_single_coil` owned by `tx_inner_region`, matching the sampled owner-local X placement contract enforced during import styling.
+- TxRx setup fixtures keep `tx_inner_single_coil` owned by `tx_inner_region`, matching the lower-X wall-side anchoring contract enforced during import styling.
 - Active `tx_inner_single_coil` setup fixtures use the current fixed/sweep exported names `tx_inner_pcb_l0` and `tx_inner_copper_l0`; multilayer copper-stack naming is reserved for explicit synthetic stack tests outside the active TX-inner fixture path.
 - TxRx setup fixtures include the `tx_inner_actual_region` non-model member and imported STEP name whenever
   `tx_inner_single_coil` participates, so setup-ready fake import ledgers satisfy strict actual-region validation before AEDT setup operations run.

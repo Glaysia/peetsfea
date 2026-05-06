@@ -268,8 +268,8 @@ description = "TX inner 배치 영역 대비 local X 방향 외곽 크기 비율
 range = [false, 0.2, 0.9, 150]
 description = "TX inner 배치 영역 대비 local Y 방향 외곽 크기 비율"
 [modeled_objects.x_position_ratio]
-range = [false, 0.0, 0.3, 45]
-description = "TX inner 배치 영역 안에서 local X 방향 위치 비율"
+range = [false, 0.0, 0.0, 1]
+description = "TX inner lower-X wall-side anchoring compatibility field; fixed at zero"
 [modeled_objects.turn_count]
 range = [true, 1, 3, 3]
 description = "TX inner spiral turn 수"

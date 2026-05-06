@@ -26,7 +26,7 @@ tags:
 - `non_model_objects.tx_region.tx_reference_line.x_ratio` is fixed at `[false, 0.99, 0.99, 1]`.
 - `non_model_objects.tx_region.tx_reference_line.y_usage_ratio` remains fixed at `[false, 1.0, 1.0, 1]`; it continues to size `tx_inner_region` inside fixed `tx_region`.
 - `modeled_objects.tx_inner_rect_void_coil.outer_x_usage_ratio` and `outer_y_usage_ratio` remain fixed at their sweep maxima `[false, 0.9, 0.9, 1]`.
-- TX inner X placement source field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio`.
+- TX inner X placement compatibility field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` with fixed zero range `[false, 0.0, 0.0, 1]`; lower-X wall-side anchoring is not sampled.
 - `modeled_objects.tx_inner_rect_void_coil` remains active with role `tx_inner_single_coil`.
 - `modeled_objects.tx_inner_rect_void_coil.turn_count` remains unchanged at `[true, 1, 1, 1]`; `layer_count` also remains fixed at one for the fixed example.
 - Active fixed uses `modeled_objects.tx_inner_rect_void_coil.layer_count = [true, 1, 1, 1]`; it does not expect `tx_inner_copper_stack` and is not a sampled owner.

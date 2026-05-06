@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-import copy
 from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor, as_completed
 import hashlib
 import math
-import json
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal, TypedDict, cast
 
-from peetsfea.spec.loader import TOMLTable, TOMLValue, load_toml_bytes
-from peetsfea.spec.toml_render import toml_dumps
+from peetsfea.spec.loader import TOMLTable
 from peetsfea.type2_rect_void_feasibility import min_centered_rect_void_trace_width_mm
 from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
@@ -25,7 +20,6 @@ from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec import NonModelTxRegionSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import Type2StepSpec
-from peetsfea.type2_step_spec import load_type2_step_spec as _load_type2_step_spec
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SampledScalar = int | float
@@ -795,22 +789,29 @@ def _single_coil_range_owner_specs(
     owner_specs: list[tuple[str, RangeSpec]] = [
         (f"modeled_objects.{modeled_spec.object_id}.outer_x_usage_ratio", modeled_spec.outer_x_usage_ratio),
         (f"modeled_objects.{modeled_spec.object_id}.outer_y_usage_ratio", modeled_spec.outer_y_usage_ratio),
-        (f"modeled_objects.{modeled_spec.object_id}.x_position_ratio", modeled_spec.x_position_ratio),
-        (f"modeled_objects.{modeled_spec.object_id}.void_usage_ratio", modeled_spec.void_usage_ratio),
-        (f"modeled_objects.{modeled_spec.object_id}.turn_count", modeled_spec.turn_count),
-        (f"modeled_objects.{modeled_spec.object_id}.layer_count", modeled_spec.layer_count),
-        (
-            f"modeled_objects.{modeled_spec.object_id}.underlay_repeat_count",
-            modeled_spec.underlay_repeat_count,
-        ),
-        (f"modeled_objects.{modeled_spec.object_id}.layer_gap_mm", modeled_spec.layer_gap_mm),
-        (
-            f"modeled_objects.{modeled_spec.object_id}.terminal_stub_length_mm",
-            modeled_spec.terminal_stub_length_mm,
-        ),
-        (f"modeled_objects.{modeled_spec.object_id}.margin_ratio", modeled_spec.margin_ratio),
-        (f"modeled_objects.{modeled_spec.object_id}.metal_fill_factor", modeled_spec.metal_fill_factor),
     ]
+    if not isinstance(modeled_spec, ModeledTxInnerSingleCoilSpec):
+        owner_specs.append(
+            (f"modeled_objects.{modeled_spec.object_id}.x_position_ratio", modeled_spec.x_position_ratio)
+        )
+    owner_specs.extend(
+        (
+            (f"modeled_objects.{modeled_spec.object_id}.void_usage_ratio", modeled_spec.void_usage_ratio),
+            (f"modeled_objects.{modeled_spec.object_id}.turn_count", modeled_spec.turn_count),
+            (f"modeled_objects.{modeled_spec.object_id}.layer_count", modeled_spec.layer_count),
+            (
+                f"modeled_objects.{modeled_spec.object_id}.underlay_repeat_count",
+                modeled_spec.underlay_repeat_count,
+            ),
+            (f"modeled_objects.{modeled_spec.object_id}.layer_gap_mm", modeled_spec.layer_gap_mm),
+            (
+                f"modeled_objects.{modeled_spec.object_id}.terminal_stub_length_mm",
+                modeled_spec.terminal_stub_length_mm,
+            ),
+            (f"modeled_objects.{modeled_spec.object_id}.margin_ratio", modeled_spec.margin_ratio),
+            (f"modeled_objects.{modeled_spec.object_id}.metal_fill_factor", modeled_spec.metal_fill_factor),
+        )
+    )
     if isinstance(modeled_spec, ModeledTxSingleCoilSpec):
         owner_specs.extend(
             (

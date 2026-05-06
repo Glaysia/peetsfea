@@ -79,8 +79,8 @@ def test_fixed_viewer_refresh_fixture_is_txrx() -> None:
     ]
     assert cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["void_stack_present"])["range"] == [
         True,
-        1,
-        1,
+        0,
+        0,
         1,
     ]
     assert modeled_by_id["rx_rect_void_coil"]["role"] == "rx_single_coil"

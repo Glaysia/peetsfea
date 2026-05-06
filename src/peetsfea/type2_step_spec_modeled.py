@@ -4,7 +4,6 @@ import math
 from typing import cast
 
 from peetsfea.tx_rect_void import profile_for_modeled_role
-from peetsfea.type2_step_spec_types import ModeledObjectRole
 from peetsfea.type2_step_spec_types import ModeledObjectSpec
 from peetsfea.type2_step_spec_types import ModeledPlateStackRole
 from peetsfea.type2_step_spec_types import ModeledPlateStackSpec
@@ -252,6 +251,26 @@ def _require_x_position_ratio_range(
             f"(actual={candidates})"
         )
     return range_spec
+
+
+def _require_tx_inner_x_position_ratio_range(
+    table: dict[str, object],
+    *,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_x_position_ratio_range(table, "x_position_ratio", context=context)
+    if (
+        range_spec.is_integer is False
+        and range_spec.start == 0.0
+        and range_spec.end == 0.0
+        and range_spec.count == 1
+    ):
+        return range_spec
+    raise ValueError(
+        f"{context}.x_position_ratio.range must be fixed [false, 0.0, 0.0, 1] "
+        "for tx_inner_single_coil wall-side X placement "
+        f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
+    )
 
 
 def _require_tx_rect_void_columns_connection_mode_range(
@@ -588,7 +607,10 @@ def _parse_modeled_single_coil(
 
     outer_x_usage_ratio = _require_range(table, "outer_x_usage_ratio", context, expect_integer=False)
     outer_y_usage_ratio = _require_range(table, "outer_y_usage_ratio", context, expect_integer=False)
-    x_position_ratio = _require_x_position_ratio_range(table, "x_position_ratio", context=context)
+    if modeled_role == "tx_inner_single_coil":
+        x_position_ratio = _require_tx_inner_x_position_ratio_range(table, context=context)
+    else:
+        x_position_ratio = _require_x_position_ratio_range(table, "x_position_ratio", context=context)
     outer_x_mm, outer_y_mm = _resolve_single_coil_outer_mm_ranges(
         role=modeled_role,
         owner_spec=owner_spec,

@@ -1,7 +1,7 @@
 ---
 title: type2_step_export.py
 created: 2026-04-28 @ 00:00
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - step-export
   - type2
@@ -36,7 +36,7 @@ tags:
 - `tx_outer_region` remains non-modeled guide context and follows `tx_region`/`tx_inner_region` semantic edges.
 - `tx_inner_actual_region` remains non-modeled context and mirrors the TX inner coil-fit envelope without becoming the modeled coil placement owner.
 - `tx_inner_single_coil` may be exported as modeled geometry, but not consumed for active TX ports, sources, or reports.
-- `tx_inner_single_coil` geometry and terminal metadata validation use sampled owner-local X placement inside `tx_inner_region` and centered Y placement.
+- `tx_inner_single_coil` geometry and terminal metadata validation use lower-X wall-side placement inside `tx_inner_region` and centered Y placement.
 - `tx_inner_single_coil` expected body validation includes actual-region bottom-underlay members in PET/PSA then ferrite order when its repeat count is positive.
 - `tx_inner_single_coil` expected body validation includes generated YZ void-stack members (`tx_void_ferrite_u*` / `tx_void_pet_psa_u*`) only when `void_stack_present` resolves true.
 - `tx_inner_single_coil` expected validation derives `tx_void_*` members from actual exported ledger names, then cross-checks those names against the resolved `void_stack_present` boolean.
@@ -49,7 +49,7 @@ tags:
 - Generic modeled TX roles fail before scene construction.
 - `tx_inner_single_coil` placement uses the resolved `tx_inner_region`; later code must not reverse-calculate that region from imported geometry.
 - `tx_outer_region` height uses resolved modeled `tx_inner_single_coil` layer parameters and must not use literal example coordinates.
-- TX inner and TX outer placement validation must compare against owner-local sampled X placement, not against unrelated region edges or post-hoc STEP geometry inference.
+- TX inner placement validation must compare against lower-X wall-side owner anchoring, not sampled X placement, unrelated region edges, or post-hoc STEP geometry inference. Dormant TX outer placement validation keeps its owner-local ratio contract for transitional paths.
 - `tx_inner_actual_region` sizing must match modeled `tx_inner_single_coil` sizing for the same seed and must not create active EM setup changes.
 - `tx_outer_actual_region`, once emitted, must match modeled `tx_outer_single_coil` sloped-owner sizing for the same seed and must not be populated from guide-only data.
 - The STEP scene must keep `tx_inner_single_coil` axis-aligned while `tx_outer_single_coil` is tilted by the semantic prism frame.
