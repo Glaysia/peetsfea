@@ -646,23 +646,13 @@ def test_build_type2_reads_aedt_builder_n_from_manifest(
     )
 
     calls: list[dict[str, object]] = []
-    ensure_calls: list[dict[str, object]] = []
-
-    def _fake_ensure_prepared_type2_step_ledgers(
-        prepared_builds: tuple[PreparedType2Build, ...],
-        *,
-        jobs: int,
-        exporter: object,
-    ) -> None:
-        ensure_calls.append({"jobs": jobs, "build_count": len(prepared_builds), "exporter": exporter})
-
-    def _fake_build_prepared_type2_designs(
+    def _fake_build_prepared_type2_designs_best_effort(
         prepared_builds: tuple[PreparedType2Build, ...],
         *,
         jobs: int,
         exporter: object,
         runner: object,
-    ) -> list[dict[str, str]]:
+    ) -> type2_runtime.Type2BuildBatchResult:
         calls.append(
             {
                 "jobs": jobs,
@@ -674,14 +664,16 @@ def test_build_type2_reads_aedt_builder_n_from_manifest(
                 "runner": runner,
             }
         )
-        return []
+        return {"built": [], "skipped": []}
 
-    monkeypatch.setattr(build_entry, "ensure_prepared_type2_step_ledgers", _fake_ensure_prepared_type2_step_ledgers)
-    monkeypatch.setattr(build_entry, "build_prepared_type2_designs", _fake_build_prepared_type2_designs)
+    monkeypatch.setattr(
+        build_entry,
+        "build_prepared_type2_designs_best_effort",
+        _fake_build_prepared_type2_designs_best_effort,
+    )
     results = build_type2(manifest_path=manifest_path)
 
     assert results == []
-    assert ensure_calls == [{"jobs": 6, "build_count": 2, "exporter": build_entry.export_type2_step_artifacts}]
     assert len(calls) == 1
     assert calls[0]["jobs"] == 6
     assert calls[0]["build_count"] == 2
@@ -819,47 +811,41 @@ def test_build_type2_forwards_manifest_path_and_selected_ids_to_prepared_builds_
         calls["selected_design_ids"] = selected_design_ids
         return (prepared_build,)
 
-    def _fake_build_prepared_type2_designs(
+    def _fake_build_prepared_type2_designs_best_effort(
         prepared_builds: tuple[PreparedType2Build, ...],
         *,
         jobs: int,
         exporter: object,
         runner: object,
-    ) -> list[Type2BuiltArtifact]:
+    ) -> type2_runtime.Type2BuildBatchResult:
         calls["jobs"] = jobs
         assert len(prepared_builds) == 1
         prepared = prepared_builds[0]
-        return [
-            {
-                "design_id": prepared.design_id,
-                "sampled_toml_path": str(prepared.sampled_toml_path),
-                "aedt_path": str(prepared.aedt_path),
-                "source_step_ledger_path": str(prepared.step_ledger_path),
-                "imported_ledger_path": str(prepared.imported_ledger_path),
-            }
-        ]
-
-    def _fake_ensure_prepared_type2_step_ledgers(
-        prepared_builds: tuple[PreparedType2Build, ...],
-        *,
-        jobs: int,
-        exporter: object,
-    ) -> None:
-        calls["ensure_jobs"] = jobs
-        calls["ensure_exporter"] = exporter
-        assert prepared_builds == (prepared_build,)
+        return {
+            "built": [
+                {
+                    "design_id": prepared.design_id,
+                    "sampled_toml_path": str(prepared.sampled_toml_path),
+                    "aedt_path": str(prepared.aedt_path),
+                    "source_step_ledger_path": str(prepared.step_ledger_path),
+                    "imported_ledger_path": str(prepared.imported_ledger_path),
+                }
+            ],
+            "skipped": [],
+        }
 
     monkeypatch.setattr(build_entry, "prepared_builds_from_manifest", _fake_prepared_builds_from_manifest)
     monkeypatch.setattr(type2_sampled, "prepared_builds_from_manifest", _fake_prepared_builds_from_manifest)
-    monkeypatch.setattr(build_entry, "ensure_prepared_type2_step_ledgers", _fake_ensure_prepared_type2_step_ledgers)
-    monkeypatch.setattr(build_entry, "build_prepared_type2_designs", _fake_build_prepared_type2_designs)
+    monkeypatch.setattr(
+        build_entry,
+        "build_prepared_type2_designs_best_effort",
+        _fake_build_prepared_type2_designs_best_effort,
+    )
 
     results = build_type2(manifest_path=manifest_path)
 
     assert calls["manifest_path"] == manifest_path
     assert calls["selected_design_ids"] == tuple()
-    assert calls["ensure_jobs"] == 7
-    assert calls["ensure_exporter"] is build_entry.export_type2_step_artifacts
     assert calls["jobs"] == 7
     assert len(results) == 1
     assert results[0]["design_id"] == prepared_build.design_id
@@ -907,13 +893,13 @@ def test_build_type2_builds_plate_stack_manifest_with_setup_ready_runner(
             "imported_ledger_path": str(imported_ledger_path),
         }
 
-    def _fake_build_prepared_type2_designs(
+    def _fake_build_prepared_type2_designs_best_effort(
         prepared_builds: tuple[PreparedType2Build, ...],
         *,
         jobs: int,
         exporter: object,
         runner: object,
-    ) -> list[Type2BuiltArtifact]:
+    ) -> type2_runtime.Type2BuildBatchResult:
         assert jobs == 2
         assert len(prepared_builds) == 1
         prepared_build = prepared_builds[0]
@@ -932,19 +918,26 @@ def test_build_type2_builds_plate_stack_manifest_with_setup_ready_runner(
             design_name=prepared_build.design_id,
             design_variables=prepared_build.design_variables,
         )
-        return [
-            {
-                "design_id": prepared_build.design_id,
-                "sampled_toml_path": str(prepared_build.sampled_toml_path),
-                "aedt_path": cast(str, cast(dict[str, object], runner_result)["aedt_path"]),
-                "source_step_ledger_path": cast(
-                    str, cast(dict[str, object], runner_result)["source_step_ledger_path"]
-                ),
-                "imported_ledger_path": cast(str, cast(dict[str, object], runner_result)["imported_ledger_path"]),
-            }
-        ]
+        return {
+            "built": [
+                {
+                    "design_id": prepared_build.design_id,
+                    "sampled_toml_path": str(prepared_build.sampled_toml_path),
+                    "aedt_path": cast(str, cast(dict[str, object], runner_result)["aedt_path"]),
+                    "source_step_ledger_path": cast(
+                        str, cast(dict[str, object], runner_result)["source_step_ledger_path"]
+                    ),
+                    "imported_ledger_path": cast(str, cast(dict[str, object], runner_result)["imported_ledger_path"]),
+                }
+            ],
+            "skipped": [],
+        }
 
-    monkeypatch.setattr(build_entry, "build_prepared_type2_designs", _fake_build_prepared_type2_designs)
+    monkeypatch.setattr(
+        build_entry,
+        "build_prepared_type2_designs_best_effort",
+        _fake_build_prepared_type2_designs_best_effort,
+    )
     results = build_type2(
         manifest_path=manifest_path,
         exporter=_build_exporter,
@@ -1014,13 +1007,13 @@ def test_build_type2_accepts_plate_stack_manifest_when_forced_to_setup_ready_run
             "imported_ledger_path": str(imported_ledger_path),
         }
 
-    def _fake_build_prepared_type2_designs(
+    def _fake_build_prepared_type2_designs_best_effort(
         prepared_builds: tuple[PreparedType2Build, ...],
         *,
         jobs: int,
         exporter: object,
         runner: object,
-    ) -> list[Type2BuiltArtifact]:
+    ) -> type2_runtime.Type2BuildBatchResult:
         assert jobs == 2
         assert len(prepared_builds) == 1
         prepared_build = prepared_builds[0]
@@ -1039,19 +1032,26 @@ def test_build_type2_accepts_plate_stack_manifest_when_forced_to_setup_ready_run
             design_name=prepared_build.design_id,
             design_variables=prepared_build.design_variables,
         )
-        return [
-            {
-                "design_id": prepared_build.design_id,
-                "sampled_toml_path": str(prepared_build.sampled_toml_path),
-                "aedt_path": cast(str, cast(dict[str, object], runner_result)["aedt_path"]),
-                "source_step_ledger_path": cast(
-                    str, cast(dict[str, object], runner_result)["source_step_ledger_path"]
-                ),
-                "imported_ledger_path": cast(str, cast(dict[str, object], runner_result)["imported_ledger_path"]),
-            }
-        ]
+        return {
+            "built": [
+                {
+                    "design_id": prepared_build.design_id,
+                    "sampled_toml_path": str(prepared_build.sampled_toml_path),
+                    "aedt_path": cast(str, cast(dict[str, object], runner_result)["aedt_path"]),
+                    "source_step_ledger_path": cast(
+                        str, cast(dict[str, object], runner_result)["source_step_ledger_path"]
+                    ),
+                    "imported_ledger_path": cast(str, cast(dict[str, object], runner_result)["imported_ledger_path"]),
+                }
+            ],
+            "skipped": [],
+        }
 
-    monkeypatch.setattr(build_entry, "build_prepared_type2_designs", _fake_build_prepared_type2_designs)
+    monkeypatch.setattr(
+        build_entry,
+        "build_prepared_type2_designs_best_effort",
+        _fake_build_prepared_type2_designs_best_effort,
+    )
     results = build_type2(manifest_path=manifest_path, exporter=_build_exporter, runner=_runner)
     assert len(results) == 1
     assert len(calls) == 1
@@ -1285,6 +1285,64 @@ def test_build_prepared_type2_design_accepts_rx_with_tx_inner_geometry_role(tmp_
 
     assert result["design_id"] == design_id
     assert len(runner_calls) == 1
+
+
+def test_build_prepared_type2_designs_best_effort_skips_step_value_error(tmp_path: Path) -> None:
+    source_toml_path = tmp_path / "source.toml"
+    source_toml_path.write_text("[design]\n", encoding="utf-8")
+    prepared_builds: list[PreparedType2Build] = []
+    for index, design_id in enumerate(("s000000_success", "s000001_failure")):
+        design_dir = tmp_path / design_id
+        design_dir.mkdir()
+        sampled_toml_path = design_dir / "sampled.toml"
+        sampled_toml_path.write_text("[sampled]\n", encoding="utf-8")
+        prepared_builds.append(
+            PreparedType2Build(
+                design_id=design_id,
+                seed=index,
+                source_toml_path=source_toml_path,
+                sampled_toml_path=sampled_toml_path,
+                design_dir=design_dir,
+                scene_step_path=design_dir / "type2_scene.step",
+                step_ledger_path=design_dir / "type2_step_ledger.json",
+                imported_ledger_path=design_dir / "type2_imported_ledger.json",
+                aedt_path=design_dir / f"{design_id}.aedt",
+                sampled_owner_paths=("modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",),
+                modeled_roles=("rx_single_coil",),
+                design_variables=(("rx_outer_x_usage_ratio", "0.5"),),
+            )
+        )
+
+    def _fake_exporter(**kwargs: object) -> object:
+        output_dir = cast(Path, kwargs["output_dir"])
+        if output_dir.name == "s000001_failure":
+            raise ValueError("central corridor proof failed")
+        scene_step_path = output_dir / "type2_scene.step"
+        ledger_path = cast(Path, kwargs["ledger_path"])
+        scene_step_path.write_text("STEP", encoding="utf-8")
+        ledger_path.write_text(json.dumps({"scene_step_path": str(scene_step_path)}, indent=2), encoding="utf-8")
+        return {"scene_step_path": str(scene_step_path)}
+
+    def _fake_runner(**kwargs: object) -> _Type2BuildRunnerResult:
+        return {
+            "aedt_path": str(cast(Path, kwargs["output_aedt_path"])),
+            "source_step_ledger_path": str(cast(Path, kwargs["step_ledger_path"])),
+            "imported_ledger_path": str(cast(Path, kwargs["imported_ledger_path"])),
+        }
+
+    batch = type2_runtime.build_prepared_type2_designs_best_effort(
+        tuple(prepared_builds),
+        jobs=1,
+        exporter=_fake_exporter,
+        runner=_fake_runner,
+    )
+
+    assert [built["design_id"] for built in batch["built"]] == ["s000000_success"]
+    assert len(batch["skipped"]) == 1
+    assert batch["skipped"][0]["design_id"] == "s000001_failure"
+    assert batch["skipped"][0]["phase"] == "step"
+    assert batch["skipped"][0]["error_type"] == "ValueError"
+    assert batch["skipped"][0]["error_message"] == "central corridor proof failed"
 
 
 def test_build_prepared_type2_design_accepts_rx_with_tx_inner_and_outer_geometry_roles(tmp_path: Path) -> None:

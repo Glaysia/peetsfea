@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor, as_completed
 import json
 from pathlib import Path
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from peetsfea.backend.pyaedt.type2_step_em_solve import Type2EmSolveResult
 from peetsfea.backend.pyaedt.type2_step_setup_ready import setup_type2_step_ledger
@@ -62,6 +62,42 @@ _SolveRunner = Callable[..., _Type2SolveRunnerResult]
 
 class Type2EmArtifact(Type2BuiltArtifact):
     em_solve: Type2EmSolveResult
+
+
+Type2BuildSkipPhase = Literal["step", "aedt"]
+Type2BuildSkippableException = ValueError | RuntimeError
+
+
+class Type2BuildSkippedEntry(TypedDict):
+    design_id: str
+    seed: int
+    sampled_toml_path: str
+    phase: Type2BuildSkipPhase
+    error_type: str
+    error_message: str
+
+
+class Type2BuildBatchResult(TypedDict):
+    built: list[Type2BuiltArtifact]
+    skipped: list[Type2BuildSkippedEntry]
+
+
+class Type2BuildSkippedLedger(TypedDict):
+    manifest_path: str
+    skipped: list[Type2BuildSkippedEntry]
+
+
+class _Type2BuildAttemptBuilt(TypedDict):
+    status: Literal["built"]
+    built: Type2BuiltArtifact
+
+
+class _Type2BuildAttemptSkipped(TypedDict):
+    status: Literal["skipped"]
+    skipped: Type2BuildSkippedEntry
+
+
+_Type2BuildAttempt = _Type2BuildAttemptBuilt | _Type2BuildAttemptSkipped
 
 
 def _assert_setup_ready_supported(prepared_build: PreparedType2Build) -> None:
@@ -207,6 +243,127 @@ def build_prepared_type2_design(
     }
 
 
+def _build_type2_skipped_entry(
+    prepared_build: PreparedType2Build,
+    *,
+    phase: Type2BuildSkipPhase,
+    exc: Type2BuildSkippableException,
+) -> Type2BuildSkippedEntry:
+    if not isinstance(exc, (ValueError, RuntimeError)):
+        raise TypeError("exc must be ValueError or RuntimeError")
+    error_message = str(exc)
+    if error_message == "":
+        raise ValueError("build skipped exception message must be non-empty")
+    return {
+        "design_id": prepared_build.design_id,
+        "seed": prepared_build.seed,
+        "sampled_toml_path": str(prepared_build.sampled_toml_path),
+        "phase": phase,
+        "error_type": type(exc).__name__,
+        "error_message": error_message,
+    }
+
+
+def _build_prepared_type2_design_attempt(
+    prepared_build: PreparedType2Build,
+    *,
+    exporter: _Exporter = export_type2_step_artifacts,
+    runner: _Runner = setup_type2_step_ledger,
+) -> _Type2BuildAttempt:
+    _assert_setup_ready_supported(prepared_build)
+    try:
+        ensure_prepared_type2_step_ledger(prepared_build, exporter=exporter)
+    except (ValueError, RuntimeError) as exc:
+        return {
+            "status": "skipped",
+            "skipped": _build_type2_skipped_entry(prepared_build, phase="step", exc=exc),
+        }
+    try:
+        result = runner(
+            step_ledger_path=prepared_build.step_ledger_path,
+            output_aedt_path=prepared_build.aedt_path,
+            imported_ledger_path=prepared_build.imported_ledger_path,
+            design_name=prepared_build.design_id,
+            design_variables=prepared_build.design_variables,
+        )
+    except (ValueError, RuntimeError) as exc:
+        return {
+            "status": "skipped",
+            "skipped": _build_type2_skipped_entry(prepared_build, phase="aedt", exc=exc),
+        }
+    return {
+        "status": "built",
+        "built": {
+            "design_id": prepared_build.design_id,
+            "sampled_toml_path": str(prepared_build.sampled_toml_path),
+            "aedt_path": result["aedt_path"],
+            "source_step_ledger_path": result["source_step_ledger_path"],
+            "imported_ledger_path": result["imported_ledger_path"],
+        },
+    }
+
+
+def _build_single_sampled_toml_attempt(sampled_toml_path_text: str) -> _Type2BuildAttempt:
+    prepared_build = prepare_type2_build(Path(sampled_toml_path_text))
+    return _build_prepared_type2_design_attempt(prepared_build)
+
+
+def _append_build_attempt(
+    batch: Type2BuildBatchResult,
+    attempt: _Type2BuildAttempt,
+) -> None:
+    if attempt["status"] == "built":
+        batch["built"].append(attempt["built"])
+        return
+    batch["skipped"].append(attempt["skipped"])
+
+
+def build_prepared_type2_designs_best_effort(
+    prepared_builds: tuple[PreparedType2Build, ...],
+    *,
+    jobs: int,
+    exporter: _Exporter = export_type2_step_artifacts,
+    runner: _Runner = setup_type2_step_ledger,
+) -> Type2BuildBatchResult:
+    if jobs < 1:
+        raise ValueError("jobs must be >= 1")
+    batch: Type2BuildBatchResult = {"built": [], "skipped": []}
+    if len(prepared_builds) == 0:
+        return batch
+    if jobs == 1 or runner is not setup_type2_step_ledger or exporter is not export_type2_step_artifacts:
+        for prepared_build in prepared_builds:
+            _append_build_attempt(
+                batch,
+                _build_prepared_type2_design_attempt(prepared_build, exporter=exporter, runner=runner),
+            )
+        return batch
+    future_by_index: dict[Future[_Type2BuildAttempt], int] = {}
+    indexed_attempts: list[tuple[int, _Type2BuildAttempt]] = []
+    with ProcessPoolExecutor(max_workers=jobs) as executor:
+        for index, prepared_build in enumerate(prepared_builds):
+            future = executor.submit(_build_single_sampled_toml_attempt, str(prepared_build.sampled_toml_path))
+            future_by_index[future] = index
+        for future in as_completed(future_by_index):
+            indexed_attempts.append((future_by_index[future], future.result()))
+    for _, attempt in sorted(indexed_attempts, key=lambda item: item[0]):
+        _append_build_attempt(batch, attempt)
+    return batch
+
+
+def write_type2_build_skipped_ledger(
+    ledger_path: Path,
+    *,
+    manifest_path: Path,
+    skipped: list[Type2BuildSkippedEntry],
+) -> None:
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    payload: Type2BuildSkippedLedger = {
+        "manifest_path": str(manifest_path),
+        "skipped": skipped,
+    }
+    ledger_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
 def solve_prepared_type2_design(
     prepared_build: PreparedType2Build,
     *,
@@ -278,10 +435,14 @@ def solve_prepared_type2_designs(
 
 __all__ = [
     "Type2BuiltArtifact",
+    "Type2BuildBatchResult",
+    "Type2BuildSkippedEntry",
+    "Type2BuildSkippedLedger",
     "Type2EmArtifact",
     "Type2SteppedArtifact",
     "build_prepared_type2_design",
     "build_prepared_type2_designs",
+    "build_prepared_type2_designs_best_effort",
     "ensure_prepared_type2_step_ledger",
     "ensure_prepared_type2_step_ledgers",
     "export_prepared_type2_design",
@@ -289,4 +450,5 @@ __all__ = [
     "solve_prepared_type2_design",
     "solve_prepared_type2_designs",
     "validate_prepared_type2_step_ledgers",
+    "write_type2_build_skipped_ledger",
 ]

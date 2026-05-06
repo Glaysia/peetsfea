@@ -21,8 +21,10 @@ from peetsfea.backend.pyaedt.type2_step_em_solve import Type2EmSolveResult
 from peetsfea.type2_runtime import (
     Type2BuiltArtifact,
     Type2EmArtifact,
+    build_prepared_type2_designs_best_effort,
     build_prepared_type2_designs,
     ensure_prepared_type2_step_ledgers,
+    write_type2_build_skipped_ledger,
 )
 from peetsfea.type2_runtime import solve_prepared_type2_designs
 from peetsfea.type2_step_export import export_type2_step_artifacts
@@ -82,13 +84,18 @@ def build_type2(
     document = load_type2_sample_manifest(manifest_path)
     prepared_builds = prepared_builds_from_manifest(manifest_path, selected_design_ids=())
     jobs = document["config"]["aedt_builder_n"]
-    ensure_prepared_type2_step_ledgers(prepared_builds, jobs=jobs, exporter=exporter)
-    return build_prepared_type2_designs(
+    batch = build_prepared_type2_designs_best_effort(
         prepared_builds,
         jobs=jobs,
         exporter=exporter,
         runner=runner,
     )
+    skipped_ledger_path = manifest_path.parent / "type2_build_skipped.json"
+    write_type2_build_skipped_ledger(skipped_ledger_path, manifest_path=manifest_path, skipped=batch["skipped"])
+    if len(batch["skipped"]) > 0:
+        print(f"skipped design count: {len(batch['skipped'])}")
+        print(f"build skipped ledger: {skipped_ledger_path}")
+    return batch["built"]
 
 
 def build_type2_debug(

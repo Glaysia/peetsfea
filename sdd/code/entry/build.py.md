@@ -1,7 +1,7 @@
 ---
 title: build.py
 created: 2026-04-17 @ 09:09
-updated: 2026-05-03 @ 23:55
+updated: 2026-05-07 @ 00:00
 tags:
   - entry
   - build
@@ -19,14 +19,16 @@ tags:
 - sampled type2 design을 build/setup-ready runtime으로 넘기는 entrypoint다.
 - 0.2.24 SDD 기준 RxOnly setup-ready path가 active target이다.
 - `--solve` 옵션으로 setup-ready 생성 직후 active HFSS setup을 해석하고 report CSV를 export한다.
-- Manifest의 `config.make_step_on_sample`와 entry STEP 경로를 기준으로, build/solve runner 실행 전에 STEP ledger를 보장한다.
+- Manifest의 `config.make_step_on_sample`와 entry STEP 경로를 기준으로, solve/debug runner 실행 전에 STEP ledger를 보장한다.
+- 기본 `build.py` 배치 실행은 sampled design별 STEP 생성과 AEDT setup을 개별 시도하고, skippable 실패는 build skip ledger로 남긴 뒤 나머지 design을 계속 처리한다.
 - `--debug` GUI build uses the attached-HFSS setup path and skips AEDT `ValidateDesign()` because that AEDT call can hang in GUI debug sessions; repository pipeline validation and project save remain active.
 
 ## Invariants / fail-fast
-- Build failures raise immediately unless explicitly recorded as validation/infeasible sample skips upstream.
+- Default batch build records per-design `ValueError`/`RuntimeError` as explicit build skips and continues.
+- Debug build and solve failures raise immediately; setup-ready success is not treated as EM success.
 - RxOnly build does not require TX modeled geometry.
-- Solve failures raise immediately; setup-ready success is not treated as EM success.
 - Existing STEP ledgers are validated and reused; missing STEP ledgers are generated before AEDT setup.
+- The generated build skip ledger is written beside the manifest as `type2_build_skipped.json` so stale skip state is overwritten on every default build run.
 
 ## Graph links
 - Primary owner: [type2-em-setup-boundary](../../architecture/type2-em-setup-boundary.md)

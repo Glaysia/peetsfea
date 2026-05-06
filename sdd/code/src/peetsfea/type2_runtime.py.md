@@ -1,7 +1,7 @@
 ---
 title: type2_runtime.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - runtime
 ---
@@ -21,7 +21,8 @@ tags:
 
 ## 입력 / 출력
 - 입력: sampled design metadata, build options, output paths
-- 출력: generated STEP/AEDT/EM artifacts or fail-fast exception
+- 출력: generated STEP/AEDT/EM artifacts, explicit build-skip ledger entries for best-effort batch build,
+  or fail-fast exception
 
 ## Canonical state
 - RxOnly build path does not require TX modeled geometry.
@@ -31,10 +32,14 @@ tags:
 - Build prep must not pass TX modeled sampled design variables to the backend.
 - EM solve mode uses the same prepared build and setup-ready runner, then exports the active RX output report.
 - A manifest entry's `step_ledger_path` is canonical for build input; if it exists, validate and reuse it, and if it is missing, regenerate it from the sampled TOML.
+- Default batch build can request per-design best-effort attempts. In that path, each design owns its STEP generation and AEDT setup attempt, and skippable `ValueError`/`RuntimeError` failures are recorded as explicit build skipped entries.
+- Parallel best-effort output is reassembled in prepared-build input order before returning artifacts and skipped entries.
 
 ## Invariants / fail-fast
 - Unsupported role sets fail before backend execution; `tx_outer_single_coil` is rejected by the active runtime gate.
-- Runtime failures are fail-fast unless the caller explicitly requests skip-recording for validation/infeasible sample attempts.
+- Runtime failures are fail-fast unless the caller explicitly requests skip-recording for validation/infeasible sample attempts or default build-batch continuation.
+- Build skipped entries preserve `design_id`, `seed`, `sampled_toml_path`, coarse failure phase, exception type, and exception message.
+- Best-effort build only catches `ValueError` and `RuntimeError`; structural errors such as type errors, missing files outside the skippable generation path, and assertion failures still abort.
 - EM solve failures raise and do not downgrade to setup-ready success.
 - Invalid existing STEP ledger or missing scene STEP raises instead of overwriting silently.
 

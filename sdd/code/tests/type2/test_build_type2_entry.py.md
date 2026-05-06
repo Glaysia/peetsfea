@@ -19,10 +19,12 @@ tags:
 - 0.2.24 SDD 기준 RxOnly build path is the active documented target.
 - solve-enabled build handoff and the geometry-only `tx_inner_single_coil` plus RX role gate are covered.
 - Sample-only manifest에서 build가 missing STEP ledger를 생성하고, existing ledger는 exporter 없이 재사용하는 계약을 검증한다.
+- Default build batch가 per-design best-effort로 STEP/AEDT skippable failure를 기록하고 나머지 design을 계속 처리하는 계약을 검증한다.
 - TX inner X-position compatibility metadata must stay fixed zero and removed TX outer sampled owners must stay absent.
 
 ## Canonical state
 - Build path can reuse existing STEP ledger or generate missing RX STEP artifacts.
+- Default build returns only successful artifacts while writing/propagating explicit build skip entries for failed design attempts.
 - RX single-coil fixtures use the active `3.965 mm` PCB plus `0.035 mm` copper stack.
 - Synthetic TX inner fixtures use active fixed `layer_count=1` plus passive underlay defaults: repeat count `1`, PET/PSA `6.0 mm`, and ferrite `6.0 mm`.
 - `tx_region` is allowed only as non-modeled guide context and must include the required `tx_reference_line` ratios; active-shaped synthetic fixtures use the 720.0 mm TX guide X span.
@@ -43,6 +45,7 @@ tags:
 - Passive `tv_aluminum_plate` can accompany the active RX/TX-inner role set without being treated as an EM target.
 - TX modeled build dependencies, including TX columns paired with RX, must not reach the setup-ready runner.
 - Prepared build validation must reject missing or nonzero TX inner X-position compatibility ranges before setup-ready execution.
+- Best-effort build tests catch only declared skippable runtime exceptions; unsupported role validation remains fail-fast before skip recording.
 
 ## Collaborators
 - [build.py](../../entry/build.py.md)
