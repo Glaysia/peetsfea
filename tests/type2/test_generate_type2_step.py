@@ -4229,7 +4229,7 @@ def test_export_type2_step_artifacts_derives_tx_outer_region_from_moved_tx_regio
         ("x_ratio", "[false, 0.0, 0.0, 1]", r"tx_reference_line\.x_ratio.*strictly inside"),
         ("y_usage_ratio", "[false, 0.0, 0.0, 1]", r"tx_reference_line\.y_usage_ratio.*\(0, 1\]"),
         ("y_usage_ratio", "[false, 1.1, 1.1, 1]", r"tx_reference_line\.y_usage_ratio.*\(0, 1\]"),
-        ("z_ratio", "[false, 1.0, 1.0, 1]", r"tx_reference_line\.z_ratio.*strictly inside"),
+        ("z_ratio", "[false, 1.1, 1.1, 1]", r"tx_reference_line\.z_ratio.*\(0, 1\]"),
     ),
 )
 def test_load_type2_step_spec_rejects_invalid_tx_reference_line_ratio(

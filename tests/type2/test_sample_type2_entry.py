@@ -121,7 +121,7 @@ def _patch_rx_only_spec_loader(
     tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=2.0, end=2.0, count=1)
     tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.99, end=0.99, count=1)
     tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
-    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.2, end=0.9, count=13)
+    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.5, end=1.0, count=13)
 
     fake_spec = _FakeRxOnlyType2Spec(
         non_model_objects=(
@@ -291,7 +291,7 @@ range = [false, 0.99, 0.99, 1]
 [non_model_objects.tx_reference_line.y_usage_ratio]
 range = [false, 0.2, 1.0, 17]
 [non_model_objects.tx_reference_line.z_ratio]
-range = [false, 0.2, 0.9, 13]
+range = [false, 0.5, 1.0, 13]
 
 [[non_model_objects]]
 id = "rx_region_max"
@@ -698,7 +698,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert tx_reference_line_z_range[0] is False
     assert tx_reference_line_z_range[3] == 1
     assert tx_reference_line_z_range[1] == tx_reference_line_z_range[2]
-    assert 0.2 <= float(cast(int | float, tx_reference_line_z_range[1])) <= 0.9
+    assert 0.5 <= float(cast(int | float, tx_reference_line_z_range[1])) <= 1.0
 
     modeled_objects_by_id = {
         cast(str, modeled_object["object_id"]): modeled_object
@@ -1075,7 +1075,7 @@ range = [false, 0.99, 0.99, 1]
 [non_model_objects.tx_reference_line.y_usage_ratio]
 range = [false, 0.2, 1.0, 17]
 [non_model_objects.tx_reference_line.z_ratio]
-range = [false, 0.2, 0.9, 13]
+range = [false, 0.5, 1.0, 13]
 
 [[non_model_objects]]
 id = "rx_region_max"

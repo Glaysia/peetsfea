@@ -25,6 +25,7 @@ tags:
 - `tx_region` is fixed non-modeled guide state; its Y bounds use `origin_xyz[1] = -900.0` and `size_xyz[1] = 1800.0`.
 - `non_model_objects.tx_region.tx_reference_line.x_ratio` is fixed at `[false, 0.99, 0.99, 1]` and is not an exported sampled owner.
 - `non_model_objects.tx_region.tx_reference_line.y_usage_ratio` remains sampled at `[false, 0.2, 1.0, 17]`; it continues to size `tx_inner_region` inside fixed `tx_region`.
+- `non_model_objects.tx_region.tx_reference_line.z_ratio` remains sampled at `[false, 0.5, 1.0, 13]`; its lower bound keeps the maximum current TX inner stack below the resolved reference line.
 - `modeled_objects.tx_inner_rect_void_coil.outer_y_usage_ratio` remains sampled at `[false, 0.2, 0.9, 15]`; it continues to size the actual TX coil inside `tx_inner_region`.
 - TX inner X placement source field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` with sweep default `[false, 0.0, 0.3, 9]`.
 - `modeled_objects.tx_inner_rect_void_coil` remains active with role `tx_inner_single_coil`.
@@ -34,7 +35,7 @@ tags:
 
 ## Invariants / fail-fast
 - Candidate values must satisfy `0.0 <= value <= 1.0`.
-- TX reference-line X/Z ratios remain parser-validated strict interior ratios; the fixed X value must stay below `1.0`.
+- TX reference-line X ratio remains parser-validated strict interior; Z ratio may reach `1.0` and must stay in `(0, 1]`.
 - Active sampled owners must not include `modeled_objects.tx_outer_rect_void_coil.*`.
 - Unsupported TX outer fields must be rejected by parser-level validation rather than carried as fallback state.
 

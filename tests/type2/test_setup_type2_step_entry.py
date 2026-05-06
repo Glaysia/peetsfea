@@ -127,7 +127,7 @@ def _assert_tx_reference_line_payload(payload: dict[str, object], *, example_nam
     assert z_range[0] is False
     assert 0.0 < x_range[1] <= x_range[2] < 1.0
     assert 0.0 < y_range[1] <= y_range[2] <= 1.0
-    assert 0.0 < z_range[1] <= z_range[2] < 1.0
+    assert 0.0 < z_range[1] <= z_range[2] <= 1.0
     if example_name == "type2_fixed.toml":
         assert x_range == (False, _FIXED_TX_REFERENCE_LINE_RATIOS[0], _FIXED_TX_REFERENCE_LINE_RATIOS[0], 1)
         assert y_range == (False, _FIXED_TX_REFERENCE_LINE_RATIOS[1], _FIXED_TX_REFERENCE_LINE_RATIOS[1], 1)

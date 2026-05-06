@@ -32,7 +32,8 @@ tags:
 - Missing required non-model context or unsupported object ids fail immediately.
 - Range owner tables may carry optional `description` metadata next to `range`; malformed descriptions fail immediately but do not become runtime spec state.
 - `tx_region` must contain `tx_reference_line` and that table must contain only `x_ratio`, `y_usage_ratio`, and `z_ratio`.
-- TX reference-line X/Z ratio ranges must be float ranges whose realized candidates are strictly inside `(0, 1)`.
+- TX reference-line X ratio ranges must be float ranges whose realized candidates are strictly inside `(0, 1)`.
+- TX reference-line Z ratio ranges must be float ranges whose realized candidates are in `(0, 1]`.
 - TX inner Y usage ratio range must be a float range whose realized candidates are in `(0, 1]`.
 - Non-model guide objects must not create TX modeled geometry, ports, or output variables in RxOnly.
 

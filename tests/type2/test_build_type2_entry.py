@@ -121,7 +121,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=2.0, end=2.0, count=1)
     tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.99, end=0.99, count=1)
     tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
-    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.2, end=0.9, count=13)
+    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.5, end=1.0, count=13)
     fake_spec = _FakeRxOnlyType2Spec(
         non_model_objects=(
             NonModelTxRegionSpec(
@@ -439,7 +439,7 @@ range = [false, 0.99, 0.99, 1]
 range = [false, 0.2, 1.0, 17]
 
 [non_model_objects.tx_reference_line.z_ratio]
-range = [false, 0.2, 0.9, 13]
+range = [false, 0.5, 1.0, 13]
 
 [[non_model_objects]]
 id = "rx_region_max"

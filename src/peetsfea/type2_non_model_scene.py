@@ -898,6 +898,14 @@ def _validated_tx_inner_region_ratio(*, ratio: float, owner_path: str) -> float:
     return ratio
 
 
+def _validated_tx_inner_region_z_ratio(*, ratio: float, owner_path: str) -> float:
+    if not math.isfinite(ratio):
+        raise RuntimeError(f"{owner_path} must resolve to a finite ratio (actual={ratio})")
+    if ratio <= 0.0 or ratio > 1.0:
+        raise RuntimeError(f"{owner_path} must resolve in (0, 1] (actual={ratio})")
+    return ratio
+
+
 def _validated_tx_inner_region_y_usage_ratio(*, ratio: float, owner_path: str) -> float:
     if not math.isfinite(ratio):
         raise RuntimeError(f"{owner_path} must resolve to a finite ratio (actual={ratio})")
@@ -950,7 +958,7 @@ def _resolved_tx_inner_region_from_reference_line(
         ),
         owner_path=x_ratio_owner_path,
     )
-    resolved_z_ratio = _validated_tx_inner_region_ratio(
+    resolved_z_ratio = _validated_tx_inner_region_z_ratio(
         ratio=_selected_float_candidate(
             range_spec=z_ratio,
             owner_path=z_ratio_owner_path,
