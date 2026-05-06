@@ -29,6 +29,7 @@ tags:
 - Tests should verify RX conductor mesh and one RX lumped port.
 - Tests should verify RxOnly does not create TX ports or TX output variables.
 - Tests should verify TxRx keeps TX inner + RX ledger entries, creates TX/RX port assignments, assembles two-terminal report variables, and meshes TX inner + RX conductors.
+- Mesh tests verify `Length1.MaxLength` is derived from canonical TX/RX trace widths rather than a fixed global value.
 - TxRx setup fixtures keep `tx_inner_single_coil` owned by `tx_inner_region`, matching the lower-X wall-side anchoring contract enforced during import styling.
 - Active `tx_inner_single_coil` setup fixtures use the current fixed/sweep exported names `tx_inner_pcb_l0` and `tx_inner_copper_l0`; multilayer copper-stack naming is reserved for explicit synthetic stack tests outside the active TX-inner fixture path.
 - TxRx setup fixtures include the `tx_inner_actual_region` non-model member and imported STEP name whenever
@@ -61,9 +62,11 @@ tags:
 - Passive TX inner void-stack names must not become mesh targets or port/source/report participants, and extra void pairs such as `tx_void_ferrite_u1` / `tx_void_pet_psa_u1` must not appear in active fixed-example setup fixtures.
 - Passive `tv_aluminum_plate` must stay a modeled aluminum object without becoming a mesh target or port/source/report participant.
 - Any `tx_outer_single_coil` source ledger fixture must fail before HFSS setup operations.
+- Missing or invalid `canonical_coordinates.trace_width_mm` must fail before PyAEDT mesh assignment.
 
 ## Graph links
 - Primary owner: [type2-em-setup-boundary](../../../architecture/type2-em-setup-boundary.md)
 - Direct verification: [type2_step_setup_ready.py](../../src/peetsfea/backend/pyaedt/type2_step_setup_ready.py.md)
 - Exceptional contract: [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)
 - Related plan: [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
+- Related plan: [0.2.24 Type2 Trace Width Mesh Length](../../../plans/0.2.24-type2-trace-width-mesh-length.md)

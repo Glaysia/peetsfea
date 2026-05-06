@@ -83,6 +83,7 @@ _PLATE_STACK_MERGED_BODY_NAMES: tuple[str, ...] = (
     "rx_stack_air",
 )
 _TX_RECT_VOID_COLUMNS_FUSED_COPPER_BODY_LABEL = "tx_rect_void_columns_copper"
+_TX_RECT_VOID_COLUMNS_TERMINAL_STUB_SIDE_RATIO = 0.60
 _TX_POSITIVE_BRIDGE_PCB_OBJECT_ID = "tx_pos_bridge_pcb"
 _TX_POSITIVE_BRIDGE_COPPER_OBJECT_ID = "tx_pos_bridge_copper"
 _TX_POSITIVE_BRIDGE_ROLE = "tx_inner_outer_positive_bridge"
@@ -1182,6 +1183,7 @@ def _build_tx_rect_void_columns_scene_data(
     copper_layer_positions: list[float] = []
     vertical_stub_body_names: list[str] = []
     parallel_tile_inputs: list[TxRectVoidCollectorTileInput] = []
+    terminal_stub_trace_width_mm_values: list[float] = []
 
     def _collect_terminal_anchor_box_specs_from_metadata(
         *,
@@ -1214,9 +1216,46 @@ def _build_tx_rect_void_columns_scene_data(
                         f"(stack_space_object_id={tile_anchor_metadata.stack_space_object_id}, "
                         f"anchor_label={anchor_box_spec.label}, size_xyz={anchor_box_spec.size_xyz})"
                     )
-            terminal_box_specs_by_body[start_terminal_body_name].append(start_anchor_box_spec)
-            terminal_box_specs_by_body[end_terminal_body_name].append(end_anchor_box_spec)
+        terminal_box_specs_by_body[start_terminal_body_name].append(start_anchor_box_spec)
+        terminal_box_specs_by_body[end_terminal_body_name].append(end_anchor_box_spec)
         return {name: tuple(specs) for name, specs in terminal_box_specs_by_body.items()}
+
+    def _trace_width_mm_from_terminal_anchor_box(
+        *,
+        anchor_box_spec: BoxSpec,
+        stack_space_object_id: str,
+        terminal_body_name: str,
+    ) -> float:
+        anchor_size_x, anchor_size_y, anchor_size_z = anchor_box_spec.size_xyz
+        if (
+            not math.isfinite(anchor_size_x)
+            or not math.isfinite(anchor_size_y)
+            or not math.isfinite(anchor_size_z)
+        ):
+            raise RuntimeError(
+                "tx_rect_void_columns terminal anchor box dimensions must be finite "
+                f"(stack_space_object_id={stack_space_object_id}, terminal_body_name={terminal_body_name}, "
+                f"anchor_label={anchor_box_spec.label}, size_xyz={anchor_box_spec.size_xyz})"
+            )
+        if anchor_size_x <= 0.0 or anchor_size_y <= 0.0 or anchor_size_z <= 0.0:
+            raise RuntimeError(
+                "tx_rect_void_columns terminal anchor BoxSpec must have positive dimensions "
+                f"(stack_space_object_id={stack_space_object_id}, terminal_body_name={terminal_body_name}, "
+                f"anchor_label={anchor_box_spec.label}, size_xyz={anchor_box_spec.size_xyz})"
+            )
+        anchor_stub_side_mm = math.hypot(anchor_size_x, anchor_size_y) / math.sqrt(2.0)
+        if anchor_stub_side_mm <= 0.0:
+            raise RuntimeError(
+                "tx_rect_void_columns terminal anchor recovered stub side must be positive "
+                f"(stack_space_object_id={stack_space_object_id}, terminal_body_name={terminal_body_name}, "
+                f"anchor_label={anchor_box_spec.label}, size_xyz={anchor_box_spec.size_xyz})"
+            )
+        if _TX_RECT_VOID_COLUMNS_TERMINAL_STUB_SIDE_RATIO <= 0.0:
+            raise RuntimeError(
+                "tx_rect_void_columns terminal stub ratio must be positive "
+                f"(actual={_TX_RECT_VOID_COLUMNS_TERMINAL_STUB_SIDE_RATIO})"
+            )
+        return anchor_stub_side_mm / _TX_RECT_VOID_COLUMNS_TERMINAL_STUB_SIDE_RATIO
 
     def _transformed_terminal_top_faces_by_z(
         *,
@@ -1334,6 +1373,27 @@ def _build_tx_rect_void_columns_scene_data(
             terminal_stub_label_pairs=tile_anchor_metadata.terminal_stub_body_names,
         )
         for terminal_body_name, terminal_anchor_box_specs in terminal_box_specs_by_terminal.items():
+            for terminal_anchor_box_spec in terminal_anchor_box_specs:
+                candidate_trace_width_mm = _trace_width_mm_from_terminal_anchor_box(
+                    anchor_box_spec=terminal_anchor_box_spec,
+                    stack_space_object_id=stack_space_object_id,
+                    terminal_body_name=terminal_body_name,
+                )
+                if len(terminal_stub_trace_width_mm_values) == 0:
+                    terminal_stub_trace_width_mm_values.append(candidate_trace_width_mm)
+                elif not math.isclose(
+                    terminal_stub_trace_width_mm_values[0],
+                    candidate_trace_width_mm,
+                    rel_tol=0.0,
+                    abs_tol=1e-9,
+                ):
+                    raise RuntimeError(
+                        "tx_rect_void_columns terminal anchor trace width mismatch "
+                        f"(stack_space_object_id={stack_space_object_id}, terminal_body_name={terminal_body_name}, "
+                        f"first={terminal_stub_trace_width_mm_values[0]}, actual={candidate_trace_width_mm})"
+                    )
+                else:
+                    terminal_stub_trace_width_mm_values.append(candidate_trace_width_mm)
             transformed_top_faces_by_z = _transformed_terminal_top_faces_by_z(
                 terminal_anchor_box_specs=terminal_anchor_box_specs,
                 transform=transform,
@@ -1591,6 +1651,9 @@ def _build_tx_rect_void_columns_scene_data(
         sorted(set(round(value, 10) for value in copper_layer_positions))
     )
     canonical_coordinates["stack_space_tile_members"] = tuple(tile_metadata)
+    if len(terminal_stub_trace_width_mm_values) == 0:
+        raise RuntimeError("tx_rect_void_columns terminal anchor trace width metadata is unavailable")
+    canonical_coordinates["trace_width_mm"] = terminal_stub_trace_width_mm_values[0]
     scene_data = cast(
         ModeledObjectSceneData,
         {

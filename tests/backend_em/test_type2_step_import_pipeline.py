@@ -67,6 +67,10 @@ _TV_ALUMINUM_PLATE_OBJECT_ID = "tv_aluminum_plate"
 _TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
 _TV_ALUMINUM_PLATE_CANONICAL_MIN_XYZ = (9.0, -921.0, 170.0)
 _TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ = (0.04, 1842.0, 1055.0)
+_SINGLE_COIL_TX_TRACE_WIDTH_MM = 36.0
+_SINGLE_COIL_RX_TRACE_WIDTH_MM = 81.0
+_PLATE_STACK_STRIPE_FILL_FACTOR = 0.4
+_TX_RECT_VOID_COLUMNS_TRACE_WIDTH_MM = 5.0
 
 
 def _assert_tv_aluminum_plate_ledger_contract(*, entry: dict[str, object]) -> None:
@@ -78,6 +82,15 @@ def _assert_tv_aluminum_plate_ledger_contract(*, entry: dict[str, object]) -> No
     canonical_coordinates = cast(dict[str, object], entry["canonical_coordinates"])
     assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_MIN_XYZ)
     assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ)
+
+
+def _assert_trace_width_mm_is_preserved(*, source_entry: dict[str, object], imported_entry: dict[str, object]) -> None:
+    source_coordinates = cast(dict[str, object], source_entry["canonical_coordinates"])
+    imported_coordinates = cast(dict[str, object], imported_entry["canonical_coordinates"])
+    source_trace_width = cast(float, source_coordinates["trace_width_mm"])
+    imported_trace_width = cast(float, imported_coordinates["trace_width_mm"])
+    assert source_trace_width == imported_trace_width
+    assert source_trace_width > 0.0
 
 
 def _non_model_entry_without_tv_member(
@@ -269,6 +282,7 @@ def _modeled_entry(
     expected_groups: list[ExportedBodyGroup] | None = None,
     pcb_layer_positions_mm: list[float] | None = None,
     copper_layer_positions_mm: list[float] | None = None,
+    trace_width_mm: float | None = None,
 ) -> dict[str, object]:
     origin_x, origin_y, origin_z = origin_xyz
     size_x, size_y, size_z = size_xyz
@@ -317,6 +331,7 @@ def _modeled_entry(
             "outer_bounds_size_xyz": [size_x, size_y, size_z],
             "pcb_layer_z_positions_mm": pcb_layer_positions_mm,
             "copper_layer_z_positions_mm": copper_layer_positions_mm,
+            **({"trace_width_mm": trace_width_mm} if trace_width_mm is not None else {}),
         },
         "terminal_metadata": {
             "path": "A_cw_to_a",
@@ -555,6 +570,7 @@ def _tx_rect_void_columns_entry_for_import(tmp_path: Path) -> dict[str, object]:
         source_metadata_path=str(tmp_path / "tx_rect_void_columns.metadata.json"),
         expected_names=["txrvc_x0_y0_pcb_l0", "tx_rect_void_columns_copper"],
         expected_groups=[],
+        trace_width_mm=_TX_RECT_VOID_COLUMNS_TRACE_WIDTH_MM,
     )
     modeled_object["terminal_metadata"] = _tx_rect_void_columns_terminal_metadata_for_import()
     return modeled_object
@@ -968,12 +984,16 @@ def _rx_single_coil_entry(tmp_path: Path) -> dict[str, object]:
         origin_xyz=(1.7, -25.0, 139.0),
         size_xyz=(2.8, 50.0, 30.0),
         source_metadata_path=str(tmp_path / "rx.metadata.json"),
+        trace_width_mm=_SINGLE_COIL_RX_TRACE_WIDTH_MM,
     )
 
 
 def _single_layer_modeled_objects(tmp_path: Path) -> list[dict[str, object]]:
     return [
-        _modeled_entry(source_metadata_path=str(tmp_path / "tx.metadata.json")),
+        _modeled_entry(
+            source_metadata_path=str(tmp_path / "tx.metadata.json"),
+            trace_width_mm=_SINGLE_COIL_TX_TRACE_WIDTH_MM,
+        ),
         _rx_single_coil_entry(tmp_path),
     ]
 
@@ -1695,10 +1715,13 @@ def _plate_stack_modeled_entry(
     expected_groups: list[ExportedBodyGroup],
     pcb_layer_positions_mm: list[float],
     copper_layer_positions_mm: list[float],
+    trace_width_mm: float | None = None,
     terminal_metadata: dict[str, object],
 ) -> dict[str, object]:
     origin_x, origin_y, origin_z = origin_xyz
     size_x, size_y, size_z = size_xyz
+    if trace_width_mm is None:
+        trace_width_mm = _plate_stack_trace_width_mm(size_z=size_z)
     return {
         "object_id": object_id,
         "role": role,
@@ -1716,6 +1739,7 @@ def _plate_stack_modeled_entry(
             "outer_bounds_size_xyz": [size_x, size_y, size_z],
             "pcb_layer_z_positions_mm": pcb_layer_positions_mm,
             "copper_layer_z_positions_mm": copper_layer_positions_mm,
+            "trace_width_mm": trace_width_mm,
         },
         "terminal_metadata": terminal_metadata,
         "source_metadata_path": source_metadata_path,
@@ -1730,7 +1754,7 @@ def _plate_stack_terminal_metadata(
     owner_size_z: float,
     copper_thickness_mm: float,
     turn_count: int = _PLATE_STACK_TURN_COUNT,
-    metal_fill_factor: float = 0.4,
+    metal_fill_factor: float = _PLATE_STACK_STRIPE_FILL_FACTOR,
     prefix: str,
 ) -> dict[str, object]:
     pitch_z = owner_size_z / float(turn_count)
@@ -1756,6 +1780,10 @@ def _plate_stack_terminal_metadata(
     }
 
 
+def _plate_stack_trace_width_mm(*, size_z: float, turn_count: int = _PLATE_STACK_TURN_COUNT) -> float:
+    return (size_z / float(turn_count)) * _PLATE_STACK_STRIPE_FILL_FACTOR
+
+
 def _tx_plate_stack_entry(tmp_path: Path) -> dict[str, object]:
     return _plate_stack_modeled_entry(
         object_id="tx_plate_stack",
@@ -1769,6 +1797,7 @@ def _tx_plate_stack_entry(tmp_path: Path) -> dict[str, object]:
         expected_groups=_tx_plate_stack_expected_groups(),
         pcb_layer_positions_mm=[0.035, 5.3],
         copper_layer_positions_mm=[0.0, 6.865],
+        trace_width_mm=_plate_stack_trace_width_mm(size_z=90.0),
         terminal_metadata=_plate_stack_terminal_metadata(
             owner_origin_y=-140.0,
             owner_size_y=280.0,
@@ -1793,6 +1822,7 @@ def _rx_plate_stack_entry(tmp_path: Path) -> dict[str, object]:
         expected_groups=_rx_plate_stack_expected_groups(),
         pcb_layer_positions_mm=[0.1, 4.1],
         copper_layer_positions_mm=[0.0, 4.4],
+        trace_width_mm=_plate_stack_trace_width_mm(size_z=360.0),
         terminal_metadata=_plate_stack_terminal_metadata(
             owner_origin_y=-280.0,
             owner_size_y=560.0,
@@ -1889,11 +1919,12 @@ def _expected_mesh_length_payload(*, tx_object_name: str = "tx_copper_l0") -> li
 
 def test_import_type2_step_ledger_imports_single_scene_and_writes_partitioned_ledger(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
+    modeled_objects = _single_layer_modeled_objects(tmp_path)
     _write_ledger(
         ledger_path,
         scene_step_path=scene_step,
         non_model_objects=[_non_model_entry()],
-        modeled_objects=_single_layer_modeled_objects(tmp_path),
+        modeled_objects=modeled_objects,
         radiation_margin_mm=4123.0,
     )
     output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
@@ -1937,6 +1968,8 @@ def test_import_type2_step_ledger_imports_single_scene_and_writes_partitioned_le
     assert "mesh" not in result
     assert "boundary" not in result
     modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    _assert_trace_width_mm_is_preserved(source_entry=modeled_objects[0], imported_entry=cast(dict[str, object], modeled_by_id["tx_rect_void_coil"]))
+    _assert_trace_width_mm_is_preserved(source_entry=modeled_objects[1], imported_entry=cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]))
     assert modeled_by_id["tx_rect_void_coil"]["imported_object_names"] == ["tx_pcb_l0", "tx_copper_l0", "tx_port_sheet"]
     assert modeled_by_id["rx_rect_void_coil"]["imported_object_names"] == ["rx_pcb_l0", "rx_copper_l0", "rx_port_sheet"]
     written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
@@ -1945,11 +1978,14 @@ def test_import_type2_step_ledger_imports_single_scene_and_writes_partitioned_le
 
 def test_import_type2_step_ledger_imports_tv_aluminum_plate_modeled_object(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
+    tv_aluminum_plate_entry = _tv_aluminum_plate_entry(tmp_path)
+    single_layer_modeled_objects = _single_layer_modeled_objects(tmp_path)
+    modeled_objects = [tv_aluminum_plate_entry, *single_layer_modeled_objects]
     _write_ledger(
         ledger_path,
         scene_step_path=scene_step,
         non_model_objects=[_non_model_entry_without_tv_member()],
-        modeled_objects=[_tv_aluminum_plate_entry(tmp_path), *_single_layer_modeled_objects(tmp_path)],
+        modeled_objects=modeled_objects,
     )
     output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
     imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
@@ -1998,6 +2034,14 @@ def test_import_type2_step_ledger_imports_tv_aluminum_plate_modeled_object(tmp_p
     assert "boundary" not in result
     assert "radiation_boundary" not in result
     modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    _assert_trace_width_mm_is_preserved(
+        source_entry=cast(dict[str, object], single_layer_modeled_objects[0]),
+        imported_entry=cast(dict[str, object], modeled_by_id["tx_rect_void_coil"]),
+    )
+    _assert_trace_width_mm_is_preserved(
+        source_entry=cast(dict[str, object], single_layer_modeled_objects[1]),
+        imported_entry=cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]),
+    )
     assert modeled_by_id["tx_rect_void_coil"]["imported_object_names"] == ["tx_pcb_l0", "tx_copper_l0", "tx_port_sheet"]
     assert modeled_by_id["rx_rect_void_coil"]["imported_object_names"] == ["rx_pcb_l0", "rx_copper_l0", "rx_port_sheet"]
     assert modeled_by_id[_TV_ALUMINUM_PLATE_OBJECT_ID]["imported_object_names"] == [_TV_ALUMINUM_PLATE_OBJECT_ID]
@@ -2151,11 +2195,12 @@ def test_import_type2_step_ledger_allows_missing_optional_port_sheet_bodies(tmp_
 
 def test_import_type2_step_ledger_leaves_tx_rect_void_columns_port_sheet_to_setup_ready(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
+    tx_rect_void_columns_entry = _tx_rect_void_columns_entry_for_import(tmp_path)
     _write_ledger(
         ledger_path,
         scene_step_path=scene_step,
         non_model_objects=[_tx_rect_void_columns_non_model_entry_for_import()],
-        modeled_objects=[_tx_rect_void_columns_entry_for_import(tmp_path)],
+        modeled_objects=[tx_rect_void_columns_entry],
     )
     output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
     imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
@@ -2176,6 +2221,10 @@ def test_import_type2_step_ledger_leaves_tx_rect_void_columns_port_sheet_to_setu
     assert session.modeler.create_polyline_calls == []
     assert session.modeler.cover_lines_calls == []
     modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    _assert_trace_width_mm_is_preserved(
+        source_entry=tx_rect_void_columns_entry,
+        imported_entry=cast(dict[str, object], modeled_by_id["tx_rect_void_columns"]),
+    )
     assert modeled_by_id["tx_rect_void_columns"]["imported_object_names"] == [
         "txrvc_x0_y0_pcb_l0",
         "tx_rect_void_columns_copper",
@@ -2554,6 +2603,8 @@ def test_import_type2_step_ledger_accepts_plate_stack_partial_z_usage_windows(tm
     )
 
     modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    _assert_trace_width_mm_is_preserved(source_entry=tx_entry, imported_entry=cast(dict[str, object], modeled_by_id["tx_plate_stack"]))
+    _assert_trace_width_mm_is_preserved(source_entry=rx_entry, imported_entry=cast(dict[str, object], modeled_by_id["rx_plate_stack"]))
     assert modeled_by_id["tx_plate_stack"]["canonical_coordinates"] == tx_coordinates
     assert modeled_by_id["rx_plate_stack"]["canonical_coordinates"] == rx_coordinates
 
@@ -2607,6 +2658,8 @@ def test_import_type2_step_ledger_accepts_plate_stack_partial_y_usage_windows(tm
     )
 
     modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    _assert_trace_width_mm_is_preserved(source_entry=tx_entry, imported_entry=cast(dict[str, object], modeled_by_id["tx_plate_stack"]))
+    _assert_trace_width_mm_is_preserved(source_entry=rx_entry, imported_entry=cast(dict[str, object], modeled_by_id["rx_plate_stack"]))
     assert modeled_by_id["tx_plate_stack"]["canonical_coordinates"] == tx_coordinates
     assert modeled_by_id["rx_plate_stack"]["canonical_coordinates"] == rx_coordinates
 

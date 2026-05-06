@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from typing import TypedDict, cast
 
@@ -13,6 +14,7 @@ from peetsfea.backend.pyaedt.type2_step_import_ledger import (
 
 MESH_MODULE_NAME = "MeshSetup"
 MESH_LENGTH_OPERATION_NAME = "Length1"
+MESH_LENGTH_DIVISOR = 9.0
 _TX_ROLE = "tx_single_coil"
 _RX_ROLE = "rx_single_coil"
 _TX_INNER_ROLE = "tx_inner_single_coil"
@@ -34,7 +36,6 @@ _TX_PLATE_MESH_OBJECT_NAME = "tx_plate_copper"
 _RX_PLATE_MESH_OBJECT_NAME = "rx_plate_copper"
 _TX_RECT_VOID_COLUMNS_MESH_OBJECT_NAME = "tx_rect_void_columns_copper"
 MESH_LENGTH_MAX_ELEMENTS = "1000"
-MESH_LENGTH_MAX_LENGTH = "5mm"
 
 
 def _is_tx_branch_plate_copper_name(name: str) -> bool:
@@ -70,7 +71,7 @@ class Type2ImportedMeshSummary(TypedDict):
     max_length: str
 
 
-def _mesh_assignment_payload(*, object_names: list[str]) -> list[object]:
+def _mesh_assignment_payload(*, object_names: list[str], max_length: str) -> list[object]:
     return [
         f"NAME:{MESH_LENGTH_OPERATION_NAME}",
         "RefineInside:=",
@@ -86,11 +87,11 @@ def _mesh_assignment_payload(*, object_names: list[str]) -> list[object]:
         "RestrictLength:=",
         True,
         "MaxLength:=",
-        MESH_LENGTH_MAX_LENGTH,
+        max_length,
     ]
 
 
-def _mesh_summary(*, object_names: list[str]) -> Type2ImportedMeshSummary:
+def _mesh_summary(*, object_names: list[str], max_length: str) -> Type2ImportedMeshSummary:
     return {
         "module_name": MESH_MODULE_NAME,
         "operation": "AssignLengthOp",
@@ -101,7 +102,7 @@ def _mesh_summary(*, object_names: list[str]) -> Type2ImportedMeshSummary:
         "restrict_elem": False,
         "num_max_elem": MESH_LENGTH_MAX_ELEMENTS,
         "restrict_length": True,
-        "max_length": MESH_LENGTH_MAX_LENGTH,
+        "max_length": max_length,
     }
 
 
@@ -179,6 +180,88 @@ def _required_supported_mesh_role(entry: dict[str, object], *, context: str) -> 
             f"(actual={role!r})"
         )
     return role
+
+
+def _required_canonical_coordinates(*, entry: dict[str, object], context: str) -> dict[str, object]:
+    raw_canonical_coordinates = require_key(
+        entry,
+        key="canonical_coordinates",
+        context=context,
+    )
+    if not isinstance(raw_canonical_coordinates, dict):
+        raise TypeError(
+            f"{context}.canonical_coordinates must be a table/object "
+            f"(actual={type(raw_canonical_coordinates).__name__})"
+        )
+    return cast(dict[str, object], raw_canonical_coordinates)
+
+
+def _required_positive_finite_number(*, value: object, context: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"{context} must be a number")
+    numeric_value = float(value)
+    if not math.isfinite(numeric_value):
+        raise ValueError(f"{context} must be finite (actual={value!r})")
+    if numeric_value <= 0.0:
+        raise ValueError(f"{context} must be > 0 (actual={numeric_value})")
+    return numeric_value
+
+
+def _required_trace_width_mm(*, entry: dict[str, object], context: str) -> float:
+    canonical_coordinates = _required_canonical_coordinates(entry=entry, context=context)
+    raw_trace_width_mm = require_key(
+        canonical_coordinates,
+        key="trace_width_mm",
+        context=f"{context}.canonical_coordinates",
+    )
+    return _required_positive_finite_number(
+        value=raw_trace_width_mm,
+        context=f"{context}.canonical_coordinates.trace_width_mm",
+    )
+
+
+def _required_mesh_max_length_mm(
+    *,
+    imported_modeled_objects: Sequence[dict[str, object]],
+) -> str:
+    resolved = _resolve_supported_mesh_entries(imported_modeled_objects)
+    if len(resolved) == 1:
+        role, rx_entry, rx_context = resolved[0]
+        if role != _RX_ROLE:
+            raise ValueError(
+                "Post-import mesh length for single-entry mode requires rx_single_coil "
+                f"(actual={role!r})"
+            )
+        max_length_mm = _required_trace_width_mm(entry=rx_entry, context=rx_context) / MESH_LENGTH_DIVISOR
+        return f"{max_length_mm:.12g}mm"
+    tx_entry: dict[str, object] = {}
+    rx_entry: dict[str, object] = {}
+    tx_context = ""
+    rx_context = ""
+    tx_found = False
+    rx_found = False
+    for role, entry, context in resolved:
+        if role in (_TX_ROLE, _TX_INNER_ROLE, _TX_PLATE_STACK_ROLE, _TX_RECT_VOID_COLUMNS_ROLE):
+            tx_entry = entry
+            tx_context = context
+            tx_found = True
+        elif role in (_RX_ROLE, _RX_PLATE_STACK_ROLE):
+            rx_entry = entry
+            rx_context = context
+            rx_found = True
+        else:
+            raise ValueError(
+                "Post-import mesh length resolver found unsupported role for TxRx mesh pair "
+                f"(actual={role!r})"
+            )
+    if not tx_found:
+        raise ValueError(f"Post-import mesh length resolver missing tx entry from {resolved}")
+    if not rx_found:
+        raise ValueError(f"Post-import mesh length resolver missing rx entry from {resolved}")
+    tx_trace_width_mm = _required_trace_width_mm(entry=tx_entry, context=tx_context)
+    rx_trace_width_mm = _required_trace_width_mm(entry=rx_entry, context=rx_context)
+    max_length_mm = math.sqrt(tx_trace_width_mm * rx_trace_width_mm) / MESH_LENGTH_DIVISOR
+    return f"{max_length_mm:.12g}mm"
 
 
 def _role_name_prefix_for_plate_stack(*, role: str, context: str) -> str:
@@ -383,8 +466,11 @@ def assign_post_import_mesh(
     imported_modeled_objects: Sequence[dict[str, object]],
 ) -> Type2ImportedMeshSummary:
     mesh_object_names = _required_mesh_object_names(imported_modeled_objects)
+    max_length = _required_mesh_max_length_mm(imported_modeled_objects=imported_modeled_objects)
     mesh_module = _mesh_setup_module(hfss)
-    assign_result = mesh_module.AssignLengthOp(_mesh_assignment_payload(object_names=mesh_object_names))
+    assign_result = mesh_module.AssignLengthOp(
+        _mesh_assignment_payload(object_names=mesh_object_names, max_length=max_length),
+    )
     raise_on_false(
         assign_result,
         operation="AssignLengthOp",
@@ -395,10 +481,10 @@ def assign_post_import_mesh(
             "restrict_elem": False,
             "num_max_elem": MESH_LENGTH_MAX_ELEMENTS,
             "restrict_length": True,
-            "max_length": MESH_LENGTH_MAX_LENGTH,
+            "max_length": max_length,
         },
     )
-    return _mesh_summary(object_names=mesh_object_names)
+    return _mesh_summary(object_names=mesh_object_names, max_length=max_length)
 
 
 __all__ = [

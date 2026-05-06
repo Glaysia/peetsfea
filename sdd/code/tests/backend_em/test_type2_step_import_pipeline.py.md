@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_import_pipeline.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-07 @ 00:00
+updated: 2026-05-07 @ 20:00
 tags:
   - test
   - import
@@ -22,6 +22,7 @@ tags:
 
 ## Canonical state
 - Import ledger preserves source paths, seed, imported ownership, and imported object names.
+- Import ledger preserves modeled canonical `trace_width_mm` so setup-ready mesh can derive dynamic `Length1.MaxLength`.
 - Import-only path must not create boundary, ports, mesh, or reports.
 - `tx_region` may be carried as guide context only.
 - Geometry-only `tx_inner_single_coil` import partition accepts an empty body-group contract.
@@ -42,6 +43,8 @@ tags:
 - Tx terminal bridge members are allowed as non-model scene members (`tx_pos_bridge_pcb`, `tx_pos_bridge_copper`, `tx_neg_bridge_pcb`, `tx_neg_bridge_copper`) and must stay in non-modeled buckets.
 - TV aluminum plate modeled import coverage requires modeled ledger entries with role/object_id `tv_aluminum_plate`, placement owner `tv`, canonical min/size contract, and import-time `imported_object_names` behavior.
 - The tv aluminum plate import regression is active and must pass without xfail: backend ledger, partition, bounds, styling, and imported ledger output all recognize the modeled one-body aluminum plate.
+- Single-coil and `tx_rect_void_columns` modeled fixtures now include positive canonical `trace_width_mm` and import tests assert source-to-imported preservation.
+- Plate-stack modeled fixtures set positive canonical `trace_width_mm` (stripe-derived) and import tests assert preservation on canonical-coordinate round-trip.
 
 ## Invariants / fail-fast
 - Missing RX imported bodies and generic imported names fail.
@@ -52,6 +55,8 @@ tags:
 - TX inner wall-side X placement tests must still fail when bounds escape `tx_inner_region` or when actual-region provenance no longer anchors at the lower-X owner side.
 - TX inner actual-region validation must fail when the actual/design region is not centered in `tx_inner_region` Y or when provenance no longer matches the modeled source/physical bounds contract.
 - tv aluminum plate modeled import assertions require non-modeled member `tv` to remain available as the placement owner while `tv_aluminum_plate` stays out of non-modeled ownership.
+- Imported `trace_width_mm` for single-coil, `tx_rect_void_columns`, and plate-stack entries is verified before and after import.
+- Modeled fixtures that participate in setup-ready mesh include positive canonical trace width metadata.
 
 ## Graph links
 - Primary owner: [type2-step-import-boundary](../../../architecture/type2-step-import-boundary.md)
@@ -59,3 +64,4 @@ tags:
 - Direct verification: [type2_step_import_core.py](../../src/peetsfea/backend/pyaedt/type2_step_import_core.py.md)
 - Related plan: [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
 - Related plan: [0.2.24 Type2 TV Aluminum Plate](../../../plans/0.2.24-type2-tv-aluminum-plate.md)
+- Related plan: [0.2.24 Type2 Trace Width Mesh Length](../../../plans/0.2.24-type2-trace-width-mesh-length.md)

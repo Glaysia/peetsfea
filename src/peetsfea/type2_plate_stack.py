@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Literal, cast
 
 import build123d as bd
+from build123d.topology.shape_core import Shape
 
 from peetsfea.type2_step_ledger import ExportedBodyGroup
 from peetsfea.type2_step_ledger import ModeledObjectSceneData
@@ -173,7 +174,7 @@ def build_plate_stack_scene_data(
     *,
     owner_spec: NonModelBoxSpec,
     seed: int,
-) -> tuple[tuple[bd.Shape, ...], ModeledObjectSceneData]:
+) -> tuple[tuple[Shape, ...], ModeledObjectSceneData]:
     role_config = _role_config(spec.role)
     if owner_spec.object_id != role_config.placement_owner_id:
         raise RuntimeError(
@@ -511,7 +512,7 @@ def build_plate_stack_scene_data(
         active_conductor_size_z,
     )
 
-    flat_shapes: tuple[bd.Shape, ...] = tuple(
+    flat_shapes: tuple[Shape, ...] = tuple(
         _build_labeled_solid_box_with_edge_windows(
             label=label,
             origin_xyz=origin_xyz,
@@ -558,7 +559,7 @@ def build_plate_stack_scene_data(
         group_entry["member_body_names"][0]: group_entry
         for group_entry in expected_body_groups
     }
-    top_level_shapes: list[bd.Shape] = []
+    top_level_shapes: list[Shape] = []
     for label in expected_body_names:
         if label in group_by_first_member_name:
             group_entry = group_by_first_member_name[label]
@@ -595,6 +596,7 @@ def build_plate_stack_scene_data(
                 "outer_bounds_size_xyz": outer_bounds_size_xyz,
                 "pcb_layer_z_positions_mm": (wall_pcb_origin_mm, coil_pcb_origin_mm),
                 "copper_layer_z_positions_mm": (wall_copper_origin_mm, coil_copper_origin_mm),
+                "trace_width_mm": trace_height_z,
             },
             "terminal_metadata": _plate_stack_terminal_metadata(
                 input_stub_spec=input_stub_spec,
@@ -728,7 +730,7 @@ def _build_labeled_solid_box(
     label: str,
     origin_xyz: tuple[float, float, float],
     size_xyz: tuple[float, float, float],
-) -> bd.Shape:
+) -> Shape:
     if len(label) > _MAX_LABEL_LENGTH:
         raise RuntimeError(
             "type2 plate stack body label must be <= 32 chars "
@@ -754,7 +756,7 @@ def _build_labeled_solid_box(
         )
     solid = solids[0]
     solid.label = label
-    return cast(bd.Shape, solid)
+    return cast(Shape, solid)
 
 
 def _build_labeled_solid_box_with_edge_windows(
@@ -766,7 +768,7 @@ def _build_labeled_solid_box_with_edge_windows(
     owner_size_y_mm: float,
     edge_strip_width_y_mm: float,
     edge_windows: tuple[_BridgeEdgeWindow, ...],
-) -> bd.Shape:
+) -> Shape:
     if len(label) > _MAX_LABEL_LENGTH:
         raise RuntimeError(
             "type2 plate stack body label must be <= 32 chars "
@@ -796,7 +798,7 @@ def _build_labeled_solid_box_with_edge_windows(
     ).moved(bd.Location(origin_xyz))
 
     owner_max_y_mm = owner_origin_y_mm + owner_size_y_mm
-    notch_bodies: list[bd.Shape] = []
+    notch_bodies: list[Shape] = []
     for edge_window in edge_windows:
         overlap_z_min_mm = max(origin_z, edge_window.z_min_mm)
         overlap_z_max_mm = min(max_z, edge_window.z_max_mm)
@@ -815,7 +817,7 @@ def _build_labeled_solid_box_with_edge_windows(
             )
         notch_bodies.append(
             cast(
-                bd.Shape,
+                Shape,
                 bd.Box(
                     size_x,
                     edge_strip_width_y_mm,
@@ -835,9 +837,9 @@ def _build_labeled_solid_box_with_edge_windows(
     if len(notch_bodies) == 0:
         raise RuntimeError(f"type2 plate stack notch subtraction produced no windows (label={label})")
 
-    notched_shape: bd.Shape = cast(bd.Shape, base_shape)
+    notched_shape: Shape = cast(Shape, base_shape)
     for notch_body in notch_bodies:
-        notched_shape = cast(bd.Shape, notched_shape - notch_body)
+        notched_shape = cast(Shape, notched_shape - notch_body)
     solids = tuple(notched_shape.solids())
     if len(solids) != 1:
         raise RuntimeError(
@@ -846,10 +848,10 @@ def _build_labeled_solid_box_with_edge_windows(
         )
     solid = solids[0]
     solid.label = label
-    return cast(bd.Shape, solid)
+    return cast(Shape, solid)
 
 
-def _build_labeled_group(*, label: str, children: tuple[bd.Shape, ...]) -> bd.Shape:
+def _build_labeled_group(*, label: str, children: tuple[Shape, ...]) -> Shape:
     if len(label) > _MAX_LABEL_LENGTH:
         raise RuntimeError(
             "type2 plate stack group label must be <= 32 chars "
@@ -858,16 +860,16 @@ def _build_labeled_group(*, label: str, children: tuple[bd.Shape, ...]) -> bd.Sh
     if len(children) == 0:
         raise RuntimeError(f"type2 plate stack group must contain children (label={label})")
     group = bd.Compound(children=children, label=label)
-    return cast(bd.Shape, group)
+    return cast(Shape, group)
 
 
-def _build_labeled_united_copper_body(*, label: str, source_shapes: tuple[bd.Shape, ...]) -> bd.Shape:
+def _build_labeled_united_copper_body(*, label: str, source_shapes: tuple[Shape, ...]) -> Shape:
     if len(source_shapes) == 0:
         raise RuntimeError(f"type2 plate stack copper unite requires at least one source body (label={label})")
-    fused_shape_or_list: bd.Shape | bd.ShapeList[bd.Shape] = source_shapes[0]
+    fused_shape_or_list: Shape | bd.ShapeList[Shape] = source_shapes[0]
     for source_shape in source_shapes[1:]:
         fuse_base_shape = (
-            cast(bd.Shape, bd.Compound(children=tuple(fused_shape_or_list)))
+            cast(Shape, bd.Compound(children=tuple(fused_shape_or_list)))
             if isinstance(fused_shape_or_list, bd.ShapeList)
             else fused_shape_or_list
         )
@@ -878,7 +880,7 @@ def _build_labeled_united_copper_body(*, label: str, source_shapes: tuple[bd.Sha
                 "type2 plate stack copper unite must resolve to one connected shape "
                 f"(label={label}, connected_shape_count={len(fused_shape_or_list)})"
             )
-        united_shape = cast(bd.Shape, fused_shape_or_list[0])
+        united_shape = cast(Shape, fused_shape_or_list[0])
     else:
         united_shape = fused_shape_or_list
     united_solids = tuple(united_shape.solids())
@@ -889,7 +891,7 @@ def _build_labeled_united_copper_body(*, label: str, source_shapes: tuple[bd.Sha
         )
     united_solid = united_solids[0]
     united_solid.label = label
-    return cast(bd.Shape, united_solid)
+    return cast(Shape, united_solid)
 
 
 __all__ = [
