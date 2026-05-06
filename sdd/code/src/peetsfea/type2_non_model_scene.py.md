@@ -44,7 +44,7 @@ tags:
 ## Invariants / Fail-Fast
 - Visible groups must resolve from required specs.
 - Grouped visible geometry must form exactly one solid.
-- `tx_inner_region` X/Z ratios must be finite and strictly inside `(0, 1)`, and Y usage ratio must be finite and in `(0, 1]`.
+- `tx_inner_region` X ratio must be finite and strictly inside `(0, 1)`, while Z and Y ratios must be finite and in `(0, 1]`.
 - `tx_inner_region` must derive from `tx_region`; a base box named `tx_inner_region` without reference-line provenance is rejected.
 - Ledger construction for `tx_inner_region` requires matching creation-time provenance in the registry.
 - `tx_inner_actual_region` requires exactly one `tx_inner_single_coil` modeled spec and must use the placement helper's design outer box so selected `outer_x_usage_ratio`/`outer_y_usage_ratio` and `x_position_ratio` are reflected exactly once. It must not use the smaller copper/PCB decomposed body bbox as canonical actual-region bounds.

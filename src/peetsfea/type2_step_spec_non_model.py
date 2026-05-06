@@ -177,6 +177,22 @@ def _require_tx_reference_line_ratio_range(
     return range_spec
 
 
+def _require_tx_reference_line_z_ratio_range(
+    table: dict[str, object],
+    *,
+    key: str,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, key, context, expect_integer=False)
+    candidates = _float_range_candidates(range_spec)
+    if any(candidate <= 0.0 or candidate > 1.0 for candidate in candidates):
+        raise ValueError(
+            f"{context}.{key} must realize to values in (0, 1] "
+            f"(actual={candidates})"
+        )
+    return range_spec
+
+
 def _require_tx_reference_line_y_usage_ratio_range(
     table: dict[str, object],
     *,
@@ -214,7 +230,7 @@ def _parse_tx_reference_line(table: dict[str, object], *, context: str) -> NonMo
             key="y_usage_ratio",
             context=f"{context}.tx_reference_line",
         ),
-        z_ratio=_require_tx_reference_line_ratio_range(
+        z_ratio=_require_tx_reference_line_z_ratio_range(
             reference_line,
             key="z_ratio",
             context=f"{context}.tx_reference_line",

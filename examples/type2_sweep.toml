@@ -233,7 +233,7 @@ range = [false, 0.2, 1.0, 17]
 description = "TX guide reference line의 Y 방향 사용 비율"
 
 [non_model_objects.tx_reference_line.z_ratio]
-range = [false, 0.2, 0.9, 13]
+range = [false, 0.5, 1.0, 13]
 description = "TX guide 영역 안에서 reference line의 Z 위치 비율"
 
 [[non_model_objects]]

@@ -34,7 +34,7 @@ tags:
 
 ## Invariants / fail-fast
 - Candidate values must satisfy `0.0 <= value <= 1.0`.
-- TX reference-line X/Z ratios remain parser-validated strict interior ratios; the fixed X value must stay below `1.0`.
+- TX reference-line X ratio remains parser-validated strict interior; Z ratio may reach `1.0` and must stay in `(0, 1]`.
 - Active sampled owners must not include `modeled_objects.tx_outer_rect_void_coil.*`.
 - Unsupported TX outer fields must be rejected by parser-level validation rather than carried as fallback state.
 

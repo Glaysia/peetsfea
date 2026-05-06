@@ -81,7 +81,7 @@ tags:
 - Generic TX modeled roles (`tx_single_coil`, `tx_rect_void_columns`, `tx_plate_stack`) remain inactive in
   active RxOnly parser/export tests; older detailed generic-TX contracts are xfailed until that mode is
   explicitly reactivated.
-- TX reference-line X/Z ratios must be strictly inside `(0, 1)`, Y usage ratio must be in `(0, 1]`, and invalid ratios
+- TX reference-line X ratio must be strictly inside `(0, 1)`, Z and Y ratios must be in `(0, 1]`, and invalid ratios
   must fail before STEP construction.
 - Historical TX outer guide/actual-region assertions are obsolete while `tx_outer_region` and `tx_outer_actual_region` remain absent from active output.
 - For `tx_inner_actual_region`, the non-modeled region must carry `tx_actual_region.physical_modeled_body_bounds` that matches the final
