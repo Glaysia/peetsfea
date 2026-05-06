@@ -2365,6 +2365,7 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     assert tx_inner_entry.underlay_ferrite_thickness_mm == RangeSpec(False, 6.0, 6.0, 1)
     assert tx_inner_entry.outer_x_usage_ratio == RangeSpec(False, 0.4, 0.9, 75)
     assert tx_inner_entry.outer_y_usage_ratio == RangeSpec(False, 0.2, 0.9, 150)
+    assert tx_inner_entry.void_usage_ratio == RangeSpec(False, 0.08, 0.8, 125)
     assert all(entry.object_id != "tx_outer_rect_void_coil" for entry in spec.modeled_objects)
     assert all(entry.role != "tx_outer_single_coil" for entry in spec.modeled_objects)
     rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
@@ -2372,6 +2373,7 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     assert rx_entry.role == "rx_single_coil"
     assert rx_entry.outer_x_usage_ratio == RangeSpec(False, 0.1, 1.0, 90)
     assert rx_entry.outer_y_usage_ratio == RangeSpec(False, 0.1, 1.0, 160)
+    assert rx_entry.void_usage_ratio == RangeSpec(False, 0.08, 0.8, 125)
     assert rx_entry.outer_x_mm == RangeSpec(False, 180.0, 1800.0, 90)
     assert rx_entry.outer_y_mm == RangeSpec(False, 36.0, 360.0, 160)
     assert rx_entry.layer_count.start == pytest.approx(1.0)
