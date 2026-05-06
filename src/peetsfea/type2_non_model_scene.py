@@ -581,33 +581,6 @@ def resolve_non_model_scene_specs(
                     seed=seed,
                 )
             )
-            resolved_specs.append(
-                _resolved_tx_outer_region_spec_from_source_regions(
-                    tx_region_spec=tx_region_spec,
-                    tx_inner_region_spec=tx_inner_region_spec,
-                    modeled_specs=modeled_specs,
-                    seed=seed,
-                )
-            )
-            tx_outer_region_spec = resolved_specs[-1]
-            tx_outer_single_coil_specs = tuple(
-                modeled_spec
-                for modeled_spec in modeled_specs
-                if modeled_spec.role == "tx_outer_single_coil"
-            )
-            if len(tx_outer_single_coil_specs) > 1:
-                raise RuntimeError(
-                    "tx_outer_actual_region requires exactly one tx_outer_single_coil modeled spec when TX outer coils exist "
-                    f"(actual={len(tx_outer_single_coil_specs)})"
-                )
-            if len(tx_outer_single_coil_specs) == 1:
-                resolved_specs.append(
-                    _resolved_tx_outer_actual_region_spec_from_tx_outer_region(
-                        tx_outer_region_spec=tx_outer_region_spec,
-                        tx_outer_single_coil_spec=tx_outer_single_coil_specs[0],
-                        seed=seed,
-                    )
-                )
     tx_region_actual_specs: tuple[NonModelBoxSpec, ...] = ()
     for derived_spec in derived_specs:
         if isinstance(derived_spec, NonModelTxRegionActualStackSpaceSpec):

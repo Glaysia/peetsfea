@@ -21,11 +21,9 @@ tags:
   are active.
 - 2026-04-29 TxRx plan treats `tx_inner_single_coil` as an active EM setup target when the output mode is `TxRx`.
 - Tests in this file should include TxRx-facing assertions that verify generated ledgers preserve `tx_inner_single_coil` and `rx_single_coil` modeled entries for downstream setup-ready consumption.
-- Tests cover the `tx_outer_region` non-modeled guide prism derived from semantic `tx_region` and `tx_inner_region` edges.
-- Tests assert the active export omits derived `tx_outer_single_coil` modeled geometry, outer actual-region members, outer ferrite groups, and inner/outer bridge members while keeping TX inner and RX modeled entries active.
+- Tests assert the active export omits derived `tx_outer_single_coil` modeled geometry, `tx_outer_region`, outer actual-region members, outer ferrite groups, and inner/outer bridge members while keeping TX inner and RX modeled entries active.
 - Historical TX outer tilt helper tests are not active generation regressions after the 0.2.24 TX outer removal.
 - Tests cover `tx_inner_actual_region` as a non-modeled coil-fit envelope derived before modeled coil construction.
-- Tests cover `tx_outer_actual_region` as an axis-aligned non-modeled AABB derived from the concrete tilted outer coil source.
 - Tests cover ferrite/PET_PSA-priority boolean clearance for representative Type2 single-coil STEP export without changing exported body names, groups, or ledger contracts.
 
 ## Canonical state
@@ -44,7 +42,7 @@ tags:
 - TX inner actual-underlay tests must verify `tx_underlay_pet_psa_u0..u3` and `tx_underlay_ferrite_u0..u3` share `tx_inner_actual_region` X/Y bounds and stack downward in PET/PSA then ferrite order.
 - TX inner void-stack tests must verify generated `tx_void_ferrite_u*` / `tx_void_pet_psa_u*` bodies fill the realized void X range, share void Y bounds, span from `tx_inner_actual_region.min_z` to `tx_region.max_z`, and use a shortened final sheet when needed.
 - TX inner ferrite-family clearance tests must verify the `g_ferrite_tx` member order remains the exported PET_PSA/ferrite underlay members followed by void-stack ferrite/PET_PSA members while every ferrite-family body and every PCB body remains a positive-volume solid.
-- Active generation regressions must verify no `tx_outer_void_*`, `tx_outer_underlay_*`, `tx_outer_pcb_*`, `tx_outer_copper_*`, `tx_outer_actual_region`, `g_ferrite_tx_outer`, or TX inner/outer bridge members are emitted.
+- Active generation regressions must verify no `tx_outer_region`, `tx_outer_void_*`, `tx_outer_underlay_*`, `tx_outer_pcb_*`, `tx_outer_copper_*`, `tx_outer_actual_region`, `g_ferrite_tx_outer`, or TX inner/outer bridge members are emitted.
 - Parser tests must reject missing, non-positive, non-fixed, and integer-flagged TX inner underlay thickness ranges.
 - `tx_outer_rect_void_coil` must not appear in active modeled ledgers or STEP scene labels.
 - `tx_inner_rect_void_coil` and `tx_outer_rect_void_coil` fixed-example X placement must satisfy
@@ -63,17 +61,12 @@ tags:
 - `tx_reference_line` ratio inputs, including centered `y_usage_ratio`, are expected to derive a visible non-modeled
   `tx_inner_region` STEP and retained ledger member without activating TX
   modeled geometry.
-- A moved `tx_region` placement regression requires `tx_outer` terminal metadata and bridge edges to update together in the `tx_outer_region_prism` local frame:
-  the terminal sheet metadata for `tx_outer_rect_void_coil` and `tx_inner_rect_void_coil` must reflect final
-  moved world coordinates, the positive bridge geometry must include the signal edge vertices
-  (`port_sheet_vertices_xyz[3] -> [0]`), the negative bridge geometry must include the reference edge vertices
-  (`port_sheet_vertices_xyz[1] -> [2]`), and the outer terminal sheet vertices must project inside
-  `tx_outer_region_prism` local bounds.
+- Historical moved-`tx_region` outer-prism assertions remain with obsolete TX outer tests and must not become active generation requirements.
 - `_world_terminal_stub_boxes` now resolves placement-owner specs before modeled-box rendering, and for `tx_inner_single_coil`/`tx_single_coil` it uses synthetic bus-aligned owner boxes so the world-stub geometry is validated via balanced start/end bus contract while preserving existing owner-relative semantics.
 - Example mutation tests should edit parsed TOML data and re-render it instead of brittle adjacent-line string replacement, because official range owners may carry `description` metadata beside `range`.
-- `tx_outer_region` must follow source-region semantic `+X/+Z` edges and resolved TX inner stack height, without fixed example-coordinate coupling or clipping to `tx_region`.
+- Active fixed-example export must not emit `tx_outer_region`; historical prism-local TX outer assertions stay xfailed with obsolete outer-modeled contracts.
 - `tx_inner_actual_region` must match the resolved TX inner design outer box for the same TOML and seed while leaving `tx_inner_region` as the larger guide region. Its `tx_actual_region.actual_region_bounds` must equal the canonical actual-region ledger bounds, while `physical_modeled_body_bounds` must equal the modeled `tx_inner_rect_void_coil` canonical physical bounds and remain distinct when the physical body is smaller than the design outer box.
-- `tx_outer_actual_region` must be absent from active fixed-example export because no active `tx_outer_rect_void_coil` exists.
+- `tx_outer_region` and `tx_outer_actual_region` must be absent from active fixed-example export because no active `tx_outer_rect_void_coil` exists.
 
 ## Invariants / fail-fast
 - Exported body drift and generic names fail.
@@ -87,22 +80,15 @@ tags:
   explicitly reactivated.
 - TX reference-line X/Z ratios must be strictly inside `(0, 1)`, Y usage ratio must be in `(0, 1]`, and invalid ratios
   must fail before STEP construction.
-- TX outer guide assertions must compare against source-region ledger coordinates and provenance vertices, not sorted STEP vertices.
-- TX actual-region assertions must compare against shared sizing/placement math, including X position ratio, not post-hoc imported geometry inference.
+- Historical TX outer guide/actual-region assertions are obsolete while `tx_outer_region` and `tx_outer_actual_region` remain absent from active output.
 - For `tx_inner_actual_region`, the non-modeled region must carry `tx_actual_region.physical_modeled_body_bounds` that matches the final
   modeled `tx_inner_rect_void_coil` canonical bounds, while `actual_region_bounds` stays equal to the design outer actual-region bounds.
-- For `tx_outer_actual_region`, the non-modeled region must carry `tx_actual_region.physical_modeled_body_bounds` that matches the final
-  modeled `tx_outer_rect_void_coil` canonical bounds (derived from `modeled_objects`), and the `actual_region` bounds must contain that physical body.
-- The `tx_outer_actual_region` ledger entry must not reuse pre-centering geometry bounds: its provenance `guide_bounds` and physical modeled bounds
-  must be intentionally distinct so the assertion fails if placement is regressed back to pre-centered provenance.
-- `tx_outer_rect_void_coil` acceptance must not rely on world-space AABB centering or permit owner-bbox X/Y spillover as a success condition. The regression contract is prism-local X/Y containment for modeled body vertices and outer terminal sheet vertices.
-- `tx_outer_rect_void_coil` passive outer void-stack acceptance must keep prism-local X/Y containment while asserting every exported `tx_outer_void_ferrite_u*` and `tx_outer_void_pet_psa_u*` body reaches final world `tx_region.max_z`; it must not require passive outer void vertices to stay below the `tx_outer_region_prism` local top.
-- `tx_outer_rect_void_coil` passive outer bottom-underlay acceptance must use prism-local outer design/actual footprint assertions and must not add sampled owner paths.
+- Active generation tests must fail if `tx_outer_rect_void_coil`, `tx_outer_region`, `tx_outer_actual_region`, or `tx_outer_*` passive/model body names return.
 - TX stub contract for `tx_inner_single_coil` now requires:
   fixed-term stub span checks in helper-derived world coordinates and canonical metadata to be equal:
   no fallback to non-owner-aligned local boxes and no change in existing balanced start/end stub expectation.
 - Fixed-example ledger assertions require `environment`, `tx_region`, `tx_inner_region`, `tx_inner_actual_region`,
-  `tx_outer_region`, and `rx_region_max`; `tx_outer_actual_region` and bridge members are forbidden.
+  and `rx_region_max`; `tx_outer_region`, `tx_outer_actual_region`, and bridge members are forbidden.
 - Ferrite/PET_PSA-priority clearance assertions fail if any exported ferrite-family member has positive-volume intersection with `tx_inner_pcb_l*`, if a PCB body is emptied, or if the `g_ferrite_tx` group drops/reorders members.
 
 ## Collaborators

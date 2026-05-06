@@ -7,23 +7,22 @@ from typing import cast
 from peetsfea.type2_step_export import export_type2_step_artifacts
 
 _FORBIDDEN_MEMBER_OBJECT_IDS = {
+    "tx_outer_region",
     "tx_outer_actual_region",
+    "tx_outer_rect_void_coil",
     "tx_pos_bridge_pcb",
     "tx_pos_bridge_copper",
     "tx_neg_bridge_pcb",
     "tx_neg_bridge_copper",
 }
 _FORBIDDEN_MEMBER_ROLES = {
+    "tx_outer_region",
     "tx_outer_actual_region",
+    "tx_outer_single_coil",
     "tx_inner_outer_positive_bridge",
     "tx_inner_outer_negative_bridge",
 }
-_FORBIDDEN_SCENE_LABEL_PREFIXES = (
-    "tx_outer_pcb_",
-    "tx_outer_copper_",
-    "tx_outer_void_",
-    "tx_outer_underlay_",
-)
+_FORBIDDEN_SCENE_LABEL_PREFIX = "tx_outer_"
 
 
 def _type2_fixed_spec_path() -> Path:
@@ -72,7 +71,6 @@ def test_active_export_omits_tx_outer_actual_region_groups_and_bridge_members(
 
     assert _FORBIDDEN_MEMBER_OBJECT_IDS.isdisjoint(member_object_ids)
     assert _FORBIDDEN_MEMBER_ROLES.isdisjoint(member_roles)
-    assert "tx_outer_region" in member_object_ids
     assert "tx_inner_actual_region" in member_object_ids
     assert all(group["group_name"] != "g_ferrite_tx_outer" for group in expected_exported_groups)
 
@@ -95,6 +93,6 @@ def test_active_export_omits_tx_outer_body_and_bridge_scene_labels(
 
     assert _FORBIDDEN_MEMBER_OBJECT_IDS.isdisjoint(scene_label_candidates)
     assert all(
-        not label.startswith(_FORBIDDEN_SCENE_LABEL_PREFIXES)
+        not label.startswith(_FORBIDDEN_SCENE_LABEL_PREFIX)
         for label in scene_label_candidates
     )

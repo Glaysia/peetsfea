@@ -16,7 +16,7 @@ tags:
 - Status: active
 
 ## Single Responsibility
-- Verifies the active Type2 STEP export no longer emits `tx_outer_single_coil` modeled ledgers, `tx_outer_actual_region`, outer passive body labels, outer ferrite groups, or inner/outer bridge members.
+- Verifies the active Type2 STEP export no longer emits `tx_outer_single_coil` modeled ledgers, `tx_outer_region`, `tx_outer_actual_region`, `tx_outer_rect_void_coil`, `tx_outer_*` body labels, outer ferrite groups, or inner/outer bridge members.
 - Keeps regression coverage focused on the active export contract while preserving dormant TX outer helper code outside the active generation path.
 
 ## Inputs / Outputs
@@ -25,12 +25,11 @@ tags:
 
 ## Canonical State
 - `tx_inner_rect_void_coil` and `rx_rect_void_coil` remain the active modeled ledger entries.
-- `tx_outer_region` may remain as guide/provenance context.
-- `tx_outer_actual_region`, `tx_outer_rect_void_coil`, outer passive body labels, `g_ferrite_tx_outer`, and bridge members are forbidden.
+- `tx_outer_region`, `tx_outer_actual_region`, `tx_outer_rect_void_coil`, outer passive body labels, `g_ferrite_tx_outer`, and bridge members are forbidden.
 
 ## Invariants
 - Active export must not produce any modeled object with role `tx_outer_single_coil`.
-- Active export must not produce any non-modeled member or STEP label for the removed outer actual region or bridge solids.
+- Active export must not produce any non-modeled member or STEP label for the removed outer guide region, outer actual region, outer modeled coil, `tx_outer_*` body labels, or bridge solids.
 - Active export must keep `tx_inner_single_coil` and `rx_single_coil` modeled entries.
 
 ## Fail-Fast Points
@@ -44,8 +43,7 @@ tags:
 
 ## Related Tests
 - [test_generate_type2_step.py](test_generate_type2_step.py.md)
-- [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
-- [0.2.24 Type2 TX Outer Void Stack TX Region Extension](../../../plans/0.2.24-type2-tx-outer-void-stack-tx-region-extension.md)
+- [0.2.24 Type2 TX Outer Removal](../../../plans/0.2.24-type2-tx-outer-removal.md)
 
 ## Change Hazards
 - If loader/spec workers complete removal, these tests continue to assert active absence.
