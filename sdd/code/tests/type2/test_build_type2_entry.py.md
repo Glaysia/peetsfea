@@ -24,7 +24,7 @@ tags:
 ## Canonical state
 - Build path can reuse existing STEP ledger or generate missing RX STEP artifacts.
 - RX single-coil fixtures use the active `3.965 mm` PCB plus `0.035 mm` copper stack.
-- Synthetic TX inner fixtures use fixed passive underlay defaults: repeat count `1`, PET/PSA `2.0 mm`, and ferrite `2.0 mm`.
+- Synthetic TX inner fixtures use fixed passive underlay defaults: repeat count `1`, PET/PSA `6.0 mm`, and ferrite `6.0 mm`.
 - `tx_region` is allowed only as non-modeled guide context and must include the required `tx_reference_line` ratios; active-shaped synthetic fixtures use the 720.0 mm TX guide X span.
 - Synthetic TX guide fixtures mirror the active sweep Z reference range `[false, 0.75, 1.0, 65]`.
 - Fake RxOnly specs used by entry tests mirror the current `Type2StepSpec` shape, including `non_model_objects`.

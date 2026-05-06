@@ -55,7 +55,7 @@ tags:
   AEDT-region failure cases; tests that intentionally omit the owner assert the earlier ledger-validation failure.
 - Skipping AEDT `ValidateDesign()` must be opt-in only and must not affect default fail-fast validation tests.
 - Passive TX inner actual-underlay names must not become mesh targets or port/source/report participants.
-- Passive TX inner void-stack names must not become mesh targets or port/source/report participants.
+- Passive TX inner void-stack names must not become mesh targets or port/source/report participants, and extra void pairs such as `tx_void_ferrite_u1` / `tx_void_pet_psa_u1` must not appear in active fixed-example setup fixtures.
 - Any `tx_outer_single_coil` source ledger fixture must fail before HFSS setup operations.
 
 ## Graph links

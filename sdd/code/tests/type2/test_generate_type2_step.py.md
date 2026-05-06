@@ -32,8 +32,8 @@ tags:
 - RX full-backing thickness assertions derive the active coil stack thickness from exported PCB/copper bounds.
 - TX inner active example geometry uses `pcb_thickness_mm = 0.3` and one-ounce `copper_thickness_mm = 0.035`.
 - Fixed-example TX inner guide assertions use `tx_reference_line.z_ratio = 0.9`, so the expected `tx_inner_region` Z span is 81.0 mm.
-- TX inner fixed passive defaults are `underlay_repeat_count = 1`, `underlay_pet_psa_thickness_mm = 2.0`,
-  and `underlay_ferrite_thickness_mm = 2.0`; parsed example assertions should fail if those defaults drift.
+- TX inner fixed passive defaults are `underlay_repeat_count = 1`, `underlay_pet_psa_thickness_mm = 6.0`,
+  and `underlay_ferrite_thickness_mm = 6.0`; parsed example assertions should fail if those defaults drift.
 - TX inner void-stack presence is controlled by `void_stack_present`; tests must cover disabled void stack while retaining bottom underlay, including the selected-size fixed example.
 - The disabled export regression fixes `underlay_repeat_count = 1` and `void_stack_present = 0`; it expects `tx_underlay_*` bodies and group membership without any `tx_void_*` scene labels.
 - TX inner terminal metadata remains deterministic and can drive `tx_inner_port_sheet` for `TxRx`.
@@ -44,7 +44,7 @@ tags:
 - Multilayer TX inner tests must include the active sweep upper bound: fixed `layer_count=5` exports
   `tx_inner_pcb_l0` through `tx_inner_pcb_l4` plus `tx_inner_copper_stack`.
 - `tx_inner_rect_void_coil` must use `x_position_ratio` for owner-local visible physical X placement and centered owner-local Y placement.
-- TX inner actual-underlay tests must verify only `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0` are emitted, share `tx_inner_actual_region` X/Y bounds, and stack downward in 2.0 mm PET/PSA then 2.0 mm ferrite order.
+- TX inner actual-underlay tests must verify only `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0` are emitted, share `tx_inner_actual_region` X/Y bounds, and stack downward in 6.0 mm PET/PSA then 6.0 mm ferrite order for a 12.0 mm total bottom underlay.
 - TX inner void-stack enabled tests verify generated void-stack bodies separately from the fixed example, because the selected-size fixed example disables the stack.
 - TX inner ferrite-family clearance tests must verify the `g_ferrite_tx` member order remains the exported PET_PSA/ferrite underlay members, with void-stack members included only for enabled-stack cases, while every ferrite-family body and every PCB body remains a positive-volume solid.
 - Active generation regressions must verify no `tx_outer_region`, `tx_outer_void_*`, `tx_outer_underlay_*`, `tx_outer_pcb_*`, `tx_outer_copper_*`, `tx_outer_actual_region`, `g_ferrite_tx_outer`, or TX inner/outer bridge members are emitted.

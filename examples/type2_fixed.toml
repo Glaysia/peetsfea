@@ -268,10 +268,10 @@ description = "TX inner underlay 반복 개수"
 range = [true, 0, 0, 1]
 description = "TX inner 중앙 void stack 생성 여부"
 [modeled_objects.underlay_pet_psa_thickness_mm]
-range = [false, 2.0, 2.0, 1]
+range = [false, 6.0, 6.0, 1]
 description = "TX inner PET_PSA underlay thickness(mm)"
 [modeled_objects.underlay_ferrite_thickness_mm]
-range = [false, 2.0, 2.0, 1]
+range = [false, 6.0, 6.0, 1]
 description = "TX inner ferrite underlay thickness(mm)"
 [modeled_objects.layer_gap_mm]
 range = [false, 3, 3, 1]

@@ -37,8 +37,8 @@ tags:
 - active examples preserve TX inner `outer_y_usage_ratio` as the actual-coil Y sizing ratio.
 - active example outputs use `TxRx` mode and the shared active TxRx output variable registry.
 - active example `tx_inner_single_coil` uses fixed `underlay_repeat_count = [true, 1, 1, 1]`,
-  `underlay_pet_psa_thickness_mm = [false, 2.0, 2.0, 1]`, and
-  `underlay_ferrite_thickness_mm = [false, 2.0, 2.0, 1]`.
+  `underlay_pet_psa_thickness_mm = [false, 6.0, 6.0, 1]`, and
+  `underlay_ferrite_thickness_mm = [false, 6.0, 6.0, 1]`.
 
 ## Invariants / fail-fast
 - `outputs.mode` must be `TxRx`.

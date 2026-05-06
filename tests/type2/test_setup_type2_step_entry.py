@@ -102,8 +102,8 @@ def _assert_txrx_payload(payload: dict[str, object]) -> None:
     tx_inner = modeled_by_id["tx_inner_rect_void_coil"]
     assert tx_inner["role"] == "tx_inner_single_coil"
     assert cast(dict[str, object], tx_inner["underlay_repeat_count"])["range"] == [True, 1, 1, 1]
-    assert cast(dict[str, object], tx_inner["underlay_pet_psa_thickness_mm"])["range"] == [False, 2.0, 2.0, 1]
-    assert cast(dict[str, object], tx_inner["underlay_ferrite_thickness_mm"])["range"] == [False, 2.0, 2.0, 1]
+    assert cast(dict[str, object], tx_inner["underlay_pet_psa_thickness_mm"])["range"] == [False, 6.0, 6.0, 1]
+    assert cast(dict[str, object], tx_inner["underlay_ferrite_thickness_mm"])["range"] == [False, 6.0, 6.0, 1]
 
     non_model_ids = tuple(cast(str, table["id"]) for table in _tables(payload, "non_model_objects"))
     assert "tx_region" in non_model_ids

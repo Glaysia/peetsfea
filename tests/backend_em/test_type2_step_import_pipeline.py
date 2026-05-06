@@ -1413,6 +1413,7 @@ def test_style_imported_modeled_objects_materializes_tx_inner_single_coil_void_s
         "tx_void_pet_psa_u0",
         "tx_inner_port_sheet",
     ]
+    assert all(not name.startswith(("tx_void_ferrite_u1", "tx_void_pet_psa_u1")) for name in styled_names)
     assert modeler.objects["tx_void_ferrite_u0"].material_name == "MULL12060ferrite"
     assert modeler.objects["tx_void_pet_psa_u0"].material_name == "PET_PSA"
     assert modeler.create_polyline_calls != []
