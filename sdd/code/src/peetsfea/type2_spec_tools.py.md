@@ -1,7 +1,7 @@
 ---
 title: type2_spec_tools.py
 created: 2026-04-29 @ 00:00
-updated: 2026-05-03 @ 00:00
+updated: 2026-05-06 @ 00:00
 tags:
   - type2
   - spec
@@ -28,13 +28,12 @@ tags:
 - Public owner values must exactly match exportable sampled owner paths.
 - Rendered sampled TOML freezes owner ranges and includes deterministic sampled metadata.
 - Range owner descriptions are read from TOML metadata and are not duplicated as Python hardcoded display dictionaries.
-- Public owner keys remain canonical even when a canonical sampled owner is backed by a different raw TOML source field.
-- The canonical owner `modeled_objects.tx_outer_rect_void_coil.x_position_ratio` is sourced from and frozen at raw TOML field `modeled_objects.tx_inner_rect_void_coil.tx_outer_x_position_ratio`; no raw `tx_outer_rect_void_coil` modeled object table is required by this helper.
+- Public owner keys match active raw TOML owner fields directly; the removed TX outer companion has no alias mapping.
 
 ## Invariants / fail-fast
 - Missing or extra owner paths raise immediately.
 - Missing, empty, or non-string range owner descriptions raise in the description helper.
-- Missing raw TOML source fields for aliased canonical owners raise immediately with the canonical owner path and resolved source path.
+- Missing raw TOML source fields raise immediately with the active owner path.
 - Constraint failures raise before TOML text is returned.
 - TX inner and RX rect/void trace-width constraint functions are evaluated in pure Python.
 - Generated TOML is reloaded through the lightweight validator from in-memory text before return.

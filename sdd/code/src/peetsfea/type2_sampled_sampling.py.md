@@ -1,7 +1,7 @@
 ---
 title: type2_sampled_sampling.py
 created: 2026-04-20 @ 00:00
-updated: 2026-05-03 @ 00:00
+updated: 2026-05-06 @ 00:00
 tags:
   - sampling
 ---
@@ -30,14 +30,13 @@ tags:
 - Active `count > 1` range owners must appear in `sampled_owner_paths` regardless of modeled/non-modeled ownership.
 - `tx_region.tx_reference_line.x_ratio`, `tx_region.tx_reference_line.y_usage_ratio`, and `tx_region.tx_reference_line.z_ratio` are active non-modeled guide/context sampled owners.
 - `tx_region_actual` and `tx_region_actual_stack_space` are not active RxOnly sampled owner sources.
-- `tx_outer_single_coil` is a derived geometry-only modeled object. Its promoted canonical owner `modeled_objects.tx_outer_rect_void_coil.x_position_ratio` is sourced from the inner spec's `tx_outer_x_position_ratio`; all other effective numeric geometry follows the canonical `tx_inner_rect_void_coil` sampled owners, and sampling enumeration ignores the outer modeled companion ranges.
-- The source TOML selector `modeled_objects.tx_inner_rect_void_coil.tx_outer_x_position_ratio` is intentionally mapped to the canonical sampled owner path `modeled_objects.tx_outer_rect_void_coil.x_position_ratio`.
+- `tx_outer_single_coil` is not an active sampled modeled object. `modeled_objects.tx_outer_rect_void_coil.*` owner paths are unsupported.
 
 ## Invariants / fail-fast
 - Unknown owner paths fail immediately.
 - Missing sampled-owner registration for an active non-model range is a dataset ledger bug, not a notebook display issue.
 - Generic TX modeled sampled owner roles fail immediately with RxOnly context.
-- Any attempted sampled owner under `modeled_objects.tx_outer_rect_void_coil.*` fails except the explicitly promoted `modeled_objects.tx_outer_rect_void_coil.x_position_ratio`.
+- Any attempted sampled owner under `modeled_objects.tx_outer_rect_void_coil.*` fails.
 - Constraint exhaustion is recorded only through the explicit skipped-attempt path.
 - Constraint function evaluation must stay pure-Python and must not import STEP/CAD/AEDT exporters.
 - `tx_inner_min_trace_width_mm(tx_inner_rect_void_coil)` resolves `tx_inner_region` dimensions from the sampled `tx_region.tx_reference_line.*` owners and the active retry number before applying the rect/void trace-width feasibility helper.

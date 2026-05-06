@@ -1,7 +1,7 @@
 ---
 title: type2_sweep.toml
 created: 2026-05-03 @ 00:00
-updated: 2026-05-03 @ 00:00
+updated: 2026-05-06 @ 00:00
 tags:
   - examples
   - type2
@@ -19,16 +19,18 @@ tags:
 
 ## Inputs / outputs
 - Input: type2 parser and sampler reads this file as source TOML.
-- Output: deterministic sampled owner ranges and source selector tables.
+- Output: deterministic sampled owner ranges for active TX inner guide geometry and RX EM geometry.
 
 ## Canonical state
 - TX inner X placement source field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` with sweep default `[false, 0.0, 0.3, 9]`.
-- TX outer derived companion source selector is `modeled_objects.tx_inner_rect_void_coil.tx_outer_x_position_ratio` with sweep default `[false, 0.0, 0.8, 36]`.
-- The outer selector maps to canonical sampled owner `modeled_objects.tx_outer_rect_void_coil.x_position_ratio`.
+- `modeled_objects.tx_inner_rect_void_coil` remains active with role `tx_inner_single_coil`.
+- `modeled_objects.rx_rect_void_coil` remains active with role `rx_single_coil`.
+- No active example field declares `tx_outer_terminal_path` or `tx_outer_x_position_ratio`.
 
 ## Invariants / fail-fast
 - Candidate values must satisfy `0.0 <= value <= 1.0`.
-- The derived outer companion remains source-authored through the inner TX object; the example must not add an explicit outer modeled-object TOML entry.
+- Active sampled owners must not include `modeled_objects.tx_outer_rect_void_coil.*`.
+- Unsupported TX outer fields must be rejected by parser-level validation rather than carried as fallback state.
 
 ## Collaborators
 - [type2_step_spec_modeled.py](../src/peetsfea/type2_step_spec_modeled.py.md)

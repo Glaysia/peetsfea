@@ -1,7 +1,7 @@
 ---
 title: type2_step_export.py
 created: 2026-04-28 @ 00:00
-updated: 2026-05-04 @ 00:00
+updated: 2026-05-06 @ 00:00
 tags:
   - step-export
   - type2
@@ -16,36 +16,31 @@ tags:
 - Status: active
 
 ## Responsibility
-- Build the active Type2 STEP scene and ledger artifacts for RxOnly EM export.
-- Allow geometry-only `tx_inner_single_coil` and derived `tx_outer_single_coil` STEP bodies while keeping new TX parallel wiring out of scope for this step.
+- Build the active Type2 STEP scene and ledger artifacts for Type2 export.
+- Allow geometry-only `tx_inner_single_coil` STEP bodies while keeping derived `tx_outer_single_coil` out of the active export path.
 - Pass modeled specs into non-model guide resolution so `tx_outer_region` can derive stack height from active TX inner stack parameters.
 - Pass enough modeled sizing context into non-model scene resolution for `tx_inner_actual_region` to be resolved before modeled coil STEP construction.
 - Reject legacy/generic modeled TX export requests with actionable errors.
-- Add STEP-only TX positive and negative bridge geometry between TX inner/outer terminal sheet edges when both modeled scene entries are present.
-- Register terminal-bridge PCB and copper solids as non-modeled ledger members (`model_state=false`) so imports keep them out of EM-ready modeled object flows.
+- Keep dormant terminal-bridge helper code isolated from active export because active export no longer emits `tx_outer_single_coil`.
 - Build terminal-bridge cross-sections from triangulated skew quads so non-coplanar terminal sheets are still manufacturable without planar-face construction.
 - Record terminal-bridge material thickness metadata in the non-modeled ledger member because skew bridge canonical bboxes include span/tilt, not only physical stack thickness.
 - Reuse same-call modeled scene data during post-export terminal contract validation instead of rebuilding modeled geometry a second time.
 
 ## Inputs / Outputs
 - Inputs: Type2 TOML path, output directory, ledger path, deterministic seed, optional stage reporter.
-- Outputs: combined STEP scene, per-modeled-object metadata for RX bodies and geometry-only TX inner/outer bodies, `Type2StepLedger`.
+- Outputs: combined STEP scene, per-modeled-object metadata for RX bodies and geometry-only TX inner bodies, `Type2StepLedger`.
 
 ## Canonical State
 - RX modeled body names, body groups, canonical coordinates, and terminal metadata are export-owned.
 - `tx_region`/`tx_inner_region` remain non-modeled guide context and placement owner context.
 - `tx_outer_region` remains non-modeled guide context and follows `tx_region`/`tx_inner_region` semantic edges.
 - `tx_inner_actual_region` remains non-modeled context and mirrors the TX inner coil-fit envelope without becoming the modeled coil placement owner.
-- `tx_outer_actual_region` remains non-modeled context and mirrors the TX outer coil's tilted design outer box as a world-space AABB without becoming the modeled coil placement owner.
 - `tx_inner_single_coil` may be exported as modeled geometry, but not consumed for active TX ports, sources, or reports.
 - `tx_inner_single_coil` geometry and terminal metadata validation use sampled owner-local X placement inside `tx_inner_region` and centered Y placement.
 - `tx_inner_single_coil` expected body validation includes actual-region underlay members in PET/PSA then ferrite order when its repeat count is positive.
 - `tx_inner_single_coil` expected body validation also includes the generated YZ void-stack members (`tx_void_ferrite_u*` / `tx_void_pet_psa_u*`) when its repeat count is positive.
 - `tx_region.max_z` is resolved once from non-modeled scene state and passed into modeled scene construction/validation so TX inner void-stack sheets fill to the TX region top.
-- `tx_outer_single_coil` may be exported as modeled geometry by deriving numeric ranges from the inner TX modeled spec and placing the body in `tx_outer_region`.
-- `tx_outer_single_coil` export must call the tilted outer placement path, include tilt provenance in modeled canonical metadata, and preserve the same sampled owner-local X placement contract used by `tx_inner_single_coil`.
-- `tx_outer_single_coil` expected body validation includes passive outer void-stack members (`tx_outer_void_ferrite_u*` / `tx_outer_void_pet_psa_u*`) whose X/Y footprint remains outer-prism local and whose top reaches `tx_region.max_z`, bottom-underlay members (`tx_outer_underlay_pet_psa_u*` / `tx_outer_underlay_ferrite_u*`), and the outer-specific passive group `g_ferrite_tx_outer` when its derived repeat count is positive.
-- `tx_outer_single_coil` terminal metadata is independently fixed to `A_cw_to_a`; sampling ownership remains under `tx_inner_rect_void_coil`.
+- `tx_outer_single_coil` specs, if still present from an in-flight loader during the removal work, are filtered out before non-model resolution, modeled scene construction, ledger creation, and terminal contract validation.
 - Post-export terminal metadata validation uses the first-pass `ModeledObjectSceneData` keyed by object ID as canonical expected state for the same export call.
 - Generic `tx_single_coil`, `tx_plate_stack`, and `tx_rect_void_columns` remain unsupported in active RxOnly export.
 
@@ -61,7 +56,7 @@ tags:
 - Scene body labels must be unique.
 - RX terminal metadata must match the geometry contract.
 - Terminal contract validation must fail if the ledger entry differs from first-pass scene data and must not call modeled geometry builders again for active single-coil entries.
-- Terminal-bridge generation is gated by the simultaneous presence of `tx_inner_rect_void_coil` and `tx_outer_rect_void_coil` modeled scene data.
+- Terminal-bridge generation is inactive in active export because `tx_outer_rect_void_coil` is not present in active modeled scene data.
 - Positive bridge object IDs and role remain `tx_pos_bridge_pcb`, `tx_pos_bridge_copper`, and `tx_inner_outer_positive_bridge`; its edge contract is `port_sheet_vertices_xyz[3] -> port_sheet_vertices_xyz[0]`.
 - Negative bridge object IDs and role are `tx_neg_bridge_pcb`, `tx_neg_bridge_copper`, and `tx_inner_outer_negative_bridge`; its edge contract is `port_sheet_vertices_xyz[1] -> port_sheet_vertices_xyz[2]`.
 - Terminal-bridge geometry assembly fails fast for missing terminal metadata, malformed `port_sheet_vertices_xyz`, degenerate terminal-edge geometry, non-positive dimensions, degenerate bridge triangles, or incoherent triangle normals.

@@ -7,7 +7,6 @@ _SUPPORTED_ROLES: frozenset[str] = frozenset(
     {
         "tx_single_coil",
         "tx_inner_single_coil",
-        "tx_outer_single_coil",
         "rx_single_coil",
         "tx_plate_stack",
         "rx_plate_stack",
@@ -452,7 +451,8 @@ def build_single_imported_modeled_object_entry(
     )
     if role not in _SUPPORTED_ROLES:
         raise ValueError(
-            "modeled_object.role must be one of ['tx_single_coil', 'tx_inner_single_coil', 'tx_outer_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack', 'tx_rect_void_columns'] "
+            "modeled_object.role must be one of ['tx_single_coil', 'tx_inner_single_coil', 'rx_single_coil', 'tx_plate_stack', 'rx_plate_stack', 'tx_rect_void_columns']; "
+            "tx_outer_single_coil is inactive and unsupported in active Type2 import "
             f"(actual={role!r})"
         )
     plane = _require_non_empty_str(

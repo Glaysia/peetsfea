@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_import_pipeline.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-04 @ 00:00
+updated: 2026-05-06 @ 00:00
 tags:
   - test
   - import
@@ -18,7 +18,7 @@ tags:
 ## 역할
 - type2 STEP import-only pipeline behavior를 검증한다.
 - 0.2.24 SDD 기준 RX modeled import and non-modeled guide/context import are active.
-- `tx_outer_single_coil`의 world +X rigid-tilt protrusion 허용 조건과 관련된 바운드 검증 회로를 커버한다.
+- `tx_outer_single_coil` source ledgers are rejected as inactive Type2 state before import/styling.
 
 ## Canonical state
 - Import ledger preserves source paths, seed, imported ownership, and imported object names.
@@ -34,22 +34,15 @@ tags:
 - `tx_inner_single_coil` bounds coverage accepts sampled owner-local X placement inside `tx_inner_region` while requiring physical modeled bounds provenance to match the modeled ledger entry.
 - TX inner actual-region regression coverage accepts centered design bounds at Y `[-84, 84]` when the recorded physical modeled bounds are smaller and asymmetric, such as `min_y=-84.0` and `size_y=164.07134831460672`.
 - Ledger fixtures declare `outputs.mode = "RxOnly"` and only active RX output variables.
-- `tx_outer_single_coil`의 tilt metadata는 `canonical_coordinates.outer_tilt_metadata.max_world_x_protrusion_mm` 및 `max_world_z_underhang_mm` 키로만 제공되며, 값은 0 이상의 숫자여야 한다.
-- `tx_outer_single_coil` fixtures may include outer void-stack passive bodies, outer bottom-underlay passive bodies, and an outer-specific passive body group; these must import/style as passive geometry without activating TX outer setup.
-- `tx_outer_void_ferrite_u*` and `tx_outer_void_pet_psa_u*` import fixtures may reach `tx_region.max_z`; import/setup still treats that height as passive geometry metadata, not as a TOML/schema/import-role change.
+- Tests preserve a fail-fast regression that any fixture declaring `tx_outer_single_coil` is unsupported.
 - Tx terminal bridge members are allowed as non-model scene members (`tx_pos_bridge_pcb`, `tx_pos_bridge_copper`, `tx_neg_bridge_pcb`, `tx_neg_bridge_copper`) and must stay in non-modeled buckets.
 
 ## Invariants / fail-fast
 - Missing RX imported bodies and generic imported names fail.
 - RxOnly import tests must not require TX modeled bodies.
-- `tx_outer_single_coil` without `outer_tilt_metadata` must fail strict X-overrun check.
-- `tx_outer_single_coil` malformed or negative `outer_tilt_metadata` must fail parsing/validation with no fallback.
 - Tx bridge member IDs must be claimed by `type2_non_model_scene` partitioning and cannot appear in modeled body assignments.
-- `tx_outer_single_coil` fixtures with inner-only ferrite-family expected members must fail before import grouping can treat those passive bodies as outer-coil ownership; outer-specific void-stack and bottom-underlay passive members are allowed.
 - Tx positive and negative bridge member IDs must be claimed by `type2_non_model_scene` partitioning and cannot appear in modeled body assignments.
 - Void-stack ferrite/PET_PSA prefixes must resolve to passive material families without becoming copper/mesh/port ownership.
-- Outer void-stack and bottom-underlay ferrite/PET_PSA prefixes must resolve to passive material families without becoming copper/mesh/port ownership.
-- Outer void-stack bodies reaching the TX region top must not create active EM ports, sources, reports, boundaries, or mesh targets.
 - TX inner sampled X placement tests must still fail when bounds escape `tx_inner_region`.
 - TX inner actual-region validation must fail when the actual/design region is not centered in `tx_inner_region` Y or when provenance no longer matches the modeled source/physical bounds contract.
 

@@ -1,7 +1,7 @@
 ---
 title: type2_non_model_scene.py
 created: 2026-04-28 @ 00:00
-updated: 2026-05-04 @ 00:00
+updated: 2026-05-06 @ 00:00
 tags:
   - step-export
   - type2
@@ -21,6 +21,7 @@ tags:
 - Resolve `tx_inner_actual_region` as the non-modeled coil design outer box derived from the concrete `tx_inner_single_coil` fit-envelope placement, including selected `x_position_ratio`.
 - Resolve `tx_outer_region` as a slanted non-modeled guide prism from semantic `tx_region` and `tx_inner_region` top `+X/+Z` edges.
 - Resolve `tx_outer_actual_region` as an axis-aligned non-modeled coil design outer box derived from the concrete `tx_outer_single_coil` final prism-local placement and seed.
+- During 0.2.24 TX outer removal, avoid importing the removed active `ModeledTxOuterSingleCoilSpec`; dormant outer actual-region code identifies transitional outer specs by role string only.
 - Expose a fail-fast accessor for creation-time `tx_outer_region` provenance so modeled placement can consume semantic coordinates directly.
 - Provide a pure tilt-frame math helper from provenance semantic top-edge points without rebuilding or warping geometry.
 

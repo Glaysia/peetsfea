@@ -1117,6 +1117,10 @@ def validate_modeled_bounds_against_owner(
     context: str,
 ) -> None:
     role = require_non_empty_str(require_key(modeled_entry, key="role", context=context), context=f"{context}.role")
+    if role == "tx_outer_single_coil":
+        raise ValueError(
+            f"{context}.role tx_outer_single_coil is inactive and unsupported in active Type2 import bounds validation"
+        )
     owner_id = require_non_empty_str(
         require_key(modeled_entry, key="placement_owner_id", context=context),
         context=f"{context}.placement_owner_id",
@@ -1372,6 +1376,11 @@ def style_imported_modeled_objects(
     imported_object_names: list[str],
     context: str,
 ) -> list[str]:
+    role = require_non_empty_str(require_key(modeled_entry, key="role", context=context), context=f"{context}.role")
+    if role == "tx_outer_single_coil":
+        raise ValueError(
+            f"{context}.role tx_outer_single_coil is inactive and unsupported in active Type2 import styling"
+        )
     resolved_body_names = resolve_modeled_body_names(
         modeled_entry=modeled_entry,
         imported_object_names=imported_object_names,

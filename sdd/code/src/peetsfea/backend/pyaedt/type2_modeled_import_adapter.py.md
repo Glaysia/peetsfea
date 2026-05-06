@@ -1,7 +1,7 @@
 ---
 title: type2_modeled_import_adapter.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-03 @ 23:40
+updated: 2026-05-06 @ 00:00
 tags:
   - import
   - pyaedt
@@ -17,7 +17,7 @@ tags:
 
 ## 역할
 - Export ledger modeled metadata를 import/setup-ready friendly structure로 변환한다.
-- `tx_outer_single_coil` modeled entries are accepted as geometry-only single-coil import metadata.
+- `tx_outer_single_coil` modeled entries are rejected by the active import adapter.
 - 0.2.24 SDD 기준 RX metadata and RxOnly setup are active.
 
 ## 입력 / 출력
@@ -27,14 +27,12 @@ tags:
 ## Canonical state
 - RX terminal metadata is required for RxOnly port assignment.
 - TX terminal metadata names are dormant future two-terminal context only.
-- `tx_outer_single_coil` preserves its explicit role/object/terminal metadata without enabling a TX outer port/source/report contract.
-- `tx_outer_single_coil` may carry `canonical_coordinates.outer_tilt_metadata.max_world_x_protrusion_mm` and `max_world_z_underhang_mm` to describe rigid-tilt +X protrusion and -Z underhang; parsing validates both keys are present and non-negative when supplied.
+- `tx_inner_single_coil` and `rx_single_coil` preserve explicit role/object/terminal metadata for active import/setup paths.
 
 ## Invariants / fail-fast
 - Missing RX terminal metadata fails immediately.
 - RxOnly adapter output must not require TX modeled metadata.
-- Unsupported modeled roles fail before imported ledger construction; the supported role literal list includes `tx_outer_single_coil`.
-- tx_outer canonical tilt metadata is validated as canonical scalar metadata, not silently dropped; unsupported shapes/negative values fail fast at parse time.
+- Unsupported modeled roles, including `tx_outer_single_coil`, fail before imported ledger construction.
 
 ## Graph links
 - Primary owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)

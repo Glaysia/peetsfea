@@ -995,7 +995,7 @@ def test_setup_type2_step_ledger_builds_mesh_boundary_ports_analysis_and_validat
     assert imported_payload["aedt_path"] == str(output_aedt_path)
 
 
-def test_setup_type2_step_ledger_keeps_tx_outer_single_coil_geometry_only_in_txrx_mode(tmp_path: Path) -> None:
+def test_setup_type2_step_ledger_rejects_tx_outer_single_coil_in_txrx_mode(tmp_path: Path) -> None:
     passive_names = (
         "tx_outer_void_ferrite_u0",
         "tx_outer_void_pet_psa_u0",
@@ -1032,42 +1032,16 @@ def test_setup_type2_step_ledger_keeps_tx_outer_single_coil_geometry_only_in_txr
         )
     )
 
-    result = cast(
-        Type2SetupReadyResult,
+    with pytest.raises(ValueError, match=r"tx_outer_single_coil is inactive and unsupported"):
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=output_aedt_path,
             imported_ledger_path=imported_ledger_path,
             design_name="fake_type2_setup_ready",
             hfss_factory=lambda _: cast(HfssSession, session),
-        ),
-    )
-
-    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload(tx_object_name="tx_inner_copper_l0")]
-    assert session._excitation_names == ["1_T1", "2_T1"]
-    assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
-    assert result["sources"]["tx_source_name"] == "1_T1"
-    assert result["sources"]["rx_source_name"] == "2_T1"
-    assert result["mesh"]["objects"] == ["tx_inner_copper_l0", "rx_copper_l0"]
-    setup_participant_payload = json.dumps(
-        {
-            "mesh_calls": session.mesh_module.assign_length_op_calls,
-            "port_calls": session.oboundary.assign_lumped_port_calls,
-            "source_calls": session.edited_sources_payloads,
-            "output_variables": session.created_output_variables,
-            "reports": session.created_reports,
-        }
-    )
-    for passive_name in passive_names:
-        assert passive_name not in result["mesh"]["objects"]
-        assert passive_name not in setup_participant_payload
-    imported_payload = _imported_ledger_payload(imported_ledger_path)
-    imported_modeled_objects = cast(list[dict[str, object]], imported_payload["modeled_objects"])
-    assert sorted(cast(str, entry["role"]) for entry in imported_modeled_objects) == [
-        "rx_single_coil",
-        "tx_inner_single_coil",
-        "tx_outer_single_coil",
-    ]
+        )
+    assert session.modeler.import_calls == []
+    assert not imported_ledger_path.exists()
 
 
 def test_setup_type2_step_ledger_keeps_tx_bridge_members_as_non_model_setup_targets(tmp_path: Path) -> None:

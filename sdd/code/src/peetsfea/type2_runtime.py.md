@@ -1,7 +1,7 @@
 ---
 title: type2_runtime.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-03 @ 21:30
+updated: 2026-05-06 @ 00:00
 tags:
   - runtime
 ---
@@ -26,13 +26,13 @@ tags:
 ## Canonical state
 - RxOnly build path does not require TX modeled geometry.
 - `tx_region` may flow as non-modeled guide context only.
-- Setup-ready role validation accepts the active RX modeled role set, the active RX plus geometry-only `tx_inner_single_coil` set, and the TxRx setup-ready set with one geometry-only `tx_outer_single_coil`.
+- Setup-ready role validation accepts the active RX modeled role set and the active RX plus `tx_inner_single_coil` set.
 - Build prep must not pass TX modeled sampled design variables to the backend.
 - EM solve mode uses the same prepared build and setup-ready runner, then exports the active RX output report.
 - A manifest entry's `step_ledger_path` is canonical for build input; if it exists, validate and reuse it, and if it is missing, regenerate it from the sampled TOML.
 
 ## Invariants / fail-fast
-- Unsupported role sets fail before backend execution; accepted `tx_outer_single_coil` entries are geometry-only and must not become mesh, port, source, or report participants in this runtime gate.
+- Unsupported role sets fail before backend execution; `tx_outer_single_coil` is rejected by the active runtime gate.
 - Runtime failures are fail-fast unless the caller explicitly requests skip-recording for validation/infeasible sample attempts.
 - EM solve failures raise and do not downgrade to setup-ready success.
 - Invalid existing STEP ledger or missing scene STEP raises instead of overwriting silently.

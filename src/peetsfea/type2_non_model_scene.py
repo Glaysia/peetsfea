@@ -23,9 +23,9 @@ from peetsfea.type2_step_ledger import TxActualRegionBounds
 from peetsfea.type2_step_ledger import TxActualRegionProvenance
 from peetsfea.type2_step_ledger import TxInnerRegionReferenceLineProvenance
 from peetsfea.type2_step_ledger import TxOuterRegionPrismProvenance
+from peetsfea.type2_step_spec import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledObjectSpec
 from peetsfea.type2_step_spec import ModeledTxInnerSingleCoilSpec
-from peetsfea.type2_step_spec import ModeledTxOuterSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import NonModelDerivedSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
@@ -593,7 +593,7 @@ def resolve_non_model_scene_specs(
             tx_outer_single_coil_specs = tuple(
                 modeled_spec
                 for modeled_spec in modeled_specs
-                if isinstance(modeled_spec, ModeledTxOuterSingleCoilSpec)
+                if modeled_spec.role == "tx_outer_single_coil"
             )
             if len(tx_outer_single_coil_specs) > 1:
                 raise RuntimeError(
@@ -794,7 +794,7 @@ def _resolved_tx_inner_actual_region_spec_from_tx_inner_region(
 def _resolved_tx_outer_actual_region_spec_from_tx_outer_region(
     *,
     tx_outer_region_spec: NonModelBoxSpec,
-    tx_outer_single_coil_spec: ModeledTxOuterSingleCoilSpec,
+    tx_outer_single_coil_spec: ModeledSingleCoilSpec,
     seed: int,
 ) -> NonModelBoxSpec:
     if tx_outer_region_spec.object_id != _TX_OUTER_REGION_OBJECT_ID:

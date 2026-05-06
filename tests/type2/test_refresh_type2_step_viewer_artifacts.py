@@ -105,17 +105,14 @@ def test_view_step_notebook_uses_toml_owner_descriptions() -> None:
     assert "type2_range_owner_descriptions(sampled_toml_path)" in notebook_text
 
 
-def test_view_step_notebook_maps_canonical_owner_to_raw_toml_source() -> None:
+def test_view_step_notebook_has_no_tx_outer_raw_owner_mapping() -> None:
     notebook_path = Path(__file__).resolve().parents[2] / "notebooks" / "view_step_files.ipynb"
     notebook_text = notebook_path.read_text(encoding="utf-8")
 
-    canonical_owner_path = "modeled_objects.tx_outer_rect_void_coil.x_position_ratio"
-    raw_owner_path = "modeled_objects.tx_inner_rect_void_coil.tx_outer_x_position_ratio"
-
-    assert canonical_owner_path in notebook_text
-    assert raw_owner_path in notebook_text
-    assert "CANONICAL_OWNER_RAW_SOURCE_PATHS" in notebook_text
-    assert "source_path = _selected_owner_source_path(owner_path)" in notebook_text
+    assert "modeled_objects.tx_outer_rect_void_coil." not in notebook_text
+    assert "modeled_objects.tx_inner_rect_void_coil.tx_outer_x_position_ratio" not in notebook_text
+    assert "CANONICAL_OWNER_RAW_SOURCE_PATHS" not in notebook_text
+    assert "source_path = owner_path" in notebook_text
     assert "_selected_owner_table(payload, source_path)" in notebook_text
     assert "owner_path} = {_selected_owner_value(payload, owner_path)}  # {description}" in notebook_text
     assert "description = owner_descriptions[owner_path]" in notebook_text

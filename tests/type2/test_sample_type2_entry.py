@@ -29,7 +29,6 @@ _EXPECTED_SAMPLED_OWNER_PATHS = [
     "non_model_objects.tx_region.tx_reference_line.y_usage_ratio",
     "non_model_objects.tx_region.tx_reference_line.z_ratio",
     "modeled_objects.tx_inner_rect_void_coil.x_position_ratio",
-    "modeled_objects.tx_outer_rect_void_coil.x_position_ratio",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
@@ -40,11 +39,6 @@ _RX_NON_SAMPLED_OWNER_PATHS = [
     "modeled_objects.rx_rect_void_coil.layer_count",
     "modeled_objects.rx_rect_void_coil.underlay_repeat_count",
 ]
-_TX_OUTER_PASSIVE_STACK_OWNER_PATHS = [
-    "modeled_objects.tx_outer_rect_void_coil.underlay_repeat_count",
-    "modeled_objects.tx_outer_rect_void_coil.underlay_pet_psa_thickness_mm",
-    "modeled_objects.tx_outer_rect_void_coil.underlay_ferrite_thickness_mm",
-]
 
 
 @dataclass(frozen=True)
@@ -52,19 +46,6 @@ class _FakeRxOnlyType2Spec:
     non_model_objects: tuple[NonModelTxRegionSpec, ...]
     non_model_derived_objects: tuple[NonModelDerivedSpec, ...]
     modeled_objects: tuple[ModeledTxInnerSingleCoilSpec | ModeledRxSingleCoilSpec, ...]
-
-
-@dataclass(frozen=True)
-class _FakeOuterTxSingleCoilSpec:
-    object_id: str
-    role: str
-
-
-@dataclass(frozen=True)
-class _FakeTxOuterCompanionType2Spec:
-    non_model_objects: tuple[NonModelTxRegionSpec, ...]
-    non_model_derived_objects: tuple[NonModelDerivedSpec, ...]
-    modeled_objects: tuple[ModeledTxInnerSingleCoilSpec | _FakeOuterTxSingleCoilSpec, ...]
 
 
 def _range_spec(is_integer: bool, start: float, end: float, count: int) -> RangeSpec:
@@ -98,20 +79,15 @@ def _tx_inner_single_coil_spec() -> ModeledTxInnerSingleCoilSpec:
         metal_fill_factor=fixed_float,
         terminal_path="B_cw_to_b",
         x_position_ratio=_range_spec(False, 0.0, 0.3, 9),
-        tx_outer_x_position_ratio=_range_spec(False, 0.0, 0.8, 36),
     )
 
 
-def test_exportable_sampled_owner_paths_maps_tx_outer_x_position_ratio_from_inner_source() -> None:
-    spec = _FakeTxOuterCompanionType2Spec(
+def test_exportable_sampled_owner_paths_exclude_tx_outer_derived_owners() -> None:
+    spec = _FakeRxOnlyType2Spec(
         non_model_objects=(),
         non_model_derived_objects=(),
         modeled_objects=(
             _tx_inner_single_coil_spec(),
-            _FakeOuterTxSingleCoilSpec(
-                object_id="tx_outer_rect_void_coil",
-                role="tx_outer_single_coil",
-            ),
         ),
     )
 
@@ -121,13 +97,7 @@ def test_exportable_sampled_owner_paths_maps_tx_outer_x_position_ratio_from_inne
     assert "modeled_objects.tx_inner_rect_void_coil.outer_y_usage_ratio" in owner_paths
     assert "modeled_objects.tx_inner_rect_void_coil.turn_count" in owner_paths
     assert "modeled_objects.tx_inner_rect_void_coil.x_position_ratio" in owner_paths
-    assert "modeled_objects.tx_outer_rect_void_coil.x_position_ratio" in owner_paths
-    assert all(
-        not owner_path.startswith("modeled_objects.tx_outer_rect_void_coil.")
-        or owner_path == "modeled_objects.tx_outer_rect_void_coil.x_position_ratio"
-        for owner_path in owner_paths
-    )
-    assert all(owner_path not in owner_paths for owner_path in _TX_OUTER_PASSIVE_STACK_OWNER_PATHS)
+    assert all(not owner_path.startswith("modeled_objects.tx_outer_rect_void_coil.") for owner_path in owner_paths)
 
 
 def _patch_rx_only_spec_loader(
@@ -197,7 +167,6 @@ def _patch_rx_only_spec_loader(
                 metal_fill_factor=RangeSpec(is_integer=False, start=0.5, end=0.5, count=1),
                 terminal_path="B_cw_to_b",
                 x_position_ratio=RangeSpec(is_integer=False, start=0.0, end=0.3, count=9),
-                tx_outer_x_position_ratio=RangeSpec(is_integer=False, start=0.0, end=0.8, count=36),
             ),
             ModeledRxSingleCoilSpec(
                 object_id="rx_rect_void_coil",
@@ -348,8 +317,6 @@ size_xyz = [10.0, 200.0, 200.0]
     range = [false, 0.6, 0.6, 1]
     [modeled_objects.x_position_ratio]
     range = [false, 0.0, 0.3, 9]
-    [modeled_objects.tx_outer_x_position_ratio]
-    range = [false, 0.0, 0.8, 36]
     [modeled_objects.turn_count]
     range = [true, 2, 2, 1]
     [modeled_objects.layer_count]
@@ -368,8 +335,6 @@ size_xyz = [10.0, 200.0, 200.0]
     range = [false, 0.2, 0.2, 1]
     [modeled_objects.terminal_path]
     value = "B_cw_to_b"
-    [modeled_objects.tx_outer_terminal_path]
-    value = "A_cw_to_a"
 
 [[modeled_objects]]
     object_id = "rx_rect_void_coil"
@@ -708,7 +673,10 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert sampled_metadata["retry_number"] == 0
     assert sampled_metadata["sampled_owner_paths"] == _EXPECTED_SAMPLED_OWNER_PATHS
     assert all(path not in sampled_metadata["sampled_owner_paths"] for path in _RX_NON_SAMPLED_OWNER_PATHS)
-    assert all(path not in sampled_metadata["sampled_owner_paths"] for path in _TX_OUTER_PASSIVE_STACK_OWNER_PATHS)
+    assert all(
+        not path.startswith("modeled_objects.tx_outer_rect_void_coil.")
+        for path in sampled_metadata["sampled_owner_paths"]
+    )
     assert "design_id" not in sampled_metadata
 
     non_model_objects = cast(list[dict[str, object]], sampled_payload["non_model_objects"])
@@ -743,12 +711,8 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert tx_inner_x_position_range[3] == 1
     assert tx_inner_x_position_range[1] == tx_inner_x_position_range[2]
     assert 0.0 <= float(cast(int | float, tx_inner_x_position_range[1])) <= 0.3
-    tx_outer_x_position = cast(dict[str, object], tx_inner_modeled_object["tx_outer_x_position_ratio"])
-    tx_outer_x_position_range = cast(list[object], tx_outer_x_position["range"])
-    assert tx_outer_x_position_range[0] is False
-    assert tx_outer_x_position_range[3] == 1
-    assert tx_outer_x_position_range[1] == tx_outer_x_position_range[2]
-    assert 0.0 <= float(cast(int | float, tx_outer_x_position_range[1])) <= 0.8
+    assert "tx_outer_x_position_ratio" not in tx_inner_modeled_object
+    assert "tx_outer_terminal_path" not in tx_inner_modeled_object
 
     rx_modeled_object = modeled_objects_by_id["rx_rect_void_coil"]
     assert rx_modeled_object["object_id"] == "rx_rect_void_coil"

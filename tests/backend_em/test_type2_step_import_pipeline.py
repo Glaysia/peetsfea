@@ -1365,7 +1365,7 @@ def test_style_imported_modeled_objects_materializes_tx_inner_single_coil_void_s
     assert modeler.cover_lines_calls == ["tx_inner_port_sheet"]
 
 
-def test_resolve_imported_body_groups_accepts_tx_outer_single_coil_with_outer_void_stack_group_contract() -> None:
+def test_resolve_imported_body_groups_rejects_tx_outer_single_coil_with_outer_void_stack_group_contract() -> None:
     modeled_entry = _modeled_entry(
         object_id="tx_outer_rect_void_coil",
         role="tx_outer_single_coil",
@@ -1400,43 +1400,19 @@ def test_resolve_imported_body_groups_accepts_tx_outer_single_coil_with_outer_vo
         "tx_outer_underlay_ferrite_u0",
     ]
 
-    groups = resolve_imported_body_groups(
-        modeled_entry=modeled_entry,
-        imported_object_names=imported_object_names,
-        context="modeled_objects[0]",
-    )
-    resolved_names = resolve_modeled_body_names(
-        modeled_entry=modeled_entry,
-        imported_object_names=imported_object_names,
-        context="modeled_objects[0]",
-    )
-
-    assert groups == [
-        {
-            "group_name": _TX_OUTER_FERRITE_GROUP_NAME,
-            "member_object_names": [
-                "tx_outer_void_ferrite_u0",
-                "tx_outer_void_pet_psa_u0",
-                "tx_outer_underlay_pet_psa_u0",
-                "tx_outer_underlay_ferrite_u0",
-            ],
-        },
-    ]
-    assert resolved_names["underlay_ferrite_names"] == [
-        "tx_outer_void_ferrite_u0",
-        "tx_outer_underlay_ferrite_u0",
-    ]
-    assert resolved_names["underlay_pet_psa_names"] == [
-        "tx_outer_void_pet_psa_u0",
-        "tx_outer_underlay_pet_psa_u0",
-    ]
+    with pytest.raises(ValueError, match=r"tx_outer_single_coil is inactive and unsupported"):
+        resolve_imported_body_groups(
+            modeled_entry=modeled_entry,
+            imported_object_names=imported_object_names,
+            context="modeled_objects[0]",
+        )
 
 
 @pytest.mark.parametrize(
     ("leaked_names", "expected_match"),
     [
-        (("tx_void_ferrite_u0", "tx_void_pet_psa_u0"), r"geometry-only tx_outer_single_coil"),
-        (("tx_underlay_ferrite_u0", "tx_underlay_pet_psa_u0"), r"geometry-only tx_outer_single_coil"),
+        (("tx_void_ferrite_u0", "tx_void_pet_psa_u0"), r"tx_outer_single_coil is inactive and unsupported"),
+        (("tx_underlay_ferrite_u0", "tx_underlay_pet_psa_u0"), r"tx_outer_single_coil is inactive and unsupported"),
     ],
 )
 def test_resolve_imported_body_groups_rejects_tx_outer_single_coil_with_inner_only_passive_member_leakage(
@@ -1468,7 +1444,7 @@ def test_resolve_imported_body_groups_rejects_tx_outer_single_coil_with_inner_on
         )
 
 
-def test_style_imported_modeled_objects_materializes_tx_outer_single_coil_void_stack_passively(tmp_path: Path) -> None:
+def test_style_imported_modeled_objects_rejects_tx_outer_single_coil_void_stack(tmp_path: Path) -> None:
     modeled_entry = _modeled_entry(
         object_id="tx_outer_rect_void_coil",
         role="tx_outer_single_coil",
@@ -1507,23 +1483,22 @@ def test_style_imported_modeled_objects_materializes_tx_outer_single_coil_void_s
     for name in imported_object_names:
         modeler.objects[name] = _FakeObject(name)
 
-    styled_names = style_imported_modeled_objects(
-        modeler=cast(ModelerSession, modeler),
-        modeled_entry=modeled_entry,
-        imported_object_names=imported_object_names,
-        context="modeled_objects[0]",
-    )
-
-    assert styled_names == imported_object_names
-    assert modeler.objects["tx_outer_void_ferrite_u0"].material_name == "MULL12060ferrite"
-    assert modeler.objects["tx_outer_void_pet_psa_u0"].material_name == "PET_PSA"
-    assert modeler.objects["tx_outer_underlay_ferrite_u0"].material_name == "MULL12060ferrite"
-    assert modeler.objects["tx_outer_underlay_pet_psa_u0"].material_name == "PET_PSA"
+    with pytest.raises(ValueError, match=r"tx_outer_single_coil is inactive and unsupported"):
+        style_imported_modeled_objects(
+            modeler=cast(ModelerSession, modeler),
+            modeled_entry=modeled_entry,
+            imported_object_names=imported_object_names,
+            context="modeled_objects[0]",
+        )
+    assert modeler.objects["tx_outer_void_ferrite_u0"].material_name == "vacuum"
+    assert modeler.objects["tx_outer_void_pet_psa_u0"].material_name == "vacuum"
+    assert modeler.objects["tx_outer_underlay_ferrite_u0"].material_name == "vacuum"
+    assert modeler.objects["tx_outer_underlay_pet_psa_u0"].material_name == "vacuum"
     assert modeler.create_polyline_calls == []
     assert modeler.cover_lines_calls == []
 
 
-def test_import_type2_step_ledger_keeps_tx_outer_void_stack_passive_at_tx_region_top(tmp_path: Path) -> None:
+def test_import_type2_step_ledger_rejects_tx_outer_void_stack_at_tx_region_top(tmp_path: Path) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
     expected_names = [
         "tx_outer_pcb_l0",
@@ -1565,25 +1540,21 @@ def test_import_type2_step_ledger_keeps_tx_outer_void_stack_passive_at_tx_region
     )
     session.materials.delayed_lookup_material_names.add("PET_PSA")
 
-    result = import_type2_step_ledger(
-        step_ledger_path=ledger_path,
-        output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
-        imported_ledger_path=imported_ledger_path,
-        design_name="fake_type2_import",
-        hfss_factory=lambda _: cast(HfssSession, session),
-    )
+    with pytest.raises(ValueError, match=r"tx_outer_single_coil is inactive and unsupported"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=imported_ledger_path,
+            design_name="fake_type2_import",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
 
-    assert session.modeler.objects["tx_outer_void_ferrite_u0"].material_name == "MULL12060ferrite"
-    assert session.modeler.objects["tx_outer_void_pet_psa_u0"].material_name == "PET_PSA"
     assert session.modeler.create_polyline_calls == []
     assert session.modeler.cover_lines_calls == []
     assert session.mesh_module.assign_length_op_calls == []
     assert session.design.get_module_calls == []
     assert session.radiation_boundary_calls == []
-    assert "mesh" not in result
-    assert "boundary" not in result
-    modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
-    assert modeled_by_id["tx_outer_rect_void_coil"]["imported_object_names"] == expected_names
+    assert not imported_ledger_path.exists()
 
 
 def _plate_stack_modeled_entry(
@@ -2789,7 +2760,7 @@ def test_import_type2_step_ledger_fails_when_modeled_tx_is_not_top_aligned_to_tx
         )
 
 
-def test_import_type2_step_ledger_accepts_tx_outer_single_coil_outer_x_protrusion_with_outer_tilt_metadata(
+def test_import_type2_step_ledger_rejects_tx_outer_single_coil_outer_x_protrusion_with_outer_tilt_metadata(
     tmp_path: Path,
 ) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
@@ -2820,18 +2791,14 @@ def test_import_type2_step_ledger_accepts_tx_outer_single_coil_outer_x_protrusio
         )
     )
 
-    result = import_type2_step_ledger(
-        step_ledger_path=ledger_path,
-        output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
-        imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
-        design_name="fake_type2_import",
-        hfss_factory=lambda _: cast(HfssSession, session),
-    )
-
-    modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
-    modeled_entry = cast(dict[str, object], modeled_by_id["tx_outer_rect_void_coil"])
-    assert modeled_entry["placement_owner_id"] == "tx_outer_region"
-    assert modeled_entry["role"] == "tx_outer_single_coil"
+    with pytest.raises(ValueError, match=r"tx_outer_single_coil is inactive and unsupported"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            design_name="fake_type2_import",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
 
 
 def test_import_type2_step_ledger_rejects_tx_outer_single_coil_outer_x_protrusion_without_tilt_metadata(
@@ -2863,7 +2830,7 @@ def test_import_type2_step_ledger_rejects_tx_outer_single_coil_outer_x_protrusio
         )
     )
 
-    with pytest.raises(ValueError, match=r"tx_outer_single_coil outer bounds must fit inside tx_outer_region"):
+    with pytest.raises(ValueError, match=r"tx_outer_single_coil is inactive and unsupported"):
         import_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
@@ -2906,7 +2873,7 @@ def test_import_type2_step_ledger_rejects_tx_outer_single_coil_invalid_outer_til
         )
     )
 
-    with pytest.raises(ValueError, match=r"must be >= 0"):
+    with pytest.raises(ValueError, match=r"tx_outer_single_coil is inactive and unsupported"):
         import_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",

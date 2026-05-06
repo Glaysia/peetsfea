@@ -40,7 +40,6 @@ from peetsfea.type2_step_ledger import CanonicalCoordinates
 from peetsfea.type2_step_ledger import ModeledObjectSceneData
 from peetsfea.type2_step_spec import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxInnerSingleCoilSpec
-from peetsfea.type2_step_spec import ModeledTxOuterSingleCoilSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
@@ -1263,19 +1262,23 @@ def _build_tx_outer_single_coil_scene_data(
         owner_spec=owner_spec,
         seed=seed,
     )
-    if not isinstance(spec, ModeledTxOuterSingleCoilSpec):
-        raise RuntimeError(f"type2 tx outer void stack requires tx outer spec (object_id={spec.object_id})")
     fit_envelope = placement.fit_envelope
     centerline = build_tx_rect_void_centerline(fit_envelope.realized)
     base_scene_children = placement.scene_children
     underlay_repeat_count = _resolve_modeled_single_coil_underlay_repeat_count(spec, profile=profile, seed=seed)
     if underlay_repeat_count > 0:
+        assert hasattr(spec, "underlay_pet_psa_thickness_mm")
+        raw_underlay_pet_psa_thickness_mm = object.__getattribute__(spec, "underlay_pet_psa_thickness_mm")
+        assert isinstance(raw_underlay_pet_psa_thickness_mm, RangeSpec)
+        assert hasattr(spec, "underlay_ferrite_thickness_mm")
+        raw_underlay_ferrite_thickness_mm = object.__getattribute__(spec, "underlay_ferrite_thickness_mm")
+        assert isinstance(raw_underlay_ferrite_thickness_mm, RangeSpec)
         pet_psa_thickness_mm = _resolve_fixed_positive_range_mm(
-            spec.underlay_pet_psa_thickness_mm,
+            raw_underlay_pet_psa_thickness_mm,
             context="tx_outer_single_coil.underlay_pet_psa_thickness_mm",
         )
         ferrite_thickness_mm = _resolve_fixed_positive_range_mm(
-            spec.underlay_ferrite_thickness_mm,
+            raw_underlay_ferrite_thickness_mm,
             context="tx_outer_single_coil.underlay_ferrite_thickness_mm",
         )
         void_bounds = fit_envelope.realized.void_bounds

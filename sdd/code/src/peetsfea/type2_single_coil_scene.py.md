@@ -1,7 +1,7 @@
 ---
 title: type2_single_coil_scene.py
 created: 2026-04-20 @ 00:00
-updated: 2026-05-04 @ 12:49
+updated: 2026-05-06 @ 00:00
 tags:
   - rx
   - scene
@@ -15,7 +15,7 @@ tags:
 - Status: active
 
 ## 역할
-- RX single-coil and geometry-only TX inner/outer single-coil scene assembly helper다.
+- RX single-coil and geometry-only TX inner single-coil scene assembly helper다; dormant TX outer helper code remains outside active export.
 - Expose shared owner-scaled sizing/placement helper data needed by non-model actual-region resolution, including the resolved design outer box separately from physical modeled body bounds.
 
 ## Invariants / fail-fast
@@ -23,7 +23,7 @@ tags:
 - Invalid TX inner scene dimensions fail immediately.
 - TX inner scene assembly computes mm outer ranges from the resolved `tx_inner_region` owner before building the rect-void geometry.
 - TX inner scene placement selects `spec.x_position_ratio` with the run seed and places the selected design outer footprint center within `tx_inner_region`; ratio `0.0` makes design outer min touch owner min and ratio `1.0` makes design outer max touch owner max.
-- TX outer scene assembly computes mm outer ranges from the resolved `tx_outer_region` owner and uses the same inner-owned sampled geometry/topology values, with separate `tx_outer_single_coil` profile identity and terminal metadata.
+- Dormant TX outer scene assembly code does not import the removed active `ModeledTxOuterSingleCoilSpec` type; active export filtering prevents it from running for current Type2 generation.
 - TX outer scene assembly uses a rigid tilted frame derived from `tx_outer_region_prism`: local +X follows the semantic inner-to-outer top edge, local +Y follows world +Y, and local +Z is the rotated stack normal.
 - TX outer scene placement is prism-local: `x_position_ratio` is applied to the selected design outer footprint center inside the virtual sloped owner before tilt, and the virtual local owner is transformed directly into the `tx_outer_region_prism` frame with no post-rotation world-X AABB centering.
 - TX inner and TX outer ratio placement must use their placement owner regions, not `actual_region`; actual regions are derived from the resolved design outer bounds after placement.

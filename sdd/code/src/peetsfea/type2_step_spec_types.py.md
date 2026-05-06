@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec_types.py
 created: 2026-04-20 @ 00:00
-updated: 2026-05-03 @ 21:08
+updated: 2026-05-06 @ 00:00
 tags:
   - spec
   - types
@@ -29,8 +29,8 @@ tags:
 - `tx_inner_single_coil` is the first geometry-only TX modeled role after the reset. It is explicit inner-coil state, not a reactivation of generic `tx_single_coil`.
 - `tx_inner_single_coil` owns fixed backing stack fields for actual-region underlay repeat count, PET/PSA thickness, and ferrite thickness.
 - Active type2 schema id remains `peetsfea.type2.step.v8`; this change extends the modeled-object selector surface without changing the top-level schema id.
-- `tx_outer_single_coil` is the explicit outer TX companion role. It is derived from the inner TX modeled spec for sampling/topology/passive-stack purposes, but owns its own object id `tx_outer_rect_void_coil`, placement owner `tx_outer_region`, and terminal-path metadata.
-- `ModeledSingleCoilCommonSpec.x_position_ratio` owns the local X placement ratio for modeled single-coil specs. The inner TX public source field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio`; `ModeledTxInnerSingleCoilSpec.tx_outer_x_position_ratio` retains the derived companion source selector and sampling exposes it as canonical owner `modeled_objects.tx_outer_rect_void_coil.x_position_ratio`.
+- `ModeledSingleCoilCommonSpec.x_position_ratio` owns the local X placement ratio for modeled single-coil specs. The inner TX public source field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio`.
+- Active spec/runtime unions no longer include a TX outer companion dataclass or `tx_outer_rect_void_coil` sampled owner.
 - Legacy/generic TX role constants remain unsupported for active EM setup unless a later two-terminal/parallel-wiring plan enables them.
 
 ## Invariants / fail-fast
@@ -38,9 +38,6 @@ tags:
 - Unsupported active role drift must fail in parser/preflight.
 - TX reference-line state is never nullable; absent or invalid ratio state must fail in the parser.
 - `tx_inner_single_coil` owns concrete role/object/profile identity and must not be represented as nullable or fake `tx_single_coil` state.
-- `tx_outer_single_coil` must be represented as concrete role/object/profile identity and must not be implemented through hardcoded coordinates or nullable companion state.
-- `ModeledTxOuterSingleCoilSpec` must retain `derived_from_object_id="tx_inner_rect_void_coil"` so companion ownership remains explicit.
-- `ModeledTxOuterSingleCoilSpec` may carry inner-derived underlay repeat/PET/ferrite ranges only to drive the passive outer void stack. It must not expose those values as new outer sampled owners.
 - X position ratio candidates must be unitless floats in the inclusive range `0.0 <= value <= 1.0`.
 
 ## Collaborators

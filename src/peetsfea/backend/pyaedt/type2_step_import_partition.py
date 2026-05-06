@@ -640,6 +640,10 @@ def resolve_modeled_body_names(
     context: str,
 ) -> ModeledBodyNames:
     role = require_non_empty_str(require_key(modeled_entry, key="role", context=context), context=f"{context}.role")
+    if role == "tx_outer_single_coil":
+        raise ValueError(
+            f"{context}.role tx_outer_single_coil is inactive and unsupported in active Type2 import"
+        )
     expected_names = expected_exported_body_names(modeled_entry, context=context)
     expected_roles = [_body_role_from_expected_name(name, context=context) for name in expected_names]
     if role in _SINGLE_COIL_ROLES:
@@ -785,6 +789,11 @@ def resolve_imported_body_groups(
     imported_object_names: list[str],
     context: str,
 ) -> list[ImportedBodyGroupEntry]:
+    role = require_non_empty_str(require_key(modeled_entry, key="role", context=context), context=f"{context}.role")
+    if role == "tx_outer_single_coil":
+        raise ValueError(
+            f"{context}.role tx_outer_single_coil is inactive and unsupported in active Type2 import"
+        )
     expected_names = expected_exported_body_names(modeled_entry, context=context)
     expected_groups = expected_exported_body_groups(modeled_entry, context=context)
     missing_names = [name for name in expected_names if name not in imported_object_names]

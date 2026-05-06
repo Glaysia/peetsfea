@@ -37,7 +37,6 @@ from peetsfea.type2_step_spec import ModeledRxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
 from peetsfea.type2_step_spec import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec import ModeledTxInnerSingleCoilSpec
-from peetsfea.type2_step_spec import ModeledTxOuterSingleCoilSpec
 from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
@@ -127,6 +126,25 @@ def _raise_if_modeled_tx_role_present(
     raise ValueError(
         f"{context} does not support modeled TX geometry in active Type2 RxOnly export. "
         f"Remove TX modeled objects or use a future two-terminal export path. object_roles={tx_modeled_entries}"
+    )
+
+
+def _active_step_export_modeled_specs(
+    *,
+    spec: Type2StepSpec,
+) -> tuple[
+    ModeledRxPlateStackSpec
+    | ModeledRxSingleCoilSpec
+    | ModeledTxInnerSingleCoilSpec
+    | ModeledTxPlateStackSpec
+    | ModeledTxRectVoidColumnsSpec
+    | ModeledTxSingleCoilSpec,
+    ...,
+]:
+    return tuple(
+        modeled_spec
+        for modeled_spec in spec.modeled_objects
+        if modeled_spec.role != "tx_outer_single_coil"
     )
 
 
@@ -1591,12 +1609,10 @@ def _build_tx_rect_void_columns_scene_data(
 
 def _ferrite_group_name_for_modeled_role(
     *,
-    role: Literal["tx_single_coil", "tx_inner_single_coil", "tx_outer_single_coil", "rx_single_coil"],
+    role: Literal["tx_single_coil", "tx_inner_single_coil", "rx_single_coil"],
 ) -> str:
     if role in ("tx_single_coil", "tx_inner_single_coil"):
         return _TX_FERRITE_GROUP_NAME
-    if role == "tx_outer_single_coil":
-        return _TX_OUTER_FERRITE_GROUP_NAME
     if role == "rx_single_coil":
         return _RX_FERRITE_GROUP_NAME
     raise RuntimeError(f"unsupported ferrite grouping role: {role}")
@@ -1683,40 +1699,6 @@ def _require_modeled_expected_body_contract(
                 if len(tx_inner_underlay_names) + len(tx_inner_void_names) > 0
                 else []
             )
-        elif role == "tx_outer_single_coil":
-            if not isinstance(modeled_spec, ModeledTxOuterSingleCoilSpec):
-                raise ValueError(
-                    f"type2 modeled object spec registry must retain ModeledTxOuterSingleCoilSpec for {object_id} "
-                    f"(actual={type(modeled_spec).__name__})"
-                )
-            pcb_layer_positions = cast(
-                tuple[float, ...],
-                modeled_entry["canonical_coordinates"]["pcb_layer_z_positions_mm"],
-            )
-            expected_names = [f"tx_outer_pcb_l{index}" for index in range(len(pcb_layer_positions))]
-            if len(pcb_layer_positions) == 1:
-                expected_names.append("tx_outer_copper_l0")
-            else:
-                expected_names.append("tx_outer_copper_stack")
-            tx_outer_void_names = _tx_outer_void_expected_body_names_from_exported(
-                expected_body_names=expected_body_names
-            )
-            tx_outer_underlay_names = _tx_outer_underlay_expected_body_names_from_exported(
-                expected_body_names=expected_body_names
-            )
-            expected_names.extend(tx_outer_void_names)
-            expected_names.extend(tx_outer_underlay_names)
-            tx_outer_passive_names = tx_outer_void_names + tx_outer_underlay_names
-            expected_groups = (
-                [
-                    {
-                        "group_name": _ferrite_group_name_for_modeled_role(role=role),
-                        "member_body_names": tuple(tx_outer_passive_names),
-                    }
-                ]
-                if len(tx_outer_passive_names) > 0
-                else []
-            )
         elif role == "rx_single_coil":
             if not isinstance(modeled_spec, ModeledRxSingleCoilSpec):
                 raise ValueError(
@@ -1789,11 +1771,18 @@ def _require_modeled_expected_body_contract(
 def _require_port_sheet_geometry_contract(
     *,
     ledger: Type2StepLedger,
-    toml_path: Path,
+    modeled_specs: tuple[
+        ModeledRxPlateStackSpec
+        | ModeledRxSingleCoilSpec
+        | ModeledTxInnerSingleCoilSpec
+        | ModeledTxPlateStackSpec
+        | ModeledTxRectVoidColumnsSpec
+        | ModeledTxSingleCoilSpec,
+        ...,
+    ],
     modeled_scene_data_by_object_id: dict[str, ModeledObjectSceneData],
 ) -> None:
-    spec = load_type2_step_spec(toml_path)
-    for modeled_spec in spec.modeled_objects:
+    for modeled_spec in modeled_specs:
         modeled_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == modeled_spec.object_id)
         terminal_metadata = cast(dict[str, object], modeled_entry["terminal_metadata"])
         if isinstance(modeled_spec, (ModeledTxPlateStackSpec, ModeledRxPlateStackSpec)):
@@ -1991,6 +1980,7 @@ def export_type2_step_artifacts(
         spec=spec,
         context="type2 STEP export",
     )
+    active_modeled_specs = _active_step_export_modeled_specs(spec=spec)
     em_policy: Type2ImportEmPolicy = {
         "radiation_margin_mm": spec.simulation.radiation_margin_mm,
     }
@@ -2004,7 +1994,7 @@ def export_type2_step_artifacts(
         base_specs=spec.non_model_objects,
         derived_specs=spec.non_model_derived_objects,
         seed=seed,
-        modeled_specs=spec.modeled_objects,
+        modeled_specs=active_modeled_specs,
     )
     tx_region_spec = require_non_model_object_spec(resolved_non_model_specs, object_id="tx_region")
     tx_region_max_z = tx_region_spec.origin_xyz[2] + tx_region_spec.size_xyz[2]
@@ -2012,7 +2002,7 @@ def export_type2_step_artifacts(
     modeled_scene_data: list[ModeledObjectSceneData] = []
     modeled_scene_shapes: list[Shape] = []
     modeled_entries = []
-    for modeled_spec in spec.modeled_objects:
+    for modeled_spec in active_modeled_specs:
         owner_spec = require_non_model_object_spec(
             resolved_non_model_specs,
             object_id=placement_owner_id_for_role(modeled_spec.role),
@@ -2121,7 +2111,7 @@ def export_type2_step_artifacts(
     _require_modeled_expected_body_contract(ledger, spec=spec, seed=seed)
     _require_port_sheet_geometry_contract(
         ledger=ledger,
-        toml_path=toml_path,
+        modeled_specs=active_modeled_specs,
         modeled_scene_data_by_object_id=modeled_scene_data_by_object_id,
     )
     return ledger

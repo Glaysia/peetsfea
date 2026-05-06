@@ -13,7 +13,6 @@ from peetsfea.type2_step_spec_constraints import Type2ConstraintValueRef
 from peetsfea.type2_step_spec_constraints import _parse_constraints
 from peetsfea.type2_step_spec_constraints import _validate_constraints_for_spec
 from peetsfea.type2_step_spec_modeled import parse_modeled_object
-from peetsfea.type2_step_spec_modeled import append_tx_outer_single_coil_companion_specs
 from peetsfea.type2_step_spec_modeled import modeled_object_id_for_role
 from peetsfea.type2_step_spec_modeled import modeled_plane_for_role
 from peetsfea.type2_step_spec_modeled import placement_owner_id_for_role
@@ -54,7 +53,6 @@ from peetsfea.type2_step_spec_types import ModeledSingleCoilRole
 from peetsfea.type2_step_spec_types import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledTxPlateStackSpec
 from peetsfea.type2_step_spec_types import ModeledTxInnerSingleCoilSpec
-from peetsfea.type2_step_spec_types import ModeledTxOuterSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledTxRectVoidColumnsSpec
 from peetsfea.type2_step_spec_types import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec_types import Type2StepSpec
@@ -133,7 +131,7 @@ def load_type2_step_spec(toml_path: Path) -> Type2StepSpec:
         outputs=type2_step_spec_for_constraints.outputs,
         non_model_objects=type2_step_spec_for_constraints.non_model_objects,
         non_model_derived_objects=type2_step_spec_for_constraints.non_model_derived_objects,
-        modeled_objects=append_tx_outer_single_coil_companion_specs(raw_modeled_objects, parsed_modeled_objects),
+        modeled_objects=parsed_modeled_objects,
         constraints=type2_step_spec_for_constraints.constraints,
     )
     return type2_step_spec
@@ -150,7 +148,6 @@ __all__ = [
     "ModeledSingleCoilCommonSpec",
     "ModeledSingleCoilSpec",
     "ModeledTxPlateStackSpec",
-    "ModeledTxOuterSingleCoilSpec",
     "ModeledTxSingleCoilSpec",
     "ModeledTxRectVoidColumnsSpec",
     "Type2ConstraintComparisonOperator",

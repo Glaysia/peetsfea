@@ -24,15 +24,9 @@ class _Type2BuildRunnerResult(TypedDict):
 _Runner = Callable[..., _Type2BuildRunnerResult]
 _RX_ONLY_MODELED_ROLES: tuple[str] = ("rx_single_coil",)
 _RX_WITH_TX_INNER_GEOMETRY_MODELED_ROLES: tuple[str, ...] = ("rx_single_coil", "tx_inner_single_coil")
-_RX_WITH_TX_INNER_OUTER_GEOMETRY_MODELED_ROLES: tuple[str, ...] = (
-    "rx_single_coil",
-    "tx_inner_single_coil",
-    "tx_outer_single_coil",
-)
 _SUPPORTED_MODELED_ROLE_SETS: tuple[tuple[str, ...], ...] = (
     _RX_ONLY_MODELED_ROLES,
     _RX_WITH_TX_INNER_GEOMETRY_MODELED_ROLES,
-    _RX_WITH_TX_INNER_OUTER_GEOMETRY_MODELED_ROLES,
 )
 
 

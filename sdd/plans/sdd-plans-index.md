@@ -31,6 +31,7 @@ tags:
 - [0.2.24-type2-range-owner-descriptions](0.2.24-type2-range-owner-descriptions.md)
 - [0.2.24-type2-tx-inner-terminal-stub-length](0.2.24-type2-tx-inner-terminal-stub-length.md)
 - [0.2.24-type2-tx-x-usage-ratio-floor](0.2.24-type2-tx-x-usage-ratio-floor.md)
+- [0.2.24-type2-tx-outer-removal](0.2.24-type2-tx-outer-removal.md)
 - [0.2.24-type2-tx-outer-void-stack-tx-region-extension](0.2.24-type2-tx-outer-void-stack-tx-region-extension.md)
 - [0.2.24-type2-step-export-scene-data-reuse](0.2.24-type2-step-export-scene-data-reuse.md)
 

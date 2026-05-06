@@ -126,6 +126,12 @@ _OBSOLETE_GENERIC_TX_ACTIVE_RXONLY_TEST_NAME_PARTS = (
     "export_type2_step_artifacts_translates_terminal_metadata_with_tx_region_offset",
     "export_type2_step_artifacts_places_tx_plate_stack",
     "uses_global_centered_y_window_for_plate_stack[tx_plate_stack",
+    "export_type2_fixed_example_exports_tx_positive_bridge",
+    "export_type2_step_artifacts_tx_positive_bridge_follows",
+    "export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_ledger",
+    "export_type2_step_artifacts_resizes_tx_inner_actual_region_without_resizing_guide",
+    "export_type2_step_artifacts_moves_tx_outer_model",
+    "export_type2_step_artifacts_derives_tx_outer_region_from_moved_tx_region",
 )
 
 
@@ -331,14 +337,6 @@ range = {underlay_ferrite_thickness_range}
     else:
         outer_x_usage_ratio_range = _range(False, 50.0 / 160.0, 50.0 / 160.0, 1)
         outer_y_usage_ratio_range = _range(False, 60.0 / 280.0, 60.0 / 280.0, 1)
-    tx_outer_x_position_ratio_section = ""
-    if modeled_role == "tx_inner_single_coil":
-        tx_outer_x_position_ratio_section = f"""
-[modeled_objects.tx_outer_terminal_path]
-value = "A_cw_to_a"
-[modeled_objects.tx_outer_x_position_ratio]
-range = {_range(False, 0.0, 0.0, 1)}
-""".rstrip()
     return f"""
 spec_version = "0.2.22"
 schema_id = "peetsfea.type2.step.v8"
@@ -441,7 +439,6 @@ range = {outer_x_usage_ratio_range}
 range = {outer_y_usage_ratio_range}
 [modeled_objects.x_position_ratio]
 range = {_range(False, 0.0, 0.0, 1)}
-{tx_outer_x_position_ratio_section}
 [modeled_objects.turn_count]
 range = {_range(True, 2.0, 2.0, 1)}
 [modeled_objects.layer_count]
@@ -2191,7 +2188,7 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert spec.outputs["mode"] == "TxRx"
     assert tuple(variable["name"] for variable in spec.outputs["variables"]) == _TXRX_OUTPUT_NAMES
     assert len(spec.non_model_objects) == 6
-    assert len(spec.modeled_objects) == 3
+    assert len(spec.modeled_objects) == 2
     tx_inner_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_inner_rect_void_coil")
     assert tx_inner_entry.role == "tx_inner_single_coil"
     assert tx_inner_entry.pcb_thickness_mm == pytest.approx(0.3)
@@ -2208,16 +2205,8 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert tx_inner_entry.underlay_repeat_count.count == 1
     assert tx_inner_entry.underlay_pet_psa_thickness_mm == RangeSpec(False, 0.5, 0.5, 1)
     assert tx_inner_entry.underlay_ferrite_thickness_mm == RangeSpec(False, 0.5, 0.5, 1)
-    tx_outer_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_outer_rect_void_coil")
-    assert tx_outer_entry.role == "tx_outer_single_coil"
-    assert tx_outer_entry.derived_from_object_id == "tx_inner_rect_void_coil"
-    assert tx_outer_entry.terminal_path == "A_cw_to_a"
-    assert tx_outer_entry.outer_x_usage_ratio == tx_inner_entry.outer_x_usage_ratio
-    assert tx_outer_entry.outer_y_usage_ratio == tx_inner_entry.outer_y_usage_ratio
-    assert tx_outer_entry.x_position_ratio.start == pytest.approx(0.0)
-    assert tx_outer_entry.x_position_ratio.end == pytest.approx(0.0)
-    assert tx_outer_entry.x_position_ratio.count == 1
-    assert tx_outer_entry.layer_count == tx_inner_entry.layer_count
+    assert all(entry.object_id != "tx_outer_rect_void_coil" for entry in spec.modeled_objects)
+    assert all(entry.role != "tx_outer_single_coil" for entry in spec.modeled_objects)
     rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
     assert rx_entry.object_id == "rx_rect_void_coil"
     assert rx_entry.role == "rx_single_coil"
@@ -2243,7 +2232,7 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     source_toml = repo_root / "examples" / "type2_fixed.toml"
     spec = load_type2_step_spec(source_toml)
 
-    assert len(spec.modeled_objects) == 3
+    assert len(spec.modeled_objects) == 2
     tx_inner_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_inner_rect_void_coil")
     assert tx_inner_entry.object_id == "tx_inner_rect_void_coil"
     assert tx_inner_entry.role == "tx_inner_single_coil"
@@ -2261,19 +2250,8 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     assert tx_inner_profile.plane == "XY"
     assert tx_inner_profile.object_id == "tx_inner_rect_void_coil"
     assert tx_inner_profile.placement_owner_id == "tx_inner_region"
-    tx_outer_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_outer_rect_void_coil")
-    assert tx_outer_entry.object_id == "tx_outer_rect_void_coil"
-    assert tx_outer_entry.role == "tx_outer_single_coil"
-    assert tx_outer_entry.layer_count == tx_inner_entry.layer_count
-    assert tx_outer_entry.underlay_repeat_count == tx_inner_entry.underlay_repeat_count
-    assert tx_outer_entry.underlay_pet_psa_thickness_mm == tx_inner_entry.underlay_pet_psa_thickness_mm
-    assert tx_outer_entry.underlay_ferrite_thickness_mm == tx_inner_entry.underlay_ferrite_thickness_mm
-    assert tx_outer_entry.terminal_path == "A_cw_to_a"
-    assert tx_outer_entry.derived_from_object_id == "tx_inner_rect_void_coil"
-    tx_outer_profile = profile_for_modeled_role(cast(Literal["tx_outer_single_coil"], tx_outer_entry.role))
-    assert tx_outer_profile.plane == "XY"
-    assert tx_outer_profile.object_id == "tx_outer_rect_void_coil"
-    assert tx_outer_profile.placement_owner_id == "tx_outer_region"
+    assert all(entry.object_id != "tx_outer_rect_void_coil" for entry in spec.modeled_objects)
+    assert all(entry.role != "tx_outer_single_coil" for entry in spec.modeled_objects)
     rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
     assert rx_entry.object_id == "rx_rect_void_coil"
     assert rx_entry.role == "rx_single_coil"
@@ -2305,7 +2283,7 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     source_toml = repo_root / "examples" / "type2_sweep.toml"
     spec = load_type2_step_spec(source_toml)
 
-    assert len(spec.modeled_objects) == 3
+    assert len(spec.modeled_objects) == 2
     assert len(spec.non_model_objects) >= 2
     tx_inner_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_inner_rect_void_coil")
     assert tx_inner_entry.role == "tx_inner_single_coil"
@@ -2318,12 +2296,8 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     assert tx_inner_entry.underlay_pet_psa_thickness_mm == RangeSpec(False, 0.5, 0.5, 1)
     assert tx_inner_entry.underlay_ferrite_thickness_mm == RangeSpec(False, 0.5, 0.5, 1)
     assert tx_inner_entry.outer_x_usage_ratio == RangeSpec(False, 0.4, 0.9, 15)
-    tx_outer_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_outer_rect_void_coil")
-    assert tx_outer_entry.role == "tx_outer_single_coil"
-    assert tx_outer_entry.layer_count == tx_inner_entry.layer_count
-    assert tx_outer_entry.outer_x_usage_ratio == tx_inner_entry.outer_x_usage_ratio
-    assert tx_outer_entry.terminal_path == "A_cw_to_a"
-    assert tx_outer_entry.derived_from_object_id == "tx_inner_rect_void_coil"
+    assert all(entry.object_id != "tx_outer_rect_void_coil" for entry in spec.modeled_objects)
+    assert all(entry.role != "tx_outer_single_coil" for entry in spec.modeled_objects)
     rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
     assert rx_entry.object_id == "rx_rect_void_coil"
     assert rx_entry.role == "rx_single_coil"
@@ -3230,7 +3204,6 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
         "tx_inner_region",
         "tx_inner_actual_region",
         "tx_outer_region",
-        "tx_outer_actual_region",
         "rx_region_max",
     )
     assert set(member_object_ids) >= set(required_guide_member_ids)
@@ -3245,14 +3218,10 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
         member for member in member_objects if cast(str, member["role"]) == "tx_region_actual_stack_space"
     ]
     assert tx_region_actual_stack_space_members == []
-    tx_outer_actual_member = next(member for member in member_objects if member["object_id"] == "tx_outer_actual_region")
-    assert tx_outer_actual_member["role"] == "tx_outer_actual_region"
-    assert tx_outer_actual_member["model_state"] is False
-    assert tx_outer_actual_member["non_model"] is True
+    assert all(member["object_id"] != "tx_outer_actual_region" for member in member_objects)
     assert tuple(entry["object_id"] for entry in ledger["modeled_objects"]) == (
         "tx_inner_rect_void_coil",
         "rx_rect_void_coil",
-        "tx_outer_rect_void_coil",
     )
     assert ledger["outputs"]["mode"] == "TxRx"
     assert "TX_TML" in json.dumps(ledger["outputs"], sort_keys=True)
@@ -3264,52 +3233,7 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
         void_stack_count=12,
     )
     assert tx_inner_entry["expected_exported_body_count"] == 23
-    tx_outer_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_outer_rect_void_coil")
-    assert tx_outer_entry["role"] == "tx_outer_single_coil"
-    assert tx_outer_entry["placement_owner_id"] == "tx_outer_region"
-    assert cast(dict[str, object], tx_outer_entry["terminal_metadata"])["path"] == "A_cw_to_a"
-    tx_outer_expected_body_names = cast(tuple[str, ...], tx_outer_entry["expected_exported_body_names"])
-    tx_outer_expected_base_names = _tx_outer_expected_base_body_names(layer_count=2)
-    assert tx_outer_expected_body_names[: len(tx_outer_expected_base_names)] == tx_outer_expected_base_names
-    tx_outer_expected_void_ferrite_names = tuple(
-        name for name in tx_outer_expected_body_names if name.startswith("tx_outer_void_ferrite_u")
-    )
-    tx_outer_expected_void_pet_psa_names = tuple(
-        name for name in tx_outer_expected_body_names if name.startswith("tx_outer_void_pet_psa_u")
-    )
-    tx_outer_expected_void_names = tuple(
-        name
-        for name in tx_outer_expected_body_names
-        if name.startswith("tx_outer_void_ferrite_u") or name.startswith("tx_outer_void_pet_psa_u")
-    )
-    tx_outer_expected_underlay_pet_psa_names = tuple(
-        name for name in tx_outer_expected_body_names if name.startswith("tx_outer_underlay_pet_psa_u")
-    )
-    tx_outer_expected_underlay_ferrite_names = tuple(
-        name for name in tx_outer_expected_body_names if name.startswith("tx_outer_underlay_ferrite_u")
-    )
-    tx_outer_expected_underlay_names = tuple(
-        name
-        for name in tx_outer_expected_body_names
-        if name.startswith("tx_outer_underlay_pet_psa_u") or name.startswith("tx_outer_underlay_ferrite_u")
-    )
-    assert tx_outer_expected_void_ferrite_names
-    assert tx_outer_expected_void_pet_psa_names
-    assert tx_outer_expected_underlay_pet_psa_names
-    assert tx_outer_expected_underlay_ferrite_names
-    assert "tx_outer_void_ferrite_u0" in tx_outer_expected_body_names
-    assert "tx_outer_void_pet_psa_u0" in tx_outer_expected_body_names
-    assert "tx_outer_underlay_pet_psa_u0" in tx_outer_expected_body_names
-    assert "tx_outer_underlay_ferrite_u0" in tx_outer_expected_body_names
-    assert tx_outer_entry["expected_exported_body_count"] == len(tx_outer_expected_body_names)
-    assert _normalized_body_groups(tx_outer_entry["expected_exported_body_groups"]) == _normalized_body_groups(
-        (
-            {
-                "group_name": _TX_OUTER_FERRITE_GROUP_NAME,
-                "member_body_names": tx_outer_expected_void_names + tx_outer_expected_underlay_names,
-            },
-        )
-    )
+    assert all(entry["object_id"] != "tx_outer_rect_void_coil" for entry in ledger["modeled_objects"])
     rx_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "rx_rect_void_coil")
     assert cast(dict[str, object], rx_entry["terminal_metadata"])["port_sheet_vertices_xyz"]
 
@@ -3318,13 +3242,13 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     assert "tx_inner_region" in scene_shapes_by_label
     assert "tx_inner_actual_region" in scene_shapes_by_label
     assert "tx_outer_region" in scene_shapes_by_label
-    assert "tx_outer_actual_region" in scene_shapes_by_label
+    assert "tx_outer_actual_region" not in scene_shapes_by_label
     assert "tx_region_actual" not in scene_shapes_by_label
     assert "tx_region_actual_stack_space" not in scene_shapes_by_label
-    assert all(name in scene_shapes_by_label for name in tx_outer_expected_void_ferrite_names)
-    assert all(name in scene_shapes_by_label for name in tx_outer_expected_void_pet_psa_names)
-    assert all(name in scene_shapes_by_label for name in tx_outer_expected_underlay_pet_psa_names)
-    assert all(name in scene_shapes_by_label for name in tx_outer_expected_underlay_ferrite_names)
+    assert all(
+        not name.startswith(("tx_outer_pcb_", "tx_outer_copper_", "tx_outer_void_", "tx_outer_underlay_"))
+        for name in scene_shapes_by_label
+    )
 
 
 def test_export_type2_step_artifacts_supports_tx_inner_single_coil_layer_count_eight_body_contract(tmp_path: Path) -> None:

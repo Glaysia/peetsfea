@@ -19,8 +19,6 @@ from peetsfea.type2_step_spec import load_type2_step_spec
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TYPE2_SWEEP_TOML = REPO_ROOT / "examples" / "type2_sweep.toml"
 TYPE2_FIXED_TOML = REPO_ROOT / "examples" / "type2_fixed.toml"
-TX_OUTER_DERIVED_OWNER_PATH = "modeled_objects.tx_outer_rect_void_coil.x_position_ratio"
-TX_OUTER_DERIVED_SOURCE_PATH = "modeled_objects.tx_inner_rect_void_coil.tx_outer_x_position_ratio"
 
 
 def _load_type2_spec_tools() -> ModuleType:
@@ -157,7 +155,7 @@ def test_type2_sampled_toml_from_values_renders_loadable_toml(tmp_path: Path) ->
     tools = _load_type2_spec_tools()
     source_spec = load_type2_step_spec(TYPE2_SWEEP_TOML)
     owner_values = _sampled_owner_value_mapping(source_spec, seed=0)
-    assert TX_OUTER_DERIVED_OWNER_PATH in owner_values
+    assert all(not owner_path.startswith("modeled_objects.tx_outer_rect_void_coil.") for owner_path in owner_values)
 
     sampled_toml_text = tools.type2_sampled_toml_from_values(
         source_toml_path=TYPE2_SWEEP_TOML,
@@ -172,23 +170,19 @@ def test_type2_sampled_toml_from_values_renders_loadable_toml(tmp_path: Path) ->
     sampled_toml_path.write_text(sampled_toml_text, encoding="utf-8")
     sampled_spec = load_type2_step_spec(sampled_toml_path)
     raw_sampled_spec, _ = load_toml_bytes(sampled_toml_path)
-    derived_source_field = _range_owner_field_from_path(
-        raw_sampled_spec,
-        owner_path=TX_OUTER_DERIVED_SOURCE_PATH,
-    )
     sampled_metadata = raw_sampled_spec["sampled"]
     assert isinstance(sampled_metadata, dict)
     sampled_owner_paths = sampled_metadata["sampled_owner_paths"]
     assert isinstance(sampled_owner_paths, list)
+    assert all(isinstance(owner_path, str) for owner_path in sampled_owner_paths)
+    sampled_owner_path_strings = cast(list[str], sampled_owner_paths)
 
     assert len(sampled_spec.modeled_objects) == len(source_spec.modeled_objects)
-    assert TX_OUTER_DERIVED_OWNER_PATH in sampled_owner_paths
-    assert derived_source_field["range"] == [
-        False,
-        owner_values[TX_OUTER_DERIVED_OWNER_PATH],
-        owner_values[TX_OUTER_DERIVED_OWNER_PATH],
-        1,
-    ]
+    assert sampled_owner_path_strings == list(owner_values)
+    assert all(
+        not owner_path.startswith("modeled_objects.tx_outer_rect_void_coil.")
+        for owner_path in sampled_owner_path_strings
+    )
 
 
 @pytest.mark.parametrize(
@@ -234,19 +228,11 @@ def test_type2_range_owner_descriptions_for_fixed_official_example() -> None:
 
 
 @pytest.mark.parametrize("example_toml", (TYPE2_SWEEP_TOML, TYPE2_FIXED_TOML))
-def test_type2_range_owner_descriptions_include_tx_outer_derived_alias(example_toml: Path) -> None:
+def test_type2_range_owner_descriptions_exclude_tx_outer_derived_alias(example_toml: Path) -> None:
     tools = _load_type2_spec_tools()
     descriptions = cast(dict[str, str], tools.type2_range_owner_descriptions(example_toml))
-    raw_spec, _ = load_toml_bytes(example_toml)
-    derived_source_field = _range_owner_field_from_path(
-        raw_spec,
-        owner_path=TX_OUTER_DERIVED_SOURCE_PATH,
-    )
-    source_description = derived_source_field["description"]
-    assert isinstance(source_description, str)
 
-    assert TX_OUTER_DERIVED_OWNER_PATH in descriptions
-    assert descriptions[TX_OUTER_DERIVED_OWNER_PATH] == source_description
+    assert all(not owner_path.startswith("modeled_objects.tx_outer_rect_void_coil.") for owner_path in descriptions)
 
 
 def test_type2_range_owner_descriptions_accept_generated_sampled_toml_for_notebook_use(tmp_path: Path) -> None:
@@ -264,24 +250,20 @@ def test_type2_range_owner_descriptions_accept_generated_sampled_toml_for_notebo
     sampled_toml_path = tmp_path / "notebook_sampled.toml"
     sampled_toml_path.write_text(sampled_toml_text, encoding="utf-8")
     raw_sampled_spec, _ = load_toml_bytes(sampled_toml_path)
-    derived_source_field = _range_owner_field_from_path(
-        raw_sampled_spec,
-        owner_path=TX_OUTER_DERIVED_SOURCE_PATH,
-    )
-    source_description = derived_source_field["description"]
-    assert isinstance(source_description, str)
     sampled_metadata = raw_sampled_spec["sampled"]
     assert isinstance(sampled_metadata, dict)
     sampled_owner_paths = sampled_metadata["sampled_owner_paths"]
     assert isinstance(sampled_owner_paths, list)
-    selected_value = owner_values[TX_OUTER_DERIVED_OWNER_PATH]
+    assert all(isinstance(owner_path, str) for owner_path in sampled_owner_paths)
+    sampled_owner_path_strings = cast(list[str], sampled_owner_paths)
 
     descriptions = cast(dict[str, str], tools.type2_range_owner_descriptions(sampled_toml_path))
 
-    assert TX_OUTER_DERIVED_OWNER_PATH in sampled_owner_paths
-    assert derived_source_field["range"] == [False, selected_value, selected_value, 1]
-    assert TX_OUTER_DERIVED_OWNER_PATH in descriptions
-    assert descriptions[TX_OUTER_DERIVED_OWNER_PATH] == source_description
+    assert all(
+        not owner_path.startswith("modeled_objects.tx_outer_rect_void_coil.")
+        for owner_path in sampled_owner_path_strings
+    )
+    assert all(not owner_path.startswith("modeled_objects.tx_outer_rect_void_coil.") for owner_path in descriptions)
     assert tuple(descriptions) == _range_owner_paths(sampled_toml_path)
 
 

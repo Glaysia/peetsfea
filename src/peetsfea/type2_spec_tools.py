@@ -4,7 +4,7 @@ import copy
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Final, cast
+from typing import cast
 
 from peetsfea.spec.loader import TOMLTable, TOMLValue, load_toml_bytes
 from peetsfea.spec.toml_render import toml_dumps
@@ -19,13 +19,6 @@ from peetsfea.type2_step_spec import load_type2_step_spec
 
 SampledScalar = int | float
 _SAMPLED_METADATA_TABLE = "sampled"
-_RAW_TOML_OWNER_PATHS: Final[dict[str, str]] = {
-    "modeled_objects.tx_outer_rect_void_coil.x_position_ratio": (
-        "modeled_objects.tx_inner_rect_void_coil.tx_outer_x_position_ratio"
-    ),
-}
-
-
 def validate_type2_toml(path: Path) -> Type2StepSpec:
     return load_type2_step_spec(path)
 
@@ -223,8 +216,6 @@ def _owner_range_field_table(
 
 
 def _raw_toml_owner_path(owner_path: str) -> str:
-    if owner_path in _RAW_TOML_OWNER_PATHS:
-        return _RAW_TOML_OWNER_PATHS[owner_path]
     return owner_path
 
 

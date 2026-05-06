@@ -37,7 +37,6 @@ _EXPECTED_SAMPLED_OWNER_PATHS = (
     "non_model_objects.tx_region.tx_reference_line.y_usage_ratio",
     "non_model_objects.tx_region.tx_reference_line.z_ratio",
     "modeled_objects.tx_inner_rect_void_coil.x_position_ratio",
-    "modeled_objects.tx_outer_rect_void_coil.x_position_ratio",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
@@ -49,14 +48,6 @@ _RX_NON_SAMPLED_OWNER_PATHS = (
     "modeled_objects.rx_rect_void_coil.underlay_repeat_count",
 )
 _RX_NON_SAMPLED_VARIABLE_NAMES = tuple(owner_path.replace(".", "_") for owner_path in _RX_NON_SAMPLED_OWNER_PATHS)
-_TX_OUTER_PASSIVE_STACK_OWNER_PATHS = (
-    "modeled_objects.tx_outer_rect_void_coil.underlay_repeat_count",
-    "modeled_objects.tx_outer_rect_void_coil.underlay_pet_psa_thickness_mm",
-    "modeled_objects.tx_outer_rect_void_coil.underlay_ferrite_thickness_mm",
-)
-_TX_OUTER_PASSIVE_STACK_VARIABLE_NAMES = tuple(
-    owner_path.replace(".", "_") for owner_path in _TX_OUTER_PASSIVE_STACK_OWNER_PATHS
-)
 _EXPECTED_DESIGN_VARIABLE_NAMES = tuple(owner_path.replace(".", "_") for owner_path in _EXPECTED_SAMPLED_OWNER_PATHS)
 _BuildExporter = Callable[..., object]
 _BuildRunner = Callable[..., _Type2BuildRunnerResult]
@@ -96,21 +87,16 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
     tx_inner_x_position_range = cast(
         list[object], cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["x_position_ratio"])["range"]
     )
-    tx_outer_x_position_range = cast(
-        list[object],
-        cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["tx_outer_x_position_ratio"])["range"],
-    )
     return (
         (_EXPECTED_DESIGN_VARIABLE_NAMES[0], str(float(cast(int | float, tx_reference_line_x_range[1])))),
         (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, tx_reference_line_y_range[1])))),
         (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(float(cast(int | float, tx_reference_line_z_range[1])))),
         (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(float(cast(int | float, tx_inner_x_position_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, tx_outer_x_position_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, rx_outer_x_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(float(cast(int | float, rx_outer_y_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[7], str(float(cast(int | float, rx_void_ratio_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[8], str(int(cast(int | float, rx_turn_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[9], str(float(cast(int | float, rx_fill_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, rx_outer_x_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, rx_outer_y_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(float(cast(int | float, rx_void_ratio_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[7], str(int(cast(int | float, rx_turn_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[8], str(float(cast(int | float, rx_fill_range[1])))),
     )
 
 
@@ -183,7 +169,6 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 metal_fill_factor=RangeSpec(is_integer=False, start=0.5, end=0.5, count=1),
                 terminal_path="B_cw_to_b",
                 x_position_ratio=RangeSpec(is_integer=False, start=0.0, end=0.3, count=9),
-                tx_outer_x_position_ratio=RangeSpec(is_integer=False, start=0.0, end=0.8, count=36),
             ),
             ModeledRxSingleCoilSpec(
                 object_id="rx_rect_void_coil",
@@ -313,9 +298,6 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                     terminal_path="B_cw_to_b",
                     x_position_ratio=_range_from_modeled(
                         payload, object_id="tx_inner_rect_void_coil", field_name="x_position_ratio"
-                    ),
-                    tx_outer_x_position_ratio=_range_from_modeled(
-                        payload, object_id="tx_inner_rect_void_coil", field_name="tx_outer_x_position_ratio"
                     ),
                 ),
                 ModeledRxSingleCoilSpec(
@@ -486,8 +468,6 @@ size_xyz = [10.0, 200.0, 200.0]
     range = [false, 0.6, 0.6, 1]
     [modeled_objects.x_position_ratio]
     range = [false, 0.0, 0.3, 9]
-    [modeled_objects.tx_outer_x_position_ratio]
-    range = [false, 0.0, 0.8, 36]
     [modeled_objects.turn_count]
     range = [true, 2, 2, 1]
     [modeled_objects.layer_count]
@@ -510,8 +490,6 @@ size_xyz = [10.0, 200.0, 200.0]
     range = [false, 0.2, 0.2, 1]
     [modeled_objects.terminal_path]
     value = "B_cw_to_b"
-    [modeled_objects.tx_outer_terminal_path]
-    value = "A_cw_to_a"
 
 [[modeled_objects]]
     object_id = "rx_rect_void_coil"
@@ -717,8 +695,8 @@ def test_build_type2_reads_aedt_builder_n_from_manifest(
         assert design_variables == _expected_design_variables_for_sampled_toml(sampled_toml_paths[index])
         assert all(name not in tuple(name for name, _ in design_variables) for name in _RX_NON_SAMPLED_VARIABLE_NAMES)
         assert all(
-            name not in tuple(variable_name for variable_name, _ in design_variables)
-            for name in _TX_OUTER_PASSIVE_STACK_VARIABLE_NAMES
+            not name.startswith("modeled_objects_tx_outer_rect_void_coil_")
+            for name, _ in design_variables
         )
 
 
@@ -984,7 +962,7 @@ def test_build_type2_builds_plate_stack_manifest_with_setup_ready_runner(
     assert tuple(name for name, _ in design_variables) == _EXPECTED_DESIGN_VARIABLE_NAMES
     assert len(design_variables) == len(_EXPECTED_DESIGN_VARIABLE_NAMES)
     assert all(name not in tuple(name for name, _ in design_variables) for name in _RX_NON_SAMPLED_VARIABLE_NAMES)
-    assert all(name not in tuple(name for name, _ in design_variables) for name in _TX_OUTER_PASSIVE_STACK_VARIABLE_NAMES)
+    assert all(not name.startswith("modeled_objects_tx_outer_rect_void_coil_") for name, _ in design_variables)
     assert all(expression != "" for _, expression in design_variables)
     assert results[0]["aedt_path"] == str(cast(Path, setup_ready_calls[0]["output_aedt_path"]))
     assert results[0]["imported_ledger_path"] == str(cast(Path, setup_ready_calls[0]["imported_ledger_path"]))
@@ -1084,7 +1062,7 @@ def test_build_type2_accepts_plate_stack_manifest_when_forced_to_setup_ready_run
     assert tuple(name for name, _ in design_variables) == _EXPECTED_DESIGN_VARIABLE_NAMES
     assert len(design_variables) == len(_EXPECTED_DESIGN_VARIABLE_NAMES)
     assert all(name not in tuple(name for name, _ in design_variables) for name in _RX_NON_SAMPLED_VARIABLE_NAMES)
-    assert all(name not in tuple(name for name, _ in design_variables) for name in _TX_OUTER_PASSIVE_STACK_VARIABLE_NAMES)
+    assert all(not name.startswith("modeled_objects_tx_outer_rect_void_coil_") for name, _ in design_variables)
     assert all(expression != "" for _, expression in design_variables)
 
 
@@ -1332,13 +1310,11 @@ def test_build_prepared_type2_design_accepts_rx_with_tx_inner_and_outer_geometry
         sampled_owner_paths=(
             "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
             "modeled_objects.tx_inner_rect_void_coil.x_position_ratio",
-            "modeled_objects.tx_outer_rect_void_coil.x_position_ratio",
         ),
-        modeled_roles=("rx_single_coil", "tx_inner_single_coil", "tx_outer_single_coil"),
+        modeled_roles=("rx_single_coil", "tx_inner_single_coil"),
         design_variables=(
             ("rx_outer_x_usage_ratio", "0.5"),
             ("tx_inner_x_position_ratio", "0.1"),
-            ("tx_outer_x_position_ratio", "0.2"),
         ),
     )
 
@@ -1387,7 +1363,7 @@ def test_build_prepared_type2_design_rejects_tx_only_modeled_role_before_runner(
         aedt_path=output_aedt_path,
         sampled_owner_paths=("modeled_objects.tx_single_coil.outer_x_usage_ratio",),
         modeled_roles=("tx_single_coil",),
-        design_variables=(("tx_outer_x_usage_ratio", "0.5"), ("tx_outer_y_usage_ratio", "0.6")),
+        design_variables=(("tx_single_outer_x_usage_ratio", "0.5"), ("tx_single_outer_y_usage_ratio", "0.6")),
     )
 
     runner_calls: list[dict[str, object]] = []

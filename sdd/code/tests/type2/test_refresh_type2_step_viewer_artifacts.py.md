@@ -1,7 +1,7 @@
 ---
 title: test_refresh_type2_step_viewer_artifacts.py
 created: 2026-04-17 @ 09:09
-updated: 2026-05-03 @ 21:30
+updated: 2026-05-06 @ 00:00
 tags:
   - step-export
 ---
@@ -18,9 +18,7 @@ tags:
 - fixed example에서 TX inner and RX modeled objects, TX output variables, and `TX_TML` EM references가 유지되는지
   검증한다.
 - `notebooks/view_step_files.ipynb`가 notebook-local owner description dictionary 대신 TOML-backed description helper를 쓰는지 정적으로 검증한다.
-- `notebooks/view_step_files.ipynb`가 canonical sampled owner label
-  `modeled_objects.tx_outer_rect_void_coil.x_position_ratio`를 출력하면서 raw TOML source
-  `modeled_objects.tx_inner_rect_void_coil.tx_outer_x_position_ratio`에서 값을 읽는 explicit mapping을 보유하는지 정적으로 검증한다.
+- `notebooks/view_step_files.ipynb`가 removed TX outer canonical/raw owner mapping을 보유하지 않는지 정적으로 검증한다.
 - `VIEW_INDEX`가 successful-entry list index가 아니라 manifest `sample_index`로 해석되는지 정적으로 검증한다.
 
 ## 입력 / 출력
@@ -34,7 +32,7 @@ tags:
 ## Canonical state
 - active fixed example TOML payload가 canonical assertion surface다.
 - viewer notebook owner description text must come from TOML metadata through `type2_range_owner_descriptions`.
-- viewer notebook sampled-value extraction must keep canonical owner paths as printed labels and use explicit canonical-to-raw mapping only for raw TOML lookup.
+- viewer notebook sampled-value extraction must use active owner paths directly and must not retain TX outer canonical-to-raw lookup state.
 - viewer notebook sampled manifest selection must use `entry["sample_index"]` matching so skipped samples cannot shift the Ansys GUI debug target.
 
 ## Invariants / fail-fast
@@ -43,10 +41,10 @@ tags:
 - fixed example keeps `rx_region_max` and the RX modeled object as active EM geometry inputs.
 - fixed example has TxRx outputs with TX variables and output expressions referencing `TX_TML`.
 - viewer notebook must not contain `_OWNER_DESCRIPTIONS`; it must import and call `type2_range_owner_descriptions`.
-- viewer notebook must contain the canonical-to-raw owner mapping for
-  `modeled_objects.tx_outer_rect_void_coil.x_position_ratio` ->
-  `modeled_objects.tx_inner_rect_void_coil.tx_outer_x_position_ratio`, and must still print the canonical
-  `owner_path` together with TOML-backed descriptions.
+- viewer notebook must not contain the removed canonical-to-raw owner mapping for
+  `modeled_objects.tx_outer_rect_void_coil.x_position_ratio` or
+  `modeled_objects.tx_inner_rect_void_coil.tx_outer_x_position_ratio`.
+- viewer notebook sampled-value extraction must bind `source_path = owner_path` directly after removal of the raw-source alias helper.
 
 ## 직접 의존
 - [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)
@@ -63,5 +61,5 @@ tags:
 ## 변경 시 주의점
 - notebook refresh output layout must not be tested by editing notebooks in this worker scope.
 - example type2 TOML의 modeled object registry or output mode가 바뀌면 TX inner/RX EM assertions를 같이 갱신한다.
-- canonical-to-raw notebook checks are intentionally static because this worker does not own notebook edits or generated sampled TOML artifacts.
+- removed canonical-to-raw notebook checks are intentionally static because this worker does not own notebook edits or generated sampled TOML artifacts.
 - notebook sample-index selector checks are static and must not execute AEDT.
