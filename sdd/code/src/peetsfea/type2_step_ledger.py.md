@@ -19,9 +19,7 @@ tags:
 - 0.2.24 SDD 기준 RX modeled handoff와 non-modeled guide/context handoff만 active shape contract다.
 - `tx_inner_region` member provenance carries creation-time TX reference-line ratios, centered Y usage ratio, and resolved Y-parallel line endpoints.
 - `tx_inner_actual_region` member provenance uses `TxActualRegionProvenance` to carry the source guide id, modeled source id, selected usage ratios, resolved actual-region design outer-box bounds, and diagnostic physical modeled-body bounds.
-- `tx_outer_region` member provenance carries creation-time semantic prism vertices and resolved TX stack height.
-- `tx_outer_single_coil` modeled entries carry concrete outer TX body names, terminal metadata, and placement provenance when the derived outer modeled source is emitted.
-- `tx_outer_actual_region` member typing is populated only from a real `tx_outer_single_coil` modeled source and must not be populated from guide-only placeholders.
+- Active generated ledgers must not contain `tx_outer_region`, `tx_outer_single_coil`, or `tx_outer_actual_region`; legacy imported artifacts that contain those shapes are handled by backend fail-fast validation.
 
 ## 입력 / 출력
 - 입력: exported RX modeled entries, non-modeled guide/context entries, EM policy
@@ -32,8 +30,7 @@ tags:
 - `tx_region` may be present as non-modeled future guide context.
 - `tx_inner_region`, when present, records canonical coordinates plus `tx_reference_line` provenance instead of requiring downstream geometry inference.
 - `tx_inner_actual_region`, when present, records canonical coordinates plus actual-region provenance instead of requiring downstream geometry inference; the actual-region bounds are the canonical/design outer-box bounds.
-- `tx_outer_region`, when present, records canonical coordinates plus `tx_outer_region_prism` provenance instead of requiring downstream geometry inference.
-- `tx_outer_rect_void_coil`, when present, records modeled metadata using `tx_outer_single_coil` role identity while leaving sampled owner provenance under the inner TX coil.
+- `tx_outer_region`, `tx_outer_rect_void_coil`, and `tx_outer_actual_region` are not active generated ledger members.
 - `tx_region_actual` and TX modeled bodies are not required ledger entries for RxOnly.
 - Mesh/boundary/port/report runtime summaries are not ledger-owned.
 
@@ -42,8 +39,7 @@ tags:
 - RxOnly ledger must not require TX modeled bodies.
 - `tx_inner_region` provenance is mandatory when that member is emitted.
 - `tx_inner_actual_region` provenance is mandatory when that member is emitted.
-- `tx_outer_region` prism provenance is mandatory when that member is emitted.
-- `tx_outer_actual_region` must be absent until a concrete outer TX modeled source exists, and once present must cite that source.
+- Active generated ledgers must omit `tx_outer_region`, `tx_outer_actual_region`, and `tx_outer_rect_void_coil`.
 - Missing RX terminal metadata for RxOnly is a contract failure.
 
 ## Collaborators

@@ -128,7 +128,6 @@ _OBSOLETE_GENERIC_TX_ACTIVE_RXONLY_TEST_NAME_PARTS = (
     "uses_global_centered_y_window_for_plate_stack[tx_plate_stack",
     "export_type2_fixed_example_exports_tx_positive_bridge",
     "export_type2_step_artifacts_tx_positive_bridge_follows",
-    "export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_ledger",
     "export_type2_step_artifacts_resizes_tx_inner_actual_region_without_resizing_guide",
     "export_type2_step_artifacts_moves_tx_outer_model",
     "export_type2_step_artifacts_derives_tx_outer_region_from_moved_tx_region",
@@ -3203,7 +3202,6 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
         "tx_region",
         "tx_inner_region",
         "tx_inner_actual_region",
-        "tx_outer_region",
         "rx_region_max",
     )
     assert set(member_object_ids) >= set(required_guide_member_ids)
@@ -3241,7 +3239,7 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     assert "tx_region" in scene_shapes_by_label
     assert "tx_inner_region" in scene_shapes_by_label
     assert "tx_inner_actual_region" in scene_shapes_by_label
-    assert "tx_outer_region" in scene_shapes_by_label
+    assert "tx_outer_region" not in scene_shapes_by_label
     assert "tx_outer_actual_region" not in scene_shapes_by_label
     assert "tx_region_actual" not in scene_shapes_by_label
     assert "tx_region_actual_stack_space" not in scene_shapes_by_label
@@ -3303,22 +3301,24 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
         "tx_region",
         "tx_inner_region",
         "tx_inner_actual_region",
+        "rx_region_max",
+    }
+    forbidden_member_ids = {
         "tx_outer_region",
         "tx_outer_actual_region",
-        "rx_region_max",
         _TX_POSITIVE_BRIDGE_PCB_OBJECT_ID,
         _TX_POSITIVE_BRIDGE_COPPER_OBJECT_ID,
+        _TX_NEGATIVE_BRIDGE_PCB_OBJECT_ID,
+        _TX_NEGATIVE_BRIDGE_COPPER_OBJECT_ID,
     }
+    assert forbidden_member_ids.isdisjoint(member_object_ids)
     assert member_object_ids.index("tx_region") < member_object_ids.index("tx_inner_region")
     assert member_object_ids.index("tx_inner_region") < member_object_ids.index("tx_inner_actual_region")
-    assert member_object_ids.index("tx_inner_actual_region") < member_object_ids.index("tx_outer_region")
-    assert member_object_ids.index("tx_outer_region") < member_object_ids.index("tx_outer_actual_region")
+    assert member_object_ids.index("tx_inner_actual_region") < member_object_ids.index("rx_region_max")
     member_objects = cast(Sequence[dict[str, object]], non_model_entry["member_objects"])
     tx_region_member = next(member for member in member_objects if member["object_id"] == "tx_region")
     tx_inner_member = next(member for member in member_objects if member["object_id"] == "tx_inner_region")
     tx_inner_actual_member = next(member for member in member_objects if member["object_id"] == "tx_inner_actual_region")
-    tx_outer_member = next(member for member in member_objects if member["object_id"] == "tx_outer_region")
-    tx_outer_actual_member = next(member for member in member_objects if member["object_id"] == "tx_outer_actual_region")
     assert tx_inner_member["role"] == "tx_inner_region"
     assert tx_inner_member["model_state"] is False
     assert tx_inner_member["non_model"] is True
@@ -3327,14 +3327,6 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert tx_inner_actual_member["model_state"] is False
     assert tx_inner_actual_member["non_model"] is True
     assert tx_inner_actual_member["material"] == "vacuum"
-    assert tx_outer_member["role"] == "tx_outer_region"
-    assert tx_outer_member["model_state"] is False
-    assert tx_outer_member["non_model"] is True
-    assert tx_outer_member["material"] == "vacuum"
-    assert tx_outer_actual_member["role"] == "tx_outer_actual_region"
-    assert tx_outer_actual_member["model_state"] is False
-    assert tx_outer_actual_member["non_model"] is True
-    assert tx_outer_actual_member["material"] == "vacuum"
 
     canonical_coordinates = cast(dict[str, object], tx_inner_member["canonical_coordinates"])
     assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx((0.0, -140.0, 0.0))
@@ -3347,33 +3339,11 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert reference_line["z_ratio"] == pytest.approx(0.65)
     assert reference_line["line_start_xyz"] == pytest.approx((56.0, -140.0, 58.5))
     assert reference_line["line_end_xyz"] == pytest.approx((56.0, 140.0, 58.5))
-    tx_region_min_xyz, tx_region_size_xyz = _canonical_min_size(tx_region_member)
-    tx_outer_prism = cast(dict[str, object], tx_outer_member["tx_outer_region_prism"])
-    assert tx_outer_prism["source_region_id"] == "tx_region"
-    assert tx_outer_prism["inner_region_id"] == "tx_inner_region"
-    assert tx_outer_prism["stack_source_object_id"] == "tx_inner_rect_void_coil"
-    assert tx_outer_prism["pcb_thickness_mm"] == pytest.approx(0.3)
-    assert tx_outer_prism["layer_gap_mm"] == pytest.approx(2.0)
-    assert tx_outer_prism["layer_count"] == 2
-    _assert_tx_outer_region_prism_follows_semantic_edges(
-        tx_outer_prism=tx_outer_prism,
-        tx_region_min_xyz=tx_region_min_xyz,
-        tx_region_size_xyz=tx_region_size_xyz,
-        tx_inner_min_xyz=tx_inner_region_min_xyz,
-        tx_inner_size_xyz=tx_inner_region_size_xyz,
-    )
-    tx_outer_actual_region = cast(dict[str, object], tx_outer_actual_member["tx_actual_region"])
-    assert tx_outer_actual_region["source_guide_id"] == "tx_outer_region"
-    assert tx_outer_actual_region["modeled_source_id"] == "tx_outer_rect_void_coil"
-    assert tx_outer_actual_region["x_usage_ratio"] == pytest.approx(0.5)
-    assert tx_outer_actual_region["y_usage_ratio"] == pytest.approx(0.6)
     tx_inner_actual_region = cast(dict[str, object], tx_inner_actual_member["tx_actual_region"])
     assert tx_inner_actual_region["source_guide_id"] == "tx_inner_region"
     assert tx_inner_actual_region["modeled_source_id"] == "tx_inner_rect_void_coil"
     assert tx_inner_actual_region["x_usage_ratio"] == pytest.approx(0.5)
     assert tx_inner_actual_region["y_usage_ratio"] == pytest.approx(0.6)
-    tx_outer_actual_min_xyz, tx_outer_actual_max_xyz, tx_outer_actual_size_xyz = _canonical_bounds(tx_outer_actual_member)
-    tx_outer_region_min_xyz, tx_outer_region_max_xyz, tx_outer_region_size_xyz = _canonical_bounds(tx_outer_member)
     tx_inner_actual_region_bounds = cast(dict[str, object], tx_inner_actual_region["actual_region_bounds"])
     tx_inner_actual_region_min_xyz = cast(tuple[float, float, float], tx_inner_actual_region_bounds["min_xyz"])
     tx_inner_actual_region_max_xyz = cast(tuple[float, float, float], tx_inner_actual_region_bounds["max_xyz"])
@@ -3388,65 +3358,18 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     tx_inner_actual_physical_size_xyz = cast(
         tuple[float, float, float], tx_inner_actual_physical_bounds["size_xyz"]
     )
-    tx_outer_actual_region_bounds = cast(dict[str, object], tx_outer_actual_region["actual_region_bounds"])
-    tx_outer_actual_region_min_xyz = cast(tuple[float, float, float], tx_outer_actual_region_bounds["min_xyz"])
-    tx_outer_actual_region_max_xyz = cast(tuple[float, float, float], tx_outer_actual_region_bounds["max_xyz"])
-    tx_outer_actual_region_size_xyz = cast(tuple[float, float, float], tx_outer_actual_region_bounds["size_xyz"])
-    tx_outer_actual_guide_bounds = cast(dict[str, object], tx_outer_actual_region["guide_bounds"])
-    tx_outer_actual_guide_min_xyz = cast(tuple[float, float, float], tx_outer_actual_guide_bounds["min_xyz"])
-    tx_outer_actual_guide_max_xyz = cast(tuple[float, float, float], tx_outer_actual_guide_bounds["max_xyz"])
-    tx_outer_actual_guide_size_xyz = cast(tuple[float, float, float], tx_outer_actual_guide_bounds["size_xyz"])
-    tx_outer_actual_physical_bounds = cast(dict[str, object], tx_outer_actual_region["physical_modeled_body_bounds"])
-    tx_outer_actual_physical_min_xyz = cast(
-        tuple[float, float, float], tx_outer_actual_physical_bounds["min_xyz"]
-    )
-    tx_outer_actual_physical_max_xyz = cast(
-        tuple[float, float, float], tx_outer_actual_physical_bounds["max_xyz"]
-    )
-    tx_outer_actual_physical_size_xyz = cast(
-        tuple[float, float, float], tx_outer_actual_physical_bounds["size_xyz"]
-    )
-    assert tx_outer_actual_min_xyz == pytest.approx(tx_outer_actual_region_min_xyz)
-    assert tx_outer_actual_max_xyz == pytest.approx(tx_outer_actual_region_max_xyz)
-    assert tx_outer_actual_size_xyz == pytest.approx(tx_outer_actual_region_size_xyz)
-    assert tx_outer_actual_region_bounds != tx_outer_actual_guide_bounds
-    assert tx_outer_actual_min_xyz != pytest.approx(tx_outer_region_min_xyz)
-    assert tx_outer_actual_max_xyz != pytest.approx(tx_outer_region_max_xyz)
-    assert tx_outer_actual_size_xyz != pytest.approx(tx_outer_region_size_xyz)
-    assert tx_outer_actual_physical_min_xyz != pytest.approx(tx_outer_actual_guide_min_xyz)
-    assert tx_outer_actual_physical_max_xyz != pytest.approx(tx_outer_actual_guide_max_xyz)
-    assert tx_outer_actual_physical_size_xyz != pytest.approx(tx_outer_actual_guide_size_xyz)
 
     assert tuple(entry["object_id"] for entry in ledger["modeled_objects"]) == (
         "tx_inner_rect_void_coil",
         "rx_rect_void_coil",
-        "tx_outer_rect_void_coil",
     )
     tx_inner_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_inner_rect_void_coil")
     assert tx_inner_entry["role"] == "tx_inner_single_coil"
     assert tx_inner_entry["placement_owner_id"] == "tx_inner_region"
-    tx_outer_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_outer_rect_void_coil")
-    assert tx_outer_entry["role"] == "tx_outer_single_coil"
-    assert tx_outer_entry["placement_owner_id"] == "tx_outer_region"
-    assert cast(dict[str, object], tx_outer_entry["terminal_metadata"])["path"] == "A_cw_to_a"
     tx_inner_actual_bounds = _canonical_bounds(tx_inner_actual_member)
     tx_inner_model_bounds = _canonical_bounds(cast(dict[str, object], tx_inner_entry))
     tx_inner_actual_min_xyz, tx_inner_actual_max_xyz, tx_inner_actual_size_xyz = tx_inner_actual_bounds
     model_min_xyz, model_max_xyz, model_size_xyz = tx_inner_model_bounds
-    tx_outer_model_entry_canonical = cast(dict[str, object], tx_outer_entry["canonical_coordinates"])
-    tx_outer_model_entry_min_xyz = cast(tuple[float, float, float], tx_outer_model_entry_canonical["outer_bounds_min_xyz"])
-    tx_outer_model_entry_size_xyz = cast(tuple[float, float, float], tx_outer_model_entry_canonical["outer_bounds_size_xyz"])
-    tx_outer_model_entry_max_xyz = (
-        tx_outer_model_entry_min_xyz[0] + tx_outer_model_entry_size_xyz[0],
-        tx_outer_model_entry_min_xyz[1] + tx_outer_model_entry_size_xyz[1],
-        tx_outer_model_entry_min_xyz[2] + tx_outer_model_entry_size_xyz[2],
-    )
-    assert tx_outer_actual_physical_min_xyz == pytest.approx(tx_outer_model_entry_min_xyz)
-    assert tx_outer_actual_physical_max_xyz == pytest.approx(tx_outer_model_entry_max_xyz)
-    assert tx_outer_actual_physical_size_xyz == pytest.approx(tx_outer_model_entry_size_xyz)
-    assert tx_outer_actual_physical_min_xyz != pytest.approx(tx_outer_actual_region_min_xyz)
-    assert tx_outer_actual_physical_max_xyz != pytest.approx(tx_outer_actual_region_max_xyz)
-    assert tx_outer_actual_physical_size_xyz != pytest.approx(tx_outer_actual_region_size_xyz)
     assert tx_inner_actual_min_xyz == pytest.approx(tx_inner_actual_region_min_xyz)
     assert tx_inner_actual_max_xyz == pytest.approx(tx_inner_actual_region_max_xyz)
     assert tx_inner_actual_size_xyz == pytest.approx(tx_inner_actual_region_size_xyz)
@@ -3529,8 +3452,8 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert "tx_region" in scene_shapes_by_label
     assert "tx_inner_region" in scene_shapes_by_label
     assert "tx_inner_actual_region" in scene_shapes_by_label
-    assert "tx_outer_region" in scene_shapes_by_label
-    assert "tx_outer_actual_region" in scene_shapes_by_label
+    assert "tx_outer_region" not in scene_shapes_by_label
+    assert "tx_outer_actual_region" not in scene_shapes_by_label
     assert "tx_region_actual" not in scene_shapes_by_label
     assert "tx_region_actual_stack_space" not in scene_shapes_by_label
     expected_tx_inner_underlay_names = tuple(
@@ -3583,52 +3506,9 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
         ferrite_member_names=expected_tx_inner_underlay_names + expected_tx_inner_void_names,
         pcb_body_names=("tx_inner_pcb_l0", "tx_inner_pcb_l1"),
     )
-    tx_outer_expected_names = cast(tuple[str, ...], tx_outer_entry["expected_exported_body_names"])
-    assert all(not name.startswith("tx_underlay_") for name in tx_outer_expected_names)
-    assert all(not name.startswith("tx_void_") for name in tx_outer_expected_names)
-    tx_outer_expected_base_names = _tx_outer_expected_base_body_names(layer_count=2)
-    assert tx_outer_expected_names[: len(tx_outer_expected_base_names)] == tx_outer_expected_base_names
-    expected_tx_outer_void_ferrite_names = tuple(
-        name for name in tx_outer_expected_names if name.startswith("tx_outer_void_ferrite_u")
-    )
-    expected_tx_outer_void_pet_psa_names = tuple(
-        name for name in tx_outer_expected_names if name.startswith("tx_outer_void_pet_psa_u")
-    )
-    expected_tx_outer_void_names = tuple(
-        name
-        for name in tx_outer_expected_names
-        if name.startswith("tx_outer_void_ferrite_u") or name.startswith("tx_outer_void_pet_psa_u")
-    )
-    expected_tx_outer_underlay_pet_psa_names = tuple(
-        name for name in tx_outer_expected_names if name.startswith("tx_outer_underlay_pet_psa_u")
-    )
-    expected_tx_outer_underlay_ferrite_names = tuple(
-        name for name in tx_outer_expected_names if name.startswith("tx_outer_underlay_ferrite_u")
-    )
-    expected_tx_outer_underlay_names = tuple(
-        name
-        for name in tx_outer_expected_names
-        if name.startswith("tx_outer_underlay_pet_psa_u") or name.startswith("tx_outer_underlay_ferrite_u")
-    )
-    assert expected_tx_outer_void_ferrite_names
-    assert expected_tx_outer_void_pet_psa_names
-    assert expected_tx_outer_underlay_pet_psa_names
-    assert expected_tx_outer_underlay_ferrite_names
-    assert "tx_outer_void_ferrite_u0" in tx_outer_expected_names
-    assert "tx_outer_void_pet_psa_u0" in tx_outer_expected_names
-    assert "tx_outer_underlay_pet_psa_u0" in tx_outer_expected_names
-    assert "tx_outer_underlay_ferrite_u0" in tx_outer_expected_names
-    assert all(name in scene_shapes_by_label for name in expected_tx_outer_void_ferrite_names)
-    assert all(name in scene_shapes_by_label for name in expected_tx_outer_void_pet_psa_names)
-    assert all(name in scene_shapes_by_label for name in expected_tx_outer_underlay_pet_psa_names)
-    assert all(name in scene_shapes_by_label for name in expected_tx_outer_underlay_ferrite_names)
-    assert _normalized_body_groups(tx_outer_entry["expected_exported_body_groups"]) == _normalized_body_groups(
-        (
-            {
-                "group_name": _TX_OUTER_FERRITE_GROUP_NAME,
-                "member_body_names": expected_tx_outer_void_names + expected_tx_outer_underlay_names,
-            },
-        )
+    assert all(
+        not name.startswith(("tx_outer_pcb_", "tx_outer_copper_", "tx_outer_void_", "tx_outer_underlay_"))
+        for name in scene_shapes_by_label
     )
 
     previous_top_z = tx_inner_actual_min_xyz[2]
@@ -3690,6 +3570,7 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     expected_void_max_y = tx_inner_model_frame_origin_xyz[1] + realized_tx_inner.void_bounds.max_y
     assert expected_void_max_x - expected_void_min_x == pytest.approx(5.6)
     assert expected_void_max_y > expected_void_min_y
+    tx_region_min_xyz, tx_region_size_xyz = _canonical_min_size(tx_region_member)
     tx_region_top_z = tx_region_min_xyz[2] + tx_region_size_xyz[2]
 
     previous_max_x = expected_void_min_x
@@ -3704,76 +3585,6 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
         assert body_bbox.max.X - body_bbox.min.X == pytest.approx(expected_width)
         previous_max_x = body_bbox.max.X
     assert previous_max_x == pytest.approx(expected_void_max_x)
-
-    for body_name in expected_tx_outer_void_names:
-        body_bbox = scene_shapes_by_label[body_name].bounding_box()
-        assert body_bbox.max.Z == pytest.approx(tx_region_top_z)
-
-    tx_outer_top_face_normal = _prism_top_face_normal(tx_outer_prism=cast(dict[str, object], tx_outer_member["tx_outer_region_prism"]))
-    tx_outer_modelled_body_min_xyz = (float("inf"), float("inf"), float("inf"))
-    tx_outer_modelled_body_max_xyz = (float("-inf"), float("-inf"), float("-inf"))
-    tx_outer_physical_body_names = tx_outer_expected_base_names
-    for body_name in cast(tuple[str, ...], tx_outer_entry["expected_exported_body_names"]):
-        tx_outer_body_shape = scene_shapes_by_label[body_name]
-        body_bbox = tx_outer_body_shape.bounding_box()
-        if body_name in tx_outer_physical_body_names:
-            tx_outer_modelled_body_min_xyz = (
-                min(tx_outer_modelled_body_min_xyz[0], body_bbox.min.X),
-                min(tx_outer_modelled_body_min_xyz[1], body_bbox.min.Y),
-                min(tx_outer_modelled_body_min_xyz[2], body_bbox.min.Z),
-            )
-            tx_outer_modelled_body_max_xyz = (
-                max(tx_outer_modelled_body_max_xyz[0], body_bbox.max.X),
-                max(tx_outer_modelled_body_max_xyz[1], body_bbox.max.Y),
-                max(tx_outer_modelled_body_max_xyz[2], body_bbox.max.Z),
-            )
-            assert body_bbox.min.X >= tx_outer_actual_min_xyz[0] - 1e-6
-            assert body_bbox.max.X <= tx_outer_actual_max_xyz[0] + 1e-6
-            assert body_bbox.min.Y >= tx_outer_actual_min_xyz[1] - 1e-6
-            assert body_bbox.max.Y <= tx_outer_actual_max_xyz[1] + 1e-6
-            assert body_bbox.min.Z >= tx_outer_actual_min_xyz[2] - 1e-6
-            assert body_bbox.max.Z <= tx_outer_actual_max_xyz[2] + 1e-6
-        _assert_shape_has_face_normal_parallel_to(
-            shape=tx_outer_body_shape,
-            target_normal_xyz=tx_outer_top_face_normal,
-            face_label=body_name,
-            min_dot=0.995,
-            min_abs_target_x_component_ratio=0.6,
-        )
-        tx_outer_body_vertices = _shape_vertices(Path(ledger["scene_step_path"]), label=body_name)
-        _assert_points_inside_tx_outer_prism_local_bounds(
-            points_xyz=tx_outer_body_vertices,
-            tx_outer_prism=tx_outer_prism,
-            label=body_name,
-        )
-        _assert_tx_outer_points_use_prism_local_span(
-            points_xyz=tx_outer_body_vertices,
-            tx_outer_prism=tx_outer_prism,
-            label=body_name,
-        )
-    tx_outer_modelled_body_size_xyz = (
-        tx_outer_modelled_body_max_xyz[0] - tx_outer_modelled_body_min_xyz[0],
-        tx_outer_modelled_body_max_xyz[1] - tx_outer_modelled_body_min_xyz[1],
-        tx_outer_modelled_body_max_xyz[2] - tx_outer_modelled_body_min_xyz[2],
-    )
-    assert tx_outer_actual_physical_min_xyz == pytest.approx(tx_outer_modelled_body_min_xyz)
-    assert tx_outer_actual_physical_max_xyz == pytest.approx(tx_outer_modelled_body_max_xyz)
-    assert tx_outer_actual_physical_size_xyz == pytest.approx(tx_outer_modelled_body_size_xyz)
-    assert tx_outer_actual_min_xyz[0] <= tx_outer_modelled_body_min_xyz[0] + 1e-9
-    assert tx_outer_actual_max_xyz[0] >= tx_outer_modelled_body_max_xyz[0] - 1e-9
-    assert tx_outer_actual_min_xyz[1] <= tx_outer_modelled_body_min_xyz[1] + 1e-9
-    assert tx_outer_actual_max_xyz[1] >= tx_outer_modelled_body_max_xyz[1] - 1e-9
-    assert tx_outer_actual_min_xyz[2] <= tx_outer_modelled_body_min_xyz[2] + 1e-9
-    assert tx_outer_actual_max_xyz[2] >= tx_outer_modelled_body_max_xyz[2] - 1e-9
-    assert tx_outer_actual_physical_min_xyz[0] != pytest.approx(tx_outer_actual_region_min_xyz[0])
-    assert tx_outer_actual_physical_max_xyz[0] != pytest.approx(tx_outer_actual_region_max_xyz[0])
-    assert tx_outer_actual_physical_size_xyz[0] != pytest.approx(tx_outer_actual_region_size_xyz[0])
-    for body_name in cast(tuple[str, ...], tx_inner_entry["expected_exported_body_names"]):
-        _assert_shape_has_no_face_normal_parallel_to(
-            shape=scene_shapes_by_label[body_name],
-            target_normal_xyz=tx_outer_top_face_normal,
-            face_label=body_name,
-        )
 
 
 def test_export_type2_fixed_example_exports_tx_positive_bridge_non_model_geometry(
@@ -4038,16 +3849,8 @@ def test_export_type2_step_artifacts_centers_tx_inner_region_y_usage_ratio(
     assert reference_line["y_usage_ratio"] == pytest.approx(0.5)
     assert reference_line["line_start_xyz"] == pytest.approx((56.0, -70.0, 58.5))
     assert reference_line["line_end_xyz"] == pytest.approx((56.0, 70.0, 58.5))
-    tx_inner_min_xyz, tx_inner_size_xyz = _canonical_min_size(tx_inner_member)
-    tx_outer_member = next(member for member in member_objects if member["object_id"] == "tx_outer_region")
-    tx_outer_prism = cast(dict[str, object], tx_outer_member["tx_outer_region_prism"])
-    tx_inner_max_x, tx_inner_max_z = _max_x_z(tx_inner_min_xyz, tx_inner_size_xyz)
-    assert tx_outer_prism["top_inner_start_xyz"] == pytest.approx(
-        (tx_inner_max_x, tx_inner_min_xyz[1], tx_inner_max_z)
-    )
-    assert tx_outer_prism["top_inner_end_xyz"] == pytest.approx(
-        (tx_inner_max_x, tx_inner_min_xyz[1] + tx_inner_size_xyz[1], tx_inner_max_z)
-    )
+    assert all(member["object_id"] != "tx_outer_region" for member in member_objects)
+    assert all(member["object_id"] != "tx_outer_actual_region" for member in member_objects)
 
 
 def test_export_type2_step_artifacts_resizes_tx_inner_actual_region_without_resizing_guide(
