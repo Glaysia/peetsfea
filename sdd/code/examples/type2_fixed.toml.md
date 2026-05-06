@@ -24,6 +24,7 @@ tags:
 ## Canonical state
 - TX inner X placement source field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio`.
 - `modeled_objects.tx_inner_rect_void_coil` remains active with role `tx_inner_single_coil`.
+- TX inner passive stack defaults are coarsened for simulation speed: `underlay_repeat_count = [true, 1, 1, 1]`, PET_PSA thickness `2.0 mm`, and ferrite thickness `2.0 mm`.
 - `modeled_objects.rx_rect_void_coil` remains active with role `rx_single_coil`.
 - No active example field declares `tx_outer_terminal_path` or `tx_outer_x_position_ratio`.
 

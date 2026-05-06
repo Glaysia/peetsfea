@@ -53,8 +53,8 @@ def _range_spec(is_integer: bool, start: float, end: float, count: int) -> Range
 
 
 def _tx_inner_single_coil_spec() -> ModeledTxInnerSingleCoilSpec:
-    fixed_zero = _range_spec(True, 0.0, 0.0, 1)
-    fixed_half_mm = _range_spec(False, 0.5, 0.5, 1)
+    fixed_one = _range_spec(True, 1.0, 1.0, 1)
+    fixed_two_mm = _range_spec(False, 2.0, 2.0, 1)
     fixed_float = _range_spec(False, 1.0, 1.0, 1)
     return ModeledTxInnerSingleCoilSpec(
         object_id="tx_inner_rect_void_coil",
@@ -70,9 +70,9 @@ def _tx_inner_single_coil_spec() -> ModeledTxInnerSingleCoilSpec:
         void_usage_ratio=_range_spec(False, 0.3, 0.3, 1),
         turn_count=_range_spec(True, 2.0, 6.0, 5),
         layer_count=_range_spec(True, 2.0, 2.0, 1),
-        underlay_repeat_count=fixed_zero,
-        underlay_pet_psa_thickness_mm=fixed_half_mm,
-        underlay_ferrite_thickness_mm=fixed_half_mm,
+        underlay_repeat_count=fixed_one,
+        underlay_pet_psa_thickness_mm=fixed_two_mm,
+        underlay_ferrite_thickness_mm=fixed_two_mm,
         layer_gap_mm=_range_spec(False, 2.0, 2.0, 1),
         terminal_stub_length_mm=_range_spec(False, 5.0, 5.0, 1),
         margin_ratio=_range_spec(False, 0.05, 0.05, 1),
@@ -118,7 +118,7 @@ def _patch_rx_only_spec_loader(
     rx_terminal_stub = RangeSpec(is_integer=False, start=5.0, end=5.0, count=1)
     rx_margin_ratio = RangeSpec(is_integer=False, start=0.05, end=0.05, count=1)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
-    tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=3.0, end=3.0, count=1)
+    tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=2.0, end=2.0, count=1)
     tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.2, end=0.8, count=13)
     tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
     tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.2, end=0.9, count=13)
@@ -158,7 +158,7 @@ def _patch_rx_only_spec_loader(
                 void_usage_ratio=RangeSpec(is_integer=False, start=0.2, end=0.2, count=1),
                 turn_count=RangeSpec(is_integer=True, start=2.0, end=2.0, count=1),
                 layer_count=RangeSpec(is_integer=True, start=2.0, end=2.0, count=1),
-                underlay_repeat_count=RangeSpec(is_integer=True, start=0.0, end=0.0, count=1),
+                underlay_repeat_count=RangeSpec(is_integer=True, start=1.0, end=1.0, count=1),
                 underlay_pet_psa_thickness_mm=tx_inner_underlay_thickness,
                 underlay_ferrite_thickness_mm=tx_inner_underlay_thickness,
                 layer_gap_mm=RangeSpec(is_integer=False, start=2.0, end=2.0, count=1),

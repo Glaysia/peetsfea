@@ -18,6 +18,7 @@ from peetsfea.type2_step_spec_types import _TX_REGION_ACTUAL_STACK_SPACE_TILT_EN
 from peetsfea.type2_step_spec_types import _TX_UNDERLAY_GAP_MM_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES
 from peetsfea.type2_step_spec_types import _UNDERLAY_REPEAT_COUNT_CANDIDATES
+from peetsfea.type2_step_spec_types import _UNDERLAY_REPEAT_COUNT_FIXED_CANDIDATES
 
 
 def _integer_range_candidates(range_spec: RangeSpec) -> tuple[int, ...]:
@@ -67,11 +68,12 @@ def resolve_modeled_underlay_repeat_count(spec: ModeledSingleCoilSpec, *, seed: 
     if spec.role not in ("tx_single_coil", "tx_inner_single_coil", "rx_single_coil"):
         raise RuntimeError(f"unsupported modeled object role for underlay repeat resolution: {spec.role}")
     if candidates != _UNDERLAY_REPEAT_COUNT_CANDIDATES and not (
-        len(candidates) == 1 and candidates[0] in _UNDERLAY_REPEAT_COUNT_CANDIDATES
+        len(candidates) == 1 and candidates[0] in _UNDERLAY_REPEAT_COUNT_FIXED_CANDIDATES
     ):
         raise ValueError(
             f"{spec.role}.underlay_repeat_count must realize to canonical candidates "
-            f"{_UNDERLAY_REPEAT_COUNT_CANDIDATES} or a fixed single candidate from that set "
+            f"{_UNDERLAY_REPEAT_COUNT_CANDIDATES} or a fixed single candidate from "
+            f"{_UNDERLAY_REPEAT_COUNT_FIXED_CANDIDATES} "
             f"(actual={candidates})"
         )
     if len(candidates) == 1:

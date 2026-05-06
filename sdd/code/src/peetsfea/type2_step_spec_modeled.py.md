@@ -34,7 +34,8 @@ tags:
 ## Invariants / fail-fast
 - Unsupported modeled roles/fields fail during parse.
 - `tx_single_coil`, `tx_rect_void_columns`, and `tx_plate_stack` fail before active runtime state is bound.
-- `tx_inner_single_coil` accepts any canonical or fixed `underlay_repeat_count` value and enforces fixed positive actual-underlay PET/PSA/ferrite thickness fields while still rejecting `underlay_gap_mm` and `wall_parallel_stack_present`.
+- `tx_inner_single_coil` accepts the canonical underlay repeat sweep or a supported fixed `underlay_repeat_count`; fixed `1` is supported for coarsened active TX inner underlay stacks while the canonical sweep remains `(0, 2, 4, 6, 8)`.
+- `tx_inner_single_coil` enforces fixed positive actual-underlay PET/PSA/ferrite thickness fields while still rejecting `underlay_gap_mm` and `wall_parallel_stack_present`.
 - `x_position_ratio` must realize only inclusive candidates between `0.0` and `1.0`.
 - `tx_outer_terminal_path` and `tx_outer_x_position_ratio` must fail through unsupported-key validation, not by deriving a companion object.
 - RxOnly must parse without requiring TX modeled roles.

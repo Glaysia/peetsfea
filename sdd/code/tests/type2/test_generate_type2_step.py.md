@@ -31,16 +31,18 @@ tags:
 - RX single-coil example geometry uses `pcb_thickness_mm = 3.965` and `copper_thickness_mm = 0.035`.
 - RX full-backing thickness assertions derive the active coil stack thickness from exported PCB/copper bounds.
 - TX inner active example geometry uses `pcb_thickness_mm = 0.3` and one-ounce `copper_thickness_mm = 0.035`.
+- TX inner fixed passive defaults are `underlay_repeat_count = 1`, `underlay_pet_psa_thickness_mm = 2.0`,
+  and `underlay_ferrite_thickness_mm = 2.0`; parsed example assertions should fail if those defaults drift.
 - TX inner terminal metadata remains deterministic and can drive `tx_inner_port_sheet` for `TxRx`.
 - Fixed example parsing now asserts `tx_inner_rect_void_coil.terminal_stub_length_mm == [false, 7.5, 7.5, 1]` and `tx_inner` TX export tests assert the canonical `outer_bounds_min_xyz[2]` offset is exactly 7.5 mm above the first PCB layer `z`.
 - `tx_inner_rect_void_coil` is modeled geometry-only with expected coil bodies `tx_inner_pcb_l0`,
   `tx_inner_pcb_l1`, and `tx_inner_copper_stack`; fixed examples also emit
-  `tx_underlay_pet_psa_u0..u3` and `tx_underlay_ferrite_u0..u3`; it must not create `TX_TML`.
+  `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0`; it must not create `TX_TML`.
 - Multilayer TX inner tests must include the active sweep upper bound: fixed `layer_count=8` exports
   `tx_inner_pcb_l0` through `tx_inner_pcb_l7` plus `tx_inner_copper_stack`.
 - `tx_inner_rect_void_coil` must use `x_position_ratio` for owner-local design-outer X placement and centered owner-local Y placement.
-- TX inner actual-underlay tests must verify `tx_underlay_pet_psa_u0..u3` and `tx_underlay_ferrite_u0..u3` share `tx_inner_actual_region` X/Y bounds and stack downward in PET/PSA then ferrite order.
-- TX inner void-stack tests must verify generated `tx_void_ferrite_u*` / `tx_void_pet_psa_u*` bodies fill the realized void X range, share void Y bounds, span from `tx_inner_actual_region.min_z` to `tx_region.max_z`, and use a shortened final sheet when needed.
+- TX inner actual-underlay tests must verify only `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0` are emitted, share `tx_inner_actual_region` X/Y bounds, and stack downward in 2.0 mm PET/PSA then 2.0 mm ferrite order.
+- TX inner void-stack tests must verify only `tx_void_ferrite_u0`, `tx_void_pet_psa_u0`, and `tx_void_ferrite_u1` are emitted, fill the fixed 5.6 mm realized void X range with widths 2.0, 2.0, and 1.6 mm, share void Y bounds, span from `tx_inner_actual_region.min_z` to `tx_region.max_z`, and use the shortened final ferrite sheet.
 - TX inner ferrite-family clearance tests must verify the `g_ferrite_tx` member order remains the exported PET_PSA/ferrite underlay members followed by void-stack ferrite/PET_PSA members while every ferrite-family body and every PCB body remains a positive-volume solid.
 - Active generation regressions must verify no `tx_outer_region`, `tx_outer_void_*`, `tx_outer_underlay_*`, `tx_outer_pcb_*`, `tx_outer_copper_*`, `tx_outer_actual_region`, `g_ferrite_tx_outer`, or TX inner/outer bridge members are emitted.
 - Parser tests must reject missing, non-positive, non-fixed, and integer-flagged TX inner underlay thickness ranges.

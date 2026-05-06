@@ -24,6 +24,7 @@ tags:
 ## Canonical state
 - Build path can reuse existing STEP ledger or generate missing RX STEP artifacts.
 - RX single-coil fixtures use the active `3.965 mm` PCB plus `0.035 mm` copper stack.
+- Synthetic TX inner fixtures use fixed passive underlay defaults: repeat count `1`, PET/PSA `2.0 mm`, and ferrite `2.0 mm`.
 - `tx_region` is allowed only as non-modeled guide context and must include the required `tx_reference_line` ratios.
 - Fake RxOnly specs used by entry tests mirror the current `Type2StepSpec` shape, including `non_model_objects`.
 - `config.make_step_on_sample=false` manifest는 build-time STEP generation path를 대표한다.

@@ -33,9 +33,9 @@ tags:
 - active examples include fixed/sampled `tx_reference_line` ratio inputs, including `y_usage_ratio`, for
   retained non-modeled `tx_inner_region` guide export.
 - active example outputs use `TxRx` mode and the shared active TxRx output variable registry.
-- active example `tx_inner_single_coil` uses fixed `underlay_repeat_count = [true, 4, 4, 1]`,
-  `underlay_pet_psa_thickness_mm = [false, 0.5, 0.5, 1]`, and
-  `underlay_ferrite_thickness_mm = [false, 0.5, 0.5, 1]`.
+- active example `tx_inner_single_coil` uses fixed `underlay_repeat_count = [true, 1, 1, 1]`,
+  `underlay_pet_psa_thickness_mm = [false, 2.0, 2.0, 1]`, and
+  `underlay_ferrite_thickness_mm = [false, 2.0, 2.0, 1]`.
 
 ## Invariants / fail-fast
 - `outputs.mode` must be `TxRx`.

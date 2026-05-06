@@ -23,6 +23,7 @@ from peetsfea.type2_step_spec_types import placement_owner_id_for_role
 from peetsfea.type2_step_spec_types import NonModelBoxSpec
 from peetsfea.type2_step_spec_types import RangeSpec
 from peetsfea.type2_step_spec_types import _UNDERLAY_REPEAT_COUNT_CANDIDATES
+from peetsfea.type2_step_spec_types import _UNDERLAY_REPEAT_COUNT_FIXED_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_PLATE_STACK_COIL_COUNT_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_CONNECTION_MODE_EXPECTED
 from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_CONNECTION_MODE_RANGE
@@ -114,12 +115,12 @@ def _require_underlay_repeat_count_range(
         range_spec.count == 1
         and range_spec.start == range_spec.end
         and len(candidates) == 1
-        and candidates[0] in _UNDERLAY_REPEAT_COUNT_CANDIDATES
+        and candidates[0] in _UNDERLAY_REPEAT_COUNT_FIXED_CANDIDATES
     ):
         return range_spec
     raise ValueError(
         f"{context}.underlay_repeat_count.range must be canonical [true, 0, 8, 5] "
-        f"or fixed [true, n, n, 1] for n in {_UNDERLAY_REPEAT_COUNT_CANDIDATES} for {role} "
+        f"or fixed [true, n, n, 1] for n in {_UNDERLAY_REPEAT_COUNT_FIXED_CANDIDATES} for {role} "
         f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
     )
 

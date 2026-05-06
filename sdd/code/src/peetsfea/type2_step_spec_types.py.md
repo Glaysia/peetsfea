@@ -28,6 +28,7 @@ tags:
 - `NonModelTxRegionSpec` extends the regular box spec with the required TX reference-line spec while preserving box fields used by downstream guide paths.
 - `tx_inner_single_coil` is the first geometry-only TX modeled role after the reset. It is explicit inner-coil state, not a reactivation of generic `tx_single_coil`.
 - `tx_inner_single_coil` owns fixed backing stack fields for actual-region underlay repeat count, PET/PSA thickness, and ferrite thickness.
+- Underlay repeat count canonical sweep candidates remain `(0, 2, 4, 6, 8)`; fixed-value validation additionally accepts `1` so active TX inner examples can collapse the four thin PET/PSA/ferrite pairs into one thicker pair without changing the sampled coordinate ledger.
 - Active type2 schema id remains `peetsfea.type2.step.v8`; this change extends the modeled-object selector surface without changing the top-level schema id.
 - `ModeledSingleCoilCommonSpec.x_position_ratio` owns the local X placement ratio for modeled single-coil specs. The inner TX public source field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio`.
 - Active spec/runtime unions no longer include a TX outer companion dataclass or `tx_outer_rect_void_coil` sampled owner.
@@ -39,6 +40,7 @@ tags:
 - TX reference-line state is never nullable; absent or invalid ratio state must fail in the parser.
 - `tx_inner_single_coil` owns concrete role/object/profile identity and must not be represented as nullable or fake `tx_single_coil` state.
 - X position ratio candidates must be unitless floats in the inclusive range `0.0 <= value <= 1.0`.
+- Canonical underlay repeat ranges and fixed underlay repeat values are distinct constants so parser and sampling code can keep existing sweep determinism while accepting fixed one-layer coarsening.
 
 ## Collaborators
 - [type2_step_spec.py](type2_step_spec.py.md)
