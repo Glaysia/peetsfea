@@ -62,6 +62,22 @@ from peetsfea.type2_step_spec_non_model import _require_table
 from peetsfea.type2_step_spec_sampling import _is_canonical_tx_plate_stack_array_x_usage_ratio_range
 
 
+_UNIT_RATIO_ABS_TOL = 1e-12
+
+
+def _candidate_exceeds_unit_interval(candidate: float) -> bool:
+    return candidate > 1.0 and not math.isclose(
+        candidate,
+        1.0,
+        rel_tol=0.0,
+        abs_tol=_UNIT_RATIO_ABS_TOL,
+    )
+
+
+def _positive_unit_interval_candidates_are_invalid(candidates: tuple[float, ...]) -> bool:
+    return any(candidate <= 0.0 or _candidate_exceeds_unit_interval(candidate) for candidate in candidates)
+
+
 def _require_tx_plate_stack_array_x_usage_ratio_range(
     table: dict[str, object],
     *,
@@ -230,7 +246,7 @@ def _require_x_position_ratio_range(
 ) -> RangeSpec:
     range_spec = _require_range(table, key, context, expect_integer=False)
     candidates = _float_range_candidates(range_spec)
-    if any(candidate < 0.0 or candidate > 1.0 for candidate in candidates):
+    if any(candidate < 0.0 or _candidate_exceeds_unit_interval(candidate) for candidate in candidates):
         raise ValueError(
             f"{context}.{key}.range must realize to values >= 0.0 and <= 1.0 "
             f"(actual={candidates})"
@@ -449,7 +465,7 @@ def _scaled_mm_range_from_usage_ratio(
     if span_mm <= 0.0:
         raise ValueError(f"{path} owner span must be > 0 (actual={span_mm})")
     ratio_candidates = _float_range_candidates(ratio_range)
-    if any(candidate <= 0.0 or candidate > 1.0 for candidate in ratio_candidates):
+    if _positive_unit_interval_candidates_are_invalid(ratio_candidates):
         raise ValueError(f"{path} must realize to values > 0 and <= 1 (actual={ratio_candidates})")
     return RangeSpec(
         is_integer=False,
@@ -814,14 +830,14 @@ def _parse_modeled_plate_stack(
         )
     z_usage_ratio = _require_range(table, "z_usage_ratio", context, expect_integer=False)
     z_usage_ratio_candidates = _float_range_candidates(z_usage_ratio)
-    if any(candidate <= 0.0 or candidate > 1.0 for candidate in z_usage_ratio_candidates):
+    if _positive_unit_interval_candidates_are_invalid(z_usage_ratio_candidates):
         raise ValueError(
             f"{context}.z_usage_ratio must realize to values > 0 and <= 1 "
             f"(actual={z_usage_ratio_candidates})"
         )
     y_usage_ratio = _require_range(table, "y_usage_ratio", context, expect_integer=False)
     y_usage_ratio_candidates = _float_range_candidates(y_usage_ratio)
-    if any(candidate <= 0.0 or candidate > 1.0 for candidate in y_usage_ratio_candidates):
+    if _positive_unit_interval_candidates_are_invalid(y_usage_ratio_candidates):
         raise ValueError(
             f"{context}.y_usage_ratio must realize to values > 0 and <= 1 "
             f"(actual={y_usage_ratio_candidates})"

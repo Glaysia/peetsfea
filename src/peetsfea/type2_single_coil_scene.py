@@ -316,8 +316,8 @@ def _single_coil_tx_ratio_design_outer_placement_from_realized(
     spec: ModeledSingleCoilSpec,
     owner_spec: NonModelBoxSpec,
     realized: RealizedSingleCoilRectVoid,
-    local_bounds_min_z: float,
-    local_bounds_size_z: float,
+    local_bounds_min_xyz: Point3,
+    local_bounds_size_xyz: Point3,
     profile: SingleCoilProfile,
     seed: int,
 ) -> TxRatioDesignOuterPlacement:
@@ -328,17 +328,8 @@ def _single_coil_tx_ratio_design_outer_placement_from_realized(
         )
     if profile.plane != "XY":
         raise RuntimeError(f"type2 {profile.role} x_position_ratio placement requires XY plane (actual={profile.plane})")
-    local_design_outer_min_xyz = (
-        realized.outer_bounds.min_x,
-        realized.outer_bounds.min_y,
-        local_bounds_min_z,
-    )
-    local_design_outer_size_xyz = (
-        realized.outer_x_mm,
-        realized.outer_y_mm,
-        local_bounds_size_z,
-    )
-    world_design_outer_size_xyz = profile.world_size(local_design_outer_size_xyz)
+    del realized
+    world_design_outer_size_xyz = profile.world_size(local_bounds_size_xyz)
     owner_origin_x, owner_origin_y, owner_origin_z = owner_spec.origin_xyz
     owner_size_x, owner_size_y, owner_size_z = owner_spec.size_xyz
     if (
@@ -364,7 +355,7 @@ def _single_coil_tx_ratio_design_outer_placement_from_realized(
         world_design_outer_min_xyz[1] + world_design_outer_size_xyz[1],
         world_design_outer_min_xyz[2] + world_design_outer_size_xyz[2],
     )
-    world_design_min_delta = profile.world_delta(local_design_outer_min_xyz)
+    world_design_min_delta = profile.world_delta(local_bounds_min_xyz)
     return TxRatioDesignOuterPlacement(
         frame_origin_xyz=(
             world_design_outer_min_xyz[0] - world_design_min_delta[0],
@@ -504,8 +495,8 @@ def resolve_modeled_single_coil_fit_envelope(
             spec=spec,
             owner_spec=owner_spec,
             realized=realized,
-            local_bounds_min_z=local_bounds_min_xyz[2],
-            local_bounds_size_z=local_bounds_size_xyz[2],
+            local_bounds_min_xyz=local_bounds_min_xyz,
+            local_bounds_size_xyz=local_bounds_size_xyz,
             profile=profile,
             seed=seed,
         )

@@ -124,7 +124,7 @@ def _patch_rx_only_spec_loader(
     tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=2.0, end=2.0, count=1)
     tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.99, end=0.99, count=1)
     tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
-    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.5, end=1.0, count=13)
+    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.75, end=1.0, count=13)
 
     fake_spec = _FakeRxOnlyType2Spec(
         non_model_objects=(
@@ -293,9 +293,9 @@ size_xyz = [160.0, 280.0, 90.0]
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.99, 0.99, 1]
 [non_model_objects.tx_reference_line.y_usage_ratio]
-range = [false, 0.2, 1.0, 17]
+range = [false, 0.2, 1.0, 85]
 [non_model_objects.tx_reference_line.z_ratio]
-range = [false, 0.5, 1.0, 13]
+range = [false, 0.75, 1.0, 65]
 
 [[non_model_objects]]
 id = "rx_region_max"
@@ -318,9 +318,9 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.outer_x_usage_ratio]
     range = [false, 0.5, 0.5, 1]
     [modeled_objects.outer_y_usage_ratio]
-    range = [false, 0.2, 0.9, 15]
+    range = [false, 0.2, 0.9, 150]
     [modeled_objects.x_position_ratio]
-    range = [false, 0.0, 0.3, 9]
+    range = [false, 0.0, 0.3, 45]
     [modeled_objects.turn_count]
     range = [true, 2, 2, 1]
     [modeled_objects.layer_count]
@@ -350,13 +350,13 @@ size_xyz = [10.0, 200.0, 200.0]
     pcb_thickness_mm = 3.965
     copper_thickness_mm = 0.035
     [modeled_objects.outer_x_usage_ratio]
-    range = [false, 0.1, 0.6, 17]
+    range = [false, 0.1, 0.6, 85]
     [modeled_objects.outer_y_usage_ratio]
-    range = [false, 0.1, 0.6, 17]
+    range = [false, 0.1, 0.6, 85]
     [modeled_objects.x_position_ratio]
     range = [false, 0.0, 0.0, 1]
     [modeled_objects.void_usage_ratio]
-    range = [false, 0.1, 0.6, 17]
+    range = [false, 0.1, 0.6, 85]
     [modeled_objects.turn_count]
     range = [true, 2, 6, 5]
     [modeled_objects.layer_count]
@@ -370,7 +370,7 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.margin_ratio]
     range = [false, 0.05, 0.05, 1]
     [modeled_objects.metal_fill_factor]
-    range = [false, 0.2, 0.6, 15]
+    range = [false, 0.2, 0.6, 75]
     [modeled_objects.terminal_path]
     value = "A_cw_to_a"
 """.strip()
@@ -704,7 +704,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert tx_reference_line_z_range[0] is False
     assert tx_reference_line_z_range[3] == 1
     assert tx_reference_line_z_range[1] == tx_reference_line_z_range[2]
-    assert 0.5 <= float(cast(int | float, tx_reference_line_z_range[1])) <= 1.0
+    assert 0.75 <= float(cast(int | float, tx_reference_line_z_range[1])) <= 1.0
 
     modeled_objects_by_id = {
         cast(str, modeled_object["object_id"]): modeled_object
@@ -737,13 +737,13 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert rx_outer_x_range[0] is False
     assert rx_outer_x_range[3] == 1
     assert rx_outer_x_range[1] == rx_outer_x_range[2]
-    assert 0.1 <= float(cast(int | float, rx_outer_x_range[1])) <= 0.6
+    assert 0.1 <= float(cast(int | float, rx_outer_x_range[1])) <= 1.0
     rx_outer_y = cast(dict[str, object], rx_modeled_object["outer_y_usage_ratio"])
     rx_outer_y_range = cast(list[object], rx_outer_y["range"])
     assert rx_outer_y_range[0] is False
     assert rx_outer_y_range[3] == 1
     assert rx_outer_y_range[1] == rx_outer_y_range[2]
-    assert 0.1 <= float(cast(int | float, rx_outer_y_range[1])) <= 0.6
+    assert 0.1 <= float(cast(int | float, rx_outer_y_range[1])) <= 1.0
     rx_void_ratio = cast(dict[str, object], rx_modeled_object["void_usage_ratio"])
     rx_void_ratio_range = cast(list[object], rx_void_ratio["range"])
     assert rx_void_ratio_range[0] is False

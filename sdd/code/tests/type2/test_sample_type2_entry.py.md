@@ -25,7 +25,7 @@ tags:
 - RX single-coil sampled fixtures preserve the active `3.965 mm` PCB plus `0.035 mm` copper stack.
 - `tx_region` is fixed guide context only; singleton `tx_reference_line.x_ratio` is not an exported sampled owner.
 - `tx_reference_line.y_usage_ratio` remains an effective sampled owner when its range has `count > 1`.
-- `tx_reference_line.z_ratio` remains an effective sampled owner with active sweep bounds `[false, 0.5, 1.0, 13]`.
+- `tx_reference_line.z_ratio` remains an effective sampled owner with active sweep bounds `[false, 0.75, 1.0, 65]`.
 - RxOnly sampled-owner fixtures contain RX coil owners plus active count>1 non-modeled guide owners; TX derived non-model owners are absent.
 - Synthetic `ModeledTxInnerSingleCoilSpec` fixtures include fixed TX inner passive underlay defaults: repeat count `1`, PET/PSA `2.0 mm`, and ferrite `2.0 mm`.
 - `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` is a public sampled owner sourced and frozen directly on `tx_inner_rect_void_coil`.

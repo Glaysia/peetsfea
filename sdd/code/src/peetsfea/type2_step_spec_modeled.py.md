@@ -39,6 +39,7 @@ tags:
 - `tx_inner_single_coil` accepts canonical `void_stack_present = [true, 0, 1, 2]` or fixed singleton `0`/`1`; unsupported roles must not accept this field.
 - `tx_inner_single_coil` enforces fixed positive actual-underlay PET/PSA/ferrite thickness fields while still rejecting `underlay_gap_mm` and `wall_parallel_stack_present`.
 - `x_position_ratio` must realize only inclusive candidates between `0.0` and `1.0`.
+- Usage ratios and position ratios accept mathematically inclusive `1.0` endpoints when range candidate generation produces a binary floating-point value within `1e-12` above `1.0`; values outside that tolerance still fail before specs are bound.
 - `tx_outer_terminal_path` and `tx_outer_x_position_ratio` must fail through unsupported-key validation, not by deriving a companion object.
 - RxOnly must parse without requiring TX modeled roles.
 

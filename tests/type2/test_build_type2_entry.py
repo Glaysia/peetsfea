@@ -127,7 +127,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=2.0, end=2.0, count=1)
     tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.99, end=0.99, count=1)
     tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
-    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.5, end=1.0, count=13)
+    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.75, end=1.0, count=13)
     fake_spec = _FakeRxOnlyType2Spec(
         non_model_objects=(
             NonModelTxRegionSpec(
@@ -138,8 +138,8 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 non_model=True,
                 material="vacuum",
                 plane="YZ",
-                origin_xyz=(0.0, -900.0, 0.0),
-                size_xyz=(160.0, 1800.0, 90.0),
+                origin_xyz=(0.0, -600.0, 0.0),
+                size_xyz=(720.0, 1200.0, 90.0),
                 tx_reference_line=NonModelTxReferenceLineSpec(
                     x_ratio=tx_reference_line_x_ratio,
                     y_usage_ratio=tx_reference_line_y_usage_ratio,
@@ -239,8 +239,8 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                     non_model=True,
                     material="vacuum",
                     plane="YZ",
-                    origin_xyz=(0.0, -900.0, 0.0),
-                    size_xyz=(160.0, 1800.0, 90.0),
+                    origin_xyz=(0.0, -600.0, 0.0),
+                    size_xyz=(720.0, 1200.0, 90.0),
                     tx_reference_line=NonModelTxReferenceLineSpec(
                         x_ratio=_range_from_tx_reference_line(payload, field_name="x_ratio"),
                         y_usage_ratio=_range_from_tx_reference_line(payload, field_name="y_usage_ratio"),
@@ -439,17 +439,17 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "YZ"
-origin_xyz = [0.0, -900.0, 0.0]
-size_xyz = [160.0, 1800.0, 90.0]
+origin_xyz = [0.0, -600.0, 0.0]
+size_xyz = [720.0, 1200.0, 90.0]
 
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.99, 0.99, 1]
 
 [non_model_objects.tx_reference_line.y_usage_ratio]
-range = [false, 0.2, 1.0, 17]
+range = [false, 0.2, 1.0, 85]
 
 [non_model_objects.tx_reference_line.z_ratio]
-range = [false, 0.5, 1.0, 13]
+range = [false, 0.75, 1.0, 65]
 
 [[non_model_objects]]
 id = "rx_region_max"
@@ -474,7 +474,7 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.outer_y_usage_ratio]
     range = [false, 0.6, 0.6, 1]
     [modeled_objects.x_position_ratio]
-    range = [false, 0.0, 0.3, 9]
+    range = [false, 0.0, 0.3, 45]
     [modeled_objects.turn_count]
     range = [true, 2, 2, 1]
     [modeled_objects.layer_count]
@@ -508,13 +508,13 @@ size_xyz = [10.0, 200.0, 200.0]
     pcb_thickness_mm = 3.965
     copper_thickness_mm = 0.035
     [modeled_objects.outer_x_usage_ratio]
-    range = [false, 0.1, 0.6, 17]
+    range = [false, 0.1, 0.6, 85]
     [modeled_objects.outer_y_usage_ratio]
-    range = [false, 0.1, 0.6, 17]
+    range = [false, 0.1, 0.6, 85]
     [modeled_objects.x_position_ratio]
     range = [false, 0.0, 0.0, 1]
     [modeled_objects.void_usage_ratio]
-    range = [false, 0.1, 0.6, 17]
+    range = [false, 0.1, 0.6, 85]
     [modeled_objects.turn_count]
     range = [true, 2, 6, 5]
     [modeled_objects.layer_count]
@@ -528,7 +528,7 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.margin_ratio]
     range = [false, 0.05, 0.05, 1]
     [modeled_objects.metal_fill_factor]
-    range = [false, 0.2, 0.6, 15]
+    range = [false, 0.2, 0.6, 75]
     [modeled_objects.terminal_path]
     value = "A_cw_to_a"
 

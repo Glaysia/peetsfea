@@ -207,8 +207,8 @@ non_model = true
 material = "vacuum"
 plane = "XY"
 # Guide-only future TX placement context. RxOnly does not derive sampled TX owners from it.
-origin_xyz = [0.0, -900.0, 0.0]
-size_xyz = [160.0, 1800.0, 90.0]
+origin_xyz = [0.0, -600.0, 0.0]
+size_xyz = [720.0, 1200.0, 90.0]
 
 # TX guide-only reference line used to derive retained tx_inner_region STEP context.
 # Ratios are strictly inside tx_region and do not activate TX modeled geometry.
@@ -247,16 +247,16 @@ model_state = true
 pcb_thickness_mm = 0.3
 copper_thickness_mm = 0.035
 [modeled_objects.outer_x_usage_ratio]
-range = [false, 0.5, 0.5, 1]
+range = [false, 0.22139465559575477, 0.22139465559575477, 1]
 description = "TX inner 배치 영역 대비 local X 방향 외곽 크기 비율"
 [modeled_objects.outer_y_usage_ratio]
-range = [false, 0.6, 0.6, 1]
+range = [false, 0.10828440179634166, 0.10828440179634166, 1]
 description = "TX inner 배치 영역 대비 local Y 방향 외곽 크기 비율"
 [modeled_objects.x_position_ratio]
 range = [false, 0.0, 0.0, 1]
 description = "TX inner 배치 영역 안에서 local X 방향 위치 비율"
 [modeled_objects.turn_count]
-range = [true, 1, 1, 1]
+range = [true, 2, 2, 1]
 description = "TX inner spiral turn 수"
 [modeled_objects.layer_count]
 range = [true, 2, 2, 1]
@@ -265,7 +265,7 @@ description = "TX inner coil 적층 layer 수"
 range = [true, 1, 1, 1]
 description = "TX inner underlay 반복 개수"
 [modeled_objects.void_stack_present]
-range = [true, 1, 1, 1]
+range = [true, 0, 0, 1]
 description = "TX inner 중앙 void stack 생성 여부"
 [modeled_objects.underlay_pet_psa_thickness_mm]
 range = [false, 2.0, 2.0, 1]
@@ -299,16 +299,16 @@ model_state = true
 pcb_thickness_mm = 3.965
 copper_thickness_mm = 0.035
 [modeled_objects.outer_x_usage_ratio]
-range = [false, 0.6, 0.6, 1]
+range = [false, 0.08776778025839665, 0.08776778025839665, 1]
 description = "RX 배치 영역 대비 local X 방향 외곽 크기 비율"
 [modeled_objects.outer_y_usage_ratio]
-range = [false, 0.35, 0.35, 1]
+range = [false, 0.2893592493476639, 0.2893592493476639, 1]
 description = "RX 배치 영역 대비 local Y 방향 외곽 크기 비율"
 [modeled_objects.x_position_ratio]
 range = [false, 0.0, 0.0, 1]
 description = "RX 배치 영역 안에서 local X 방향 위치 비율"
 [modeled_objects.turn_count]
-range = [true, 1, 1, 1]
+range = [true, 3, 3, 1]
 description = "RX spiral turn 수"
 [modeled_objects.layer_count]
 range = [true, 1, 1, 1]

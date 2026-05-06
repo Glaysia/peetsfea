@@ -32,8 +32,8 @@ tags:
 - active example TOML payload가 canonical assertion surface다.
 - active examples fix `tx_reference_line.x_ratio = 0.99` while preserving fixed/sampled `y_usage_ratio` for
   retained non-modeled `tx_inner_region` guide export.
-- active sweep samples `tx_reference_line.z_ratio` over `[false, 0.5, 1.0, 13]` so current maximum TX inner stack height fits under the reference line.
-- active examples set fixed non-modeled `tx_region` Y bounds to `origin_y=-900.0`, `size_y=1800.0`.
+- active sweep samples `tx_reference_line.z_ratio` over `[false, 0.75, 1.0, 65]` so current maximum TX inner stack height fits under the reference line.
+- active examples set fixed non-modeled `tx_region` bounds to `size_x=720.0`, `origin_y=-600.0`, and `size_y=1200.0`.
 - active examples preserve TX inner `outer_y_usage_ratio` as the actual-coil Y sizing ratio.
 - active example outputs use `TxRx` mode and the shared active TxRx output variable registry.
 - active example `tx_inner_single_coil` uses fixed `underlay_repeat_count = [true, 1, 1, 1]`,
