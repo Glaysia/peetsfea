@@ -1430,6 +1430,7 @@ def _build_tx_outer_single_coil_scene_data(
         "max_world_x_protrusion_mm": max_world_x_protrusion_mm,
         "max_world_z_underhang_mm": max_world_z_underhang_mm,
     }
+    canonical_coordinates["trace_width_mm"] = fit_envelope.realized.trace_width_mm
     if underlay_repeat_count > 0:
         canonical_coordinates["outer_void_stack_raw_overshoot_mm"] = raw_overshoot_mm
     terminal_metadata = modeled_terminal_metadata(
@@ -1625,6 +1626,7 @@ def build_modeled_single_coil_scene_data(
         profile=profile,
         frame_origin_xyz=fit_envelope.frame_origin_xyz,
     )
+    canonical_coordinates["trace_width_mm"] = fit_envelope.realized.trace_width_mm
     terminal_metadata = modeled_terminal_metadata(
         terminal_path=fit_envelope.realized.terminal_path,
         centerline=centerline,

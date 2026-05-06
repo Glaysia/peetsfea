@@ -26,6 +26,7 @@ tags:
 - Record terminal-bridge material thickness metadata in the non-modeled ledger member because skew bridge canonical bboxes include span/tilt, not only physical stack thickness.
 - Reuse same-call modeled scene data during post-export terminal contract validation instead of rebuilding modeled geometry a second time.
 - Add modeled TV aluminum plate support as a single standalone exported body with strict no-groups/no-ports contract.
+- `tx_rect_void_columns` modeled entries now carry `trace_width_mm` in `canonical_coordinates`, recovered from terminal stub anchor boxes carried through existing tile terminal metadata.
 
 ## Inputs / Outputs
 - Inputs: Type2 TOML path, output directory, ledger path, deterministic seed, optional stage reporter.
@@ -46,6 +47,7 @@ tags:
 - `tx_outer_single_coil` specs, if still present from an in-flight loader during the removal work, are filtered out before non-model resolution, modeled scene construction, ledger creation, and terminal contract validation.
 - Post-export terminal metadata validation uses the first-pass `ModeledObjectSceneData` keyed by object ID as canonical expected state for the same export call.
 - Generic `tx_single_coil`, `tx_plate_stack`, and `tx_rect_void_columns` remain unsupported in active RxOnly export.
+- `tx_rect_void_columns` canonical trace-width metadata is derived from each terminal anchor stub BoxSpec in `TxRectVoidColumnsTileTerminalAnchors`, enforcing consistency across all tiles/layers and requiring at least one metadata anchor to avoid fallback behavior.
 
 ## Invariants / Fail-Fast
 - Generic modeled TX roles fail before scene construction.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 from pathlib import Path
 from typing import cast
 
@@ -27,7 +28,6 @@ from tests.backend_em.test_type2_step_import_pipeline import (
     _FakeHfss as _ImportFakeHfss,
     _FakeMeshModule,
     _FakeModeler as _ImportFakeModeler,
-    _expected_mesh_length_payload,
     _expected_ferrite_group_for_role,
     _modeled_entry,
     _non_model_entry_with_tx_inner_region,
@@ -245,6 +245,43 @@ class _SetupReadyModeler(_ImportFakeModeler):
         assert assignment in self._vertex_positions, f"unknown vertex id: {assignment}"
         x, y, z = self._vertex_positions[assignment]
         return [x, y, z]
+
+
+def _trace_width_tx_mm() -> float:
+    return 36.0
+
+
+def _trace_width_rx_mm() -> float:
+    return 81.0
+
+
+def _expected_mesh_length_payload(
+    *,
+    mesh_object_names: list[str],
+    tx_trace_width_mm: float,
+    rx_trace_width_mm: float,
+) -> list[object]:
+    if mesh_object_names == ["rx_copper_l0"]:
+        max_length_mm = rx_trace_width_mm / 9.0
+    else:
+        max_length_mm = math.sqrt(tx_trace_width_mm * rx_trace_width_mm) / 9.0
+    return [
+        "NAME:Length1",
+        "RefineInside:=",
+        False,
+        "Enabled:=",
+        True,
+        "Objects:=",
+        mesh_object_names,
+        "RestrictElem:=",
+        False,
+        "NumMaxElem:=",
+        "1000",
+        "RestrictLength:=",
+        True,
+        "MaxLength:=",
+        f"{max_length_mm:.12g}mm",
+    ]
 
 
 class _SetupReadyHfss(_ImportFakeHfss):
@@ -498,6 +535,13 @@ def _role_aware_mesh_entries(
         {
             "object_id": tx_object_id,
             "role": tx_role,
+            "canonical_coordinates": {
+                "frame_origin_xyz": [0.0, -15.0, 87.2],
+                "outer_bounds_min_xyz": [0.0, -15.0, 87.2],
+                "outer_bounds_max_xyz": [50.0, 15.0, 89.99999999999999],
+                "outer_bounds_size_xyz": [50.0, 30.0, 2.8],
+                "trace_width_mm": _trace_width_tx_mm(),
+            },
             "imported_object_names": [
                 tx_pcb_name,
                 tx_object_name,
@@ -510,6 +554,13 @@ def _role_aware_mesh_entries(
         {
             "object_id": "rx_rect_void_coil",
             "role": "rx_single_coil",
+            "canonical_coordinates": {
+                "frame_origin_xyz": [1.7, -25.0, 139.0],
+                "outer_bounds_min_xyz": [1.7, -25.0, 139.0],
+                "outer_bounds_max_xyz": [4.5, 25.0, 169.0],
+                "outer_bounds_size_xyz": [2.8, 50.0, 30.0],
+                "trace_width_mm": _trace_width_rx_mm(),
+            },
             "imported_object_names": [
                 "rx_pcb_l0",
                 "rx_copper_l0",
@@ -524,6 +575,12 @@ def _role_aware_mesh_entries(
 
 def _coil_modeled_objects_with_imported_names(tmp_path: Path) -> list[dict[str, object]]:
     modeled_objects = _single_layer_modeled_objects(tmp_path)
+    tx_entry = cast(dict[str, object], modeled_objects[0])
+    tx_coordinates = cast(dict[str, object], tx_entry["canonical_coordinates"])
+    rx_entry = cast(dict[str, object], modeled_objects[1])
+    rx_coordinates = cast(dict[str, object], rx_entry["canonical_coordinates"])
+    tx_coordinates["trace_width_mm"] = _trace_width_tx_mm()
+    rx_coordinates["trace_width_mm"] = _trace_width_rx_mm()
     modeled_objects[0]["imported_object_names"] = ["tx_pcb_l0", "tx_copper_l0", "tx_port_sheet"]
     modeled_objects[1]["imported_object_names"] = ["rx_pcb_l0", "rx_copper_l0", "rx_port_sheet"]
     return modeled_objects
@@ -546,6 +603,7 @@ def _tx_inner_single_coil_modeled_object_with_imported_names(
         expected_names=expected_names,
         expected_groups=_expected_ferrite_group_for_role(role="tx_inner_single_coil", expected_names=expected_names),
         source_metadata_path=str(tmp_path / "tx_inner.metadata.json"),
+        trace_width_mm=_trace_width_tx_mm(),
     )
     modeled_object["imported_object_names"] = [
         "tx_inner_pcb_l0",
@@ -625,6 +683,8 @@ def _non_model_entry_with_tx_inner_void_stack_members_for_setup() -> dict[str, o
 
 def _rx_single_coil_modeled_object_with_imported_names(tmp_path: Path) -> dict[str, object]:
     modeled_object = _rx_single_coil_entry(tmp_path)
+    modeled_object_coordinates = cast(dict[str, object], modeled_object["canonical_coordinates"])
+    modeled_object_coordinates["trace_width_mm"] = _trace_width_rx_mm()
     modeled_object["imported_object_names"] = ["rx_pcb_l0", "rx_copper_l0", "rx_port_sheet"]
     return modeled_object
 
@@ -723,6 +783,7 @@ def _tx_array_modeled_entry(tmp_path: Path, *, branch_count: int) -> dict[str, o
         expected_groups=_tx_plate_stack_array_expected_groups(branch_count=branch_count),
         pcb_layer_positions_mm=[0.035, 5.3],
         copper_layer_positions_mm=[0.0, 6.865],
+        trace_width_mm=12.0,
         terminal_metadata=_tx_array_port_sheet_metadata(branch_count=branch_count),
     )
 
@@ -992,7 +1053,13 @@ def test_setup_type2_step_ledger_builds_mesh_boundary_ports_analysis_and_validat
     )
 
     assert session.design.import_dataset_calls == []
-    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload(tx_object_name="tx_inner_copper_l0")]
+    assert session.mesh_module.assign_length_op_calls == [
+        _expected_mesh_length_payload(
+            mesh_object_names=["tx_inner_copper_l0", "rx_copper_l0"],
+            tx_trace_width_mm=_trace_width_tx_mm(),
+            rx_trace_width_mm=_trace_width_rx_mm(),
+        )
+    ]
     assert session.modeler.created_region_name == "Region_Abs_4123mm"
     assert session.radiation_boundary_calls == [
         ([10], "Rad_RegionAbs_0"),
@@ -1240,7 +1307,13 @@ def test_setup_type2_step_ledger_keeps_mesh_conductor_only_for_tx_inner_single_c
         ),
     )
 
-    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload(tx_object_name="tx_inner_copper_l0")]
+    assert session.mesh_module.assign_length_op_calls == [
+        _expected_mesh_length_payload(
+            mesh_object_names=["tx_inner_copper_l0", "rx_copper_l0"],
+            tx_trace_width_mm=_trace_width_tx_mm(),
+            rx_trace_width_mm=_trace_width_rx_mm(),
+        )
+    ]
     assert result["mesh"]["objects"] == ["tx_inner_copper_l0", "rx_copper_l0"]
 
 
@@ -1292,7 +1365,13 @@ def test_setup_type2_step_ledger_keeps_tx_inner_underlay_and_void_stack_passive_
         ),
     )
 
-    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload(tx_object_name="tx_inner_copper_l0")]
+    assert session.mesh_module.assign_length_op_calls == [
+        _expected_mesh_length_payload(
+            mesh_object_names=["tx_inner_copper_l0", "rx_copper_l0"],
+            tx_trace_width_mm=_trace_width_tx_mm(),
+            rx_trace_width_mm=_trace_width_rx_mm(),
+        )
+    ]
     assert session._excitation_names == ["1_T1", "2_T1"]
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
     assert result["sources"]["tx_source_name"] == "1_T1"
@@ -1361,7 +1440,13 @@ def test_setup_type2_step_ledger_disabled_tx_inner_void_stack_keeps_underlay_pas
         ),
     )
 
-    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload(tx_object_name="tx_inner_copper_l0")]
+    assert session.mesh_module.assign_length_op_calls == [
+        _expected_mesh_length_payload(
+            mesh_object_names=["tx_inner_copper_l0", "rx_copper_l0"],
+            tx_trace_width_mm=_trace_width_tx_mm(),
+            rx_trace_width_mm=_trace_width_rx_mm(),
+        )
+    ]
     assert session._excitation_names == ["1_T1", "2_T1"]
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
     assert result["sources"]["tx_source_name"] == "1_T1"
@@ -1492,7 +1577,7 @@ def test_setup_type2_step_ledger_rejects_tx_plate_style_modeled_roles_before_hfs
 
     with pytest.raises(
         ValueError,
-        match=r"type2 setup mode 'TxRx' supports only \['tx_inner_single_coil', 'rx_single_coil'\] for setup-ready orchestration",
+        match=r"type2 setup mode 'TxRx' supports only \['tx_inner_single_coil', 'rx_single_coil'\](?: plus optional passive 'tv_aluminum_plate')? for setup-ready orchestration",
     ):
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
@@ -1511,7 +1596,13 @@ def test_assign_post_import_mesh_ignores_tx_and_rx_underlay_exact_name_bodies() 
         imported_modeled_objects=_role_aware_mesh_entries(tx_object_name="tx_copper_stack"),
     )
 
-    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload(tx_object_name="tx_copper_stack")]
+    assert session.mesh_module.assign_length_op_calls == [
+        _expected_mesh_length_payload(
+            mesh_object_names=["tx_copper_stack", "rx_copper_l0"],
+            tx_trace_width_mm=_trace_width_tx_mm(),
+            rx_trace_width_mm=_trace_width_rx_mm(),
+        )
+    ]
     assert result["objects"] == ["tx_copper_stack", "rx_copper_l0"]
 
 
@@ -1531,6 +1622,47 @@ def test_assign_post_import_mesh_rejects_rx_underlay_names_without_rx_copper() -
             hfss=cast(HfssSession, session),
             imported_modeled_objects=imported_modeled_objects,
         )
+
+
+def test_assign_post_import_mesh_raises_when_trace_width_is_missing_from_canonical_coordinates() -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+    imported_modeled_objects = _role_aware_mesh_entries()
+    tx_coordinates = cast(
+        dict[str, object],
+        cast(dict[str, object], imported_modeled_objects[0])["canonical_coordinates"],
+    )
+    del tx_coordinates["trace_width_mm"]
+
+    with pytest.raises(
+        ValueError,
+        match=r"modeled_objects\[tx_single_coil\]\.canonical_coordinates is missing required key 'trace_width_mm'",
+    ):
+        assign_post_import_mesh(
+            hfss=cast(HfssSession, session),
+            imported_modeled_objects=imported_modeled_objects,
+        )
+
+    assert session.mesh_module.assign_length_op_calls == []
+    assert session.design.get_module_calls == []
+
+
+def test_assign_post_import_mesh_raises_when_trace_width_is_invalid() -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+    imported_modeled_objects = _role_aware_mesh_entries()
+    rx_coordinates = cast(
+        dict[str, object],
+        cast(dict[str, object], imported_modeled_objects[1])["canonical_coordinates"],
+    )
+    rx_coordinates["trace_width_mm"] = 0.0
+
+    with pytest.raises(ValueError, match=r"canonical_coordinates.trace_width_mm must be > 0"):
+        assign_post_import_mesh(
+            hfss=cast(HfssSession, session),
+            imported_modeled_objects=imported_modeled_objects,
+        )
+
+    assert session.mesh_module.assign_length_op_calls == []
+    assert session.design.get_module_calls == []
 
 
 def test_assign_post_import_mesh_accepts_plate_stack_exact_pair(tmp_path: Path) -> None:
@@ -1607,23 +1739,11 @@ def test_assign_post_import_mesh_accepts_rx_single_coil_only(tmp_path: Path) -> 
     )
 
     assert session.mesh_module.assign_length_op_calls == [
-        [
-            "NAME:Length1",
-            "RefineInside:=",
-            False,
-            "Enabled:=",
-            True,
-            "Objects:=",
-            ["rx_copper_l0"],
-            "RestrictElem:=",
-            False,
-            "NumMaxElem:=",
-            "1000",
-            "RestrictLength:=",
-            True,
-            "MaxLength:=",
-            "5mm",
-        ]
+        _expected_mesh_length_payload(
+            mesh_object_names=["rx_copper_l0"],
+            tx_trace_width_mm=_trace_width_tx_mm(),
+            rx_trace_width_mm=_trace_width_rx_mm(),
+        )
     ]
     assert result["objects"] == ["rx_copper_l0"]
 
@@ -2089,23 +2209,11 @@ def test_setup_type2_step_ledger_rx_single_coil_only_runs_full_rx_only_setup_rea
     )
 
     assert session.mesh_module.assign_length_op_calls == [
-        [
-            "NAME:Length1",
-            "RefineInside:=",
-            False,
-            "Enabled:=",
-            True,
-            "Objects:=",
-            ["rx_copper_l0"],
-            "RestrictElem:=",
-            False,
-            "NumMaxElem:=",
-            "1000",
-            "RestrictLength:=",
-            True,
-            "MaxLength:=",
-            "5mm",
-        ]
+        _expected_mesh_length_payload(
+            mesh_object_names=["rx_copper_l0"],
+            tx_trace_width_mm=_trace_width_tx_mm(),
+            rx_trace_width_mm=_trace_width_rx_mm(),
+        )
     ]
     assert len(session.oboundary.assign_lumped_port_calls) == 1
     assert result["ports"] == {"tx": [], "rx": ["1_T1"]}
@@ -2354,7 +2462,7 @@ def test_setup_type2_step_ledger_rejects_plate_stack_exact_pair_before_hfss(tmp_
     )
     with pytest.raises(
         ValueError,
-        match=r"type2 setup mode 'TxRx' supports only \['tx_inner_single_coil', 'rx_single_coil'\] for setup-ready orchestration",
+        match=r"type2 setup mode 'TxRx' supports only \['tx_inner_single_coil', 'rx_single_coil'\](?: plus optional passive 'tv_aluminum_plate')? for setup-ready orchestration",
     ):
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
@@ -2377,7 +2485,7 @@ def test_setup_type2_step_ledger_rejects_tx_rect_void_columns_with_rx_single_coi
     )
     with pytest.raises(
         ValueError,
-        match=r"type2 setup mode 'TxRx' supports only \['tx_inner_single_coil', 'rx_single_coil'\] for setup-ready orchestration",
+        match=r"type2 setup mode 'TxRx' supports only \['tx_inner_single_coil', 'rx_single_coil'\](?: plus optional passive 'tv_aluminum_plate')? for setup-ready orchestration",
     ):
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
@@ -2401,7 +2509,7 @@ def test_setup_type2_step_ledger_rejects_rotated_tx_plate_stack_array_port_sheet
     imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
     with pytest.raises(
         ValueError,
-        match=r"type2 setup mode 'TxRx' supports only \['tx_inner_single_coil', 'rx_single_coil'\] for setup-ready orchestration",
+        match=r"type2 setup mode 'TxRx' supports only \['tx_inner_single_coil', 'rx_single_coil'\](?: plus optional passive 'tv_aluminum_plate')? for setup-ready orchestration",
     ):
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
@@ -2425,7 +2533,7 @@ def test_setup_type2_step_ledger_rejects_tx_plate_stack_with_rx_single_coil_befo
     )
     with pytest.raises(
         ValueError,
-        match=r"type2 setup mode 'TxRx' supports only \['tx_inner_single_coil', 'rx_single_coil'\] for setup-ready orchestration",
+        match=r"type2 setup mode 'TxRx' supports only \['tx_inner_single_coil', 'rx_single_coil'\](?: plus optional passive 'tv_aluminum_plate')? for setup-ready orchestration",
     ):
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
@@ -2448,7 +2556,7 @@ def test_setup_type2_step_ledger_rejects_inverse_mixed_role_family_before_hfss(t
 
     with pytest.raises(
         ValueError,
-        match=r"type2 setup mode 'TxRx' supports only \['tx_inner_single_coil', 'rx_single_coil'\] for setup-ready orchestration",
+        match=r"type2 setup mode 'TxRx' supports only \['tx_inner_single_coil', 'rx_single_coil'\](?: plus optional passive 'tv_aluminum_plate')? for setup-ready orchestration",
     ):
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,

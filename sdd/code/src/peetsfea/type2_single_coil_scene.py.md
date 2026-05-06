@@ -36,6 +36,9 @@ tags:
 - Actual-region helpers must expose the resolved visible physical box, matching the exported modeled body bbox, so passive TX underlay/void bodies align with imported AEDT geometry.
 - `RealizedSingleCoilFitEnvelope.design_outer_bounds_*` and `outer_bounds_*` are the visible physical body box intended for actual-region bounds and for TX inner wall-side placement validation.
 - `RealizedSingleCoilFitEnvelope.physical_modeled_body_bounds_*` describes the same exported physical modeled body bbox used by modeled scene assembly.
+- Single-coil canonical coordinates for TX single-coil modeled entries now include realized rect/void `trace_width_mm` via `fit_envelope.realized.trace_width_mm`.
+  TX outer single-coil modeled entries reuse the same source from `placement.fit_envelope.realized.trace_width_mm`.
+- Setup-ready mesh consumes this field to derive Length1 max length.
 - The TX outer fit-envelope helper resolves the same virtual sloped owner used by `tx_outer_single_coil` scene assembly so non-model `tx_outer_actual_region` sizing cannot drift from the modeled placement path.
 - `TxOuterSingleCoilScenePlacement` resolves final prism-local scene children once and returns:
   - final child geometries after tilt-frame rotation/translation,
@@ -78,3 +81,4 @@ tags:
 - [0.2.24 Type2 TX Inner Void YZ Stack](../../../plans/0.2.24-type2-tx-inner-void-yz-stack.md)
 - [0.2.24 Type2 Ferrite FR4 Boolean Clearance](../../../plans/0.2.24-type2-ferrite-fr4-boolean-clearance.md)
 - [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
+- [0.2.24 Type2 Trace Width Mesh Length](../../../plans/0.2.24-type2-trace-width-mesh-length.md)

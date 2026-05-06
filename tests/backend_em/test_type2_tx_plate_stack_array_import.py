@@ -90,6 +90,7 @@ def _array_imported_name_batch(*, branch_count: int) -> tuple[str, ...]:
     return (
         "environment",
         "tx_region",
+        "tx_region_actual",
         "rx_region_max",
         *_tx_array_expected_names(branch_count=branch_count),
         "rx_plate_copper",
