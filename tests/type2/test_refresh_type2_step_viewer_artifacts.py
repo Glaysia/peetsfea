@@ -138,3 +138,14 @@ def test_view_step_notebook_step_display_and_gui_build_share_sample_index_select
     assert selector_call in gui_build_text
     assert "sample_index=VIEW_INDEX" in step_display_text
     assert "sample_index=VIEW_INDEX" in gui_build_text
+
+
+def test_view_step_notebook_gui_build_supports_fixed_view_index() -> None:
+    code_sources = _notebook_code_sources()
+
+    gui_build_text = next(source for source in code_sources if "GUI debug build delegated to entry/build.py" in source)
+
+    assert "if VIEW_INDEX == -1:" in gui_build_text
+    assert "setup_type2_step_ledger_into_hfss" in gui_build_text
+    assert "step_ledger_path=TYPE2_FIXED_LEDGER_PATH" in gui_build_text
+    assert 'output_aedt_path = TYPE2_FIXED_OUTPUT_DIR / "type2_fixed.aedt"' in gui_build_text

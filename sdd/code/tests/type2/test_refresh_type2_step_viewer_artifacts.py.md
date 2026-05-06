@@ -20,6 +20,7 @@ tags:
 - `notebooks/view_step_files.ipynb`가 notebook-local owner description dictionary 대신 TOML-backed description helper를 쓰는지 정적으로 검증한다.
 - `notebooks/view_step_files.ipynb`가 removed TX outer canonical/raw owner mapping을 보유하지 않는지 정적으로 검증한다.
 - `VIEW_INDEX`가 successful-entry list index가 아니라 manifest `sample_index`로 해석되는지 정적으로 검증한다.
+- `VIEW_INDEX = -1` GUI build path가 sampled manifest selector를 호출하지 않고 fixed STEP ledger를 직접 setup-ready로 넘기는지 정적으로 검증한다.
 
 ## 입력 / 출력
 - 입력:
@@ -34,6 +35,7 @@ tags:
 - viewer notebook owner description text must come from TOML metadata through `type2_range_owner_descriptions`.
 - viewer notebook sampled-value extraction must use active owner paths directly and must not retain TX outer canonical-to-raw lookup state.
 - viewer notebook sampled manifest selection must use `entry["sample_index"]` matching so skipped samples cannot shift the Ansys GUI debug target.
+- viewer notebook fixed GUI build must use `TYPE2_FIXED_LEDGER_PATH` and `setup_type2_step_ledger_into_hfss()` directly because fixed view mode has no sampled manifest entry.
 
 ## Invariants / fail-fast
 - fixed example keeps `tx_region` as guide context and derives `tx_inner_region` geometry context.

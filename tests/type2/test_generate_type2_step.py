@@ -2204,8 +2204,9 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert tx_inner_entry.x_position_ratio.start == pytest.approx(0.0)
     assert tx_inner_entry.x_position_ratio.end == pytest.approx(0.0)
     assert tx_inner_entry.x_position_ratio.count == 1
-    assert tx_inner_entry.turn_count.start == pytest.approx(2.0)
+    assert tx_inner_entry.turn_count.start == pytest.approx(1.0)
     assert tx_inner_entry.layer_count.start == pytest.approx(2.0)
+    assert tx_inner_entry.layer_gap_mm.start == pytest.approx(3.0)
     assert tx_inner_entry.underlay_repeat_count.start == pytest.approx(1.0)
     assert tx_inner_entry.underlay_repeat_count.end == pytest.approx(1.0)
     assert tx_inner_entry.underlay_repeat_count.count == 1
@@ -2218,11 +2219,11 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert rx_entry.role == "rx_single_coil"
     assert rx_entry.pcb_thickness_mm == pytest.approx(3.965)
     assert rx_entry.copper_thickness_mm == pytest.approx(0.035)
-    assert rx_entry.outer_x_usage_ratio.start == pytest.approx(0.3)
-    assert rx_entry.outer_y_usage_ratio.start == pytest.approx(0.3)
-    assert rx_entry.outer_x_mm.start == pytest.approx(168.0)
-    assert rx_entry.outer_y_mm.start == pytest.approx(108.0)
-    assert rx_entry.turn_count.start == pytest.approx(3.0)
+    assert rx_entry.outer_x_usage_ratio.start == pytest.approx(0.6)
+    assert rx_entry.outer_y_usage_ratio.start == pytest.approx(0.35)
+    assert rx_entry.outer_x_mm.start == pytest.approx(1080.0)
+    assert rx_entry.outer_y_mm.start == pytest.approx(126.0)
+    assert rx_entry.turn_count.start == pytest.approx(1.0)
     assert rx_entry.layer_count.start == pytest.approx(1.0)
     assert rx_entry.underlay_repeat_count.start == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.end == pytest.approx(8.0)
@@ -2230,7 +2231,7 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert rx_entry.void_usage_ratio.start == pytest.approx(0.2)
     assert rx_entry.void_usage_ratio.end == pytest.approx(0.2)
     assert rx_entry.void_usage_ratio.count == 1
-    assert rx_entry.metal_fill_factor.start == pytest.approx(0.5)
+    assert rx_entry.metal_fill_factor.start == pytest.approx(0.5142857142857142)
 
 
 def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:

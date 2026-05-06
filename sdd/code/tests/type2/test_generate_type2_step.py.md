@@ -57,7 +57,7 @@ tags:
   each modeled outer body is validated to have a face whose normal is nearly parallel to the local normal of
   `tx_outer_region_prism.top_inner_start→top_outer_start` and whose frame `local_x` projection is non-zero.
 - `tx_region` may be present as guide context only.
-- Fixed examples must verify fixed non-modeled `tx_region` Y width `1800.0`, fixed `x_ratio=0.99`, preserved `y_usage_ratio`, and preserved TX inner `outer_y_usage_ratio=0.6`.
+- Fixed examples must verify fixed non-modeled `tx_region` Y width `1800.0`, fixed `x_ratio=0.99`, preserved `y_usage_ratio`, preserved TX inner `outer_y_usage_ratio=0.6`, and one-turn fixed TX/RX coil counts.
 - Deterministic tx_inner body-name contract is now explicitly covered for a fixed `layer_count=8` realization:
   expected exported bodies are `tx_inner_pcb_l0` through `tx_inner_pcb_l7` plus `tx_inner_copper_stack`.
 - STEP-only positive and negative inner/outer bridge geometry must be absent from active fixed-example TX paths.

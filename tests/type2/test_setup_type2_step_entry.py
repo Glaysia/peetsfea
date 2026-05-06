@@ -12,7 +12,7 @@ _TX_MODELED_ROLES = {"tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"}
 _TX_SAMPLED_OWNER_IDS = {"tx_region_actual", "tx_region_actual_stack_space"}
 _TX_REGION_ORIGIN_XYZ = [0.0, -900.0, 0.0]
 _TX_REGION_SIZE_XYZ = [160.0, 1800.0, 90.0]
-_FIXED_TX_REFERENCE_LINE_RATIOS = (0.99, 1.0, 0.65)
+_FIXED_TX_REFERENCE_LINE_RATIOS = (0.99, 1.0, 0.9)
 _SAMPLED_TX_REFERENCE_LINE_RANGES = ((0.99, 0.99, 1), (0.2, 1.0, 17), (0.2, 0.9, 13))
 
 

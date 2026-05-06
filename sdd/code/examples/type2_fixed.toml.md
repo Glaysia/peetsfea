@@ -28,8 +28,10 @@ tags:
 - `modeled_objects.tx_inner_rect_void_coil.outer_y_usage_ratio` remains fixed at `[false, 0.6, 0.6, 1]`; it continues to size the actual TX coil inside `tx_inner_region`.
 - TX inner X placement source field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio`.
 - `modeled_objects.tx_inner_rect_void_coil` remains active with role `tx_inner_single_coil`.
+- `modeled_objects.tx_inner_rect_void_coil.turn_count` remains fixed at one turn for the fixed example.
 - TX inner passive stack defaults are coarsened for simulation speed: `underlay_repeat_count = [true, 1, 1, 1]`, PET_PSA thickness `2.0 mm`, and ferrite thickness `2.0 mm`.
 - `modeled_objects.rx_rect_void_coil` remains active with role `rx_single_coil`.
+- `modeled_objects.rx_rect_void_coil.turn_count` remains fixed at one turn for the fixed example.
 - No active example field declares `tx_outer_terminal_path` or `tx_outer_x_position_ratio`.
 
 ## Invariants / fail-fast
