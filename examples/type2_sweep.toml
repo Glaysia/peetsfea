@@ -245,8 +245,8 @@ non_model = true
 material = "vacuum"
 plane = "YZ"
 # RX single-coil placement owner다.
-origin_xyz = [0.0, -280.0, 170.0]
-size_xyz = [5.0, 560.0, 360.0]
+origin_xyz = [0.0, -900.0, 170.0]
+size_xyz = [5.0, 1800.0, 360.0]
 
 # ----------------------------------------------------------------------------
 # Modeled object registry
@@ -314,7 +314,7 @@ pcb_thickness_mm = 3.965
 copper_thickness_mm = 0.035
 [modeled_objects.outer_x_usage_ratio]
 # RX placement owner span 대비 local X outer size ratio.
-range = [false, 0.1, 0.6, 17]
+range = [false, 0.1, 1.0, 34]
 description = "RX 배치 영역 대비 local X 방향 외곽 크기 비율"
 [modeled_objects.outer_y_usage_ratio]
 # RX placement owner span 대비 local Y outer size ratio.
