@@ -23,8 +23,9 @@ tags:
 ## Canonical state
 - Sampling remains deterministic by source TOML, version, seed, and retry number.
 - RX single-coil sampled fixtures preserve the active `3.965 mm` PCB plus `0.035 mm` copper stack.
-- `tx_region` is guide context only, but its `tx_reference_line` range fields are effective sampled owner coordinates.
-- RxOnly sampled-owner fixtures contain RX coil owners plus active non-modeled guide owners; TX derived non-model owners are absent.
+- `tx_region` is fixed guide context only; singleton `tx_reference_line.x_ratio` is not an exported sampled owner.
+- `tx_reference_line.y_usage_ratio` remains an effective sampled owner when its range has `count > 1`.
+- RxOnly sampled-owner fixtures contain RX coil owners plus active count>1 non-modeled guide owners; TX derived non-model owners are absent.
 - Synthetic `ModeledTxInnerSingleCoilSpec` fixtures include the required fixed PET/PSA and ferrite underlay thickness ranges so sampled-owner tests exercise the current parser dataclass contract.
 - `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` is a public sampled owner sourced and frozen directly on `tx_inner_rect_void_coil`.
 - `modeled_objects.tx_outer_rect_void_coil.*` paths are not active sampled owners.
@@ -32,7 +33,7 @@ tags:
 
 ## Invariants / fail-fast
 - Unknown owner paths fail immediately.
-- `sampled_owner_paths` must include every active `count > 1` range owner, including non-modeled guide ranges.
+- `sampled_owner_paths` must include every active `count > 1` range owner, including non-modeled Y/Z guide ranges, and exclude fixed singleton X guide ranges.
 - RxOnly sampling tests must not require TX modeled owners.
 - RxOnly sampling tests must not require `tx_region_actual` or `tx_region_actual_stack_space`.
 - Fixed TX inner underlay thickness fields are not sampled owner paths because their ranges are fixed singleton values.
@@ -49,3 +50,4 @@ tags:
 - [type2_sampled.py](../../src/peetsfea/type2_sampled.py.md)
 - [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
 - [0.2.24 Type2 STEP Export Scene Data Reuse](../../../plans/0.2.24-type2-step-export-scene-data-reuse.md)
+- [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
