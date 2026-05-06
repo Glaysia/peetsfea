@@ -30,6 +30,7 @@ tags:
 - TX inner X placement source field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` with sweep default `[false, 0.0, 0.3, 45]`.
 - `modeled_objects.tx_inner_rect_void_coil` remains active with role `tx_inner_single_coil`.
 - `modeled_objects.tx_inner_rect_void_coil.turn_count` samples the official active sweep range `[true, 1, 3, 3]`.
+- Active sweep fixes `modeled_objects.tx_inner_rect_void_coil.layer_count` at `[true, 1, 1, 1]`; it is not a sampled owner.
 - TX inner passive stack defaults are coarsened for simulation speed: `underlay_repeat_count = [true, 1, 1, 1]`, PET_PSA thickness `2.0 mm`, and ferrite thickness `2.0 mm`.
 - `modeled_objects.tx_inner_rect_void_coil.void_stack_present` uses `[true, 0, 1, 2]` so sampled designs can include or omit the TX void YZ stack while keeping the bottom underlay present.
 - `modeled_objects.rx_rect_void_coil` remains active with role `rx_single_coil`.
@@ -40,6 +41,7 @@ tags:
 - Candidate values must satisfy `0.0 <= value <= 1.0`.
 - TX reference-line X ratio remains parser-validated strict interior; Z ratio may reach `1.0` and must stay in `(0, 1]`.
 - Active sampled owners must not include `modeled_objects.tx_outer_rect_void_coil.*`.
+- Active sampled owners must not include `modeled_objects.tx_inner_rect_void_coil.layer_count`.
 - Unsupported TX outer fields must be rejected by parser-level validation rather than carried as fallback state.
 
 ## Collaborators

@@ -38,13 +38,12 @@ tags:
 - The disabled export regression fixes `underlay_repeat_count = 1` and `void_stack_present = 0`; it expects `tx_underlay_*` bodies and group membership without any `tx_void_*` scene labels.
 - TX inner terminal metadata remains deterministic and can drive `tx_inner_port_sheet` for `TxRx`.
 - Fixed example parsing now asserts `tx_inner_rect_void_coil.terminal_stub_length_mm == [false, 7.5, 7.5, 1]` and `tx_inner` TX export tests assert the canonical `outer_bounds_min_xyz[2]` offset is exactly 7.5 mm above the first PCB layer `z`.
-- `tx_inner_rect_void_coil` is modeled geometry-only with expected coil bodies `tx_inner_pcb_l0`,
-  `tx_inner_pcb_l1`, and `tx_inner_copper_stack`; fixed examples also emit
-  `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0`; it must not create `TX_TML`.
-- Multilayer TX inner tests must include the active sweep upper bound: fixed `layer_count=5` exports
-  `tx_inner_pcb_l0` through `tx_inner_pcb_l4` plus `tx_inner_copper_stack`.
+- Active `tx_inner_rect_void_coil` example and sweep contracts are single-layer: `layer_count = [true, 1, 1, 1]`.
+- `tx_inner_rect_void_coil` is modeled geometry-only with expected active coil bodies `tx_inner_pcb_l0`
+  and `tx_inner_copper_l0`; fixed examples also emit `tx_underlay_pet_psa_u0` and
+  `tx_underlay_ferrite_u0`; it must not create `TX_TML`.
 - `tx_inner_rect_void_coil` must use `x_position_ratio` for owner-local visible physical X placement and centered owner-local Y placement.
-- TX inner actual-underlay tests must verify only `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0` are emitted, share `tx_inner_actual_region` X/Y bounds, and stack downward in 6.0 mm PET/PSA then 6.0 mm ferrite order for a 12.0 mm total bottom underlay.
+- TX inner actual-underlay tests must verify only `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0` are emitted, share `tx_inner_actual_region` X/Y bounds, and stack downward in fixed-example 2.0 mm PET/PSA then 2.0 mm ferrite order for a 4.0 mm total bottom underlay.
 - TX inner void-stack enabled tests verify generated void-stack bodies separately from the fixed example, because the selected-size fixed example disables the stack.
 - TX inner ferrite-family clearance tests must verify the `g_ferrite_tx` member order remains the exported PET_PSA/ferrite underlay members, with void-stack members included only for enabled-stack cases, while every ferrite-family body and every PCB body remains a positive-volume solid.
 - Active generation regressions must verify no `tx_outer_region`, `tx_outer_void_*`, `tx_outer_underlay_*`, `tx_outer_pcb_*`, `tx_outer_copper_*`, `tx_outer_actual_region`, `g_ferrite_tx_outer`, or TX inner/outer bridge members are emitted.
@@ -61,8 +60,8 @@ tags:
   `tx_outer_region_prism.top_inner_start→top_outer_start` and whose frame `local_x` projection is non-zero.
 - `tx_region` may be present as guide context only.
 - Fixed examples must verify fixed non-modeled `tx_region` Y width `1800.0`, fixed `x_ratio=0.99`, preserved `y_usage_ratio`, maximum fixed TX/RX outer usage ratios, disabled TX inner void stack, fixed TX one-layer/one-turn state, and fixed RX one-turn state.
-- Deterministic tx_inner body-name contract is now explicitly covered for a fixed `layer_count=5` realization:
-  expected exported bodies are `tx_inner_pcb_l0` through `tx_inner_pcb_l4` plus `tx_inner_copper_stack`.
+- Deterministic active tx_inner body-name contract is explicitly covered for a fixed `layer_count=1` realization:
+  expected exported bodies are `tx_inner_pcb_l0` and `tx_inner_copper_l0`.
 - STEP-only positive and negative inner/outer bridge geometry must be absent from active fixed-example TX paths.
 - `tx_reference_line` ratio inputs, including centered `y_usage_ratio`, are expected to derive a visible non-modeled
   `tx_inner_region` STEP and retained ledger member without activating TX

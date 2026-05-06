@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_import_pipeline.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - test
   - import
@@ -29,6 +29,7 @@ tags:
 - `tx_inner_single_coil` void-stack fixtures require `g_ferrite_tx` member order to include `tx_void_ferrite_u*` and `tx_void_pet_psa_u*` exactly as export declares them.
 - Disabled `tx_inner_single_coil` void-stack fixtures require `g_ferrite_tx` to accept underlay-only membership while `tx_void_*` bodies are absent from expected, imported, and styled names.
 - Enabled `tx_inner_single_coil` void-stack fixtures require `g_ferrite_tx` member order to include bottom underlay members plus exactly the computed void pair members export declares.
+- Active fixed/sweep import fixtures treat TX inner as layer-count one and must not expect `tx_inner_copper_stack`.
 - STEP ledger load coverage verifies the same TX inner void-stack group contract before PyAEDT import begins.
 - TX inner underlay import fixtures include the non-modeled `tx_inner_region` owner and `tx_inner_actual_region` provenance before import-bound validation runs.
 - TX inner actual-region regression coverage preserves a large guide owner with a centered design/actual region and a smaller asymmetric physical modeled bbox, matching sampled TxRx debug failures.

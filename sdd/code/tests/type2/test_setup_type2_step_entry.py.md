@@ -40,6 +40,8 @@ tags:
   `underlay_pet_psa_thickness_mm = [false, 6.0, 6.0, 1]`, and
   `underlay_ferrite_thickness_mm = [false, 6.0, 6.0, 1]`.
 - active sweep examples assert TX inner and RX `turn_count` ranges as `[true, 1, 3, 3]`; fixed examples remain unchanged at `[true, 1, 1, 1]`.
+- active examples fix `tx_inner_rect_void_coil.layer_count = [true, 1, 1, 1]` and must not expect
+  `tx_inner_copper_stack` in fixed/sweep body-name contracts.
 
 ## Invariants / fail-fast
 - `outputs.mode` must be `TxRx`.
@@ -48,6 +50,7 @@ tags:
   TX modeled role.
 - active examples must not expose TX derived sampled owners such as `tx_region_actual`, `tx_region_actual_stack_space`, or TX modeled sampled fields.
 - fixed example `turn_count` ranges must stay singleton one-turn ranges while the official sweep upper bound stays at three turns.
+- active examples must not expose `modeled_objects.tx_inner_rect_void_coil.layer_count` as a sampled owner.
 - `tx_reference_line.x_ratio`, `tx_reference_line.y_usage_ratio`, and `tx_reference_line.z_ratio` are guide-only
   inputs and may derive TX inner geometry context, but must not imply TX ports, reports, generic TX modeled roles,
   or active TX sampled owners.

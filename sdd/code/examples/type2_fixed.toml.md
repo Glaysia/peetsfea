@@ -29,6 +29,7 @@ tags:
 - TX inner X placement source field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio`.
 - `modeled_objects.tx_inner_rect_void_coil` remains active with role `tx_inner_single_coil`.
 - `modeled_objects.tx_inner_rect_void_coil.turn_count` remains unchanged at `[true, 1, 1, 1]`; `layer_count` also remains fixed at one for the fixed example.
+- Active fixed uses `modeled_objects.tx_inner_rect_void_coil.layer_count = [true, 1, 1, 1]`; it does not expect `tx_inner_copper_stack` and is not a sampled owner.
 - TX inner passive stack defaults are coarsened for simulation speed: `underlay_repeat_count = [true, 1, 1, 1]`, PET_PSA thickness `2.0 mm`, and ferrite thickness `2.0 mm`.
 - `modeled_objects.tx_inner_rect_void_coil.void_stack_present` remains fixed disabled at `[true, 0, 0, 1]`.
 - `modeled_objects.rx_rect_void_coil` remains active with role `rx_single_coil`.
@@ -40,6 +41,7 @@ tags:
 - Candidate values must satisfy `0.0 <= value <= 1.0`.
 - TX reference-line X ratio remains parser-validated strict interior; Z ratio may reach `1.0` and must stay in `(0, 1]`.
 - Active sampled owners must not include `modeled_objects.tx_outer_rect_void_coil.*`.
+- Active sampled owners must not include `modeled_objects.tx_inner_rect_void_coil.layer_count`.
 - Unsupported TX outer fields must be rejected by parser-level validation rather than carried as fallback state.
 
 ## Collaborators

@@ -631,24 +631,6 @@ def _tx_inner_rx_imported_name_batch_with_tx_inner_underlay_disabled_void_stack(
     return tuple(names)
 
 
-def _tx_inner_multilayer_stack_modeled_object(tmp_path: Path) -> dict[str, object]:
-    modeled_object = _modeled_entry(
-        object_id="tx_inner_rect_void_coil",
-        role="tx_inner_single_coil",
-        source_metadata_path=str(tmp_path / "tx_inner.metadata.json"),
-        expected_names=["tx_inner_pcb_l0", "tx_inner_pcb_l1", "tx_inner_copper_stack"],
-        pcb_layer_positions_mm=[87.2, 91.3],
-        copper_layer_positions_mm=[88.8, 92.9],
-    )
-    modeled_object["imported_object_names"] = [
-        "tx_inner_pcb_l0",
-        "tx_inner_pcb_l1",
-        "tx_inner_copper_stack",
-        "tx_inner_port_sheet",
-    ]
-    return modeled_object
-
-
 def _plate_stack_modeled_objects_with_imported_names(tmp_path: Path) -> list[dict[str, object]]:
     modeled_objects = _plate_stack_modeled_objects(tmp_path)
     tx_entry = cast(dict[str, object], modeled_objects[0])
@@ -1297,7 +1279,8 @@ def test_setup_type2_step_ledger_disabled_tx_inner_void_stack_keeps_underlay_pas
     assert result["sources"]["rx_source_name"] == "2_T1"
     assert result["mesh"]["objects"] == ["tx_inner_copper_l0", "rx_copper_l0"]
     assert session.created_output_variables == _expected_output_variables()
-    assert session.created_reports[0]["components"][3] == [name for name, _ in TYPE1_OUTPUT_VARIABLES]
+    report_components = cast(list[object], session.created_reports[0]["components"])
+    assert report_components[3] == [name for name, _ in TYPE1_OUTPUT_VARIABLES]
     setup_participant_payload = json.dumps(
         {
             "mesh_calls": session.mesh_module.assign_length_op_calls,

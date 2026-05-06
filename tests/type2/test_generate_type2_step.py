@@ -2222,6 +2222,8 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert tx_inner_entry.x_position_ratio.count == 1
     assert tx_inner_entry.turn_count.start == pytest.approx(1.0)
     assert tx_inner_entry.layer_count.start == pytest.approx(1.0)
+    assert tx_inner_entry.layer_count.end == pytest.approx(1.0)
+    assert tx_inner_entry.layer_count.count == 1
     assert tx_inner_entry.layer_gap_mm.start == pytest.approx(3.0)
     assert tx_inner_entry.underlay_repeat_count.start == pytest.approx(1.0)
     assert tx_inner_entry.underlay_repeat_count.end == pytest.approx(1.0)
@@ -2311,8 +2313,8 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     tx_inner_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_inner_rect_void_coil")
     assert tx_inner_entry.role == "tx_inner_single_coil"
     assert tx_inner_entry.layer_count.start == pytest.approx(1.0)
-    assert tx_inner_entry.layer_count.end == pytest.approx(5.0)
-    assert tx_inner_entry.layer_count.count == 5
+    assert tx_inner_entry.layer_count.end == pytest.approx(1.0)
+    assert tx_inner_entry.layer_count.count == 1
     assert tx_inner_entry.turn_count == RangeSpec(True, 1.0, 3.0, 3)
     assert tx_inner_entry.underlay_repeat_count.start == pytest.approx(1.0)
     assert tx_inner_entry.underlay_repeat_count.end == pytest.approx(1.0)
@@ -3333,8 +3335,8 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     assert tx_region_member["model_state"] is False
     assert tx_region_member["non_model"] is True
     tx_region_min_xyz, tx_region_size_xyz = _canonical_min_size(tx_region_member)
-    assert tx_region_min_xyz == pytest.approx((0.0, -600.0, 0.0))
-    assert tx_region_size_xyz == pytest.approx((720.0, 1200.0, 90.0))
+    assert tx_region_min_xyz == pytest.approx((0.0, -900.0, 0.0))
+    assert tx_region_size_xyz == pytest.approx((160.0, 1800.0, 90.0))
     tx_inner_member = next(member for member in member_objects if cast(str, member["object_id"]) == "tx_inner_region")
     tx_inner_actual_member = next(
         member for member in member_objects if cast(str, member["object_id"]) == "tx_inner_actual_region"
@@ -3346,13 +3348,13 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     reference_line = cast(dict[str, object], tx_inner_member["tx_reference_line"])
     assert reference_line["x_ratio"] == pytest.approx(0.99)
     assert reference_line["y_usage_ratio"] == pytest.approx(1.0)
-    assert tx_inner_min_xyz == pytest.approx((0.0, -600.0, 0.0))
-    assert tx_inner_size_xyz == pytest.approx((712.8, 1200.0, 81.0))
+    assert tx_inner_min_xyz == pytest.approx((0.0, -900.0, 0.0))
+    assert tx_inner_size_xyz == pytest.approx((158.4, 1800.0, 81.0))
     assert tx_inner_actual_min_xyz[0] == pytest.approx(0.0)
-    assert tx_inner_actual_min_xyz[1] == pytest.approx(-54.63440272451783)
-    assert tx_inner_actual_max_xyz[1] == pytest.approx(54.634402724517855)
-    assert tx_inner_actual_size_xyz[0] == pytest.approx(137.13763380207968)
-    assert tx_inner_actual_size_xyz[1] == pytest.approx(109.26880544903568)
+    assert tx_inner_actual_min_xyz[1] == pytest.approx(-791.171320754717)
+    assert tx_inner_actual_max_xyz[1] == pytest.approx(791.171320754717)
+    assert tx_inner_actual_size_xyz[0] == pytest.approx(104.90264150943396)
+    assert tx_inner_actual_size_xyz[1] == pytest.approx(1582.342641509434)
     tx_region_actual_members = [member for member in member_objects if cast(str, member["role"]) == "tx_region_actual"]
     assert tx_region_actual_members == []
     tx_region_actual_stack_space_members = [
@@ -3369,10 +3371,10 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     tx_inner_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_inner_rect_void_coil")
     assert tx_inner_entry["role"] == "tx_inner_single_coil"
     assert tx_inner_entry["expected_exported_body_names"] == _tx_inner_expected_body_names(
-        layer_count=2,
+        layer_count=1,
         underlay_repeat_count=1,
     )
-    assert tx_inner_entry["expected_exported_body_count"] == 5
+    assert tx_inner_entry["expected_exported_body_count"] == 4
     assert all(entry["object_id"] != "tx_outer_rect_void_coil" for entry in ledger["modeled_objects"])
     rx_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "rx_rect_void_coil")
     assert cast(dict[str, object], rx_entry["terminal_metadata"])["port_sheet_vertices_xyz"]
@@ -3391,7 +3393,7 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     )
 
 
-def test_export_type2_step_artifacts_supports_tx_inner_single_coil_layer_count_five_body_contract(tmp_path: Path) -> None:
+def test_export_type2_step_artifacts_supports_active_tx_inner_single_layer_body_contract(tmp_path: Path) -> None:
     toml_path = _write_spec(
         tmp_path,
         _type2_spec_text(
@@ -3399,7 +3401,7 @@ def test_export_type2_step_artifacts_supports_tx_inner_single_coil_layer_count_f
             modeled_role="tx_inner_single_coil",
             underlay_repeat_count_range=_range(True, 0.0, 0.0, 1),
             void_stack_present_range=_range(True, 0.0, 0.0, 1),
-            layer_count=5,
+            layer_count=1,
         ),
     )
     ledger = export_type2_step_artifacts(
@@ -3411,17 +3413,18 @@ def test_export_type2_step_artifacts_supports_tx_inner_single_coil_layer_count_f
 
     tx_inner_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_inner_rect_void_coil")
     assert tx_inner_entry["role"] == "tx_inner_single_coil"
-    expected_names = _tx_inner_expected_body_names(layer_count=5)
+    expected_names = _tx_inner_expected_body_names(layer_count=1)
     assert tx_inner_entry["expected_exported_body_names"] == expected_names
     assert tx_inner_entry["expected_exported_body_count"] == len(expected_names)
-    assert tx_inner_entry["expected_exported_body_count"] == 6
+    assert tx_inner_entry["expected_exported_body_count"] == 2
     assert ledger["outputs"]["mode"] == "RxOnly"
     assert "TX_TML" not in json.dumps(ledger["outputs"], sort_keys=True)
 
     scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
     for body_name in expected_names:
         assert body_name in scene_shapes_by_label
-    assert "tx_inner_copper_l0" not in scene_shapes_by_label
+    assert "tx_inner_pcb_l1" not in scene_shapes_by_label
+    assert "tx_inner_copper_stack" not in scene_shapes_by_label
 
 
 def test_export_type2_step_artifacts_keeps_tx_inner_underlay_when_void_stack_disabled(tmp_path: Path) -> None:
@@ -3432,7 +3435,7 @@ def test_export_type2_step_artifacts_keeps_tx_inner_underlay_when_void_stack_dis
             modeled_role="tx_inner_single_coil",
             underlay_repeat_count_range=_range(True, 1.0, 1.0, 1),
             void_stack_present_range=_range(True, 0.0, 0.0, 1),
-            layer_count=2,
+            layer_count=1,
         ),
     )
     ledger = export_type2_step_artifacts(
@@ -3443,7 +3446,7 @@ def test_export_type2_step_artifacts_keeps_tx_inner_underlay_when_void_stack_dis
     )
 
     tx_inner_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_inner_rect_void_coil")
-    expected_names = _tx_inner_expected_body_names(layer_count=2, underlay_repeat_count=1)
+    expected_names = _tx_inner_expected_body_names(layer_count=1, underlay_repeat_count=1)
     assert tx_inner_entry["expected_exported_body_names"] == expected_names
     assert tx_inner_entry["expected_exported_body_count"] == len(expected_names)
     expected_underlay_names = ("tx_underlay_pet_psa_u0", "tx_underlay_ferrite_u0")
@@ -3502,8 +3505,8 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     tx_inner_member = next(member for member in member_objects if member["object_id"] == "tx_inner_region")
     tx_inner_actual_member = next(member for member in member_objects if member["object_id"] == "tx_inner_actual_region")
     tx_region_min_xyz, tx_region_size_xyz = _canonical_min_size(tx_region_member)
-    assert tx_region_min_xyz == pytest.approx((0.0, -600.0, 0.0))
-    assert tx_region_size_xyz == pytest.approx((720.0, 1200.0, 90.0))
+    assert tx_region_min_xyz == pytest.approx((0.0, -900.0, 0.0))
+    assert tx_region_size_xyz == pytest.approx((160.0, 1800.0, 90.0))
     assert tx_inner_member["role"] == "tx_inner_region"
     assert tx_inner_member["model_state"] is False
     assert tx_inner_member["non_model"] is True
@@ -3514,21 +3517,21 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert tx_inner_actual_member["material"] == "vacuum"
 
     canonical_coordinates = cast(dict[str, object], tx_inner_member["canonical_coordinates"])
-    assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx((0.0, -600.0, 0.0))
-    assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx((712.8, 1200.0, 81.0))
+    assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx((0.0, -900.0, 0.0))
+    assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx((158.4, 1800.0, 81.0))
     tx_inner_region_min_xyz, tx_inner_region_size_xyz = _canonical_min_size(tx_inner_member)
     reference_line = cast(dict[str, object], tx_inner_member["tx_reference_line"])
     assert reference_line["source_region_id"] == "tx_region"
     assert reference_line["x_ratio"] == pytest.approx(0.99)
     assert reference_line["y_usage_ratio"] == pytest.approx(1.0)
     assert reference_line["z_ratio"] == pytest.approx(0.9)
-    assert reference_line["line_start_xyz"] == pytest.approx((712.8, -600.0, 81.0))
-    assert reference_line["line_end_xyz"] == pytest.approx((712.8, 600.0, 81.0))
+    assert reference_line["line_start_xyz"] == pytest.approx((158.4, -900.0, 81.0))
+    assert reference_line["line_end_xyz"] == pytest.approx((158.4, 900.0, 81.0))
     tx_inner_actual_region = cast(dict[str, object], tx_inner_actual_member["tx_actual_region"])
     assert tx_inner_actual_region["source_guide_id"] == "tx_inner_region"
     assert tx_inner_actual_region["modeled_source_id"] == "tx_inner_rect_void_coil"
-    assert tx_inner_actual_region["x_usage_ratio"] == pytest.approx(0.22139465559575477)
-    assert tx_inner_actual_region["y_usage_ratio"] == pytest.approx(0.10828440179634166)
+    assert tx_inner_actual_region["x_usage_ratio"] == pytest.approx(0.9)
+    assert tx_inner_actual_region["y_usage_ratio"] == pytest.approx(0.9)
     tx_inner_actual_region_bounds = cast(dict[str, object], tx_inner_actual_region["actual_region_bounds"])
     tx_inner_actual_region_min_xyz = cast(tuple[float, float, float], tx_inner_actual_region_bounds["min_xyz"])
     tx_inner_actual_region_max_xyz = cast(tuple[float, float, float], tx_inner_actual_region_bounds["max_xyz"])
@@ -3565,10 +3568,10 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert tx_inner_actual_physical_max_xyz == pytest.approx(tx_inner_actual_region_max_xyz)
     assert tx_inner_actual_physical_size_xyz == pytest.approx(tx_inner_actual_region_size_xyz)
     assert tx_inner_actual_min_xyz[0] == pytest.approx(0.0)
-    assert tx_inner_actual_min_xyz[1] == pytest.approx(-54.63440272451783)
-    assert tx_inner_actual_max_xyz[1] == pytest.approx(54.634402724517855)
-    assert tx_inner_actual_size_xyz[0] == pytest.approx(137.13763380207968)
-    assert tx_inner_actual_size_xyz[1] == pytest.approx(109.26880544903568)
+    assert tx_inner_actual_min_xyz[1] == pytest.approx(-791.171320754717)
+    assert tx_inner_actual_max_xyz[1] == pytest.approx(791.171320754717)
+    assert tx_inner_actual_size_xyz[0] == pytest.approx(104.90264150943396)
+    assert tx_inner_actual_size_xyz[1] == pytest.approx(1582.342641509434)
     assert tx_inner_actual_min_xyz[0] <= model_min_xyz[0]
     assert model_max_xyz[0] <= tx_inner_actual_max_xyz[0]
     assert tx_inner_actual_min_xyz[1] <= model_min_xyz[1]
@@ -3585,10 +3588,10 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
         tx_inner_region_min_xyz[1] + (tx_inner_region_size_xyz[1] - tx_inner_actual_size_xyz[1]) / 2.0
     )
     assert tx_inner_entry["expected_exported_body_names"] == _tx_inner_expected_body_names(
-        layer_count=2,
+        layer_count=1,
         underlay_repeat_count=1,
     )
-    assert tx_inner_entry["expected_exported_body_count"] == 5
+    assert tx_inner_entry["expected_exported_body_count"] == 4
     tx_inner_terminal_metadata = cast(dict[str, object], tx_inner_entry["terminal_metadata"])
     tx_inner_model_canonical = cast(dict[str, object], tx_inner_entry["canonical_coordinates"])
     tx_inner_terminal_pcb_layer_z_positions = cast(
@@ -3643,7 +3646,7 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert "tx_region_actual_stack_space" not in scene_shapes_by_label
     expected_tx_inner_underlay_names = tuple(
         name
-        for name in _tx_inner_expected_body_names(layer_count=2, underlay_repeat_count=1)
+        for name in _tx_inner_expected_body_names(layer_count=1, underlay_repeat_count=1)
         if name.startswith("tx_underlay_")
     )
     assert expected_tx_inner_underlay_names == (
@@ -3665,7 +3668,7 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
         scene_shapes_by_label=scene_shapes_by_label,
         ferrite_group_name=_TX_FERRITE_GROUP_NAME,
         ferrite_member_names=expected_tx_inner_underlay_names,
-        pcb_body_names=("tx_inner_pcb_l0", "tx_inner_pcb_l1"),
+        pcb_body_names=("tx_inner_pcb_l0",),
     )
     assert all(
         not name.startswith(("tx_outer_pcb_", "tx_outer_copper_", "tx_outer_void_", "tx_outer_underlay_"))
@@ -3684,11 +3687,11 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
             assert bbox.min.Y == pytest.approx(tx_inner_actual_min_xyz[1])
             assert bbox.max.Y == pytest.approx(tx_inner_actual_max_xyz[1])
         assert pet_bbox.max.Z == pytest.approx(previous_top_z)
-        assert pet_bbox.min.Z == pytest.approx(previous_top_z - 6.0)
+        assert pet_bbox.min.Z == pytest.approx(previous_top_z - 2.0)
         assert ferrite_bbox.max.Z == pytest.approx(pet_bbox.min.Z)
-        assert ferrite_bbox.min.Z == pytest.approx(pet_bbox.min.Z - 6.0)
+        assert ferrite_bbox.min.Z == pytest.approx(pet_bbox.min.Z - 2.0)
         previous_top_z = ferrite_bbox.min.Z
-    assert tx_inner_actual_min_xyz[2] - previous_top_z == pytest.approx(12.0)
+    assert tx_inner_actual_min_xyz[2] - previous_top_z == pytest.approx(4.0)
 
 
 def test_export_type2_fixed_example_exports_tx_positive_bridge_non_model_geometry(
@@ -3947,12 +3950,12 @@ def test_export_type2_step_artifacts_centers_tx_inner_region_y_usage_ratio(
     member_objects = cast(Sequence[dict[str, object]], non_model_entry["member_objects"])
     tx_inner_member = next(member for member in member_objects if member["object_id"] == "tx_inner_region")
     canonical_coordinates = cast(dict[str, object], tx_inner_member["canonical_coordinates"])
-    assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx((0.0, -300.0, 0.0))
-    assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx((712.8, 600.0, 81.0))
+    assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx((0.0, -450.0, 0.0))
+    assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx((158.4, 900.0, 81.0))
     reference_line = cast(dict[str, object], tx_inner_member["tx_reference_line"])
     assert reference_line["y_usage_ratio"] == pytest.approx(0.5)
-    assert reference_line["line_start_xyz"] == pytest.approx((712.8, -300.0, 81.0))
-    assert reference_line["line_end_xyz"] == pytest.approx((712.8, 300.0, 81.0))
+    assert reference_line["line_start_xyz"] == pytest.approx((158.4, -450.0, 81.0))
+    assert reference_line["line_end_xyz"] == pytest.approx((158.4, 450.0, 81.0))
     assert all(member["object_id"] != "tx_outer_region" for member in member_objects)
     assert all(member["object_id"] != "tx_outer_actual_region" for member in member_objects)
 

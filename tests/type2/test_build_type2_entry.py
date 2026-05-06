@@ -161,7 +161,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 outer_x_mm=RangeSpec(is_integer=False, start=100.0, end=100.0, count=1),
                 outer_y_mm=RangeSpec(is_integer=False, start=80.0, end=80.0, count=1),
                 turn_count=RangeSpec(is_integer=True, start=2.0, end=2.0, count=1),
-                layer_count=RangeSpec(is_integer=True, start=2.0, end=2.0, count=1),
+                layer_count=RangeSpec(is_integer=True, start=1.0, end=1.0, count=1),
                 underlay_repeat_count=RangeSpec(is_integer=True, start=1.0, end=1.0, count=1),
                 void_stack_present=RangeSpec(is_integer=True, start=0.0, end=1.0, count=2),
                 underlay_pet_psa_thickness_mm=tx_inner_underlay_thickness,
