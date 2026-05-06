@@ -1,7 +1,7 @@
 ---
 title: type2_single_coil_scene.py
 created: 2026-04-20 @ 00:00
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - rx
   - scene
@@ -22,19 +22,19 @@ tags:
 - Invalid RX scene dimensions fail immediately.
 - Invalid TX inner scene dimensions fail immediately.
 - TX inner scene assembly computes mm outer ranges from the resolved `tx_inner_region` owner before building the rect-void geometry.
-- TX inner scene placement selects `spec.x_position_ratio` with the run seed and places the selected physical modeled footprint center within `tx_inner_region`; ratio `0.0` makes the visible body min X touch owner min X and ratio `1.0` makes the visible body max X touch owner max X.
+- TX inner scene placement is lower-X anchored: the selected physical modeled footprint min X equals `tx_inner_region` min X, Y remains centered in the owner, and top Z remains aligned to the owner top.
 - Dormant TX outer scene assembly code does not import the removed active `ModeledTxOuterSingleCoilSpec` type; active export filtering prevents it from running for current Type2 generation.
 - TX outer scene assembly uses a rigid tilted frame derived from `tx_outer_region_prism`: local +X follows the semantic inner-to-outer top edge, local +Y follows world +Y, and local +Z is the rotated stack normal.
 - TX outer scene placement is prism-local: `x_position_ratio` is applied to the selected design outer footprint center inside the virtual sloped owner before tilt, and the virtual local owner is transformed directly into the `tx_outer_region_prism` frame with no post-rotation world-X AABB centering.
-- TX inner and TX outer ratio placement must use their placement owner regions, not `actual_region`; actual regions are derived from the resolved visible physical footprint after placement.
-- TX inner and TX outer ratio placement uses the physical PCB/copper bbox as the visible placement reference so wall attachment and Y centering match imported AEDT geometry.
-- TX inner scene placement selects `spec.x_position_ratio` inside `tx_inner_region`; the TX outer prism-local path must not change RX placement behavior.
+- TX inner placement and TX outer ratio placement must use their placement owner regions, not `actual_region`; actual regions are derived from the resolved visible physical footprint after placement.
+- TX inner wall-side placement and TX outer ratio placement use the physical PCB/copper bbox as the visible placement reference so wall attachment and Y centering match imported AEDT geometry.
+- TX inner scene placement must not read or select `spec.x_position_ratio`; the TX outer prism-local path must not change RX placement behavior.
 - TX outer canonical `outer_tilt_metadata` records both accepted world +X protrusion and world -Z underhang from the rigid tilted frame.
 - TX outer scene placement must read `tx_outer_region` creation-time prism provenance from the non-model scene; it must not sort or reverse-calculate the sloped prism from downstream modeled bodies.
 - TX outer owner-scaled `outer_x_mm` uses the sloped top-face length.
 - TX inner actual-underlay stack bodies, when requested, use `tx_inner_actual_region`/visible physical bounds as the X/Y footprint and stack in `-Z` below the actual region.
 - Actual-region helpers must expose the resolved visible physical box, matching the exported modeled body bbox, so passive TX underlay/void bodies align with imported AEDT geometry.
-- `RealizedSingleCoilFitEnvelope.design_outer_bounds_*` and `outer_bounds_*` are the visible physical body box intended for actual-region bounds and for TX ratio placement validation.
+- `RealizedSingleCoilFitEnvelope.design_outer_bounds_*` and `outer_bounds_*` are the visible physical body box intended for actual-region bounds and for TX inner wall-side placement validation.
 - `RealizedSingleCoilFitEnvelope.physical_modeled_body_bounds_*` describes the same exported physical modeled body bbox used by modeled scene assembly.
 - The TX outer fit-envelope helper resolves the same virtual sloped owner used by `tx_outer_single_coil` scene assembly so non-model `tx_outer_actual_region` sizing cannot drift from the modeled placement path.
 - `TxOuterSingleCoilScenePlacement` resolves final prism-local scene children once and returns:

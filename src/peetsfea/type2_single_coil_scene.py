@@ -368,6 +368,60 @@ def _single_coil_tx_ratio_design_outer_placement_from_realized(
     )
 
 
+def _single_coil_tx_inner_design_outer_placement_from_realized(
+    *,
+    spec: ModeledSingleCoilSpec,
+    owner_spec: NonModelBoxSpec,
+    realized: RealizedSingleCoilRectVoid,
+    local_bounds_min_xyz: Point3,
+    local_bounds_size_xyz: Point3,
+    profile: SingleCoilProfile,
+) -> TxRatioDesignOuterPlacement:
+    if spec.role != "tx_inner_single_coil":
+        raise RuntimeError(f"TX inner lower-X placement requires tx_inner_single_coil role (actual={spec.role})")
+    if owner_spec.plane != profile.plane:
+        raise RuntimeError(
+            "type2 tx inner placement owner plane must match profile plane "
+            f"(owner={owner_spec.object_id}, owner_plane={owner_spec.plane}, profile_plane={profile.plane})"
+        )
+    if profile.plane != "XY":
+        raise RuntimeError(f"type2 {profile.role} lower-X placement requires XY plane (actual={profile.plane})")
+    del realized
+    world_design_outer_size_xyz = profile.world_size(local_bounds_size_xyz)
+    owner_origin_x, owner_origin_y, owner_origin_z = owner_spec.origin_xyz
+    owner_size_x, owner_size_y, owner_size_z = owner_spec.size_xyz
+    if (
+        world_design_outer_size_xyz[0] > owner_size_x
+        or world_design_outer_size_xyz[1] > owner_size_y
+        or world_design_outer_size_xyz[2] > owner_size_z
+    ):
+        raise RuntimeError(
+            f"type2 {profile.role} realized design outer bounds must fit inside {owner_spec.object_id} "
+            f"(design_outer_size={world_design_outer_size_xyz}, owner_size={owner_spec.size_xyz})"
+        )
+    world_design_outer_min_xyz = (
+        owner_origin_x,
+        owner_origin_y + (owner_size_y - world_design_outer_size_xyz[1]) / 2.0,
+        owner_origin_z + owner_size_z - world_design_outer_size_xyz[2],
+    )
+    world_design_outer_max_xyz = (
+        world_design_outer_min_xyz[0] + world_design_outer_size_xyz[0],
+        world_design_outer_min_xyz[1] + world_design_outer_size_xyz[1],
+        world_design_outer_min_xyz[2] + world_design_outer_size_xyz[2],
+    )
+    world_design_min_delta = profile.world_delta(local_bounds_min_xyz)
+    return TxRatioDesignOuterPlacement(
+        frame_origin_xyz=(
+            world_design_outer_min_xyz[0] - world_design_min_delta[0],
+            world_design_outer_min_xyz[1] - world_design_min_delta[1],
+            world_design_outer_min_xyz[2] - world_design_min_delta[2],
+        ),
+        design_outer_bounds_min_xyz=world_design_outer_min_xyz,
+        design_outer_bounds_max_xyz=world_design_outer_max_xyz,
+        design_outer_bounds_size_xyz=world_design_outer_size_xyz,
+    )
+
+
 def _single_coil_design_outer_bounds_from_realized(
     *,
     owner_spec: NonModelBoxSpec,
@@ -490,7 +544,17 @@ def resolve_modeled_single_coil_fit_envelope(
         realized = realize_tx_rect_void_spec(tx_rect_void_spec, seed=seed, profile=profile)
     local_boxes = build_tx_rect_void_box_specs(realized, profile=profile)
     local_bounds_min_xyz, local_bounds_max_xyz, local_bounds_size_xyz = modeled_body_bounds_from_boxes(local_boxes)
-    if profile.role in ("tx_inner_single_coil", "tx_outer_single_coil"):
+    if profile.role == "tx_inner_single_coil":
+        tx_ratio_placement = _single_coil_tx_inner_design_outer_placement_from_realized(
+            spec=spec,
+            owner_spec=owner_spec,
+            realized=realized,
+            local_bounds_min_xyz=local_bounds_min_xyz,
+            local_bounds_size_xyz=local_bounds_size_xyz,
+            profile=profile,
+        )
+        placement_offset_xyz = tx_ratio_placement.frame_origin_xyz
+    elif profile.role == "tx_outer_single_coil":
         tx_ratio_placement = _single_coil_tx_ratio_design_outer_placement_from_realized(
             spec=spec,
             owner_spec=owner_spec,

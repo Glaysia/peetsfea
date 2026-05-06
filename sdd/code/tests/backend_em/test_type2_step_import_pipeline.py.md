@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_import_pipeline.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - test
   - import
@@ -31,10 +31,10 @@ tags:
 - Enabled `tx_inner_single_coil` void-stack fixtures require `g_ferrite_tx` member order to include bottom underlay members plus exactly the computed void pair members export declares.
 - STEP ledger load coverage verifies the same TX inner void-stack group contract before PyAEDT import begins.
 - TX inner underlay import fixtures include the non-modeled `tx_inner_region` owner and `tx_inner_actual_region` provenance before import-bound validation runs.
-- TX inner actual-region regression coverage preserves a large guide owner with a centered design/actual region and a smaller asymmetric physical modeled bbox, matching sampled TxRx debug failures.
+- TX inner actual-region regression coverage preserves a large guide owner with a lower-X wall-side anchored design/actual region, Y centering, and matching physical modeled bbox provenance.
 - TX inner import/style coverage must preserve enabled `tx_void_*` passive bodies and accept disabled void-stack ledgers that still include bottom `tx_underlay_*` bodies.
 - TX inner import fixtures include the derived non-modeled `tx_inner_actual_region` member with `tx_actual_region` provenance whenever `tx_inner_single_coil` validation requires the design/actual bounds contract.
-- `tx_inner_single_coil` bounds coverage accepts sampled owner-local X placement inside `tx_inner_region` while requiring physical modeled bounds provenance to match the modeled ledger entry.
+- `tx_inner_single_coil` bounds coverage accepts lower-X wall-side X placement inside `tx_inner_region` while requiring physical modeled bounds provenance to match the modeled ledger entry.
 - TX inner actual-region regression coverage accepts centered design bounds at Y `[-84, 84]` when the recorded physical modeled bounds are smaller and asymmetric, such as `min_y=-84.0` and `size_y=164.07134831460672`.
 - Ledger fixtures declare `outputs.mode = "RxOnly"` and only active RX output variables.
 - Tests preserve a fail-fast regression that any fixture declaring `tx_outer_single_coil` is unsupported.
@@ -46,7 +46,7 @@ tags:
 - Tx bridge member IDs must be claimed by `type2_non_model_scene` partitioning and cannot appear in modeled body assignments.
 - Tx positive and negative bridge member IDs must be claimed by `type2_non_model_scene` partitioning and cannot appear in modeled body assignments.
 - Void-stack ferrite/PET_PSA prefixes must resolve to passive material families (`MULL12060ferrite` for ferrite and `PET_PSA` for PET/PSA) without becoming copper/mesh/port ownership.
-- TX inner sampled X placement tests must still fail when bounds escape `tx_inner_region`.
+- TX inner wall-side X placement tests must still fail when bounds escape `tx_inner_region` or when actual-region provenance no longer anchors at the lower-X owner side.
 - TX inner actual-region validation must fail when the actual/design region is not centered in `tx_inner_region` Y or when provenance no longer matches the modeled source/physical bounds contract.
 
 ## Graph links

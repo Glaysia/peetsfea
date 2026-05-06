@@ -1,7 +1,7 @@
 ---
 title: type2_sampled_sampling.py
 created: 2026-04-20 @ 00:00
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - sampling
 ---
@@ -27,6 +27,7 @@ tags:
 - RxOnly sampling does not require TX modeled owner values.
 - Generic TX modeled roles (`tx_single_coil`, `tx_plate_stack`, `tx_rect_void_columns`) are not sampled owners.
 - `tx_inner_single_coil` is a geometry-only sampled modeled owner and now contributes `void_stack_present` in addition to existing coil sizing and bottom underlay fields.
+- TX inner `x_position_ratio` is fixed-zero compatibility state and must not appear as a sampled owner or design variable.
 - Active `count > 1` range owners must appear in `sampled_owner_paths` regardless of modeled/non-modeled ownership.
 - When `void_stack_present` uses `[true, 0, 1, 2]`, it is an active sampled owner and must freeze to an integer singleton in sampled TOML.
 - `tx_region.tx_reference_line.x_ratio`, `tx_region.tx_reference_line.y_usage_ratio`, and `tx_region.tx_reference_line.z_ratio` are active non-modeled guide/context sampled owners.

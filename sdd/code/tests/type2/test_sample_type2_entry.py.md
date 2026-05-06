@@ -1,7 +1,7 @@
 ---
 title: test_sample_type2_entry.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - test
   - sampling
@@ -18,7 +18,7 @@ tags:
 - type2 sampling entrypoint and manifest behavior를 검증한다.
 - `entry/sample.py --build-step` opt-in behavior and sample-only CLI default를 검증한다.
 - CLI override tests verify diagnostic seed range and worker-count arguments flow into manifest config without changing defaults.
-- 0.2.24 SDD 기준 RxOnly owner discovery, guide/context handling, and TX inner X-position owner mapping are active.
+- 0.2.24 SDD 기준 RxOnly owner discovery, guide/context handling, and fixed-zero TX inner X-position compatibility handling are active.
 
 ## Canonical state
 - Sampling remains deterministic by source TOML, version, seed, and retry number.
@@ -28,7 +28,7 @@ tags:
 - `tx_reference_line.z_ratio` remains an effective sampled owner with active sweep bounds `[false, 0.75, 1.0, 65]`.
 - RxOnly sampled-owner fixtures contain RX coil owners plus active count>1 non-modeled guide owners; TX derived non-model owners are absent.
 - Synthetic `ModeledTxInnerSingleCoilSpec` fixtures include fixed TX inner passive underlay defaults: repeat count `1`, PET/PSA `6.0 mm`, and ferrite `6.0 mm`.
-- `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` is a public sampled owner sourced and frozen directly on `tx_inner_rect_void_coil`.
+- Embedded TOML fixtures keep `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` as a fixed zero compatibility field for lower-X wall-side anchoring.
 - Synthetic source TOML fixtures include sampled `modeled_objects.tx_inner_rect_void_coil.void_stack_present` so manifest metadata exercises the active TX inner void-stack owner.
 - `modeled_objects.tx_outer_rect_void_coil.*` paths are not active sampled owners.
 - Active sampled TOML must not preserve removed `tx_outer_terminal_path` or `tx_outer_x_position_ratio` fields.
@@ -39,7 +39,7 @@ tags:
 - RxOnly sampling tests must not require TX modeled owners.
 - RxOnly sampling tests must not require `tx_region_actual` or `tx_region_actual_stack_space`.
 - Fixed TX inner underlay thickness fields are not sampled owner paths because their ranges are fixed singleton values.
-- Sampled owner discovery must preserve canonical `modeled_objects.tx_inner_rect_void_coil.x_position_ratio`.
+- Sampled owner discovery must keep TX inner `x_position_ratio` as fixed zero compatibility state, not as an effective sampled owner.
 - Sampled owner discovery must exclude every `modeled_objects.tx_outer_rect_void_coil.*` path.
 - TX modeled-role fixtures assert parser/sampling fail-fast behavior instead of sampled manifest success.
 - TX inner trace-width feasibility is validated as a sample-time constraint so retry occurs before STEP export.

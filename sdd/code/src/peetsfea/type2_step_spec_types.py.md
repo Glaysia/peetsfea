@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec_types.py
 created: 2026-04-20 @ 00:00
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - spec
   - types
@@ -31,7 +31,7 @@ tags:
 - `tx_inner_single_coil` owns `void_stack_present` as the public integer switch for YZ `tx_void_*` bodies; it is separate from the bottom underlay repeat owner.
 - Underlay repeat count canonical sweep candidates remain `(0, 2, 4, 6, 8)`; fixed-value validation additionally accepts `1` so active TX inner examples can collapse the four thin PET/PSA/ferrite pairs into one thicker pair without changing the sampled coordinate ledger.
 - Active type2 schema id remains `peetsfea.type2.step.v8`; this change extends the modeled-object selector surface without changing the top-level schema id.
-- `ModeledSingleCoilCommonSpec.x_position_ratio` owns the local X placement ratio for modeled single-coil specs. The inner TX public source field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio`.
+- `ModeledSingleCoilCommonSpec.x_position_ratio` owns the local X placement ratio for modeled single-coil specs that still use ratio placement. The inner TX public source field `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` is fixed-zero compatibility state and does not drive placement.
 - Active spec/runtime unions no longer include a TX outer companion dataclass or `tx_outer_rect_void_coil` sampled owner.
 - Legacy/generic TX role constants remain unsupported for active EM setup unless a later two-terminal/parallel-wiring plan enables them.
 

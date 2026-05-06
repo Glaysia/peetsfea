@@ -28,7 +28,6 @@ _EXPECTED_SAMPLED_OWNER_PATHS = [
     "non_model_objects.tx_region.tx_reference_line.y_usage_ratio",
     "non_model_objects.tx_region.tx_reference_line.z_ratio",
     "modeled_objects.tx_inner_rect_void_coil.outer_y_usage_ratio",
-    "modeled_objects.tx_inner_rect_void_coil.x_position_ratio",
     "modeled_objects.tx_inner_rect_void_coil.void_stack_present",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
@@ -81,7 +80,7 @@ def _tx_inner_single_coil_spec() -> ModeledTxInnerSingleCoilSpec:
         margin_ratio=_range_spec(False, 0.05, 0.05, 1),
         metal_fill_factor=fixed_float,
         terminal_path="B_cw_to_b",
-        x_position_ratio=_range_spec(False, 0.0, 0.3, 9),
+        x_position_ratio=_range_spec(False, 0.0, 0.0, 1),
     )
 
 
@@ -99,7 +98,7 @@ def test_exportable_sampled_owner_paths_exclude_tx_outer_derived_owners() -> Non
     assert "modeled_objects.tx_inner_rect_void_coil.outer_x_usage_ratio" in owner_paths
     assert "modeled_objects.tx_inner_rect_void_coil.outer_y_usage_ratio" in owner_paths
     assert "modeled_objects.tx_inner_rect_void_coil.turn_count" in owner_paths
-    assert "modeled_objects.tx_inner_rect_void_coil.x_position_ratio" in owner_paths
+    assert "modeled_objects.tx_inner_rect_void_coil.x_position_ratio" not in owner_paths
     assert all(not owner_path.startswith("modeled_objects.tx_outer_rect_void_coil.") for owner_path in owner_paths)
 
 
@@ -170,7 +169,7 @@ def _patch_rx_only_spec_loader(
                 margin_ratio=RangeSpec(is_integer=False, start=0.05, end=0.05, count=1),
                 metal_fill_factor=RangeSpec(is_integer=False, start=0.5, end=0.5, count=1),
                 terminal_path="B_cw_to_b",
-                x_position_ratio=RangeSpec(is_integer=False, start=0.0, end=0.3, count=9),
+                x_position_ratio=RangeSpec(is_integer=False, start=0.0, end=0.0, count=1),
             ),
             ModeledRxSingleCoilSpec(
                 object_id="rx_rect_void_coil",
@@ -320,7 +319,7 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.outer_y_usage_ratio]
     range = [false, 0.2, 0.9, 150]
     [modeled_objects.x_position_ratio]
-    range = [false, 0.0, 0.3, 45]
+    range = [false, 0.0, 0.0, 1]
     [modeled_objects.turn_count]
     range = [true, 2, 2, 1]
     [modeled_objects.layer_count]
@@ -380,6 +379,35 @@ def _write_source_type2_toml(tmp_path: Path) -> Path:
     path = tmp_path / "type2_sweep.toml"
     path.write_text(_source_type2_toml_text(), encoding="utf-8")
     return path
+
+
+@pytest.mark.parametrize(
+    ("range_line", "match"),
+    (
+        ("range = [false, 0.1, 0.1, 1]", r"must be fixed \[false, 0\.0, 0\.0, 1\]"),
+        ("range = [false, 0.0, 0.3, 45]", r"must be fixed \[false, 0\.0, 0\.0, 1\]"),
+        ("range = [false, 0.0, 0.0, 2]", r"must be fixed \[false, 0\.0, 0\.0, 1\]"),
+    ),
+)
+def test_load_type2_step_spec_rejects_tx_inner_x_position_ratio_non_fixed_zero(
+    tmp_path: Path,
+    range_line: str,
+    match: str,
+) -> None:
+    fixed_block = """    [modeled_objects.x_position_ratio]
+    range = [false, 0.0, 0.0, 1]
+    [modeled_objects.turn_count]"""
+    invalid_block = f"""    [modeled_objects.x_position_ratio]
+    {range_line}
+    [modeled_objects.turn_count]"""
+    source_toml_path = tmp_path / "type2_invalid_tx_inner_x_position.toml"
+    source_toml_path.write_text(
+        _source_type2_toml_text().replace(fixed_block, invalid_block, 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=match):
+        load_type2_step_spec(source_toml_path)
 
 
 def _current_head_hash4() -> str:
@@ -722,7 +750,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert tx_inner_x_position_range[0] is False
     assert tx_inner_x_position_range[3] == 1
     assert tx_inner_x_position_range[1] == tx_inner_x_position_range[2]
-    assert 0.0 <= float(cast(int | float, tx_inner_x_position_range[1])) <= 0.3
+    assert tx_inner_x_position_range[1] == 0.0
     assert "tx_outer_x_position_ratio" not in tx_inner_modeled_object
     assert "tx_outer_terminal_path" not in tx_inner_modeled_object
 

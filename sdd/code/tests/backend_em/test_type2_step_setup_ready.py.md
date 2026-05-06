@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_setup_ready.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - test
   - em
@@ -29,7 +29,7 @@ tags:
 - Tests should verify RX conductor mesh and one RX lumped port.
 - Tests should verify RxOnly does not create TX ports or TX output variables.
 - Tests should verify TxRx keeps TX inner + RX ledger entries, creates TX/RX port assignments, assembles two-terminal report variables, and meshes TX inner + RX conductors.
-- TxRx setup fixtures keep `tx_inner_single_coil` owned by `tx_inner_region`, matching the sampled owner-local X placement contract enforced during import styling.
+- TxRx setup fixtures keep `tx_inner_single_coil` owned by `tx_inner_region`, matching the lower-X wall-side anchoring contract enforced during import styling.
 - TxRx setup fixtures include the `tx_inner_actual_region` non-model member and imported STEP name whenever
   `tx_inner_single_coil` participates, so setup-ready fake import ledgers satisfy strict actual-region validation before AEDT setup operations run.
 - 포트 할당 단위 테스트에 `tx_inner_single_coil` paired mode (`tx_inner_single_coil` + `rx_single_coil`)를 추가로 검증한다.

@@ -1,7 +1,7 @@
 ---
 title: test_build_type2_entry.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - test
   - build
@@ -19,7 +19,7 @@ tags:
 - 0.2.24 SDD 기준 RxOnly build path is the active documented target.
 - solve-enabled build handoff and the geometry-only `tx_inner_single_coil` plus RX role gate are covered.
 - Sample-only manifest에서 build가 missing STEP ledger를 생성하고, existing ledger는 exporter 없이 재사용하는 계약을 검증한다.
-- TX inner X-position sampled owner metadata must become a build design variable while removed TX outer sampled owners stay absent.
+- TX inner X-position compatibility metadata must stay fixed zero and removed TX outer sampled owners must stay absent.
 
 ## Canonical state
 - Build path can reuse existing STEP ledger or generate missing RX STEP artifacts.
@@ -29,7 +29,7 @@ tags:
 - Synthetic TX guide fixtures mirror the active sweep Z reference range `[false, 0.75, 1.0, 65]`.
 - Fake RxOnly specs used by entry tests mirror the current `Type2StepSpec` shape, including `non_model_objects`.
 - `config.make_step_on_sample=false` manifest는 build-time STEP generation path를 대표한다.
-- Expected sampled owner/design-variable order includes TX inner sampled owners, including `modeled_objects.tx_inner_rect_void_coil.void_stack_present`, before RX coil sampled owners.
+- Expected sampled owner/design-variable order includes TX inner sampled owners such as `modeled_objects.tx_inner_rect_void_coil.void_stack_present`, but excludes fixed TX inner `x_position_ratio`, before RX coil sampled owners.
 - Synthetic source TOML and `ModeledTxInnerSingleCoilSpec` fixtures must expose `void_stack_present` as a sampled integer owner when build design-variable handoff is under test.
 - Fixed singleton TX guide X ratio must not become a build design variable, while sampled TX guide Y ratio remains exported when `count > 1`.
 - Build design variables must not include `modeled_objects_tx_outer_rect_void_coil_*`.
@@ -39,7 +39,7 @@ tags:
 - RxOnly build tests must not require EM-active TX modeled objects.
 - Geometry-only `tx_inner_single_coil` can accompany RX without activating removed TX outer modeled roles.
 - TX modeled build dependencies, including TX columns paired with RX, must not reach the setup-ready runner.
-- Prepared build validation must reject missing or unfrozen TX inner X-position source ranges before setup-ready execution.
+- Prepared build validation must reject missing or nonzero TX inner X-position compatibility ranges before setup-ready execution.
 
 ## Collaborators
 - [build.py](../../entry/build.py.md)

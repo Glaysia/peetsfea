@@ -27,7 +27,7 @@ tags:
 - `non_model_objects.tx_region.tx_reference_line.y_usage_ratio` remains sampled at `[false, 0.2, 1.0, 85]`; it continues to size `tx_inner_region` inside fixed `tx_region`.
 - `non_model_objects.tx_region.tx_reference_line.z_ratio` remains sampled at `[false, 0.75, 1.0, 65]`; its lower bound keeps the maximum current TX inner stack closer to the TX guide top while staying below the resolved reference line.
 - `modeled_objects.tx_inner_rect_void_coil.outer_y_usage_ratio` remains sampled at `[false, 0.2, 0.9, 150]`; it continues to size the actual TX coil inside `tx_inner_region`.
-- TX inner X placement source field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` with sweep default `[false, 0.0, 0.3, 45]`.
+- TX inner X placement compatibility field is `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` with fixed zero range `[false, 0.0, 0.0, 1]`; lower-X wall-side anchoring is not sampled.
 - `modeled_objects.tx_inner_rect_void_coil` remains active with role `tx_inner_single_coil`.
 - TX inner passive stack defaults are coarsened for simulation speed: `underlay_repeat_count = [true, 1, 1, 1]`, PET_PSA thickness `2.0 mm`, and ferrite thickness `2.0 mm`.
 - `modeled_objects.tx_inner_rect_void_coil.void_stack_present` uses `[true, 0, 1, 2]` so sampled designs can include or omit the TX void YZ stack while keeping the bottom underlay present.

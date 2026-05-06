@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec_modeled.py
 created: 2026-04-20 @ 00:00
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - spec
   - modeled
@@ -28,7 +28,7 @@ tags:
 - Generic/legacy TX modeled roles are rejected at the active parser boundary during the reset.
 - `tx_inner_single_coil` is parsed as an explicit rect-void inner TX coil placed by derived `tx_inner_region`; it also owns the TOML-controlled actual-region underlay stack fields.
 - `tx_inner_single_coil.void_stack_present` is parsed as a required integer range and controls only YZ void-stack body presence.
-- `tx_inner_single_coil` parses `x_position_ratio` as the inner coil local X placement owner.
+- `tx_inner_single_coil` requires `x_position_ratio` only as fixed-zero compatibility source state; it is not an effective sampled placement owner.
 - `tx_outer_terminal_path` and `tx_outer_x_position_ratio` are no longer active fields on `tx_inner_single_coil`; declaring either must fail as unsupported schema state.
 - `tx_region` remains outside modeled parsing as future guide context.
 
@@ -38,7 +38,7 @@ tags:
 - `tx_inner_single_coil` accepts the canonical underlay repeat sweep or a supported fixed `underlay_repeat_count`; fixed `1` is supported for coarsened active TX inner underlay stacks while the canonical sweep remains `(0, 2, 4, 6, 8)`.
 - `tx_inner_single_coil` accepts canonical `void_stack_present = [true, 0, 1, 2]` or fixed singleton `0`/`1`; unsupported roles must not accept this field.
 - `tx_inner_single_coil` enforces fixed positive actual-underlay PET/PSA/ferrite thickness fields while still rejecting `underlay_gap_mm` and `wall_parallel_stack_present`.
-- `x_position_ratio` must realize only inclusive candidates between `0.0` and `1.0`.
+- TX inner `x_position_ratio` must be the fixed compatibility table `[false, 0.0, 0.0, 1]`; sampled or nonzero TX inner values fail at the modeled parser boundary.
 - Usage ratios and position ratios accept mathematically inclusive `1.0` endpoints when range candidate generation produces a binary floating-point value within `1e-12` above `1.0`; values outside that tolerance still fail before specs are bound.
 - `tx_outer_terminal_path` and `tx_outer_x_position_ratio` must fail through unsupported-key validation, not by deriving a companion object.
 - RxOnly must parse without requiring TX modeled roles.
