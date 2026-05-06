@@ -1238,6 +1238,60 @@ def test_resolve_imported_body_groups_accepts_tx_inner_single_coil_with_actual_u
     ]
 
 
+def test_resolve_imported_body_groups_accepts_tx_inner_single_coil_with_disabled_void_stack_group_contract() -> None:
+    modeled_entry = _modeled_entry(
+        object_id="tx_inner_rect_void_coil",
+        role="tx_inner_single_coil",
+        plane="XY",
+        placement_owner_id="tx_inner_region",
+        expected_names=[
+            "tx_inner_pcb_l0",
+            "tx_inner_copper_l0",
+            "tx_underlay_pet_psa_u0",
+            "tx_underlay_ferrite_u0",
+        ],
+        expected_groups=[
+            {
+                "group_name": _TX_FERRITE_GROUP_NAME,
+                "member_body_names": (
+                    "tx_underlay_pet_psa_u0",
+                    "tx_underlay_ferrite_u0",
+                ),
+            }
+        ],
+    )
+    imported_object_names = [
+        "tx_inner_pcb_l0",
+        "tx_inner_copper_l0",
+        "tx_underlay_pet_psa_u0",
+        "tx_underlay_ferrite_u0",
+    ]
+
+    groups = resolve_imported_body_groups(
+        modeled_entry=modeled_entry,
+        imported_object_names=imported_object_names,
+        context="modeled_objects[0]",
+    )
+    resolved_names = resolve_modeled_body_names(
+        modeled_entry=modeled_entry,
+        imported_object_names=imported_object_names,
+        context="modeled_objects[0]",
+    )
+
+    assert groups == [
+        {
+            "group_name": _TX_FERRITE_GROUP_NAME,
+            "member_object_names": [
+                "tx_underlay_pet_psa_u0",
+                "tx_underlay_ferrite_u0",
+            ],
+        },
+    ]
+    assert resolved_names["underlay_ferrite_names"] == ["tx_underlay_ferrite_u0"]
+    assert resolved_names["underlay_pet_psa_names"] == ["tx_underlay_pet_psa_u0"]
+    assert all(not name.startswith("tx_void_") for name in imported_object_names)
+
+
 def test_resolve_imported_body_groups_accepts_tx_inner_single_coil_with_void_stack_group_contract() -> None:
     modeled_entry = _modeled_entry(
         object_id="tx_inner_rect_void_coil",
@@ -1359,6 +1413,7 @@ def test_style_imported_modeled_objects_materializes_tx_inner_single_coil_void_s
         "tx_void_pet_psa_u0",
         "tx_inner_port_sheet",
     ]
+    assert all(not name.startswith(("tx_void_ferrite_u1", "tx_void_pet_psa_u1")) for name in styled_names)
     assert modeler.objects["tx_void_ferrite_u0"].material_name == "MULL12060ferrite"
     assert modeler.objects["tx_void_pet_psa_u0"].material_name == "PET_PSA"
     assert modeler.create_polyline_calls != []
@@ -2142,6 +2197,77 @@ def test_import_type2_step_ledger_styles_tx_inner_single_coil_with_underlay_grou
             ],
         }
     ]
+    written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
+    assert written == result
+
+
+def test_import_type2_step_ledger_styles_tx_inner_single_coil_with_disabled_void_stack_underlay_only(
+    tmp_path: Path,
+) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    tx_inner_object = _tx_inner_modeled_object_with_role_aware_underlay(
+        tmp_path,
+        tx_underlay_repeat_count=1,
+        tx_void_stack_repeat_count=0,
+    )
+    expected_names = cast(list[str], tx_inner_object["expected_exported_body_names"])
+    assert expected_names == [
+        "tx_inner_pcb_l0",
+        "tx_inner_copper_l0",
+        "tx_underlay_pet_psa_u0",
+        "tx_underlay_ferrite_u0",
+    ]
+    assert all(not name.startswith("tx_void_") for name in expected_names)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry_with_tx_inner_region()],
+        modeled_objects=[tx_inner_object],
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    imported_name_batch = _tx_inner_imported_name_batch_with_role_aware_underlay(
+        tx_underlay_repeat_count=1,
+        tx_void_stack_repeat_count=0,
+    )
+    assert "tx_underlay_pet_psa_u0" in imported_name_batch
+    assert "tx_underlay_ferrite_u0" in imported_name_batch
+    assert all(not name.startswith("tx_void_") for name in imported_name_batch)
+    session = _FakeHfss(modeler=_FakeModeler(imported_name_batches=[imported_name_batch]))
+
+    result = import_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        design_name="fake_type2_import",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    assert session.modeler.objects["tx_underlay_ferrite_u0"].material_name == "MULL12060ferrite"
+    assert session.modeler.objects["tx_underlay_pet_psa_u0"].material_name == "PET_PSA"
+    assert all(not name.startswith("tx_void_") for name in session.modeler.objects)
+    assert session.mesh_module.assign_length_op_calls == []
+    modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    assert modeled_by_id["tx_inner_rect_void_coil"]["imported_object_names"] == [
+        "tx_inner_pcb_l0",
+        "tx_inner_copper_l0",
+        "tx_underlay_pet_psa_u0",
+        "tx_underlay_ferrite_u0",
+        "tx_inner_port_sheet",
+    ]
+    assert modeled_by_id["tx_inner_rect_void_coil"]["imported_body_groups"] == [
+        {
+            "group_name": _TX_FERRITE_GROUP_NAME,
+            "member_object_names": [
+                "tx_underlay_pet_psa_u0",
+                "tx_underlay_ferrite_u0",
+            ],
+        }
+    ]
+    assert all(
+        not name.startswith("tx_void_")
+        for name in cast(list[str], modeled_by_id["tx_inner_rect_void_coil"]["imported_object_names"])
+    )
     written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
     assert written == result
 

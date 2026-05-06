@@ -219,8 +219,8 @@ non_model = true
 material = "vacuum"
 plane = "XY"
 # Guide-only future TX placement context. RxOnly does not derive sampled TX owners from it.
-origin_xyz = [0.0, -900.0, 0.0]
-size_xyz = [160.0, 1800.0, 90.0]
+origin_xyz = [0.0, -600.0, 0.0]
+size_xyz = [720.0, 1200.0, 90.0]
 
 # TX guide-only reference line used to derive retained tx_inner_region STEP context.
 # Ratios are sampled strictly inside tx_region and do not activate TX modeled geometry.
@@ -229,11 +229,11 @@ range = [false, 0.99, 0.99, 1]
 description = "TX guide 영역 안에서 reference line의 X 위치 비율"
 
 [non_model_objects.tx_reference_line.y_usage_ratio]
-range = [false, 0.2, 1.0, 17]
+range = [false, 0.2, 1.0, 85]
 description = "TX guide reference line의 Y 방향 사용 비율"
 
 [non_model_objects.tx_reference_line.z_ratio]
-range = [false, 0.5, 1.0, 13]
+range = [false, 0.75, 1.0, 65]
 description = "TX guide 영역 안에서 reference line의 Z 위치 비율"
 
 [[non_model_objects]]
@@ -261,29 +261,32 @@ pcb_thickness_mm = 0.3
 copper_thickness_mm = 0.035
 [modeled_objects.outer_x_usage_ratio]
 # TX inner coil X size ratio against resolved tx_inner_region.
-range = [false, 0.4, 0.9, 15]
+range = [false, 0.4, 0.9, 75]
 description = "TX inner 배치 영역 대비 local X 방향 외곽 크기 비율"
 [modeled_objects.outer_y_usage_ratio]
 # TX inner coil Y size ratio against resolved tx_inner_region.
-range = [false, 0.2, 0.9, 15]
+range = [false, 0.2, 0.9, 150]
 description = "TX inner 배치 영역 대비 local Y 방향 외곽 크기 비율"
 [modeled_objects.x_position_ratio]
-range = [false, 0.0, 0.3, 9]
+range = [false, 0.0, 0.3, 45]
 description = "TX inner 배치 영역 안에서 local X 방향 위치 비율"
 [modeled_objects.turn_count]
 range = [true, 1, 4, 4]
 description = "TX inner spiral turn 수"
 [modeled_objects.layer_count]
-range = [true, 1, 8, 8]
+range = [true, 1, 5, 5]
 description = "TX inner coil 적층 layer 수"
 [modeled_objects.underlay_repeat_count]
 range = [true, 1, 1, 1]
 description = "TX inner underlay 반복 개수"
+[modeled_objects.void_stack_present]
+range = [true, 0, 1, 2]
+description = "TX inner 중앙 void stack 생성 여부"
 [modeled_objects.underlay_pet_psa_thickness_mm]
-range = [false, 2.0, 2.0, 1]
+range = [false, 6.0, 6.0, 1]
 description = "TX inner PET_PSA underlay thickness(mm)"
 [modeled_objects.underlay_ferrite_thickness_mm]
-range = [false, 2.0, 2.0, 1]
+range = [false, 6.0, 6.0, 1]
 description = "TX inner ferrite underlay thickness(mm)"
 [modeled_objects.layer_gap_mm]
 range = [false, 3, 3, 1]
@@ -292,13 +295,13 @@ description = "TX inner layer 사이 z 방향 간격(mm)"
 range = [false, 7.5, 7.5, 1]
 description = "TX inner terminal stub 길이(mm)"
 [modeled_objects.void_usage_ratio]
-range = [false, 0.2, 0.8, 25]
+range = [false, 0.2, 0.8, 125]
 description = "TX inner 중앙 void keepout의 X/Y 공통 크기 비율"
 [modeled_objects.margin_ratio]
 range = [false, 0.05, 0.05, 1]
 description = "TX inner void와 외곽 사이 최소 margin 비율"
 [modeled_objects.metal_fill_factor]
-range = [false, 0.2, 0.6, 15]
+range = [false, 0.2, 0.6, 75]
 description = "TX inner trace/gap pitch 안에서 copper가 차지하는 비율"
 [modeled_objects.terminal_path]
 value = "B_cw_to_b"
@@ -314,11 +317,11 @@ pcb_thickness_mm = 3.965
 copper_thickness_mm = 0.035
 [modeled_objects.outer_x_usage_ratio]
 # RX placement owner span 대비 local X outer size ratio.
-range = [false, 0.1, 1.0, 34]
+range = [false, 0.1, 1.0, 90]
 description = "RX 배치 영역 대비 local X 방향 외곽 크기 비율"
 [modeled_objects.outer_y_usage_ratio]
 # RX placement owner span 대비 local Y outer size ratio.
-range = [false, 0.1, 0.6, 17]
+range = [false, 0.1, 1.0, 160]
 description = "RX 배치 영역 대비 local Y 방향 외곽 크기 비율"
 [modeled_objects.x_position_ratio]
 range = [false, 0.0, 0.0, 1]
@@ -345,7 +348,7 @@ range = [false, 5, 5, 1]
 description = "RX terminal stub 길이(mm)"
 [modeled_objects.void_usage_ratio]
 # centered void keepout의 X/Y 공통 size ratio다.
-range = [false, 0.2, 0.8, 25]
+range = [false, 0.2, 0.8, 125]
 description = "중앙 void keepout의 X/Y 공통 크기 비율"
 [modeled_objects.margin_ratio]
 # void-to-outer minimum margin ratio.
@@ -353,7 +356,7 @@ range = [false, 0.05, 0.05, 1]
 description = "void와 외곽 사이 최소 margin 비율"
 [modeled_objects.metal_fill_factor]
 # trace/gap pitch 안에서 copper가 차지하는 비율.
-range = [false, 0.2, 0.6, 15]
+range = [false, 0.2, 0.6, 75]
 description = "trace/gap pitch 안에서 copper가 차지하는 비율"
 [modeled_objects.terminal_path]
 # terminal path는 same-corner format '<outer>_<cw|ccw>_to_<inner>'를 사용한다.

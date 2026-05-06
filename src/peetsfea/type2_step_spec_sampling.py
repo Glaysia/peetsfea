@@ -14,6 +14,7 @@ from peetsfea.type2_step_spec_types import _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_C
 from peetsfea.type2_step_spec_types import _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_END
 from peetsfea.type2_step_spec_types import _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_START
 from peetsfea.type2_step_spec_types import _TX_PLATE_STACK_COIL_COUNT_CANDIDATES
+from peetsfea.type2_step_spec_types import _TX_INNER_VOID_STACK_PRESENT_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_REGION_ACTUAL_STACK_SPACE_TILT_ENABLED_VALUE
 from peetsfea.type2_step_spec_types import _TX_UNDERLAY_GAP_MM_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES
@@ -113,6 +114,27 @@ def resolve_modeled_tx_inner_underlay_ferrite_thickness_mm(
             f"(actual={candidates})"
         )
     return candidates[0]
+
+
+def resolve_modeled_tx_inner_void_stack_present(
+    spec: ModeledTxInnerSingleCoilSpec,
+    *,
+    seed: int,
+) -> bool:
+    candidates = _integer_range_candidates(spec.void_stack_present)
+    if candidates != _TX_INNER_VOID_STACK_PRESENT_CANDIDATES and not (
+        len(candidates) == 1 and candidates[0] in _TX_INNER_VOID_STACK_PRESENT_CANDIDATES
+    ):
+        raise ValueError(
+            "tx_inner_single_coil.void_stack_present must realize to canonical candidates "
+            f"{_TX_INNER_VOID_STACK_PRESENT_CANDIDATES} or a fixed single candidate from that set "
+            f"(actual={candidates})"
+        )
+    if len(candidates) == 1:
+        return bool(candidates[0])
+    range_path = f"modeled_objects.{spec.object_id}.void_stack_present"
+    index = _resolve_seeded_candidate_index(seed=seed, range_path=range_path, candidate_count=len(candidates))
+    return bool(candidates[index])
 
 
 def resolve_modeled_underlay_gap_mm(spec: ModeledTxSingleCoilSpec, *, seed: int) -> float:
@@ -275,6 +297,7 @@ __all__ = [
     "resolve_modeled_plate_stack_z_usage_ratio",
     "resolve_modeled_tx_array_x_usage_ratio",
     "resolve_modeled_tx_coil_count",
+    "resolve_modeled_tx_inner_void_stack_present",
     "resolve_modeled_underlay_gap_mm",
     "resolve_modeled_tx_inner_underlay_ferrite_thickness_mm",
     "resolve_modeled_tx_inner_underlay_pet_psa_thickness_mm",

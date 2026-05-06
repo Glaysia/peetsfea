@@ -29,6 +29,7 @@ _EXPECTED_SAMPLED_OWNER_PATHS = [
     "non_model_objects.tx_region.tx_reference_line.z_ratio",
     "modeled_objects.tx_inner_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.tx_inner_rect_void_coil.x_position_ratio",
+    "modeled_objects.tx_inner_rect_void_coil.void_stack_present",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
@@ -54,7 +55,8 @@ def _range_spec(is_integer: bool, start: float, end: float, count: int) -> Range
 
 def _tx_inner_single_coil_spec() -> ModeledTxInnerSingleCoilSpec:
     fixed_one = _range_spec(True, 1.0, 1.0, 1)
-    fixed_two_mm = _range_spec(False, 2.0, 2.0, 1)
+    fixed_void_stack_present = _range_spec(True, 1.0, 1.0, 1)
+    fixed_tx_inner_underlay_thickness = _range_spec(False, 6.0, 6.0, 1)
     fixed_float = _range_spec(False, 1.0, 1.0, 1)
     return ModeledTxInnerSingleCoilSpec(
         object_id="tx_inner_rect_void_coil",
@@ -71,8 +73,9 @@ def _tx_inner_single_coil_spec() -> ModeledTxInnerSingleCoilSpec:
         turn_count=_range_spec(True, 2.0, 6.0, 5),
         layer_count=_range_spec(True, 2.0, 2.0, 1),
         underlay_repeat_count=fixed_one,
-        underlay_pet_psa_thickness_mm=fixed_two_mm,
-        underlay_ferrite_thickness_mm=fixed_two_mm,
+        void_stack_present=fixed_void_stack_present,
+        underlay_pet_psa_thickness_mm=fixed_tx_inner_underlay_thickness,
+        underlay_ferrite_thickness_mm=fixed_tx_inner_underlay_thickness,
         layer_gap_mm=_range_spec(False, 2.0, 2.0, 1),
         terminal_stub_length_mm=_range_spec(False, 5.0, 5.0, 1),
         margin_ratio=_range_spec(False, 0.05, 0.05, 1),
@@ -118,10 +121,10 @@ def _patch_rx_only_spec_loader(
     rx_terminal_stub = RangeSpec(is_integer=False, start=5.0, end=5.0, count=1)
     rx_margin_ratio = RangeSpec(is_integer=False, start=0.05, end=0.05, count=1)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
-    tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=2.0, end=2.0, count=1)
+    tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=6.0, end=6.0, count=1)
     tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.99, end=0.99, count=1)
     tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
-    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.5, end=1.0, count=13)
+    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.75, end=1.0, count=13)
 
     fake_spec = _FakeRxOnlyType2Spec(
         non_model_objects=(
@@ -159,6 +162,7 @@ def _patch_rx_only_spec_loader(
                 turn_count=RangeSpec(is_integer=True, start=2.0, end=2.0, count=1),
                 layer_count=RangeSpec(is_integer=True, start=2.0, end=2.0, count=1),
                 underlay_repeat_count=RangeSpec(is_integer=True, start=1.0, end=1.0, count=1),
+                void_stack_present=RangeSpec(is_integer=True, start=0.0, end=1.0, count=2),
                 underlay_pet_psa_thickness_mm=tx_inner_underlay_thickness,
                 underlay_ferrite_thickness_mm=tx_inner_underlay_thickness,
                 layer_gap_mm=RangeSpec(is_integer=False, start=2.0, end=2.0, count=1),
@@ -204,7 +208,7 @@ def _patch_rx_only_spec_loader(
 
 
 def _source_type2_toml_text() -> str:
-    return f"""
+    return """
 spec_version = "0.2.22"
 schema_id = "peetsfea.type2.step.v8"
 runtime_compatible = false
@@ -289,9 +293,9 @@ size_xyz = [160.0, 280.0, 90.0]
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.99, 0.99, 1]
 [non_model_objects.tx_reference_line.y_usage_ratio]
-range = [false, 0.2, 1.0, 17]
+range = [false, 0.2, 1.0, 85]
 [non_model_objects.tx_reference_line.z_ratio]
-range = [false, 0.5, 1.0, 13]
+range = [false, 0.75, 1.0, 65]
 
 [[non_model_objects]]
 id = "rx_region_max"
@@ -314,15 +318,17 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.outer_x_usage_ratio]
     range = [false, 0.5, 0.5, 1]
     [modeled_objects.outer_y_usage_ratio]
-    range = [false, 0.2, 0.9, 15]
+    range = [false, 0.2, 0.9, 150]
     [modeled_objects.x_position_ratio]
-    range = [false, 0.0, 0.3, 9]
+    range = [false, 0.0, 0.3, 45]
     [modeled_objects.turn_count]
     range = [true, 2, 2, 1]
     [modeled_objects.layer_count]
     range = [true, 2, 2, 1]
     [modeled_objects.underlay_repeat_count]
     range = [true, 0, 0, 1]
+    [modeled_objects.void_stack_present]
+    range = [true, 0, 1, 2]
     [modeled_objects.layer_gap_mm]
     range = [false, 2, 2, 1]
     [modeled_objects.terminal_stub_length_mm]
@@ -344,13 +350,13 @@ size_xyz = [10.0, 200.0, 200.0]
     pcb_thickness_mm = 3.965
     copper_thickness_mm = 0.035
     [modeled_objects.outer_x_usage_ratio]
-    range = [false, 0.1, 0.6, 17]
+    range = [false, 0.1, 0.6, 85]
     [modeled_objects.outer_y_usage_ratio]
-    range = [false, 0.1, 0.6, 17]
+    range = [false, 0.1, 0.6, 85]
     [modeled_objects.x_position_ratio]
     range = [false, 0.0, 0.0, 1]
     [modeled_objects.void_usage_ratio]
-    range = [false, 0.1, 0.6, 17]
+    range = [false, 0.1, 0.6, 85]
     [modeled_objects.turn_count]
     range = [true, 2, 6, 5]
     [modeled_objects.layer_count]
@@ -364,7 +370,7 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.margin_ratio]
     range = [false, 0.05, 0.05, 1]
     [modeled_objects.metal_fill_factor]
-    range = [false, 0.2, 0.6, 15]
+    range = [false, 0.2, 0.6, 75]
     [modeled_objects.terminal_path]
     value = "A_cw_to_a"
 """.strip()
@@ -698,7 +704,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert tx_reference_line_z_range[0] is False
     assert tx_reference_line_z_range[3] == 1
     assert tx_reference_line_z_range[1] == tx_reference_line_z_range[2]
-    assert 0.5 <= float(cast(int | float, tx_reference_line_z_range[1])) <= 1.0
+    assert 0.75 <= float(cast(int | float, tx_reference_line_z_range[1])) <= 1.0
 
     modeled_objects_by_id = {
         cast(str, modeled_object["object_id"]): modeled_object
@@ -731,13 +737,13 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert rx_outer_x_range[0] is False
     assert rx_outer_x_range[3] == 1
     assert rx_outer_x_range[1] == rx_outer_x_range[2]
-    assert 0.1 <= float(cast(int | float, rx_outer_x_range[1])) <= 0.6
+    assert 0.1 <= float(cast(int | float, rx_outer_x_range[1])) <= 1.0
     rx_outer_y = cast(dict[str, object], rx_modeled_object["outer_y_usage_ratio"])
     rx_outer_y_range = cast(list[object], rx_outer_y["range"])
     assert rx_outer_y_range[0] is False
     assert rx_outer_y_range[3] == 1
     assert rx_outer_y_range[1] == rx_outer_y_range[2]
-    assert 0.1 <= float(cast(int | float, rx_outer_y_range[1])) <= 0.6
+    assert 0.1 <= float(cast(int | float, rx_outer_y_range[1])) <= 1.0
     rx_void_ratio = cast(dict[str, object], rx_modeled_object["void_usage_ratio"])
     rx_void_ratio_range = cast(list[object], rx_void_ratio["range"])
     assert rx_void_ratio_range[0] is False
@@ -839,7 +845,7 @@ def test_sample_type2_reports_step_skip_and_removes_partial_design_dir(
     ]
     assert [entry["seed"] for entry in document["entries"]] == [4, 6]
     assert "[sample] skip idx=1 seed=5 phase=step error=RuntimeError: simulated step validation failure" in captured.out
-    assert f"[sample] done count=2 skipped=1 attempted=3" in captured.out
+    assert "[sample] done count=2 skipped=1 attempted=3" in captured.out
     assert exporter_calls == [4, 5, 6]
 
     design_dir_paths = [Path(entry["design_dir"]) for entry in document["entries"]]
@@ -1032,7 +1038,7 @@ def test_sample_type2_can_write_manifest_without_step_artifacts(
 
 def _source_type2_toml_text_with_tx_rect_void_columns(
 ) -> str:
-    return f"""
+    return """
 spec_version = "0.2.22"
 schema_id = "peetsfea.type2.step.v8"
 runtime_compatible = false

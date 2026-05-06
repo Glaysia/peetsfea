@@ -19,6 +19,8 @@ from peetsfea.type2_step_spec import load_type2_step_spec
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TYPE2_SWEEP_TOML = REPO_ROOT / "examples" / "type2_sweep.toml"
 TYPE2_FIXED_TOML = REPO_ROOT / "examples" / "type2_fixed.toml"
+TX_INNER_VOID_STACK_OWNER_PATH = "modeled_objects.tx_inner_rect_void_coil.void_stack_present"
+TX_INNER_VOID_STACK_DESCRIPTION = "TX inner 중앙 void stack 생성 여부"
 
 
 def _load_type2_spec_tools() -> ModuleType:
@@ -113,6 +115,7 @@ def _assert_complete_range_owner_descriptions(path: Path) -> None:
     descriptions = cast(dict[str, str], tools.type2_range_owner_descriptions(path))
     assert tuple(descriptions) == _range_owner_paths(path)
     assert all(description != "" for description in descriptions.values())
+    assert descriptions[TX_INNER_VOID_STACK_OWNER_PATH] == TX_INNER_VOID_STACK_DESCRIPTION
 
 
 def _single_retry_constraint_for_public_sampling(spec: Type2StepSpec, *, seed: int) -> tuple[str, int | float, int]:
@@ -176,9 +179,22 @@ def test_type2_sampled_toml_from_values_renders_loadable_toml(tmp_path: Path) ->
     assert isinstance(sampled_owner_paths, list)
     assert all(isinstance(owner_path, str) for owner_path in sampled_owner_paths)
     sampled_owner_path_strings = cast(list[str], sampled_owner_paths)
+    sampled_void_stack = _range_owner_field_from_path(
+        raw_sampled_spec,
+        owner_path=TX_INNER_VOID_STACK_OWNER_PATH,
+    )
+    sampled_void_stack_range = sampled_void_stack["range"]
+    assert isinstance(sampled_void_stack_range, list)
 
     assert len(sampled_spec.modeled_objects) == len(source_spec.modeled_objects)
     assert sampled_owner_path_strings == list(owner_values)
+    assert TX_INNER_VOID_STACK_OWNER_PATH in sampled_owner_path_strings
+    assert sampled_void_stack_range == [
+        True,
+        owner_values[TX_INNER_VOID_STACK_OWNER_PATH],
+        owner_values[TX_INNER_VOID_STACK_OWNER_PATH],
+        1,
+    ]
     assert all(
         not owner_path.startswith("modeled_objects.tx_outer_rect_void_coil.")
         for owner_path in sampled_owner_path_strings
@@ -256,9 +272,22 @@ def test_type2_range_owner_descriptions_accept_generated_sampled_toml_for_notebo
     assert isinstance(sampled_owner_paths, list)
     assert all(isinstance(owner_path, str) for owner_path in sampled_owner_paths)
     sampled_owner_path_strings = cast(list[str], sampled_owner_paths)
+    sampled_void_stack = _range_owner_field_from_path(
+        raw_sampled_spec,
+        owner_path=TX_INNER_VOID_STACK_OWNER_PATH,
+    )
+    sampled_void_stack_range = sampled_void_stack["range"]
+    assert isinstance(sampled_void_stack_range, list)
 
     descriptions = cast(dict[str, str], tools.type2_range_owner_descriptions(sampled_toml_path))
 
+    assert TX_INNER_VOID_STACK_OWNER_PATH in sampled_owner_path_strings
+    assert sampled_void_stack_range == [
+        True,
+        owner_values[TX_INNER_VOID_STACK_OWNER_PATH],
+        owner_values[TX_INNER_VOID_STACK_OWNER_PATH],
+        1,
+    ]
     assert all(
         not owner_path.startswith("modeled_objects.tx_outer_rect_void_coil.")
         for owner_path in sampled_owner_path_strings

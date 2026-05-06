@@ -30,6 +30,7 @@ tags:
 - `modeled_objects.tx_inner_rect_void_coil` remains active with role `tx_inner_single_coil`.
 - `modeled_objects.tx_inner_rect_void_coil.turn_count` and `layer_count` remain fixed at one for the fixed example.
 - TX inner passive stack defaults are coarsened for simulation speed: `underlay_repeat_count = [true, 1, 1, 1]`, PET_PSA thickness `2.0 mm`, and ferrite thickness `2.0 mm`.
+- `modeled_objects.tx_inner_rect_void_coil.void_stack_present` remains fixed disabled at `[true, 0, 0, 1]`.
 - `modeled_objects.rx_rect_void_coil` remains active with role `rx_single_coil`.
 - `modeled_objects.rx_rect_void_coil.outer_x_usage_ratio` and `outer_y_usage_ratio` remain fixed at their sweep maxima `[false, 1.0, 1.0, 1]` and `[false, 0.6, 0.6, 1]`.
 - `modeled_objects.rx_rect_void_coil.turn_count` remains fixed at one turn for the fixed example.

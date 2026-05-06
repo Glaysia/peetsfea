@@ -36,6 +36,7 @@ _EXPECTED_SAMPLED_OWNER_PATHS = (
     "non_model_objects.tx_region.tx_reference_line.y_usage_ratio",
     "non_model_objects.tx_region.tx_reference_line.z_ratio",
     "modeled_objects.tx_inner_rect_void_coil.x_position_ratio",
+    "modeled_objects.tx_inner_rect_void_coil.void_stack_present",
     "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
     "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
@@ -85,15 +86,20 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
     tx_inner_x_position_range = cast(
         list[object], cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["x_position_ratio"])["range"]
     )
+    tx_inner_void_stack_present_range = cast(
+        list[object],
+        cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["void_stack_present"])["range"],
+    )
     return (
         (_EXPECTED_DESIGN_VARIABLE_NAMES[0], str(float(cast(int | float, tx_reference_line_y_range[1])))),
         (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, tx_reference_line_z_range[1])))),
         (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(float(cast(int | float, tx_inner_x_position_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(float(cast(int | float, rx_outer_x_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, rx_outer_y_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, rx_void_ratio_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(int(cast(int | float, rx_turn_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[7], str(float(cast(int | float, rx_fill_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(int(cast(int | float, tx_inner_void_stack_present_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, rx_outer_x_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, rx_outer_y_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(float(cast(int | float, rx_void_ratio_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[7], str(int(cast(int | float, rx_turn_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[8], str(float(cast(int | float, rx_fill_range[1])))),
     )
 
 
@@ -118,10 +124,10 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     rx_terminal_stub = RangeSpec(is_integer=False, start=5.0, end=5.0, count=1)
     rx_margin_ratio = RangeSpec(is_integer=False, start=0.05, end=0.05, count=1)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
-    tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=2.0, end=2.0, count=1)
+    tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=6.0, end=6.0, count=1)
     tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.99, end=0.99, count=1)
     tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
-    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.5, end=1.0, count=13)
+    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.75, end=1.0, count=13)
     fake_spec = _FakeRxOnlyType2Spec(
         non_model_objects=(
             NonModelTxRegionSpec(
@@ -132,8 +138,8 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 non_model=True,
                 material="vacuum",
                 plane="YZ",
-                origin_xyz=(0.0, -900.0, 0.0),
-                size_xyz=(160.0, 1800.0, 90.0),
+                origin_xyz=(0.0, -600.0, 0.0),
+                size_xyz=(720.0, 1200.0, 90.0),
                 tx_reference_line=NonModelTxReferenceLineSpec(
                     x_ratio=tx_reference_line_x_ratio,
                     y_usage_ratio=tx_reference_line_y_usage_ratio,
@@ -157,6 +163,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 turn_count=RangeSpec(is_integer=True, start=2.0, end=2.0, count=1),
                 layer_count=RangeSpec(is_integer=True, start=2.0, end=2.0, count=1),
                 underlay_repeat_count=RangeSpec(is_integer=True, start=1.0, end=1.0, count=1),
+                void_stack_present=RangeSpec(is_integer=True, start=0.0, end=1.0, count=2),
                 underlay_pet_psa_thickness_mm=tx_inner_underlay_thickness,
                 underlay_ferrite_thickness_mm=tx_inner_underlay_thickness,
                 layer_gap_mm=RangeSpec(is_integer=False, start=2.0, end=2.0, count=1),
@@ -232,8 +239,8 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                     non_model=True,
                     material="vacuum",
                     plane="YZ",
-                    origin_xyz=(0.0, -900.0, 0.0),
-                    size_xyz=(160.0, 1800.0, 90.0),
+                    origin_xyz=(0.0, -600.0, 0.0),
+                    size_xyz=(720.0, 1200.0, 90.0),
                     tx_reference_line=NonModelTxReferenceLineSpec(
                         x_ratio=_range_from_tx_reference_line(payload, field_name="x_ratio"),
                         y_usage_ratio=_range_from_tx_reference_line(payload, field_name="y_usage_ratio"),
@@ -266,6 +273,9 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                     ),
                     underlay_repeat_count=_range_from_modeled(
                         payload, object_id="tx_inner_rect_void_coil", field_name="underlay_repeat_count"
+                    ),
+                    void_stack_present=_range_from_modeled(
+                        payload, object_id="tx_inner_rect_void_coil", field_name="void_stack_present"
                     ),
                     underlay_pet_psa_thickness_mm=_range_from_modeled(
                         payload,
@@ -349,7 +359,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _source_type2_toml_text() -> str:
-    return f"""
+    return """
 spec_version = "0.2.22"
 schema_id = "peetsfea.type2.step.v8"
 runtime_compatible = false
@@ -429,17 +439,17 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "YZ"
-origin_xyz = [0.0, -900.0, 0.0]
-size_xyz = [160.0, 1800.0, 90.0]
+origin_xyz = [0.0, -600.0, 0.0]
+size_xyz = [720.0, 1200.0, 90.0]
 
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.99, 0.99, 1]
 
 [non_model_objects.tx_reference_line.y_usage_ratio]
-range = [false, 0.2, 1.0, 17]
+range = [false, 0.2, 1.0, 85]
 
 [non_model_objects.tx_reference_line.z_ratio]
-range = [false, 0.5, 1.0, 13]
+range = [false, 0.75, 1.0, 65]
 
 [[non_model_objects]]
 id = "rx_region_max"
@@ -464,13 +474,15 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.outer_y_usage_ratio]
     range = [false, 0.6, 0.6, 1]
     [modeled_objects.x_position_ratio]
-    range = [false, 0.0, 0.3, 9]
+    range = [false, 0.0, 0.3, 45]
     [modeled_objects.turn_count]
     range = [true, 2, 2, 1]
     [modeled_objects.layer_count]
     range = [true, 2, 2, 1]
     [modeled_objects.underlay_repeat_count]
     range = [true, 0, 0, 1]
+    [modeled_objects.void_stack_present]
+    range = [true, 0, 1, 2]
     [modeled_objects.underlay_pet_psa_thickness_mm]
     range = [false, 3, 3, 1]
     [modeled_objects.underlay_ferrite_thickness_mm]
@@ -496,13 +508,13 @@ size_xyz = [10.0, 200.0, 200.0]
     pcb_thickness_mm = 3.965
     copper_thickness_mm = 0.035
     [modeled_objects.outer_x_usage_ratio]
-    range = [false, 0.1, 0.6, 17]
+    range = [false, 0.1, 0.6, 85]
     [modeled_objects.outer_y_usage_ratio]
-    range = [false, 0.1, 0.6, 17]
+    range = [false, 0.1, 0.6, 85]
     [modeled_objects.x_position_ratio]
     range = [false, 0.0, 0.0, 1]
     [modeled_objects.void_usage_ratio]
-    range = [false, 0.1, 0.6, 17]
+    range = [false, 0.1, 0.6, 85]
     [modeled_objects.turn_count]
     range = [true, 2, 6, 5]
     [modeled_objects.layer_count]
@@ -516,7 +528,7 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.margin_ratio]
     range = [false, 0.05, 0.05, 1]
     [modeled_objects.metal_fill_factor]
-    range = [false, 0.2, 0.6, 15]
+    range = [false, 0.2, 0.6, 75]
     [modeled_objects.terminal_path]
     value = "A_cw_to_a"
 

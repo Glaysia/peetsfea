@@ -26,6 +26,7 @@ tags:
 ## Canonical state
 - sampled owner canonical paths are rooted at `modeled_objects.<object_id>` or `non_model_objects.<object_id>` and may address nested TOML tables.
 - `tx_region` remains guide context; its `tx_reference_line` nested range fields are sampled non-modeled owner coordinates, not TX modeled geometry.
+- `modeled_objects.tx_inner_rect_void_coil.void_stack_present` is an integer sampled owner when the source uses the canonical two-state switch.
 - `modeled_objects.tx_outer_rect_void_coil.x_position_ratio` is an exportable sampled owner even though its source TOML range is selected by `modeled_objects.tx_inner_rect_void_coil.tx_outer_x_position_ratio`; freeze logic must write the selected value back to that source selector.
 - constraints are preserved in sampled TOML and evaluated as deterministic sampling feasibility filters.
 - `retry_number` records the first constraint-satisfying retry attempt and remains part of the `design_id`.

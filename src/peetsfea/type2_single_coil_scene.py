@@ -48,6 +48,7 @@ from peetsfea.type2_step_spec import Point3
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
 from peetsfea.type2_step_spec import resolve_modeled_underlay_gap_mm
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
+from peetsfea.type2_step_spec import resolve_modeled_tx_inner_void_stack_present
 from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
 from peetsfea.type2_step_spec_sampling import resolve_modeled_tx_inner_underlay_ferrite_thickness_mm
 from peetsfea.type2_step_spec_sampling import resolve_modeled_tx_inner_underlay_pet_psa_thickness_mm
@@ -315,8 +316,8 @@ def _single_coil_tx_ratio_design_outer_placement_from_realized(
     spec: ModeledSingleCoilSpec,
     owner_spec: NonModelBoxSpec,
     realized: RealizedSingleCoilRectVoid,
-    local_bounds_min_z: float,
-    local_bounds_size_z: float,
+    local_bounds_min_xyz: Point3,
+    local_bounds_size_xyz: Point3,
     profile: SingleCoilProfile,
     seed: int,
 ) -> TxRatioDesignOuterPlacement:
@@ -327,17 +328,8 @@ def _single_coil_tx_ratio_design_outer_placement_from_realized(
         )
     if profile.plane != "XY":
         raise RuntimeError(f"type2 {profile.role} x_position_ratio placement requires XY plane (actual={profile.plane})")
-    local_design_outer_min_xyz = (
-        realized.outer_bounds.min_x,
-        realized.outer_bounds.min_y,
-        local_bounds_min_z,
-    )
-    local_design_outer_size_xyz = (
-        realized.outer_x_mm,
-        realized.outer_y_mm,
-        local_bounds_size_z,
-    )
-    world_design_outer_size_xyz = profile.world_size(local_design_outer_size_xyz)
+    del realized
+    world_design_outer_size_xyz = profile.world_size(local_bounds_size_xyz)
     owner_origin_x, owner_origin_y, owner_origin_z = owner_spec.origin_xyz
     owner_size_x, owner_size_y, owner_size_z = owner_spec.size_xyz
     if (
@@ -363,7 +355,7 @@ def _single_coil_tx_ratio_design_outer_placement_from_realized(
         world_design_outer_min_xyz[1] + world_design_outer_size_xyz[1],
         world_design_outer_min_xyz[2] + world_design_outer_size_xyz[2],
     )
-    world_design_min_delta = profile.world_delta(local_design_outer_min_xyz)
+    world_design_min_delta = profile.world_delta(local_bounds_min_xyz)
     return TxRatioDesignOuterPlacement(
         frame_origin_xyz=(
             world_design_outer_min_xyz[0] - world_design_min_delta[0],
@@ -503,8 +495,8 @@ def resolve_modeled_single_coil_fit_envelope(
             spec=spec,
             owner_spec=owner_spec,
             realized=realized,
-            local_bounds_min_z=local_bounds_min_xyz[2],
-            local_bounds_size_z=local_bounds_size_xyz[2],
+            local_bounds_min_xyz=local_bounds_min_xyz,
+            local_bounds_size_xyz=local_bounds_size_xyz,
             profile=profile,
             seed=seed,
         )
@@ -1485,15 +1477,15 @@ def build_modeled_single_coil_scene_data(
     elif profile.role == "tx_inner_single_coil":
         if not isinstance(spec, ModeledTxInnerSingleCoilSpec):
             raise RuntimeError(f"type2 tx inner underlay requires tx inner spec (object_id={spec.object_id})")
+        pet_psa_thickness_mm = resolve_modeled_tx_inner_underlay_pet_psa_thickness_mm(
+            spec,
+            seed=seed,
+        )
+        ferrite_thickness_mm = resolve_modeled_tx_inner_underlay_ferrite_thickness_mm(
+            spec,
+            seed=seed,
+        )
         if underlay_repeat_count > 0:
-            pet_psa_thickness_mm = resolve_modeled_tx_inner_underlay_pet_psa_thickness_mm(
-                spec,
-                seed=seed,
-            )
-            ferrite_thickness_mm = resolve_modeled_tx_inner_underlay_ferrite_thickness_mm(
-                spec,
-                seed=seed,
-            )
             tx_inner_underlay_descriptor = resolve_tx_inner_single_coil_underlay_placement_descriptor(
                 owner_spec=owner_spec,
                 actual_region_min_xyz=fit_envelope.outer_bounds_min_xyz,
@@ -1502,6 +1494,10 @@ def build_modeled_single_coil_scene_data(
                 pet_psa_thickness_mm=pet_psa_thickness_mm,
                 ferrite_thickness_mm=ferrite_thickness_mm,
             )
+            bottom_underlay_scene_children = build_tx_inner_single_coil_underlay_shapes(tx_inner_underlay_descriptor)
+        else:
+            bottom_underlay_scene_children = ()
+        if resolve_modeled_tx_inner_void_stack_present(spec, seed=seed):
             void_bounds = fit_envelope.realized.void_bounds
             local_corridor_min_y, local_corridor_max_y = local_central_void_corridor_y_bounds(
                 fit_envelope.realized,
@@ -1518,11 +1514,10 @@ def build_modeled_single_coil_scene_data(
                 pet_psa_thickness_mm=pet_psa_thickness_mm,
                 ferrite_thickness_mm=ferrite_thickness_mm,
             )
-            underlay_scene_children = build_tx_inner_single_coil_underlay_shapes(
-                tx_inner_underlay_descriptor
-            ) + build_tx_inner_single_coil_void_stack_shapes(tx_inner_void_stack_descriptor)
+            void_stack_scene_children = build_tx_inner_single_coil_void_stack_shapes(tx_inner_void_stack_descriptor)
         else:
-            underlay_scene_children = ()
+            void_stack_scene_children = ()
+        underlay_scene_children = bottom_underlay_scene_children + void_stack_scene_children
     elif profile.role == "tx_outer_single_coil":
         if underlay_repeat_count != 0:
             raise RuntimeError(

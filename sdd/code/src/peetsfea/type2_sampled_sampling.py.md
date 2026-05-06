@@ -26,8 +26,9 @@ tags:
 - Same source spec + version + seed + retry number yields deterministic sampled values.
 - RxOnly sampling does not require TX modeled owner values.
 - Generic TX modeled roles (`tx_single_coil`, `tx_plate_stack`, `tx_rect_void_columns`) are not sampled owners.
-- `tx_inner_single_coil` is a geometry-only sampled modeled owner and now contributes PET/PSA/ferrite thickness owner paths in addition to existing coil sizing and underlay repeat fields.
+- `tx_inner_single_coil` is a geometry-only sampled modeled owner and now contributes `void_stack_present` in addition to existing coil sizing and bottom underlay fields.
 - Active `count > 1` range owners must appear in `sampled_owner_paths` regardless of modeled/non-modeled ownership.
+- When `void_stack_present` uses `[true, 0, 1, 2]`, it is an active sampled owner and must freeze to an integer singleton in sampled TOML.
 - `tx_region.tx_reference_line.x_ratio`, `tx_region.tx_reference_line.y_usage_ratio`, and `tx_region.tx_reference_line.z_ratio` are active non-modeled guide/context sampled owners.
 - `tx_region_actual` and `tx_region_actual_stack_space` are not active RxOnly sampled owner sources.
 - `tx_outer_single_coil` is not an active sampled modeled object. `modeled_objects.tx_outer_rect_void_coil.*` owner paths are unsupported.

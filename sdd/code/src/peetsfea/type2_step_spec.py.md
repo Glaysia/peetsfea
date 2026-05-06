@@ -30,7 +30,7 @@ tags:
 - `tx_region_actual`과 `tx_region_actual_stack_space`는 active RxOnly 입력에서 제거된 TX 형상 파생 객체다.
 - `outputs.mode = "RxOnly"`는 TX port를 만들지 않고 RX 변수만 요청하는 모드다.
 - active modeled object parsing rejects generic/legacy TX modeled roles before downstream sampling/export can treat them as runtime state.
-- `tx_inner_single_coil` is parsed as geometry-only modeled state for STEP export/import, but remains outside the facade `__all__` public import contract while active tests own that surface.
+- `tx_inner_single_coil` is parsed as geometry-only modeled state for STEP export/import, and the facade re-exports its `void_stack_present` resolver as the public switch-sampling surface.
 - two-terminal output variable 이름은 [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)에서 shape-independent dormant contract로 보존한다.
 - constraints parsing remains declarative and deterministic.
 

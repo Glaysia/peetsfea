@@ -31,36 +31,38 @@ tags:
 - RX single-coil example geometry uses `pcb_thickness_mm = 3.965` and `copper_thickness_mm = 0.035`.
 - RX full-backing thickness assertions derive the active coil stack thickness from exported PCB/copper bounds.
 - TX inner active example geometry uses `pcb_thickness_mm = 0.3` and one-ounce `copper_thickness_mm = 0.035`.
-- TX inner fixed passive defaults are `underlay_repeat_count = 1`, `underlay_pet_psa_thickness_mm = 2.0`,
-  and `underlay_ferrite_thickness_mm = 2.0`; parsed example assertions should fail if those defaults drift.
+- Fixed-example TX inner guide assertions use `tx_reference_line.z_ratio = 0.9`, so the expected `tx_inner_region` Z span is 81.0 mm.
+- TX inner fixed passive defaults are `underlay_repeat_count = 1`, `underlay_pet_psa_thickness_mm = 6.0`,
+  and `underlay_ferrite_thickness_mm = 6.0`; parsed example assertions should fail if those defaults drift.
+- TX inner void-stack presence is controlled by `void_stack_present`; tests must cover disabled void stack while retaining bottom underlay, including the selected-size fixed example.
+- The disabled export regression fixes `underlay_repeat_count = 1` and `void_stack_present = 0`; it expects `tx_underlay_*` bodies and group membership without any `tx_void_*` scene labels.
 - TX inner terminal metadata remains deterministic and can drive `tx_inner_port_sheet` for `TxRx`.
 - Fixed example parsing now asserts `tx_inner_rect_void_coil.terminal_stub_length_mm == [false, 7.5, 7.5, 1]` and `tx_inner` TX export tests assert the canonical `outer_bounds_min_xyz[2]` offset is exactly 7.5 mm above the first PCB layer `z`.
 - `tx_inner_rect_void_coil` is modeled geometry-only with expected coil bodies `tx_inner_pcb_l0`,
   `tx_inner_pcb_l1`, and `tx_inner_copper_stack`; fixed examples also emit
   `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0`; it must not create `TX_TML`.
-- Multilayer TX inner tests must include the active sweep upper bound: fixed `layer_count=8` exports
-  `tx_inner_pcb_l0` through `tx_inner_pcb_l7` plus `tx_inner_copper_stack`.
-- `tx_inner_rect_void_coil` must use `x_position_ratio` for owner-local design-outer X placement and centered owner-local Y placement.
-- TX inner actual-underlay tests must verify only `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0` are emitted, share `tx_inner_actual_region` X/Y bounds, and stack downward in 2.0 mm PET/PSA then 2.0 mm ferrite order.
-- TX inner void-stack tests must verify the fixed 15.84 mm realized void X range is filled by 8 alternating 2.0 mm nominal sheets with a shortened final 1.84 mm PET/PSA sheet, while Y spans the computed copper-free central corridor rather than the smaller central rectangular void.
-- TX inner void-stack tests must assert every void ferrite/PET_PSA body spans from `tx_inner_actual_region.min_z` to `tx_region.max_z` and remains in the `g_ferrite_tx` group after the underlay members.
-- TX inner ferrite-family clearance tests must verify the `g_ferrite_tx` member order remains the exported PET_PSA/ferrite underlay members followed by void-stack ferrite/PET_PSA members while every ferrite-family body and every PCB body remains a positive-volume solid.
+- Multilayer TX inner tests must include the active sweep upper bound: fixed `layer_count=5` exports
+  `tx_inner_pcb_l0` through `tx_inner_pcb_l4` plus `tx_inner_copper_stack`.
+- `tx_inner_rect_void_coil` must use `x_position_ratio` for owner-local visible physical X placement and centered owner-local Y placement.
+- TX inner actual-underlay tests must verify only `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0` are emitted, share `tx_inner_actual_region` X/Y bounds, and stack downward in 6.0 mm PET/PSA then 6.0 mm ferrite order for a 12.0 mm total bottom underlay.
+- TX inner void-stack enabled tests verify generated void-stack bodies separately from the fixed example, because the selected-size fixed example disables the stack.
+- TX inner ferrite-family clearance tests must verify the `g_ferrite_tx` member order remains the exported PET_PSA/ferrite underlay members, with void-stack members included only for enabled-stack cases, while every ferrite-family body and every PCB body remains a positive-volume solid.
 - Active generation regressions must verify no `tx_outer_region`, `tx_outer_void_*`, `tx_outer_underlay_*`, `tx_outer_pcb_*`, `tx_outer_copper_*`, `tx_outer_actual_region`, `g_ferrite_tx_outer`, or TX inner/outer bridge members are emitted.
 - Parser tests must reject missing, non-positive, non-fixed, and integer-flagged TX inner underlay thickness ranges.
 - `tx_outer_rect_void_coil` must not appear in active modeled ledgers or STEP scene labels.
 - `tx_inner_rect_void_coil` and `tx_outer_rect_void_coil` fixed-example X placement must satisfy
-  their owner-local design-outer X contracts; physical modeled body bboxes are containment/provenance outputs, not the ratio authority.
+  their owner-local visible physical X contracts; the physical modeled body bbox is the placement authority for imported geometry.
 - TX outer X placement uses the `tx_outer_region_prism` local frame rather than post-tilt world-X AABB centering; tests validate the actual/design footprint against the prism-local center interval, including the `0.5942857142857143` regression ratio.
 - `tx_outer_rect_void_coil` must be validated in the `tx_outer_region_prism` local frame. Tests derive prism-local axes and X/Y bounds from the prism provenance vertices, then assert exported body vertices remain inside those local spans.
-- `examples/type2_sweep.toml` parsing must assert `tx_inner_rect_void_coil.outer_x_usage_ratio == [false, 0.4, 0.9, 15]` and the derived `tx_outer_rect_void_coil` must inherit that exact range.
+- `examples/type2_sweep.toml` parsing must assert active TX inner and RX usage-ratio ranges, including RX inclusive `1.0` upper endpoints, remain parseable and scale to owner spans.
 - `tx_outer_rect_void_coil` may protrude slightly in world +X after tilted stacking; tests should assert prism-local containment, semantic tilt, and Y/Z consistency rather than clipping to the axis-aligned prism bbox.
 - `tx_outer_rect_void_coil` must preserve outer-frame tilt normals:
   each modeled outer body is validated to have a face whose normal is nearly parallel to the local normal of
   `tx_outer_region_prism.top_inner_start→top_outer_start` and whose frame `local_x` projection is non-zero.
 - `tx_region` may be present as guide context only.
-- Fixed examples must verify fixed non-modeled `tx_region` Y width `1800.0`, fixed `x_ratio=0.99`, preserved `y_usage_ratio`, maximum fixed TX/RX outer usage ratios, fixed TX one-layer/one-turn state, and fixed RX one-turn state.
-- Deterministic tx_inner body-name contract is now explicitly covered for a fixed `layer_count=8` realization:
-  expected exported bodies are `tx_inner_pcb_l0` through `tx_inner_pcb_l7` plus `tx_inner_copper_stack`.
+- Fixed examples must verify fixed non-modeled `tx_region` Y width `1800.0`, fixed `x_ratio=0.99`, preserved `y_usage_ratio`, maximum fixed TX/RX outer usage ratios, disabled TX inner void stack, fixed TX one-layer/one-turn state, and fixed RX one-turn state.
+- Deterministic tx_inner body-name contract is now explicitly covered for a fixed `layer_count=5` realization:
+  expected exported bodies are `tx_inner_pcb_l0` through `tx_inner_pcb_l4` plus `tx_inner_copper_stack`.
 - STEP-only positive and negative inner/outer bridge geometry must be absent from active fixed-example TX paths.
 - `tx_reference_line` ratio inputs, including centered `y_usage_ratio`, are expected to derive a visible non-modeled
   `tx_inner_region` STEP and retained ledger member without activating TX
@@ -69,7 +71,7 @@ tags:
 - `_world_terminal_stub_boxes` now resolves placement-owner specs before modeled-box rendering, and for `tx_inner_single_coil`/`tx_single_coil` it uses synthetic bus-aligned owner boxes so the world-stub geometry is validated via balanced start/end bus contract while preserving existing owner-relative semantics.
 - Example mutation tests should edit parsed TOML data and re-render it instead of brittle adjacent-line string replacement, because official range owners may carry `description` metadata beside `range`.
 - Active fixed-example export must not emit `tx_outer_region`; historical prism-local TX outer assertions stay xfailed with obsolete outer-modeled contracts.
-- `tx_inner_actual_region` must match the resolved TX inner design outer box for the same TOML and seed while leaving `tx_inner_region` as the larger guide region. Its `tx_actual_region.actual_region_bounds` must equal the canonical actual-region ledger bounds, while `physical_modeled_body_bounds` must equal the modeled `tx_inner_rect_void_coil` canonical physical bounds and remain distinct when the physical body is smaller than the design outer box.
+- `tx_inner_actual_region` must match the resolved TX inner visible physical body box for the same TOML and seed while leaving `tx_inner_region` as the larger guide region. Its `tx_actual_region.actual_region_bounds` must equal the canonical actual-region ledger bounds, and `physical_modeled_body_bounds` must equal the modeled `tx_inner_rect_void_coil` canonical physical bounds.
 - `tx_outer_region` and `tx_outer_actual_region` must be absent from active fixed-example export because no active `tx_outer_rect_void_coil` exists.
 
 ## Invariants / fail-fast
@@ -86,7 +88,7 @@ tags:
   must fail before STEP construction.
 - Historical TX outer guide/actual-region assertions are obsolete while `tx_outer_region` and `tx_outer_actual_region` remain absent from active output.
 - For `tx_inner_actual_region`, the non-modeled region must carry `tx_actual_region.physical_modeled_body_bounds` that matches the final
-  modeled `tx_inner_rect_void_coil` canonical bounds, while `actual_region_bounds` stays equal to the design outer actual-region bounds.
+  modeled `tx_inner_rect_void_coil` canonical bounds, while `actual_region_bounds` stays equal to the visible physical actual-region bounds.
 - Active generation tests must fail if `tx_outer_rect_void_coil`, `tx_outer_region`, `tx_outer_actual_region`, or `tx_outer_*` passive/model body names return.
 - TX stub contract for `tx_inner_single_coil` now requires:
   fixed-term stub span checks in helper-derived world coordinates and canonical metadata to be equal:

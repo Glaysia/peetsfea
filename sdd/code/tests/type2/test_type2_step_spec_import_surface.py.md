@@ -26,7 +26,8 @@ tags:
 - 출력: assertions that `__all__` matches the expected symbol contract and selected symbols resolve from expected module origins
 
 ## Canonical state
-- expected surface is frozen as a set of 40 canonical public names (including parser, modeled/non-modeled types, resolvers, and helpers)
+- expected surface is frozen as a set of canonical public names (including parser, modeled/non-modeled types, resolvers, and helpers)
+- `resolve_modeled_tx_inner_void_stack_present` is part of the facade resolver contract and must resolve from `type2_step_spec_sampling`
 - import-path coverage includes `type2_step_spec_modeled` and `type2_step_spec_sampling` owner paths for split-owned functions
 - failures should be fail-fast when the facade cannot import
 

@@ -10,10 +10,12 @@ from peetsfea.spec.outputs import ACTIVE_OUTPUT_VARIABLE_NAMES_BY_MODE
 
 _TX_MODELED_ROLES = {"tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"}
 _TX_SAMPLED_OWNER_IDS = {"tx_region_actual", "tx_region_actual_stack_space"}
-_TX_REGION_ORIGIN_XYZ = [0.0, -900.0, 0.0]
-_TX_REGION_SIZE_XYZ = [160.0, 1800.0, 90.0]
+_FIXED_TX_REGION_ORIGIN_XYZ = [0.0, -900.0, 0.0]
+_FIXED_TX_REGION_SIZE_XYZ = [160.0, 1800.0, 90.0]
+_SAMPLED_TX_REGION_ORIGIN_XYZ = [0.0, -600.0, 0.0]
+_SAMPLED_TX_REGION_SIZE_XYZ = [720.0, 1200.0, 90.0]
 _FIXED_TX_REFERENCE_LINE_RATIOS = (0.99, 1.0, 0.9)
-_SAMPLED_TX_REFERENCE_LINE_RANGES = ((0.99, 0.99, 1), (0.2, 1.0, 17), (0.5, 1.0, 13))
+_SAMPLED_TX_REFERENCE_LINE_RANGES = ((0.99, 0.99, 1), (0.2, 1.0, 85), (0.75, 1.0, 65))
 
 
 def _repo_root() -> Path:
@@ -82,7 +84,7 @@ def _raw_output_variable_list(payload: dict[str, object]) -> list[object]:
     return raw_variables
 
 
-def _assert_txrx_payload(payload: dict[str, object]) -> None:
+def _assert_txrx_payload(payload: dict[str, object], *, example_name: str) -> None:
     outputs = cast(dict[str, object], payload["outputs"])
     assert outputs["mode"] == "TxRx"
 
@@ -102,8 +104,14 @@ def _assert_txrx_payload(payload: dict[str, object]) -> None:
     tx_inner = modeled_by_id["tx_inner_rect_void_coil"]
     assert tx_inner["role"] == "tx_inner_single_coil"
     assert cast(dict[str, object], tx_inner["underlay_repeat_count"])["range"] == [True, 1, 1, 1]
-    assert cast(dict[str, object], tx_inner["underlay_pet_psa_thickness_mm"])["range"] == [False, 2.0, 2.0, 1]
-    assert cast(dict[str, object], tx_inner["underlay_ferrite_thickness_mm"])["range"] == [False, 2.0, 2.0, 1]
+    if example_name == "type2_fixed.toml":
+        assert cast(dict[str, object], tx_inner["underlay_pet_psa_thickness_mm"])["range"] == [False, 2.0, 2.0, 1]
+        assert cast(dict[str, object], tx_inner["underlay_ferrite_thickness_mm"])["range"] == [False, 2.0, 2.0, 1]
+    elif example_name == "type2_sweep.toml":
+        assert cast(dict[str, object], tx_inner["underlay_pet_psa_thickness_mm"])["range"] == [False, 6.0, 6.0, 1]
+        assert cast(dict[str, object], tx_inner["underlay_ferrite_thickness_mm"])["range"] == [False, 6.0, 6.0, 1]
+    else:
+        raise AssertionError(f"unsupported type2 example {example_name!r}")
 
     non_model_ids = tuple(cast(str, table["id"]) for table in _tables(payload, "non_model_objects"))
     assert "tx_region" in non_model_ids
@@ -112,10 +120,16 @@ def _assert_txrx_payload(payload: dict[str, object]) -> None:
     assert not _TX_SAMPLED_OWNER_IDS.intersection(non_model_ids)
 
 
-def _assert_tx_region_payload(payload: dict[str, object]) -> None:
+def _assert_tx_region_payload(payload: dict[str, object], *, example_name: str) -> None:
     tx_region = next(table for table in _tables(payload, "non_model_objects") if table["id"] == "tx_region")
-    assert tx_region["origin_xyz"] == _TX_REGION_ORIGIN_XYZ
-    assert tx_region["size_xyz"] == _TX_REGION_SIZE_XYZ
+    if example_name == "type2_fixed.toml":
+        assert tx_region["origin_xyz"] == _FIXED_TX_REGION_ORIGIN_XYZ
+        assert tx_region["size_xyz"] == _FIXED_TX_REGION_SIZE_XYZ
+    elif example_name == "type2_sweep.toml":
+        assert tx_region["origin_xyz"] == _SAMPLED_TX_REGION_ORIGIN_XYZ
+        assert tx_region["size_xyz"] == _SAMPLED_TX_REGION_SIZE_XYZ
+    else:
+        raise AssertionError(f"unsupported type2 example {example_name!r}")
 
 
 def _assert_tx_reference_line_payload(payload: dict[str, object], *, example_name: str) -> None:
@@ -170,8 +184,8 @@ def _assert_rejects_tx_sampled_owner(payload: dict[str, object]) -> None:
 @pytest.mark.parametrize("example_name", ("type2_fixed.toml", "type2_sweep.toml"))
 def test_active_type2_examples_are_txrx(example_name: str) -> None:
     payload = _example_payload(example_name)
-    _assert_txrx_payload(payload)
-    _assert_tx_region_payload(payload)
+    _assert_txrx_payload(payload, example_name=example_name)
+    _assert_tx_region_payload(payload, example_name=example_name)
     _assert_tx_reference_line_payload(payload, example_name=example_name)
 
 

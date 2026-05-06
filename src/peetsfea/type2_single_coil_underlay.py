@@ -808,15 +808,96 @@ def _build_tx_void_stack_shapes(
     return tuple(scene_children)
 
 
+def _build_tx_inner_void_stack_pair_shapes(
+    descriptor: _TxVoidStackPlacementDescriptor,
+) -> tuple[Shape, ...]:
+    context = "type2 tx_inner void stack"
+    span_x = descriptor.void_max_x - descriptor.void_min_x
+    span_y = descriptor.void_max_y - descriptor.void_min_y
+    span_z = descriptor.z_top - descriptor.z_bottom
+    minimum_pair_width = descriptor.ferrite_thickness_mm + descriptor.pet_thickness_mm
+    geometry_values = (
+        descriptor.void_min_x,
+        descriptor.void_max_x,
+        descriptor.void_min_y,
+        descriptor.void_max_y,
+        descriptor.z_bottom,
+        descriptor.z_top,
+        descriptor.pet_thickness_mm,
+        descriptor.ferrite_thickness_mm,
+        span_x,
+        span_y,
+        span_z,
+        minimum_pair_width,
+    )
+    if any(not math.isfinite(value) for value in geometry_values):
+        raise RuntimeError(f"{context} descriptor must be finite (descriptor={descriptor})")
+    if span_x <= 0.0 or span_y <= 0.0 or span_z <= 0.0:
+        raise RuntimeError(f"{context} descriptor spans must be positive (descriptor={descriptor})")
+    if descriptor.pet_thickness_mm <= 0.0 or descriptor.ferrite_thickness_mm <= 0.0:
+        raise RuntimeError(f"{context} descriptor thicknesses must be positive (descriptor={descriptor})")
+
+    pair_count = 0
+    pair_span_x = 0.0
+    for candidate_pair_count in range(4, 0, -1):
+        candidate_pair_span_x = span_x / float(candidate_pair_count)
+        if candidate_pair_span_x >= minimum_pair_width:
+            pair_count = candidate_pair_count
+            pair_span_x = candidate_pair_span_x
+            break
+    if pair_count == 0:
+        raise RuntimeError(
+            f"{context} void stack width cannot fit one minimum ferrite/PET_PSA pair "
+            f"(void_width={span_x}, ferrite_min_width={descriptor.ferrite_thickness_mm}, "
+            f"pet_psa_min_width={descriptor.pet_thickness_mm}, minimum_pair_width={minimum_pair_width})"
+        )
+
+    leftover_pair_width = pair_span_x - minimum_pair_width
+    if leftover_pair_width < 0.0 or not math.isfinite(leftover_pair_width):
+        raise RuntimeError(
+            f"{context} pair leftover width must be finite and non-negative "
+            f"(pair_count={pair_count}, pair_span_x={pair_span_x}, minimum_pair_width={minimum_pair_width})"
+        )
+    ferrite_width = descriptor.ferrite_thickness_mm + (leftover_pair_width / 2.0)
+    pet_width = descriptor.pet_thickness_mm + (leftover_pair_width / 2.0)
+    if ferrite_width <= 0.0 or pet_width <= 0.0:
+        raise RuntimeError(
+            f"{context} pair sheet widths must be positive "
+            f"(pair_count={pair_count}, ferrite_width={ferrite_width}, pet_psa_width={pet_width})"
+        )
+
+    current_x = descriptor.void_min_x
+    scene_children: list[Shape] = []
+    for pair_index in range(pair_count):
+        scene_children.append(
+            _build_labeled_solid_box(
+                label=f"tx_void_ferrite_u{pair_index}",
+                origin_xyz=(current_x, descriptor.void_min_y, descriptor.z_bottom),
+                size_xyz=(ferrite_width, span_y, span_z),
+            )
+        )
+        current_x += ferrite_width
+        scene_children.append(
+            _build_labeled_solid_box(
+                label=f"tx_void_pet_psa_u{pair_index}",
+                origin_xyz=(current_x, descriptor.void_min_y, descriptor.z_bottom),
+                size_xyz=(pet_width, span_y, span_z),
+            )
+        )
+        current_x += pet_width
+    if not math.isclose(current_x, descriptor.void_max_x, rel_tol=0.0, abs_tol=1e-12):
+        raise RuntimeError(
+            f"{context} must end exactly at void.max_x "
+            f"(actual_end_x={current_x}, void_max_x={descriptor.void_max_x}, pair_count={pair_count})"
+        )
+    return tuple(scene_children)
+
+
 def build_tx_inner_single_coil_void_stack_shapes(
     descriptor: _TxVoidStackPlacementDescriptor,
 ) -> tuple[Shape, ...]:
-    return _build_tx_void_stack_shapes(
-        descriptor,
-        context="type2 tx_inner void stack",
-        ferrite_label_prefix="tx_void_ferrite_u",
-        pet_psa_label_prefix="tx_void_pet_psa_u",
-    )
+    return _build_tx_inner_void_stack_pair_shapes(descriptor)
+
 
 
 def build_tx_outer_single_coil_void_stack_shapes(

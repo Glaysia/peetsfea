@@ -27,6 +27,7 @@ tags:
 - RX single-coil and RX plate-stack parsing remain documented.
 - Generic/legacy TX modeled roles are rejected at the active parser boundary during the reset.
 - `tx_inner_single_coil` is parsed as an explicit rect-void inner TX coil placed by derived `tx_inner_region`; it also owns the TOML-controlled actual-region underlay stack fields.
+- `tx_inner_single_coil.void_stack_present` is parsed as a required integer range and controls only YZ void-stack body presence.
 - `tx_inner_single_coil` parses `x_position_ratio` as the inner coil local X placement owner.
 - `tx_outer_terminal_path` and `tx_outer_x_position_ratio` are no longer active fields on `tx_inner_single_coil`; declaring either must fail as unsupported schema state.
 - `tx_region` remains outside modeled parsing as future guide context.
@@ -35,8 +36,10 @@ tags:
 - Unsupported modeled roles/fields fail during parse.
 - `tx_single_coil`, `tx_rect_void_columns`, and `tx_plate_stack` fail before active runtime state is bound.
 - `tx_inner_single_coil` accepts the canonical underlay repeat sweep or a supported fixed `underlay_repeat_count`; fixed `1` is supported for coarsened active TX inner underlay stacks while the canonical sweep remains `(0, 2, 4, 6, 8)`.
+- `tx_inner_single_coil` accepts canonical `void_stack_present = [true, 0, 1, 2]` or fixed singleton `0`/`1`; unsupported roles must not accept this field.
 - `tx_inner_single_coil` enforces fixed positive actual-underlay PET/PSA/ferrite thickness fields while still rejecting `underlay_gap_mm` and `wall_parallel_stack_present`.
 - `x_position_ratio` must realize only inclusive candidates between `0.0` and `1.0`.
+- Usage ratios and position ratios accept mathematically inclusive `1.0` endpoints when range candidate generation produces a binary floating-point value within `1e-12` above `1.0`; values outside that tolerance still fail before specs are bound.
 - `tx_outer_terminal_path` and `tx_outer_x_position_ratio` must fail through unsupported-key validation, not by deriving a companion object.
 - RxOnly must parse without requiring TX modeled roles.
 

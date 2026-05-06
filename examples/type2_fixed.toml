@@ -264,6 +264,9 @@ description = "TX inner coil 적층 layer 수"
 [modeled_objects.underlay_repeat_count]
 range = [true, 1, 1, 1]
 description = "TX inner underlay 반복 개수"
+[modeled_objects.void_stack_present]
+range = [true, 0, 0, 1]
+description = "TX inner 중앙 void stack 생성 여부"
 [modeled_objects.underlay_pet_psa_thickness_mm]
 range = [false, 2.0, 2.0, 1]
 description = "TX inner PET_PSA underlay thickness(mm)"

@@ -29,8 +29,9 @@ tags:
 
 ## Canonical State
 - `peetsfea.type2_spec_tools` must remain usable without importing CAD/AEDT modules.
-- Public sampled owner mappings must match the active exportable sampled owner set exactly.
+- Public sampled owner mappings must match the active exportable sampled owner set exactly, including the TX inner `void_stack_present` switch when sampled.
 - Official type2 examples must describe every discovered range owner path.
+- Official and generated sampled TOML must carry the Korean TX inner `void_stack_present` description and freeze the sampled integer owner to `[true, value, value, 1]`.
 - Generated sampled TOML must not include `modeled_objects.tx_outer_rect_void_coil.*` in `[sampled].sampled_owner_paths`.
 - Generated sampled TOML must remain loadable and usable by the notebook-facing description helper.
 - TX inner `terminal_stub_length_mm` in `examples/type2_sweep.toml` and `examples/type2_fixed.toml` must remain a fixed range with value `7.5` for deterministic ownership.

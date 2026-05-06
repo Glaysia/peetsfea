@@ -38,6 +38,7 @@ from peetsfea.type2_step_spec_sampling import resolve_modeled_plate_stack_y_usag
 from peetsfea.type2_step_spec_sampling import resolve_modeled_plate_stack_z_usage_ratio
 from peetsfea.type2_step_spec_sampling import resolve_modeled_tx_array_x_usage_ratio
 from peetsfea.type2_step_spec_sampling import resolve_modeled_tx_coil_count
+from peetsfea.type2_step_spec_sampling import resolve_modeled_tx_inner_void_stack_present
 from peetsfea.type2_step_spec_sampling import resolve_modeled_underlay_gap_mm
 from peetsfea.type2_step_spec_sampling import resolve_modeled_underlay_repeat_count
 from peetsfea.type2_step_spec_sampling import resolve_modeled_wall_parallel_stack_present
@@ -174,6 +175,7 @@ __all__ = [
     "resolve_modeled_plate_stack_y_usage_ratio",
     "resolve_modeled_tx_array_x_usage_ratio",
     "resolve_modeled_tx_coil_count",
+    "resolve_modeled_tx_inner_void_stack_present",
     "resolve_modeled_underlay_gap_mm",
     "resolve_modeled_underlay_repeat_count",
     "resolve_modeled_wall_parallel_stack_present",

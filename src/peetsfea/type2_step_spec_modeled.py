@@ -50,6 +50,7 @@ from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_R
 from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_END
 from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_START
 from peetsfea.type2_step_spec_types import _TX_UNDERLAY_GAP_MM_CANDIDATES
+from peetsfea.type2_step_spec_types import _TX_INNER_VOID_STACK_PRESENT_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES
 from peetsfea.type2_step_spec_non_model import _float_range_candidates
 from peetsfea.type2_step_spec_non_model import _integer_range_candidates
@@ -59,6 +60,22 @@ from peetsfea.type2_step_spec_non_model import _require_non_empty_str
 from peetsfea.type2_step_spec_non_model import _require_range
 from peetsfea.type2_step_spec_non_model import _require_table
 from peetsfea.type2_step_spec_sampling import _is_canonical_tx_plate_stack_array_x_usage_ratio_range
+
+
+_UNIT_RATIO_ABS_TOL = 1e-12
+
+
+def _candidate_exceeds_unit_interval(candidate: float) -> bool:
+    return candidate > 1.0 and not math.isclose(
+        candidate,
+        1.0,
+        rel_tol=0.0,
+        abs_tol=_UNIT_RATIO_ABS_TOL,
+    )
+
+
+def _positive_unit_interval_candidates_are_invalid(candidates: tuple[float, ...]) -> bool:
+    return any(candidate <= 0.0 or _candidate_exceeds_unit_interval(candidate) for candidate in candidates)
 
 
 def _require_tx_plate_stack_array_x_usage_ratio_range(
@@ -197,6 +214,30 @@ def _require_wall_parallel_stack_present_range(
     )
 
 
+def _require_tx_inner_void_stack_present_range(
+    table: dict[str, object],
+    *,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, "void_stack_present", context, expect_integer=True)
+    candidates = _integer_range_candidates(range_spec)
+    if candidates == _TX_INNER_VOID_STACK_PRESENT_CANDIDATES:
+        return range_spec
+    if (
+        range_spec.count == 1
+        and range_spec.start == range_spec.end
+        and len(candidates) == 1
+        and candidates[0] in _TX_INNER_VOID_STACK_PRESENT_CANDIDATES
+    ):
+        return range_spec
+    raise ValueError(
+        f"{context}.void_stack_present.range must be canonical [true, 0, 1, 2] "
+        f"or fixed [true, b, b, 1] for b in {_TX_INNER_VOID_STACK_PRESENT_CANDIDATES} "
+        "for tx_inner_single_coil "
+        f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
+    )
+
+
 def _require_x_position_ratio_range(
     table: dict[str, object],
     key: str,
@@ -205,7 +246,7 @@ def _require_x_position_ratio_range(
 ) -> RangeSpec:
     range_spec = _require_range(table, key, context, expect_integer=False)
     candidates = _float_range_candidates(range_spec)
-    if any(candidate < 0.0 or candidate > 1.0 for candidate in candidates):
+    if any(candidate < 0.0 or _candidate_exceeds_unit_interval(candidate) for candidate in candidates):
         raise ValueError(
             f"{context}.{key}.range must realize to values >= 0.0 and <= 1.0 "
             f"(actual={candidates})"
@@ -424,7 +465,7 @@ def _scaled_mm_range_from_usage_ratio(
     if span_mm <= 0.0:
         raise ValueError(f"{path} owner span must be > 0 (actual={span_mm})")
     ratio_candidates = _float_range_candidates(ratio_range)
-    if any(candidate <= 0.0 or candidate > 1.0 for candidate in ratio_candidates):
+    if _positive_unit_interval_candidates_are_invalid(ratio_candidates):
         raise ValueError(f"{path} must realize to values > 0 and <= 1 (actual={ratio_candidates})")
     return RangeSpec(
         is_integer=False,
@@ -615,7 +656,11 @@ def _parse_modeled_single_coil(
         "metal_fill_factor",
         "terminal_path",
     }
-    tx_inner_allowed_keys = rx_allowed_keys | {"underlay_pet_psa_thickness_mm", "underlay_ferrite_thickness_mm"}
+    tx_inner_allowed_keys = rx_allowed_keys | {
+        "void_stack_present",
+        "underlay_pet_psa_thickness_mm",
+        "underlay_ferrite_thickness_mm",
+    }
     if modeled_role == "tx_single_coil":
         extra_keys = sorted(set(table.keys()) - tx_allowed_keys)
         if extra_keys:
@@ -662,6 +707,7 @@ def _parse_modeled_single_coil(
             key="underlay_ferrite_thickness_mm",
             context=context,
         )
+        void_stack_present = _require_tx_inner_void_stack_present_range(table, context=context)
         extra_keys = sorted(set(table.keys()) - tx_inner_allowed_keys)
         if extra_keys:
             raise ValueError(
@@ -683,6 +729,7 @@ def _parse_modeled_single_coil(
             turn_count=turn_count,
             layer_count=layer_count,
             underlay_repeat_count=underlay_repeat_count,
+            void_stack_present=void_stack_present,
             underlay_pet_psa_thickness_mm=underlay_pet_psa_thickness_mm,
             underlay_ferrite_thickness_mm=underlay_ferrite_thickness_mm,
             layer_gap_mm=layer_gap_mm,
@@ -783,14 +830,14 @@ def _parse_modeled_plate_stack(
         )
     z_usage_ratio = _require_range(table, "z_usage_ratio", context, expect_integer=False)
     z_usage_ratio_candidates = _float_range_candidates(z_usage_ratio)
-    if any(candidate <= 0.0 or candidate > 1.0 for candidate in z_usage_ratio_candidates):
+    if _positive_unit_interval_candidates_are_invalid(z_usage_ratio_candidates):
         raise ValueError(
             f"{context}.z_usage_ratio must realize to values > 0 and <= 1 "
             f"(actual={z_usage_ratio_candidates})"
         )
     y_usage_ratio = _require_range(table, "y_usage_ratio", context, expect_integer=False)
     y_usage_ratio_candidates = _float_range_candidates(y_usage_ratio)
-    if any(candidate <= 0.0 or candidate > 1.0 for candidate in y_usage_ratio_candidates):
+    if _positive_unit_interval_candidates_are_invalid(y_usage_ratio_candidates):
         raise ValueError(
             f"{context}.y_usage_ratio must realize to values > 0 and <= 1 "
             f"(actual={y_usage_ratio_candidates})"
@@ -1068,6 +1115,8 @@ def parse_modeled_object(
     context = f"modeled_objects[{index}]"
     table = _require_table(raw_object, context)
     role = _require_non_empty_str(table, "role", context)
+    if role == "tx_single_coil" and "void_stack_present" in table:
+        raise ValueError(f"{context} contains unsupported keys for tx_single_coil (actual=['void_stack_present'])")
     if role in ("tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"):
         raise ValueError(f"{context}.role is unsupported in active RxOnly type2 mode (actual={role!r})")
     if role == "tx_inner_single_coil":

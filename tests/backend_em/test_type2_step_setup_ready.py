@@ -622,6 +622,15 @@ def _tx_inner_rx_imported_name_batch_with_tx_inner_underlay() -> tuple[str, ...]
     return tuple(names)
 
 
+def _tx_inner_rx_imported_name_batch_with_tx_inner_underlay_disabled_void_stack() -> tuple[str, ...]:
+    names = list(_tx_inner_rx_imported_name_batch())
+    names[6:6] = [
+        "tx_underlay_pet_psa_u0",
+        "tx_underlay_ferrite_u0",
+    ]
+    return tuple(names)
+
+
 def _tx_inner_multilayer_stack_modeled_object(tmp_path: Path) -> dict[str, object]:
     modeled_object = _modeled_entry(
         object_id="tx_inner_rect_void_coil",
@@ -1173,6 +1182,10 @@ def test_setup_type2_step_ledger_keeps_tx_inner_underlay_and_void_stack_passive_
         "tx_void_ferrite_u0",
         "tx_void_pet_psa_u0",
     )
+    forbidden_extra_void_names = (
+        "tx_void_ferrite_u1",
+        "tx_void_pet_psa_u1",
+    )
     scene_step, ledger_path = _source_paths(tmp_path)
     modeled_objects = _tx_inner_rx_modeled_objects_with_tx_inner_underlay_imported_names(tmp_path)
     tx_entry = cast(dict[str, object], modeled_objects[0])
@@ -1182,6 +1195,9 @@ def test_setup_type2_step_ledger_keeps_tx_inner_underlay_and_void_stack_passive_
     imported_name_batch = _tx_inner_rx_imported_name_batch_with_tx_inner_underlay()
     for passive_name in passive_names:
         assert passive_name in imported_name_batch
+    for forbidden_name in forbidden_extra_void_names:
+        assert forbidden_name not in tx_imported_names
+        assert forbidden_name not in imported_name_batch
     _write_txrx_step_ledger(
         ledger_path,
         scene_step_path=scene_step,
@@ -1223,6 +1239,96 @@ def test_setup_type2_step_ledger_keeps_tx_inner_underlay_and_void_stack_passive_
     for passive_name in passive_names:
         assert passive_name not in result["mesh"]["objects"]
         assert passive_name not in setup_participant_payload
+    for forbidden_name in forbidden_extra_void_names:
+        assert forbidden_name not in setup_participant_payload
+
+
+def test_setup_type2_step_ledger_disabled_tx_inner_void_stack_keeps_underlay_passive_and_targets_unchanged(
+    tmp_path: Path,
+) -> None:
+    underlay_passive_names = (
+        "tx_underlay_pet_psa_u0",
+        "tx_underlay_ferrite_u0",
+    )
+    disabled_void_names = (
+        "tx_void_ferrite_u0",
+        "tx_void_pet_psa_u0",
+    )
+    scene_step, ledger_path = _source_paths(tmp_path)
+    modeled_objects = _tx_inner_rx_modeled_objects_with_tx_inner_underlay_imported_names(tmp_path)
+    tx_entry = cast(dict[str, object], modeled_objects[0])
+    tx_imported_names = cast(list[str], tx_entry["imported_object_names"])
+    for passive_name in underlay_passive_names:
+        assert passive_name in tx_imported_names
+    for disabled_void_name in disabled_void_names:
+        assert disabled_void_name not in tx_imported_names
+    imported_name_batch = _tx_inner_rx_imported_name_batch_with_tx_inner_underlay_disabled_void_stack()
+    for passive_name in underlay_passive_names:
+        assert passive_name in imported_name_batch
+    for disabled_void_name in disabled_void_names:
+        assert disabled_void_name not in imported_name_batch
+    _write_txrx_step_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry_with_tx_inner_region()],
+        modeled_objects=modeled_objects,
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_setup_ready.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _SetupReadyHfss(
+        modeler=_SetupReadyModeler(imported_name_batches=[imported_name_batch])
+    )
+
+    result = cast(
+        Type2SetupReadyResult,
+        setup_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=output_aedt_path,
+            imported_ledger_path=imported_ledger_path,
+            design_name="fake_type2_setup_ready",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        ),
+    )
+
+    assert session.mesh_module.assign_length_op_calls == [_expected_mesh_length_payload(tx_object_name="tx_inner_copper_l0")]
+    assert session._excitation_names == ["1_T1", "2_T1"]
+    assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
+    assert result["sources"]["tx_source_name"] == "1_T1"
+    assert result["sources"]["rx_source_name"] == "2_T1"
+    assert result["mesh"]["objects"] == ["tx_inner_copper_l0", "rx_copper_l0"]
+    assert session.created_output_variables == _expected_output_variables()
+    assert session.created_reports[0]["components"][3] == [name for name, _ in TYPE1_OUTPUT_VARIABLES]
+    setup_participant_payload = json.dumps(
+        {
+            "mesh_calls": session.mesh_module.assign_length_op_calls,
+            "port_calls": session.oboundary.assign_lumped_port_calls,
+            "source_calls": session.edited_sources_payloads,
+            "output_variables": session.created_output_variables,
+            "reports": session.created_reports,
+        }
+    )
+    for passive_name in (*underlay_passive_names, *disabled_void_names):
+        assert passive_name not in result["mesh"]["objects"]
+        assert passive_name not in setup_participant_payload
+    imported_payload = _imported_ledger_payload(imported_ledger_path)
+    modeled_by_id = {
+        cast(str, entry["object_id"]): entry
+        for entry in cast(list[dict[str, object]], imported_payload["modeled_objects"])
+    }
+    imported_tx_names = cast(list[str], modeled_by_id["tx_inner_rect_void_coil"]["imported_object_names"])
+    for passive_name in underlay_passive_names:
+        assert passive_name in imported_tx_names
+    for disabled_void_name in disabled_void_names:
+        assert disabled_void_name not in imported_tx_names
+    assert modeled_by_id["tx_inner_rect_void_coil"]["imported_body_groups"] == [
+        {
+            "group_name": "g_ferrite_tx",
+            "member_object_names": [
+                "tx_underlay_pet_psa_u0",
+                "tx_underlay_ferrite_u0",
+            ],
+        }
+    ]
 
 
 def test_setup_type2_step_ledger_into_hfss_auto_detaches_after_setup(tmp_path: Path) -> None:

@@ -41,6 +41,8 @@ tags:
 - TX inner actual-underlay bodies may be present in imported object names, but setup-ready assertions keep ports, sources, reports, and mesh based on TX/RX conductors only.
 - EM input construction keeps `tx_underlay_pet_psa_u*` and `tx_underlay_ferrite_u*` out of conductor and ferrite-ready object lists for the setup-ready contract.
 - TX inner void-stack bodies `tx_void_pet_psa_u*` and `tx_void_ferrite_u*` are passive import names and must stay out of conductor, mesh, port, source, and report targets.
+- Disabling `void_stack_present` removes only `tx_void_*` members; bottom `tx_underlay_*` members remain passive setup-ready inputs when underlay repeat count is positive.
+- Disabled void-stack setup-ready regression coverage keeps `g_ferrite_tx` underlay-only membership and verifies conductor, mesh, port, source, output-variable, and report targets are unchanged from the enabled passive-body contract.
 - Future two-terminal report names are documented in `sdd/architecture/type2-em-report-contract.md` but are not active RxOnly assertions.
 - Solve/export tests use the same active output-variable report created by setup-ready generation.
 - Attached-HFSS setup tests cover the explicit flag that skips AEDT `ValidateDesign()` while still saving and detaching.
@@ -53,7 +55,7 @@ tags:
   AEDT-region failure cases; tests that intentionally omit the owner assert the earlier ledger-validation failure.
 - Skipping AEDT `ValidateDesign()` must be opt-in only and must not affect default fail-fast validation tests.
 - Passive TX inner actual-underlay names must not become mesh targets or port/source/report participants.
-- Passive TX inner void-stack names must not become mesh targets or port/source/report participants.
+- Passive TX inner void-stack names must not become mesh targets or port/source/report participants, and extra void pairs such as `tx_void_ferrite_u1` / `tx_void_pet_psa_u1` must not appear in active fixed-example setup fixtures.
 - Any `tx_outer_single_coil` source ledger fixture must fail before HFSS setup operations.
 
 ## Graph links
