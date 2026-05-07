@@ -1,7 +1,7 @@
 ---
 title: sample.py
 created: 2026-04-17 @ 09:09
-updated: 2026-04-29 @ 17:05
+updated: 2026-05-07 @ 00:00
 tags:
   - sampling
   - step
@@ -41,6 +41,7 @@ tags:
 ## Canonical state
 - module constants가 기본 sample/runtime contract를 이룬다.
 - canonical sampled design set은 `range(SEED_FIRST, SEED_FIRST + SEED_N)`다.
+- Active operator defaults are `SEED_FIRST=12000` and `SEED_N=48000`.
 - CLI-provided `seed_first`, `seed_n`, and `sampler_n` overrides become the manifest config for that process only.
 - default operator task samples the configured `SEED_N` designs and writes STEP artifacts when `MAKE_STEP_ON_SAMPLE=True`.
 - manifest top-level `config`는 downstream build runtime contract를 보존한다.
@@ -55,13 +56,14 @@ tags:
 - interactive status line clearing은 마지막 render 길이가 아니라 현재 terminal width 기준으로 한 physical line만 지운다.
 - done line은 `elapsed_s=<seconds>`를 고정 소수점 문자열로 남긴다.
 - final done line 뒤에는 active status line을 newline으로 종료해 VS Code task reuse prompt가 status line에 붙지 않게 한다.
-- `design_id`는 seed가 아니라 `sample_index + generated_hash4 + head_hash4 + retry_number` 조합이다.
+- `sample_index` is the absolute seed-space index, and `design_id` uses `sample_index + generated_hash4 + head_hash4 + retry_number`.
+- With `SEED_FIRST=12000`, the first generated design id starts with `s012000`.
 - done line reports successful `count`, `skipped`, and attempted seed count.
 - manifest `entries` is successful design order; manifest `skipped` is failure ledger order.
 
 ## Invariants / fail-fast
 - `SEED_N`, `SAMPLER_N`, `AEDT_BUILDER_N`는 모두 양수여야 한다.
-- default constants should remain lightweight enough for the VS Code task to complete interactively under the active TOML surface.
+- default constants are operator-scale batch defaults, not a lightweight interactive smoke run.
 - `MAKE_STEP_ON_SAMPLE=True`면 sampled TOML generation과 STEP export는 같은 sample worker path 안에서 deterministic해야 한다.
 - `MAKE_STEP_ON_SAMPLE=False`면 sample 단계는 STEP export를 호출하지 않아야 한다.
 - `--build-step` is an opt-in flag; absent means sample-only.
@@ -72,7 +74,7 @@ tags:
 - skip reporting is operator-facing stdout plus manifest `skipped`; it must not create sampled or STEP artifacts for failed attempts.
 - `.aedt`는 만들지 않는다.
 - manifest object shape는 list fallback 없이 고정한다.
-- notebook-visible sampled index는 `entries` 배열 순서를 그대로 쓴다.
+- notebook-visible sampled index resolves by concrete `entry["sample_index"]`, not by the entry list offset.
 - live status line은 stage 경계에서 newline으로 정리한 뒤 다음 info line을 쓰고, interactive terminal이면 마지막 status line을 다시 그려야 한다.
 - live status line must never exceed the current terminal width because carriage-return clearing cannot cleanly erase wrapped physical lines.
 
@@ -92,3 +94,4 @@ tags:
 - manifest config ownership을 `entry/build.py`로 이동시키지 않는다.
 - `MAKE_STEP_ON_SAMPLE` policy와 manifest `config.make_step_on_sample`를 어긋나게 만들지 않는다.
 - design directory layout을 바꾸면 build replay와 docs를 함께 갱신한다.
+- Related plan: [0.2.24-type2-batch-resume-absolute-sample-index](../../plans/0.2.24-type2-batch-resume-absolute-sample-index.md).

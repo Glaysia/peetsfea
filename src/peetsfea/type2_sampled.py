@@ -733,8 +733,9 @@ def generate_sample_manifest_attempts(
         _require_not_sampled_source(raw_source_spec, context=str(source_toml_path))
         entries: list[Type2SampleManifestEntry] = []
         skipped: list[Type2SampleSkippedEntry] = []
-        for sample_index, seed in enumerate(seed_values):
-            completed = sample_index + 1
+        for sample_offset, seed in enumerate(seed_values):
+            sample_index = seed_start + sample_offset
+            completed = sample_offset + 1
             try:
                 entry = _build_sample_manifest_entry_for_seed(
                     source_toml_path=source_toml_path,
@@ -801,10 +802,12 @@ def generate_sample_manifest_attempts(
             "skipped": skipped,
         }
 
-    tasks = [
-        (str(source_toml_path), str(output_dir), seed, sample_index, head_hash4, make_step_on_sample)
-        for sample_index, seed in enumerate(seed_values)
-    ]
+    tasks = []
+    for sample_offset, seed in enumerate(seed_values):
+        sample_index = seed_start + sample_offset
+        tasks.append(
+            (str(source_toml_path), str(output_dir), seed, sample_index, head_hash4, make_step_on_sample)
+        )
     results_by_index: dict[int, Type2SampleManifestEntry | Type2SampleSkippedEntry] = {}
     with ProcessPoolExecutor(max_workers=jobs) as executor:
         future_by_index = {
@@ -831,7 +834,11 @@ def generate_sample_manifest_attempts(
             )
     entries: list[Type2SampleManifestEntry] = []
     skipped: list[Type2SampleSkippedEntry] = []
-    for sample_index in range(count):
+    for sample_index in seed_values:
+        if sample_index not in results_by_index:
+            raise RuntimeError(
+                f"missing generated manifest result for sample_index={sample_index}; completed={len(results_by_index)}/{len(seed_values)}"
+            )
         result = results_by_index[sample_index]
         if _is_skipped_manifest_entry(result):
             skipped.append(result)
@@ -1056,12 +1063,19 @@ def manifest_entry_for_sample_index(
         raise ValueError(f"sample_index must be >= 0 (actual={sample_index})")
     document = load_type2_sample_manifest(manifest_path)
     entries = document["entries"]
-    if sample_index >= len(entries):
-        raise IndexError(
-            f"type2 sample manifest sample_index is out of range (index={sample_index}, count={len(entries)})"
+    matching_entries = [
+        entry
+        for entry in entries
+        if entry["sample_index"] == sample_index
+    ]
+    if len(matching_entries) == 0:
+        raise ValueError(
+            f"type2 sample manifest has no entry for sample_index={sample_index}; available="
+            f"{[entry['sample_index'] for entry in entries]}"
         )
-    entry = entries[sample_index]
-    return entry
+    if len(matching_entries) > 1:
+        raise RuntimeError(f"type2 sample manifest has duplicate entries for sample_index={sample_index}")
+    return matching_entries[0]
 
 
 def _range_scalar_from_sampled_toml(spec: Type2StepSpec, owner_path: str) -> SampledScalar:

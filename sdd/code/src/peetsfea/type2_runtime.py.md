@@ -34,12 +34,15 @@ tags:
 - A manifest entry's `step_ledger_path` is canonical for build input; if it exists, validate and reuse it, and if it is missing, regenerate it from the sampled TOML.
 - Default batch build can request per-design best-effort attempts. In that path, each design owns its STEP generation and AEDT setup attempt, and skippable `ValueError`/`RuntimeError` failures are recorded as explicit build skipped entries.
 - Parallel best-effort output is reassembled in prepared-build input order before returning artifacts and skipped entries.
+- Default best-effort batch build treats a prepared design as already complete when its STEP ledger validates, `aedt_path` exists, and `imported_ledger_path` exists with a valid JSON payload whose `source_step_ledger_path`, `aedt_path`, and `imported_ledger_path` all match the current prepared build paths, so interrupted batches can resume without rebuilding completed sampled TOMLs.
+- Related plan: [0.2.24-type2-batch-resume-absolute-sample-index](../../../plans/0.2.24-type2-batch-resume-absolute-sample-index.md).
 
 ## Invariants / fail-fast
 - Unsupported role sets fail before backend execution; `tx_outer_single_coil` is rejected by the active runtime gate.
 - Runtime failures are fail-fast unless the caller explicitly requests skip-recording for validation/infeasible sample attempts or default build-batch continuation.
 - Build skipped entries preserve `design_id`, `seed`, `sampled_toml_path`, coarse failure phase, exception type, and exception message.
 - Best-effort build only catches `ValueError` and `RuntimeError`; structural errors such as type errors, missing files outside the skippable generation path, and assertion failures still abort.
+- Resume reuse is allowed only after STEP ledger validation; partial outputs without AEDT, without imported ledger, with malformed imported-ledger JSON, or with mismatched path fields are retried by running the normal setup-ready runner.
 - EM solve failures raise and do not downgrade to setup-ready success.
 - Invalid existing STEP ledger or missing scene STEP raises instead of overwriting silently.
 

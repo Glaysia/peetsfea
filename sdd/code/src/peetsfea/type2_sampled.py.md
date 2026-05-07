@@ -1,7 +1,7 @@
 ---
 title: type2_sampled.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-03 @ 00:00
+updated: 2026-05-07 @ 00:00
 tags:
   - sampling
   - build
@@ -31,6 +31,8 @@ tags:
 - constraints are preserved in sampled TOML and evaluated as deterministic sampling feasibility filters.
 - `retry_number` records the first constraint-satisfying retry attempt and remains part of the `design_id`.
 - manifest `entries` contains only successful sampled designs; validation/infeasible attempts are recorded in top-level `skipped`.
+- `sample_index` is an absolute seed-space index equal to `seed_start + offset`; design IDs use this absolute index, so nonzero `seed_first` starts at the matching `sNNNNNN` prefix.
+- Manifest entry order remains successful-attempt order; generation now records absolute sample indices in both serial and parallel manifests, and lookup by sample index compares `entry["sample_index"]` instead of indexing the entries list by offset.
 - stage reporting is runtime visibility only and is not canonical sampled state.
 - Omitting the exporter uses the process-safe built-in STEP exporter and may use the worker pool; explicit custom exporters stay in-process so tests and injected callbacks remain deterministic.
 
@@ -45,6 +47,8 @@ tags:
 - STEP/CAD export dependencies are imported only by orchestration paths that actually build STEP artifacts.
 - `make_step_on_sample=True` with the built-in exporter must not be forced into the serial custom-exporter path.
 - non-validation exceptions remain fail-fast.
+- `manifest_entry_for_sample_index()` fails if no matching manifest entry exists for the requested absolute `sample_index`; duplicate matches are treated as a contract failure.
+- Related plan: [0.2.24-type2-batch-resume-absolute-sample-index](../../../plans/0.2.24-type2-batch-resume-absolute-sample-index.md).
 
 ## Collaborators
 - [type2_step_spec.py](type2_step_spec.py.md)

@@ -33,6 +33,7 @@ tags:
 - RX sampled `turn_count` manifest values are members of `{2, 3, 4, 5}`.
 - Embedded TOML fixtures keep `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` as a fixed zero compatibility field for lower-X wall-side anchoring.
 - Synthetic source TOML fixtures include sampled `modeled_objects.tx_inner_rect_void_coil.void_stack_present` so manifest metadata exercises the active TX inner void-stack owner.
+- `seed_first` is the absolute sample index floor; emitted sample metadata and `design_id` prefixes match absolute indices (for example `seed_first=12000` produces `s012000_*`).
 - Active fixed/sweep source fixtures use `modeled_objects.tx_inner_rect_void_coil.layer_count = [true, 1, 1, 1]`.
 - `modeled_objects.tx_outer_rect_void_coil.*` paths are not active sampled owners.
 - Active sampled TOML must not preserve removed `tx_outer_terminal_path` or `tx_outer_x_position_ratio` fields.
@@ -50,6 +51,7 @@ tags:
 - TX inner trace-width feasibility is validated as a sample-time constraint so retry occurs before STEP export.
 - Default `--build-step`/sample API usage must preserve the parallel worker path by not passing the entrypoint exporter as a custom callback.
 - CLI seed/worker overrides must be process-local manifest configuration, not module-level default mutation.
+- `manifest_entry_for_sample_index()` resolves by concrete `sample_index` values, including when `seed_first>0`; index `0` must be treated as out-of-range unless produced by the manifest.
 - Lightweight spec tools must import without CAD/AEDT modules.
 
 ## Collaborators

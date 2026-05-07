@@ -630,7 +630,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
         source_toml_path=source_toml_path,
         output_dir=output_dir,
         manifest_path=manifest_path,
-        seed_first=4,
+        seed_first=12000,
         seed_n=3,
         sampler_n=1,
         aedt_builder_n=6,
@@ -645,7 +645,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert document["skipped"] == []
     assert document["config"] == {
         "source_toml_path": str(source_toml_path.resolve(strict=False)),
-        "seed_first": 4,
+        "seed_first": 12000,
         "seed_n": 3,
         "sampler_n": 1,
         "make_step_on_sample": True,
@@ -678,8 +678,8 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert "[sample] stage=manifest write" in captured.out
     assert "[sample] done" in captured.out
     assert "elapsed_s=" in captured.out
-    assert [entry["seed"] for entry in document["entries"]] == [4, 5, 6]
-    assert [entry["sample_index"] for entry in document["entries"]] == [0, 1, 2]
+    assert [entry["seed"] for entry in document["entries"]] == [12000, 12001, 12002]
+    assert [entry["sample_index"] for entry in document["entries"]] == [12000, 12001, 12002]
     assert [entry["retry_number"] for entry in document["entries"]] == [0, 0, 0]
     assert len(exporter_calls) == 3
 
@@ -689,7 +689,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
         Path(first_entry["sampled_toml_path"]).read_bytes(),
         digest_size=2,
     ).hexdigest()
-    assert first_entry["design_id"] == f"s000000_{generated_hash4}_{head_hash4}_0"
+    assert first_entry["design_id"] == f"s012000_{generated_hash4}_{head_hash4}_0"
     assert Path(first_entry["design_dir"]).name == first_entry["design_id"]
     assert first_entry["sampled_owner_paths"] == _EXPECTED_SAMPLED_OWNER_PATHS
     assert all(path not in first_entry["sampled_owner_paths"] for path in _RX_NON_SAMPLED_OWNER_PATHS)
@@ -701,8 +701,8 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     sampled_payload = tomllib.loads(Path(first_entry["sampled_toml_path"]).read_text(encoding="utf-8"))
     sampled_metadata = sampled_payload["sampled"]
     assert sampled_metadata["source_toml_path"] == str(source_toml_path.resolve(strict=False))
-    assert sampled_metadata["seed"] == 4
-    assert sampled_metadata["sample_index"] == 0
+    assert sampled_metadata["seed"] == 12000
+    assert sampled_metadata["sample_index"] == 12000
     assert sampled_metadata["head_hash4"] == head_hash4
     assert sampled_metadata["retry_number"] == 0
     assert sampled_metadata["sampled_owner_paths"] == _EXPECTED_SAMPLED_OWNER_PATHS
@@ -817,8 +817,10 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert "pcb_total_thickness_mm" not in rx_modeled_object
     assert "underlay_gap_mm" not in rx_modeled_object
 
-    resolved_entry = manifest_entry_for_sample_index(manifest_path, sample_index=0)
+    resolved_entry = manifest_entry_for_sample_index(manifest_path, sample_index=12000)
     assert resolved_entry["design_id"] == first_entry["design_id"]
+    with pytest.raises(ValueError, match=r"sample_index.*0"):
+        manifest_entry_for_sample_index(manifest_path, sample_index=0)
 
 
 def test_sample_type2_reports_step_skip_and_removes_partial_design_dir(
@@ -865,14 +867,15 @@ def test_sample_type2_reports_step_skip_and_removes_partial_design_dir(
     assert document["skipped"] == [
         {
             "seed": skipped_seed,
-            "sample_index": 1,
+            "sample_index": 5,
             "phase": "step",
             "error_type": "RuntimeError",
             "error_message": "simulated step validation failure",
         }
     ]
     assert [entry["seed"] for entry in document["entries"]] == [4, 6]
-    assert "[sample] skip idx=1 seed=5 phase=step error=RuntimeError: simulated step validation failure" in captured.out
+    assert [entry["sample_index"] for entry in document["entries"]] == [4, 6]
+    assert "[sample] skip idx=5 seed=5 phase=step error=RuntimeError: simulated step validation failure" in captured.out
     assert "[sample] done count=2 skipped=1 attempted=3" in captured.out
     assert exporter_calls == [4, 5, 6]
 
@@ -908,7 +911,7 @@ def test_sample_type2_load_type2_step_spec_hook_via_type2_sampled_module(
     assert document["skipped"] == []
     assert patched_calls == [source_toml_path]
     assert [entry["seed"] for entry in document["entries"]] == [101, 102]
-    assert [entry["sample_index"] for entry in document["entries"]] == [0, 1]
+    assert [entry["sample_index"] for entry in document["entries"]] == [101, 102]
     assert [entry["retry_number"] for entry in document["entries"]] == [0, 0]
     for entry in document["entries"]:
         assert Path(entry["sampled_toml_path"]).is_file()
@@ -945,7 +948,10 @@ def test_manifest_entry_for_sample_index_rejects_out_of_range(
         exporter=_exporter,
     )
 
-    with pytest.raises(IndexError, match=r"sample_index is out of range"):
+    assert manifest_entry_for_sample_index(manifest_path, sample_index=10)["sample_index"] == 10
+    with pytest.raises(ValueError, match=r"sample_index.*0"):
+        manifest_entry_for_sample_index(manifest_path, sample_index=0)
+    with pytest.raises(ValueError, match=r"sample_index"):
         manifest_entry_for_sample_index(manifest_path, sample_index=2)
 
 
@@ -965,38 +971,38 @@ def test_manifest_entry_for_sample_index_indexes_successful_entries_with_skipped
         },
         "entries": [
             {
-                "design_id": "s000000_0000_abcd_0",
+                "design_id": "s000004_0000_abcd_0",
                 "seed": 4,
-                "sample_index": 0,
+                "sample_index": 4,
                 "retry_number": 0,
                 "source_toml_path": str((tmp_path / "source.toml").resolve(strict=False)),
-                "sampled_toml_path": f"{entry_by_success_order['path_prefix']}/s000000_0000_abcd_0/sample_0.toml",
-                "design_dir": f"{entry_by_success_order['path_prefix']}/s000000_0000_abcd_0",
-                "scene_step_path": f"{entry_by_success_order['path_prefix']}/s000000_0000_abcd_0/type2_scene.step",
-                "step_ledger_path": f"{entry_by_success_order['path_prefix']}/s000000_0000_abcd_0/type2_step_ledger.json",
-                "imported_ledger_path": f"{entry_by_success_order['path_prefix']}/s000000_0000_abcd_0/type2_imported_ledger.json",
-                "aedt_path": f"{entry_by_success_order['path_prefix']}/s000000_0000_abcd_0/s000000_0000_abcd_0.aedt",
+                "sampled_toml_path": f"{entry_by_success_order['path_prefix']}/s000004_0000_abcd_0/sample_4.toml",
+                "design_dir": f"{entry_by_success_order['path_prefix']}/s000004_0000_abcd_0",
+                "scene_step_path": f"{entry_by_success_order['path_prefix']}/s000004_0000_abcd_0/type2_scene.step",
+                "step_ledger_path": f"{entry_by_success_order['path_prefix']}/s000004_0000_abcd_0/type2_step_ledger.json",
+                "imported_ledger_path": f"{entry_by_success_order['path_prefix']}/s000004_0000_abcd_0/type2_imported_ledger.json",
+                "aedt_path": f"{entry_by_success_order['path_prefix']}/s000004_0000_abcd_0/s000004_0000_abcd_0.aedt",
                 "sampled_owner_paths": ["non_model_objects.tx_region_actual.x_usage_ratio"],
             },
             {
-                "design_id": "s000002_0000_abcd_0",
+                "design_id": "s000006_0000_abcd_0",
                 "seed": 6,
-                "sample_index": 2,
+                "sample_index": 6,
                 "retry_number": 0,
                 "source_toml_path": str((tmp_path / "source.toml").resolve(strict=False)),
-                "sampled_toml_path": f"{entry_by_success_order['path_prefix']}/s000002_0000_abcd_0/sample_2.toml",
-                "design_dir": f"{entry_by_success_order['path_prefix']}/s000002_0000_abcd_0",
-                "scene_step_path": f"{entry_by_success_order['path_prefix']}/s000002_0000_abcd_0/type2_scene.step",
-                "step_ledger_path": f"{entry_by_success_order['path_prefix']}/s000002_0000_abcd_0/type2_step_ledger.json",
-                "imported_ledger_path": f"{entry_by_success_order['path_prefix']}/s000002_0000_abcd_0/type2_imported_ledger.json",
-                "aedt_path": f"{entry_by_success_order['path_prefix']}/s000002_0000_abcd_0/s000002_0000_abcd_0.aedt",
+                "sampled_toml_path": f"{entry_by_success_order['path_prefix']}/s000006_0000_abcd_0/sample_6.toml",
+                "design_dir": f"{entry_by_success_order['path_prefix']}/s000006_0000_abcd_0",
+                "scene_step_path": f"{entry_by_success_order['path_prefix']}/s000006_0000_abcd_0/type2_scene.step",
+                "step_ledger_path": f"{entry_by_success_order['path_prefix']}/s000006_0000_abcd_0/type2_step_ledger.json",
+                "imported_ledger_path": f"{entry_by_success_order['path_prefix']}/s000006_0000_abcd_0/type2_imported_ledger.json",
+                "aedt_path": f"{entry_by_success_order['path_prefix']}/s000006_0000_abcd_0/s000006_0000_abcd_0.aedt",
                 "sampled_owner_paths": ["non_model_objects.tx_region_actual.x_usage_ratio"],
             },
         ],
         "skipped": [
             {
                 "seed": 5,
-                "sample_index": 1,
+                "sample_index": 5,
                 "phase": "step",
                 "error_type": "ValueError",
                 "error_message": "simulated step failure",
@@ -1005,12 +1011,12 @@ def test_manifest_entry_for_sample_index_indexes_successful_entries_with_skipped
     }
     manifest_path.write_text(json.dumps(manifest_payload, indent=2), encoding="utf-8")
 
-    resolved_entry = manifest_entry_for_sample_index(manifest_path, sample_index=1)
+    resolved_entry = manifest_entry_for_sample_index(manifest_path, sample_index=6)
     assert resolved_entry == manifest_payload["entries"][1]
     assert resolved_entry["seed"] == 6
 
-    with pytest.raises(IndexError, match=r"sample_index is out of range"):
-        manifest_entry_for_sample_index(manifest_path, sample_index=2)
+    with pytest.raises(ValueError, match=r"sample_index"):
+        manifest_entry_for_sample_index(manifest_path, sample_index=5)
 
 
 def test_sample_type2_can_write_manifest_without_step_artifacts(
