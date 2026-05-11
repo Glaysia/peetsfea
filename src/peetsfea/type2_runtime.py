@@ -146,6 +146,13 @@ def _create_persistent_hfss(
     project_path: Path | None = None,
     hfss_factory: Callable[..., object] = Hfss,
 ) -> HfssSession:
+    os.environ.setdefault("PYAEDT_USE_PRE_GRPC_ARGS", "True")
+    try:
+        from ansys.aedt.core.generic.settings import settings as pyaedt_settings
+
+        pyaedt_settings.grpc_secure_mode = False
+    except Exception:
+        pass
     return cast(
         HfssSession,
         hfss_factory(
