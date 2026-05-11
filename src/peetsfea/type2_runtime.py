@@ -3,13 +3,19 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import Future, ProcessPoolExecutor, as_completed
 import json
+from multiprocessing import Process, Queue
+from queue import Empty
 import os
 from pathlib import Path
-from typing import Literal, TextIO, TypedDict, cast
+import time
+from typing import Any, Literal, TextIO, TypedDict, cast
 
+from peetsfea.aedt import Hfss
+from peetsfea.aedt.protocols import HfssSession
 from peetsfea.backend.pyaedt.type2_step_em_solve import Type2EmSolveResult
-from peetsfea.backend.pyaedt.type2_step_setup_ready import setup_type2_step_ledger
 from peetsfea.backend.pyaedt.type2_step_setup_ready import setup_and_solve_type2_step_ledger
+from peetsfea.backend.pyaedt.type2_step_setup_ready import setup_type2_step_ledger
+from peetsfea.backend.pyaedt.type2_step_setup_ready import setup_type2_step_ledger_into_hfss
 from peetsfea.type2_step_export import export_type2_step_artifacts
 from peetsfea.type2_sampled import PreparedType2Build, load_type2_step_spec, prepare_type2_build
 from peetsfea.type2_step_spec import Type2StepSpec
@@ -25,7 +31,12 @@ class _Type2BuildRunnerResult(TypedDict):
 
 _Runner = Callable[..., _Type2BuildRunnerResult]
 _ProgressReporter = Callable[[int, int, int], None]
+_Sleep = Callable[[float], None]
 _WORKER_SPEC_CACHE: dict[Path, Type2StepSpec] = {}
+DEFAULT_AEDT_PORT_BASE = 45000
+DEFAULT_AEDT_LAUNCH_STAGGER_SEC = 5.0
+_PERSISTENT_WORKER_INIT_TIMEOUT_SEC = 900.0
+_PERSISTENT_WORKER_QUEUE_FACTOR = 2
 _RX_ONLY_MODELED_ROLES: tuple[str] = ("rx_single_coil",)
 _RX_ONLY_WITH_TV_ALUMINUM_PLATE_MODELED_ROLES: tuple[str, ...] = ("rx_single_coil", "tv_aluminum_plate")
 _RX_WITH_TX_INNER_GEOMETRY_MODELED_ROLES: tuple[str, ...] = ("rx_single_coil", "tx_inner_single_coil")
@@ -115,6 +126,80 @@ class _Type2BuildAttemptSkipped(TypedDict):
 
 
 _Type2BuildAttempt = _Type2BuildAttemptBuilt | _Type2BuildAttemptSkipped
+_PersistentTask = tuple[int, str]
+_PersistentResultMessage = tuple[str, int, object]
+
+
+class Type2AedtWorkerLaunchError(RuntimeError):
+    pass
+
+
+class Type2AedtWorkerProcessError(RuntimeError):
+    pass
+
+
+def _create_persistent_hfss(
+    *,
+    design_name: str,
+    port: int,
+    new_desktop: bool,
+    project_path: Path | None = None,
+    hfss_factory: Callable[..., object] = Hfss,
+) -> HfssSession:
+    return cast(
+        HfssSession,
+        hfss_factory(
+            project=str(project_path) if project_path is not None else None,
+            design=design_name,
+            non_graphical=True,
+            new_desktop=new_desktop,
+            close_on_exit=False,
+            port=port,
+        ),
+    )
+
+
+def _release_hfss_desktop(hfss: HfssSession, *, close_projects: bool, close_on_exit: bool) -> None:
+    release_result = hfss.desktop_class.release_desktop(close_projects=close_projects, close_on_exit=close_on_exit)
+    if release_result is False:
+        raise RuntimeError(
+            "PyAEDT operation returned False: release_desktop "
+            f"(close_projects={close_projects}, close_on_exit={close_on_exit})"
+        )
+
+
+def _persistent_worker_design_name(worker_index: int) -> str:
+    return f"peets_type2_worker_{worker_index}"
+
+
+def _launch_persistent_aedt_session(
+    *,
+    worker_index: int,
+    port: int,
+    hfss_factory: Callable[..., object] = Hfss,
+) -> None:
+    hfss = _create_persistent_hfss(
+        design_name=_persistent_worker_design_name(worker_index),
+        port=port,
+        new_desktop=True,
+        hfss_factory=hfss_factory,
+    )
+    _release_hfss_desktop(hfss, close_projects=True, close_on_exit=False)
+
+
+def _shutdown_persistent_aedt_session(
+    *,
+    worker_index: int,
+    port: int,
+    hfss_factory: Callable[..., object] = Hfss,
+) -> None:
+    hfss = _create_persistent_hfss(
+        design_name=_persistent_worker_design_name(worker_index),
+        port=port,
+        new_desktop=False,
+        hfss_factory=hfss_factory,
+    )
+    _release_hfss_desktop(hfss, close_projects=True, close_on_exit=True)
 
 
 def _assert_setup_ready_supported(prepared_build: PreparedType2Build) -> None:
@@ -332,6 +417,78 @@ def _build_prepared_type2_design_attempt(
     }
 
 
+def _build_prepared_type2_design_attempt_with_persistent_aedt(
+    prepared_build: PreparedType2Build,
+    *,
+    worker_index: int,
+    port: int,
+    hfss_factory: Callable[..., object] = Hfss,
+) -> _Type2BuildAttempt:
+    _assert_setup_ready_supported(prepared_build)
+    try:
+        ensure_prepared_type2_step_ledger(prepared_build)
+    except (ValueError, RuntimeError) as exc:
+        return {
+            "status": "skipped",
+            "skipped": _build_type2_skipped_entry(prepared_build, phase="step", exc=exc),
+        }
+
+    if _is_resume_ready_type2_build(prepared_build):
+        return {
+            "status": "built",
+            "built": {
+                "design_id": prepared_build.design_id,
+                "sampled_toml_path": str(prepared_build.sampled_toml_path),
+                "aedt_path": str(prepared_build.aedt_path),
+                "source_step_ledger_path": str(prepared_build.step_ledger_path),
+                "imported_ledger_path": str(prepared_build.imported_ledger_path),
+            },
+        }
+
+    last_exc: ValueError | RuntimeError | None = None
+    for _attempt_index in range(2):
+        try:
+            hfss = _create_persistent_hfss(
+                design_name=prepared_build.design_id,
+                port=port,
+                new_desktop=False,
+                project_path=prepared_build.aedt_path,
+                hfss_factory=hfss_factory,
+            )
+            result = setup_type2_step_ledger_into_hfss(
+                hfss=hfss,
+                step_ledger_path=prepared_build.step_ledger_path,
+                output_aedt_path=prepared_build.aedt_path,
+                imported_ledger_path=prepared_build.imported_ledger_path,
+                design_variables=prepared_build.design_variables,
+                close_projects_on_release=True,
+            )
+            return {
+                "status": "built",
+                "built": {
+                    "design_id": prepared_build.design_id,
+                    "sampled_toml_path": str(prepared_build.sampled_toml_path),
+                    "aedt_path": result["aedt_path"],
+                    "source_step_ledger_path": result["source_step_ledger_path"],
+                    "imported_ledger_path": result["imported_ledger_path"],
+                },
+            }
+        except (ValueError, RuntimeError) as exc:
+            last_exc = exc
+            try:
+                _shutdown_persistent_aedt_session(worker_index=worker_index, port=port, hfss_factory=hfss_factory)
+            except (ValueError, RuntimeError):
+                pass
+            if _attempt_index == 0:
+                _launch_persistent_aedt_session(worker_index=worker_index, port=port, hfss_factory=hfss_factory)
+                continue
+    assert last_exc is not None
+    return {
+        "status": "skipped",
+        "skipped": _build_type2_skipped_entry(prepared_build, phase="aedt", exc=last_exc),
+    }
+
+
 def _resolve_relative_candidate_path(raw_path: str, *, anchor: Path) -> Path:
     candidate_path = Path(raw_path)
     if candidate_path.is_absolute():
@@ -516,6 +673,218 @@ class Type2BuildSkippedLedgerWriter:
             self._tmp_path.replace(self._ledger_path)
 
 
+def _format_worker_exception(exc: BaseException) -> str:
+    return f"{type(exc).__name__}: {exc}"
+
+
+def _raise_if_worker_launch_message(message: str) -> None:
+    lowered_message = message.lower()
+    if "does not exist in the licensing pool" in lowered_message or "failed to connect to desktop session" in lowered_message:
+        raise Type2AedtWorkerLaunchError(
+            "Persistent AEDT worker failed during launch or license checkout. "
+            f"Reduce aedt_builder_n or check the license pool. Details: {message}"
+        )
+    raise Type2AedtWorkerLaunchError(f"Persistent AEDT worker failed during launch. Details: {message}")
+
+
+def _persistent_build_worker_main(
+    *,
+    worker_index: int,
+    port: int,
+    task_queue: Queue[Any],
+    result_queue: Queue[Any],
+) -> None:
+    try:
+        _launch_persistent_aedt_session(worker_index=worker_index, port=port)
+    except BaseException as exc:
+        result_queue.put(("fatal", worker_index, _format_worker_exception(exc)))
+        return
+    result_queue.put(("ready", worker_index, port))
+    try:
+        while True:
+            task = task_queue.get()
+            if task is None:
+                return
+            index, sampled_toml_path_text = cast(_PersistentTask, task)
+            try:
+                prepared_build = _prepare_type2_build_for_worker(sampled_toml_path_text)
+                attempt = _build_prepared_type2_design_attempt_with_persistent_aedt(
+                    prepared_build,
+                    worker_index=worker_index,
+                    port=port,
+                )
+                result_queue.put(("result", index, attempt))
+            except BaseException as exc:
+                result_queue.put(("fatal", worker_index, _format_worker_exception(exc)))
+                return
+    finally:
+        try:
+            _shutdown_persistent_aedt_session(worker_index=worker_index, port=port)
+        except BaseException as exc:
+            result_queue.put(("shutdown_error", worker_index, _format_worker_exception(exc)))
+        result_queue.put(("done", worker_index, port))
+
+
+def _start_persistent_build_workers(
+    *,
+    jobs: int,
+    aedt_port_base: int,
+    aedt_launch_stagger_sec: float,
+    task_queue: Queue[Any],
+    result_queue: Queue[Any],
+    sleep: _Sleep,
+) -> list[Process]:
+    workers: list[Process] = []
+    for worker_index in range(jobs):
+        port = aedt_port_base + worker_index
+        process = Process(
+            target=_persistent_build_worker_main,
+            kwargs={
+                "worker_index": worker_index,
+                "port": port,
+                "task_queue": task_queue,
+                "result_queue": result_queue,
+            },
+        )
+        process.start()
+        workers.append(process)
+        while True:
+            try:
+                raw_message = result_queue.get(timeout=_PERSISTENT_WORKER_INIT_TIMEOUT_SEC)
+            except Empty as exc:
+                raise Type2AedtWorkerLaunchError(
+                    f"Persistent AEDT worker {worker_index} did not report ready within "
+                    f"{_PERSISTENT_WORKER_INIT_TIMEOUT_SEC:.0f}s"
+                ) from exc
+            message_type, message_worker_index, payload = cast(_PersistentResultMessage, raw_message)
+            if message_worker_index != worker_index:
+                raise Type2AedtWorkerLaunchError(
+                    "Persistent AEDT workers reported readiness out of order "
+                    f"(expected={worker_index}, actual={message_worker_index}, type={message_type})"
+                )
+            if message_type == "ready":
+                break
+            if message_type == "fatal":
+                _raise_if_worker_launch_message(cast(str, payload))
+            raise Type2AedtWorkerLaunchError(
+                f"Unexpected persistent AEDT worker init message: type={message_type}, payload={payload!r}"
+            )
+        if worker_index != jobs - 1 and aedt_launch_stagger_sec > 0:
+            sleep(aedt_launch_stagger_sec)
+    return workers
+
+
+def _signal_persistent_build_workers_to_stop(workers: list[Process], task_queue: Queue[Any]) -> None:
+    for _worker in workers:
+        task_queue.put(None)
+
+
+def _join_persistent_build_workers(workers: list[Process]) -> None:
+    for worker in workers:
+        worker.join(timeout=120)
+        if worker.is_alive():
+            worker.terminate()
+            worker.join(timeout=30)
+
+
+def _iter_persistent_aedt_build_attempts(
+    sampled_toml_paths: Iterable[Path | str],
+    *,
+    jobs: int,
+    aedt_port_base: int,
+    aedt_launch_stagger_sec: float,
+    sleep: _Sleep = time.sleep,
+) -> Iterator[_Type2BuildAttempt]:
+    if jobs < 1:
+        raise ValueError("jobs must be >= 1")
+    if aedt_port_base < 1:
+        raise ValueError("aedt_port_base must be >= 1")
+    if aedt_launch_stagger_sec < 0:
+        raise ValueError("aedt_launch_stagger_sec must be >= 0")
+
+    task_queue: Queue[Any] = Queue(maxsize=max(1, jobs * _PERSISTENT_WORKER_QUEUE_FACTOR))
+    result_queue: Queue[Any] = Queue()
+    workers = _start_persistent_build_workers(
+        jobs=jobs,
+        aedt_port_base=aedt_port_base,
+        aedt_launch_stagger_sec=aedt_launch_stagger_sec,
+        task_queue=task_queue,
+        result_queue=result_queue,
+        sleep=sleep,
+    )
+    input_iter = enumerate(str(path) for path in sampled_toml_paths)
+    active_count = 0
+    input_done = False
+    completed_by_index: dict[int, _Type2BuildAttempt] = {}
+    next_emit_index = 0
+    done_workers: set[int] = set()
+
+    try:
+        while True:
+            while not input_done and active_count < max(1, jobs * _PERSISTENT_WORKER_QUEUE_FACTOR):
+                try:
+                    task = next(input_iter)
+                except StopIteration:
+                    input_done = True
+                    break
+                task_queue.put(task)
+                active_count += 1
+
+            if input_done and active_count == 0:
+                _signal_persistent_build_workers_to_stop(workers, task_queue)
+                while len(done_workers) < len(workers):
+                    message_type, worker_index, payload = cast(_PersistentResultMessage, result_queue.get())
+                    if message_type == "done":
+                        done_workers.add(worker_index)
+                    elif message_type == "shutdown_error":
+                        raise Type2AedtWorkerProcessError(
+                            f"Persistent AEDT worker {worker_index} failed during shutdown: {payload}"
+                        )
+                    elif message_type == "fatal":
+                        raise Type2AedtWorkerProcessError(
+                            f"Persistent AEDT worker {worker_index} failed: {payload}"
+                        )
+                    elif message_type == "result":
+                        task_index = worker_index
+                        completed_by_index[task_index] = cast(_Type2BuildAttempt, payload)
+                        continue
+                    else:
+                        raise Type2AedtWorkerProcessError(
+                            f"Unexpected persistent AEDT worker shutdown message: type={message_type}, payload={payload!r}"
+                        )
+                _join_persistent_build_workers(workers)
+                return
+
+            try:
+                message_type, worker_index, payload = cast(_PersistentResultMessage, result_queue.get(timeout=1.0))
+            except Empty:
+                for worker in workers:
+                    if worker.exitcode is not None and worker.exitcode != 0:
+                        raise Type2AedtWorkerProcessError(
+                            f"Persistent AEDT worker exited unexpectedly (pid={worker.pid}, exitcode={worker.exitcode})"
+                        )
+                continue
+            if message_type == "result":
+                active_count -= 1
+                task_index = worker_index
+                completed_by_index[task_index] = cast(_Type2BuildAttempt, payload)
+                while next_emit_index in completed_by_index:
+                    yield completed_by_index.pop(next_emit_index)
+                    next_emit_index += 1
+                continue
+            if message_type == "fatal":
+                raise Type2AedtWorkerProcessError(f"Persistent AEDT worker {worker_index} failed: {payload}")
+            if message_type == "shutdown_error":
+                raise Type2AedtWorkerProcessError(
+                    f"Persistent AEDT worker {worker_index} failed during shutdown: {payload}"
+                )
+    finally:
+        for worker in workers:
+            if worker.is_alive():
+                worker.terminate()
+                worker.join(timeout=30)
+
+
 def build_type2_sampled_tomls_best_effort(
     sampled_toml_paths: Iterable[Path | str],
     *,
@@ -523,12 +892,28 @@ def build_type2_sampled_tomls_best_effort(
     skipped_ledger_path: Path | None = None,
     manifest_path: Path | None = None,
     progress_reporter: _ProgressReporter | None = None,
+    reuse_aedt: bool = True,
+    aedt_port_base: int = DEFAULT_AEDT_PORT_BASE,
+    aedt_launch_stagger_sec: float = DEFAULT_AEDT_LAUNCH_STAGGER_SEC,
+    sleep: _Sleep = time.sleep,
 ) -> Type2BuildBatchResult:
     if jobs < 1:
         raise ValueError("jobs must be >= 1")
     batch: Type2BuildBatchResult = {"built": [], "skipped": []}
     path_texts = (str(path) for path in sampled_toml_paths)
-    result_iter = _iter_bounded_parallel_results(path_texts, jobs=jobs, worker=_build_single_sampled_toml_attempt)
+    if reuse_aedt:
+        result_iter = _iter_persistent_aedt_build_attempts(
+            path_texts,
+            jobs=jobs,
+            aedt_port_base=aedt_port_base,
+            aedt_launch_stagger_sec=aedt_launch_stagger_sec,
+            sleep=sleep,
+        )
+    else:
+        result_iter = (
+            cast(_Type2BuildAttempt, attempt)
+            for attempt in _iter_bounded_parallel_results(path_texts, jobs=jobs, worker=_build_single_sampled_toml_attempt)
+        )
     ledger_writer: Type2BuildSkippedLedgerWriter | None = None
     if skipped_ledger_path is not None and manifest_path is not None:
         ledger_writer = Type2BuildSkippedLedgerWriter(skipped_ledger_path, manifest_path=manifest_path)
@@ -657,6 +1042,10 @@ def solve_prepared_type2_designs(
 
 
 __all__ = [
+    "DEFAULT_AEDT_LAUNCH_STAGGER_SEC",
+    "DEFAULT_AEDT_PORT_BASE",
+    "Type2AedtWorkerLaunchError",
+    "Type2AedtWorkerProcessError",
     "Type2BuiltArtifact",
     "Type2BuildBatchResult",
     "Type2BuildSkippedEntry",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable, Sequence
+import os
 import sys
 import time
 from pathlib import Path
@@ -20,6 +21,8 @@ from peetsfea.backend.pyaedt.type2_step_setup_ready import (
 )
 from peetsfea.backend.pyaedt.type2_step_em_solve import Type2EmSolveResult
 from peetsfea.type2_runtime import (
+    DEFAULT_AEDT_LAUNCH_STAGGER_SEC,
+    DEFAULT_AEDT_PORT_BASE,
     Type2BuiltArtifact,
     Type2EmArtifact,
     build_type2_sampled_tomls_best_effort,
@@ -89,6 +92,9 @@ def build_type2(
     selected_design_ids: tuple[str, ...] = (),
     exporter: _Exporter = export_type2_step_artifacts,
     runner: _Runner = setup_type2_step_ledger,
+    reuse_aedt: bool = True,
+    aedt_port_base: int = DEFAULT_AEDT_PORT_BASE,
+    aedt_launch_stagger_sec: float = DEFAULT_AEDT_LAUNCH_STAGGER_SEC,
 ) -> list[Type2BuiltArtifact]:
     config = load_type2_sample_manifest_config(manifest_path)
     jobs = config["aedt_builder_n"]
@@ -114,6 +120,9 @@ def build_type2(
             skipped_ledger_path=skipped_ledger_path,
             manifest_path=manifest_path,
             progress_reporter=_build_progress_reporter("build"),
+            reuse_aedt=reuse_aedt,
+            aedt_port_base=aedt_port_base,
+            aedt_launch_stagger_sec=aedt_launch_stagger_sec,
         )
     if len(batch["skipped"]) > 0:
         print(f"skipped design count: {len(batch['skipped'])}")
@@ -193,6 +202,17 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--design-id", default="")
     parser.add_argument("--solve", action="store_true")
+    parser.add_argument(
+        "--aedt-port-base",
+        type=int,
+        default=int(os.environ.get("PEETSFEA_AEDT_PORT_BASE", str(DEFAULT_AEDT_PORT_BASE))),
+    )
+    parser.add_argument(
+        "--aedt-launch-stagger-sec",
+        type=float,
+        default=float(os.environ.get("PEETSFEA_AEDT_LAUNCH_STAGGER_SEC", str(DEFAULT_AEDT_LAUNCH_STAGGER_SEC))),
+    )
+    parser.add_argument("--no-aedt-reuse", action="store_true")
     return parser
 
 
@@ -222,7 +242,13 @@ def run_build_cli(argv: Sequence[str]) -> list[Type2BuiltArtifact] | list[Type2E
     elif args.debug:
         results = build_type2_debug(manifest_path=args.manifest, design_id=args.design_id)
     else:
-        results = build_type2(manifest_path=args.manifest, selected_design_ids=selected_design_ids)
+        results = build_type2(
+            manifest_path=args.manifest,
+            selected_design_ids=selected_design_ids,
+            reuse_aedt=not args.no_aedt_reuse,
+            aedt_port_base=args.aedt_port_base,
+            aedt_launch_stagger_sec=args.aedt_launch_stagger_sec,
+        )
 
     print(f"manifest: {args.manifest}")
     stage_label = "solved" if args.solve else "built"

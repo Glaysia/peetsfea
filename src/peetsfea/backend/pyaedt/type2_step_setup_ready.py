@@ -677,6 +677,7 @@ def setup_type2_step_ledger_into_hfss(
     imported_ledger_path: Path = DEFAULT_IMPORTED_LEDGER_PATH,
     design_variables: tuple[DesignVariableEntry, ...] = (),
     run_aedt_design_validation: bool = True,
+    close_projects_on_release: bool = False,
 ) -> Type2StepSetupFacadeResult:
     checked_step_ledger_path = step_ledger_path.resolve(strict=False)
     try:
@@ -695,11 +696,14 @@ def setup_type2_step_ledger_into_hfss(
             run_aedt_design_validation=run_aedt_design_validation,
         )
     finally:
-        release_result = hfss.desktop_class.release_desktop(close_projects=False, close_on_exit=False)
+        release_result = hfss.desktop_class.release_desktop(
+            close_projects=close_projects_on_release,
+            close_on_exit=False,
+        )
         raise_on_false(
             release_result,
             operation="release_desktop",
-            context={"close_projects": False, "close_on_exit": False},
+            context={"close_projects": close_projects_on_release, "close_on_exit": False},
         )
 
 

@@ -5,8 +5,9 @@ from concurrent.futures import Future
 from dataclasses import dataclass
 import json
 from pathlib import Path
+from queue import Queue as LocalQueue
 import tomllib
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -654,6 +655,9 @@ def test_build_type2_reads_aedt_builder_n_from_manifest(
         skipped_ledger_path: Path,
         manifest_path: Path,
         progress_reporter: object,
+        reuse_aedt: bool,
+        aedt_port_base: int,
+        aedt_launch_stagger_sec: float,
     ) -> type2_runtime.Type2BuildBatchResult:
         sampled_toml_path_list = [Path(path) for path in cast(Iterable[str], sampled_toml_paths)]
         calls.append(
@@ -664,6 +668,9 @@ def test_build_type2_reads_aedt_builder_n_from_manifest(
                 "skipped_ledger_path": skipped_ledger_path,
                 "manifest_path": manifest_path,
                 "progress_reporter": progress_reporter,
+                "reuse_aedt": reuse_aedt,
+                "aedt_port_base": aedt_port_base,
+                "aedt_launch_stagger_sec": aedt_launch_stagger_sec,
             }
         )
         return {"built": [], "skipped": []}
@@ -678,6 +685,9 @@ def test_build_type2_reads_aedt_builder_n_from_manifest(
     assert results == []
     assert len(calls) == 1
     assert calls[0]["jobs"] == 6
+    assert calls[0]["reuse_aedt"] is True
+    assert calls[0]["aedt_port_base"] == 45000
+    assert calls[0]["aedt_launch_stagger_sec"] == 5.0
     assert calls[0]["build_count"] == 2
     assert calls[0]["skipped_ledger_path"] == manifest_path.parent / "type2_build_skipped.json"
     assert calls[0]["manifest_path"] == manifest_path
@@ -790,11 +800,17 @@ def test_build_type2_forwards_manifest_path_and_selected_ids_to_streaming_runtim
         skipped_ledger_path: Path,
         manifest_path: Path,
         progress_reporter: object,
+        reuse_aedt: bool,
+        aedt_port_base: int,
+        aedt_launch_stagger_sec: float,
     ) -> type2_runtime.Type2BuildBatchResult:
         calls["jobs"] = jobs
         calls["sampled_toml_paths"] = list(cast(Iterable[str], sampled_toml_paths))
         calls["skipped_ledger_path"] = skipped_ledger_path
         calls["manifest_path"] = manifest_path
+        calls["reuse_aedt"] = reuse_aedt
+        calls["aedt_port_base"] = aedt_port_base
+        calls["aedt_launch_stagger_sec"] = aedt_launch_stagger_sec
         _ = progress_reporter
         return {
             "built": [
@@ -818,6 +834,9 @@ def test_build_type2_forwards_manifest_path_and_selected_ids_to_streaming_runtim
     results = build_type2(manifest_path=manifest_path, selected_design_ids=("design-compat",))
 
     assert calls["jobs"] == 7
+    assert calls["reuse_aedt"] is True
+    assert calls["aedt_port_base"] == 45000
+    assert calls["aedt_launch_stagger_sec"] == 5.0
     assert calls["manifest_path"] == manifest_path
     assert calls["skipped_ledger_path"] == manifest_path.parent / "type2_build_skipped.json"
     assert calls["sampled_toml_paths"] == [str(sampled_toml_path)]
@@ -2064,6 +2083,7 @@ def test_build_type2_sampled_tomls_writes_streaming_skipped_ledger(
         jobs=2,
         skipped_ledger_path=ledger_path,
         manifest_path=manifest_path,
+        reuse_aedt=False,
     )
 
     assert batch["built"] == []
@@ -2072,6 +2092,191 @@ def test_build_type2_sampled_tomls_writes_streaming_skipped_ledger(
         "manifest_path": str(manifest_path),
         "skipped": [skipped],
     }
+
+
+def test_persistent_aedt_launch_uses_fixed_port_and_keeps_desktop_open() -> None:
+    calls: list[dict[str, object]] = []
+    releases: list[dict[str, object]] = []
+
+    class _FakeDesktop:
+        def release_desktop(self, *, close_projects: bool, close_on_exit: bool) -> bool:
+            releases.append({"close_projects": close_projects, "close_on_exit": close_on_exit})
+            return True
+
+    class _FakeHfss:
+        desktop_class = _FakeDesktop()
+
+    def _fake_hfss_factory(**kwargs: object) -> _FakeHfss:
+        calls.append(dict(kwargs))
+        return _FakeHfss()
+
+    type2_runtime._launch_persistent_aedt_session(worker_index=2, port=45002, hfss_factory=_fake_hfss_factory)
+
+    assert calls == [
+        {
+            "project": None,
+            "design": "peets_type2_worker_2",
+            "non_graphical": True,
+            "new_desktop": True,
+            "close_on_exit": False,
+            "port": 45002,
+        }
+    ]
+    assert releases == [{"close_projects": True, "close_on_exit": False}]
+
+
+def test_persistent_build_attempt_attaches_per_design_and_closes_only_project(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    design_id = "design-rx"
+    sampled_toml_path = tmp_path / "sampled.toml"
+    source_toml_path = tmp_path / "source.toml"
+    step_ledger_path = tmp_path / "type2_step_ledger.json"
+    imported_ledger_path = tmp_path / "type2_imported_ledger.json"
+    aedt_path = tmp_path / f"{design_id}.aedt"
+    prepared_build = PreparedType2Build(
+        design_id=design_id,
+        seed=1,
+        source_toml_path=source_toml_path,
+        sampled_toml_path=sampled_toml_path,
+        design_dir=tmp_path,
+        scene_step_path=tmp_path / "type2_scene.step",
+        step_ledger_path=step_ledger_path,
+        imported_ledger_path=imported_ledger_path,
+        aedt_path=aedt_path,
+        sampled_owner_paths=(),
+        modeled_roles=("rx_single_coil",),
+        design_variables=(("rx_outer_x_usage_ratio", "0.5"),),
+    )
+    create_calls: list[dict[str, object]] = []
+    setup_calls: list[dict[str, object]] = []
+
+    class _FakeHfss:
+        pass
+
+    def _fake_create_persistent_hfss(**kwargs: object) -> _FakeHfss:
+        create_calls.append(dict(kwargs))
+        return _FakeHfss()
+
+    def _fake_setup_type2_step_ledger_into_hfss(**kwargs: object) -> _Type2BuildRunnerResult:
+        setup_calls.append(dict(kwargs))
+        return {
+            "aedt_path": str(cast(Path, kwargs["output_aedt_path"])),
+            "source_step_ledger_path": str(cast(Path, kwargs["step_ledger_path"])),
+            "imported_ledger_path": str(cast(Path, kwargs["imported_ledger_path"])),
+        }
+
+    monkeypatch.setattr(type2_runtime, "ensure_prepared_type2_step_ledger", lambda prepared_build: None)
+    monkeypatch.setattr(type2_runtime, "_is_resume_ready_type2_build", lambda prepared_build: False)
+    monkeypatch.setattr(type2_runtime, "_create_persistent_hfss", _fake_create_persistent_hfss)
+    monkeypatch.setattr(type2_runtime, "setup_type2_step_ledger_into_hfss", _fake_setup_type2_step_ledger_into_hfss)
+
+    attempt = type2_runtime._build_prepared_type2_design_attempt_with_persistent_aedt(
+        prepared_build,
+        worker_index=1,
+        port=45001,
+    )
+
+    assert attempt["status"] == "built"
+    assert create_calls == [
+        {
+            "design_name": design_id,
+            "port": 45001,
+            "new_desktop": False,
+            "project_path": aedt_path,
+            "hfss_factory": type2_runtime.Hfss,
+        }
+    ]
+    assert setup_calls[0]["hfss"].__class__ is _FakeHfss
+    assert setup_calls[0]["close_projects_on_release"] is True
+
+
+def test_start_persistent_build_workers_uses_fixed_ports_and_stagger(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ports: list[int] = []
+    sleeps: list[float] = []
+
+    class _FakeProcess:
+        def __init__(self, *, target: object, kwargs: dict[str, object]) -> None:
+            self.kwargs = kwargs
+            self.pid = 123
+            self.exitcode = None
+
+        def start(self) -> None:
+            port = cast(int, self.kwargs["port"])
+            worker_index = cast(int, self.kwargs["worker_index"])
+            ports.append(port)
+            cast(LocalQueue[object], self.kwargs["result_queue"]).put(("ready", worker_index, port))
+
+        def is_alive(self) -> bool:
+            return False
+
+        def join(self, timeout: float | None = None) -> None:
+            _ = timeout
+
+        def terminate(self) -> None:
+            pass
+
+    monkeypatch.setattr(type2_runtime, "Process", _FakeProcess)
+    task_queue: LocalQueue[Any] = LocalQueue()
+    result_queue: LocalQueue[Any] = LocalQueue()
+
+    workers = type2_runtime._start_persistent_build_workers(
+        jobs=3,
+        aedt_port_base=46000,
+        aedt_launch_stagger_sec=5.0,
+        task_queue=cast(Any, task_queue),
+        result_queue=cast(Any, result_queue),
+        sleep=sleeps.append,
+    )
+
+    assert len(workers) == 3
+    assert ports == [46000, 46001, 46002]
+    assert sleeps == [5.0, 5.0]
+
+
+def test_start_persistent_build_workers_treats_license_launch_failure_as_batch_fatal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeProcess:
+        def __init__(self, *, target: object, kwargs: dict[str, object]) -> None:
+            self.kwargs = kwargs
+            self.pid = 123
+            self.exitcode = None
+
+        def start(self) -> None:
+            cast(LocalQueue[object], self.kwargs["result_queue"]).put(
+                (
+                    "fatal",
+                    cast(int, self.kwargs["worker_index"]),
+                    "RuntimeError: Request name electronics3d_gui 1,hfss_gui 1 does not exist in the licensing pool.",
+                )
+            )
+
+        def is_alive(self) -> bool:
+            return False
+
+        def join(self, timeout: float | None = None) -> None:
+            _ = timeout
+
+        def terminate(self) -> None:
+            pass
+
+    monkeypatch.setattr(type2_runtime, "Process", _FakeProcess)
+    task_queue: LocalQueue[Any] = LocalQueue()
+    result_queue: LocalQueue[Any] = LocalQueue()
+
+    with pytest.raises(type2_runtime.Type2AedtWorkerLaunchError, match=r"license pool"):
+        type2_runtime._start_persistent_build_workers(
+            jobs=1,
+            aedt_port_base=46000,
+            aedt_launch_stagger_sec=5.0,
+            task_queue=cast(Any, task_queue),
+            result_queue=cast(Any, result_queue),
+            sleep=lambda _: None,
+        )
 
 
 def test_run_build_cli_passes_design_id_to_headless_build(
@@ -2087,9 +2292,15 @@ def test_run_build_cli_passes_design_id_to_headless_build(
         *,
         manifest_path: Path,
         selected_design_ids: tuple[str, ...],
+        reuse_aedt: bool,
+        aedt_port_base: int,
+        aedt_launch_stagger_sec: float,
     ) -> list[Type2BuiltArtifact]:
         calls["manifest_path"] = manifest_path
         calls["selected_design_ids"] = selected_design_ids
+        calls["reuse_aedt"] = reuse_aedt
+        calls["aedt_port_base"] = aedt_port_base
+        calls["aedt_launch_stagger_sec"] = aedt_launch_stagger_sec
         return []
 
     monkeypatch.setattr(build_entry, "build_type2", _fake_build_type2)
@@ -2097,3 +2308,54 @@ def test_run_build_cli_passes_design_id_to_headless_build(
     assert run_build_cli(("--manifest", str(manifest_path), "--design-id", "abc")) == []
     assert calls["manifest_path"] == manifest_path
     assert calls["selected_design_ids"] == ("abc",)
+    assert calls["reuse_aedt"] is True
+    assert calls["aedt_port_base"] == 45000
+    assert calls["aedt_launch_stagger_sec"] == 5.0
+
+
+def test_run_build_cli_passes_aedt_reuse_knobs_to_headless_build(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text("{}", encoding="utf-8")
+    calls: dict[str, object] = {}
+
+    def _fake_build_type2(
+        *,
+        manifest_path: Path,
+        selected_design_ids: tuple[str, ...],
+        reuse_aedt: bool,
+        aedt_port_base: int,
+        aedt_launch_stagger_sec: float,
+    ) -> list[Type2BuiltArtifact]:
+        calls["manifest_path"] = manifest_path
+        calls["selected_design_ids"] = selected_design_ids
+        calls["reuse_aedt"] = reuse_aedt
+        calls["aedt_port_base"] = aedt_port_base
+        calls["aedt_launch_stagger_sec"] = aedt_launch_stagger_sec
+        return []
+
+    monkeypatch.setattr(build_entry, "build_type2", _fake_build_type2)
+
+    assert (
+        run_build_cli(
+            (
+                "--manifest",
+                str(manifest_path),
+                "--no-aedt-reuse",
+                "--aedt-port-base",
+                "47000",
+                "--aedt-launch-stagger-sec",
+                "7.5",
+            )
+        )
+        == []
+    )
+    assert calls == {
+        "manifest_path": manifest_path,
+        "selected_design_ids": (),
+        "reuse_aedt": False,
+        "aedt_port_base": 47000,
+        "aedt_launch_stagger_sec": 7.5,
+    }
