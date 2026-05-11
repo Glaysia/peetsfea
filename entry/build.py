@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable, Sequence
 import sys
+import time
 from pathlib import Path
 from typing import TypedDict, cast
 
@@ -21,14 +22,21 @@ from peetsfea.backend.pyaedt.type2_step_em_solve import Type2EmSolveResult
 from peetsfea.type2_runtime import (
     Type2BuiltArtifact,
     Type2EmArtifact,
+    build_type2_sampled_tomls_best_effort,
     build_prepared_type2_designs_best_effort,
     build_prepared_type2_designs,
     ensure_prepared_type2_step_ledgers,
     write_type2_build_skipped_ledger,
+    solve_type2_sampled_tomls,
 )
 from peetsfea.type2_runtime import solve_prepared_type2_designs
 from peetsfea.type2_step_export import export_type2_step_artifacts
-from peetsfea.type2_sampled import DesignVariableEntry, load_type2_sample_manifest, prepared_builds_from_manifest
+from peetsfea.type2_sampled import (
+    DesignVariableEntry,
+    iter_type2_sample_manifest_entries,
+    load_type2_sample_manifest_config,
+    prepared_builds_from_manifest,
+)
 
 _Exporter = Callable[..., object]
 
@@ -78,20 +86,35 @@ def _setup_type2_step_ledger_gui_debug(
 def build_type2(
     *,
     manifest_path: Path = MANIFEST_PATH,
+    selected_design_ids: tuple[str, ...] = (),
     exporter: _Exporter = export_type2_step_artifacts,
     runner: _Runner = setup_type2_step_ledger,
 ) -> list[Type2BuiltArtifact]:
-    document = load_type2_sample_manifest(manifest_path)
-    prepared_builds = prepared_builds_from_manifest(manifest_path, selected_design_ids=())
-    jobs = document["config"]["aedt_builder_n"]
-    batch = build_prepared_type2_designs_best_effort(
-        prepared_builds,
-        jobs=jobs,
-        exporter=exporter,
-        runner=runner,
-    )
+    config = load_type2_sample_manifest_config(manifest_path)
+    jobs = config["aedt_builder_n"]
     skipped_ledger_path = manifest_path.parent / "type2_build_skipped.json"
-    write_type2_build_skipped_ledger(skipped_ledger_path, manifest_path=manifest_path, skipped=batch["skipped"])
+    if exporter is not export_type2_step_artifacts or runner is not setup_type2_step_ledger:
+        batch = build_prepared_type2_designs_best_effort(
+            prepared_builds_from_manifest(manifest_path, selected_design_ids=selected_design_ids),
+            jobs=jobs,
+            exporter=exporter,
+            runner=runner,
+        )
+        write_type2_build_skipped_ledger(skipped_ledger_path, manifest_path=manifest_path, skipped=batch["skipped"])
+    else:
+        batch = build_type2_sampled_tomls_best_effort(
+            (
+                entry["sampled_toml_path"]
+                for entry in iter_type2_sample_manifest_entries(
+                    manifest_path,
+                    selected_design_ids=selected_design_ids,
+                )
+            ),
+            jobs=jobs,
+            skipped_ledger_path=skipped_ledger_path,
+            manifest_path=manifest_path,
+            progress_reporter=_build_progress_reporter("build"),
+        )
     if len(batch["skipped"]) > 0:
         print(f"skipped design count: {len(batch['skipped'])}")
         print(f"build skipped ledger: {skipped_ledger_path}")
@@ -120,12 +143,22 @@ def build_type2_debug(
 def solve_type2(
     *,
     manifest_path: Path = MANIFEST_PATH,
+    selected_design_ids: tuple[str, ...] = (),
     exporter: _Exporter = export_type2_step_artifacts,
     runner: _SolveRunner = setup_and_solve_type2_step_ledger,
 ) -> list[Type2EmArtifact]:
-    document = load_type2_sample_manifest(manifest_path)
-    prepared_builds = prepared_builds_from_manifest(manifest_path, selected_design_ids=())
-    jobs = document["config"]["aedt_builder_n"]
+    config = load_type2_sample_manifest_config(manifest_path)
+    jobs = config["aedt_builder_n"]
+    if exporter is export_type2_step_artifacts and runner is setup_and_solve_type2_step_ledger:
+        return solve_type2_sampled_tomls(
+            (
+                entry["sampled_toml_path"]
+                for entry in iter_type2_sample_manifest_entries(manifest_path, selected_design_ids=selected_design_ids)
+            ),
+            jobs=jobs,
+            progress_reporter=_build_progress_reporter("solve"),
+        )
+    prepared_builds = prepared_builds_from_manifest(manifest_path, selected_design_ids=selected_design_ids)
     ensure_prepared_type2_step_ledgers(prepared_builds, jobs=jobs, exporter=exporter)
     return solve_prepared_type2_designs(
         prepared_builds,
@@ -163,21 +196,33 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _build_progress_reporter(stage: str) -> Callable[[int, int, int], None]:
+    last_report_at = 0.0
+
+    def report(completed_count: int, built_count: int, skipped_count: int) -> None:
+        nonlocal last_report_at
+        now = time.monotonic()
+        if completed_count == 1 or completed_count % 100 == 0 or now - last_report_at >= 30:
+            last_report_at = now
+            print(f"{stage} progress: completed={completed_count} built={built_count} skipped={skipped_count}", flush=True)
+
+    return report
+
+
 def run_build_cli(argv: Sequence[str]) -> list[Type2BuiltArtifact] | list[Type2EmArtifact]:
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
     if args.debug and args.design_id == "":
         parser.error("--debug requires --design-id")
-    if not args.debug and args.design_id != "":
-        parser.error("--design-id requires --debug")
+    selected_design_ids = (args.design_id,) if args.design_id != "" else tuple()
     if args.solve and args.debug:
         results = solve_type2_debug(manifest_path=args.manifest, design_id=args.design_id)
     elif args.solve:
-        results = solve_type2(manifest_path=args.manifest)
+        results = solve_type2(manifest_path=args.manifest, selected_design_ids=selected_design_ids)
     elif args.debug:
         results = build_type2_debug(manifest_path=args.manifest, design_id=args.design_id)
     else:
-        results = build_type2(manifest_path=args.manifest)
+        results = build_type2(manifest_path=args.manifest, selected_design_ids=selected_design_ids)
 
     print(f"manifest: {args.manifest}")
     stage_label = "solved" if args.solve else "built"

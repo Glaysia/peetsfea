@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import hashlib
 import json
@@ -21,13 +21,6 @@ from peetsfea.type2_sampled_sampling import _require_constraints_satisfied
 from peetsfea.type2_sampled_sampling import exportable_sampled_owner_paths
 from peetsfea.type2_sampled_sampling import exportable_sampled_owner_paths_for_seed
 from peetsfea.type2_sampled_sampling import sampled_owner_values
-from peetsfea.type2_step_spec import ModeledPlateStackSpec
-from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
-from peetsfea.type2_step_spec import ModeledTxPlateStackSpec
-from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
-from peetsfea.type2_step_spec import NonModelDerivedSpec
-from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
-from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec import RangeSpec
 from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import load_type2_step_spec as _load_type2_step_spec
@@ -172,6 +165,8 @@ class PreparedType2Build:
 
 
 load_type2_step_spec = _load_type2_step_spec
+
+_MANIFEST_STREAM_CHUNK_SIZE: Final[int] = 1024 * 1024
 
 
 def _hash4_from_bytes(payload: bytes) -> str:
@@ -1209,23 +1204,156 @@ def prepared_builds_from_manifest(
     resolved_spec_loader = load_type2_step_spec
     if resolved_spec_loader is None:
         resolved_spec_loader = globals()["load_type2_step_spec"]
-    document = load_type2_sample_manifest(manifest_path)
-    entries = document["entries"]
     requested_design_ids = set(selected_design_ids)
+    source_spec_cache: dict[Path, Type2StepSpec] = {}
+
+    def cached_spec_loader(path: Path) -> Type2StepSpec:
+        resolved_path = path.resolve(strict=False)
+        if resolved_path.name == "sampled.toml":
+            return resolved_spec_loader(resolved_path)
+        if resolved_path not in source_spec_cache:
+            source_spec_cache[resolved_path] = resolved_spec_loader(resolved_path)
+        return source_spec_cache[resolved_path]
+
     prepared_builds: list[PreparedType2Build] = []
     selected_found: set[str] = set()
-    for entry in entries:
+    for entry in iter_type2_sample_manifest_entries(manifest_path, selected_design_ids=selected_design_ids):
         design_id = entry["design_id"]
-        if requested_design_ids and design_id not in requested_design_ids:
-            continue
         selected_found.add(design_id)
-        prepared_builds.append(
-            prepare_type2_build(Path(entry["sampled_toml_path"]), load_type2_step_spec=resolved_spec_loader)
-        )
+        prepared_builds.append(prepare_type2_build(Path(entry["sampled_toml_path"]), load_type2_step_spec=cached_spec_loader))
     missing_design_ids = requested_design_ids - selected_found
     if missing_design_ids:
         raise ValueError(f"type2 sample manifest is missing requested design ids: {sorted(missing_design_ids)}")
     return tuple(prepared_builds)
+
+
+def _stream_manifest_json_value(manifest_path: Path, *, key: str) -> Iterator[object]:
+    decoder = json.JSONDecoder()
+    needle = json.dumps(key)
+    buffer = ""
+    position = 0
+    found_key = False
+    found_array = False
+    eof = False
+    file_size = manifest_path.stat().st_size
+
+    with manifest_path.open("r", encoding="utf-8") as manifest_file:
+        def read_more(*, compact: bool) -> None:
+            nonlocal buffer, position, eof
+            if eof:
+                return
+            if compact:
+                buffer = buffer[position:]
+                position = 0
+            buffer += manifest_file.read(_MANIFEST_STREAM_CHUNK_SIZE)
+            eof = manifest_file.tell() == file_size
+
+        while True:
+            if not buffer or (not eof and position >= len(buffer) - _MANIFEST_STREAM_CHUNK_SIZE // 2):
+                read_more(compact=True)
+
+            if not found_key:
+                key_position = buffer.find(needle, position)
+                if key_position < 0:
+                    if eof:
+                        raise ValueError(f"type2 sample manifest is missing key {key!r}: {manifest_path}")
+                    position = max(0, len(buffer) - len(needle))
+                    read_more(compact=True)
+                    continue
+                colon_position = buffer.find(":", key_position + len(needle))
+                if colon_position < 0:
+                    if eof:
+                        raise ValueError(f"type2 sample manifest key {key!r} is missing ':'")
+                    position = key_position
+                    read_more(compact=True)
+                    continue
+                found_key = True
+                position = colon_position + 1
+
+            while True:
+                while position < len(buffer) and buffer[position].isspace():
+                    position += 1
+                if position >= len(buffer) and not eof:
+                    read_more(compact=True)
+                    break
+                if key != "entries":
+                    try:
+                        value, end_position = decoder.raw_decode(buffer, position)
+                    except json.JSONDecodeError:
+                        if eof:
+                            raise
+                        read_more(compact=False)
+                        break
+                    yield value
+                    position = end_position
+                    return
+                if not found_array:
+                    if position >= len(buffer):
+                        if eof:
+                            raise ValueError(f"type2 sample manifest key {key!r} is missing array value")
+                        read_more(compact=True)
+                        break
+                    if buffer[position] != "[":
+                        raise TypeError(f"type2 sample manifest key {key!r} must be an array")
+                    found_array = True
+                    position += 1
+                while position < len(buffer) and buffer[position].isspace():
+                    position += 1
+                if position >= len(buffer) and not eof:
+                    read_more(compact=True)
+                    break
+                if position < len(buffer) and buffer[position] == "]":
+                    return
+                if position < len(buffer) and buffer[position] == ",":
+                    position += 1
+                    continue
+                try:
+                    value, end_position = decoder.raw_decode(buffer, position)
+                except json.JSONDecodeError:
+                    if eof:
+                        raise
+                    read_more(compact=False)
+                    break
+                yield value
+                position = end_position
+
+
+def load_type2_sample_manifest_config(manifest_path: Path) -> Type2SampleManifestConfig:
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"type2 sample manifest not found: {manifest_path}")
+    with manifest_path.open("r", encoding="utf-8") as manifest_file:
+        while True:
+            character = manifest_file.read(1)
+            if character == "":
+                raise TypeError("type2 sample manifest must be an object")
+            if character.isspace():
+                continue
+            if character != "{":
+                raise TypeError("type2 sample manifest must be an object")
+            break
+    value = next(_stream_manifest_json_value(manifest_path, key="config"))
+    return _load_type2_sample_manifest_config(value, manifest_path=manifest_path)
+
+
+def iter_type2_sample_manifest_entries(
+    manifest_path: Path,
+    *,
+    selected_design_ids: tuple[str, ...] = (),
+) -> Iterator[Type2SampleManifestEntry]:
+    requested_design_ids = set(selected_design_ids)
+    selected_found: set[str] = set()
+    for value in _stream_manifest_json_value(manifest_path, key="entries"):
+        if not isinstance(value, dict):
+            raise TypeError(f"type2 sample manifest entry must be object: {manifest_path}")
+        entry = _load_type2_sample_manifest_entries([value])[0]
+        design_id = entry["design_id"]
+        if requested_design_ids and design_id not in requested_design_ids:
+            continue
+        selected_found.add(design_id)
+        yield entry
+    missing_design_ids = requested_design_ids - selected_found
+    if missing_design_ids:
+        raise ValueError(f"type2 sample manifest is missing requested design ids: {sorted(missing_design_ids)}")
 
 
 __all__ = [
@@ -1246,7 +1374,9 @@ __all__ = [
     "generate_sample_manifest_entries",
     "generate_sample_manifest_attempts",
     "load_type2_sample_manifest",
+    "load_type2_sample_manifest_config",
     "load_type2_sample_metadata",
+    "iter_type2_sample_manifest_entries",
     "manifest_entry_for_sample_index",
     "prepare_type2_build",
     "prepared_builds_from_manifest",
