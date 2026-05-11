@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_setup_ready.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-07 @ 00:00
+updated: 2026-05-11 @ 00:00
 tags:
   - test
   - em
@@ -50,6 +50,7 @@ tags:
 - Future two-terminal report names are documented in `sdd/architecture/type2-em-report-contract.md` but are not active RxOnly assertions.
 - Solve/export tests use the same active output-variable report created by setup-ready generation.
 - Attached-HFSS setup tests cover the explicit flag that skips AEDT `ValidateDesign()` while still saving and detaching.
+- Mesh setup assertions expect `Length1` with `RestrictElem=True`, `NumMaxElem=24000`, `RestrictLength=True`, and trace-width-derived `MaxLength`.
 
 ## Invariants / fail-fast
 - PyAEDT false-return handling remains fail-fast.

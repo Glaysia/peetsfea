@@ -35,7 +35,7 @@ _RX_MESH_OBJECT_NAME = "rx_copper_l0"
 _TX_PLATE_MESH_OBJECT_NAME = "tx_plate_copper"
 _RX_PLATE_MESH_OBJECT_NAME = "rx_plate_copper"
 _TX_RECT_VOID_COLUMNS_MESH_OBJECT_NAME = "tx_rect_void_columns_copper"
-MESH_LENGTH_MAX_ELEMENTS = "1000"
+MESH_LENGTH_MAX_ELEMENTS = "24000"
 
 
 def _is_tx_branch_plate_copper_name(name: str) -> bool:
@@ -81,7 +81,7 @@ def _mesh_assignment_payload(*, object_names: list[str], max_length: str) -> lis
         "Objects:=",
         object_names,
         "RestrictElem:=",
-        False,
+        True,
         "NumMaxElem:=",
         MESH_LENGTH_MAX_ELEMENTS,
         "RestrictLength:=",
@@ -99,7 +99,7 @@ def _mesh_summary(*, object_names: list[str], max_length: str) -> Type2ImportedM
         "objects": list(object_names),
         "refine_inside": False,
         "enabled": True,
-        "restrict_elem": False,
+        "restrict_elem": True,
         "num_max_elem": MESH_LENGTH_MAX_ELEMENTS,
         "restrict_length": True,
         "max_length": max_length,
@@ -478,7 +478,7 @@ def assign_post_import_mesh(
             "module_name": MESH_MODULE_NAME,
             "operation_name": MESH_LENGTH_OPERATION_NAME,
             "objects": mesh_object_names,
-            "restrict_elem": False,
+            "restrict_elem": True,
             "num_max_elem": MESH_LENGTH_MAX_ELEMENTS,
             "restrict_length": True,
             "max_length": max_length,

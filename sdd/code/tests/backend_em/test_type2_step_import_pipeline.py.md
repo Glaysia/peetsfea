@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_import_pipeline.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-07 @ 20:00
+updated: 2026-05-11 @ 00:00
 tags:
   - test
   - import
@@ -45,6 +45,7 @@ tags:
 - The tv aluminum plate import regression is active and must pass without xfail: backend ledger, partition, bounds, styling, and imported ledger output all recognize the modeled one-body aluminum plate.
 - Single-coil and `tx_rect_void_columns` modeled fixtures now include positive canonical `trace_width_mm` and import tests assert source-to-imported preservation.
 - Plate-stack modeled fixtures set positive canonical `trace_width_mm` (stripe-derived) and import tests assert preservation on canonical-coordinate round-trip.
+- Shared mesh payload fixtures expect `Length1` with `RestrictElem=True`, `NumMaxElem=24000`, `RestrictLength=True`, and the documented max-length value for their fixture shape.
 
 ## Invariants / fail-fast
 - Missing RX imported bodies and generic imported names fail.

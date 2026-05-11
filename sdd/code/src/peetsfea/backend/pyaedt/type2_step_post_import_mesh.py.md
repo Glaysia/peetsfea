@@ -1,7 +1,7 @@
 ---
 title: type2_step_post_import_mesh.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-07 @ 00:00
+updated: 2026-05-11 @ 00:00
 tags:
   - em
   - pyaedt
@@ -34,6 +34,7 @@ tags:
   - RxOnly: `rx_trace_width_mm / 9.0`
   - TxRx: `sqrt(tx_trace_width_mm * rx_trace_width_mm) / 9.0`
 - 요약/페이로드 모두 동일한 `MaxLength`를 사용한다.
+- The `Length1` operation uses `RestrictLength=True`, `RestrictElem=True`, and `NumMaxElem=24000`.
 
 ## Invariants / fail-fast
 - Missing RX or TX role-specific conductor target fails immediately with role and available names context.
