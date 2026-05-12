@@ -41,7 +41,7 @@ tags:
   bounds.
 - TX inner actual-underlay bodies receive passive material styling: `tx_underlay_pet_psa_u*` uses `PET_PSA`, and `tx_underlay_ferrite_u*` uses `MULL12060ferrite`.
 - TX inner void-stack bodies receive passive material styling: `tx_void_pet_psa_u*` uses `PET_PSA`, and `tx_void_ferrite_u*` uses `MULL12060ferrite`.
-- `tv_aluminum_plate` receives volume material `aluminum` and visual styling directly, with no runtime port sheet creation and no imported body groups.
+- `tv_aluminum_plate` is created as a runtime HFSS sheet from canonical `sheet_vertices_xyz` only when `sheet_present == 1`; import styling applies visual state only, with no finite-conductivity boundary, volume material assignment, port sheet ownership, or imported body groups.
 
 ## Invariants / fail-fast
 - Missing required RX imported objects fail immediately.
@@ -57,7 +57,7 @@ tags:
   `placement_owner_id=tx_inner_region`, and `modeled_source_id` must match the modeled
   object id.
 - TX inner actual-underlay material setup must use the existing dataset ferrite material path and fail fast when dataset/material APIs are unavailable.
-- TV aluminum plate bounds must prove flush placement on the `tv` +X face, full TV Y/Z span, 0.04 mm X thickness, `plane = "YZ"`, `material = "aluminum"`, and `placement_owner_id = "tv"`.
+- TV aluminum plate bounds must prove flush placement on the `tv` +X face, zero X thickness, full TV Y/Z span, `plane = "YZ"`, `material = "aluminum"`, and `placement_owner_id = "tv"`; sheet creation also fails if the covered AEDT sheet name drifts from `tv_aluminum_plate`.
 
 ## Graph links
 - Primary owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
@@ -67,4 +67,5 @@ tags:
 - Related plan: [0.2.24 Type2 TX Inner Void YZ Stack](../../../../../plans/0.2.24-type2-tx-inner-void-yz-stack.md)
 - Related plan: [0.2.24 Type2 TX Outer Void Stack](../../../../../plans/0.2.24-type2-tx-outer-void-stack.md)
 - Related plan: [0.2.24 Type2 TV Aluminum Plate](../../../../../plans/0.2.24-type2-tv-aluminum-plate.md)
+- Related plan: [0.2.25 Type2 TV Aluminum Sheet Presence](../../../../../plans/0.2.25-type2-tv-aluminum-sheet-presence.md)
 - Related plan: [0.2.25 Type2 Port Sheet Contract Rewrite](../../../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)

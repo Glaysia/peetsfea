@@ -24,6 +24,7 @@ _UNDERLAY_REPEAT_COUNT_FIXED_CANDIDATES = (0, 1, 2, 4, 6, 8)
 _TX_UNDERLAY_GAP_MM_CANDIDATES = (1.0, 4.0, 7.0, 10.0)
 _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES = (0, 1)
 _TX_INNER_VOID_STACK_PRESENT_CANDIDATES = (0, 1)
+_TV_ALUMINUM_SHEET_PRESENT_CANDIDATES = (0, 1)
 _TX_PLATE_STACK_COIL_COUNT_CANDIDATES = (1, 2, 3, 4)
 _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_START = 0.1
 _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_END = 0.6
@@ -256,12 +257,13 @@ class ModeledTxRectVoidColumnsSpec:
 class ModeledTvAluminumPlateSpec:
     object_id: str
     role: Literal["tv_aluminum_plate"]
-    primitive: Literal["box"]
+    primitive: Literal["sheet"]
     material: Literal["aluminum"]
     model_state: Literal[True]
     source_non_model_object_id: str
     face: Literal["+x"]
     thickness_mm: float
+    sheet_present: RangeSpec
 
 
 ModeledSingleCoilSpec = ModeledTxSingleCoilSpec | ModeledTxInnerSingleCoilSpec | ModeledRxSingleCoilSpec

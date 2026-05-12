@@ -48,6 +48,10 @@ def _fixed_payload() -> dict[str, object]:
     return tomllib.loads(path.read_text(encoding="utf-8"))
 
 
+_FIXED_TV_ALUMINUM_PLATE_SHEET_PRESENT_RANGE = [True, 1, 1, 1]
+_TV_ALUMINUM_PLATE_THICKNESS_MM = 0.04
+
+
 def _tables(payload: dict[str, object], key: str) -> list[dict[str, object]]:
     raw_tables = payload[key]
     assert isinstance(raw_tables, list)
@@ -85,9 +89,16 @@ def test_fixed_viewer_refresh_fixture_is_txrx() -> None:
 
     tv_aluminum_plate = modeled_by_id["tv_aluminum_plate"]
     assert tv_aluminum_plate["role"] == "tv_aluminum_plate"
+    assert tv_aluminum_plate["primitive"] == "sheet"
     assert tv_aluminum_plate["material"] == "aluminum"
     assert tv_aluminum_plate["model_state"] is True
     assert tv_aluminum_plate["source_non_model_object_id"] == "tv"
+    assert tv_aluminum_plate["face"] == "+x"
+    assert tv_aluminum_plate["thickness_mm"] == _TV_ALUMINUM_PLATE_THICKNESS_MM
+    sheet_present = cast(dict[str, object], tv_aluminum_plate["sheet_present"])
+    assert sheet_present["range"] == _FIXED_TV_ALUMINUM_PLATE_SHEET_PRESENT_RANGE
+    assert "expected_exported_body_names" not in tv_aluminum_plate
+    assert "expected_exported_body_count" not in tv_aluminum_plate
     outputs = cast(dict[str, object], payload["outputs"])
     assert outputs["mode"] == "TxRx"
     raw_variables = outputs["variables"]

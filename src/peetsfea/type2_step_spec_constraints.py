@@ -299,6 +299,7 @@ def _constraint_reference_paths(spec: Type2StepSpec) -> set[str]:
             )
             continue
         if isinstance(modeled_spec, ModeledTvAluminumPlateSpec):
+            paths.add(f"{base}.sheet_present")
             continue
         raise RuntimeError(f"unsupported modeled object for constraint owner-path collection: {modeled_spec.object_id}")
     return paths

@@ -365,12 +365,15 @@ value = "A_cw_to_a"
 [[modeled_objects]]
 object_id = "tv_aluminum_plate"
 role = "tv_aluminum_plate"
-primitive = "box"
+primitive = "sheet"
 material = "aluminum"
 model_state = true
 source_non_model_object_id = "tv"
 face = "+x"
 thickness_mm = 0.04
+[modeled_objects.sheet_present]
+range = [true, 0, 1, 2]
+description = "TV +X face aluminum sheet presence flag"
 
 [constraints]
 

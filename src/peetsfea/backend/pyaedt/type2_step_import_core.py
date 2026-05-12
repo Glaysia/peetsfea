@@ -21,6 +21,7 @@ from peetsfea.backend.pyaedt.type2_step_import_ledger import (
     require_key,
     require_member_objects,
     require_non_empty_str,
+    require_sheet_present,
     validated_object_names,
 )
 from peetsfea.backend.pyaedt.type2_step_import_partition import (
@@ -31,6 +32,7 @@ from peetsfea.backend.pyaedt.type2_step_import_partition import (
     resolve_imported_body_groups,
 )
 from peetsfea.backend.pyaedt.type2_step_import_style import (
+    create_tv_aluminum_plate_sheet_from_contract,
     ensure_underlay_materials,
     set_imported_object_model_state,
     style_imported_modeled_objects,
@@ -233,6 +235,41 @@ class Type2ImportedLedger(TypedDict):
 
 _TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
 _TV_ALUMINUM_PLATE_BODY_NAME = "tv_aluminum_plate"
+
+
+def _tv_aluminum_plate_imported_object_names(
+    *,
+    modeler: ModelerSession,
+    modeled_entry: dict[str, object],
+    partitioned_object_names: list[str],
+    context: str,
+) -> list[str]:
+    if partitioned_object_names:
+        raise ValueError(
+            f"{context} requires zero STEP-imported tv aluminum plate bodies "
+            f"(actual={partitioned_object_names})"
+        )
+    sheet_present = require_sheet_present(
+        require_key(modeled_entry, key="sheet_present", context=context),
+        context=f"{context}.sheet_present",
+    )
+    runtime_object_names = current_object_names(modeler, context=f"{context}.tv_aluminum_plate.runtime_names")
+    if sheet_present == 0:
+        if _TV_ALUMINUM_PLATE_BODY_NAME in runtime_object_names:
+            raise ValueError(
+                f"{context} sheet_present is 0 but HFSS already contains {_TV_ALUMINUM_PLATE_BODY_NAME!r}"
+            )
+        return []
+    if _TV_ALUMINUM_PLATE_BODY_NAME in runtime_object_names:
+        raise ValueError(
+            f"{context} sheet_present is 1 but HFSS already contains {_TV_ALUMINUM_PLATE_BODY_NAME!r} "
+            "before runtime sheet creation"
+        )
+    return create_tv_aluminum_plate_sheet_from_contract(
+        modeler=modeler,
+        modeled_entry=modeled_entry,
+        context=context,
+    )
 
 
 def _require_plate_stack_merged_material_contract(*, modeled_entry: dict[str, object], context: str) -> None:
@@ -466,10 +503,15 @@ def _merge_tv_aluminum_plate_entry(
     imported_body_groups: list[ImportedBodyGroupEntry],
     context: str,
 ) -> dict[str, object]:
-    if imported_object_names != [_TV_ALUMINUM_PLATE_BODY_NAME]:
+    sheet_present = require_sheet_present(
+        require_key(export_entry, key="sheet_present", context=context),
+        context=f"{context}.sheet_present",
+    )
+    expected_imported_object_names = [_TV_ALUMINUM_PLATE_BODY_NAME] if sheet_present == 1 else []
+    if imported_object_names != expected_imported_object_names:
         raise ValueError(
-            f"{context} requires exactly one imported tv aluminum plate body "
-            f"(expected={[_TV_ALUMINUM_PLATE_BODY_NAME]}, actual={imported_object_names})"
+            f"{context} imported tv aluminum plate names must match sheet_present "
+            f"(sheet_present={sheet_present}, expected={expected_imported_object_names}, actual={imported_object_names})"
         )
     if imported_body_groups:
         raise ValueError(
@@ -524,9 +566,7 @@ def _recreate_imported_body_groups(
 
 def _all_imported_modeled_object_names(modeled_names_by_object_id: dict[str, list[str]]) -> list[str]:
     imported_object_names: list[str] = []
-    for object_id, modeled_object_names in modeled_names_by_object_id.items():
-        if not modeled_object_names:
-            raise ValueError(f"modeled import partition must claim at least one body per modeled object (object_id={object_id})")
+    for modeled_object_names in modeled_names_by_object_id.values():
         imported_object_names.extend(modeled_object_names)
     return imported_object_names
 
@@ -652,19 +692,29 @@ def build_imported_ledger(
                 owner_member=owner_member,
                 context=context,
             )
-        imported_object_names = modeled_names_by_object_id[validated_entry["object_id"]]
+        partitioned_object_names = modeled_names_by_object_id[validated_entry["object_id"]]
+        if role == _TV_ALUMINUM_PLATE_ROLE:
+            imported_object_names = _tv_aluminum_plate_imported_object_names(
+                modeler=modeler,
+                modeled_entry=validated_entry["entry"],
+                partitioned_object_names=partitioned_object_names,
+                context=context,
+            )
+        else:
+            imported_object_names = partitioned_object_names
         set_imported_object_model_state(
             modeler=modeler,
             object_id=validated_entry["object_id"],
             imported_object_names=imported_object_names,
             model_state=True,
         )
-        _assert_imported_object_bounds_match_ledger(
-            modeler=modeler,
-            modeled_entry=validated_entry["entry"],
-            imported_object_names=imported_object_names,
-            context=context,
-        )
+        if role != _TV_ALUMINUM_PLATE_ROLE:
+            _assert_imported_object_bounds_match_ledger(
+                modeler=modeler,
+                modeled_entry=validated_entry["entry"],
+                imported_object_names=imported_object_names,
+                context=context,
+            )
         final_imported_object_names = style_imported_modeled_objects(
             modeler=modeler,
             modeled_entry=validated_entry["entry"],

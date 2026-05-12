@@ -26,7 +26,6 @@ _PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stac
 _SUPPORTED_SCHEMA_VERSION = "type2.step_ledger.v3"
 _TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
 _TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
-_TV_ALUMINUM_PLATE_BODY_NAME = "tv_aluminum_plate"
 _TX_COPPER_GROUP_NAME = "g_copper_tx"
 _RX_COPPER_GROUP_NAME = "g_copper_rx"
 _TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
@@ -206,6 +205,13 @@ def require_int(value: object, *, context: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{context} must be int")
     return value
+
+
+def require_sheet_present(value: object, *, context: str) -> int:
+    sheet_present = require_int(value, context=context)
+    if sheet_present not in (0, 1):
+        raise ValueError(f"{context} must be 0 or 1 (actual={sheet_present})")
+    return sheet_present
 
 
 def _require_float(value: object, *, context: str) -> float:
@@ -778,9 +784,9 @@ def _validate_modeled_ferrite_group_contract(
     context: str,
 ) -> None:
     if role == _TV_ALUMINUM_PLATE_ROLE:
-        if expected_exported_body_names != [_TV_ALUMINUM_PLATE_BODY_NAME]:
+        if expected_exported_body_names:
             raise ValueError(
-                f"{context}.expected_exported_body_names must be ['{_TV_ALUMINUM_PLATE_BODY_NAME}'] "
+                f"{context}.expected_exported_body_names must be [] "
                 f"for {_TV_ALUMINUM_PLATE_ROLE} (actual={expected_exported_body_names})"
             )
         if len(validated_groups) != 0:
@@ -883,6 +889,10 @@ def _validated_modeled_entry(
     if _require_bool(require_key(entry, key="model_state", context=context), context=f"{context}.model_state") is not True:
         raise ValueError(f"{context}.model_state must be true")
     if role == _TV_ALUMINUM_PLATE_ROLE:
+        require_sheet_present(
+            require_key(entry, key="sheet_present", context=context),
+            context=f"{context}.sheet_present",
+        )
         if plane != "YZ":
             raise ValueError(f"{context}.plane must be 'YZ' for tv_aluminum_plate modeled geometry (actual={plane!r})")
         if placement_owner_id != "tv":
@@ -914,7 +924,22 @@ def _validated_modeled_entry(
         require_key(entry, key="expected_exported_body_count", context=context),
         context=f"{context}.expected_exported_body_count",
     )
-    if expected_exported_body_count < 1:
+    if role == _TV_ALUMINUM_PLATE_ROLE:
+        if expected_exported_body_count != 0:
+            raise ValueError(
+                f"{context}.expected_exported_body_count must be 0 for tv_aluminum_plate sheet geometry "
+                f"(actual={expected_exported_body_count})"
+            )
+        if expected_exported_body_names:
+            raise ValueError(
+                f"{context}.expected_exported_body_names must be empty for tv_aluminum_plate sheet geometry "
+                f"(actual={expected_exported_body_names})"
+            )
+        _require_float_triplet_sequence(
+            require_key(raw_canonical_coordinates, key="sheet_vertices_xyz", context=f"{context}.canonical_coordinates"),
+            context=f"{context}.canonical_coordinates.sheet_vertices_xyz",
+        )
+    elif expected_exported_body_count < 1:
         raise ValueError(f"{context}.expected_exported_body_count must be >= 1")
     if expected_exported_body_count != len(expected_exported_body_names):
         raise ValueError(

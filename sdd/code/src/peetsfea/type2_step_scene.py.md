@@ -17,21 +17,24 @@ tags:
 
 ## Responsibility
 - Dispatch modeled scene-data construction for active Type2 RxOnly bodies.
-- Add modeled TV aluminum plate construction when role is `tv_aluminum_plate`.
+- Add modeled TV aluminum sheet ledger construction when role is `tv_aluminum_plate`.
 
 ## Inputs / Outputs
 - Inputs: modeled object spec, placement owner spec, resolved `tx_region.max_z`, deterministic seed.
-- Outputs: build123d shapes and `ModeledObjectSceneData` for supported RX and modeled TV aluminum plate objects.
+- Outputs: build123d shapes and `ModeledObjectSceneData` for supported RX objects, plus zero-body `ModeledObjectSceneData` for the modeled TV aluminum sheet.
 
 ## Canonical State
 - RX modeled geometry is represented by returned shapes and scene data.
 - TX modeled geometry is not active runtime state.
-- TV aluminum plate geometry is represented by a single `tv_aluminum_plate` solid derived from `tv` owner bounds.
+- TV aluminum plate geometry is represented as a zero-thickness sheet on the source `tv` `+X` face; it is canonical ledger state and not a STEP solid.
+- TV aluminum sheet canonical metadata records `source_non_model_object_id = "tv"`, `source_face = "+X"`, resolved `sheet_present`, `sheet_thickness_mm`, and the four sheet vertices.
 
 ## Invariants / Fail-Fast
 - TX modeled roles fail immediately.
 - Supported modeled specs must produce scene data through role-specific builders.
 - `tv_aluminum_plate` requires owner `tv`, and fails immediately if the owner is missing expected identity or has non-finite/non-positive geometry bounds.
+- TV aluminum sheet thickness must remain finite and positive, but that thickness is metadata for downstream finite-conductivity setup rather than exported body depth.
+- `sheet_present` is resolved deterministically from the modeled object's integer range and seed; only canonical boolean candidates are accepted.
 - `tx_inner_single_coil` and `tx_outer_single_coil` scene building receive `tx_region.max_z` explicitly so passive void-stack sheets can fill to the TX region top without inferring it from inner or outer guide owners.
 
 ## Collaborators

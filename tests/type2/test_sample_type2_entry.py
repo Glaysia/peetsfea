@@ -34,6 +34,7 @@ _EXPECTED_SAMPLED_OWNER_PATHS = [
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
     "modeled_objects.rx_rect_void_coil.turn_count",
     "modeled_objects.rx_rect_void_coil.metal_fill_factor",
+    "modeled_objects.tv_aluminum_plate.sheet_present",
 ]
 _RX_NON_SAMPLED_OWNER_PATHS = [
     "modeled_objects.rx_rect_void_coil.layer_count",
@@ -42,10 +43,23 @@ _RX_NON_SAMPLED_OWNER_PATHS = [
 
 
 @dataclass(frozen=True)
+class _FakeTvAluminumPlateSpec:
+    object_id: str
+    role: str
+    primitive: str
+    material: str
+    model_state: bool
+    source_non_model_object_id: str
+    face: str
+    thickness_mm: float
+    sheet_present: RangeSpec
+
+
+@dataclass(frozen=True)
 class _FakeRxOnlyType2Spec:
     non_model_objects: tuple[NonModelTxRegionSpec, ...]
     non_model_derived_objects: tuple[NonModelDerivedSpec, ...]
-    modeled_objects: tuple[ModeledTxInnerSingleCoilSpec | ModeledRxSingleCoilSpec, ...]
+    modeled_objects: tuple[ModeledTxInnerSingleCoilSpec | ModeledRxSingleCoilSpec | _FakeTvAluminumPlateSpec, ...]
 
 
 def _range_spec(is_integer: bool, start: float, end: float, count: int) -> RangeSpec:
@@ -192,6 +206,17 @@ def _patch_rx_only_spec_loader(
                 metal_fill_factor=rx_fill_factor,
                 terminal_path="A_cw_to_a",
                 x_position_ratio=RangeSpec(is_integer=False, start=0.0, end=0.0, count=1),
+            ),
+            _FakeTvAluminumPlateSpec(
+                object_id="tv_aluminum_plate",
+                role="tv_aluminum_plate",
+                primitive="sheet",
+                material="aluminum",
+                model_state=True,
+                source_non_model_object_id="tv",
+                face="+x",
+                thickness_mm=0.04,
+                sheet_present=RangeSpec(is_integer=True, start=0.0, end=1.0, count=2),
             ),
         )
     )
@@ -372,6 +397,18 @@ size_xyz = [10.0, 200.0, 200.0]
     range = [false, 0.2, 0.6, 75]
     [modeled_objects.terminal_path]
     value = "A_cw_to_a"
+
+[[modeled_objects]]
+    object_id = "tv_aluminum_plate"
+    role = "tv_aluminum_plate"
+    primitive = "sheet"
+    material = "aluminum"
+    model_state = true
+    source_non_model_object_id = "tv"
+    face = "+x"
+    thickness_mm = 0.04
+    [modeled_objects.sheet_present]
+    range = [true, 0, 1, 2]
 """.strip()
 
 
@@ -816,6 +853,14 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert "y_usage_ratio" not in rx_modeled_object
     assert "pcb_total_thickness_mm" not in rx_modeled_object
     assert "underlay_gap_mm" not in rx_modeled_object
+
+    tv_aluminum_plate = modeled_objects_by_id["tv_aluminum_plate"]
+    sheet_present = cast(dict[str, object], tv_aluminum_plate["sheet_present"])
+    sheet_present_range = cast(list[object], sheet_present["range"])
+    assert sheet_present_range[0] is True
+    assert sheet_present_range[3] == 1
+    assert sheet_present_range[1] == sheet_present_range[2]
+    assert sheet_present_range[1] in {0, 1}
 
     resolved_entry = manifest_entry_for_sample_index(manifest_path, sample_index=12000)
     assert resolved_entry["design_id"] == first_entry["design_id"]

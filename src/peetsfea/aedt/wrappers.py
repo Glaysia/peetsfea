@@ -740,6 +740,7 @@ class Hfss(RawHfss, _WrappedAccess):
     _allowed_names = frozenset(
         {
             "__setitem__",
+            "assign_finite_conductivity",
             "assign_radiation_boundary_to_faces",
             "change_validation_settings",
             "create_output_variable",
@@ -818,6 +819,44 @@ class Hfss(RawHfss, _WrappedAccess):
 
     def __setitem__(self, key: str, value: str) -> None:
         _require_callable_attr(object.__getattribute__(self, "_raw"), "__setitem__", owner="Hfss")(key, value)
+
+    def assign_finite_conductivity(
+        self,
+        assignment: str | list[object],
+        *,
+        material: str,
+        use_thickness: bool,
+        thickness: str,
+        is_two_side: bool,
+        name: str,
+    ) -> object:
+        validate_aedt_name(material, field="material")
+        validate_aedt_name(name, field="boundary_name")
+        if isinstance(assignment, str):
+            validate_aedt_name(assignment, field="assignment")
+        return raise_on_false(
+            _require_callable_attr(
+                object.__getattribute__(self, "_raw"),
+                "assign_finite_conductivity",
+                owner="Hfss",
+            )(
+                assignment=assignment,
+                material=material,
+                use_thickness=use_thickness,
+                thickness=thickness,
+                is_two_side=is_two_side,
+                name=name,
+            ),
+            operation="assign_finite_conductivity",
+            context={
+                "assignment": assignment,
+                "material": material,
+                "use_thickness": use_thickness,
+                "thickness": thickness,
+                "is_two_side": is_two_side,
+                "name": name,
+            },
+        )
 
     def assign_radiation_boundary_to_faces(self, assignment: object, name: str) -> object:
         validate_aedt_name(name, field="boundary_name")

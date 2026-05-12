@@ -1,7 +1,7 @@
 ---
 title: type2_step_setup_ready.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - em
   - pyaedt
@@ -26,6 +26,7 @@ tags:
 - The solve-enabled facade keeps the same HFSS session alive after setup-ready generation, runs `Setup1`, exports the active report CSV, then saves.
 - Generic TX roles remain unsupported setup targets.
 - The full imported ledger records all imported bodies; active setup resolves and caches a branch-specific modeled ledger for mesh, port assignment, EM input, sources, and reports.
+- The full imported ledger is inspected before branch filtering to assign the passive TV aluminum finite-conductivity boundary when `sheet_present == 1`.
 - `RxOnly` branch accepts only a single `rx_single_coil` modeled object.
 - `RxOnly` branch accepts exactly one active `rx_single_coil` modeled object and may carry one geometry-only `tx_inner_single_coil` entry that is filtered before active EM setup.
 - `TxRx` branch uses exact `tx_inner_single_coil` + `rx_single_coil` modeled objects for downstream passes and
@@ -39,6 +40,8 @@ tags:
 - `TxRx` must create TX and RX ports, TX+RX output variables, and two terminal groups.
 - Generic TX roles are rejected before setup-ready begins; there is no paired-mode fallback path.
 - `tv_aluminum_plate` is allowed only as passive modeled geometry; it must not become a mesh or port target.
+- `tv_aluminum_plate.sheet_present == 1` requires exactly one imported `tv_aluminum_plate` AEDT object and assigns `bc_tv_aluminum_plate` with material `aluminum`, `use_thickness=True`, thickness `0.04mm`, and two-sided sheet behavior.
+- `tv_aluminum_plate.sheet_present == 0` requires no imported `tv_aluminum_plate` object and skips finite-conductivity assignment.
 - Loaded ledgers containing `tx_outer_single_coil` fail before setup-ready import; there is no active outer TX geometry-only path.
 - Default setup-ready execution calls AEDT `ValidateDesign()`; only explicit `run_aedt_design_validation=False` attached-HFSS callers skip that AEDT call.
 - RxOnly report setup filters to the active RX variable contract and requires every active RX variable to be present.

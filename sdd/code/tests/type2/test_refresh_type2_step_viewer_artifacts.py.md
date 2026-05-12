@@ -1,7 +1,7 @@
 ---
 title: test_refresh_type2_step_viewer_artifacts.py
 created: 2026-04-17 @ 09:09
-updated: 2026-05-07 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - step-export
 ---
@@ -36,12 +36,14 @@ tags:
 - viewer notebook sampled-value extraction must use active owner paths directly and must not retain TX outer canonical-to-raw lookup state.
 - viewer notebook sampled manifest selection must use `entry["sample_index"]` matching so skipped samples cannot shift the Ansys GUI debug target.
 - viewer notebook fixed GUI build must use `TYPE2_FIXED_LEDGER_PATH` and `setup_type2_step_ledger_into_hfss()` directly because fixed view mode has no sampled manifest entry.
+- fixed viewer fixture keeps `tv_aluminum_plate` as sheet metadata and must not expect it as an exported STEP solid.
 
 ## Invariants / fail-fast
 - fixed example keeps `tx_region` as guide context and derives `tx_inner_region` geometry context.
 - fixed example keeps `tx_inner_rect_void_coil` as the active TX inner modeled input with fixed 1-repeat actual-region underlay and fixed disabled void stack.
 - fixed example keeps `rx_region_max` and the RX modeled object as active EM geometry inputs.
-- fixed example keeps `tv` as a non-modeled owner and `tv_aluminum_plate` as modeled aluminum geometry sourced by `source_non_model_object_id = "tv"`.
+- fixed example keeps `tv` as a non-modeled owner and `tv_aluminum_plate` as modeled aluminum sheet metadata sourced by `source_non_model_object_id = "tv"`.
+- fixed example declares `tv_aluminum_plate.primitive = "sheet"` and `sheet_present = [true, 1, 1, 1]`; no viewer/setup expectation may require an exported `tv_aluminum_plate` solid.
 - fixed example has TxRx outputs with TX variables and output expressions referencing `TX_TML`.
 - viewer notebook must not contain `_OWNER_DESCRIPTIONS`; it must import and call `type2_range_owner_descriptions`.
 - viewer notebook must not contain the removed canonical-to-raw owner mapping for
@@ -54,6 +56,7 @@ tags:
 - [0.2.24-type2-rxonly-tx-removal](../../../plans/0.2.24-type2-rxonly-tx-removal.md)
 - [0.2.24-type2-range-owner-descriptions](../../../plans/0.2.24-type2-range-owner-descriptions.md)
 - [0.2.24-view-step-derived-owner-display](../../../plans/0.2.24-view-step-derived-owner-display.md)
+- [0.2.25-type2-tv-aluminum-sheet-presence](../../../plans/0.2.25-type2-tv-aluminum-sheet-presence.md)
 
 ## 이 파일을 쓰는 곳
 - default pure-Python regression suite.

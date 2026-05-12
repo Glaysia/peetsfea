@@ -7,6 +7,7 @@ from typing import cast
 import pytest
 
 from peetsfea.spec.outputs import ACTIVE_OUTPUT_VARIABLE_NAMES_BY_MODE
+from peetsfea.type2_spec_tools import type2_sampled_owner_paths
 
 _TX_MODELED_ROLES = {"tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"}
 _TX_SAMPLED_OWNER_IDS = {"tx_region_actual", "tx_region_actual_stack_space"}
@@ -18,6 +19,11 @@ _FIXED_TX_REFERENCE_LINE_RATIOS = (0.99, 1.0, 0.9)
 _SAMPLED_TX_REFERENCE_LINE_RANGES = ((0.99, 0.99, 1), (0.2, 1.0, 85), (0.75, 1.0, 65))
 _TV_ALUMINUM_PLATE_OBJECT_ID = "tv_aluminum_plate"
 _TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
+_TV_ALUMINUM_PLATE_SHEET_PRESENT_OWNER_PATH = "modeled_objects.tv_aluminum_plate.sheet_present"
+_TV_ALUMINUM_PLATE_THICKNESS_MM = 0.04
+_FIXED_TV_ALUMINUM_PLATE_SHEET_PRESENT_RANGE = [True, 1, 1, 1]
+_SAMPLED_TV_ALUMINUM_PLATE_SHEET_PRESENT_RANGE = [True, 0, 1, 2]
+_SAMPLED_TYPE2_OWNER_COUNT = 14
 _FIXED_TURN_COUNT_RANGE = [True, 1, 1, 1]
 _SAMPLED_TURN_COUNT_RANGE = [True, 1, 3, 3]
 
@@ -131,9 +137,19 @@ def _assert_txrx_payload(payload: dict[str, object], *, example_name: str) -> No
     assert not _TX_SAMPLED_OWNER_IDS.intersection(non_model_ids)
     tv_aluminum_plate = modeled_by_id[_TV_ALUMINUM_PLATE_OBJECT_ID]
     assert tv_aluminum_plate["role"] == _TV_ALUMINUM_PLATE_ROLE
+    assert tv_aluminum_plate["primitive"] == "sheet"
     assert tv_aluminum_plate["material"] == "aluminum"
     assert tv_aluminum_plate["model_state"] is True
     assert tv_aluminum_plate["source_non_model_object_id"] == "tv"
+    assert tv_aluminum_plate["face"] == "+x"
+    assert tv_aluminum_plate["thickness_mm"] == _TV_ALUMINUM_PLATE_THICKNESS_MM
+    sheet_present = cast(dict[str, object], tv_aluminum_plate["sheet_present"])
+    if example_name == "type2_fixed.toml":
+        assert sheet_present["range"] == _FIXED_TV_ALUMINUM_PLATE_SHEET_PRESENT_RANGE
+    elif example_name == "type2_sweep.toml":
+        assert sheet_present["range"] == _SAMPLED_TV_ALUMINUM_PLATE_SHEET_PRESENT_RANGE
+    else:
+        raise AssertionError(f"unsupported type2 example {example_name!r}")
 
 
 def _assert_tx_region_payload(payload: dict[str, object], *, example_name: str) -> None:
@@ -203,6 +219,14 @@ def test_active_type2_examples_are_txrx(example_name: str) -> None:
     _assert_txrx_payload(payload, example_name=example_name)
     _assert_tx_region_payload(payload, example_name=example_name)
     _assert_tx_reference_line_payload(payload, example_name=example_name)
+
+
+def test_active_type2_sweep_has_tv_aluminum_sheet_presence_dimension() -> None:
+    owner_paths = type2_sampled_owner_paths(_repo_root() / "examples" / "type2_sweep.toml")
+
+    assert len(owner_paths) == _SAMPLED_TYPE2_OWNER_COUNT
+    assert _TV_ALUMINUM_PLATE_SHEET_PRESENT_OWNER_PATH in owner_paths
+    assert "modeled_objects.tv_aluminum_plate.thickness_mm" not in owner_paths
 
 
 def test_rx_only_surface_rejects_tx_output_variable() -> None:

@@ -22,7 +22,7 @@ Release notes are managed by version and language under `release-notes/`.
 - Keep single-design generation and dataset generation on the same contract interface.
 
 ## Current Documentation Baseline
-- The current documentation baseline is `0.2.22`.
+- The current documentation baseline is `0.2.25.1`.
 - This README is the public summary. Current design notes live under `sdd/`, and active build123d/AEDT import planning lives under `PLANS/`.
 - For implementation rules, see [AGENTS.md](AGENTS.md). For the current build123d/AEDT import plan, see [PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md](PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md).
 
@@ -67,7 +67,11 @@ VS Code debug tasks in `.vscode/tasks.json` install the project in editable mode
   - `<design_id>.source.toml`
 - `manifest_<design_id>.json` and `geometry_metadata_<design_id>.json` are disabled by default and optional.
 
-## Major Contracts In 0.2.22
+## Major Contracts In 0.2.25.1
+- Active type2 uses a TxRx example surface with an RxOnly setup-ready backend.
+- `tv_aluminum_plate` is an optional finite-conductivity HFSS sheet on the source `tv` `+X` face. It is not exported as a STEP solid.
+- `modeled_objects.tv_aluminum_plate.sheet_present` is the canonical presence owner, and the active sweep dimension count is 14.
+- When the sheet is present, setup-ready uses `aluminum`, `use_thickness=True`, `thickness=0.04mm`, and deterministic boundary name `bc_tv_aluminum_plate`.
 - Sampling ownership is managed only through canonical owners.
 - Alias/derived paths do not count as independent sampled dimensions.
 - `dataset.toml` includes inline sampled owners such as `coil_groups[*].count_*`, while excluding derived aliases and fixed fields.

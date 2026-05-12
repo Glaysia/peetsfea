@@ -333,6 +333,24 @@ def _modeled_scene_data_with_exported_body_coordinates(
     scene_children: tuple[Shape, ...],
 ) -> ModeledObjectSceneData:
     enriched_scene_data = dict(scene_data)
+    if scene_data["expected_exported_body_count"] == 0:
+        if scene_data["expected_exported_body_names"]:
+            raise RuntimeError(
+                "type2 zero-body modeled export contract must not declare expected body names "
+                f"(object_id={scene_data['object_id']}, names={scene_data['expected_exported_body_names']})"
+            )
+        if scene_data["expected_exported_body_groups"]:
+            raise RuntimeError(
+                "type2 zero-body modeled export contract must not declare expected body groups "
+                f"(object_id={scene_data['object_id']}, groups={scene_data['expected_exported_body_groups']})"
+            )
+        if scene_children:
+            raise RuntimeError(
+                "type2 zero-body modeled export contract must not provide STEP scene children "
+                f"(object_id={scene_data['object_id']}, child_count={len(scene_children)})"
+            )
+        enriched_scene_data["exported_body_canonical_coordinates"] = dict(scene_data["canonical_coordinates"])
+        return cast(ModeledObjectSceneData, enriched_scene_data)
     enriched_scene_data["exported_body_canonical_coordinates"] = _exported_body_canonical_coordinates_from_shapes(
         object_id=scene_data["object_id"],
         scene_children=scene_children,
@@ -1974,7 +1992,7 @@ def _require_modeled_expected_body_contract(
             )
             expected_groups = []
         elif role == "tv_aluminum_plate":
-            expected_names = ["tv_aluminum_plate"]
+            expected_names = []
             expected_groups = []
         else:
             raise ValueError(f"unsupported modeled object role in type2 ledger: {role}")

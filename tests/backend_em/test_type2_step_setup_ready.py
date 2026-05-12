@@ -16,6 +16,7 @@ from peetsfea.backend.pyaedt.type2_step_post_import_mesh import assign_post_impo
 from peetsfea.backend.pyaedt.type2_step_port_assignment import assign_type2_lumped_ports
 from peetsfea.backend.pyaedt.type2_step_setup_ready import (
     Type2SetupReadyResult,
+    _assign_tv_aluminum_plate_boundary,
     setup_and_solve_type2_step_ledger,
     setup_type2_step_ledger,
     setup_type2_step_ledger_into_hfss,
@@ -304,6 +305,8 @@ class _SetupReadyHfss(_ImportFakeHfss):
         self.export_report_result: object = True
         self.analyze_setup_calls: list[tuple[str, bool]] = []
         self.analyze_setup_result: object = True
+        self.finite_conductivity_calls: list[dict[str, object]] = []
+        self.finite_conductivity_result: object = True
         self.validation_settings_calls: list[tuple[str, bool, bool]] = []
         self.validate_design_result: object = True
         self.oboundary = _FakeBoundaryModule(self)
@@ -333,6 +336,28 @@ class _SetupReadyHfss(_ImportFakeHfss):
     def analyze_setup(self, name: str, blocking: bool = True) -> object:
         self.analyze_setup_calls.append((name, blocking))
         return self.analyze_setup_result
+
+    def assign_finite_conductivity(
+        self,
+        assignment: str | list[object],
+        *,
+        material: str,
+        use_thickness: bool,
+        thickness: str,
+        is_two_side: bool,
+        name: str,
+    ) -> object:
+        self.finite_conductivity_calls.append(
+            {
+                "assignment": assignment,
+                "material": material,
+                "use_thickness": use_thickness,
+                "thickness": thickness,
+                "is_two_side": is_two_side,
+                "name": name,
+            }
+        )
+        return self.finite_conductivity_result
 
     def get_traces_for_plot(
         self,
@@ -732,6 +757,25 @@ def _tv_aluminum_plate_modeled_object_with_imported_names(tmp_path: Path) -> dic
         source_metadata_path=str(tmp_path / "tv_aluminum_plate.metadata.json"),
     )
     modeled_object["material"] = "aluminum"
+    modeled_object["sheet_present"] = 1
+    modeled_object["canonical_coordinates"] = {
+        "frame_origin_xyz": [9.0, -921.0, 170.0],
+        "outer_bounds_min_xyz": [9.0, -921.0, 170.0],
+        "outer_bounds_max_xyz": [9.0, 921.0, 1225.0],
+        "outer_bounds_size_xyz": [0.0, 1842.0, 1055.0],
+        "source_non_model_object_id": "tv",
+        "source_face": "+X",
+        "sheet_present": True,
+        "sheet_thickness_mm": 0.04,
+        "sheet_vertices_xyz": [
+            [9.0, -921.0, 170.0],
+            [9.0, 921.0, 170.0],
+            [9.0, 921.0, 1225.0],
+            [9.0, -921.0, 1225.0],
+        ],
+    }
+    modeled_object["expected_exported_body_names"] = []
+    modeled_object["expected_exported_body_count"] = 0
     modeled_object["imported_object_names"] = ["tv_aluminum_plate"]
     modeled_object["terminal_metadata"] = {}
     return modeled_object
@@ -1135,22 +1179,65 @@ def test_setup_type2_step_ledger_builds_mesh_boundary_ports_analysis_and_validat
     assert imported_payload["aedt_path"] == str(output_aedt_path)
 
 
-def test_setup_type2_step_ledger_allows_passive_tv_aluminum_plate_in_txrx_mode(tmp_path: Path) -> None:
+def test_setup_type2_step_ledger_allows_passive_tv_aluminum_plate_in_txrx_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     scene_step, ledger_path = _source_paths(tmp_path)
+    modeled_objects = [
+        *_tx_inner_rx_modeled_objects_with_imported_names(tmp_path),
+        _tv_aluminum_plate_modeled_object_with_imported_names(tmp_path),
+    ]
     _write_txrx_step_ledger(
         ledger_path,
         scene_step_path=scene_step,
         non_model_objects=[_non_model_entry_with_tv_and_tx_inner_region()],
-        modeled_objects=[
-            *_tx_inner_rx_modeled_objects_with_imported_names(tmp_path),
-            _tv_aluminum_plate_modeled_object_with_imported_names(tmp_path),
-        ],
+        modeled_objects=modeled_objects,
         radiation_margin_mm=4123.0,
     )
     output_aedt_path = tmp_path / "aedt" / "type2_setup_ready.aedt"
     imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
     session = _SetupReadyHfss(
         modeler=_SetupReadyModeler(imported_name_batches=[_tx_inner_rx_imported_name_batch_with_tv_aluminum_plate()])
+    )
+
+    def _fake_build_imported_ledger(
+        *,
+        hfss: HfssSession,
+        step_ledger_path: Path,
+        output_aedt_path: Path,
+        imported_ledger_path: Path,
+        ledger: object,
+    ) -> Type2ImportedLedger:
+        _ = ledger
+        import_result = hfss.modeler.import_3d_cad(scene_step)
+        assert import_result is True
+        assert isinstance(hfss.modeler, _SetupReadyModeler)
+        _seed_port_sheet_edges_from_terminal_metadata(
+            hfss.modeler,
+            entry=modeled_objects[0],
+            sheet_name="tx_inner_port_sheet",
+        )
+        _seed_port_sheet_edges_from_terminal_metadata(
+            hfss.modeler,
+            entry=modeled_objects[1],
+            sheet_name="rx_port_sheet",
+        )
+        hfss.modeler.objects["tv_aluminum_plate"].material_name = "aluminum"
+        return {
+            "source_toml_path": str(tmp_path / "type2_fixed.toml"),
+            "source_step_ledger_path": str(step_ledger_path),
+            "scene_step_path": str(scene_step),
+            "seed": 7,
+            "aedt_path": str(output_aedt_path),
+            "imported_ledger_path": str(imported_ledger_path),
+            "non_model_objects": [],
+            "modeled_objects": modeled_objects,
+        }
+
+    monkeypatch.setattr(
+        "peetsfea.backend.pyaedt.type2_step_setup_ready.build_imported_ledger",
+        _fake_build_imported_ledger,
     )
 
     result = cast(
@@ -1165,10 +1252,125 @@ def test_setup_type2_step_ledger_allows_passive_tv_aluminum_plate_in_txrx_mode(t
     )
 
     assert session.modeler.objects["tv_aluminum_plate"].material_name == "aluminum"
+    assert session.finite_conductivity_calls == [
+        {
+            "assignment": "tv_aluminum_plate",
+            "material": "aluminum",
+            "use_thickness": True,
+            "thickness": "0.04mm",
+            "is_two_side": True,
+            "name": "bc_tv_aluminum_plate",
+        }
+    ]
     assert result["mesh"]["objects"] == ["tx_inner_copper_l0", "rx_copper_l0"]
+    assert "tv_aluminum_plate" not in result["mesh"]["objects"]
+    assert "tv_aluminum_plate" not in result["ports"]["tx"]
+    assert "tv_aluminum_plate" not in result["ports"]["rx"]
+    assert "tv_aluminum_plate" not in result["sources"].values()
     imported_payload = _imported_ledger_payload(imported_ledger_path)
     imported_roles = [entry["role"] for entry in cast(list[dict[str, object]], imported_payload["modeled_objects"])]
     assert imported_roles == ["tx_inner_single_coil", "rx_single_coil", "tv_aluminum_plate"]
+
+
+def test_setup_ready_tv_aluminum_plate_boundary_skips_when_sheet_is_absent() -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+    imported_ledger = cast(
+        Type2ImportedLedger,
+        {
+            "source_toml_path": "source.toml",
+            "source_step_ledger_path": "ledger.json",
+            "scene_step_path": "scene.step",
+            "seed": 7,
+            "aedt_path": "setup.aedt",
+            "imported_ledger_path": "imported.json",
+            "non_model_objects": [],
+            "modeled_objects": [
+                {
+                    "object_id": "tv_aluminum_plate",
+                    "role": "tv_aluminum_plate",
+                    "material": "aluminum",
+                    "sheet_present": 0,
+                    "imported_object_names": [],
+                }
+            ],
+        },
+    )
+
+    _assign_tv_aluminum_plate_boundary(hfss=cast(HfssSession, session), imported_ledger=imported_ledger)
+
+    assert session.finite_conductivity_calls == []
+
+
+def test_setup_ready_tv_aluminum_plate_boundary_rejects_absent_sheet_imported_object() -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+    session.modeler._object_names = ("tv_aluminum_plate",)
+    imported_ledger = cast(
+        Type2ImportedLedger,
+        {
+            "source_toml_path": "source.toml",
+            "source_step_ledger_path": "ledger.json",
+            "scene_step_path": "scene.step",
+            "seed": 7,
+            "aedt_path": "setup.aedt",
+            "imported_ledger_path": "imported.json",
+            "non_model_objects": [],
+            "modeled_objects": [
+                {
+                    "object_id": "tv_aluminum_plate",
+                    "role": "tv_aluminum_plate",
+                    "material": "aluminum",
+                    "sheet_present": 0,
+                    "imported_object_names": [],
+                }
+            ],
+        },
+    )
+
+    with pytest.raises(ValueError, match=r"requires no tv_aluminum_plate AEDT object when sheet_present == 0"):
+        _assign_tv_aluminum_plate_boundary(hfss=cast(HfssSession, session), imported_ledger=imported_ledger)
+
+    assert session.finite_conductivity_calls == []
+
+
+def test_setup_ready_tv_aluminum_plate_boundary_raises_on_finite_conductivity_false() -> None:
+    session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[]))
+    session.modeler._object_names = ("tv_aluminum_plate",)
+    session.finite_conductivity_result = False
+    imported_ledger = cast(
+        Type2ImportedLedger,
+        {
+            "source_toml_path": "source.toml",
+            "source_step_ledger_path": "ledger.json",
+            "scene_step_path": "scene.step",
+            "seed": 7,
+            "aedt_path": "setup.aedt",
+            "imported_ledger_path": "imported.json",
+            "non_model_objects": [],
+            "modeled_objects": [
+                {
+                    "object_id": "tv_aluminum_plate",
+                    "role": "tv_aluminum_plate",
+                    "material": "aluminum",
+                    "sheet_present": 1,
+                    "imported_object_names": ["tv_aluminum_plate"],
+                }
+            ],
+        },
+    )
+
+    with pytest.raises(RuntimeError, match=r"PyAEDT operation returned False: assign_finite_conductivity"):
+        _assign_tv_aluminum_plate_boundary(hfss=cast(HfssSession, session), imported_ledger=imported_ledger)
+
+    assert session.finite_conductivity_calls == [
+        {
+            "assignment": "tv_aluminum_plate",
+            "material": "aluminum",
+            "use_thickness": True,
+            "thickness": "0.04mm",
+            "is_two_side": True,
+            "name": "bc_tv_aluminum_plate",
+        }
+    ]
 
 
 def test_setup_type2_step_ledger_rejects_tx_outer_single_coil_in_txrx_mode(tmp_path: Path) -> None:

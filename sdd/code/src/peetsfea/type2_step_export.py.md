@@ -25,11 +25,12 @@ tags:
 - Build terminal-bridge cross-sections from triangulated skew quads so non-coplanar terminal sheets are still manufacturable without planar-face construction.
 - Record terminal-bridge material thickness metadata in the non-modeled ledger member because skew bridge canonical bboxes include span/tilt, not only physical stack thickness.
 - Reuse same-call modeled scene data during post-export terminal contract validation instead of rebuilding modeled geometry a second time.
-- Add modeled TV aluminum plate support as a single standalone exported body with strict no-groups/no-ports contract.
+- Add modeled TV aluminum sheet support as a ledger-only modeled entry with strict zero-exported-body/no-groups/no-ports contract.
 - `tx_rect_void_columns` modeled entries now carry `trace_width_mm` in `canonical_coordinates`, recovered from terminal stub anchor boxes carried through existing tile terminal metadata.
 - Single-coil active Type2 terminal metadata uses the `single_coil_port_v1` runtime contract with `sheet_name`, four global-mm `vertices_xyz`, and explicit 3D integration line endpoints.
 - Ledger emission records `source_toml_sha256` and `scene_step_sha256` so import can reject mixed/stale artifacts before AEDT setup proceeds.
 - Modeled ledger entries emit `exported_body_canonical_coordinates` from the exact full body set declared by `expected_exported_body_names`; semantic `canonical_coordinates` remains available for placement, mesh, and terminal contracts.
+- Zero-body modeled sheet entries emit `exported_body_canonical_coordinates` equal to their canonical sheet coordinates and must not contribute STEP scene children.
 - Final AEDT scene STEP export flattens ferrite-family group compounds into exact leaf bodies, then stamps blank `MANIFOLD_SOLID_BREP` names with the leaf labels so PyAEDT imports exact body names instead of `SOLID*`.
 
 ## Inputs / Outputs
@@ -42,7 +43,7 @@ tags:
 - `tx_outer_region` remains non-modeled guide context and follows `tx_region`/`tx_inner_region` semantic edges.
 - `tx_inner_actual_region` remains non-modeled context and mirrors the TX inner coil-fit envelope without becoming the modeled coil placement owner.
 - `tx_inner_single_coil` may be exported as modeled geometry, but not consumed for active TX ports, sources, or reports.
-- TV aluminum plate is modeled as one body (`tv_aluminum_plate`) with `placement_owner_id = "tv"`, `plane = "YZ"`, `material = "aluminum"`, and no expected groups/ports.
+- TV aluminum plate is modeled as a ledger sheet (`tv_aluminum_plate`) with `placement_owner_id = "tv"`, `plane = "YZ"`, `material = "aluminum"`, zero expected exported bodies, and no expected groups/ports.
 - `tx_inner_single_coil` geometry and terminal metadata validation use lower-X wall-side placement inside `tx_inner_region` and centered Y placement.
 - `tx_inner_single_coil` expected body validation includes actual-region bottom-underlay members in PET/PSA then ferrite order when its repeat count is positive.
 - `tx_inner_single_coil` expected body validation includes generated YZ void-stack members (`tx_void_ferrite_u*` / `tx_void_pet_psa_u*`) only when `void_stack_present` resolves true.
@@ -63,6 +64,7 @@ tags:
 - TX inner placement validation must compare against lower-X wall-side owner anchoring, not sampled X placement, unrelated region edges, or post-hoc STEP geometry inference. Dormant TX outer placement validation keeps its owner-local ratio contract for transitional paths.
 - `tx_inner_actual_region` sizing must match modeled `tx_inner_single_coil` sizing for the same seed and must not create active EM setup changes.
 - `tv_aluminum_plate` requires resolved `tv` owner bounds; export fails fast if the owner or canonical dimensions are invalid before ledger emission.
+- A modeled entry with `expected_exported_body_count = 0` fails fast if it declares body names, body groups, or build123d scene children.
 - `tx_outer_actual_region`, once emitted, must match modeled `tx_outer_single_coil` sloped-owner sizing for the same seed and must not be populated from guide-only data.
 - The STEP scene must keep `tx_inner_single_coil` axis-aligned while `tx_outer_single_coil` is tilted by the semantic prism frame.
 - STEP export must return `True`.
@@ -73,7 +75,7 @@ tags:
 - Terminal-bridge generation is inactive in active export because `tx_outer_rect_void_coil` is not present in active modeled scene data.
 - Positive bridge object IDs and role remain `tx_pos_bridge_pcb`, `tx_pos_bridge_copper`, and `tx_inner_outer_positive_bridge`; its edge contract is `port_sheet_vertices_xyz[3] -> port_sheet_vertices_xyz[0]`.
 - Negative bridge object IDs and role are `tx_neg_bridge_pcb`, `tx_neg_bridge_copper`, and `tx_inner_outer_negative_bridge`; its edge contract is `port_sheet_vertices_xyz[1] -> port_sheet_vertices_xyz[2]`.
-- TV aluminum plate modeling has no port bridge metadata and must not enter non-model membership or bridge geometry paths.
+- TV aluminum plate modeling has no port bridge metadata, exports no STEP body, and must not enter non-model membership or bridge geometry paths.
 - Terminal-bridge geometry assembly fails fast for missing terminal metadata, malformed `port_sheet_vertices_xyz`, degenerate terminal-edge geometry, non-positive dimensions, degenerate bridge triangles, or incoherent triangle normals.
 - Terminal-bridge assembly requires non-degenerate start/end spans between the inner and outer terminal sheets and uses paired triangular loft operations to preserve bridge solidity on skew terminals.
 - Terminal-bridge non-modeled member metadata must retain `bridge_material_thickness_mm` and `bridge_total_stack_thickness_mm`; tests must not infer those physical thicknesses from skew-shape bbox extents.
@@ -91,3 +93,4 @@ tags:
 - [0.2.24 Type2 STEP Export Scene Data Reuse](../../../plans/0.2.24-type2-step-export-scene-data-reuse.md)
 - [0.2.25 Type2 Port Sheet Contract Rewrite](../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)
 - [0.2.25 Type2 Exported Body Bounds Import Validation](../../../plans/0.2.25-type2-exported-body-bounds-import-validation.md)
+- [0.2.25 Type2 TV Aluminum Sheet Presence](../../../plans/0.2.25-type2-tv-aluminum-sheet-presence.md)

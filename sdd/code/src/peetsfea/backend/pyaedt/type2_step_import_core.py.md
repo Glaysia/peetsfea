@@ -35,7 +35,7 @@ tags:
 - Import core does not heal or infer missing geometry.
 - Import core does not allow ledger/body coordinate-frame drift to proceed into sheet creation or setup.
 - Import core compares AEDT imported body union bbox against `exported_body_canonical_coordinates`; semantic `canonical_coordinates` remains reserved for owner/actual-region, mesh, and port setup contracts.
-- `tv_aluminum_plate` uses the backend ledger/partition/style validation path and is merged into the imported ledger directly as one modeled aluminum body; it does not use coil/plate-stack terminal adapter parsing.
+- `tv_aluminum_plate` uses the backend ledger/partition/style validation path and is merged into the imported ledger directly as a modeled sheet entry; when `sheet_present == 1`, import core creates the runtime sheet from canonical vertices, and when `sheet_present == 0`, it records no imported object names.
 
 ## Invariants / fail-fast
 - `import_3d_cad`, save, or PyAEDT false returns fail immediately.
@@ -45,7 +45,7 @@ tags:
 - Missing `tx_inner_actual_region` for a `tx_inner_single_coil` ledger entry fails during
   strict import validation; no fallback to recentering physical modeled bounds inside
   `tx_inner_region` is allowed.
-- TV aluminum plate import fails when `tv` ownership, bounds, material, model state, or exact imported object name drift.
+- TV aluminum plate import fails when `tv` ownership, bounds, material, model state, canonical vertices, `sheet_present`, imported STEP names, runtime pre-existing names, or final imported object names drift.
 
 ## Graph links
 - Primary owner: [type2-step-import-boundary](../../../../../architecture/type2-step-import-boundary.md)
@@ -56,3 +56,4 @@ tags:
 - Related plan: [0.2.24 Type2 TV Aluminum Plate](../../../../../plans/0.2.24-type2-tv-aluminum-plate.md)
 - Related plan: [0.2.25 Type2 Port Sheet Contract Rewrite](../../../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)
 - Related plan: [0.2.25 Type2 Exported Body Bounds Import Validation](../../../../../plans/0.2.25-type2-exported-body-bounds-import-validation.md)
+- Related plan: [0.2.25 Type2 TV Aluminum Sheet Presence](../../../../../plans/0.2.25-type2-tv-aluminum-sheet-presence.md)

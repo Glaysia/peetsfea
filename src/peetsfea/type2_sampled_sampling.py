@@ -31,6 +31,7 @@ _INTEGER_RANGE_FIELD_NAMES = (
     "layer_count",
     "underlay_repeat_count",
     "void_stack_present",
+    "sheet_present",
     "wall_parallel_stack_present",
     "tx_coil_count",
     "x_division_count",
@@ -773,6 +774,7 @@ def _modeled_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpe
             )
             continue
         if role == "tv_aluminum_plate":
+            owner_specs.extend(_tv_aluminum_plate_range_owner_specs(modeled_spec))
             continue
         if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
             owner_specs.extend(_plate_stack_range_owner_specs(cast(ModeledPlateStackSpec, modeled_spec)))
@@ -864,6 +866,17 @@ def _plate_stack_range_owner_specs(
             )
     )
     return tuple(owner_specs)
+
+
+def _tv_aluminum_plate_range_owner_specs(modeled_spec: object) -> tuple[tuple[str, RangeSpec], ...]:
+    assert hasattr(modeled_spec, "object_id"), "tv_aluminum_plate modeled spec must expose object_id"
+    raw_object_id = getattr(modeled_spec, "object_id")
+    assert isinstance(raw_object_id, str), "tv_aluminum_plate object_id must be str"
+    assert raw_object_id != "", "tv_aluminum_plate object_id must be non-empty"
+    assert hasattr(modeled_spec, "sheet_present"), "tv_aluminum_plate modeled spec must expose sheet_present"
+    raw_sheet_present = getattr(modeled_spec, "sheet_present")
+    assert isinstance(raw_sheet_present, RangeSpec), "tv_aluminum_plate sheet_present must be RangeSpec"
+    return ((f"modeled_objects.{raw_object_id}.sheet_present", raw_sheet_present),)
 
 
 def _tx_rect_void_columns_range_owner_specs(modeled_spec: object) -> tuple[tuple[str, RangeSpec], ...]:
@@ -1152,6 +1165,9 @@ def sampled_owner_values(
             )
             continue
         if role == "tv_aluminum_plate":
+            sampled_values.extend(
+                _tv_aluminum_plate_range_owner_values(modeled_spec, seed=seed, retry_number=retry_number)
+            )
             continue
         if role.endswith(_PLATE_STACK_ROLE_SUFFIX):
             sampled_values.extend(
@@ -1250,6 +1266,30 @@ def _plate_stack_range_owner_values(
 ) -> tuple[tuple[str, SampledScalar], ...]:
     sampled_values: list[tuple[str, SampledScalar]] = []
     for owner_path, range_spec in _plate_stack_range_owner_specs(modeled_spec):
+        if range_spec.count == 1:
+            continue
+        sampled_values.append(
+            (
+                owner_path,
+                _selected_value_for_owner_path(
+                    range_spec,
+                    owner_path=owner_path,
+                    seed=seed,
+                    retry_number=retry_number,
+                ),
+            )
+        )
+    return tuple(sampled_values)
+
+
+def _tv_aluminum_plate_range_owner_values(
+    modeled_spec: object,
+    *,
+    seed: int,
+    retry_number: int,
+) -> tuple[tuple[str, SampledScalar], ...]:
+    sampled_values: list[tuple[str, SampledScalar]] = []
+    for owner_path, range_spec in _tv_aluminum_plate_range_owner_specs(modeled_spec):
         if range_spec.count == 1:
             continue
         sampled_values.append(

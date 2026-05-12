@@ -66,6 +66,9 @@ tags:
 - Passive TX inner actual-underlay names must not become mesh targets or port/source/report participants.
 - Passive TX inner void-stack names must not become mesh targets or port/source/report participants, and extra void pairs such as `tx_void_ferrite_u1` / `tx_void_pet_psa_u1` must not appear in active fixed-example setup fixtures.
 - Passive `tv_aluminum_plate` must stay a modeled aluminum object without becoming a mesh target or port/source/report participant.
+- Enabled `tv_aluminum_plate.sheet_present` must assign finite conductivity with `bc_tv_aluminum_plate`, material `aluminum`, `use_thickness=True`, thickness `0.04mm`, and two-sided sheet behavior.
+- Disabled `tv_aluminum_plate.sheet_present` must skip assignment and fail if a `tv_aluminum_plate` AEDT object is present.
+- PyAEDT `False` from finite-conductivity assignment must raise immediately with operation context.
 - Any `tx_outer_single_coil` source ledger fixture must fail before HFSS setup operations.
 - Missing or invalid `canonical_coordinates.trace_width_mm` must fail before PyAEDT mesh assignment.
 

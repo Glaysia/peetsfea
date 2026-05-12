@@ -1,7 +1,7 @@
 ---
 title: type2_sweep.toml
 created: 2026-05-03 @ 00:00
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - examples
   - type2
@@ -36,6 +36,9 @@ tags:
 - `modeled_objects.tx_inner_rect_void_coil.void_stack_present` uses `[true, 0, 1, 2]` so sampled designs can include or omit the TX void YZ stack while keeping the bottom underlay present.
 - `modeled_objects.rx_rect_void_coil` remains active with role `rx_single_coil`.
 - `modeled_objects.rx_rect_void_coil.turn_count` samples the official active sweep range `[true, 1, 3, 3]`.
+- `modeled_objects.tv_aluminum_plate` is a `primitive = "sheet"` modeled surface on the TV `+X` face, not a STEP solid.
+- `modeled_objects.tv_aluminum_plate.thickness_mm = 0.04` remains the finite-conductivity boundary thickness, not exported body thickness.
+- `modeled_objects.tv_aluminum_plate.sheet_present` sweeps `[true, 0, 1, 2]`, raising the official active sampled owner count to 14.
 - No active example field declares `tx_outer_terminal_path` or `tx_outer_x_position_ratio`.
 
 ## Invariants / fail-fast
@@ -43,10 +46,13 @@ tags:
 - TX reference-line X ratio remains parser-validated strict interior; Z ratio may reach `1.0` and must stay in `(0, 1]`.
 - Active sampled owners must not include `modeled_objects.tx_outer_rect_void_coil.*`.
 - Active sampled owners must not include `modeled_objects.tx_inner_rect_void_coil.layer_count`.
+- `modeled_objects.tv_aluminum_plate.sheet_present` must realize only `0` or `1`.
+- STEP export must not emit a `tv_aluminum_plate` body; the modeled ledger entry remains present with zero exported bodies and sheet canonical metadata.
 - Unsupported TX outer fields must be rejected by parser-level validation rather than carried as fallback state.
 
 ## Collaborators
 - [type2_step_spec_modeled.py](../src/peetsfea/type2_step_spec_modeled.py.md)
 - [type2_sampled_sampling.py](../src/peetsfea/type2_sampled_sampling.py.md)
+- [0.2.25-type2-tv-aluminum-sheet-presence](../../plans/0.2.25-type2-tv-aluminum-sheet-presence.md)
 - [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
 - [0.2.24-type2-turn-count-sweep-upper-bound](../../plans/0.2.24-type2-turn-count-sweep-upper-bound.md)

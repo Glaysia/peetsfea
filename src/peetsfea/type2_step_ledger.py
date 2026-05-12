@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, cast
 
 from peetsfea.types.manifest import OutputsSpec
 
@@ -19,6 +19,14 @@ class CanonicalCoordinates(TypedDict):
     outer_bounds_min_xyz: Point3
     outer_bounds_max_xyz: Point3
     outer_bounds_size_xyz: Point3
+
+
+class TvAluminumSheetCanonicalCoordinates(CanonicalCoordinates):
+    source_non_model_object_id: Literal["tv"]
+    source_face: Literal["+X"]
+    sheet_present: bool
+    sheet_thickness_mm: float
+    sheet_vertices_xyz: tuple[Point3, Point3, Point3, Point3]
 
 
 class ExportedBodyGroup(TypedDict):
@@ -194,6 +202,22 @@ class ModeledObjectLedgerEntry(ModeledObjectSceneData):
     source_metadata_path: str
 
 
+def _tv_aluminum_sheet_present_value(
+    *,
+    scene_data: ModeledObjectSceneData,
+    context: str,
+) -> int:
+    if scene_data["role"] != "tv_aluminum_plate":
+        raise ValueError(f"{context}.role must be tv_aluminum_plate")
+    canonical_coordinates = scene_data["canonical_coordinates"]
+    if "sheet_present" not in canonical_coordinates:
+        raise ValueError(f"{context}.canonical_coordinates is missing required key 'sheet_present'")
+    raw_sheet_present = canonical_coordinates["sheet_present"]
+    if not isinstance(raw_sheet_present, bool):
+        raise TypeError(f"{context}.canonical_coordinates.sheet_present must be bool")
+    return 1 if raw_sheet_present else 0
+
+
 class Type2StepLedger(TypedDict):
     schema_version: Literal["type2.step_ledger.v3"]
     source_toml_path: str
@@ -232,6 +256,11 @@ def write_modeled_source_metadata(
         "exported_body_canonical_coordinates": scene_data["exported_body_canonical_coordinates"],
         "terminal_metadata": scene_data["terminal_metadata"],
     }
+    if scene_data["role"] == "tv_aluminum_plate":
+        payload["sheet_present"] = _tv_aluminum_sheet_present_value(
+            scene_data=scene_data,
+            context=f"modeled_source_metadata[{scene_data['object_id']}]",
+        )
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
     metadata_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -247,7 +276,7 @@ def build_modeled_object_ledger_entry(
     scene_data: ModeledObjectSceneData,
     source_metadata_path: Path,
 ) -> ModeledObjectLedgerEntry:
-    return {
+    entry: dict[str, object] = {
         "object_id": scene_data["object_id"],
         "role": scene_data["role"],
         "plane": scene_data["plane"],
@@ -262,6 +291,12 @@ def build_modeled_object_ledger_entry(
         "terminal_metadata": scene_data["terminal_metadata"],
         "source_metadata_path": str(source_metadata_path),
     }
+    if scene_data["role"] == "tv_aluminum_plate":
+        entry["sheet_present"] = _tv_aluminum_sheet_present_value(
+            scene_data=scene_data,
+            context=f"modeled_object_ledger_entry[{scene_data['object_id']}]",
+        )
+    return cast(ModeledObjectLedgerEntry, entry)
 
 
 def build_type2_step_ledger(
@@ -321,6 +356,7 @@ __all__ = [
     "TxOuterActualRegionNonModelSceneMemberLedgerEntry",
     "TxOuterRegionNonModelSceneMemberLedgerEntry",
     "TxOuterRegionPrismProvenance",
+    "TvAluminumSheetCanonicalCoordinates",
     "build_modeled_object_ledger_entry",
     "build_type2_step_ledger",
     "write_modeled_source_metadata",

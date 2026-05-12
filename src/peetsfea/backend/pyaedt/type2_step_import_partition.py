@@ -27,7 +27,6 @@ _PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stac
 _TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
 _TX_RECT_VOID_COLUMNS_COPPER_NAME = "tx_rect_void_columns_copper"
 _TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
-_TV_ALUMINUM_PLATE_BODY_NAME = "tv_aluminum_plate"
 _TX_COPPER_GROUP_NAME = "g_copper_tx"
 _RX_COPPER_GROUP_NAME = "g_copper_rx"
 _TX_FERRITE_GROUP_NAME = "g_ferrite_tx"
@@ -377,9 +376,9 @@ def _group_contract_for_role(
             )
         return []
     if role == _TV_ALUMINUM_PLATE_ROLE:
-        if expected_names != [_TV_ALUMINUM_PLATE_BODY_NAME]:
+        if expected_names:
             raise ValueError(
-                f"{context}.expected_exported_body_names must be ['{_TV_ALUMINUM_PLATE_BODY_NAME}'] "
+                f"{context}.expected_exported_body_names must be [] "
                 f"for {_TV_ALUMINUM_PLATE_ROLE} (actual={expected_names})"
             )
         return []
@@ -655,17 +654,16 @@ def resolve_modeled_body_names(
         )
     expected_names = expected_exported_body_names(modeled_entry, context=context)
     if role == _TV_ALUMINUM_PLATE_ROLE:
-        if expected_names != [_TV_ALUMINUM_PLATE_BODY_NAME]:
+        if expected_names:
             raise ValueError(
-                f"{context}.expected_exported_body_names must be ['{_TV_ALUMINUM_PLATE_BODY_NAME}'] "
+                f"{context}.expected_exported_body_names must be [] "
                 f"for {_TV_ALUMINUM_PLATE_ROLE} (actual={expected_names})"
             )
-        _require_exact_name_contract(
-            expected_names=expected_names,
-            imported_object_names=imported_object_names,
-            context=context,
-            role_label="tv_aluminum_plate",
-        )
+        if imported_object_names:
+            raise ValueError(
+                f"{context} requires no STEP-imported tv aluminum plate bodies; runtime sheet creation is controlled "
+                f"by sheet_present (actual={imported_object_names})"
+            )
         return {
             "pcb_names": [],
             "copper_names": [],
@@ -918,7 +916,11 @@ def partition_imported_scene_object_names(
 
     for validated_entry in ledger["modeled_objects"]:
         object_id = validated_entry["object_id"]
-        if not modeled_names_by_object_id[object_id]:
+        role = require_non_empty_str(
+            require_key(validated_entry["entry"], key="role", context=f"modeled_objects[{object_id}]"),
+            context=f"modeled_objects[{object_id}].role",
+        )
+        if not modeled_names_by_object_id[object_id] and role != _TV_ALUMINUM_PLATE_ROLE:
             raise ValueError(f"scene STEP import claimed no modeled bodies for {object_id}")
 
     return (non_model_names_by_object_id, modeled_names_by_object_id)

@@ -28,6 +28,7 @@ tags:
 - Tests now assert the single-coil `single_coil_port_v1` contract emits global-mm `vertices_xyz`, explicit integration-line endpoints, role-specific `sheet_name`, and no legacy single-coil `port_sheet_vertices_xyz` ownership.
 - Tests assert modeled ledger entries expose both semantic `canonical_coordinates` and full exported-body `exported_body_canonical_coordinates`.
 - Tests assert the AEDT-facing STEP emits exact leaf body labels in `MANIFOLD_SOLID_BREP` records and does not export ferrite-family group wrappers as scene bodies.
+- Tests assert `tv_aluminum_plate` remains in the modeled ledger as zero-body sheet metadata and is absent from STEP `MANIFOLD_SOLID_BREP` names.
 
 ## Canonical state
 - RX exported body names/counts and terminal metadata remain deterministic.
@@ -78,6 +79,7 @@ tags:
 - Changing TX inner `outer_x_usage_ratio` may resize `tx_inner_actual_region` and the modeled physical body, but their min X must remain equal to the unchanged `tx_inner_region` min X and their Y centers must remain equal to the owner Y center.
 - `tx_outer_region` and `tx_outer_actual_region` must be absent from active fixed-example export because no active `tx_outer_rect_void_coil` exists.
 - TX inner passive underlay/void-stack tests verify exported-body coordinates include passive body depth while semantic coordinates stay tied to the modeled coil/actual-region contract.
+- TV aluminum sheet assertions use zero-thickness `tv` `+X` face bounds, four canonical sheet vertices, top-level resolved integer `sheet_present`, canonical boolean `sheet_present`, and `sheet_thickness_mm = 0.04`.
 
 ## Invariants / fail-fast
 - Exported body drift and generic names fail.
@@ -104,6 +106,7 @@ tags:
 - Fixed singleton `tx_reference_line.x_ratio` remains required provenance, but must not be treated as a sampled-owner dimension in sample/build tests.
 - Ferrite/PET_PSA-priority clearance assertions fail if any exported ferrite-family member has positive-volume intersection with `tx_inner_pcb_l*`, if a PCB body is emptied, or if the `g_ferrite_tx` group drops/reorders members.
 - STEP label assertions fail if build123d output keeps blank BREP names or if imported/round-tripped labels regress to `SOLID*`.
+- TV aluminum sheet tests fail if the ledger returns an exported body name/count for `tv_aluminum_plate` or if the combined STEP file contains a `tv_aluminum_plate` solid name.
 
 ## Collaborators
 - [generate_type2_step.py](../../entry/generate_type2_step.py.md)
@@ -119,3 +122,4 @@ tags:
 - [0.2.24 Type2 Turn Count Sweep Upper Bound](../../../plans/0.2.24-type2-turn-count-sweep-upper-bound.md)
 - [0.2.25 Type2 Port Sheet Contract Rewrite](../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)
 - [0.2.25 Type2 Exported Body Bounds Import Validation](../../../plans/0.2.25-type2-exported-body-bounds-import-validation.md)
+- [0.2.25 Type2 TV Aluminum Sheet Presence](../../../plans/0.2.25-type2-tv-aluminum-sheet-presence.md)

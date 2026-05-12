@@ -49,6 +49,7 @@ from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_B_R
 from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_COUNT
 from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_END
 from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_START
+from peetsfea.type2_step_spec_types import _TV_ALUMINUM_SHEET_PRESENT_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_UNDERLAY_GAP_MM_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_INNER_VOID_STACK_PRESENT_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES
@@ -234,6 +235,30 @@ def _require_tx_inner_void_stack_present_range(
         f"{context}.void_stack_present.range must be canonical [true, 0, 1, 2] "
         f"or fixed [true, b, b, 1] for b in {_TX_INNER_VOID_STACK_PRESENT_CANDIDATES} "
         "for tx_inner_single_coil "
+        f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
+    )
+
+
+def _require_tv_aluminum_sheet_present_range(
+    table: dict[str, object],
+    *,
+    context: str,
+) -> RangeSpec:
+    range_spec = _require_range(table, "sheet_present", context, expect_integer=True)
+    candidates = _integer_range_candidates(range_spec)
+    if candidates == _TV_ALUMINUM_SHEET_PRESENT_CANDIDATES:
+        return range_spec
+    if (
+        range_spec.count == 1
+        and range_spec.start == range_spec.end
+        and len(candidates) == 1
+        and candidates[0] in _TV_ALUMINUM_SHEET_PRESENT_CANDIDATES
+    ):
+        return range_spec
+    raise ValueError(
+        f"{context}.sheet_present.range must be canonical [true, 0, 1, 2] "
+        f"or fixed [true, b, b, 1] for b in {_TV_ALUMINUM_SHEET_PRESENT_CANDIDATES} "
+        "for tv_aluminum_plate "
         f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
     )
 
@@ -1151,8 +1176,8 @@ def _parse_modeled_tv_aluminum_plate(
             f"(actual={object_id})"
         )
     raw_primitive = _require_non_empty_str(table, "primitive", context)
-    if raw_primitive != "box":
-        raise ValueError(f"{context}.primitive must be 'box' (actual={raw_primitive})")
+    if raw_primitive != "sheet":
+        raise ValueError(f"{context}.primitive must be 'sheet' (actual={raw_primitive})")
     material = _require_non_empty_str(table, "material", context)
     if material != "aluminum":
         raise ValueError(f"{context}.material must be 'aluminum' (actual={material})")
@@ -1181,6 +1206,7 @@ def _parse_modeled_tv_aluminum_plate(
         raise ValueError(f"{context}.thickness_mm must be finite")
     if thickness_mm <= 0.0:
         raise ValueError(f"{context}.thickness_mm must be > 0")
+    sheet_present = _require_tv_aluminum_sheet_present_range(table, context=context)
     unsupported_keys = sorted(set(table.keys()) - {
         "object_id",
         "role",
@@ -1190,6 +1216,7 @@ def _parse_modeled_tv_aluminum_plate(
         "source_non_model_object_id",
         "face",
         "thickness_mm",
+        "sheet_present",
     })
     if unsupported_keys:
         raise ValueError(
@@ -1198,12 +1225,13 @@ def _parse_modeled_tv_aluminum_plate(
     return ModeledTvAluminumPlateSpec(
         object_id=object_id,
         role="tv_aluminum_plate",
-        primitive="box",
+        primitive="sheet",
         material="aluminum",
         model_state=True,
         source_non_model_object_id=source_non_model_object_id,
         face="+x",
         thickness_mm=thickness_mm,
+        sheet_present=sheet_present,
     )
 
 

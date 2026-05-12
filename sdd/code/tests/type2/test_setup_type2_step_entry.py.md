@@ -1,7 +1,7 @@
 ---
 title: test_setup_type2_step_entry.py
 created: 2026-04-17 @ 09:09
-updated: 2026-05-03 @ 18:45
+updated: 2026-05-13 @ 00:00
 tags:
   - hfss-import
   - em
@@ -42,6 +42,9 @@ tags:
 - active sweep examples assert TX inner and RX `turn_count` ranges as `[true, 1, 3, 3]`; fixed examples remain unchanged at `[true, 1, 1, 1]`.
 - active examples fix `tx_inner_rect_void_coil.layer_count = [true, 1, 1, 1]` and must not expect
   `tx_inner_copper_stack` in fixed/sweep body-name contracts.
+- active examples define `tv_aluminum_plate` as optional finite-conductivity sheet metadata sourced from the `tv` `+X` face, not as a STEP solid.
+- active sweep exposes `modeled_objects.tv_aluminum_plate.sheet_present = [true, 0, 1, 2]`, raising the active sampled-owner count to 14.
+- active fixed exposes `modeled_objects.tv_aluminum_plate.sheet_present = [true, 1, 1, 1]`, preserving a sheet-present fixed realization.
 
 ## Invariants / fail-fast
 - `outputs.mode` must be `TxRx`.
@@ -51,6 +54,8 @@ tags:
 - active examples must not expose TX derived sampled owners such as `tx_region_actual`, `tx_region_actual_stack_space`, or TX modeled sampled fields.
 - fixed example `turn_count` ranges must stay singleton one-turn ranges while the official sweep upper bound stays at three turns.
 - active examples must not expose `modeled_objects.tx_inner_rect_void_coil.layer_count` as a sampled owner.
+- active examples must not declare `tv_aluminum_plate.primitive = "box"` or any other STEP-solid primitive.
+- active sweep sampled-owner paths must include `modeled_objects.tv_aluminum_plate.sheet_present` and have length 14.
 - `tx_reference_line.x_ratio`, `tx_reference_line.y_usage_ratio`, and `tx_reference_line.z_ratio` are guide-only
   inputs and may derive TX inner geometry context, but must not imply TX ports, reports, generic TX modeled roles,
   or active TX sampled owners.
@@ -62,6 +67,7 @@ tags:
 - [0.2.24 Type2 TX Inner Actual Underlay Stack](../../../plans/0.2.24-type2-tx-inner-actual-underlay-stack.md)
 - [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
 - [0.2.24-type2-turn-count-sweep-upper-bound](../../../plans/0.2.24-type2-turn-count-sweep-upper-bound.md)
+- [0.2.25-type2-tv-aluminum-sheet-presence](../../../plans/0.2.25-type2-tv-aluminum-sheet-presence.md)
 
 ## 이 파일을 쓰는 곳
 - Default pure-Python test suite.

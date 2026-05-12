@@ -44,6 +44,7 @@ _EXPECTED_SAMPLED_OWNER_PATHS = (
     "modeled_objects.rx_rect_void_coil.void_usage_ratio",
     "modeled_objects.rx_rect_void_coil.turn_count",
     "modeled_objects.rx_rect_void_coil.metal_fill_factor",
+    "modeled_objects.tv_aluminum_plate.sheet_present",
 )
 _RX_NON_SAMPLED_OWNER_PATHS = (
     "modeled_objects.rx_rect_void_coil.layer_count",
@@ -89,6 +90,10 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
         list[object],
         cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["void_stack_present"])["range"],
     )
+    tv_aluminum_sheet_present_range = cast(
+        list[object],
+        cast(dict[str, object], modeled_by_id["tv_aluminum_plate"]["sheet_present"])["range"],
+    )
     return (
         (_EXPECTED_DESIGN_VARIABLE_NAMES[0], str(float(cast(int | float, tx_reference_line_y_range[1])))),
         (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, tx_reference_line_z_range[1])))),
@@ -98,14 +103,28 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
         (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, rx_void_ratio_range[1])))),
         (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(int(cast(int | float, rx_turn_range[1])))),
         (_EXPECTED_DESIGN_VARIABLE_NAMES[7], str(float(cast(int | float, rx_fill_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[8], str(int(cast(int | float, tv_aluminum_sheet_present_range[1])))),
     )
+
+
+@dataclass(frozen=True)
+class _FakeTvAluminumPlateSpec:
+    object_id: str
+    role: str
+    primitive: str
+    material: str
+    model_state: bool
+    source_non_model_object_id: str
+    face: str
+    thickness_mm: float
+    sheet_present: RangeSpec
 
 
 @dataclass(frozen=True)
 class _FakeRxOnlyType2Spec:
     non_model_objects: tuple[NonModelTxRegionSpec, ...]
     non_model_derived_objects: tuple[NonModelTxRegionActualSpec | NonModelTxRegionActualStackSpaceSpec, ...]
-    modeled_objects: tuple[ModeledTxInnerSingleCoilSpec | ModeledRxSingleCoilSpec, ...]
+    modeled_objects: tuple[ModeledTxInnerSingleCoilSpec | ModeledRxSingleCoilSpec | _FakeTvAluminumPlateSpec, ...]
 
 
 def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -193,6 +212,17 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 metal_fill_factor=rx_fill_factor,
                 terminal_path="A_cw_to_a",
                 x_position_ratio=RangeSpec(is_integer=False, start=0.0, end=0.0, count=1),
+            ),
+            _FakeTvAluminumPlateSpec(
+                object_id="tv_aluminum_plate",
+                role="tv_aluminum_plate",
+                primitive="sheet",
+                material="aluminum",
+                model_state=True,
+                source_non_model_object_id="tv",
+                face="+x",
+                thickness_mm=0.04,
+                sheet_present=RangeSpec(is_integer=True, start=0.0, end=1.0, count=2),
             ),
         )
     )
@@ -341,6 +371,19 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                     terminal_path="A_cw_to_a",
                     x_position_ratio=_range_from_modeled(
                         payload, object_id="rx_rect_void_coil", field_name="x_position_ratio"
+                    ),
+                ),
+                _FakeTvAluminumPlateSpec(
+                    object_id="tv_aluminum_plate",
+                    role="tv_aluminum_plate",
+                    primitive="sheet",
+                    material="aluminum",
+                    model_state=True,
+                    source_non_model_object_id="tv",
+                    face="+x",
+                    thickness_mm=0.04,
+                    sheet_present=_range_from_modeled(
+                        payload, object_id="tv_aluminum_plate", field_name="sheet_present"
                     ),
                 ),
             ),
@@ -529,6 +572,18 @@ size_xyz = [10.0, 200.0, 200.0]
     range = [false, 0.2, 0.6, 75]
     [modeled_objects.terminal_path]
     value = "A_cw_to_a"
+
+[[modeled_objects]]
+    object_id = "tv_aluminum_plate"
+    role = "tv_aluminum_plate"
+    primitive = "sheet"
+    material = "aluminum"
+    model_state = true
+    source_non_model_object_id = "tv"
+    face = "+x"
+    thickness_mm = 0.04
+    [modeled_objects.sheet_present]
+    range = [true, 0, 1, 2]
 
 """.strip()
 

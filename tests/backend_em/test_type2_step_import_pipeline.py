@@ -67,7 +67,13 @@ _RX_PLATE_STACK_FERRITE_GROUP_MEMBER_NAMES: tuple[str, ...] = (
 _TV_ALUMINUM_PLATE_OBJECT_ID = "tv_aluminum_plate"
 _TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
 _TV_ALUMINUM_PLATE_CANONICAL_MIN_XYZ = (9.0, -921.0, 170.0)
-_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ = (0.04, 1842.0, 1055.0)
+_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ = (0.0, 1842.0, 1055.0)
+_TV_ALUMINUM_PLATE_SHEET_VERTICES_XYZ = (
+    (9.0, -921.0, 170.0),
+    (9.0, 921.0, 170.0),
+    (9.0, 921.0, 1225.0),
+    (9.0, -921.0, 1225.0),
+)
 _SINGLE_COIL_TX_TRACE_WIDTH_MM = 36.0
 _SINGLE_COIL_RX_TRACE_WIDTH_MM = 81.0
 _PLATE_STACK_STRIPE_FILL_FACTOR = 0.4
@@ -124,9 +130,16 @@ def _assert_tv_aluminum_plate_ledger_contract(*, entry: dict[str, object]) -> No
     assert entry["material"] == "aluminum"
     assert entry["model_state"] is True
     assert entry["placement_owner_id"] == "tv"
+    assert entry["sheet_present"] == 1
+    assert entry["expected_exported_body_names"] == []
+    assert entry["expected_exported_body_count"] == 0
     canonical_coordinates = cast(dict[str, object], entry["canonical_coordinates"])
     assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_MIN_XYZ)
     assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ)
+    actual_vertices = cast(list[list[float]], canonical_coordinates["sheet_vertices_xyz"])
+    assert len(actual_vertices) == len(_TV_ALUMINUM_PLATE_SHEET_VERTICES_XYZ)
+    for actual_vertex, expected_vertex in zip(actual_vertices, _TV_ALUMINUM_PLATE_SHEET_VERTICES_XYZ, strict=True):
+        assert actual_vertex == pytest.approx(expected_vertex)
 
 
 def _assert_trace_width_mm_is_preserved(*, source_entry: dict[str, object], imported_entry: dict[str, object]) -> None:
@@ -166,6 +179,8 @@ def _non_model_entry_without_tv_member(
 
 def _tv_aluminum_plate_entry(
     tmp_path: Path,
+    *,
+    sheet_present: int = 1,
 ) -> dict[str, object]:
     entry = _modeled_entry(
         object_id=_TV_ALUMINUM_PLATE_OBJECT_ID,
@@ -175,10 +190,15 @@ def _tv_aluminum_plate_entry(
         origin_xyz=_TV_ALUMINUM_PLATE_CANONICAL_MIN_XYZ,
         size_xyz=_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ,
         source_metadata_path=str(tmp_path / "tv_aluminum_plate.metadata.json"),
-        expected_names=[_TV_ALUMINUM_PLATE_OBJECT_ID],
+        expected_names=[],
     )
     entry["material"] = "aluminum"
+    entry["sheet_present"] = sheet_present
     entry["terminal_metadata"] = {}
+    canonical_coordinates = cast(dict[str, object], entry["canonical_coordinates"])
+    canonical_coordinates["sheet_vertices_xyz"] = [list(vertex) for vertex in _TV_ALUMINUM_PLATE_SHEET_VERTICES_XYZ]
+    exported_body_coordinates = cast(dict[str, object], entry["exported_body_canonical_coordinates"])
+    exported_body_coordinates["sheet_vertices_xyz"] = [list(vertex) for vertex in _TV_ALUMINUM_PLATE_SHEET_VERTICES_XYZ]
     return entry
 
 
@@ -1123,7 +1143,7 @@ def _single_layer_imported_name_batch_with_tx_region_actual_divisions(
 
 def _single_layer_imported_name_batch_with_tv_aluminum_plate(
     *,
-    include_tv_aluminum_plate: bool = True,
+    include_tv_aluminum_plate: bool = False,
 ) -> tuple[str, ...]:
     names = list(_single_layer_imported_name_batch())
     names.insert(4, "tv")
@@ -2150,7 +2170,20 @@ def test_import_type2_step_ledger_imports_tv_aluminum_plate_modeled_object(tmp_p
     ]
     assert session.modeler.objects["tx_copper_l0"].material_name == "copper"
     assert session.modeler.objects["rx_copper_l0"].material_name == "copper"
-    assert session.modeler.objects[_TV_ALUMINUM_PLATE_OBJECT_ID].material_name == "aluminum"
+    assert session.modeler.objects[_TV_ALUMINUM_PLATE_OBJECT_ID].valid_properties == [
+        "Color",
+        "Transparent",
+        "Model",
+        "Group",
+    ]
+    assert session.modeler.create_polyline_calls[0] == {
+        "points": [list(vertex) for vertex in _TV_ALUMINUM_PLATE_SHEET_VERTICES_XYZ],
+        "name": _TV_ALUMINUM_PLATE_OBJECT_ID,
+        "material": "vacuum",
+        "close_surface": True,
+        "cover_surface": False,
+    }
+    assert session.modeler.cover_lines_calls[0] == _TV_ALUMINUM_PLATE_OBJECT_ID
     assert session.design.import_dataset_calls == []
     assert session.oproject.add_dataset_calls == []
     assert session.oproject.definition_manager.add_material_calls == []
@@ -2187,6 +2220,89 @@ def test_import_type2_step_ledger_imports_tv_aluminum_plate_modeled_object(tmp_p
     }
     written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
     assert written == result
+
+
+def test_import_type2_step_ledger_skips_tv_aluminum_plate_when_sheet_absent(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    tv_aluminum_plate_entry = _tv_aluminum_plate_entry(tmp_path, sheet_present=0)
+    modeled_objects = [tv_aluminum_plate_entry, *_single_layer_modeled_objects(tmp_path)]
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry_without_tv_member()],
+        modeled_objects=modeled_objects,
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _FakeHfss(
+        modeler=_FakeModeler(imported_name_batches=[_single_layer_imported_name_batch_with_tv_aluminum_plate()])
+    )
+
+    result = import_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        design_name="fake_type2_import",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    assert _TV_ALUMINUM_PLATE_OBJECT_ID not in session.modeler.objects
+    assert _TV_ALUMINUM_PLATE_OBJECT_ID not in [name for name, model in session.modeler.model_state_calls if model]
+    assert _TV_ALUMINUM_PLATE_OBJECT_ID not in [cast(str, call["name"]) for call in session.modeler.create_polyline_calls]
+    modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    assert modeled_by_id[_TV_ALUMINUM_PLATE_OBJECT_ID]["sheet_present"] == 0
+    assert modeled_by_id[_TV_ALUMINUM_PLATE_OBJECT_ID]["imported_object_names"] == []
+
+
+def test_import_type2_step_ledger_rejects_step_imported_tv_aluminum_plate_body(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    modeled_objects = [_tv_aluminum_plate_entry(tmp_path), *_single_layer_modeled_objects(tmp_path)]
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry_without_tv_member()],
+        modeled_objects=modeled_objects,
+    )
+    session = _FakeHfss(
+        modeler=_FakeModeler(
+            imported_name_batches=[
+                _single_layer_imported_name_batch_with_tv_aluminum_plate(include_tv_aluminum_plate=True)
+            ]
+        )
+    )
+
+    with pytest.raises(ValueError, match=r"unclaimed imported object names: \['tv_aluminum_plate'\]"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            design_name="fake_type2_import",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
+
+
+def test_import_type2_step_ledger_rejects_existing_tv_sheet_when_sheet_absent(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    modeled_objects = [_tv_aluminum_plate_entry(tmp_path, sheet_present=0), *_single_layer_modeled_objects(tmp_path)]
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry_without_tv_member()],
+        modeled_objects=modeled_objects,
+    )
+    modeler = _FakeModeler(imported_name_batches=[_single_layer_imported_name_batch_with_tv_aluminum_plate()])
+    modeler._object_names = ("existing", _TV_ALUMINUM_PLATE_OBJECT_ID)
+    modeler.objects[_TV_ALUMINUM_PLATE_OBJECT_ID] = _new_fake_sheet_object(_TV_ALUMINUM_PLATE_OBJECT_ID)
+    session = _FakeHfss(modeler=modeler)
+
+    with pytest.raises(ValueError, match=r"sheet_present is 0 but HFSS already contains 'tv_aluminum_plate'"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            design_name="fake_type2_import",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
 
 
 def test_import_type2_step_ledger_accepts_tiled_tx_region_actual_member_names(tmp_path: Path) -> None:

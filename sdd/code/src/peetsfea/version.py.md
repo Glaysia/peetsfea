@@ -1,7 +1,7 @@
 ---
 title: version.py
 created: 2026-04-28 @ 00:00
-updated: 2026-04-28 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - version
   - sdd
@@ -22,7 +22,7 @@ tags:
 - 출력: `SUPPORTED_SPEC_VERSION`, `__version__`
 
 ## Canonical state
-- Current version baseline is `0.2.24`.
+- Current version baseline is `0.2.25.1`.
 - `__version__` mirrors `SUPPORTED_SPEC_VERSION`.
 
 ## Invariants / fail-fast

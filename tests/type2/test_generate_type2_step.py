@@ -109,7 +109,13 @@ _TX_NEGATIVE_BRIDGE_ROLE = "tx_inner_outer_negative_bridge"
 _TV_ALUMINUM_PLATE_OBJECT_ID = "tv_aluminum_plate"
 _TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
 _TV_ALUMINUM_PLATE_CANONICAL_MIN_XYZ = (9.0, -921.0, 170.0)
-_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ = (0.04, 1842.0, 1055.0)
+_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ = (0.0, 1842.0, 1055.0)
+_TV_ALUMINUM_PLATE_SHEET_VERTICES_XYZ = (
+    (9.0, -921.0, 170.0),
+    (9.0, 921.0, 170.0),
+    (9.0, 921.0, 1225.0),
+    (9.0, -921.0, 1225.0),
+)
 
 _OBSOLETE_GENERIC_TX_ACTIVE_RXONLY_TEST_NAME_PARTS = (
     "parses_tx_rect_void_columns_parser_surface",
@@ -229,12 +235,13 @@ def _make_tv_aluminum_plate_spec() -> ModeledTvAluminumPlateSpec:
     return ModeledTvAluminumPlateSpec(
         object_id="tv_aluminum_plate",
         role="tv_aluminum_plate",
-        primitive="box",
+        primitive="sheet",
         material="aluminum",
         model_state=True,
         source_non_model_object_id="tv",
         face="+x",
         thickness_mm=0.04,
+        sheet_present=RangeSpec(True, 1.0, 1.0, 1),
     )
 
 
@@ -245,6 +252,11 @@ def _assert_tv_aluminum_plate_spec_contract(*, spec: Type2StepSpec) -> None:
     assert tv_entry.material == "aluminum"
     assert tv_entry.model_state is True
     assert tv_entry.source_non_model_object_id == "tv"
+    assert tv_entry.primitive == "sheet"
+    assert tv_entry.face == "+x"
+    assert tv_entry.thickness_mm == pytest.approx(0.04)
+    assert tv_entry.sheet_present.start in (0.0, 1.0)
+    assert tv_entry.sheet_present.end == pytest.approx(1.0)
 
 
 def _assert_tv_aluminum_plate_ledger_contract(*, entry: dict[str, object]) -> None:
@@ -253,9 +265,24 @@ def _assert_tv_aluminum_plate_ledger_contract(*, entry: dict[str, object]) -> No
     assert entry["material"] == "aluminum"
     assert entry["model_state"] is True
     assert entry["placement_owner_id"] == "tv"
+    assert entry["expected_exported_body_names"] == ()
+    assert entry["expected_exported_body_count"] == 0
+    assert entry["expected_exported_body_groups"] == ()
+    assert entry["sheet_present"] == 1
     canonical_coordinates = cast(dict[str, object], entry["canonical_coordinates"])
     assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_MIN_XYZ)
     assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ)
+    assert canonical_coordinates["source_non_model_object_id"] == "tv"
+    assert canonical_coordinates["source_face"] == "+X"
+    assert canonical_coordinates["sheet_present"] is True
+    assert canonical_coordinates["sheet_thickness_mm"] == pytest.approx(0.04)
+    sheet_vertices = cast(Sequence[Sequence[float]], canonical_coordinates["sheet_vertices_xyz"])
+    assert len(sheet_vertices) == 4
+    for actual_vertex, expected_vertex in zip(sheet_vertices, _TV_ALUMINUM_PLATE_SHEET_VERTICES_XYZ, strict=True):
+        assert tuple(actual_vertex) == pytest.approx(expected_vertex)
+    exported_coordinates = cast(dict[str, object], entry["exported_body_canonical_coordinates"])
+    assert exported_coordinates["outer_bounds_min_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_MIN_XYZ)
+    assert exported_coordinates["outer_bounds_size_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ)
 
 
 def _max_x_z(min_xyz: tuple[float, float, float], size_xyz: tuple[float, float, float]) -> tuple[float, float]:
@@ -1352,12 +1379,16 @@ def _assert_step_brep_names_include_exact_labels(
     step_path: Path,
     expected_body_names: tuple[str, ...],
 ) -> None:
-    step_text = step_path.read_text(encoding="utf-8")
-    brep_names = tuple(re.findall(r"MANIFOLD_SOLID_BREP\('([^']+)',#[0-9]+\);", step_text))
+    brep_names = _step_brep_names(step_path)
     assert len(brep_names) >= len(expected_body_names)
     assert all(name != "SOLID" and not name.startswith("SOLID_") for name in brep_names)
     for expected_body_name in expected_body_names:
         assert expected_body_name in brep_names
+
+
+def _step_brep_names(step_path: Path) -> tuple[str, ...]:
+    step_text = step_path.read_text(encoding="utf-8")
+    return tuple(re.findall(r"MANIFOLD_SOLID_BREP\('([^']+)',#[0-9]+\);", step_text))
 
 
 def _plate_stack_top_level_expected_body_names(
@@ -2496,6 +2527,39 @@ def test_build_modeled_scene_data_fails_for_tv_aluminum_plate_when_owner_is_not_
         )
 
 
+def test_build_modeled_scene_data_records_tv_aluminum_plate_as_zero_body_sheet() -> None:
+    tv_plate_spec = _make_tv_aluminum_plate_spec()
+    tv_owner = NonModelBoxSpec(
+        object_id="tv",
+        kind="box",
+        primitive="box",
+        present=True,
+        non_model=True,
+        material="vacuum",
+        plane="XY",
+        origin_xyz=(-1.0, -2.0, 3.0),
+        size_xyz=(10.0, 20.0, 30.0),
+    )
+
+    scene_shapes, scene_data = build_modeled_scene_data(
+        tv_plate_spec,
+        owner_spec=tv_owner,
+        tx_region_max_z=100.0,
+        seed=0,
+    )
+
+    assert scene_shapes == ()
+    assert scene_data["expected_exported_body_names"] == ()
+    assert scene_data["expected_exported_body_count"] == 0
+    canonical_coordinates = cast(dict[str, object], scene_data["canonical_coordinates"])
+    assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx((9.0, -2.0, 3.0))
+    assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx((0.0, 20.0, 30.0))
+    assert canonical_coordinates["source_non_model_object_id"] == "tv"
+    assert canonical_coordinates["source_face"] == "+X"
+    assert canonical_coordinates["sheet_present"] is True
+    assert canonical_coordinates["sheet_thickness_mm"] == pytest.approx(0.04)
+
+
 def test_build_modeled_scene_data_fails_for_tv_aluminum_plate_when_owner_origin_is_non_finite() -> None:
     tv_plate_spec = _make_tv_aluminum_plate_spec()
     non_finite_owner = NonModelBoxSpec(
@@ -3582,7 +3646,7 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     assert "tx_outer_actual_region" not in scene_shapes_by_label
     assert "tx_region_actual" not in scene_shapes_by_label
     assert "tx_region_actual_stack_space" not in scene_shapes_by_label
-    assert _TV_ALUMINUM_PLATE_OBJECT_ID in scene_shapes_by_label
+    assert _TV_ALUMINUM_PLATE_OBJECT_ID not in scene_shapes_by_label
     assert all(
         not name.startswith(("tx_outer_pcb_", "tx_outer_copper_", "tx_outer_void_", "tx_outer_underlay_"))
         for name in scene_shapes_by_label
@@ -3861,6 +3925,7 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
         entry for entry in ledger["modeled_objects"] if entry["object_id"] == _TV_ALUMINUM_PLATE_OBJECT_ID
     )
     _assert_tv_aluminum_plate_ledger_contract(entry=cast(dict[str, object], tv_aluminum_plate_entry))
+    assert _TV_ALUMINUM_PLATE_OBJECT_ID not in _step_brep_names(Path(ledger["scene_step_path"]))
     _assert_owner_local_design_x_position_ratio(
         design_entry=tx_inner_actual_member,
         owner_entry=tx_inner_member,

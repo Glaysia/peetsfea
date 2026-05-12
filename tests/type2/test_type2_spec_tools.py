@@ -21,6 +21,7 @@ TYPE2_SWEEP_TOML = REPO_ROOT / "examples" / "type2_sweep.toml"
 TYPE2_FIXED_TOML = REPO_ROOT / "examples" / "type2_fixed.toml"
 TX_INNER_VOID_STACK_OWNER_PATH = "modeled_objects.tx_inner_rect_void_coil.void_stack_present"
 TX_INNER_VOID_STACK_DESCRIPTION = "TX inner 중앙 void stack 생성 여부"
+TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH = "modeled_objects.tv_aluminum_plate.sheet_present"
 
 
 def _load_type2_spec_tools() -> ModuleType:
@@ -185,14 +186,27 @@ def test_type2_sampled_toml_from_values_renders_loadable_toml(tmp_path: Path) ->
     )
     sampled_void_stack_range = sampled_void_stack["range"]
     assert isinstance(sampled_void_stack_range, list)
+    sampled_tv_sheet_present = _range_owner_field_from_path(
+        raw_sampled_spec,
+        owner_path=TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH,
+    )
+    sampled_tv_sheet_present_range = sampled_tv_sheet_present["range"]
+    assert isinstance(sampled_tv_sheet_present_range, list)
 
     assert len(sampled_spec.modeled_objects) == len(source_spec.modeled_objects)
     assert sampled_owner_path_strings == list(owner_values)
     assert TX_INNER_VOID_STACK_OWNER_PATH in sampled_owner_path_strings
+    assert TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH in sampled_owner_path_strings
     assert sampled_void_stack_range == [
         True,
         owner_values[TX_INNER_VOID_STACK_OWNER_PATH],
         owner_values[TX_INNER_VOID_STACK_OWNER_PATH],
+        1,
+    ]
+    assert sampled_tv_sheet_present_range == [
+        True,
+        owner_values[TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH],
+        owner_values[TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH],
         1,
     ]
     assert all(
@@ -239,6 +253,15 @@ def test_type2_range_owner_descriptions_for_official_sweep_example() -> None:
     _assert_complete_range_owner_descriptions(TYPE2_SWEEP_TOML)
 
 
+def test_type2_sweep_has_14_sampled_dimensions_including_tv_aluminum_sheet_present() -> None:
+    owner_values = _sampled_owner_value_mapping(load_type2_step_spec(TYPE2_SWEEP_TOML), seed=0)
+
+    assert len(owner_values) == 14
+    assert TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH in owner_values
+    assert owner_values[TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH] in {0, 1}
+    assert isinstance(owner_values[TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH], int)
+
+
 def test_type2_range_owner_descriptions_for_fixed_official_example() -> None:
     _assert_complete_range_owner_descriptions(TYPE2_FIXED_TOML)
 
@@ -278,14 +301,27 @@ def test_type2_range_owner_descriptions_accept_generated_sampled_toml_for_notebo
     )
     sampled_void_stack_range = sampled_void_stack["range"]
     assert isinstance(sampled_void_stack_range, list)
+    sampled_tv_sheet_present = _range_owner_field_from_path(
+        raw_sampled_spec,
+        owner_path=TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH,
+    )
+    sampled_tv_sheet_present_range = sampled_tv_sheet_present["range"]
+    assert isinstance(sampled_tv_sheet_present_range, list)
 
     descriptions = cast(dict[str, str], tools.type2_range_owner_descriptions(sampled_toml_path))
 
     assert TX_INNER_VOID_STACK_OWNER_PATH in sampled_owner_path_strings
+    assert TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH in sampled_owner_path_strings
     assert sampled_void_stack_range == [
         True,
         owner_values[TX_INNER_VOID_STACK_OWNER_PATH],
         owner_values[TX_INNER_VOID_STACK_OWNER_PATH],
+        1,
+    ]
+    assert sampled_tv_sheet_present_range == [
+        True,
+        owner_values[TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH],
+        owner_values[TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH],
         1,
     ]
     assert all(

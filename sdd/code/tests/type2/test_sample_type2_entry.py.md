@@ -1,7 +1,7 @@
 ---
 title: test_sample_type2_entry.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-07 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - test
   - sampling
@@ -33,6 +33,7 @@ tags:
 - RX sampled `turn_count` manifest values are members of `{2, 3, 4, 5}`.
 - Embedded TOML fixtures keep `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` as a fixed zero compatibility field for lower-X wall-side anchoring.
 - Synthetic source TOML fixtures include sampled `modeled_objects.tx_inner_rect_void_coil.void_stack_present` so manifest metadata exercises the active TX inner void-stack owner.
+- Synthetic source TOML fixtures include sampled `modeled_objects.tv_aluminum_plate.sheet_present` so manifest metadata and sampled TOML freeze behavior exercise the active TV aluminum sheet presence owner.
 - `seed_first` is the absolute sample index floor; emitted sample metadata and `design_id` prefixes match absolute indices (for example `seed_first=12000` produces `s012000_*`).
 - Active fixed/sweep source fixtures use `modeled_objects.tx_inner_rect_void_coil.layer_count = [true, 1, 1, 1]`.
 - `modeled_objects.tx_outer_rect_void_coil.*` paths are not active sampled owners.
@@ -41,6 +42,7 @@ tags:
 ## Invariants / fail-fast
 - Unknown owner paths fail immediately.
 - `sampled_owner_paths` must include every active `count > 1` range owner, including non-modeled Y/Z guide ranges and TX inner `void_stack_present`, and exclude fixed singleton X guide ranges.
+- `sampled_owner_paths` must include TV aluminum `sheet_present` when it has `count > 1`, and sampled TOML must freeze it to a singleton integer range.
 - RxOnly sampling tests must not require TX modeled owners.
 - RxOnly sampling tests must not require `tx_region_actual` or `tx_region_actual_stack_space`.
 - Fixed TX inner underlay thickness fields are not sampled owner paths because their ranges are fixed singleton values.
@@ -61,3 +63,4 @@ tags:
 - [0.2.24 Type2 STEP Export Scene Data Reuse](../../../plans/0.2.24-type2-step-export-scene-data-reuse.md)
 - [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
 - [0.2.24 Type2 Turn Count Sweep Upper Bound](../../../plans/0.2.24-type2-turn-count-sweep-upper-bound.md)
+- [0.2.25 Type2 TV Aluminum Sheet Presence](../../../plans/0.2.25-type2-tv-aluminum-sheet-presence.md)

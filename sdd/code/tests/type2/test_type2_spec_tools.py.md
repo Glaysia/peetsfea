@@ -1,7 +1,7 @@
 ---
 title: test_type2_spec_tools.py
 created: 2026-04-29 @ 00:00
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - test
   - type2
@@ -30,8 +30,10 @@ tags:
 ## Canonical State
 - `peetsfea.type2_spec_tools` must remain usable without importing CAD/AEDT modules.
 - Public sampled owner mappings must match the active exportable sampled owner set exactly, including the TX inner `void_stack_present` switch when sampled.
+- Public sampled owner mappings must include `modeled_objects.tv_aluminum_plate.sheet_present` for the active sweep, bringing `examples/type2_sweep.toml` to 14 sampled dimensions.
 - Official type2 examples must describe every discovered range owner path.
 - Official and generated sampled TOML must carry the Korean TX inner `void_stack_present` description and freeze the sampled integer owner to `[true, value, value, 1]`.
+- Generated sampled TOML must freeze TV aluminum `sheet_present` to `[true, value, value, 1]` with value `0` or `1`.
 - Generated sampled TOML must not include `modeled_objects.tx_outer_rect_void_coil.*` in `[sampled].sampled_owner_paths`.
 - Generated sampled TOML must remain loadable and usable by the notebook-facing description helper.
 - TX inner `terminal_stub_length_mm` in `examples/type2_sweep.toml` and `examples/type2_fixed.toml` must remain a fixed range with value `7.5` for deterministic ownership.
@@ -46,6 +48,7 @@ tags:
 - Notebook-equivalent coverage must generate its sampled TOML under pytest `tmp_path` and must not depend on stale local manifest artifacts.
 - Invalid constraint references must raise during `load_type2_step_spec`.
 - Retry coverage must use `make_step_on_sample=False` and must not require STEP/CAD export.
+- Active sweep dimension audit must fail if the TV aluminum sheet presence owner drops from the exportable sampled owner set.
 
 ## Collaborator Modules
 - [type2_spec_tools.py](../../src/peetsfea/type2_spec_tools.py.md)
@@ -58,6 +61,7 @@ tags:
 - `tests/type2/test_sample_type2_entry.py`
 - `tests/type2/test_type2_step_spec_import_surface.py`
 - `sdd/plans/0.2.24-type2-range-owner-descriptions.md`
+- `sdd/plans/0.2.25-type2-tv-aluminum-sheet-presence.md`
 
 ## Change Hazards
 - Keep this module focused; do not move these assertions into existing large test files.

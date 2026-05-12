@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TypedDict, cast
 
@@ -44,6 +44,10 @@ _RX_SINGLE_COIL_ROLE: str = "rx_single_coil"
 _TX_INNER_SINGLE_COIL_ROLE: str = "tx_inner_single_coil"
 _TX_OUTER_SINGLE_COIL_ROLE: str = "tx_outer_single_coil"
 _TV_ALUMINUM_PLATE_ROLE: str = "tv_aluminum_plate"
+_TV_ALUMINUM_PLATE_BODY_NAME: str = "tv_aluminum_plate"
+_TV_ALUMINUM_PLATE_BOUNDARY_NAME: str = "bc_tv_aluminum_plate"
+_TV_ALUMINUM_PLATE_MATERIAL: str = "aluminum"
+_TV_ALUMINUM_PLATE_THICKNESS: str = "0.04mm"
 _SETUP_BRANCH_RX_SINGLE_READY = "rx_single_ready"
 _SETUP_BRANCH_TXRX_READY = "txrx_ready"
 _ACTIVE_RX_ONLY_OUTPUT_VARIABLE_NAMES: frozenset[str] = frozenset(
@@ -243,6 +247,121 @@ def _modeled_role(*, entry: dict[str, object], context: str) -> str:
     return raw_role
 
 
+def _required_imported_object_names(*, entry: dict[str, object], context: str) -> list[str]:
+    if "imported_object_names" not in entry:
+        raise ValueError(f"{context} is missing required key 'imported_object_names'")
+    raw_names = entry["imported_object_names"]
+    if isinstance(raw_names, (str, bytes)):
+        raise TypeError(f"{context}.imported_object_names must be a sequence of strings")
+    if not isinstance(raw_names, Sequence):
+        raise TypeError(f"{context}.imported_object_names must be a sequence of strings")
+    names: list[str] = []
+    for index, raw_name in enumerate(raw_names):
+        if not isinstance(raw_name, str):
+            raise TypeError(f"{context}.imported_object_names[{index}] must be str")
+        if raw_name == "":
+            raise ValueError(f"{context}.imported_object_names[{index}] must be non-empty")
+        names.append(raw_name)
+    return names
+
+
+def _required_tv_sheet_present(*, entry: dict[str, object], context: str) -> int:
+    if "sheet_present" not in entry:
+        raise ValueError(f"{context} is missing required key 'sheet_present'")
+    raw_sheet_present = entry["sheet_present"]
+    if not isinstance(raw_sheet_present, int) or isinstance(raw_sheet_present, bool):
+        raise TypeError(f"{context}.sheet_present must be integer 0 or 1")
+    if raw_sheet_present not in (0, 1):
+        raise ValueError(f"{context}.sheet_present must be 0 or 1 (actual={raw_sheet_present!r})")
+    return raw_sheet_present
+
+
+def _required_tv_material(*, entry: dict[str, object], context: str) -> str:
+    if "material" not in entry:
+        raise ValueError(f"{context} is missing required key 'material'")
+    raw_material = entry["material"]
+    if not isinstance(raw_material, str):
+        raise TypeError(f"{context}.material must be str")
+    if raw_material != _TV_ALUMINUM_PLATE_MATERIAL:
+        raise ValueError(
+            f"{context}.material must be {_TV_ALUMINUM_PLATE_MATERIAL!r} "
+            f"for tv_aluminum_plate finite-conductivity boundary (actual={raw_material!r})"
+        )
+    return raw_material
+
+
+def _assign_tv_aluminum_plate_boundary(
+    *,
+    hfss: HfssSession,
+    imported_ledger: Type2ImportedLedger,
+) -> None:
+    tv_entries: list[tuple[int, dict[str, object]]] = []
+    for index, imported_entry in enumerate(imported_ledger["modeled_objects"]):
+        role = _modeled_role(entry=imported_entry, context=f"imported_ledger.modeled_objects[{index}]")
+        if role == _TV_ALUMINUM_PLATE_ROLE:
+            tv_entries.append((index, imported_entry))
+    imported_object_names = list(hfss.modeler.object_names)
+    if len(tv_entries) > 1:
+        raise ValueError(
+            "type2 setup-ready requires at most one tv_aluminum_plate imported ledger entry "
+            f"(actual={len(tv_entries)})"
+        )
+    if not tv_entries:
+        if _TV_ALUMINUM_PLATE_BODY_NAME in imported_object_names:
+            raise ValueError(
+                "type2 setup-ready found tv_aluminum_plate AEDT object without a matching imported ledger entry"
+            )
+        return
+
+    tv_index, tv_entry = tv_entries[0]
+    context = f"imported_ledger.modeled_objects[{tv_index}]"
+    sheet_present = _required_tv_sheet_present(entry=tv_entry, context=context)
+    tv_imported_names = _required_imported_object_names(entry=tv_entry, context=context)
+    if sheet_present == 0:
+        if tv_imported_names:
+            raise ValueError(
+                f"{context}.imported_object_names must be empty when sheet_present == 0 "
+                f"(actual={tv_imported_names})"
+            )
+        if _TV_ALUMINUM_PLATE_BODY_NAME in imported_object_names:
+            raise ValueError(
+                "type2 setup-ready requires no tv_aluminum_plate AEDT object when sheet_present == 0"
+            )
+        return
+
+    assert sheet_present == 1, f"validated tv_aluminum_plate sheet_present must be 1, got {sheet_present!r}"
+    _required_tv_material(entry=tv_entry, context=context)
+    if tv_imported_names != [_TV_ALUMINUM_PLATE_BODY_NAME]:
+        raise ValueError(
+            f"{context}.imported_object_names must be exactly {[_TV_ALUMINUM_PLATE_BODY_NAME]} "
+            f"when sheet_present == 1 (actual={tv_imported_names})"
+        )
+    if _TV_ALUMINUM_PLATE_BODY_NAME not in imported_object_names:
+        raise ValueError(
+            "type2 setup-ready requires tv_aluminum_plate AEDT object when sheet_present == 1"
+        )
+    finite_conductivity_result = hfss.assign_finite_conductivity(
+        assignment=_TV_ALUMINUM_PLATE_BODY_NAME,
+        material=_TV_ALUMINUM_PLATE_MATERIAL,
+        use_thickness=True,
+        thickness=_TV_ALUMINUM_PLATE_THICKNESS,
+        is_two_side=True,
+        name=_TV_ALUMINUM_PLATE_BOUNDARY_NAME,
+    )
+    raise_on_false(
+        finite_conductivity_result,
+        operation="assign_finite_conductivity",
+        context={
+            "assignment": _TV_ALUMINUM_PLATE_BODY_NAME,
+            "material": _TV_ALUMINUM_PLATE_MATERIAL,
+            "use_thickness": True,
+            "thickness": _TV_ALUMINUM_PLATE_THICKNESS,
+            "is_two_side": True,
+            "name": _TV_ALUMINUM_PLATE_BOUNDARY_NAME,
+        },
+    )
+
+
 def _resolve_setup_branch(ledger: ValidatedStepLedger) -> str:
     output_mode = _output_mode(ledger["outputs"])
     modeled_entries = ledger["modeled_objects"]
@@ -392,6 +511,7 @@ def _setup_ready_from_loaded_ledger_full(
         imported_ledger_path=imported_ledger_path,
         ledger=ledger,
     )
+    _assign_tv_aluminum_plate_boundary(hfss=hfss, imported_ledger=imported_ledger)
     rx_only_imported_ledger = _rx_only_imported_ledger(imported_ledger)
     mesh = assign_post_import_mesh(
         hfss=hfss,
@@ -513,6 +633,7 @@ def _setup_ready_from_loaded_ledger_txrx(
         imported_ledger_path=imported_ledger_path,
         ledger=ledger,
     )
+    _assign_tv_aluminum_plate_boundary(hfss=hfss, imported_ledger=imported_ledger)
     txrx_imported_ledger = _txrx_imported_ledger(imported_ledger)
     mesh = assign_post_import_mesh(
         hfss=hfss,

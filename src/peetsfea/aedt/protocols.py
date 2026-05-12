@@ -204,6 +204,17 @@ class HfssSession(TraceProviderSession, Protocol):
 
     def __setitem__(self, key: str, value: str) -> None: ...
 
+    def assign_finite_conductivity(
+        self,
+        assignment: str | list[object],
+        *,
+        material: str,
+        use_thickness: bool,
+        thickness: str,
+        is_two_side: bool,
+        name: str,
+    ) -> object: ...
+
     def assign_radiation_boundary_to_faces(self, assignment: object, name: str) -> object: ...
 
     def create_output_variable(self, variable: str, expression: str, solution: str) -> object: ...

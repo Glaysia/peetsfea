@@ -39,11 +39,13 @@ tags:
 - Fake RxOnly specs used by entry tests mirror the current `Type2StepSpec` shape, including `non_model_objects`.
 - `config.make_step_on_sample=false` manifest는 build-time STEP generation path를 대표한다.
 - Expected sampled owner/design-variable order includes TX inner sampled owners such as `modeled_objects.tx_inner_rect_void_coil.void_stack_present`, but excludes fixed TX inner `x_position_ratio`, before RX coil sampled owners.
+- Expected sampled owner/design-variable order includes `modeled_objects.tv_aluminum_plate.sheet_present` after the RX coil sampled owners when the source sheet presence range has `count > 1`.
 - Synthetic source TOML and `ModeledTxInnerSingleCoilSpec` fixtures must expose `void_stack_present` as a sampled integer owner when build design-variable handoff is under test.
 - Active single-coil turn-count sweep fixtures cap sampled upper bounds at one below the former maximum: synthetic RX single-coil `turn_count` uses `2.0..5.0` with `count=4`, embedded sampled TOML uses `[true, 2, 5, 4]`, and non-`turn_count` owners remain unchanged; fixed singleton `turn_count` ranges remain unchanged.
 - Active fixed/sweep source fixtures use `modeled_objects.tx_inner_rect_void_coil.layer_count = [true, 1, 1, 1]`, and build design variables exclude layer count.
 - Fixed singleton TX guide X ratio must not become a build design variable, while sampled TX guide Y ratio remains exported when `count > 1`.
 - Build design variables must not include `modeled_objects_tx_outer_rect_void_coil_*`.
+- Build design variables must render TV aluminum sheet presence as a bare integer `0` or `1`.
 
 ## Invariants / fail-fast
 - Unsupported role sets fail before backend execution.
@@ -74,3 +76,4 @@ tags:
 - [0.2.24-type2-turn-count-sweep-upper-bound](../../../plans/0.2.24-type2-turn-count-sweep-upper-bound.md)
 - [0.2.24-type2-batch-resume-absolute-sample-index](../../../plans/0.2.24-type2-batch-resume-absolute-sample-index.md)
 - [0.2.25 Type2 Exported Body Bounds Import Validation](../../../plans/0.2.25-type2-exported-body-bounds-import-validation.md)
+- [0.2.25 Type2 TV Aluminum Sheet Presence](../../../plans/0.2.25-type2-tv-aluminum-sheet-presence.md)

@@ -19,8 +19,11 @@ tags:
 - `tx_inner_single_coil` may be present as geometry-only TX STEP/ledger context.
 - Transmitter ports, transmitter sources, transmitter mesh ownership, and transmitter output variables are not active type2 contracts.
 - `tx_region` and derived `tx_inner_region` remain non-modeled placement guide context.
-- In `examples/type2_sweep.toml`, `tx_region.tx_reference_line.z_ratio` samples `[false, 0.5, 1.0, 13]` so the current maximum TX inner stack fits below the resolved reference line.
+- In `examples/type2_sweep.toml`, `tx_region.tx_reference_line.z_ratio` samples `[false, 0.75, 1.0, 65]` so the current maximum TX inner stack fits below the resolved reference line.
 - TX inner `terminal_stub_length_mm` is TOML-owned and fixed to `7.5` mm in official type2 examples (`examples/type2_sweep.toml`, `examples/type2_fixed.toml`).
+- `tv_aluminum_plate` is optional finite-conductivity HFSS sheet metadata on the source `tv` `+X` face, not a STEP solid.
+- `modeled_objects.tv_aluminum_plate.sheet_present` is the canonical presence owner: the sweep example samples `[true, 0, 1, 2]`, the fixed example keeps `[true, 1, 1, 1]`, and the active sweep dimension count is 14.
+- STEP export must not include a `tv_aluminum_plate` solid body. Import/setup-ready creates or skips the HFSS sheet from ledger metadata and assigns `aluminum` finite conductivity with `0.04mm` thickness only when present.
 - The active runtime flow is:
   1. `entry/sample.py`
   2. `entry/build.py`
@@ -49,6 +52,7 @@ tags:
 - Active mesh ownership is RX conductor-only.
 - Geometry-only TX inner bodies may be imported with the STEP scene but are not consumed by RxOnly setup-ready EM inputs.
 - Reconstructed RX port-sheet geometry is runtime metadata and not a STEP body.
+- Reconstructed `tv_aluminum_plate` sheet geometry is also runtime metadata and not a STEP body.
 - Active report variables are the RxOnly variables documented in `sdd/architecture/type2-em-report-contract.md`.
 
 ## Legacy Path

@@ -1,7 +1,7 @@
 ---
 title: type2_sampled_sampling.py
 created: 2026-04-20 @ 00:00
-updated: 2026-05-07 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - sampling
 ---
@@ -27,7 +27,7 @@ tags:
 - RxOnly sampling does not require TX modeled owner values.
 - Generic TX modeled roles (`tx_single_coil`, `tx_plate_stack`, `tx_rect_void_columns`) are not sampled owners.
 - `tx_inner_single_coil` is a geometry-only sampled modeled owner and now contributes `void_stack_present` in addition to existing coil sizing and bottom underlay fields.
-- `tv_aluminum_plate` is a fixed modeled surface and is intentionally excluded from sampled owner enumeration.
+- `tv_aluminum_plate` contributes `modeled_objects.tv_aluminum_plate.sheet_present` as an integer sampled owner when its range has `count > 1`.
 - TX inner `x_position_ratio` is fixed-zero compatibility state and must not appear as a sampled owner or design variable.
 - Active `count > 1` range owners must appear in `sampled_owner_paths` regardless of modeled/non-modeled ownership.
 - When `void_stack_present` uses `[true, 0, 1, 2]`, it is an active sampled owner and must freeze to an integer singleton in sampled TOML.
@@ -40,7 +40,8 @@ tags:
 - Missing sampled-owner registration for an active non-model range is a dataset ledger bug, not a notebook display issue.
 - Generic TX modeled sampled owner roles fail immediately with RxOnly context.
 - Any attempted sampled owner under `modeled_objects.tx_outer_rect_void_coil.*` fails.
-- Presence of fixed modeled roles such as `tv_aluminum_plate` must not add entries to sampled owner paths or sampled values.
+- `tv_aluminum_plate` must expose `sheet_present` as a `RangeSpec`; missing or malformed sheet presence state fails at owner discovery.
+- Fixed singleton `sheet_present` ranges stay out of sampled owner paths and sampled values.
 - Constraint exhaustion is recorded only through the explicit skipped-attempt path.
 - Constraint function evaluation must stay pure-Python and must not import STEP/CAD/AEDT exporters.
 - `tx_inner_min_trace_width_mm(tx_inner_rect_void_coil)` resolves `tx_inner_region` dimensions from the sampled `tx_region.tx_reference_line.*` owners and the active retry number before applying the rect/void trace-width feasibility helper.
@@ -52,3 +53,4 @@ tags:
 - [type2_step_spec_sampling.py](type2_step_spec_sampling.py.md)
 - [type2_rect_void_feasibility.py](type2_rect_void_feasibility.py.md)
 - [0.2.24 Type2 TX Outer Single Coil](../../../plans/0.2.24-type2-tx-outer-single-coil.md)
+- [0.2.25 Type2 TV Aluminum Sheet Presence](../../../plans/0.2.25-type2-tv-aluminum-sheet-presence.md)

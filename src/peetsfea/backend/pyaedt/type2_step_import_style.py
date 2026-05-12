@@ -715,6 +715,43 @@ def _port_sheet_vertices_xyz(modeled_entry: dict[str, object], *, context: str) 
     return tuple(vertices)
 
 
+def _tv_aluminum_plate_sheet_vertices_xyz(
+    modeled_entry: dict[str, object],
+    *,
+    context: str,
+) -> tuple[tuple[float, float, float], ...]:
+    raw_canonical_coordinates = require_key(modeled_entry, key="canonical_coordinates", context=context)
+    if not isinstance(raw_canonical_coordinates, dict):
+        raise TypeError(f"{context}.canonical_coordinates must be a table/object")
+    raw_vertices = require_key(
+        raw_canonical_coordinates,
+        key="sheet_vertices_xyz",
+        context=f"{context}.canonical_coordinates",
+    )
+    if isinstance(raw_vertices, (str, bytes)) or not isinstance(raw_vertices, Sequence):
+        raise TypeError(f"{context}.canonical_coordinates.sheet_vertices_xyz must be a sequence of 3D points")
+    vertices: list[tuple[float, float, float]] = []
+    for vertex_index, raw_vertex in enumerate(raw_vertices):
+        if isinstance(raw_vertex, (str, bytes)) or not isinstance(raw_vertex, Sequence):
+            raise TypeError(
+                f"{context}.canonical_coordinates.sheet_vertices_xyz[{vertex_index}] must be a sequence of length 3"
+            )
+        if len(raw_vertex) != 3:
+            raise ValueError(
+                f"{context}.canonical_coordinates.sheet_vertices_xyz[{vertex_index}] must contain exactly 3 entries"
+            )
+        vertices.append(
+            (
+                _require_float(raw_vertex[0], context=f"{context}.canonical_coordinates.sheet_vertices_xyz[{vertex_index}][0]"),
+                _require_float(raw_vertex[1], context=f"{context}.canonical_coordinates.sheet_vertices_xyz[{vertex_index}][1]"),
+                _require_float(raw_vertex[2], context=f"{context}.canonical_coordinates.sheet_vertices_xyz[{vertex_index}][2]"),
+            )
+        )
+    if len(vertices) != 4:
+        raise ValueError(f"{context}.canonical_coordinates.sheet_vertices_xyz must contain exactly 4 vertices")
+    return tuple(vertices)
+
+
 def _tx_rect_void_columns_tab_face_vertices_by_terminal(
     modeled_entry: dict[str, object],
     *,
@@ -904,6 +941,40 @@ def _create_port_sheet_from_contract(
         operation="set_object_model_state",
         context={"context": context, "name": covered_name, "model": True},
     )
+    return [covered_name]
+
+
+def create_tv_aluminum_plate_sheet_from_contract(
+    *,
+    modeler: ModelerSession,
+    modeled_entry: dict[str, object],
+    context: str,
+) -> list[str]:
+    vertices_xyz = _tv_aluminum_plate_sheet_vertices_xyz(modeled_entry, context=context)
+    polyline_created = create_polyline(
+        modeler,
+        points=[[x, y, z] for x, y, z in vertices_xyz],
+        name=_TV_ALUMINUM_PLATE_BODY_NAME,
+        material="vacuum",
+        close_surface=True,
+        cover_surface=False,
+    )
+    loop_name = require_non_empty_str(
+        getattr(polyline_created, "name"),
+        context=f"{context}.tv_aluminum_plate_sheet.loop_name",
+    )
+    if loop_name != _TV_ALUMINUM_PLATE_BODY_NAME:
+        raise RuntimeError(
+            f"{context} tv aluminum plate polyline name drifted "
+            f"(expected={_TV_ALUMINUM_PLATE_BODY_NAME!r}, actual={loop_name!r})"
+        )
+    covered = cover_lines(modeler, assignment=loop_name)
+    covered_name = _covered_sheet_name(covered, fallback_name=loop_name, context=context)
+    if covered_name != _TV_ALUMINUM_PLATE_BODY_NAME:
+        raise RuntimeError(
+            f"{context} tv aluminum plate sheet name drifted after cover_lines "
+            f"(expected={_TV_ALUMINUM_PLATE_BODY_NAME!r}, actual={covered_name!r})"
+        )
     return [covered_name]
 
 
@@ -1238,7 +1309,7 @@ def validate_modeled_bounds_against_owner(
         if model_state is not True:
             raise ValueError(f"{context}.model_state must be true for tv_aluminum_plate modeled geometry")
         expected_min_xyz = (owner_max_x, owner_min_y, owner_min_z)
-        expected_size_xyz = (0.04, owner_size_y, owner_size_z)
+        expected_size_xyz = (0.0, owner_size_y, owner_size_z)
         modeled_min_xyz = (modeled_min_x, modeled_min_y, modeled_min_z)
         modeled_size_xyz = (modeled_size_x, modeled_size_y, modeled_size_z)
         if any(abs(modeled_min_xyz[index] - expected_min_xyz[index]) > _PLACEMENT_TOLERANCE for index in range(3)):
@@ -1248,7 +1319,7 @@ def validate_modeled_bounds_against_owner(
             )
         if any(abs(modeled_size_xyz[index] - expected_size_xyz[index]) > _PLACEMENT_TOLERANCE for index in range(3)):
             raise ValueError(
-                "tv_aluminum_plate outer bounds size must be 0.04 mm thick and span full tv Y/Z "
+                "tv_aluminum_plate outer bounds size must be a zero-thickness sheet and span full tv Y/Z "
                 f"(actual={modeled_size_xyz}, expected={expected_size_xyz})"
             )
         return
@@ -1464,15 +1535,22 @@ def style_imported_modeled_objects(
             f"{context}.role tx_outer_single_coil is inactive and unsupported in active Type2 import styling"
         )
     if role == _TV_ALUMINUM_PLATE_ROLE:
+        raw_sheet_present = require_key(modeled_entry, key="sheet_present", context=context)
+        if isinstance(raw_sheet_present, bool) or not isinstance(raw_sheet_present, int):
+            raise TypeError(f"{context}.sheet_present must be int")
+        sheet_present = raw_sheet_present
+        if sheet_present == 0 and imported_object_names == []:
+            return []
+        if sheet_present != 1:
+            raise ValueError(f"{context}.sheet_present must be 0 or 1 (actual={sheet_present!r})")
         if imported_object_names != [_TV_ALUMINUM_PLATE_BODY_NAME]:
             raise ValueError(
-                f"{context} requires exactly one imported tv aluminum plate body "
+                f"{context} imported tv aluminum plate names must match enabled sheet_present "
                 f"(expected={[_TV_ALUMINUM_PLATE_BODY_NAME]}, actual={imported_object_names})"
             )
-        _apply_object_material_and_visual_state(
+        _apply_object_visual_state(
             modeler=modeler,
             object_name=_TV_ALUMINUM_PLATE_BODY_NAME,
-            material_name=_TV_ALUMINUM_PLATE_MATERIAL,
             color=_TV_ALUMINUM_PLATE_COLOR,
             transparency=_TV_ALUMINUM_PLATE_TRANSPARENCY,
             context=f"{context}.tv_aluminum_plate[{_TV_ALUMINUM_PLATE_BODY_NAME}]",
@@ -1534,6 +1612,7 @@ def style_imported_modeled_objects(
 
 
 __all__ = [
+    "create_tv_aluminum_plate_sheet_from_contract",
     "ensure_underlay_materials",
     "ensure_pet_psa_material",
     "ensure_notebook_dataset_ferrite_material",
