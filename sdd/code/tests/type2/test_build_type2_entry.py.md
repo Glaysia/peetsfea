@@ -26,6 +26,7 @@ tags:
 - Related plan: [0.2.24-type2-batch-resume-absolute-sample-index](../../../plans/0.2.24-type2-batch-resume-absolute-sample-index.md).
 - TX inner X-position compatibility metadata must stay fixed zero and removed TX outer sampled owners must stay absent.
 - Default Type2 build retries only `Type2AedtWorkerProcessError` from the persistent AEDT worker path, waits 60 seconds between restarts, and stops after the configured production restart limit.
+- Persistent AEDT worker launch coverage asserts the default 1-second start-event stagger and verifies the starter does not wait for each worker's ready message before starting the next worker.
 
 ## Canonical state
 - Build path can reuse existing STEP ledger or generate missing RX STEP artifacts.
@@ -56,6 +57,7 @@ tags:
 - Prepared build validation must reject missing or nonzero TX inner X-position compatibility ranges before setup-ready execution.
 - Best-effort build tests catch only declared skippable runtime exceptions; unsupported role validation remains fail-fast before skip recording.
 - Worker restart tests assert non-worker exceptions are not retried and persistent worker failures re-raise after the bounded restart limit; failure-path tests monkeypatch the production limit down to three restarts.
+- Worker startup tests must distinguish process start-event staggering from AEDT readiness serialization.
 - Skipped validation or AEDT setup failures are not persistent-worker restart candidates; they are reported through the skip ledger and then raised by the entry boundary.
 
 ### Build resume contract covered here

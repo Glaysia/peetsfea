@@ -34,7 +34,7 @@ _ProgressReporter = Callable[[int, int, int], None]
 _Sleep = Callable[[float], None]
 _WORKER_SPEC_CACHE: dict[Path, Type2StepSpec] = {}
 DEFAULT_AEDT_PORT_BASE = 45000
-DEFAULT_AEDT_LAUNCH_STAGGER_SEC = 5.0
+DEFAULT_AEDT_LAUNCH_STAGGER_SEC = 1.0
 _PERSISTENT_WORKER_INIT_TIMEOUT_SEC = 900.0
 _PERSISTENT_WORKER_QUEUE_FACTOR = 2
 _RX_ONLY_MODELED_ROLES: tuple[str] = ("rx_single_coil",)
@@ -748,29 +748,39 @@ def _start_persistent_build_workers(
         )
         process.start()
         workers.append(process)
-        while True:
-            try:
-                raw_message = result_queue.get(timeout=_PERSISTENT_WORKER_INIT_TIMEOUT_SEC)
-            except Empty as exc:
-                raise Type2AedtWorkerLaunchError(
-                    f"Persistent AEDT worker {worker_index} did not report ready within "
-                    f"{_PERSISTENT_WORKER_INIT_TIMEOUT_SEC:.0f}s"
-                ) from exc
-            message_type, message_worker_index, payload = cast(_PersistentResultMessage, raw_message)
-            if message_worker_index != worker_index:
-                raise Type2AedtWorkerLaunchError(
-                    "Persistent AEDT workers reported readiness out of order "
-                    f"(expected={worker_index}, actual={message_worker_index}, type={message_type})"
-                )
-            if message_type == "ready":
-                break
-            if message_type == "fatal":
-                _raise_if_worker_launch_message(cast(str, payload))
-            raise Type2AedtWorkerLaunchError(
-                f"Unexpected persistent AEDT worker init message: type={message_type}, payload={payload!r}"
-            )
         if worker_index != jobs - 1 and aedt_launch_stagger_sec > 0:
             sleep(aedt_launch_stagger_sec)
+
+    ready_worker_indexes: set[int] = set()
+    while len(ready_worker_indexes) < jobs:
+        try:
+            raw_message = result_queue.get(timeout=_PERSISTENT_WORKER_INIT_TIMEOUT_SEC)
+        except Empty as exc:
+            missing_worker_indexes = sorted(set(range(jobs)) - ready_worker_indexes)
+            raise Type2AedtWorkerLaunchError(
+                "Persistent AEDT workers did not report ready within "
+                f"{_PERSISTENT_WORKER_INIT_TIMEOUT_SEC:.0f}s "
+                f"(missing_worker_indexes={missing_worker_indexes})"
+            ) from exc
+        message_type, message_worker_index, payload = cast(_PersistentResultMessage, raw_message)
+        if message_worker_index < 0 or message_worker_index >= jobs:
+            raise Type2AedtWorkerLaunchError(
+                "Persistent AEDT worker reported invalid readiness index "
+                f"(actual={message_worker_index}, type={message_type})"
+            )
+        if message_worker_index in ready_worker_indexes:
+            raise Type2AedtWorkerLaunchError(
+                "Persistent AEDT worker reported duplicate readiness "
+                f"(worker_index={message_worker_index}, type={message_type})"
+            )
+        if message_type == "ready":
+            ready_worker_indexes.add(message_worker_index)
+            continue
+        if message_type == "fatal":
+            _raise_if_worker_launch_message(cast(str, payload))
+        raise Type2AedtWorkerLaunchError(
+            f"Unexpected persistent AEDT worker init message: type={message_type}, payload={payload!r}"
+        )
     return workers
 
 

@@ -743,7 +743,7 @@ def test_build_type2_reads_aedt_builder_n_from_manifest(
     assert calls[0]["jobs"] == 6
     assert calls[0]["reuse_aedt"] is True
     assert calls[0]["aedt_port_base"] == 45000
-    assert calls[0]["aedt_launch_stagger_sec"] == 5.0
+    assert calls[0]["aedt_launch_stagger_sec"] == 1.0
     assert calls[0]["build_count"] == 2
     assert calls[0]["skipped_ledger_path"] == manifest_path.parent / "type2_build_skipped.json"
     assert calls[0]["manifest_path"] == manifest_path
@@ -834,7 +834,7 @@ def test_build_type2_retries_worker_process_error_with_bounded_restart(
     assert calls[0]["manifest_path"] == manifest_path
     assert calls[0]["reuse_aedt"] is True
     assert calls[0]["aedt_port_base"] == 45000
-    assert calls[0]["aedt_launch_stagger_sec"] == 5.0
+    assert calls[0]["aedt_launch_stagger_sec"] == 1.0
     assert calls[0]["sampled_toml_paths"] == calls[1]["sampled_toml_paths"]
 
 
@@ -1213,7 +1213,7 @@ def test_build_type2_forwards_manifest_path_and_selected_ids_to_streaming_runtim
     assert calls["jobs"] == 7
     assert calls["reuse_aedt"] is True
     assert calls["aedt_port_base"] == 45000
-    assert calls["aedt_launch_stagger_sec"] == 5.0
+    assert calls["aedt_launch_stagger_sec"] == 1.0
     assert calls["manifest_path"] == manifest_path
     assert calls["skipped_ledger_path"] == manifest_path.parent / "type2_build_skipped.json"
     assert calls["sampled_toml_paths"] == [str(sampled_toml_path)]
@@ -2575,6 +2575,21 @@ def test_start_persistent_build_workers_uses_fixed_ports_and_stagger(
     ports: list[int] = []
     sleeps: list[float] = []
 
+    class _TrackingQueue:
+        def __init__(self) -> None:
+            self.messages: list[object] = []
+            self.get_call_count = 0
+
+        def put(self, item: object) -> None:
+            self.messages.append(item)
+
+        def get(self, timeout: float | None = None) -> object:
+            _ = timeout
+            self.get_call_count += 1
+            if not self.messages:
+                raise AssertionError("ready messages must be queued before readiness collection")
+            return self.messages.pop(0)
+
     class _FakeProcess:
         def __init__(self, *, target: object, kwargs: dict[str, object]) -> None:
             self.kwargs = kwargs
@@ -2598,20 +2613,25 @@ def test_start_persistent_build_workers_uses_fixed_ports_and_stagger(
 
     monkeypatch.setattr(type2_runtime, "Process", _FakeProcess)
     task_queue: LocalQueue[Any] = LocalQueue()
-    result_queue: LocalQueue[Any] = LocalQueue()
+    result_queue = _TrackingQueue()
+
+    def _sleep(seconds: float) -> None:
+        assert result_queue.get_call_count == 0
+        sleeps.append(seconds)
 
     workers = type2_runtime._start_persistent_build_workers(
         jobs=3,
         aedt_port_base=46000,
-        aedt_launch_stagger_sec=5.0,
+        aedt_launch_stagger_sec=1.0,
         task_queue=cast(Any, task_queue),
         result_queue=cast(Any, result_queue),
-        sleep=sleeps.append,
+        sleep=_sleep,
     )
 
     assert len(workers) == 3
     assert ports == [46000, 46001, 46002]
-    assert sleeps == [5.0, 5.0]
+    assert sleeps == [1.0, 1.0]
+    assert result_queue.get_call_count == 3
 
 
 def test_start_persistent_build_workers_treats_license_launch_failure_as_batch_fatal(
@@ -2687,7 +2707,7 @@ def test_run_build_cli_passes_design_id_to_headless_build(
     assert calls["selected_design_ids"] == ("abc",)
     assert calls["reuse_aedt"] is True
     assert calls["aedt_port_base"] == 45000
-    assert calls["aedt_launch_stagger_sec"] == 5.0
+    assert calls["aedt_launch_stagger_sec"] == 1.0
 
 
 def test_run_build_cli_passes_aedt_reuse_knobs_to_headless_build(
