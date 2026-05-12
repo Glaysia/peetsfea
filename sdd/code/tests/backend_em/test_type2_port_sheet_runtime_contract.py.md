@@ -19,6 +19,7 @@ tags:
 ## 역할
 - Active Type2 runtime port sheet contract tests for fake AEDT modeler/import paths.
 - Covers direct ledger-vertex sheet creation and bbox drift fail-fast ordering without launching AEDT.
+- Covers the exported-body coordinate block used for imported body bbox validation.
 
 ## 입력 / 출력
 - 입력: fake imported ledgers and fake AEDT modeler object bounds.
@@ -26,13 +27,14 @@ tags:
 
 ## Canonical state
 - Single-coil runtime sheets are created only from `single_coil_port_v1` terminal metadata.
-- Imported body bbox validation runs before sheet primitive creation.
+- Imported body bbox validation runs before sheet primitive creation and reads `exported_body_canonical_coordinates`.
 
 ## Invariants / fail-fast
-- Mismatched imported bbox versus ledger canonical bounds raises before `create_polyline`.
+- Mismatched imported bbox versus ledger exported-body bounds raises before `create_polyline`.
 - Missing or malformed single-coil port contract raises without fallback.
 
 ## Collaborators
 - [type2_step_import_core.py](../../src/peetsfea/backend/pyaedt/type2_step_import_core.py.md)
 - [type2_step_import_style.py](../../src/peetsfea/backend/pyaedt/type2_step_import_style.py.md)
 - [0.2.25 Type2 Port Sheet Contract Rewrite](../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)
+- [0.2.25 Type2 Exported Body Bounds Import Validation](../../../plans/0.2.25-type2-exported-body-bounds-import-validation.md)

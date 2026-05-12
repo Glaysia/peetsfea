@@ -44,7 +44,7 @@ from peetsfea.type2_sampled import (
 
 _Exporter = Callable[..., object]
 _BUILD_RESTART_SLEEP_SEC: float = 60.0
-_BUILD_RESTART_LIMIT: int = 100
+_BUILD_RESTART_LIMIT: int = 500
 
 
 class _Type2BuildRunnerResult(TypedDict):
@@ -140,6 +140,10 @@ def build_type2(
     if len(batch["skipped"]) > 0:
         print(f"skipped design count: {len(batch['skipped'])}")
         print(f"build skipped ledger: {skipped_ledger_path}")
+        raise RuntimeError(
+            f"type2 build skipped {len(batch['skipped'])} design(s); "
+            f"see skipped ledger at {skipped_ledger_path}"
+        )
     return batch["built"]
 
 

@@ -215,6 +215,16 @@ def _canonical_bounds(
     return min_xyz, max_xyz, size_xyz
 
 
+def _exported_body_bounds(
+    entry: dict[str, object],
+) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
+    canonical_coordinates = cast(dict[str, object], entry["exported_body_canonical_coordinates"])
+    min_xyz = cast(tuple[float, float, float], canonical_coordinates["outer_bounds_min_xyz"])
+    max_xyz = cast(tuple[float, float, float], canonical_coordinates["outer_bounds_max_xyz"])
+    size_xyz = cast(tuple[float, float, float], canonical_coordinates["outer_bounds_size_xyz"])
+    return min_xyz, max_xyz, size_xyz
+
+
 def _make_tv_aluminum_plate_spec() -> ModeledTvAluminumPlateSpec:
     return ModeledTvAluminumPlateSpec(
         object_id="tv_aluminum_plate",
@@ -1243,19 +1253,111 @@ def _iter_shape_tree(shape: Shape) -> tuple[Shape, ...]:
     return tuple(descendants)
 
 
+def _is_step_import_solid_placeholder(label: str) -> bool:
+    return label == "" or label == "SOLID"
+
+
+def _synthetic_step_group_child_labels(
+    *,
+    group_label: str,
+    child_count: int,
+    top_level_labels: set[str],
+) -> tuple[str, ...]:
+    if child_count < 1:
+        raise AssertionError(f"STEP group must contain children for synthetic labels: {group_label}")
+    if group_label == _TX_COPPER_GROUP_NAME:
+        if child_count != 1:
+            raise AssertionError(f"TX copper STEP group must contain exactly one child (actual={child_count})")
+        return ("tx_plate_copper",)
+    if group_label == _RX_COPPER_GROUP_NAME:
+        if child_count != 1:
+            raise AssertionError(f"RX copper STEP group must contain exactly one child (actual={child_count})")
+        return ("rx_plate_copper",)
+    if group_label == _RX_FERRITE_GROUP_NAME:
+        if child_count != 3:
+            raise AssertionError(f"RX ferrite STEP group must contain exactly three children (actual={child_count})")
+        if {"rx_pcb_wall", "rx_pcb_coil"}.issubset(top_level_labels):
+            return ("rx_stack_pet_psa", "rx_stack_ferrite", "rx_stack_air")
+        return ("under_rx_ferrite_u0", "under_rx_pet_psa_u0", "under_rx_air_u0")
+    if group_label == _TX_FERRITE_GROUP_NAME:
+        if {"tx_pcb_wall", "tx_pcb_coil"}.issubset(top_level_labels):
+            if child_count != 3:
+                raise AssertionError(f"TX plate ferrite STEP group must contain exactly three children (actual={child_count})")
+            return ("tx_stack_pet_psa", "tx_stack_ferrite", "tx_stack_air")
+        if any(label.startswith("tx_inner_pcb_l") for label in top_level_labels):
+            if child_count < 2 or (child_count - 2) % 2 != 0:
+                raise AssertionError(f"TX inner ferrite STEP group child count is not underlay plus void pairs: {child_count}")
+            labels: list[str] = ["tx_underlay_pet_psa_u0", "tx_underlay_ferrite_u0"]
+            for pair_index in range((child_count - 2) // 2):
+                labels.append(f"tx_void_ferrite_u{pair_index}")
+                labels.append(f"tx_void_pet_psa_u{pair_index}")
+            return tuple(labels)
+        if child_count != 3:
+            raise AssertionError(f"TX wall ferrite STEP group must contain exactly three children (actual={child_count})")
+        return ("tx_wall_ferrite_u0", "tx_wall_pet_psa_u0", "tx_wall_air_u0")
+    raise AssertionError(f"unsupported STEP group label for synthetic child labels: {group_label}")
+
+
+def _add_shape_by_label(
+    shapes_by_label: dict[str, Shape],
+    *,
+    label: str,
+    shape: Shape,
+) -> None:
+    if _is_step_import_solid_placeholder(label):
+        return
+    if label in shapes_by_label:
+        raise AssertionError(f"duplicate STEP label found during recursive scan: {label}")
+    shapes_by_label[label] = shape
+
+
 def _step_shapes_by_label(step_path: Path) -> dict[str, Shape]:
     imported_scene = bd.import_step(step_path)
     top_level_children = tuple(imported_scene.children)
     roots = top_level_children if len(top_level_children) != 0 else (cast(Shape, imported_scene),)
+    top_level_labels = {root.label for root in roots if not _is_step_import_solid_placeholder(root.label)}
     shapes_by_label: dict[str, Shape] = {}
     for root in roots:
-        for shape in _iter_shape_tree(cast(Shape, root)):
-            if shape.label == "" or shape.label == "SOLID":
+        root_shape = cast(Shape, root)
+        _add_shape_by_label(shapes_by_label, label=root_shape.label, shape=root_shape)
+        root_children = tuple(root_shape.children)
+        if root_shape.label in {
+            _TX_COPPER_GROUP_NAME,
+            _RX_COPPER_GROUP_NAME,
+            _TX_FERRITE_GROUP_NAME,
+            _RX_FERRITE_GROUP_NAME,
+        }:
+            synthetic_labels = _synthetic_step_group_child_labels(
+                group_label=root_shape.label,
+                child_count=len(root_children),
+                top_level_labels=top_level_labels,
+            )
+            if len(synthetic_labels) != len(root_children):
+                raise AssertionError(
+                    "synthetic STEP group label count must match imported child count "
+                    f"(group={root_shape.label}, labels={synthetic_labels}, children={len(root_children)})"
+                )
+            for synthetic_label, child in zip(synthetic_labels, root_children, strict=True):
+                _add_shape_by_label(shapes_by_label, label=synthetic_label, shape=cast(Shape, child))
+            continue
+        for shape in _iter_shape_tree(root_shape):
+            if shape is root_shape:
                 continue
-            if shape.label in shapes_by_label:
-                raise AssertionError(f"duplicate STEP label found during recursive scan: {shape.label}")
-            shapes_by_label[shape.label] = shape
+            _add_shape_by_label(shapes_by_label, label=shape.label, shape=shape)
     return shapes_by_label
+
+
+def _assert_step_brep_names_include_exact_labels(
+    *,
+    step_path: Path,
+    expected_body_names: tuple[str, ...],
+) -> None:
+    step_text = step_path.read_text(encoding="utf-8")
+    brep_names = tuple(re.findall(r"MANIFOLD_SOLID_BREP\('([^']+)',#[0-9]+\);", step_text))
+    assert len(brep_names) >= len(expected_body_names)
+    assert all(name != "SOLID" and not name.startswith("SOLID_") for name in brep_names)
+    for expected_body_name in expected_body_names:
+        assert expected_body_name in brep_names
 
 
 def _plate_stack_top_level_expected_body_names(
@@ -1519,9 +1621,7 @@ def _assert_ferrite_family_pcb_clearance_contract(
     ferrite_member_names: tuple[str, ...],
     pcb_body_names: tuple[str, ...],
 ) -> None:
-    ferrite_group = scene_shapes_by_label[ferrite_group_name]
-    assert type(ferrite_group).__name__ == "Compound"
-    assert tuple(cast(Shape, child).label for child in ferrite_group.children) == ferrite_member_names
+    assert ferrite_group_name not in scene_shapes_by_label
 
     for ferrite_member_name in ferrite_member_names:
         ferrite_shape = scene_shapes_by_label[ferrite_member_name]
@@ -1805,9 +1905,7 @@ def _assert_plate_stack_united_ferrite_family_contract(
         f"{prefix}_stack_ferrite",
         f"{prefix}_stack_air",
     )
-    group_shape = scene_shapes_by_label[group_label]
-    assert type(group_shape).__name__ == "Compound"
-    assert tuple(child.label for child in group_shape.children) == expected_member_labels
+    assert group_label not in scene_shapes_by_label
     for member_label in expected_member_labels:
         member_shape = scene_shapes_by_label[member_label]
         assert type(member_shape).__name__ == "Solid"
@@ -1848,9 +1946,7 @@ def _assert_rx_full_backing_contract(
         "under_rx_air_u0",
     )
     assert all(label in scene_shapes_by_label for label in underlay_labels)
-    ferrite_group = scene_shapes_by_label[_RX_FERRITE_GROUP_NAME]
-    assert type(ferrite_group).__name__ == "Compound"
-    assert {child.label for child in ferrite_group.children} == set(underlay_labels)
+    assert _RX_FERRITE_GROUP_NAME not in scene_shapes_by_label
 
     rx_pcb_shape = scene_shapes_by_label["rx_pcb_l0"]
     rx_copper_shape = scene_shapes_by_label["rx_copper_l0"]
@@ -1890,9 +1986,7 @@ def _assert_plate_stack_united_copper_group_contract(
 ) -> None:
     group_label = _TX_COPPER_GROUP_NAME if prefix == "tx" else _RX_COPPER_GROUP_NAME
     member_label = f"{prefix}_plate_copper"
-    group_shape = scene_shapes_by_label[group_label]
-    assert type(group_shape).__name__ == "Compound"
-    assert tuple(child.label for child in group_shape.children) == (member_label,)
+    assert group_label not in scene_shapes_by_label
     member_shape = scene_shapes_by_label[member_label]
     assert type(member_shape).__name__ == "Solid"
     assert len(tuple(member_shape.solids())) == 1
@@ -3514,11 +3608,15 @@ def test_export_type2_step_artifacts_supports_active_tx_inner_single_layer_body_
     )
 
     tx_inner_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_inner_rect_void_coil")
+    assert ledger["schema_version"] == "type2.step_ledger.v3"
     assert tx_inner_entry["role"] == "tx_inner_single_coil"
     expected_names = _tx_inner_expected_body_names(layer_count=1)
     assert tx_inner_entry["expected_exported_body_names"] == expected_names
     assert tx_inner_entry["expected_exported_body_count"] == len(expected_names)
     assert tx_inner_entry["expected_exported_body_count"] == 2
+    assert _exported_body_bounds(cast(dict[str, object], tx_inner_entry)) == _canonical_bounds(
+        cast(dict[str, object], tx_inner_entry)
+    )
     assert ledger["outputs"]["mode"] == "RxOnly"
     assert "TX_TML" not in json.dumps(ledger["outputs"], sort_keys=True)
 
@@ -3566,6 +3664,69 @@ def test_export_type2_step_artifacts_keeps_tx_inner_underlay_when_void_stack_dis
     scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
     assert all(name in scene_shapes_by_label for name in expected_underlay_names)
     assert all(not name.startswith("tx_void_") for name in scene_shapes_by_label)
+
+
+def test_export_type2_step_artifacts_tx_inner_exported_bounds_include_passive_underlay_and_void_stack(
+    tmp_path: Path,
+) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_spec_text(
+            modeled_object_id="tx_inner_rect_void_coil",
+            modeled_role="tx_inner_single_coil",
+            underlay_repeat_count_range=_range(True, 1.0, 1.0, 1),
+            void_stack_present_range=_range(True, 1.0, 1.0, 1),
+            underlay_pet_psa_thickness_range=_range(False, 1.0, 1.0, 1),
+            underlay_ferrite_thickness_range=_range(False, 1.0, 1.0, 1),
+            layer_count=1,
+        ),
+    )
+    ledger = export_type2_step_artifacts(
+        toml_path=toml_path,
+        output_dir=tmp_path / "out",
+        ledger_path=tmp_path / "out" / "ledger.json",
+        seed=0,
+    )
+
+    assert ledger["schema_version"] == "type2.step_ledger.v3"
+    tx_inner_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_inner_rect_void_coil")
+    expected_names = _tx_inner_expected_body_names(
+        layer_count=1,
+        underlay_repeat_count=1,
+        void_stack_count=2,
+    )
+    assert tx_inner_entry["expected_exported_body_names"] == expected_names
+    assert tx_inner_entry["expected_exported_body_count"] == len(expected_names)
+
+    semantic_min_xyz, semantic_max_xyz, semantic_size_xyz = _canonical_bounds(
+        cast(dict[str, object], tx_inner_entry)
+    )
+    exported_min_xyz, exported_max_xyz, exported_size_xyz = _exported_body_bounds(
+        cast(dict[str, object], tx_inner_entry)
+    )
+    assert exported_min_xyz[0] == pytest.approx(semantic_min_xyz[0])
+    assert exported_max_xyz[0] == pytest.approx(semantic_max_xyz[0])
+    assert exported_min_xyz[2] < semantic_min_xyz[2]
+    assert exported_max_xyz[2] > semantic_max_xyz[2]
+    assert exported_size_xyz[2] > semantic_size_xyz[2]
+    assert exported_min_xyz[1] == pytest.approx(semantic_min_xyz[1])
+    assert exported_max_xyz[1] == pytest.approx(semantic_max_xyz[1])
+
+    scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
+    assert "g_ferrite_tx" not in scene_shapes_by_label
+    assert _normalized_body_groups(tx_inner_entry["expected_exported_body_groups"]) == _normalized_body_groups(
+        (
+            {
+                "group_name": _TX_FERRITE_GROUP_NAME,
+                "member_body_names": (
+                    "tx_underlay_pet_psa_u0",
+                    "tx_underlay_ferrite_u0",
+                    "tx_void_ferrite_u0",
+                    "tx_void_pet_psa_u0",
+                ),
+            },
+        )
+    )
 
 
 def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_ledger(
@@ -3656,6 +3817,15 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
         "rx_rect_void_coil",
         _TV_ALUMINUM_PLATE_OBJECT_ID,
     }
+    expected_step_body_names = member_object_ids + tuple(
+        body_name
+        for modeled_entry in ledger["modeled_objects"]
+        for body_name in cast(Sequence[str], modeled_entry["expected_exported_body_names"])
+    )
+    _assert_step_brep_names_include_exact_labels(
+        step_path=Path(ledger["scene_step_path"]),
+        expected_body_names=expected_step_body_names,
+    )
     tx_inner_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_inner_rect_void_coil")
     assert tx_inner_entry["role"] == "tx_inner_single_coil"
     assert tx_inner_entry["placement_owner_id"] == "tx_inner_region"
@@ -5125,8 +5295,7 @@ def test_export_type2_step_artifacts_groups_tx_wall_ferrite_family_when_exported
         )
     )
     scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
-    assert "g_ferrite_tx" in scene_shapes_by_label
-    assert type(scene_shapes_by_label["g_ferrite_tx"]).__name__ == "Compound"
+    assert "g_ferrite_tx" not in scene_shapes_by_label
     for label in _tx_wall_expected_body_names(repeat_count=2):
         assert label in scene_shapes_by_label
 
@@ -5155,8 +5324,7 @@ def test_export_type2_step_artifacts_groups_rx_underlay_ferrite_family_when_expo
         _rx_expected_body_groups(underlay_repeat_count=8)
     )
     scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
-    assert "g_ferrite_rx" in scene_shapes_by_label
-    assert type(scene_shapes_by_label["g_ferrite_rx"]).__name__ == "Compound"
+    assert "g_ferrite_rx" not in scene_shapes_by_label
     for label in _rx_underlay_expected_body_names(repeat_count=8):
         assert label in scene_shapes_by_label
     _assert_rx_full_backing_contract(
@@ -5192,7 +5360,7 @@ def test_export_type2_step_artifacts_builds_literal_tx_plate_stack_body_contract
         assert label in scene_children_by_label
     for group_entry in _tx_plate_stack_expected_body_groups():
         group_name = cast(str, group_entry["group_name"])
-        assert group_name in scene_children_by_label
+        assert group_name not in scene_children_by_label
     assert expected_names == (
         "tx_plate_copper",
         "tx_pcb_wall",
@@ -5235,7 +5403,7 @@ def test_export_type2_step_artifacts_builds_literal_rx_plate_stack_body_contract
         assert label in scene_children_by_label
     for group_entry in _rx_plate_stack_expected_body_groups():
         group_name = cast(str, group_entry["group_name"])
-        assert group_name in scene_children_by_label
+        assert group_name not in scene_children_by_label
     assert expected_names == (
         "rx_plate_copper",
         "rx_pcb_wall",
@@ -5615,8 +5783,13 @@ def test_export_type2_step_artifacts_reuses_first_pass_scene_data_for_terminal_v
         output_path.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
         return True
 
+    def _no_op_stamp_scene_step_brep_names(*, scene_step_path: Path, body_names: tuple[str, ...]) -> None:
+        assert scene_step_path.exists()
+        assert len(body_names) > 0
+
     monkeypatch.setattr(module_under_test, "build_modeled_scene_data", _counting_build_modeled_scene_data)
     monkeypatch.setattr(module_under_test.bd, "export_step", _successful_export_step)
+    monkeypatch.setattr(module_under_test, "_stamp_scene_step_brep_names", _no_op_stamp_scene_step_brep_names)
 
     module_under_test.export_type2_step_artifacts(
         toml_path=toml_path,
@@ -5679,9 +5852,14 @@ def test_export_type2_step_artifacts_fails_terminal_metadata_drift_against_first
         output_path.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
         return True
 
+    def _no_op_stamp_scene_step_brep_names(*, scene_step_path: Path, body_names: tuple[str, ...]) -> None:
+        assert scene_step_path.exists()
+        assert len(body_names) > 0
+
     monkeypatch.setattr(module_under_test, "build_modeled_scene_data", _tagged_build_modeled_scene_data)
     monkeypatch.setattr(module_under_test, "build_type2_step_ledger", _drifted_build_type2_step_ledger)
     monkeypatch.setattr(module_under_test.bd, "export_step", _successful_export_step)
+    monkeypatch.setattr(module_under_test, "_stamp_scene_step_brep_names", _no_op_stamp_scene_step_brep_names)
 
     with pytest.raises(RuntimeError, match=r"type2 port sheet metadata must match modeled scene construction contract"):
         module_under_test.export_type2_step_artifacts(

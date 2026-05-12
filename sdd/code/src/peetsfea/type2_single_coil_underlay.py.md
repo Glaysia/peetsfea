@@ -1,7 +1,7 @@
 ---
 title: type2_single_coil_underlay.py
 created: 2026-04-20 @ 00:00
-updated: 2026-05-06 @ 01:00
+updated: 2026-05-13 @ 00:00
 tags:
   - rx
   - non-model
@@ -21,10 +21,11 @@ tags:
 - Type2 single-coil ferrite/PET_PSA priority boolean-clearance helper다.
 - TX outer prism-local void sheet-stack geometry helper다.
 - TX outer prism-local bottom-underlay sheet-stack geometry helper다.
+- Single-coil ferrite-family grouping contract helper다. Group names are emitted to the ledger for post-import grouping, while the scene body tuple preserves exact leaf bodies for AEDT STEP import.
 
 ## 책임
 - `tx_inner_single_coil` 하위층 하부 적층 바디를 생성한다. `-Z` 방향으로 각 반복마다 `PET_PSA`(상단)→`MULL12060ferrite`(하단) 순으로 쌓으며 `tx_underlay_pet_psa_u{n}` / `tx_underlay_ferrite_u{n}` 라벨을 붙인다.
-- `tx_inner_single_coil` 페라이트/언더레이 그룹 이름을 `g_ferrite_tx`로 반환해 export ledger에 반영한다.
+- `tx_inner_single_coil` 페라이트/언더레이 그룹 이름을 `g_ferrite_tx`로 반환해 export ledger에 반영하되, exported STEP scene에는 group wrapper가 아니라 leaf bodies를 유지한다.
 - 스택의 상단 Z(첫 PET의 MAX Z)는 `fit_envelope.outer_bounds_min_z`와 정렬한다.
 - `tx_inner_single_coil` void 내부 YZ 스택을 생성한다. body prefix는 `tx_void_ferrite_u{n}` / `tx_void_pet_psa_u{n}`이며 X방향으로 최대 4개 ferrite/PET_PSA 쌍을 균등 pair span으로 배치하고, Y는 scene layer에서 계산한 central corridor bounds를 따른다. 생성 여부는 scene layer의 `void_stack_present` 판정이 소유한다.
 - ordered scene child tuple에서 ferrite/PET_PSA tool과 PCB/FR4 blank를 식별하고, build123d/OCC cut으로 PCB/FR4 blank만 절단한 새 ordered tuple을 반환한다.
@@ -38,6 +39,7 @@ tags:
 - TX outer central void stack and bottom underlay stack are derived from inner repeat/thickness state and use separate outer label prefixes.
 - TX inner void stack descriptor는 realized void X world bounds, copper-free central corridor Y world bounds, `tx_inner_actual_region.min_z`, `tx_region.max_z`, nominal PET/PSA/ferrite thickness를 canonical state로 가진다.
 - boolean-clearance helper의 canonical state는 caller가 넘긴 ordered scene shapes, explicit ferrite/PET_PSA tool labels/groups 또는 narrow label predicate, 그리고 explicit PCB/FR4 blank labels다.
+- `single_coil_scene_children_with_grouped_ferrite_family()` validates group membership/order against the ledger contract and then returns `base_scene_children + underlay_scene_children`; the function name is historical, but the runtime export contract no longer emits `g_ferrite_*` as a STEP body.
 
 ## Invariants / fail-fast
 - 잘못된 `tx_inner_single_coil` footprint/thickness/반복 값은 즉시 실패한다.
@@ -51,6 +53,7 @@ tags:
 - boolean-clearance helper는 입력/출력 top-level body count와 label order를 보존하며, ferrite/PET_PSA tools는 절단하지 않고 PCB/FR4 blanks만 절단한다.
 - expected cut path에서 tool 또는 blank가 비어 있으면 즉시 실패한다.
 - label 중복, 무라벨 shape, group child label 중복, cut 결과 empty/invalid/non-positive/non-single-solid 상태는 즉시 실패한다.
+- Ferrite group contract validation fails if declared group members differ from the exact underlay leaf order; it does not create a STEP compound because AEDT imports those compounds as generic `SOLID*` bodies.
 
 ## Collaborators
 - [type2_single_coil_scene.py](type2_single_coil_scene.py.md)

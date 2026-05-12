@@ -186,6 +186,7 @@ class ModeledObjectSceneData(TypedDict):
     expected_exported_body_count: int
     expected_exported_body_groups: tuple[ExportedBodyGroup, ...]
     canonical_coordinates: dict[str, object]
+    exported_body_canonical_coordinates: CanonicalCoordinates
     terminal_metadata: dict[str, object]
 
 
@@ -194,7 +195,7 @@ class ModeledObjectLedgerEntry(ModeledObjectSceneData):
 
 
 class Type2StepLedger(TypedDict):
-    schema_version: Literal["type2.step_ledger.v2"]
+    schema_version: Literal["type2.step_ledger.v3"]
     source_toml_path: str
     source_toml_sha256: str
     output_dir: str
@@ -228,6 +229,7 @@ def write_modeled_source_metadata(
         "expected_exported_body_count": scene_data["expected_exported_body_count"],
         "expected_exported_body_groups": scene_data["expected_exported_body_groups"],
         "canonical_coordinates": scene_data["canonical_coordinates"],
+        "exported_body_canonical_coordinates": scene_data["exported_body_canonical_coordinates"],
         "terminal_metadata": scene_data["terminal_metadata"],
     }
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
@@ -256,6 +258,7 @@ def build_modeled_object_ledger_entry(
         "expected_exported_body_count": scene_data["expected_exported_body_count"],
         "expected_exported_body_groups": scene_data["expected_exported_body_groups"],
         "canonical_coordinates": scene_data["canonical_coordinates"],
+        "exported_body_canonical_coordinates": scene_data["exported_body_canonical_coordinates"],
         "terminal_metadata": scene_data["terminal_metadata"],
         "source_metadata_path": str(source_metadata_path),
     }
@@ -277,7 +280,7 @@ def build_type2_step_ledger(
     source_toml_sha256 = _sha256_hex_digest(path=source_toml, context="source_toml_path")
     scene_step_sha256 = _sha256_hex_digest(path=scene_step, context="scene_step_path")
     return {
-        "schema_version": "type2.step_ledger.v2",
+        "schema_version": "type2.step_ledger.v3",
         "source_toml_path": source_toml_path,
         "source_toml_sha256": source_toml_sha256,
         "output_dir": str(output_dir),

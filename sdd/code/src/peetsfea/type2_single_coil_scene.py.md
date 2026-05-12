@@ -18,6 +18,7 @@ tags:
 - RX single-coil and geometry-only TX inner single-coil scene assembly helper다; dormant TX outer helper code remains outside active export.
 - Expose shared owner-scaled sizing/placement helper data needed by non-model actual-region resolution, including the resolved visible physical body footprint and physical modeled body bounds.
 - Active port sheet coordinates are delegated to [type2_single_coil_ports.py](type2_single_coil_ports.py.md); this file must not keep a second private port-sheet resolver.
+- Single-coil scene data must expose a full exported-body bbox separate from the semantic modeled-body bbox.
 
 ## Invariants / fail-fast
 - Invalid RX scene dimensions fail immediately.
@@ -38,6 +39,7 @@ tags:
 - Actual-region helpers must expose the resolved visible physical box, matching the exported modeled body bbox, so passive TX underlay/void bodies align with imported AEDT geometry.
 - `RealizedSingleCoilFitEnvelope.design_outer_bounds_*` and `outer_bounds_*` are the visible physical body box intended for actual-region bounds and for TX inner wall-side placement validation.
 - `RealizedSingleCoilFitEnvelope.physical_modeled_body_bounds_*` describes the same exported physical modeled body bbox used by modeled scene assembly.
+- `canonical_coordinates` remains the semantic physical modeled-body bbox, while `exported_body_canonical_coordinates` must include every top-level STEP body declared for the modeled object, including passive TX inner underlay and void-stack bodies.
 - Single-coil canonical coordinates for TX single-coil modeled entries now include realized rect/void `trace_width_mm` via `fit_envelope.realized.trace_width_mm`.
   TX outer single-coil modeled entries reuse the same source from `placement.fit_envelope.realized.trace_width_mm`.
 - Setup-ready mesh consumes this field to derive Length1 max length.
@@ -85,3 +87,4 @@ tags:
 - [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
 - [0.2.24 Type2 Trace Width Mesh Length](../../../plans/0.2.24-type2-trace-width-mesh-length.md)
 - [0.2.25 Type2 Port Sheet Contract Rewrite](../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)
+- [0.2.25 Type2 Exported Body Bounds Import Validation](../../../plans/0.2.25-type2-exported-body-bounds-import-validation.md)

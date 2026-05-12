@@ -76,6 +76,48 @@ _DEFAULT_FAKE_BBOX = (0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
 _FAKE_IMPORTED_BBOX_BY_NAME: dict[str, tuple[float, float, float, float, float, float]] = {}
 
 
+def _coordinate_block(
+    *,
+    origin_xyz: tuple[float, float, float],
+    size_xyz: tuple[float, float, float],
+    frame_origin_xyz: tuple[float, float, float],
+) -> dict[str, object]:
+    origin_x, origin_y, origin_z = origin_xyz
+    size_x, size_y, size_z = size_xyz
+    return {
+        "frame_origin_xyz": list(frame_origin_xyz),
+        "outer_bounds_min_xyz": [origin_x, origin_y, origin_z],
+        "outer_bounds_max_xyz": [origin_x + size_x, origin_y + size_y, origin_z + size_z],
+        "outer_bounds_size_xyz": [size_x, size_y, size_z],
+    }
+
+
+def _bbox_from_coordinate_block(coordinates: dict[str, object]) -> tuple[float, float, float, float, float, float]:
+    raw_min_xyz = cast(list[float], coordinates["outer_bounds_min_xyz"])
+    raw_max_xyz = cast(list[float], coordinates["outer_bounds_max_xyz"])
+    return (
+        float(raw_min_xyz[0]),
+        float(raw_min_xyz[1]),
+        float(raw_min_xyz[2]),
+        float(raw_max_xyz[0]),
+        float(raw_max_xyz[1]),
+        float(raw_max_xyz[2]),
+    )
+
+
+def _set_exported_body_canonical_coordinates(
+    entry: dict[str, object],
+    *,
+    origin_xyz: tuple[float, float, float],
+    size_xyz: tuple[float, float, float],
+) -> None:
+    entry["exported_body_canonical_coordinates"] = _coordinate_block(
+        origin_xyz=origin_xyz,
+        size_xyz=size_xyz,
+        frame_origin_xyz=origin_xyz,
+    )
+
+
 def _assert_tv_aluminum_plate_ledger_contract(*, entry: dict[str, object]) -> None:
     assert entry["object_id"] == _TV_ALUMINUM_PLATE_OBJECT_ID
     assert entry["role"] == _TV_ALUMINUM_PLATE_ROLE
@@ -329,6 +371,16 @@ def _modeled_entry(
             [origin_x, origin_y + 5.0, origin_z + 5.0],
             [origin_x, origin_y, origin_z + 5.0],
         ]
+    canonical_coordinates = {
+        **_coordinate_block(
+            origin_xyz=origin_xyz,
+            size_xyz=size_xyz,
+            frame_origin_xyz=(offset_x, offset_y, origin_z),
+        ),
+        "pcb_layer_z_positions_mm": pcb_layer_positions_mm,
+        "copper_layer_z_positions_mm": copper_layer_positions_mm,
+        **({"trace_width_mm": trace_width_mm} if trace_width_mm is not None else {}),
+    }
     return {
         "object_id": object_id,
         "role": role,
@@ -339,15 +391,8 @@ def _modeled_entry(
         "expected_exported_body_names": expected_names,
         "expected_exported_body_count": len(expected_names),
         "expected_exported_body_groups": expected_groups,
-        "canonical_coordinates": {
-            "frame_origin_xyz": [offset_x, offset_y, origin_z],
-            "outer_bounds_min_xyz": [origin_x, origin_y, origin_z],
-            "outer_bounds_max_xyz": [origin_x + size_x, origin_y + size_y, origin_z + size_z],
-            "outer_bounds_size_xyz": [size_x, size_y, size_z],
-            "pcb_layer_z_positions_mm": pcb_layer_positions_mm,
-            "copper_layer_z_positions_mm": copper_layer_positions_mm,
-            **({"trace_width_mm": trace_width_mm} if trace_width_mm is not None else {}),
-        },
+        "canonical_coordinates": canonical_coordinates,
+        "exported_body_canonical_coordinates": dict(canonical_coordinates),
         "terminal_metadata": {
             "kind": "single_coil_port_v1",
             "sheet_name": sheet_name,
@@ -645,17 +690,8 @@ def _write_ledger(
 ) -> Path:
     _FAKE_IMPORTED_BBOX_BY_NAME.clear()
     for modeled_object in modeled_objects:
-        canonical_coordinates = cast(dict[str, object], modeled_object["canonical_coordinates"])
-        raw_min_xyz = cast(list[float], canonical_coordinates["outer_bounds_min_xyz"])
-        raw_max_xyz = cast(list[float], canonical_coordinates["outer_bounds_max_xyz"])
-        bbox = (
-            float(raw_min_xyz[0]),
-            float(raw_min_xyz[1]),
-            float(raw_min_xyz[2]),
-            float(raw_max_xyz[0]),
-            float(raw_max_xyz[1]),
-            float(raw_max_xyz[2]),
-        )
+        exported_body_coordinates = cast(dict[str, object], modeled_object["exported_body_canonical_coordinates"])
+        bbox = _bbox_from_coordinate_block(exported_body_coordinates)
         for body_name in cast(list[str], modeled_object["expected_exported_body_names"]):
             _FAKE_IMPORTED_BBOX_BY_NAME[body_name] = bbox
     legacy_outputs = type1_outputs_spec()
@@ -690,7 +726,7 @@ def _write_ledger(
             _sha256_hex_digest(path=scene_step_path, context="scene_step_path") if scene_step_path.is_file() else "missing"
         )
     payload = {
-        "schema_version": "type2.step_ledger.v2",
+        "schema_version": "type2.step_ledger.v3",
         "source_toml_path": str(source_toml_path),
         "source_toml_sha256": calculated_source_toml_sha256,
         "scene_step_sha256": calculated_scene_step_sha256,
@@ -1813,6 +1849,16 @@ def _plate_stack_modeled_entry(
     size_x, size_y, size_z = size_xyz
     if trace_width_mm is None:
         trace_width_mm = _plate_stack_trace_width_mm(size_z=size_z)
+    canonical_coordinates = {
+        **_coordinate_block(
+            origin_xyz=origin_xyz,
+            size_xyz=size_xyz,
+            frame_origin_xyz=(origin_x, origin_y, origin_z),
+        ),
+        "pcb_layer_z_positions_mm": pcb_layer_positions_mm,
+        "copper_layer_z_positions_mm": copper_layer_positions_mm,
+        "trace_width_mm": trace_width_mm,
+    }
     return {
         "object_id": object_id,
         "role": role,
@@ -1823,15 +1869,8 @@ def _plate_stack_modeled_entry(
         "expected_exported_body_names": expected_names,
         "expected_exported_body_count": len(expected_names),
         "expected_exported_body_groups": expected_groups,
-        "canonical_coordinates": {
-            "frame_origin_xyz": [origin_x, origin_y, origin_z],
-            "outer_bounds_min_xyz": [origin_x, origin_y, origin_z],
-            "outer_bounds_max_xyz": [origin_x + size_x, origin_y + size_y, origin_z + size_z],
-            "outer_bounds_size_xyz": [size_x, size_y, size_z],
-            "pcb_layer_z_positions_mm": pcb_layer_positions_mm,
-            "copper_layer_z_positions_mm": copper_layer_positions_mm,
-            "trace_width_mm": trace_width_mm,
-        },
+        "canonical_coordinates": canonical_coordinates,
+        "exported_body_canonical_coordinates": dict(canonical_coordinates),
         "terminal_metadata": terminal_metadata,
         "source_metadata_path": source_metadata_path,
     }
@@ -2481,6 +2520,128 @@ def test_import_type2_step_ledger_styles_tx_inner_single_coil_with_underlay_grou
     ]
     written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
     assert written == result
+
+
+def test_import_type2_step_ledger_accepts_tx_inner_void_stack_when_exported_body_bounds_include_passives(
+    tmp_path: Path,
+) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    tx_inner_object = _tx_inner_modeled_object_with_role_aware_underlay(
+        tmp_path,
+        tx_underlay_repeat_count=1,
+        tx_void_stack_repeat_count=1,
+    )
+    semantic_coordinates = cast(dict[str, object], tx_inner_object["canonical_coordinates"])
+    assert semantic_coordinates["outer_bounds_min_xyz"] == [3.0, -15.0, 67.2]
+    assert semantic_coordinates["outer_bounds_size_xyz"] == [50.0, 30.0, 2.8]
+    _set_exported_body_canonical_coordinates(
+        tx_inner_object,
+        origin_xyz=(3.0, -15.0, 40.0),
+        size_xyz=(50.0, 30.0, 30.0),
+    )
+    exported_body_coordinates = cast(dict[str, object], tx_inner_object["exported_body_canonical_coordinates"])
+    assert exported_body_coordinates["outer_bounds_min_xyz"] == [3.0, -15.0, 40.0]
+    assert exported_body_coordinates["outer_bounds_size_xyz"] == [50.0, 30.0, 30.0]
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry_with_tx_inner_region()],
+        modeled_objects=[tx_inner_object],
+    )
+    output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _FakeHfss(
+        modeler=_FakeModeler(
+            imported_name_batches=[
+                _tx_inner_imported_name_batch_with_role_aware_underlay(
+                    tx_underlay_repeat_count=1,
+                    tx_void_stack_repeat_count=1,
+                )
+            ]
+        )
+    )
+
+    result = import_type2_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=output_aedt_path,
+        imported_ledger_path=imported_ledger_path,
+        design_name="fake_type2_import",
+        hfss_factory=lambda _: cast(HfssSession, session),
+    )
+
+    assert session.modeler.create_polyline_calls == [
+        {
+            "points": cast(dict[str, object], tx_inner_object["terminal_metadata"])["vertices_xyz"],
+            "name": "tx_inner_port_sheet",
+            "cover_surface": False,
+            "close_surface": True,
+            "material": "vacuum",
+        }
+    ]
+    modeled_by_id = {entry["object_id"]: entry for entry in result["modeled_objects"]}
+    assert modeled_by_id["tx_inner_rect_void_coil"]["canonical_coordinates"] == semantic_coordinates
+    assert modeled_by_id["tx_inner_rect_void_coil"]["exported_body_canonical_coordinates"] == exported_body_coordinates
+    assert modeled_by_id["tx_inner_rect_void_coil"]["imported_body_groups"] == [
+        {
+            "group_name": _TX_FERRITE_GROUP_NAME,
+            "member_object_names": [
+                "tx_underlay_pet_psa_u0",
+                "tx_underlay_ferrite_u0",
+                "tx_void_ferrite_u0",
+                "tx_void_pet_psa_u0",
+            ],
+        }
+    ]
+    written = json.loads(imported_ledger_path.read_text(encoding="utf-8"))
+    assert written == result
+
+
+def test_import_type2_step_ledger_rejects_exported_body_bbox_drift_before_sheet_creation(
+    tmp_path: Path,
+) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    tx_inner_object = _tx_inner_modeled_object_with_role_aware_underlay(
+        tmp_path,
+        tx_underlay_repeat_count=1,
+        tx_void_stack_repeat_count=1,
+    )
+    _set_exported_body_canonical_coordinates(
+        tx_inner_object,
+        origin_xyz=(3.0, -15.0, 40.0),
+        size_xyz=(50.0, 30.0, 30.0),
+    )
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry_with_tx_inner_region()],
+        modeled_objects=[tx_inner_object],
+    )
+    for body_name in cast(list[str], tx_inner_object["expected_exported_body_names"]):
+        _FAKE_IMPORTED_BBOX_BY_NAME[body_name] = (4.0, -15.0, 40.0, 54.0, 15.0, 70.0)
+    output_aedt_path = tmp_path / "aedt" / "type2_import.aedt"
+    imported_ledger_path = tmp_path / "aedt" / "type2_imported_ledger.json"
+    session = _FakeHfss(
+        modeler=_FakeModeler(
+            imported_name_batches=[
+                _tx_inner_imported_name_batch_with_role_aware_underlay(
+                    tx_underlay_repeat_count=1,
+                    tx_void_stack_repeat_count=1,
+                )
+            ]
+        )
+    )
+
+    with pytest.raises(ValueError, match=r"modeled_objects\[0\] imported body bbox min drift exceeds tolerance"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=output_aedt_path,
+            imported_ledger_path=imported_ledger_path,
+            design_name="fake_type2_import",
+            hfss_factory=lambda _: cast(HfssSession, session),
+        )
+
+    assert session.modeler.create_polyline_calls == []
+    assert not imported_ledger_path.exists()
 
 
 def test_import_type2_step_ledger_styles_tx_inner_single_coil_with_disabled_void_stack_underlay_only(

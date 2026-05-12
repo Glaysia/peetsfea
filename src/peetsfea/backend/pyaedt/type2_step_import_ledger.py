@@ -23,7 +23,7 @@ _SUPPORTED_MODELED_ROLES: frozenset[str] = frozenset(
 )
 _SUPPORTED_MODELED_PLANES: frozenset[str] = frozenset({"XY", "YZ"})
 _PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
-_SUPPORTED_SCHEMA_VERSION = "type2.step_ledger.v2"
+_SUPPORTED_SCHEMA_VERSION = "type2.step_ledger.v3"
 _TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
 _TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
 _TV_ALUMINUM_PLATE_BODY_NAME = "tv_aluminum_plate"
@@ -154,6 +154,7 @@ _MODELED_REQUIRED_FIELDS = (
     "expected_exported_body_count",
     "expected_exported_body_groups",
     "canonical_coordinates",
+    "exported_body_canonical_coordinates",
     "terminal_metadata",
     "source_metadata_path",
 )
@@ -165,7 +166,7 @@ class ValidatedStepEntry(TypedDict):
 
 
 class ValidatedStepLedger(TypedDict):
-    schema_version: Literal["type2.step_ledger.v2"]
+    schema_version: Literal["type2.step_ledger.v3"]
     source_toml_path: str
     source_toml_sha256: str
     scene_step_path: Path
@@ -309,6 +310,36 @@ def _validated_em_policy(raw_policy: object, *, context: str) -> Type2ImportEmPo
         context=f"{context}.radiation_margin_mm",
     )
     return {"radiation_margin_mm": radiation_margin_mm}
+
+
+def _validated_canonical_coordinates(raw_coordinates: object, *, context: str) -> dict[str, object]:
+    coordinates = _require_table(raw_coordinates, context=context)
+    require_float_triplet(
+        require_key(coordinates, key="frame_origin_xyz", context=context),
+        context=f"{context}.frame_origin_xyz",
+    )
+    min_xyz = require_float_triplet(
+        require_key(coordinates, key="outer_bounds_min_xyz", context=context),
+        context=f"{context}.outer_bounds_min_xyz",
+    )
+    max_xyz = require_float_triplet(
+        require_key(coordinates, key="outer_bounds_max_xyz", context=context),
+        context=f"{context}.outer_bounds_max_xyz",
+    )
+    size_xyz = require_float_triplet(
+        require_key(coordinates, key="outer_bounds_size_xyz", context=context),
+        context=f"{context}.outer_bounds_size_xyz",
+    )
+    for axis_index in (0, 1, 2):
+        if max_xyz[axis_index] < min_xyz[axis_index]:
+            raise ValueError(f"{context}.outer_bounds_max_xyz must be >= outer_bounds_min_xyz on every axis")
+        computed_size = max_xyz[axis_index] - min_xyz[axis_index]
+        if abs(computed_size - size_xyz[axis_index]) > 1e-9:
+            raise ValueError(
+                f"{context}.outer_bounds_size_xyz must equal max-min on every axis "
+                f"(axis_index={axis_index}, min={min_xyz}, max={max_xyz}, size={size_xyz})"
+            )
+    return coordinates
 
 
 def _validated_plate_stack_terminal_metadata(
@@ -813,7 +844,10 @@ def _validated_non_model_entry(
         raise ValueError(f"{context}.model_state must be false")
     if _require_bool(require_key(entry, key="non_model", context=context), context=f"{context}.non_model") is not True:
         raise ValueError(f"{context}.non_model must be true")
-    _require_table(require_key(entry, key="canonical_coordinates", context=context), context=f"{context}.canonical_coordinates")
+    _validated_canonical_coordinates(
+        require_key(entry, key="canonical_coordinates", context=context),
+        context=f"{context}.canonical_coordinates",
+    )
     require_non_empty_str(require_key(entry, key="plane", context=context), context=f"{context}.plane")
     _require_entry_list(require_key(entry, key="member_objects", context=context), context=f"{context}.member_objects")
     return {"object_id": object_id, "entry": entry}
@@ -861,7 +895,14 @@ def _validated_modeled_entry(
                 f"{context}.material must be 'aluminum' for tv_aluminum_plate modeled geometry "
                 f"(actual={material!r})"
             )
-    _require_table(require_key(entry, key="canonical_coordinates", context=context), context=f"{context}.canonical_coordinates")
+    raw_canonical_coordinates = _validated_canonical_coordinates(
+        require_key(entry, key="canonical_coordinates", context=context),
+        context=f"{context}.canonical_coordinates",
+    )
+    _validated_canonical_coordinates(
+        require_key(entry, key="exported_body_canonical_coordinates", context=context),
+        context=f"{context}.exported_body_canonical_coordinates",
+    )
     expected_exported_body_names = validated_object_names(
         cast(
             Sequence[object],
@@ -927,10 +968,6 @@ def _validated_modeled_entry(
             context=context,
         )
     if role == "tx_outer_single_coil":
-        raw_canonical_coordinates = _require_table(
-            require_key(entry, key="canonical_coordinates", context=context),
-            context=f"{context}.canonical_coordinates",
-        )
         if "outer_tilt_metadata" in raw_canonical_coordinates:
             _validated_outer_tilt_metadata(
                 require_key(
@@ -960,6 +997,13 @@ def _member_canonical_coordinates(entry: dict[str, object], *, context: str) -> 
     return _require_table(
         require_key(entry, key="canonical_coordinates", context=context),
         context=f"{context}.canonical_coordinates",
+    )
+
+
+def _member_exported_body_canonical_coordinates(entry: dict[str, object], *, context: str) -> dict[str, object]:
+    return _require_table(
+        require_key(entry, key="exported_body_canonical_coordinates", context=context),
+        context=f"{context}.exported_body_canonical_coordinates",
     )
 
 
@@ -1020,6 +1064,30 @@ def outer_bounds_size_xyz(entry: dict[str, object], *, context: str) -> tuple[fl
     return require_float_triplet(
         require_key(canonical_coordinates, key="outer_bounds_size_xyz", context=f"{context}.canonical_coordinates"),
         context=f"{context}.canonical_coordinates.outer_bounds_size_xyz",
+    )
+
+
+def exported_body_outer_bounds_min_xyz(entry: dict[str, object], *, context: str) -> tuple[float, float, float]:
+    canonical_coordinates = _member_exported_body_canonical_coordinates(entry, context=context)
+    return require_float_triplet(
+        require_key(
+            canonical_coordinates,
+            key="outer_bounds_min_xyz",
+            context=f"{context}.exported_body_canonical_coordinates",
+        ),
+        context=f"{context}.exported_body_canonical_coordinates.outer_bounds_min_xyz",
+    )
+
+
+def exported_body_outer_bounds_size_xyz(entry: dict[str, object], *, context: str) -> tuple[float, float, float]:
+    canonical_coordinates = _member_exported_body_canonical_coordinates(entry, context=context)
+    return require_float_triplet(
+        require_key(
+            canonical_coordinates,
+            key="outer_bounds_size_xyz",
+            context=f"{context}.exported_body_canonical_coordinates",
+        ),
+        context=f"{context}.exported_body_canonical_coordinates.outer_bounds_size_xyz",
     )
 
 
@@ -1156,6 +1224,8 @@ __all__ = [
     "ValidatedStepEntry",
     "ValidatedStepLedger",
     "Type2ImportEmPolicy",
+    "exported_body_outer_bounds_min_xyz",
+    "exported_body_outer_bounds_size_xyz",
     "find_owner_member",
     "find_owner_members_by_concrete_prefix",
     "load_step_ledger",

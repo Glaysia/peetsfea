@@ -17,7 +17,7 @@ tags:
 
 ## 역할
 - STEP import, ownership partition, styling handoff, imported ledger assembly를 조율한다.
-- Immediately after AEDT STEP import, imported body bounding boxes are compared with ledger canonical bounds before any runtime port sheet is created.
+- Immediately after AEDT STEP import, imported body bounding boxes are compared with ledger exported-body bounds before any runtime port sheet is created.
 - 0.2.24 SDD 기준 RX modeled import와 non-modeled guide/context import만 active contract로 둔다.
 - `tx_inner_single_coil` modeled bounds validation receives both its semantic placement owner
   `tx_inner_region` and the separate `tx_inner_actual_region` design/provenance member.
@@ -34,11 +34,12 @@ tags:
   owner validation remains unchanged.
 - Import core does not heal or infer missing geometry.
 - Import core does not allow ledger/body coordinate-frame drift to proceed into sheet creation or setup.
+- Import core compares AEDT imported body union bbox against `exported_body_canonical_coordinates`; semantic `canonical_coordinates` remains reserved for owner/actual-region, mesh, and port setup contracts.
 - `tv_aluminum_plate` uses the backend ledger/partition/style validation path and is merged into the imported ledger directly as one modeled aluminum body; it does not use coil/plate-stack terminal adapter parsing.
 
 ## Invariants / fail-fast
 - `import_3d_cad`, save, or PyAEDT false returns fail immediately.
-- Imported AEDT bbox drift versus ledger canonical coordinates fails immediately with object context.
+- Imported AEDT bbox drift versus ledger exported-body coordinates fails immediately with object context.
 - Missing RX bodies or generic name drift fails immediately.
 - RxOnly import must not require TX modeled geometry or TX port sheets.
 - Missing `tx_inner_actual_region` for a `tx_inner_single_coil` ledger entry fails during
@@ -54,3 +55,4 @@ tags:
 - Representative verification: [test_type2_step_import_pipeline.py](../../../../tests/backend_em/test_type2_step_import_pipeline.py.md)
 - Related plan: [0.2.24 Type2 TV Aluminum Plate](../../../../../plans/0.2.24-type2-tv-aluminum-plate.md)
 - Related plan: [0.2.25 Type2 Port Sheet Contract Rewrite](../../../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)
+- Related plan: [0.2.25 Type2 Exported Body Bounds Import Validation](../../../../../plans/0.2.25-type2-exported-body-bounds-import-validation.md)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 import shutil
 from collections.abc import Callable
 from pathlib import Path
@@ -14,6 +15,7 @@ from peetsfea.tx_rect_void import profile_for_modeled_role
 from peetsfea.type2_plate_stack import expected_plate_stack_body_groups
 from peetsfea.type2_plate_stack import expected_plate_stack_body_names
 from peetsfea.type2_step_ledger import Type2DirectModeledArtifact
+from peetsfea.type2_step_ledger import ExportedBodyGroup
 from peetsfea.type2_step_ledger import Type2ImportEmPolicy
 from peetsfea.type2_step_ledger import Type2StepLedger
 from peetsfea.type2_step_ledger import NonModelObjectLedgerEntry
@@ -95,6 +97,7 @@ _TX_TERMINAL_BRIDGE_COPPER_THICKNESS_MM = 0.035
 _TX_TERMINAL_BRIDGE_TOTAL_THICKNESS_MM = 0.400
 _Type2StepExportStage = Literal["build_scene", "export_scene_step", "finalize_step_artifacts"]
 _TxTerminalBridgePolarity = Literal["positive", "negative"]
+_BLANK_MANIFOLD_SOLID_BREP_RE = re.compile(r"^(#\d+ = MANIFOLD_SOLID_BREP\()''(,#[0-9]+\);)$")
 
 
 def _no_op_type2_step_export_stage_reporter(stage: _Type2StepExportStage) -> None:
@@ -180,9 +183,11 @@ def _validate_top_level_scene_child(shape: Shape) -> None:
     solid_count = len(tuple(shape.solids()))
     if solid_count == 1:
         return
+    if solid_count > 1 and shape.label in (_TX_FERRITE_GROUP_NAME, _TX_OUTER_FERRITE_GROUP_NAME, _RX_FERRITE_GROUP_NAME):
+        return
     if solid_count != 0:
         raise RuntimeError(
-            "type2 scene STEP top-level child must contain either one solid or one sheet "
+            "type2 scene STEP top-level child must contain either one solid, one grouped ferrite family, or one sheet "
             f"(label={shape.label}, solid_count={solid_count})"
         )
     face_count = len(tuple(shape.faces()))
@@ -191,6 +196,71 @@ def _validate_top_level_scene_child(shape: Shape) -> None:
             "type2 scene STEP top-level non-solid child must contain exactly one face "
             f"(label={shape.label}, face_count={face_count})"
         )
+
+
+def _aedt_scene_export_leaf_shapes(scene_shapes: tuple[Shape, ...]) -> tuple[Shape, ...]:
+    leaf_shapes: list[Shape] = []
+
+    def _append_leaf_shapes(shape: Shape) -> None:
+        children = tuple(shape.children)
+        if children:
+            for child in children:
+                _append_leaf_shapes(cast(Shape, child))
+            return
+        if shape.label == "":
+            raise RuntimeError("type2 AEDT scene STEP leaf body label must be non-empty")
+        leaf_shapes.append(shape)
+
+    for scene_shape in scene_shapes:
+        _append_leaf_shapes(scene_shape)
+    if len(leaf_shapes) == 0:
+        raise RuntimeError("type2 AEDT scene STEP must include at least one leaf body")
+    leaf_labels = tuple(shape.label for shape in leaf_shapes)
+    if len(leaf_labels) != len(set(leaf_labels)):
+        raise RuntimeError(f"type2 AEDT scene STEP leaf body labels must be unique (actual={leaf_labels})")
+    return tuple(leaf_shapes)
+
+
+def _step_name_literal(name: str) -> str:
+    if name == "":
+        raise RuntimeError("type2 STEP BREP body name must be non-empty")
+    if "'" in name or "\n" in name or "\r" in name:
+        raise RuntimeError(f"type2 STEP BREP body name contains an unsupported STEP string delimiter (name={name!r})")
+    return f"'{name}'"
+
+
+def _stamp_scene_step_brep_names(
+    *,
+    scene_step_path: Path,
+    body_names: tuple[str, ...],
+) -> None:
+    if len(body_names) == 0:
+        raise RuntimeError(f"type2 scene STEP BREP name stamping requires at least one body name: {scene_step_path}")
+    text = scene_step_path.read_text(encoding="utf-8")
+    stamped_lines: list[str] = []
+    body_index = 0
+    for line in text.splitlines(keepends=True):
+        stripped_line = line.rstrip("\r\n")
+        line_ending = line[len(stripped_line) :]
+        match = _BLANK_MANIFOLD_SOLID_BREP_RE.match(stripped_line)
+        if match:
+            if body_index >= len(body_names):
+                raise RuntimeError(
+                    "type2 scene STEP contains more blank BREP solids than exported leaf body labels "
+                    f"(scene_step_path={scene_step_path}, expected_body_count={len(body_names)})"
+                )
+            stamped_lines.append(
+                f"{match.group(1)}{_step_name_literal(body_names[body_index])}{match.group(2)}{line_ending}"
+            )
+            body_index += 1
+            continue
+        stamped_lines.append(line)
+    if body_index != len(body_names):
+        raise RuntimeError(
+            "type2 scene STEP BREP solid count must match exported leaf body labels "
+            f"(scene_step_path={scene_step_path}, brep_count={body_index}, body_count={len(body_names)}, body_names={body_names})"
+        )
+    scene_step_path.write_text("".join(stamped_lines), encoding="utf-8")
 
 
 def _canonical_coordinates_center_xyz(
@@ -204,6 +274,72 @@ def _canonical_coordinates_center_xyz(
         origin_xyz[1] + (size_xyz[1] * 0.5),
         origin_xyz[2] + (size_xyz[2] * 0.5),
     )
+
+
+def _exported_body_canonical_coordinates_from_shapes(
+    *,
+    object_id: str,
+    scene_children: tuple[Shape, ...],
+    expected_exported_body_names: tuple[str, ...],
+    expected_exported_body_groups: tuple[ExportedBodyGroup, ...],
+) -> dict[str, object]:
+    shapes_by_label: dict[str, Shape] = {}
+
+    def _collect_labeled_shapes(shape: Shape) -> None:
+        children = tuple(shape.children)
+        if children:
+            for child in children:
+                _collect_labeled_shapes(cast(Shape, child))
+            return
+        if shape.label in shapes_by_label:
+            raise RuntimeError(
+                "type2 modeled exported body labels must be unique "
+                f"(object_id={object_id}, duplicate={shape.label})"
+            )
+        shapes_by_label[shape.label] = shape
+
+    for shape in scene_children:
+        _collect_labeled_shapes(shape)
+    exported_shapes = [shapes_by_label[name] for name in expected_exported_body_names if name in shapes_by_label]
+    covered_by_group: set[str] = set()
+    for group_entry in expected_exported_body_groups:
+        group_name = cast(str, group_entry["group_name"])
+        member_body_names = cast(tuple[str, ...], group_entry["member_body_names"])
+        missing_group_member_names = tuple(name for name in member_body_names if name not in shapes_by_label)
+        if missing_group_member_names:
+            if group_name not in shapes_by_label:
+                raise RuntimeError(
+                    "type2 modeled exported body group bounds cannot be derived because group shape is missing "
+                    f"(object_id={object_id}, group_name={group_name}, missing_members={missing_group_member_names})"
+                )
+            exported_shapes.append(shapes_by_label[group_name])
+            covered_by_group.update(missing_group_member_names)
+    missing_names = tuple(
+        name for name in expected_exported_body_names if name not in shapes_by_label and name not in covered_by_group
+    )
+    if missing_names:
+        raise RuntimeError(
+            "type2 modeled exported body bounds cannot be derived because expected bodies are missing "
+            f"(object_id={object_id}, missing={missing_names})"
+        )
+    if len(exported_shapes) == 0:
+        raise RuntimeError(f"type2 modeled object must export at least one body (object_id={object_id})")
+    return dict(canonical_from_shape(cast(Shape, bd.Compound(children=tuple(exported_shapes), label=object_id))))
+
+
+def _modeled_scene_data_with_exported_body_coordinates(
+    *,
+    scene_data: ModeledObjectSceneData,
+    scene_children: tuple[Shape, ...],
+) -> ModeledObjectSceneData:
+    enriched_scene_data = dict(scene_data)
+    enriched_scene_data["exported_body_canonical_coordinates"] = _exported_body_canonical_coordinates_from_shapes(
+        object_id=scene_data["object_id"],
+        scene_children=scene_children,
+        expected_exported_body_names=scene_data["expected_exported_body_names"],
+        expected_exported_body_groups=scene_data["expected_exported_body_groups"],
+    )
+    return cast(ModeledObjectSceneData, enriched_scene_data)
 
 
 def _face_from_xy_polygon(points_xy: tuple[tuple[float, float], ...]) -> bd.Face:
@@ -886,12 +1022,21 @@ def _export_modeled_single_coil(
         tx_region_max_z=owner_spec.origin_xyz[2] + owner_spec.size_xyz[2],
         seed=seed,
     )
-    for shape in scene_children:
+    scene_data = _modeled_scene_data_with_exported_body_coordinates(
+        scene_data=scene_data,
+        scene_children=scene_children,
+    )
+    scene_export_children = _aedt_scene_export_leaf_shapes(scene_children)
+    for shape in scene_export_children:
         _validate_top_level_scene_child(shape)
-    scene = bd.Compound(children=scene_children, label=profile.compound_label)
+    scene = bd.Compound(children=scene_export_children, label=profile.compound_label)
     export_ok = bd.export_step(scene, output_path)
     if export_ok is not True:
         raise RuntimeError(f"build123d export_step returned False for modeled type2 STEP: {output_path}")
+    _stamp_scene_step_brep_names(
+        scene_step_path=output_path,
+        body_names=tuple(shape.label for shape in scene_export_children),
+    )
     write_modeled_source_metadata(
         metadata_path=metadata_path,
         source_toml_path=source_toml_path,
@@ -910,6 +1055,7 @@ def _export_modeled_single_coil(
         "expected_exported_body_count": scene_data["expected_exported_body_count"],
         "expected_exported_body_groups": scene_data["expected_exported_body_groups"],
         "canonical_coordinates": scene_data["canonical_coordinates"],
+        "exported_body_canonical_coordinates": scene_data["exported_body_canonical_coordinates"],
         "terminal_metadata": scene_data["terminal_metadata"],
         "source_metadata_path": str(metadata_path),
     }
@@ -1667,6 +1813,7 @@ def _build_tx_rect_void_columns_scene_data(
             "expected_exported_body_count": len(expected_names),
             "expected_exported_body_groups": (),
             "canonical_coordinates": canonical_coordinates,
+            "exported_body_canonical_coordinates": dict(canonical_coordinates),
             "terminal_metadata": terminal_metadata,
         },
     )
@@ -2105,6 +2252,10 @@ def export_type2_step_artifacts(
             tx_region_max_z=tx_region_max_z,
             seed=seed,
         )
+        scene_data = _modeled_scene_data_with_exported_body_coordinates(
+            scene_data=scene_data,
+            scene_children=current_modeled_scene_shapes,
+        )
         write_modeled_source_metadata(
             metadata_path=metadata_path,
             source_toml_path=toml_path,
@@ -2174,18 +2325,20 @@ def export_type2_step_artifacts(
         non_model_entry["member_objects"] = tuple(member_objects)
 
     scene_shapes = [*non_model_scene_shapes, *modeled_scene_shapes]
+    scene_export_shapes = _aedt_scene_export_leaf_shapes(tuple(scene_shapes))
 
-    scene_body_names = tuple(shape.label for shape in scene_shapes)
+    scene_body_names = tuple(shape.label for shape in scene_export_shapes)
     if len(scene_body_names) != len(set(scene_body_names)):
         raise RuntimeError(f"type2 scene STEP body names must be unique (actual={scene_body_names})")
-    _require_plate_stack_merged_scene_shape_contract(scene_shapes=tuple(scene_shapes))
-    for shape in scene_shapes:
+    _require_plate_stack_merged_scene_shape_contract(scene_shapes=tuple(scene_export_shapes))
+    for shape in scene_export_shapes:
         _validate_top_level_scene_child(shape)
-    scene = bd.Compound(children=scene_shapes, label="type2_scene")
+    scene = bd.Compound(children=scene_export_shapes, label="type2_scene")
     stage_reporter("export_scene_step")
     export_ok = bd.export_step(scene, scene_step_path)
     if export_ok is not True:
         raise RuntimeError(f"build123d export_step returned False for type2 scene STEP: {scene_step_path}")
+    _stamp_scene_step_brep_names(scene_step_path=scene_step_path, body_names=scene_body_names)
 
     stage_reporter("finalize_step_artifacts")
     ledger = build_type2_step_ledger(

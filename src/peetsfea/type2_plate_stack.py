@@ -6,6 +6,7 @@ from typing import Literal, cast
 import build123d as bd
 from build123d.topology.shape_core import Shape
 
+from peetsfea.type2_step_ledger import CanonicalCoordinates
 from peetsfea.type2_step_ledger import ExportedBodyGroup
 from peetsfea.type2_step_ledger import ModeledObjectSceneData
 from peetsfea.type2_step_spec import ModeledPlateStackRole
@@ -550,29 +551,35 @@ def build_plate_stack_scene_data(
             "type2 plate stack final shape labels must stay unique after copper unite "
             f"(role={spec.role}, label={plate_copper_label})"
         )
-    stack_member_names = {
-        member_body_name
-        for group_entry in expected_body_groups
-        for member_body_name in group_entry["member_body_names"]
-    }
-    group_by_first_member_name = {
-        group_entry["member_body_names"][0]: group_entry
-        for group_entry in expected_body_groups
-    }
     top_level_shapes: list[Shape] = []
-    for label in expected_body_names:
-        if label in group_by_first_member_name:
-            group_entry = group_by_first_member_name[label]
-            top_level_shapes.append(
-                _build_labeled_group(
-                    label=group_entry["group_name"],
-                    children=tuple(final_shapes_by_label[member_name] for member_name in group_entry["member_body_names"]),
+    for group_entry in expected_body_groups:
+        for member_body_name in group_entry["member_body_names"]:
+            if member_body_name not in final_shapes_by_label:
+                raise RuntimeError(
+                    "type2 plate stack expected body group member is missing from final body registry "
+                    f"(role={spec.role}, group_name={group_entry['group_name']}, member_body_name={member_body_name})"
                 )
+    for label in expected_body_names:
+        if label not in final_shapes_by_label:
+            raise RuntimeError(
+                "type2 plate stack expected body is missing from final body registry "
+                f"(role={spec.role}, body_name={label})"
             )
-            continue
-        if label in stack_member_names:
-            continue
         top_level_shapes.append(final_shapes_by_label[label])
+    exported_body_canonical_coordinates: CanonicalCoordinates = {
+        "frame_origin_xyz": owner_spec.origin_xyz,
+        "outer_bounds_min_xyz": (
+            owner_origin_x,
+            active_min_y - _PLATE_STACK_STUB_LENGTH_MM,
+            conductor_origin_z,
+        ),
+        "outer_bounds_max_xyz": outer_bounds_max_xyz,
+        "outer_bounds_size_xyz": outer_bounds_size_xyz,
+    }
+    canonical_coordinates: dict[str, object] = dict(exported_body_canonical_coordinates)
+    canonical_coordinates["pcb_layer_z_positions_mm"] = (wall_pcb_origin_mm, coil_pcb_origin_mm)
+    canonical_coordinates["copper_layer_z_positions_mm"] = (wall_copper_origin_mm, coil_copper_origin_mm)
+    canonical_coordinates["trace_width_mm"] = trace_height_z
     return (
         tuple(top_level_shapes),
         {
@@ -585,19 +592,8 @@ def build_plate_stack_scene_data(
             "expected_exported_body_names": expected_body_names,
             "expected_exported_body_count": len(expected_body_names),
             "expected_exported_body_groups": expected_body_groups,
-            "canonical_coordinates": {
-                "frame_origin_xyz": owner_spec.origin_xyz,
-                "outer_bounds_min_xyz": (
-                    owner_origin_x,
-                    active_min_y - _PLATE_STACK_STUB_LENGTH_MM,
-                    conductor_origin_z,
-                ),
-                "outer_bounds_max_xyz": outer_bounds_max_xyz,
-                "outer_bounds_size_xyz": outer_bounds_size_xyz,
-                "pcb_layer_z_positions_mm": (wall_pcb_origin_mm, coil_pcb_origin_mm),
-                "copper_layer_z_positions_mm": (wall_copper_origin_mm, coil_copper_origin_mm),
-                "trace_width_mm": trace_height_z,
-            },
+            "canonical_coordinates": canonical_coordinates,
+            "exported_body_canonical_coordinates": exported_body_canonical_coordinates,
             "terminal_metadata": _plate_stack_terminal_metadata(
                 input_stub_spec=input_stub_spec,
                 output_stub_spec=output_stub_spec,

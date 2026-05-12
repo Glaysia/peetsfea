@@ -11,6 +11,8 @@ from peetsfea.backend.pyaedt.failfast import raise_on_false
 from peetsfea.backend.pyaedt.type2_modeled_import_adapter import build_single_imported_modeled_object_entry
 from peetsfea.backend.pyaedt.type2_step_import_ledger import (
     ValidatedStepLedger,
+    exported_body_outer_bounds_min_xyz,
+    exported_body_outer_bounds_size_xyz,
     find_owner_member,
     find_owner_members_by_concrete_prefix,
     member_object_id,
@@ -65,8 +67,8 @@ def _assert_imported_object_bounds_match_ledger(
     context: str,
     tolerance: float = 1e-6,
 ) -> None:
-    expected_min = outer_bounds_min_xyz(modeled_entry, context=context)
-    expected_size = outer_bounds_size_xyz(modeled_entry, context=context)
+    expected_min = exported_body_outer_bounds_min_xyz(modeled_entry, context=context)
+    expected_size = exported_body_outer_bounds_size_xyz(modeled_entry, context=context)
     if not imported_object_names:
         raise ValueError(f"{context} must include at least one imported modeled object name")
     if tolerance < 0.0:

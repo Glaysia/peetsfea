@@ -118,6 +118,64 @@ def _canonical_from_scene_children(children: tuple[Shape, ...]) -> CanonicalCoor
     return _canonical_from_shape(cast(Shape, compound))
 
 
+def _exported_body_canonical_coordinates(
+    *,
+    scene_children: tuple[Shape, ...],
+    expected_exported_body_names: tuple[str, ...],
+    object_id: str,
+) -> CanonicalCoordinates:
+    if len(expected_exported_body_names) == 0:
+        raise RuntimeError(f"type2 modeled scene requires expected exported body names (object_id={object_id})")
+    if len(set(expected_exported_body_names)) != len(expected_exported_body_names):
+        raise RuntimeError(
+            "type2 modeled scene expected exported body names must be unique "
+            f"(object_id={object_id}, names={expected_exported_body_names})"
+        )
+    expected_name_set = set(expected_exported_body_names)
+    selected_shapes_by_label: dict[str, Shape] = {}
+    unexpected_leaf_labels: list[str] = []
+    for scene_child in scene_children:
+        scene_child_label = scene_child.label
+        if scene_child_label in expected_name_set:
+            if scene_child_label in selected_shapes_by_label:
+                raise RuntimeError(
+                    "type2 exported body canonical coordinates found duplicate top-level body label "
+                    f"(object_id={object_id}, label={scene_child_label})"
+                )
+            selected_shapes_by_label[scene_child_label] = scene_child
+            continue
+        group_children = tuple(scene_child.children)
+        if len(group_children) == 0:
+            unexpected_leaf_labels.append(scene_child_label)
+            continue
+        for group_child in group_children:
+            group_child_label = group_child.label
+            if group_child_label not in expected_name_set:
+                unexpected_leaf_labels.append(group_child_label)
+                continue
+            if group_child_label in selected_shapes_by_label:
+                raise RuntimeError(
+                    "type2 exported body canonical coordinates found duplicate grouped body label "
+                    f"(object_id={object_id}, label={group_child_label}, group={scene_child_label})"
+                )
+            selected_shapes_by_label[group_child_label] = cast(Shape, group_child)
+    if len(unexpected_leaf_labels) != 0:
+        raise RuntimeError(
+            "type2 exported body canonical coordinates found shapes outside expected exported body names "
+            f"(object_id={object_id}, unexpected={tuple(unexpected_leaf_labels)}, "
+            f"expected={expected_exported_body_names})"
+        )
+    selected_labels = tuple(selected_shapes_by_label)
+    if selected_labels != expected_exported_body_names:
+        missing_labels = tuple(label for label in expected_exported_body_names if label not in selected_shapes_by_label)
+        raise RuntimeError(
+            "type2 exported body canonical coordinates must resolve every expected body in order "
+            f"(object_id={object_id}, expected={expected_exported_body_names}, "
+            f"selected={selected_labels}, missing={missing_labels})"
+        )
+    return _canonical_from_scene_children(tuple(selected_shapes_by_label[label] for label in expected_exported_body_names))
+
+
 def _single_coil_clearance_blank_body_names(base_scene_children: tuple[Shape, ...]) -> tuple[str, ...]:
     blank_body_names = tuple(shape.label for shape in base_scene_children if "_pcb_l" in shape.label)
     if len(blank_body_names) == 0:
@@ -1093,6 +1151,11 @@ def _build_tx_outer_single_coil_scene_data(
             "type2 modeled scene body names must be unique "
             f"(object_id={spec.object_id}, names={expected_exported_body_names})"
         )
+    exported_body_canonical_coordinates = _exported_body_canonical_coordinates(
+        scene_children=scene_children,
+        expected_exported_body_names=expected_exported_body_names,
+        object_id=spec.object_id,
+    )
     return (
         scene_children,
         {
@@ -1106,6 +1169,7 @@ def _build_tx_outer_single_coil_scene_data(
             "expected_exported_body_count": len(expected_exported_body_names),
             "expected_exported_body_groups": expected_exported_body_groups,
             "canonical_coordinates": canonical_coordinates,
+            "exported_body_canonical_coordinates": exported_body_canonical_coordinates,
             "terminal_metadata": terminal_metadata,
         },
     )
@@ -1253,6 +1317,11 @@ def build_modeled_single_coil_scene_data(
         frame_origin_xyz=fit_envelope.frame_origin_xyz,
     )
     canonical_coordinates["trace_width_mm"] = fit_envelope.realized.trace_width_mm
+    exported_body_canonical_coordinates = _exported_body_canonical_coordinates(
+        scene_children=scene_children,
+        expected_exported_body_names=expected_exported_body_names,
+        object_id=spec.object_id,
+    )
     terminal_metadata = modeled_terminal_metadata(
         terminal_path=fit_envelope.realized.terminal_path,
         centerline=centerline,
@@ -1274,6 +1343,7 @@ def build_modeled_single_coil_scene_data(
             "expected_exported_body_count": len(expected_exported_body_names),
             "expected_exported_body_groups": expected_exported_body_groups,
             "canonical_coordinates": canonical_coordinates,
+            "exported_body_canonical_coordinates": exported_body_canonical_coordinates,
             "terminal_metadata": terminal_metadata,
         },
     )

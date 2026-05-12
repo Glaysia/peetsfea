@@ -29,6 +29,8 @@ tags:
 - `tx_rect_void_columns` modeled entries now carry `trace_width_mm` in `canonical_coordinates`, recovered from terminal stub anchor boxes carried through existing tile terminal metadata.
 - Single-coil active Type2 terminal metadata uses the `single_coil_port_v1` runtime contract with `sheet_name`, four global-mm `vertices_xyz`, and explicit 3D integration line endpoints.
 - Ledger emission records `source_toml_sha256` and `scene_step_sha256` so import can reject mixed/stale artifacts before AEDT setup proceeds.
+- Modeled ledger entries emit `exported_body_canonical_coordinates` from the exact full body set declared by `expected_exported_body_names`; semantic `canonical_coordinates` remains available for placement, mesh, and terminal contracts.
+- Final AEDT scene STEP export flattens ferrite-family group compounds into exact leaf bodies, then stamps blank `MANIFOLD_SOLID_BREP` names with the leaf labels so PyAEDT imports exact body names instead of `SOLID*`.
 
 ## Inputs / Outputs
 - Inputs: Type2 TOML path, output directory, ledger path, deterministic seed, optional stage reporter.
@@ -51,6 +53,8 @@ tags:
 - Generic `tx_single_coil`, `tx_plate_stack`, and `tx_rect_void_columns` remain unsupported in active RxOnly export.
 - `tx_rect_void_columns` canonical trace-width metadata is derived from each terminal anchor stub BoxSpec in `TxRectVoidColumnsTileTerminalAnchors`, enforcing consistency across all tiles/layers and requiring at least one metadata anchor to avoid fallback behavior.
 - Single-coil port sheet coordinates are creation-time canonical data in `terminal_metadata.vertices_xyz`; downstream import/build code must not derive them from AEDT body bbox, sheet bbox, or terminal stub bbox.
+- For passive-body single-coil cases, `canonical_coordinates` can exclude underlay/void-stack depth while `exported_body_canonical_coordinates` includes those declared passive bodies for AEDT import drift validation.
+- `expected_exported_body_groups` is a post-import grouping contract only; the emitted STEP file must not depend on AEDT preserving compound group children.
 
 ## Invariants / Fail-Fast
 - Generic modeled TX roles fail before scene construction.
@@ -63,6 +67,7 @@ tags:
 - The STEP scene must keep `tx_inner_single_coil` axis-aligned while `tx_outer_single_coil` is tilted by the semantic prism frame.
 - STEP export must return `True`.
 - Scene body labels must be unique.
+- Final scene leaf-body labels must be unique, finite in count, and match one blank STEP BREP name each after build123d export; count drift or labels containing STEP string delimiters fail before hash-bound ledger emission.
 - RX terminal metadata must match the geometry contract.
 - Terminal contract validation must fail if the ledger entry differs from first-pass scene data and must not call modeled geometry builders again for active single-coil entries.
 - Terminal-bridge generation is inactive in active export because `tx_outer_rect_void_coil` is not present in active modeled scene data.
@@ -85,3 +90,4 @@ tags:
 - [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
 - [0.2.24 Type2 STEP Export Scene Data Reuse](../../../plans/0.2.24-type2-step-export-scene-data-reuse.md)
 - [0.2.25 Type2 Port Sheet Contract Rewrite](../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)
+- [0.2.25 Type2 Exported Body Bounds Import Validation](../../../plans/0.2.25-type2-exported-body-bounds-import-validation.md)

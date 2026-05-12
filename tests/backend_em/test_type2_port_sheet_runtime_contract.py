@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import cast
 
 import pytest
@@ -61,13 +62,21 @@ class _RuntimeContractFakeModeler:
 def _single_coil_modeled_entry(
     *,
     vertices_xyz: list[list[float]],
+    canonical_min_xyz: Sequence[float] = (10.0, 20.0, 32.0),
+    canonical_size_xyz: Sequence[float] = (5.0, 1.0, 1.0),
+    exported_body_min_xyz: Sequence[float] = (10.0, 20.0, 30.0),
+    exported_body_size_xyz: Sequence[float] = (5.0, 6.0, 7.0),
 ) -> dict[str, object]:
     return {
         "object_id": "tx_inner_rect_void_coil",
         "role": "tx_inner_single_coil",
         "canonical_coordinates": {
-            "outer_bounds_min_xyz": [10.0, 20.0, 30.0],
-            "outer_bounds_size_xyz": [5.0, 6.0, 7.0],
+            "outer_bounds_min_xyz": list(canonical_min_xyz),
+            "outer_bounds_size_xyz": list(canonical_size_xyz),
+        },
+        "exported_body_canonical_coordinates": {
+            "outer_bounds_min_xyz": list(exported_body_min_xyz),
+            "outer_bounds_size_xyz": list(exported_body_size_xyz),
         },
         "terminal_metadata": {
             "kind": "single_coil_port_v1",
@@ -118,13 +127,20 @@ def test_imported_bbox_drift_fails_before_port_sheet_creation() -> None:
     modeler = _RuntimeContractFakeModeler()
     modeler.objects["tx_inner_copper_l0"] = _RuntimeContractFakeObject(
         "tx_inner_copper_l0",
-        bounding_box=(11.0, 20.0, 30.0, 16.0, 26.0, 37.0),
+        bounding_box=(10.0, 20.0, 32.0, 15.0, 26.0, 39.0),
+    )
+    modeled_entry = _single_coil_modeled_entry(
+        vertices_xyz=vertices_xyz,
+        canonical_min_xyz=[10.0, 20.0, 32.0],
+        canonical_size_xyz=[5.0, 6.0, 7.0],
+        exported_body_min_xyz=[10.0, 20.0, 30.0],
+        exported_body_size_xyz=[5.0, 6.0, 7.0],
     )
 
     with pytest.raises(ValueError, match=r"imported body bbox min drift exceeds tolerance"):
         _assert_imported_object_bounds_match_ledger(
             modeler=cast(ModelerSession, modeler),
-            modeled_entry=_single_coil_modeled_entry(vertices_xyz=vertices_xyz),
+            modeled_entry=modeled_entry,
             imported_object_names=["tx_inner_copper_l0"],
             context="modeled_objects[0]",
         )
@@ -144,7 +160,13 @@ def test_imported_bbox_match_allows_contract_sheet_creation() -> None:
         "tx_inner_copper_l0",
         bounding_box=(10.0, 20.0, 30.0, 15.0, 26.0, 37.0),
     )
-    modeled_entry = _single_coil_modeled_entry(vertices_xyz=vertices_xyz)
+    modeled_entry = _single_coil_modeled_entry(
+        vertices_xyz=vertices_xyz,
+        canonical_min_xyz=[10.0, 20.0, 32.0],
+        canonical_size_xyz=[5.0, 1.0, 1.0],
+        exported_body_min_xyz=[10.0, 20.0, 30.0],
+        exported_body_size_xyz=[5.0, 6.0, 7.0],
+    )
 
     _assert_imported_object_bounds_match_ledger(
         modeler=cast(ModelerSession, modeler),

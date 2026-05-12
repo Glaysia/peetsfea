@@ -26,6 +26,8 @@ tags:
 - Tests cover `tx_inner_actual_region` as a non-modeled coil-fit envelope derived before modeled coil construction.
 - Tests cover ferrite/PET_PSA-priority boolean clearance for representative Type2 single-coil STEP export without changing exported body names, groups, or ledger contracts.
 - Tests now assert the single-coil `single_coil_port_v1` contract emits global-mm `vertices_xyz`, explicit integration-line endpoints, role-specific `sheet_name`, and no legacy single-coil `port_sheet_vertices_xyz` ownership.
+- Tests assert modeled ledger entries expose both semantic `canonical_coordinates` and full exported-body `exported_body_canonical_coordinates`.
+- Tests assert the AEDT-facing STEP emits exact leaf body labels in `MANIFOLD_SOLID_BREP` records and does not export ferrite-family group wrappers as scene bodies.
 
 ## Canonical state
 - RX exported body names/counts and terminal metadata remain deterministic.
@@ -48,6 +50,7 @@ tags:
 - TX inner actual-underlay tests must verify only `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0` are emitted, share `tx_inner_actual_region` X/Y bounds, and stack downward in fixed-example 2.0 mm PET/PSA then 2.0 mm ferrite order for a 4.0 mm total bottom underlay.
 - TX inner void-stack enabled tests verify generated void-stack bodies separately from the fixed example, because the selected-size fixed example disables the stack.
 - TX inner ferrite-family clearance tests must verify the `g_ferrite_tx` member order remains the exported PET_PSA/ferrite underlay members, with void-stack members included only for enabled-stack cases, while every ferrite-family body and every PCB body remains a positive-volume solid.
+- TX/RX ferrite group names remain ledger grouping contracts, but generated STEP labels expose only their exact leaf members for AEDT import.
 - Active generation regressions must verify no `tx_outer_region`, `tx_outer_void_*`, `tx_outer_underlay_*`, `tx_outer_pcb_*`, `tx_outer_copper_*`, `tx_outer_actual_region`, `g_ferrite_tx_outer`, or TX inner/outer bridge members are emitted.
 - Parser tests must reject missing, non-positive, non-fixed, and integer-flagged TX inner underlay thickness ranges.
 - `tx_outer_rect_void_coil` must not appear in active modeled ledgers or STEP scene labels.
@@ -74,6 +77,7 @@ tags:
 - `tx_inner_actual_region` must match the resolved TX inner visible physical body box for the same TOML and seed while leaving `tx_inner_region` as the larger guide region. Its `tx_actual_region.actual_region_bounds` must equal the canonical actual-region ledger bounds, and `physical_modeled_body_bounds` must equal the modeled `tx_inner_rect_void_coil` canonical physical bounds.
 - Changing TX inner `outer_x_usage_ratio` may resize `tx_inner_actual_region` and the modeled physical body, but their min X must remain equal to the unchanged `tx_inner_region` min X and their Y centers must remain equal to the owner Y center.
 - `tx_outer_region` and `tx_outer_actual_region` must be absent from active fixed-example export because no active `tx_outer_rect_void_coil` exists.
+- TX inner passive underlay/void-stack tests verify exported-body coordinates include passive body depth while semantic coordinates stay tied to the modeled coil/actual-region contract.
 
 ## Invariants / fail-fast
 - Exported body drift and generic names fail.
@@ -99,6 +103,7 @@ tags:
   and `rx_region_max`; `tx_outer_region`, `tx_outer_actual_region`, and bridge members are forbidden.
 - Fixed singleton `tx_reference_line.x_ratio` remains required provenance, but must not be treated as a sampled-owner dimension in sample/build tests.
 - Ferrite/PET_PSA-priority clearance assertions fail if any exported ferrite-family member has positive-volume intersection with `tx_inner_pcb_l*`, if a PCB body is emptied, or if the `g_ferrite_tx` group drops/reorders members.
+- STEP label assertions fail if build123d output keeps blank BREP names or if imported/round-tripped labels regress to `SOLID*`.
 
 ## Collaborators
 - [generate_type2_step.py](../../entry/generate_type2_step.py.md)
@@ -113,3 +118,4 @@ tags:
 - [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
 - [0.2.24 Type2 Turn Count Sweep Upper Bound](../../../plans/0.2.24-type2-turn-count-sweep-upper-bound.md)
 - [0.2.25 Type2 Port Sheet Contract Rewrite](../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)
+- [0.2.25 Type2 Exported Body Bounds Import Validation](../../../plans/0.2.25-type2-exported-body-bounds-import-validation.md)

@@ -333,17 +333,13 @@ def single_coil_scene_children_with_grouped_ferrite_family(
             "type2 ferrite group members must match underlay export order "
             f"(expected={member_body_names}, actual={underlay_member_body_names})"
         )
-    shapes_by_label = {shape.label: shape for shape in underlay_scene_children}
-    if len(shapes_by_label) != len(underlay_scene_children):
+    underlay_labels = tuple(shape.label for shape in underlay_scene_children)
+    if len(set(underlay_labels)) != len(underlay_scene_children):
         raise RuntimeError(
             "type2 underlay scene body names must be unique for ferrite grouping "
             f"(body_names={underlay_member_body_names})"
         )
-    ferrite_group_shape = _build_labeled_group(
-        label=group_entry["group_name"],
-        children=tuple(shapes_by_label[member_name] for member_name in member_body_names),
-    )
-    return base_scene_children + (ferrite_group_shape,)
+    return base_scene_children + underlay_scene_children
 
 
 def _underlay_unit_thickness_mm() -> float:

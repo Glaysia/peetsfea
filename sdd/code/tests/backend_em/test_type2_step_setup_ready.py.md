@@ -24,6 +24,7 @@ tags:
   회귀로 검증한다.
 - `assign_type2_lumped_ports`에서 단일 코일 터미널 메타데이터의 `vertices_xyz`와
   `single_coil_port_v1` sheet contract를 AEDT world 좌표 그대로 사용해 경계 엣지를 선택하는 경로를 검증한다.
+- Setup-ready fake ledgers include v3 exported-body coordinates so imported body bbox validation is exercised before setup operations.
 
 ## Canonical state
 - Tests should verify RX conductor mesh and one RX lumped port.
@@ -34,6 +35,7 @@ tags:
 - Active `tx_inner_single_coil` setup fixtures use the current fixed/sweep exported names `tx_inner_pcb_l0` and `tx_inner_copper_l0`; multilayer copper-stack naming is reserved for explicit synthetic stack tests outside the active TX-inner fixture path.
 - TxRx setup fixtures include the `tx_inner_actual_region` non-model member and imported STEP name whenever
   `tx_inner_single_coil` participates, so setup-ready fake import ledgers satisfy strict actual-region validation before AEDT setup operations run.
+- TX inner passive body fixtures keep `canonical_coordinates` semantic and use `exported_body_canonical_coordinates` for imported body union bounds.
 - 포트 할당 단위 테스트에 `tx_inner_single_coil` paired mode (`tx_inner_single_coil` + `rx_single_coil`)를 추가로 검증한다.
 - The active full setup-ready happy path uses a single `rx_single_coil` modeled entry.
 - TxRx full setup-ready happy path uses `tx_inner_single_coil` and `rx_single_coil`; a passive
@@ -74,3 +76,4 @@ tags:
 - Related plan: [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
 - Related plan: [0.2.24 Type2 Trace Width Mesh Length](../../../plans/0.2.24-type2-trace-width-mesh-length.md)
 - Related plan: [0.2.25 Type2 Port Sheet Contract Rewrite](../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)
+- Related plan: [0.2.25 Type2 Exported Body Bounds Import Validation](../../../plans/0.2.25-type2-exported-body-bounds-import-validation.md)

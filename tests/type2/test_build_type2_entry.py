@@ -836,6 +836,134 @@ def test_build_type2_does_not_retry_non_worker_exception(
     assert sleeps == []
 
 
+def test_build_type2_raises_after_streaming_skipped_ledger_is_written(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _patch_rx_only_spec_loader(monkeypatch)
+    source_toml_path = _write_source_type2_toml(tmp_path)
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+    sampled_manifest = sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=4,
+        seed_n=1,
+        sampler_n=1,
+        aedt_builder_n=1,
+        make_step_on_sample=False,
+    )
+    manifest_entry = sampled_manifest["entries"][0]
+    skipped: type2_runtime.Type2BuildSkippedEntry = {
+        "design_id": manifest_entry["design_id"],
+        "seed": manifest_entry["seed"],
+        "sampled_toml_path": manifest_entry["sampled_toml_path"],
+        "phase": "aedt",
+        "error_type": "ValueError",
+        "error_message": "imported body bbox drift validation failed",
+    }
+
+    def _fake_build_type2_sampled_tomls_best_effort(
+        sampled_toml_paths: object,
+        *,
+        jobs: int,
+        skipped_ledger_path: Path,
+        manifest_path: Path,
+        progress_reporter: object,
+        reuse_aedt: bool,
+        aedt_port_base: int,
+        aedt_launch_stagger_sec: float,
+    ) -> type2_runtime.Type2BuildBatchResult:
+        _ = list(cast(Iterable[str], sampled_toml_paths))
+        _ = jobs, progress_reporter, reuse_aedt, aedt_port_base, aedt_launch_stagger_sec
+        build_entry.write_type2_build_skipped_ledger(
+            skipped_ledger_path,
+            manifest_path=manifest_path,
+            skipped=[skipped],
+        )
+        return {"built": [], "skipped": [skipped]}
+
+    monkeypatch.setattr(
+        build_entry,
+        "build_type2_sampled_tomls_best_effort",
+        _fake_build_type2_sampled_tomls_best_effort,
+    )
+
+    with pytest.raises(RuntimeError, match=r"type2 build skipped 1 design"):
+        build_type2(manifest_path=manifest_path)
+
+    skipped_ledger_path = manifest_path.parent / "type2_build_skipped.json"
+    assert json.loads(skipped_ledger_path.read_text(encoding="utf-8")) == {
+        "manifest_path": str(manifest_path),
+        "skipped": [skipped],
+    }
+
+
+def test_build_type2_does_not_retry_skipped_validation_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _patch_rx_only_spec_loader(monkeypatch)
+    source_toml_path = _write_source_type2_toml(tmp_path)
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+    sampled_manifest = sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=4,
+        seed_n=1,
+        sampler_n=1,
+        aedt_builder_n=1,
+        make_step_on_sample=False,
+    )
+    manifest_entry = sampled_manifest["entries"][0]
+    skipped: type2_runtime.Type2BuildSkippedEntry = {
+        "design_id": manifest_entry["design_id"],
+        "seed": manifest_entry["seed"],
+        "sampled_toml_path": manifest_entry["sampled_toml_path"],
+        "phase": "aedt",
+        "error_type": "ValueError",
+        "error_message": "unsupported imported body bounds",
+    }
+    calls = 0
+    sleeps: list[float] = []
+
+    def _fake_build_type2_sampled_tomls_best_effort(
+        sampled_toml_paths: object,
+        *,
+        jobs: int,
+        skipped_ledger_path: Path,
+        manifest_path: Path,
+        progress_reporter: object,
+        reuse_aedt: bool,
+        aedt_port_base: int,
+        aedt_launch_stagger_sec: float,
+    ) -> type2_runtime.Type2BuildBatchResult:
+        nonlocal calls
+        calls += 1
+        _ = list(cast(Iterable[str], sampled_toml_paths))
+        _ = jobs, skipped_ledger_path, manifest_path, progress_reporter
+        _ = reuse_aedt, aedt_port_base, aedt_launch_stagger_sec
+        return {"built": [], "skipped": [skipped]}
+
+    def _sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(
+        build_entry,
+        "build_type2_sampled_tomls_best_effort",
+        _fake_build_type2_sampled_tomls_best_effort,
+    )
+
+    with pytest.raises(RuntimeError, match=r"type2 build skipped 1 design"):
+        build_type2(manifest_path=manifest_path, sleep=_sleep)
+
+    assert calls == 1
+    assert sleeps == []
+
+
 def test_build_type2_retries_worker_process_error_three_times_then_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

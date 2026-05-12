@@ -318,8 +318,8 @@ def single_coil_port_sheet_vertices(
         raise RuntimeError(f"type2 port sheet signal/reference edges must be separated (role={profile.role})")
     vertices = (
         signal_edge[1],
-        reference_edge[0],
         reference_edge[1],
+        reference_edge[0],
         signal_edge[0],
     )
     for vertex_index, vertex in enumerate(vertices):

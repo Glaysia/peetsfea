@@ -30,6 +30,7 @@ from tests.backend_em.test_type2_step_import_pipeline import (
     _FakeHfss as _ImportFakeHfss,
     _FakeMeshModule,
     _FakeModeler as _ImportFakeModeler,
+    _bbox_from_coordinate_block,
     _expected_ferrite_group_for_role,
     _modeled_entry,
     _non_model_entry_with_tx_inner_region,
@@ -49,6 +50,7 @@ from tests.backend_em.test_type2_step_import_pipeline import (
     _tx_region_actual_member_names,
     _tx_outer_single_coil_entry,
     _source_paths,
+    _set_exported_body_canonical_coordinates,
     _write_ledger,
 )
 from tests.fixtures.legacy.type1_spec import TYPE1_OUTPUT_VARIABLES, type1_outputs_spec
@@ -423,17 +425,8 @@ def _write_txrx_step_ledger(
 ) -> Path:
     _FAKE_IMPORTED_BBOX_BY_NAME.clear()
     for modeled_object in modeled_objects:
-        canonical_coordinates = cast(dict[str, object], modeled_object["canonical_coordinates"])
-        raw_min_xyz = cast(list[float], canonical_coordinates["outer_bounds_min_xyz"])
-        raw_max_xyz = cast(list[float], canonical_coordinates["outer_bounds_max_xyz"])
-        bbox = (
-            float(raw_min_xyz[0]),
-            float(raw_min_xyz[1]),
-            float(raw_min_xyz[2]),
-            float(raw_max_xyz[0]),
-            float(raw_max_xyz[1]),
-            float(raw_max_xyz[2]),
-        )
+        exported_body_coordinates = cast(dict[str, object], modeled_object["exported_body_canonical_coordinates"])
+        bbox = _bbox_from_coordinate_block(exported_body_coordinates)
         for body_name in cast(list[str], modeled_object["expected_exported_body_names"]):
             _FAKE_IMPORTED_BBOX_BY_NAME[body_name] = bbox
     legacy_outputs = type1_outputs_spec()
@@ -449,7 +442,7 @@ def _write_txrx_step_ledger(
     source_toml_path = path.parent / "type2_fixed.toml"
     source_toml_path.write_text("source_toml_version=1\n", encoding="utf-8")
     payload = {
-        "schema_version": "type2.step_ledger.v2",
+        "schema_version": "type2.step_ledger.v3",
         "source_toml_path": str(source_toml_path),
         "source_toml_sha256": hashlib.sha256(source_toml_path.read_bytes()).hexdigest(),
         "scene_step_sha256": hashlib.sha256(scene_step_path.read_bytes()).hexdigest(),
@@ -612,10 +605,13 @@ def _tx_inner_single_coil_modeled_object_with_imported_names(
     tmp_path: Path,
     *,
     include_tx_inner_underlay: bool = False,
+    include_tx_inner_void_stack: bool = False,
 ) -> dict[str, object]:
     expected_names = ["tx_inner_pcb_l0", "tx_inner_copper_l0"]
     if include_tx_inner_underlay:
         expected_names.extend(["tx_underlay_pet_psa_u0", "tx_underlay_ferrite_u0"])
+    if include_tx_inner_void_stack:
+        expected_names.extend(["tx_void_ferrite_u0", "tx_void_pet_psa_u0"])
     modeled_object = _modeled_entry(
         object_id="tx_inner_rect_void_coil",
         role="tx_inner_single_coil",
@@ -636,6 +632,11 @@ def _tx_inner_single_coil_modeled_object_with_imported_names(
         modeled_object["imported_object_names"][2:2] = [
             "tx_underlay_pet_psa_u0",
             "tx_underlay_ferrite_u0",
+        ]
+    if include_tx_inner_void_stack:
+        modeled_object["imported_object_names"][4:4] = [
+            "tx_void_ferrite_u0",
+            "tx_void_pet_psa_u0",
         ]
     return modeled_object
 
@@ -736,11 +737,16 @@ def _tv_aluminum_plate_modeled_object_with_imported_names(tmp_path: Path) -> dic
     return modeled_object
 
 
-def _tx_inner_rx_modeled_objects_with_tx_inner_underlay_imported_names(tmp_path: Path) -> list[dict[str, object]]:
+def _tx_inner_rx_modeled_objects_with_tx_inner_underlay_imported_names(
+    tmp_path: Path,
+    *,
+    include_tx_inner_void_stack: bool = False,
+) -> list[dict[str, object]]:
     return [
         _tx_inner_single_coil_modeled_object_with_imported_names(
             tmp_path,
             include_tx_inner_underlay=True,
+            include_tx_inner_void_stack=include_tx_inner_void_stack,
         ),
         _rx_single_coil_modeled_object_with_imported_names(tmp_path),
     ]
@@ -1354,10 +1360,24 @@ def test_setup_type2_step_ledger_keeps_tx_inner_underlay_and_void_stack_passive_
         "tx_void_pet_psa_u1",
     )
     scene_step, ledger_path = _source_paths(tmp_path)
-    modeled_objects = _tx_inner_rx_modeled_objects_with_tx_inner_underlay_imported_names(tmp_path)
+    modeled_objects = _tx_inner_rx_modeled_objects_with_tx_inner_underlay_imported_names(
+        tmp_path,
+        include_tx_inner_void_stack=True,
+    )
     tx_entry = cast(dict[str, object], modeled_objects[0])
+    tx_canonical_coordinates = cast(dict[str, object], tx_entry["canonical_coordinates"])
+    assert tx_canonical_coordinates["outer_bounds_min_xyz"] == [3.0, -15.0, 67.2]
+    assert tx_canonical_coordinates["outer_bounds_size_xyz"] == [50.0, 30.0, 2.8]
+    _set_exported_body_canonical_coordinates(
+        tx_entry,
+        origin_xyz=(3.0, -15.0, 40.0),
+        size_xyz=(50.0, 30.0, 30.0),
+    )
+    tx_exported_coordinates = cast(dict[str, object], tx_entry["exported_body_canonical_coordinates"])
+    assert tx_exported_coordinates["outer_bounds_min_xyz"] == [3.0, -15.0, 40.0]
+    assert tx_exported_coordinates["outer_bounds_size_xyz"] == [50.0, 30.0, 30.0]
     tx_imported_names = cast(list[str], tx_entry["imported_object_names"])
-    for passive_name in passive_names[:2]:
+    for passive_name in passive_names:
         assert passive_name in tx_imported_names
     imported_name_batch = _tx_inner_rx_imported_name_batch_with_tx_inner_underlay()
     for passive_name in passive_names:
@@ -1368,7 +1388,7 @@ def test_setup_type2_step_ledger_keeps_tx_inner_underlay_and_void_stack_passive_
     _write_txrx_step_ledger(
         ledger_path,
         scene_step_path=scene_step,
-        non_model_objects=[_non_model_entry_with_tx_inner_void_stack_members_for_setup()],
+        non_model_objects=[_non_model_entry_with_tx_inner_region()],
         modeled_objects=modeled_objects,
     )
     output_aedt_path = tmp_path / "aedt" / "type2_setup_ready.aedt"

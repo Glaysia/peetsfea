@@ -26,9 +26,11 @@ tags:
 ## Canonical state
 - The terminal metadata written to `type2_step_ledger.json` is the canonical resolved port sheet state.
 - Sheet vertices are ordered so vertices `[3] -> [0]` are the signal edge and `[1] -> [2]` are the reference edge.
+- The four sheet vertices must also form a simple non-self-intersecting loop for AEDT `CreatePolyline`; the reference edge order is chosen so the loop does not become a bow-tie while preserving the signal/reference edge indices used by integration-line metadata.
 
 ## Invariants / fail-fast
 - Missing, ambiguous, unbalanced, non-finite, or degenerate terminal stub geometry fails immediately.
+- Self-intersecting port-sheet vertex ordering is forbidden because AEDT rejects it at `CreatePolyline`.
 - TX parallel single-coil ports use synthetic bus owner boxes built from balanced start/end terminal stub columns.
 - RX single-coil ports require exactly one start and one end terminal stub box.
 
