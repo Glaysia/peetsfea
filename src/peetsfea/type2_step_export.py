@@ -615,36 +615,36 @@ def _build_tx_terminal_bridge_shapes_and_members(
             f"total={_TX_TERMINAL_BRIDGE_TOTAL_THICKNESS_MM})"
         )
     inner_terminal_metadata = cast(dict[str, object], tx_inner_scene_data["terminal_metadata"])
-    if "port_sheet_vertices_xyz" not in inner_terminal_metadata:
+    if "vertices_xyz" not in inner_terminal_metadata:
         raise RuntimeError(
-            f"tx inner {polarity} bridge requires port_sheet_vertices_xyz terminal metadata "
+            f"tx inner {polarity} bridge requires vertices_xyz terminal metadata "
             f"(object_id={tx_inner_scene_data['object_id']})"
         )
     outer_terminal_metadata = cast(dict[str, object], tx_outer_scene_data["terminal_metadata"])
-    if "port_sheet_vertices_xyz" not in outer_terminal_metadata:
+    if "vertices_xyz" not in outer_terminal_metadata:
         raise RuntimeError(
-            f"tx outer {polarity} bridge requires port_sheet_vertices_xyz terminal metadata "
+            f"tx outer {polarity} bridge requires vertices_xyz terminal metadata "
             f"(object_id={tx_outer_scene_data['object_id']})"
         )
     inner_sheet_vertices = _require_port_sheet_vertices_xyz(
-        value=inner_terminal_metadata["port_sheet_vertices_xyz"],
-        context=f"modeled_scene_data[{tx_inner_scene_data['object_id']}].terminal_metadata.port_sheet_vertices_xyz",
+        value=inner_terminal_metadata["vertices_xyz"],
+        context=f"modeled_scene_data[{tx_inner_scene_data['object_id']}].terminal_metadata.vertices_xyz",
     )
     outer_sheet_vertices = _require_port_sheet_vertices_xyz(
-        value=outer_terminal_metadata["port_sheet_vertices_xyz"],
-        context=f"modeled_scene_data[{tx_outer_scene_data['object_id']}].terminal_metadata.port_sheet_vertices_xyz",
+        value=outer_terminal_metadata["vertices_xyz"],
+        context=f"modeled_scene_data[{tx_outer_scene_data['object_id']}].terminal_metadata.vertices_xyz",
     )
     inner_terminal_edge = _terminal_edge_from_port_sheet(
         vertices=inner_sheet_vertices,
         start_vertex_index=start_vertex_index,
         end_vertex_index=end_vertex_index,
-        context=f"modeled_scene_data[{tx_inner_scene_data['object_id']}].terminal_metadata.port_sheet_vertices_xyz",
+        context=f"modeled_scene_data[{tx_inner_scene_data['object_id']}].terminal_metadata.vertices_xyz",
     )
     outer_terminal_edge = _terminal_edge_from_port_sheet(
         vertices=outer_sheet_vertices,
         start_vertex_index=start_vertex_index,
         end_vertex_index=end_vertex_index,
-        context=f"modeled_scene_data[{tx_outer_scene_data['object_id']}].terminal_metadata.port_sheet_vertices_xyz",
+        context=f"modeled_scene_data[{tx_outer_scene_data['object_id']}].terminal_metadata.vertices_xyz",
     )
     if _edge_length_sq(*inner_terminal_edge) <= 1e-18:
         raise RuntimeError(f"tx {polarity} bridge inner terminal edge length is zero")
@@ -2024,15 +2024,22 @@ def _require_port_sheet_geometry_contract(
                 "tx_rect_void_columns terminal metadata kind sentinel must be geometry_only, parallel_collector_tabs, or series_collector_tabs "
                 f"(object_id={modeled_spec.object_id}, actual={raw_kind!r})"
             )
-        if "kind" in terminal_metadata:
-            raw_kind = terminal_metadata["kind"]
-            if not isinstance(raw_kind, str):
+        if isinstance(modeled_spec, ModeledTvAluminumPlateSpec):
+            if terminal_metadata != {}:
                 raise RuntimeError(
-                    "type2 terminal metadata kind sentinel must be str "
-                    f"(object_id={modeled_spec.object_id}, actual={raw_kind!r})"
+                    "tv_aluminum_plate terminal metadata must stay empty "
+                    f"(object_id={modeled_spec.object_id}, actual={terminal_metadata})"
                 )
+            continue
+        raw_kind = terminal_metadata["kind"] if "kind" in terminal_metadata else ""
+        if not isinstance(raw_kind, str):
             raise RuntimeError(
-                "type2 terminal metadata kind sentinel is unsupported "
+                "type2 terminal metadata kind sentinel must be str "
+                f"(object_id={modeled_spec.object_id}, actual={raw_kind!r})"
+            )
+        if raw_kind != "single_coil_port_v1":
+            raise RuntimeError(
+                "type2 single-coil terminal metadata kind sentinel must be single_coil_port_v1 "
                 f"(object_id={modeled_spec.object_id}, kind={raw_kind!r})"
             )
         assert modeled_spec.object_id in modeled_scene_data_by_object_id, (

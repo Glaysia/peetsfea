@@ -616,27 +616,72 @@ def _tx_actual_region_bounds(
     return checked_min_xyz, checked_max_xyz, checked_size_xyz
 
 
-def _expected_port_sheet_name(modeled_entry: dict[str, object], *, context: str) -> str | None:
+def _required_port_sheet_name(modeled_entry: dict[str, object], *, context: str) -> str:
     role = require_non_empty_str(require_key(modeled_entry, key="role", context=context), context=f"{context}.role")
-    if role == "tx_single_coil":
-        return "tx_port_sheet"
-    if role == "rx_single_coil":
-        return "rx_port_sheet"
-    if role == "tx_inner_single_coil":
-        return "tx_inner_port_sheet"
-    if role == "tx_outer_single_coil":
-        return None
+    if role in ("tx_single_coil", "rx_single_coil", "tx_inner_single_coil"):
+        terminal_metadata = require_key(modeled_entry, key="terminal_metadata", context=context)
+        assert isinstance(terminal_metadata, dict), f"{context}.terminal_metadata must be a table/object"
+        kind = require_non_empty_str(
+            require_key(terminal_metadata, key="kind", context=f"{context}.terminal_metadata"),
+            context=f"{context}.terminal_metadata.kind",
+        )
+        if kind != "single_coil_port_v1":
+            raise ValueError(
+                f"{context}.terminal_metadata.kind must be 'single_coil_port_v1' for single-coil roles "
+                f"(actual={kind!r})"
+            )
+        return require_non_empty_str(
+            require_key(terminal_metadata, key="sheet_name", context=f"{context}.terminal_metadata"),
+            context=f"{context}.terminal_metadata.sheet_name",
+        )
     if role == "tx_plate_stack":
         return "tx_plate_port_sheet"
     if role == "rx_plate_stack":
         return "rx_plate_port_sheet"
-    if role == "tx_rect_void_columns":
-        return "tx_rect_void_columns_port_sheet"
-    return None
+    raise ValueError(f"{context}.role does not support runtime port sheet creation (actual={role!r})")
 
 
 def _port_sheet_vertices_xyz(modeled_entry: dict[str, object], *, context: str) -> tuple[tuple[float, float, float], ...]:
     role = require_non_empty_str(require_key(modeled_entry, key="role", context=context), context=f"{context}.role")
+    if role in ("tx_single_coil", "rx_single_coil", "tx_inner_single_coil"):
+        terminal_metadata = require_key(modeled_entry, key="terminal_metadata", context=context)
+        assert isinstance(terminal_metadata, dict), f"{context}.terminal_metadata must be a table/object"
+        kind = require_non_empty_str(
+            require_key(terminal_metadata, key="kind", context=f"{context}.terminal_metadata"),
+            context=f"{context}.terminal_metadata.kind",
+        )
+        if kind != "single_coil_port_v1":
+            raise ValueError(
+                f"{context}.terminal_metadata.kind must be 'single_coil_port_v1' for single-coil port sheets "
+                f"(actual={kind!r})"
+            )
+        raw_vertices = require_key(
+            terminal_metadata,
+            key="vertices_xyz",
+            context=f"{context}.terminal_metadata",
+        )
+        if isinstance(raw_vertices, (str, bytes)) or not isinstance(raw_vertices, Sequence):
+            raise TypeError(f"{context}.terminal_metadata.vertices_xyz must be a sequence of 3D points")
+        vertices: list[tuple[float, float, float]] = []
+        for vertex_index, raw_vertex in enumerate(raw_vertices):
+            if isinstance(raw_vertex, (str, bytes)) or not isinstance(raw_vertex, Sequence):
+                raise TypeError(
+                    f"{context}.terminal_metadata.vertices_xyz[{vertex_index}] must be a sequence of length 3"
+                )
+            if len(raw_vertex) != 3:
+                raise ValueError(
+                    f"{context}.terminal_metadata.vertices_xyz[{vertex_index}] must contain exactly 3 entries"
+                )
+            vertices.append(
+                (
+                    _require_float(raw_vertex[0], context=f"{context}.terminal_metadata.vertices_xyz[{vertex_index}][0]"),
+                    _require_float(raw_vertex[1], context=f"{context}.terminal_metadata.vertices_xyz[{vertex_index}][1]"),
+                    _require_float(raw_vertex[2], context=f"{context}.terminal_metadata.vertices_xyz[{vertex_index}][2]"),
+                )
+            )
+        if len(vertices) != 4:
+            raise ValueError(f"{context}.terminal_metadata.vertices_xyz must contain exactly 4 vertices")
+        return tuple(vertices)
     if role == "tx_rect_void_columns":
         return _tx_rect_void_columns_port_sheet_vertices_xyz(modeled_entry, context=context)
     terminal_metadata = require_key(modeled_entry, key="terminal_metadata", context=context)
@@ -684,7 +729,7 @@ def _tx_rect_void_columns_tab_face_vertices_by_terminal(
     if kind not in ("parallel_collector_tabs", "series_collector_tabs"):
         raise ValueError(
             f"{context}.terminal_metadata.kind must be 'parallel_collector_tabs' or 'series_collector_tabs' "
-            f"for tx_rect_void_columns port sheet reconstruction (actual={kind!r})"
+            f"for tx_rect_void_columns port sheet contract (actual={kind!r})"
         )
     raw_tab_faces = require_key(
         terminal_metadata,
@@ -814,7 +859,7 @@ def _covered_sheet_name(covered: object, *, fallback_name: str, context: str) ->
     return raw_name
 
 
-def _reconstruct_port_sheet_if_needed(
+def _create_port_sheet_from_contract(
     *,
     modeler: ModelerSession,
     modeled_entry: dict[str, object],
@@ -827,9 +872,7 @@ def _reconstruct_port_sheet_if_needed(
         return []
     if role == "tx_outer_single_coil":
         return []
-    expected_port_sheet_name = _expected_port_sheet_name(modeled_entry, context=context)
-    if expected_port_sheet_name is None:
-        return []
+    expected_port_sheet_name = _required_port_sheet_name(modeled_entry, context=context)
 
     port_sheet_vertices_xyz = _port_sheet_vertices_xyz(modeled_entry, context=context)
     polyline_created = create_polyline(
@@ -840,12 +883,12 @@ def _reconstruct_port_sheet_if_needed(
         close_surface=True,
         cover_surface=False,
     )
-    loop_name = require_non_empty_str(getattr(polyline_created, "name"), context=f"{context}.reconstructed_port_sheet.loop_name")
+    loop_name = require_non_empty_str(getattr(polyline_created, "name"), context=f"{context}.port_sheet_contract.loop_name")
     covered = cover_lines(modeler, assignment=loop_name)
     covered_name = _covered_sheet_name(covered, fallback_name=loop_name, context=context)
-    reconstructed_context = f"{context}.reconstructed_port_sheet[{covered_name}]"
-    object_ref = _object_ref(modeler, name=covered_name, context=reconstructed_context)
-    valid_properties = _object_valid_properties(object_ref, context=reconstructed_context)
+    port_sheet_context = f"{context}.port_sheet_contract[{covered_name}]"
+    object_ref = _object_ref(modeler, name=covered_name, context=port_sheet_context)
+    valid_properties = _object_valid_properties(object_ref, context=port_sheet_context)
     # AEDT covered polylines resolve to sheets. Many sheet objects expose no volume
     # "Material" property, so do not issue a volume-material mutation unless the
     # live object explicitly supports it.
@@ -853,7 +896,7 @@ def _reconstruct_port_sheet_if_needed(
         _set_object_material(
             object_ref,
             material_name="vacuum",
-            context=reconstructed_context,
+            context=port_sheet_context,
         )
     state_result = modeler.set_object_model_state(covered_name, True)
     raise_on_false(
@@ -1482,12 +1525,12 @@ def style_imported_modeled_objects(
             transparency=_TX_UNDERLAY_AIR_TRANSPARENCY,
             context=f"{context}.underlay_air[{air_name}]",
         )
-    reconstructed_port_sheet_names = _reconstruct_port_sheet_if_needed(
+    port_sheet_contract_names = _create_port_sheet_from_contract(
         modeler=modeler,
         modeled_entry=modeled_entry,
         context=context,
     )
-    return list(imported_object_names) + reconstructed_port_sheet_names
+    return list(imported_object_names) + port_sheet_contract_names
 
 
 __all__ = [

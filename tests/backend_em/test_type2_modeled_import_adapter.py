@@ -25,12 +25,20 @@ def _modeled_object() -> dict[str, object]:
             "copper_layer_z_positions_mm": [0.4, 2.9],
         },
         "terminal_metadata": {
+            "kind": "single_coil_port_v1",
+            "sheet_name": "tx_single_coil_port_sheet",
             "path": "A_cw_to_a",
             "outer_corner": "A",
             "inner_corner": "a",
             "direction": "cw",
-            "start_point_plane_mm": [-25.0, 15.0],
-            "end_point_plane_mm": [-10.0, 5.0],
+            "vertices_xyz": [
+                [-25.0, 15.0, 0.0],
+                [-20.0, 15.0, 0.0],
+                [-20.0, 16.0, 0.0],
+                [-25.0, 16.0, 0.0],
+            ],
+            "integration_line_start_xyz": [-25.0, 15.0, 0.0],
+            "integration_line_end_xyz": [-10.0, 5.0, 0.0],
         },
     }
 
@@ -79,14 +87,16 @@ def test_build_single_imported_modeled_object_entry_returns_validated_contract(t
     assert result["model_state"] is True
     assert result["canonical_coordinates"]["frame_origin_xyz"] == (0.0, 0.0, 0.0)
     terminal_metadata = cast(dict[str, object], result["terminal_metadata"])
+    assert terminal_metadata["kind"] == "single_coil_port_v1"
     assert terminal_metadata["direction"] == "cw"
+    assert terminal_metadata["sheet_name"] == "tx_single_coil_port_sheet"
     assert result["imported_object_names"] == ("body_1", "body_2")
 
 
-def test_build_single_imported_modeled_object_entry_preserves_port_sheet_vertices_as_world_tuples(tmp_path: Path) -> None:
+def test_build_single_imported_modeled_object_entry_preserves_vertices_as_world_tuples(tmp_path: Path) -> None:
     modeled_object = _modeled_object()
     terminal_metadata = cast(dict[str, object], modeled_object["terminal_metadata"])
-    terminal_metadata["port_sheet_vertices_xyz"] = [
+    terminal_metadata["vertices_xyz"] = [
         [110.0, 150.0, 250.0],
         [120.0, 150.0, 250.0],
         [120.0, 151.0, 254.0],
@@ -99,7 +109,7 @@ def test_build_single_imported_modeled_object_entry_preserves_port_sheet_vertice
     )
 
     parsed_terminal_metadata = cast(dict[str, object], result["terminal_metadata"])
-    assert parsed_terminal_metadata["port_sheet_vertices_xyz"] == (
+    assert parsed_terminal_metadata["vertices_xyz"] == (
         (110.0, 150.0, 250.0),
         (120.0, 150.0, 250.0),
         (120.0, 151.0, 254.0),
@@ -210,7 +220,34 @@ def test_build_single_imported_modeled_object_entry_rejects_geometry_only_termin
     modeled_object = _modeled_object()
     modeled_object["terminal_metadata"] = {"kind": "stub_port"}
 
-    with pytest.raises(ValueError, match=r"unsupported for coil import"):
+    with pytest.raises(ValueError, match=r"terminal_metadata.kind must be 'single_coil_port_v1'"):
+        build_single_imported_modeled_object_entry(
+            modeled_object=modeled_object,
+            imported_object_names=("body_1",),
+        )
+
+
+def test_build_single_imported_modeled_object_entry_rejects_legacy_single_coil_terminal_metadata_without_kind(
+    tmp_path: Path,
+) -> None:
+    modeled_object = _modeled_object()
+    del cast(dict[str, object], modeled_object["terminal_metadata"])["kind"]
+
+    with pytest.raises(AssertionError, match=r"modeled_object\.terminal_metadata.*kind"):
+        build_single_imported_modeled_object_entry(
+            modeled_object=modeled_object,
+            imported_object_names=("body_1",),
+        )
+
+
+def test_build_single_imported_modeled_object_entry_rejects_malformed_single_coil_terminal_vertices_count(
+    tmp_path: Path,
+) -> None:
+    modeled_object = _modeled_object()
+    terminal_metadata = cast(dict[str, object], modeled_object["terminal_metadata"])
+    terminal_metadata["vertices_xyz"] = [[1.0, 2.0, 3.0], [2.0, 3.0, 4.0]]
+
+    with pytest.raises(ValueError, match=r"must contain exactly 4 vertices"):
         build_single_imported_modeled_object_entry(
             modeled_object=modeled_object,
             imported_object_names=("body_1",),

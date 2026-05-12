@@ -1,7 +1,7 @@
 ---
 title: type2_step_export.py
 created: 2026-04-28 @ 00:00
-updated: 2026-05-07 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - step-export
   - type2
@@ -27,10 +27,12 @@ tags:
 - Reuse same-call modeled scene data during post-export terminal contract validation instead of rebuilding modeled geometry a second time.
 - Add modeled TV aluminum plate support as a single standalone exported body with strict no-groups/no-ports contract.
 - `tx_rect_void_columns` modeled entries now carry `trace_width_mm` in `canonical_coordinates`, recovered from terminal stub anchor boxes carried through existing tile terminal metadata.
+- Single-coil active Type2 terminal metadata uses the `single_coil_port_v1` runtime contract with `sheet_name`, four global-mm `vertices_xyz`, and explicit 3D integration line endpoints.
+- Ledger emission records `source_toml_sha256` and `scene_step_sha256` so import can reject mixed/stale artifacts before AEDT setup proceeds.
 
 ## Inputs / Outputs
 - Inputs: Type2 TOML path, output directory, ledger path, deterministic seed, optional stage reporter.
-- Outputs: combined STEP scene, per-modeled-object metadata for RX bodies and geometry-only TX inner bodies, `Type2StepLedger`.
+- Outputs: combined STEP scene, per-modeled-object metadata for RX bodies and geometry-only TX inner bodies, hash-bound `Type2StepLedger`.
 
 ## Canonical State
 - RX modeled body names, body groups, canonical coordinates, and terminal metadata are export-owned.
@@ -48,6 +50,7 @@ tags:
 - Post-export terminal metadata validation uses the first-pass `ModeledObjectSceneData` keyed by object ID as canonical expected state for the same export call.
 - Generic `tx_single_coil`, `tx_plate_stack`, and `tx_rect_void_columns` remain unsupported in active RxOnly export.
 - `tx_rect_void_columns` canonical trace-width metadata is derived from each terminal anchor stub BoxSpec in `TxRectVoidColumnsTileTerminalAnchors`, enforcing consistency across all tiles/layers and requiring at least one metadata anchor to avoid fallback behavior.
+- Single-coil port sheet coordinates are creation-time canonical data in `terminal_metadata.vertices_xyz`; downstream import/build code must not derive them from AEDT body bbox, sheet bbox, or terminal stub bbox.
 
 ## Invariants / Fail-Fast
 - Generic modeled TX roles fail before scene construction.
@@ -71,6 +74,7 @@ tags:
 - Terminal-bridge non-modeled member metadata must retain `bridge_material_thickness_mm` and `bridge_total_stack_thickness_mm`; tests must not infer those physical thicknesses from skew-shape bbox extents.
 - Terminal-bridge bridge normal is derived from the bridge quad triangles' normals, and non-modeled ledger `plane` is `mixed` unless the normal is axis-aligned.
 - Positive and negative bridges share the same material and thickness contract: FR4 PCB `0.365 mm`, copper `0.035 mm`, total stack `0.400 mm`.
+- Single-coil terminal metadata validation fails for legacy `port_sheet_vertices_xyz`, missing `sheet_name`, malformed `vertices_xyz`, missing 3D integration line endpoints, or hash metadata that cannot bind the emitted sidecar to its source TOML and STEP scene.
 
 ## Collaborators
 - [type2_step_ledger.py](type2_step_ledger.py.md)
@@ -80,3 +84,4 @@ tags:
 - [0.2.24 Type2 TX Inner Void YZ Stack](../../../plans/0.2.24-type2-tx-inner-void-yz-stack.md)
 - [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
 - [0.2.24 Type2 STEP Export Scene Data Reuse](../../../plans/0.2.24-type2-step-export-scene-data-reuse.md)
+- [0.2.25 Type2 Port Sheet Contract Rewrite](../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)

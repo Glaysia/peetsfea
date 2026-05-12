@@ -1,7 +1,7 @@
 ---
 title: test_build_type2_entry.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-07 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - test
   - build
@@ -24,6 +24,7 @@ tags:
 - 부분 출력(누락된 imported ledger 또는 imported ledger 경로 불일치)은 정상 빌드 경로로 runner를 실행한다.
 - Related plan: [0.2.24-type2-batch-resume-absolute-sample-index](../../../plans/0.2.24-type2-batch-resume-absolute-sample-index.md).
 - TX inner X-position compatibility metadata must stay fixed zero and removed TX outer sampled owners must stay absent.
+- Default Type2 build retries only `Type2AedtWorkerProcessError` from the persistent AEDT worker path, waits 60 seconds between restarts, and stops after the configured production restart limit.
 
 ## Canonical state
 - Build path can reuse existing STEP ledger or generate missing RX STEP artifacts.
@@ -50,6 +51,7 @@ tags:
 - TX modeled build dependencies, including TX columns paired with RX, must not reach the setup-ready runner.
 - Prepared build validation must reject missing or nonzero TX inner X-position compatibility ranges before setup-ready execution.
 - Best-effort build tests catch only declared skippable runtime exceptions; unsupported role validation remains fail-fast before skip recording.
+- Worker restart tests assert non-worker exceptions are not retried and persistent worker failures re-raise after the bounded restart limit; failure-path tests monkeypatch the production limit down to three restarts.
 
 ### Build resume contract covered here
 - `_is_resume_ready_type2_build()`의 조건을 실무 계약으로 검증: 
@@ -67,3 +69,4 @@ tags:
 - [0.2.24-view-step-gui-setup-ready](../../../plans/0.2.24-view-step-gui-setup-ready.md)
 - [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
 - [0.2.24-type2-turn-count-sweep-upper-bound](../../../plans/0.2.24-type2-turn-count-sweep-upper-bound.md)
+- [0.2.24-type2-batch-resume-absolute-sample-index](../../../plans/0.2.24-type2-batch-resume-absolute-sample-index.md)

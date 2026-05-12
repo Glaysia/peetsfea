@@ -1,7 +1,7 @@
 ---
 title: type2_runtime.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-07 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - runtime
 ---
@@ -18,6 +18,7 @@ tags:
 - 0.2.24 SDD 기준 active default path is RxOnly setup-ready.
 - 선택된 호출 경로에서 setup-ready 이후 EM solve/report export까지 실행할 수 있다.
 - Prepared build 집합의 STEP ledger를 AEDT runner 전에 보장한다.
+- Persistent AEDT worker process failures are surfaced as `Type2AedtWorkerProcessError` so the entry layer can restart the default manifest build.
 
 ## 입력 / 출력
 - 입력: sampled design metadata, build options, output paths
@@ -45,6 +46,7 @@ tags:
 - Resume reuse is allowed only after STEP ledger validation; partial outputs without AEDT, without imported ledger, with malformed imported-ledger JSON, or with mismatched path fields are retried by running the normal setup-ready runner.
 - EM solve failures raise and do not downgrade to setup-ready success.
 - Invalid existing STEP ledger or missing scene STEP raises instead of overwriting silently.
+- Resume readiness remains the only skip mechanism used after an entry-level worker restart.
 
 ## Collaborators
 - [type2_sampled.py](type2_sampled.py.md)

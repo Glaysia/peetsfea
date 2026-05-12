@@ -25,6 +25,7 @@ from peetsfea.type2_runtime import (
     DEFAULT_AEDT_PORT_BASE,
     Type2BuiltArtifact,
     Type2EmArtifact,
+    Type2AedtWorkerProcessError,
     build_type2_sampled_tomls_best_effort,
     build_prepared_type2_designs_best_effort,
     build_prepared_type2_designs,
@@ -42,6 +43,8 @@ from peetsfea.type2_sampled import (
 )
 
 _Exporter = Callable[..., object]
+_BUILD_RESTART_SLEEP_SEC: float = 60.0
+_BUILD_RESTART_LIMIT: int = 100
 
 
 class _Type2BuildRunnerResult(TypedDict):
@@ -95,6 +98,7 @@ def build_type2(
     reuse_aedt: bool = True,
     aedt_port_base: int = DEFAULT_AEDT_PORT_BASE,
     aedt_launch_stagger_sec: float = DEFAULT_AEDT_LAUNCH_STAGGER_SEC,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> list[Type2BuiltArtifact]:
     config = load_type2_sample_manifest_config(manifest_path)
     jobs = config["aedt_builder_n"]
@@ -108,22 +112,31 @@ def build_type2(
         )
         write_type2_build_skipped_ledger(skipped_ledger_path, manifest_path=manifest_path, skipped=batch["skipped"])
     else:
-        batch = build_type2_sampled_tomls_best_effort(
-            (
-                entry["sampled_toml_path"]
-                for entry in iter_type2_sample_manifest_entries(
-                    manifest_path,
-                    selected_design_ids=selected_design_ids,
+        restart_attempt = 0
+        while True:
+            try:
+                batch = build_type2_sampled_tomls_best_effort(
+                    (
+                        entry["sampled_toml_path"]
+                        for entry in iter_type2_sample_manifest_entries(
+                            manifest_path,
+                            selected_design_ids=selected_design_ids,
+                        )
+                    ),
+                    jobs=jobs,
+                    skipped_ledger_path=skipped_ledger_path,
+                    manifest_path=manifest_path,
+                    progress_reporter=_build_progress_reporter("build"),
+                    reuse_aedt=reuse_aedt,
+                    aedt_port_base=aedt_port_base,
+                    aedt_launch_stagger_sec=aedt_launch_stagger_sec,
                 )
-            ),
-            jobs=jobs,
-            skipped_ledger_path=skipped_ledger_path,
-            manifest_path=manifest_path,
-            progress_reporter=_build_progress_reporter("build"),
-            reuse_aedt=reuse_aedt,
-            aedt_port_base=aedt_port_base,
-            aedt_launch_stagger_sec=aedt_launch_stagger_sec,
-        )
+                break
+            except Type2AedtWorkerProcessError:
+                restart_attempt += 1
+                if restart_attempt > _BUILD_RESTART_LIMIT:
+                    raise
+                sleep(_BUILD_RESTART_SLEEP_SEC)
     if len(batch["skipped"]) > 0:
         print(f"skipped design count: {len(batch['skipped'])}")
         print(f"build skipped ledger: {skipped_ledger_path}")

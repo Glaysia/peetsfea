@@ -4,6 +4,7 @@ import math
 from typing import cast
 
 import build123d as bd
+from build123d.topology import Shape
 
 from peetsfea.tx_rect_void import BoxSpec
 from peetsfea.tx_rect_void import SingleCoilProfile
@@ -191,24 +192,6 @@ def port_sheet_owner_bottom_square_center_plane_xy(
     )
 
 
-def line_signed_distance_in_plane(
-    *,
-    point_plane_xy: tuple[float, float],
-    line_origin_plane_xy: tuple[float, float],
-    line_direction_plane_xy: tuple[float, float],
-) -> float:
-    direction_u, direction_v = line_direction_plane_xy
-    direction_length = math.hypot(direction_u, direction_v)
-    if direction_length <= 1e-9:
-        raise RuntimeError(
-            "type2 port sheet inter-owner centerline must have positive length "
-            f"(line_origin={line_origin_plane_xy}, line_direction={line_direction_plane_xy})"
-        )
-    point_offset_u = point_plane_xy[0] - line_origin_plane_xy[0]
-    point_offset_v = point_plane_xy[1] - line_origin_plane_xy[1]
-    return ((direction_u * point_offset_v) - (direction_v * point_offset_u)) / direction_length
-
-
 def plane_point_to_world_xyz(
     *,
     point_plane_xy: tuple[float, float],
@@ -220,77 +203,54 @@ def plane_point_to_world_xyz(
     return (bottom_plane_coordinate, point_plane_xy[0], point_plane_xy[1])
 
 
-def selected_diagonal_plane_points_for_stub(
+def _facing_bottom_face_edge_plane_points(
     *,
     box: BoxSpec,
     profile: SingleCoilProfile,
-    line_origin_plane_xy: tuple[float, float],
-    line_direction_plane_xy: tuple[float, float],
+    target_center_plane_xy: tuple[float, float],
 ) -> tuple[tuple[float, float], tuple[float, float]]:
     (plane_min_u, plane_min_v), (plane_max_u, plane_max_v) = port_sheet_owner_bottom_square_plane_bounds(
         box=box,
         profile=profile,
     )
-    candidate_diagonals = (
-        ((plane_min_u, plane_min_v), (plane_max_u, plane_max_v)),
-        ((plane_min_u, plane_max_v), (plane_max_u, plane_min_v)),
+    center_u = (plane_min_u + plane_max_u) / 2.0
+    center_v = (plane_min_v + plane_max_v) / 2.0
+    delta_u = target_center_plane_xy[0] - center_u
+    delta_v = target_center_plane_xy[1] - center_v
+    if math.hypot(delta_u, delta_v) <= 1e-9:
+        raise RuntimeError(
+            "type2 port sheet owner centers must be separated "
+            f"(role={profile.role}, box={box.label}, center={(center_u, center_v)}, target={target_center_plane_xy})"
+        )
+    if abs(delta_u) >= abs(delta_v):
+        edge_u = plane_max_u if delta_u > 0.0 else plane_min_u
+        return ((edge_u, plane_min_v), (edge_u, plane_max_v))
+    edge_v = plane_max_v if delta_v > 0.0 else plane_min_v
+    return ((plane_min_u, edge_v), (plane_max_u, edge_v))
+
+
+def _edge_center(edge: tuple[Point3, Point3]) -> Point3:
+    first, second = edge
+    return (
+        (first[0] + second[0]) / 2.0,
+        (first[1] + second[1]) / 2.0,
+        (first[2] + second[2]) / 2.0,
     )
 
-    def _ordered_endpoints(
-        diagonal: tuple[tuple[float, float], tuple[float, float]],
-    ) -> tuple[tuple[float, float], tuple[float, float]]:
-        def _endpoint_sort_key(point_plane_xy: tuple[float, float]) -> tuple[float, float, float]:
-            signed_distance = line_signed_distance_in_plane(
-                point_plane_xy=point_plane_xy,
-                line_origin_plane_xy=line_origin_plane_xy,
-                line_direction_plane_xy=line_direction_plane_xy,
-            )
-            return (
-                signed_distance,
-                point_plane_xy[0],
-                point_plane_xy[1],
-            )
 
-        ordered_points = tuple(sorted(diagonal, key=_endpoint_sort_key, reverse=True))
-        if len(ordered_points) != 2:
-            raise RuntimeError(f"type2 port sheet diagonal ordering must keep two endpoints: {ordered_points}")
-        return cast(tuple[tuple[float, float], tuple[float, float]], ordered_points)
-
-    def _diagonal_selection_key(
-        diagonal: tuple[tuple[float, float], tuple[float, float]],
-    ) -> tuple[float, float, float, float, float]:
-        ordered_first_point_plane_xy, ordered_second_point_plane_xy = _ordered_endpoints(diagonal)
-        signed_distance_a = abs(
-            line_signed_distance_in_plane(
-                point_plane_xy=ordered_first_point_plane_xy,
-                line_origin_plane_xy=line_origin_plane_xy,
-                line_direction_plane_xy=line_direction_plane_xy,
-            )
-        )
-        signed_distance_b = abs(
-            line_signed_distance_in_plane(
-                point_plane_xy=ordered_second_point_plane_xy,
-                line_origin_plane_xy=line_origin_plane_xy,
-                line_direction_plane_xy=line_direction_plane_xy,
-            )
-        )
-        return (
-            signed_distance_a + signed_distance_b,
-            ordered_first_point_plane_xy[0],
-            ordered_first_point_plane_xy[1],
-            ordered_second_point_plane_xy[0],
-            ordered_second_point_plane_xy[1],
-        )
-
-    selected_diagonal = max(candidate_diagonals, key=_diagonal_selection_key)
-    return _ordered_endpoints(selected_diagonal)
+def _distance_sq(first: Point3, second: Point3) -> float:
+    return (
+        (first[0] - second[0]) ** 2
+        + (first[1] - second[1]) ** 2
+        + (first[2] - second[2]) ** 2
+    )
 
 
 def build_single_coil_port_sheet_shape(
     *,
     transformed_boxes: tuple[BoxSpec, ...],
     profile: SingleCoilProfile,
-) -> bd.Shape:
+) -> Shape:
     vertices = single_coil_port_sheet_vertices(
         transformed_boxes=transformed_boxes,
         profile=profile,
@@ -309,56 +269,80 @@ def single_coil_port_sheet_vertices(
     transformed_boxes: tuple[BoxSpec, ...],
     profile: SingleCoilProfile,
 ) -> tuple[Point3, Point3, Point3, Point3]:
-    first_stub_box, second_stub_box = port_sheet_owner_boxes(
+    signal_box, reference_box = port_sheet_owner_boxes(
         transformed_boxes=transformed_boxes,
         profile=profile,
     )
-    first_stub_center_plane_xy = port_sheet_owner_bottom_square_center_plane_xy(box=first_stub_box, profile=profile)
-    second_stub_center_plane_xy = port_sheet_owner_bottom_square_center_plane_xy(box=second_stub_box, profile=profile)
-    inter_stub_centerline_direction_plane_xy = (
-        second_stub_center_plane_xy[0] - first_stub_center_plane_xy[0],
-        second_stub_center_plane_xy[1] - first_stub_center_plane_xy[1],
-    )
-    first_diagonal_start_plane_xy, first_diagonal_end_plane_xy = selected_diagonal_plane_points_for_stub(
-        box=first_stub_box,
+    signal_center_plane_xy = port_sheet_owner_bottom_square_center_plane_xy(box=signal_box, profile=profile)
+    reference_center_plane_xy = port_sheet_owner_bottom_square_center_plane_xy(box=reference_box, profile=profile)
+    signal_edge_plane = _facing_bottom_face_edge_plane_points(
+        box=signal_box,
         profile=profile,
-        line_origin_plane_xy=first_stub_center_plane_xy,
-        line_direction_plane_xy=inter_stub_centerline_direction_plane_xy,
+        target_center_plane_xy=reference_center_plane_xy,
     )
-    second_diagonal_start_plane_xy, second_diagonal_end_plane_xy = selected_diagonal_plane_points_for_stub(
-        box=second_stub_box,
+    reference_edge_plane = _facing_bottom_face_edge_plane_points(
+        box=reference_box,
         profile=profile,
-        line_origin_plane_xy=first_stub_center_plane_xy,
-        line_direction_plane_xy=inter_stub_centerline_direction_plane_xy,
+        target_center_plane_xy=signal_center_plane_xy,
     )
-    bottom_plane_coordinate = port_sheet_owner_bottom_plane_coordinate(box=first_stub_box, profile=profile)
-    first_diagonal_start_world_xyz = plane_point_to_world_xyz(
-        point_plane_xy=first_diagonal_start_plane_xy,
-        bottom_plane_coordinate=bottom_plane_coordinate,
-        profile=profile,
+    bottom_plane_coordinate = port_sheet_owner_bottom_plane_coordinate(box=signal_box, profile=profile)
+    signal_edge = (
+        plane_point_to_world_xyz(
+            point_plane_xy=signal_edge_plane[0],
+            bottom_plane_coordinate=bottom_plane_coordinate,
+            profile=profile,
+        ),
+        plane_point_to_world_xyz(
+            point_plane_xy=signal_edge_plane[1],
+            bottom_plane_coordinate=bottom_plane_coordinate,
+            profile=profile,
+        ),
     )
-    first_diagonal_end_world_xyz = plane_point_to_world_xyz(
-        point_plane_xy=first_diagonal_end_plane_xy,
-        bottom_plane_coordinate=bottom_plane_coordinate,
-        profile=profile,
+    reference_edge = (
+        plane_point_to_world_xyz(
+            point_plane_xy=reference_edge_plane[0],
+            bottom_plane_coordinate=bottom_plane_coordinate,
+            profile=profile,
+        ),
+        plane_point_to_world_xyz(
+            point_plane_xy=reference_edge_plane[1],
+            bottom_plane_coordinate=bottom_plane_coordinate,
+            profile=profile,
+        ),
     )
-    second_diagonal_start_world_xyz = plane_point_to_world_xyz(
-        point_plane_xy=second_diagonal_start_plane_xy,
-        bottom_plane_coordinate=bottom_plane_coordinate,
-        profile=profile,
-    )
-    second_diagonal_end_world_xyz = plane_point_to_world_xyz(
-        point_plane_xy=second_diagonal_end_plane_xy,
-        bottom_plane_coordinate=bottom_plane_coordinate,
-        profile=profile,
-    )
+    if _distance_sq(signal_edge[0], signal_edge[1]) <= 1e-18:
+        raise RuntimeError(f"type2 port sheet signal edge must be non-degenerate (role={profile.role})")
+    if _distance_sq(reference_edge[0], reference_edge[1]) <= 1e-18:
+        raise RuntimeError(f"type2 port sheet reference edge must be non-degenerate (role={profile.role})")
+    if _distance_sq(_edge_center(signal_edge), _edge_center(reference_edge)) <= 1e-18:
+        raise RuntimeError(f"type2 port sheet signal/reference edges must be separated (role={profile.role})")
     vertices = (
-        first_diagonal_start_world_xyz,
-        second_diagonal_start_world_xyz,
-        second_diagonal_end_world_xyz,
-        first_diagonal_end_world_xyz,
+        signal_edge[1],
+        reference_edge[0],
+        reference_edge[1],
+        signal_edge[0],
     )
+    for vertex_index, vertex in enumerate(vertices):
+        if not all(math.isfinite(component) for component in vertex):
+            raise RuntimeError(
+                "type2 port sheet vertices must be finite "
+                f"(role={profile.role}, vertex_index={vertex_index}, vertex={vertex})"
+            )
     return vertices
+
+
+def single_coil_port_integration_line(
+    *,
+    transformed_boxes: tuple[BoxSpec, ...],
+    profile: SingleCoilProfile,
+) -> tuple[Point3, Point3]:
+    vertices = single_coil_port_sheet_vertices(
+        transformed_boxes=transformed_boxes,
+        profile=profile,
+    )
+    signal_edge = (vertices[3], vertices[0])
+    reference_edge = (vertices[1], vertices[2])
+    return (_edge_center(signal_edge), _edge_center(reference_edge))
 
 
 def parse_terminal_path_components(raw_terminal_path: str) -> tuple[str, str, str]:
@@ -384,34 +368,24 @@ def modeled_terminal_metadata(
     transformed_boxes: tuple[BoxSpec, ...],
 ) -> dict[str, object]:
     outer_corner, direction, inner_corner = parse_terminal_path_components(terminal_path)
-    plane_origin_xy = profile.plane_point((0.0, 0.0), frame_origin_xyz=frame_origin_xyz)
-    local_start_xy, local_end_xy = local_terminal_plane_points(
-        terminal_path=terminal_path,
-        centerline=centerline,
+    vertices_xyz = single_coil_port_sheet_vertices(
         transformed_boxes=transformed_boxes,
         profile=profile,
-        frame_origin_xyz=frame_origin_xyz,
     )
-    start_point_plane_mm = (
-        local_start_xy[0] + plane_origin_xy[0],
-        local_start_xy[1] + plane_origin_xy[1],
-    )
-    end_point_plane_mm = (
-        local_end_xy[0] + plane_origin_xy[0],
-        local_end_xy[1] + plane_origin_xy[1],
-    )
-    port_sheet_vertices_xyz = single_coil_port_sheet_vertices(
+    integration_line_start_xyz, integration_line_end_xyz = single_coil_port_integration_line(
         transformed_boxes=transformed_boxes,
         profile=profile,
     )
     return {
+        "kind": "single_coil_port_v1",
         "path": terminal_path,
         "outer_corner": outer_corner,
         "inner_corner": inner_corner,
         "direction": direction,
-        "start_point_plane_mm": start_point_plane_mm,
-        "end_point_plane_mm": end_point_plane_mm,
-        "port_sheet_vertices_xyz": port_sheet_vertices_xyz,
+        "sheet_name": port_sheet_label_for_profile(profile),
+        "vertices_xyz": vertices_xyz,
+        "integration_line_start_xyz": integration_line_start_xyz,
+        "integration_line_end_xyz": integration_line_end_xyz,
     }
 
 
@@ -421,5 +395,6 @@ __all__ = [
     "modeled_terminal_metadata",
     "parse_terminal_path_components",
     "port_sheet_label_for_profile",
+    "single_coil_port_integration_line",
     "single_coil_port_sheet_vertices",
 ]

@@ -1,7 +1,7 @@
 ---
 title: type2_step_ledger.py
 created: 2026-04-18 @ 09:09
-updated: 2026-04-30 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - step-export
   - ledger
@@ -16,6 +16,7 @@ tags:
 
 ## 역할
 - STEP export handoff metadata를 JSON ledger로 직렬화한다.
+- Ledger artifact identity includes schema/version plus source TOML and scene STEP SHA-256 hashes.
 - 0.2.24 SDD 기준 RX modeled handoff와 non-modeled guide/context handoff만 active shape contract다.
 - `tx_inner_region` member provenance carries creation-time TX reference-line ratios, centered Y usage ratio, and resolved Y-parallel line endpoints.
 - `tx_inner_actual_region` member provenance uses `TxActualRegionProvenance` to carry the source guide id, modeled source id, selected usage ratios, resolved actual-region design outer-box bounds, and diagnostic physical modeled-body bounds.
@@ -27,6 +28,7 @@ tags:
 
 ## Canonical state
 - RX body names/counts/groups are exact export contract values.
+- Single-coil port sheet coordinates are canonical only in `terminal_metadata.kind = "single_coil_port_v1"`.
 - `tx_region` may be present as non-modeled future guide context.
 - `tx_inner_region`, when present, records canonical coordinates plus `tx_reference_line` provenance instead of requiring downstream geometry inference.
 - `tx_inner_actual_region`, when present, records canonical coordinates plus actual-region provenance instead of requiring downstream geometry inference; the actual-region bounds are the canonical/design outer-box bounds.
@@ -37,6 +39,7 @@ tags:
 
 ## Invariants / fail-fast
 - Ledger body names must match exported names exactly.
+- Import must reject ledgers whose recorded source TOML or scene STEP hash no longer matches the files on disk.
 - RxOnly ledger must not require TX modeled bodies.
 - `tx_inner_region` provenance is mandatory when that member is emitted.
 - `tx_inner_actual_region` provenance is mandatory when that member is emitted.
@@ -49,3 +52,4 @@ tags:
 - [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)
 - [0.2.24 Type2 TX Actual Regions](../../../plans/0.2.24-type2-tx-actual-regions.md)
 - [0.2.24 Type2 TX Outer Single Coil](../../../plans/0.2.24-type2-tx-outer-single-coil.md)
+- [0.2.25 Type2 Port Sheet Contract Rewrite](../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)

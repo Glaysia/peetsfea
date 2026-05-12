@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Literal, TypedDict
@@ -193,9 +194,12 @@ class ModeledObjectLedgerEntry(ModeledObjectSceneData):
 
 
 class Type2StepLedger(TypedDict):
+    schema_version: Literal["type2.step_ledger.v2"]
     source_toml_path: str
+    source_toml_sha256: str
     output_dir: str
     scene_step_path: str
+    scene_step_sha256: str
     seed: int
     em_policy: Type2ImportEmPolicy
     outputs: OutputsSpec
@@ -230,6 +234,12 @@ def write_modeled_source_metadata(
     metadata_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _sha256_hex_digest(*, path: Path, context: str) -> str:
+    if not path.is_file():
+        raise FileNotFoundError(f"{context} does not exist: {path}")
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def build_modeled_object_ledger_entry(
     *,
     scene_data: ModeledObjectSceneData,
@@ -262,10 +272,17 @@ def build_type2_step_ledger(
     non_model_objects: list[NonModelObjectLedgerEntry],
     modeled_objects: list[ModeledObjectLedgerEntry],
 ) -> Type2StepLedger:
+    source_toml = Path(source_toml_path)
+    scene_step = Path(scene_step_path)
+    source_toml_sha256 = _sha256_hex_digest(path=source_toml, context="source_toml_path")
+    scene_step_sha256 = _sha256_hex_digest(path=scene_step, context="scene_step_path")
     return {
+        "schema_version": "type2.step_ledger.v2",
         "source_toml_path": source_toml_path,
+        "source_toml_sha256": source_toml_sha256,
         "output_dir": str(output_dir),
         "scene_step_path": str(scene_step_path),
+        "scene_step_sha256": scene_step_sha256,
         "seed": seed,
         "em_policy": em_policy,
         "outputs": outputs,

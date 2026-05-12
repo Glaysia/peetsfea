@@ -1,7 +1,7 @@
 ---
 title: build.py
 created: 2026-04-17 @ 09:09
-updated: 2026-05-07 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - entry
   - build
@@ -22,6 +22,8 @@ tags:
 - Manifest의 `config.make_step_on_sample`와 entry STEP 경로를 기준으로, solve/debug runner 실행 전에 STEP ledger를 보장한다.
 - 기본 `build.py` 배치 실행은 sampled design별 STEP 생성과 AEDT setup을 개별 시도하고, skippable 실패는 build skip ledger로 남긴 뒤 나머지 design을 계속 처리한다.
 - 기본 `build.py` 배치 실행은 이미 완료된 sampled TOML의 AEDT/import ledger를 재사용해 중단된 배치를 재개한다.
+- 기본 Type2 batch path retries persistent AEDT worker/session failures by restarting the same manifest after 60 seconds, bounded to the production restart limit.
+- The restart path uses an injectable sleep callback so tests can avoid waiting on real time.
 - Related plan: [0.2.24-type2-batch-resume-absolute-sample-index](../../plans/0.2.24-type2-batch-resume-absolute-sample-index.md).
 - `--debug` GUI build uses the attached-HFSS setup path and skips AEDT `ValidateDesign()` because that AEDT call can hang in GUI debug sessions; repository pipeline validation and project save remain active.
 
@@ -32,6 +34,8 @@ tags:
 - Existing STEP ledgers are validated and reused; missing STEP ledgers are generated before AEDT setup.
 - The generated build skip ledger is written beside the manifest as `type2_build_skipped.json` so stale skip state is overwritten on every default build run.
 - Resume reuse requires both AEDT output and imported ledger; partial output remains rebuild work.
+- Only `Type2AedtWorkerProcessError` is restartable; validation, stale artifact, and coordinate drift failures remain fail-fast.
+- The production restart limit is intentionally high for large AEDT batch runs; tests monkeypatch the limit down to keep failure-path coverage fast.
 
 ## Graph links
 - Primary owner: [type2-em-setup-boundary](../../architecture/type2-em-setup-boundary.md)

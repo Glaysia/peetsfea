@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_setup_ready.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-11 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - test
   - em
@@ -22,8 +22,8 @@ tags:
 - `tx_outer_single_coil` 포함 조합은 setup-ready 전에 fail-fast rejection 되는지 검증한다.
 - Tx 양극/음극 브릿지 멤버(`tx_pos_bridge_pcb/copper`, `tx_neg_bridge_pcb/copper`)는 modeled 대상이 아닌 `non_model` 타겟으로만 남는지를
   회귀로 검증한다.
-- `assign_type2_lumped_ports`에서 단일 코일 터미널 메타데이터의 `port_sheet_vertices_xyz`를
-  AEDT world 좌표 그대로 사용해 경계 엣지를 선택하는 경로를 검증한다.
+- `assign_type2_lumped_ports`에서 단일 코일 터미널 메타데이터의 `vertices_xyz`와
+  `single_coil_port_v1` sheet contract를 AEDT world 좌표 그대로 사용해 경계 엣지를 선택하는 경로를 검증한다.
 
 ## Canonical state
 - Tests should verify RX conductor mesh and one RX lumped port.
@@ -40,8 +40,9 @@ tags:
   `tv_aluminum_plate` may also be imported and styled while staying out of mesh, ports, sources, and reports.
 - Active fixed/sweep setup-ready fixtures treat TX inner as layer-count one and must not expect `tx_inner_copper_stack`.
 - `non_model` 장면에서의 양극/음극 브릿지 멤버는 modeled coil/port payload에 포함되지 않고 `non_model_objects[*].imported_object_names`에 유지되어야 한다.
-- 단일 코일 TX 포트 할당 테스트는 `terminal_metadata.port_sheet_vertices_xyz` 기반 엣지 좌표가
+- 단일 코일 TX 포트 할당 테스트는 `terminal_metadata.vertices_xyz` 기반 엣지 좌표가
   `oboundary.AssignLumpedPort(..., Edges:=...)` 단계에서 그대로 반영되는지를 확인한다.
+- TxRx test ledgers carry schema/hash fields, so setup-ready tests exercise the same stale-artifact guard as import tests.
 - TX inner actual-underlay bodies may be present in imported object names, but setup-ready assertions keep ports, sources, reports, and mesh based on TX/RX conductors only.
 - EM input construction keeps `tx_underlay_pet_psa_u*` and `tx_underlay_ferrite_u*` out of conductor and ferrite-ready object lists for the setup-ready contract.
 - TX inner void-stack bodies `tx_void_pet_psa_u*` and `tx_void_ferrite_u*` are passive import names and must stay out of conductor, mesh, port, source, and report targets.
@@ -55,6 +56,7 @@ tags:
 ## Invariants / fail-fast
 - PyAEDT false-return handling remains fail-fast.
 - Missing RX/TX terminal metadata or unsupported role pairings must fail with context.
+- Malformed single-coil runtime port sheet metadata fails on `vertices_xyz`; plate-stack tests keep the legacy `port_sheet_vertices_xyz` contract isolated to plate-stack roles.
 - TX inner setup fixtures must include the non-modeled `tx_inner_region` owner before import-bound validation runs.
 - TX inner setup fixtures must include `tx_inner_actual_region` provenance and imported names for positive and downstream
   AEDT-region failure cases; tests that intentionally omit the owner assert the earlier ledger-validation failure.
@@ -71,3 +73,4 @@ tags:
 - Exceptional contract: [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)
 - Related plan: [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
 - Related plan: [0.2.24 Type2 Trace Width Mesh Length](../../../plans/0.2.24-type2-trace-width-mesh-length.md)
+- Related plan: [0.2.25 Type2 Port Sheet Contract Rewrite](../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)

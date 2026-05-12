@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import Literal, TypedDict, cast
 
 from peetsfea.aedt.failfast import validate_aedt_name
 from peetsfea.spec.outputs import parse_outputs_table
@@ -22,6 +23,7 @@ _SUPPORTED_MODELED_ROLES: frozenset[str] = frozenset(
 )
 _SUPPORTED_MODELED_PLANES: frozenset[str] = frozenset({"XY", "YZ"})
 _PLATE_STACK_ROLES: frozenset[str] = frozenset({"tx_plate_stack", "rx_plate_stack"})
+_SUPPORTED_SCHEMA_VERSION = "type2.step_ledger.v2"
 _TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
 _TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
 _TV_ALUMINUM_PLATE_BODY_NAME = "tv_aluminum_plate"
@@ -163,8 +165,11 @@ class ValidatedStepEntry(TypedDict):
 
 
 class ValidatedStepLedger(TypedDict):
+    schema_version: Literal["type2.step_ledger.v2"]
     source_toml_path: str
+    source_toml_sha256: str
     scene_step_path: Path
+    scene_step_sha256: str
     seed: int
     em_policy: "Type2ImportEmPolicy"
     outputs: OutputsSpec
@@ -246,6 +251,11 @@ def _require_existing_file_from_text(raw_path: object, *, context: str, ledger_d
     if not resolved_path.is_file():
         raise FileNotFoundError(f"{context} does not exist: {resolved_path}")
     return resolved_path
+
+
+def _sha256_hex_digest(path: Path, *, context: str) -> str:
+    assert path.is_file(), f"{context} must resolve to a file path (actual={path!r})"
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def require_float_triplet(value: object, *, context: str) -> tuple[float, float, float]:
@@ -357,6 +367,93 @@ def _validated_plate_stack_terminal_metadata(
         require_key(terminal_metadata, key="port_sheet_vertices_xyz", context=f"{context}.terminal_metadata"),
         context=f"{context}.terminal_metadata.port_sheet_vertices_xyz",
     )
+
+
+def _validated_single_coil_terminal_metadata(
+    raw_terminal_metadata: object,
+    *,
+    context: str,
+) -> None:
+    terminal_metadata = _require_table(raw_terminal_metadata, context=f"{context}.terminal_metadata")
+    if "kind" not in terminal_metadata:
+        raise ValueError(
+            f"{context}.terminal_metadata.kind must be 'single_coil_port_v1' for coil import "
+            "(actual=None)"
+        )
+    kind = require_non_empty_str(
+        terminal_metadata["kind"],
+        context=f"{context}.terminal_metadata.kind",
+    )
+    if kind != "single_coil_port_v1":
+        raise ValueError(
+            f"{context}.terminal_metadata.kind must be 'single_coil_port_v1' for coil import (actual={kind!r})"
+        )
+    allowed_keys = {
+        "kind",
+        "sheet_name",
+        "vertices_xyz",
+        "integration_line_start_xyz",
+        "integration_line_end_xyz",
+        "path",
+        "outer_corner",
+        "inner_corner",
+        "direction",
+    }
+    extra_keys = sorted(set(terminal_metadata) - allowed_keys)
+    if extra_keys:
+        raise ValueError(
+            f"{context}.terminal_metadata contains unsupported single_coil_port_v1 keys "
+            f"(actual={extra_keys})"
+        )
+    require_non_empty_str(
+        require_key(terminal_metadata, key="sheet_name", context=f"{context}.terminal_metadata"),
+        context=f"{context}.terminal_metadata.sheet_name",
+    )
+    _require_float_triplet_sequence(
+        require_key(terminal_metadata, key="vertices_xyz", context=f"{context}.terminal_metadata"),
+        context=f"{context}.terminal_metadata.vertices_xyz",
+    )
+    require_float_triplet(
+        require_key(terminal_metadata, key="integration_line_start_xyz", context=f"{context}.terminal_metadata"),
+        context=f"{context}.terminal_metadata.integration_line_start_xyz",
+    )
+    require_float_triplet(
+        require_key(terminal_metadata, key="integration_line_end_xyz", context=f"{context}.terminal_metadata"),
+        context=f"{context}.terminal_metadata.integration_line_end_xyz",
+    )
+    if "path" in terminal_metadata:
+        require_non_empty_str(
+            require_key(terminal_metadata, key="path", context=f"{context}.terminal_metadata"),
+            context=f"{context}.terminal_metadata.path",
+        )
+    if "outer_corner" in terminal_metadata:
+        outer_corner = require_non_empty_str(
+            require_key(terminal_metadata, key="outer_corner", context=f"{context}.terminal_metadata"),
+            context=f"{context}.terminal_metadata.outer_corner",
+        )
+        if outer_corner not in ("A", "B", "C", "D"):
+            raise ValueError(
+                f"{context}.terminal_metadata.outer_corner must be one of ['A', 'B', 'C', 'D'] (actual={outer_corner!r})"
+            )
+    if "inner_corner" in terminal_metadata:
+        inner_corner = require_non_empty_str(
+            require_key(terminal_metadata, key="inner_corner", context=f"{context}.terminal_metadata"),
+            context=f"{context}.terminal_metadata.inner_corner",
+        )
+        if inner_corner not in ("a", "b", "c", "d"):
+            raise ValueError(
+                f"{context}.terminal_metadata.inner_corner must be one of ['a', 'b', 'c', 'd'] "
+                f"(actual={inner_corner!r})"
+            )
+    if "direction" in terminal_metadata:
+        direction = require_non_empty_str(
+            require_key(terminal_metadata, key="direction", context=f"{context}.terminal_metadata"),
+            context=f"{context}.terminal_metadata.direction",
+        )
+        if direction not in ("cw", "ccw"):
+            raise ValueError(
+                f"{context}.terminal_metadata.direction must be 'cw' or 'ccw' (actual={direction!r})"
+            )
 
 
 def _validated_outer_tilt_metadata(
@@ -825,16 +922,10 @@ def _validated_modeled_entry(
                 f"(actual_keys={sorted(terminal_metadata)})"
             )
     else:
-        terminal_metadata = _require_table(raw_terminal_metadata, context=f"{context}.terminal_metadata")
-        if "kind" in terminal_metadata:
-            kind = require_non_empty_str(
-                require_key(terminal_metadata, key="kind", context=f"{context}.terminal_metadata"),
-                context=f"{context}.terminal_metadata.kind",
-            )
-            raise ValueError(
-                f"{context}.terminal_metadata.kind {kind!r} is unsupported for coil import; "
-                "coil roles require explicit terminal geometry metadata"
-            )
+        _validated_single_coil_terminal_metadata(
+            raw_terminal_metadata,
+            context=context,
+        )
     if role == "tx_outer_single_coil":
         raw_canonical_coordinates = _require_table(
             require_key(entry, key="canonical_coordinates", context=context),
@@ -938,15 +1029,49 @@ def load_step_ledger(step_ledger_path: Path) -> ValidatedStepLedger:
     ledger_dir = step_ledger_path.parent
     raw_payload = json.loads(step_ledger_path.read_text(encoding="utf-8"))
     payload = _require_table(raw_payload, context="type2_step_ledger")
+    schema_version = require_non_empty_str(
+        require_key(payload, key="schema_version", context="type2_step_ledger"),
+        context="type2_step_ledger.schema_version",
+    )
+    if schema_version != _SUPPORTED_SCHEMA_VERSION:
+        raise ValueError(
+            f"type2_step_ledger.schema_version must be {_SUPPORTED_SCHEMA_VERSION!r} "
+            f"(actual={schema_version!r})"
+        )
     source_toml_path = require_non_empty_str(
         require_key(payload, key="source_toml_path", context="type2_step_ledger"),
         context="type2_step_ledger.source_toml_path",
     )
+    source_toml_sha256 = require_non_empty_str(
+        require_key(payload, key="source_toml_sha256", context="type2_step_ledger"),
+        context="type2_step_ledger.source_toml_sha256",
+    )
+    scene_step_sha256 = require_non_empty_str(
+        require_key(payload, key="scene_step_sha256", context="type2_step_ledger"),
+        context="type2_step_ledger.scene_step_sha256",
+    )
+    source_toml_path_resolved = _require_existing_file_from_text(
+        source_toml_path,
+        context="type2_step_ledger.source_toml_path",
+        ledger_dir=ledger_dir,
+    )
+    actual_source_toml_sha256 = _sha256_hex_digest(source_toml_path_resolved, context="type2_step_ledger.source_toml_path")
+    if source_toml_sha256 != actual_source_toml_sha256:
+        raise ValueError(
+            "type2_step_ledger.source_toml hash mismatch; refusing stale/mixed artifact import"
+            f" (expected={source_toml_sha256}, actual={actual_source_toml_sha256})"
+        )
     scene_step_path = _require_existing_file_from_text(
         require_key(payload, key="scene_step_path", context="type2_step_ledger"),
         context="type2_step_ledger.scene_step_path",
         ledger_dir=ledger_dir,
     )
+    actual_scene_step_sha256 = _sha256_hex_digest(scene_step_path, context="type2_step_ledger.scene_step_path")
+    if scene_step_sha256 != actual_scene_step_sha256:
+        raise ValueError(
+            "type2_step_ledger.scene_step hash mismatch; refusing stale/mixed artifact import"
+            f" (expected={scene_step_sha256}, actual={actual_scene_step_sha256})"
+        )
     seed = require_int(require_key(payload, key="seed", context="type2_step_ledger"), context="type2_step_ledger.seed")
     em_policy = _validated_em_policy(
         require_key(payload, key="em_policy", context="type2_step_ledger"),
@@ -1014,8 +1139,11 @@ def load_step_ledger(step_ledger_path: Path) -> ValidatedStepLedger:
             )
 
     return {
+        "schema_version": schema_version,
         "source_toml_path": source_toml_path,
+        "source_toml_sha256": source_toml_sha256,
         "scene_step_path": scene_step_path,
+        "scene_step_sha256": scene_step_sha256,
         "seed": seed,
         "em_policy": em_policy,
         "outputs": outputs,

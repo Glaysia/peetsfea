@@ -241,6 +241,28 @@ def _world_point_from_plane(entry: dict[str, object], *, field_name: str, contex
     raise ValueError(f"{context}.plane must be 'XY' or 'YZ' for type2 setup-ready (actual={plane!r})")
 
 
+def _require_integration_line_point(
+    *,
+    terminal_metadata: dict[str, object],
+    field_name: str,
+    context: str,
+) -> tuple[float, float, float]:
+    raw_line_point = require_key(
+        terminal_metadata,
+        key=field_name,
+        context=f"{context}.terminal_metadata",
+    )
+    if isinstance(raw_line_point, (str, bytes)) or not isinstance(raw_line_point, list):
+        raise TypeError(f"{context}.terminal_metadata.{field_name} must be a 3-item list")
+    if len(raw_line_point) != 3:
+        raise ValueError(f"{context}.terminal_metadata.{field_name} must contain exactly 3 entries")
+    return (
+        float(raw_line_point[0]),
+        float(raw_line_point[1]),
+        float(raw_line_point[2]),
+    )
+
+
 def _endpoint_entry(
     *,
     entry: dict[str, object],
@@ -252,6 +274,8 @@ def _endpoint_entry(
     group_kind: str
     start_label: str
     end_label: str
+    start_point: tuple[float, float, float]
+    end_point: tuple[float, float, float]
     if role in (_TX_SINGLE_COIL_ROLE, _TX_INNER_SINGLE_COIL_ROLE):
         group_kind = "tx_vertical"
         start_label = require_non_empty_str(
@@ -262,6 +286,16 @@ def _endpoint_entry(
             require_key(terminal_metadata, key="inner_corner", context=f"{context}.terminal_metadata"),
             context=f"{context}.terminal_metadata.inner_corner",
         )
+        start_point = _require_integration_line_point(
+            terminal_metadata=terminal_metadata,
+            field_name="integration_line_start_xyz",
+            context=context,
+        )
+        end_point = _require_integration_line_point(
+            terminal_metadata=terminal_metadata,
+            field_name="integration_line_end_xyz",
+            context=context,
+        )
     elif role == _RX_SINGLE_COIL_ROLE:
         group_kind = "rx_dd"
         start_label = require_non_empty_str(
@@ -271,6 +305,16 @@ def _endpoint_entry(
         end_label = require_non_empty_str(
             require_key(terminal_metadata, key="inner_corner", context=f"{context}.terminal_metadata"),
             context=f"{context}.terminal_metadata.inner_corner",
+        )
+        start_point = _require_integration_line_point(
+            terminal_metadata=terminal_metadata,
+            field_name="integration_line_start_xyz",
+            context=context,
+        )
+        end_point = _require_integration_line_point(
+            terminal_metadata=terminal_metadata,
+            field_name="integration_line_end_xyz",
+            context=context,
         )
     elif role == "tx_plate_stack":
         kind = require_non_empty_str(
@@ -285,6 +329,8 @@ def _endpoint_entry(
         group_kind = "tx_plate_stack"
         start_label = "input_stub"
         end_label = "output_stub"
+        start_point = _world_point_from_plane(entry, field_name="start_point_plane_mm", context=context)
+        end_point = _world_point_from_plane(entry, field_name="end_point_plane_mm", context=context)
     else:
         if role == "tx_rect_void_columns":
             return _tx_rect_void_columns_endpoint_entry(entry=entry, context=context)
@@ -301,6 +347,8 @@ def _endpoint_entry(
         group_kind = "rx_plate_stack"
         start_label = "input_stub"
         end_label = "output_stub"
+        start_point = _world_point_from_plane(entry, field_name="start_point_plane_mm", context=context)
+        end_point = _world_point_from_plane(entry, field_name="end_point_plane_mm", context=context)
     return cast(
         GroupEndpointEntry,
         {
@@ -310,8 +358,8 @@ def _endpoint_entry(
                 require_key(entry, key="object_id", context=context),
                 context=f"{context}.object_id",
             ),
-            "start_xyz": _world_point_from_plane(entry, field_name="start_point_plane_mm", context=context),
-            "end_xyz": _world_point_from_plane(entry, field_name="end_point_plane_mm", context=context),
+            "start_xyz": start_point,
+            "end_xyz": end_point,
             "start_label": start_label,
             "end_label": end_label,
             "present": True,

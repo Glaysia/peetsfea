@@ -77,6 +77,35 @@ def _capture_new_excitation_name(
 
 def _port_sheet_vertices(entry: dict[str, object], *, context: str) -> tuple[tuple[float, float, float], ...]:
     role = require_non_empty_str(require_key(entry, key="role", context=context), context=f"{context}.role")
+    if role in ("tx_single_coil", "rx_single_coil", "tx_inner_single_coil"):
+        terminal_metadata = require_key(entry, key="terminal_metadata", context=context)
+        assert isinstance(terminal_metadata, dict), f"{context}.terminal_metadata must be a table/object"
+        kind = require_non_empty_str(
+            require_key(terminal_metadata, key="kind", context=f"{context}.terminal_metadata"),
+            context=f"{context}.terminal_metadata.kind",
+        )
+        if kind != "single_coil_port_v1":
+            raise ValueError(
+                f"{context}.terminal_metadata.kind must be 'single_coil_port_v1' for single-coil roles "
+                f"(actual={kind!r})"
+            )
+        raw_vertices = require_key(
+            terminal_metadata,
+            key="vertices_xyz",
+            context=f"{context}.terminal_metadata",
+        )
+        if isinstance(raw_vertices, (str, bytes)) or not isinstance(raw_vertices, list):
+            raise TypeError(f"{context}.terminal_metadata.vertices_xyz must be a list of 3D vertices")
+        vertices: list[tuple[float, float, float]] = []
+        for vertex_index, raw_vertex in enumerate(raw_vertices):
+            if isinstance(raw_vertex, (str, bytes)) or not isinstance(raw_vertex, list):
+                raise TypeError(f"{context}.terminal_metadata.vertices_xyz[{vertex_index}] must be a 3-item list")
+            if len(raw_vertex) != 3:
+                raise ValueError(f"{context}.terminal_metadata.vertices_xyz[{vertex_index}] must contain exactly 3 entries")
+            vertices.append((float(raw_vertex[0]), float(raw_vertex[1]), float(raw_vertex[2])))
+        if len(vertices) != 4:
+            raise ValueError(f"{context}.terminal_metadata.vertices_xyz must contain exactly 4 vertices")
+        return tuple(vertices)
     if role == "tx_rect_void_columns":
         return _tx_rect_void_columns_port_sheet_vertices(entry, context=context)
     terminal_metadata = require_key(entry, key="terminal_metadata", context=context)
@@ -505,12 +534,22 @@ def _required_port_sheet_name(entry: dict[str, object], *, context: str) -> str:
         require_non_empty_str(raw_name, context=f"{context}.imported_object_names[{index}]")
         for index, raw_name in enumerate(raw_imported_names)
     ]
-    if role == "tx_single_coil":
-        expected_name = "tx_port_sheet"
-    elif role == "rx_single_coil":
-        expected_name = "rx_port_sheet"
-    elif role == "tx_inner_single_coil":
-        expected_name = "tx_inner_port_sheet"
+    if role in ("tx_single_coil", "rx_single_coil", "tx_inner_single_coil"):
+        terminal_metadata = require_key(entry, key="terminal_metadata", context=context)
+        assert isinstance(terminal_metadata, dict), f"{context}.terminal_metadata must be a table/object"
+        expected_name = require_non_empty_str(
+            require_key(terminal_metadata, key="sheet_name", context=f"{context}.terminal_metadata"),
+            context=f"{context}.terminal_metadata.sheet_name",
+        )
+        kind = require_non_empty_str(
+            require_key(terminal_metadata, key="kind", context=f"{context}.terminal_metadata"),
+            context=f"{context}.terminal_metadata.kind",
+        )
+        if kind != "single_coil_port_v1":
+            raise ValueError(
+                f"{context}.terminal_metadata.kind must be 'single_coil_port_v1' for single-coil port sheet resolution "
+                f"(actual={kind!r})"
+            )
     elif role == "tx_plate_stack":
         expected_name = "tx_plate_port_sheet"
     elif role == "rx_plate_stack":

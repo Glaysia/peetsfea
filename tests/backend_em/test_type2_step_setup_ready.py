@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -22,6 +23,7 @@ from peetsfea.backend.pyaedt.type2_step_setup_ready import (
 from peetsfea.backend.pyaedt.type2_step_em_solve import solve_type2_setup_ready_hfss
 from peetsfea.types.manifest import EmPorts
 from tests.backend_em.test_type2_step_import_pipeline import (
+    _FAKE_IMPORTED_BBOX_BY_NAME,
     _PLATE_STACK_STUB_LENGTH_MM,
     _PLATE_STACK_TURN_COUNT,
     _FakeDesign as _ImportFakeDesign,
@@ -419,6 +421,21 @@ def _write_txrx_step_ledger(
     modeled_objects: list[dict[str, object]],
     radiation_margin_mm: float = 3500.0,
 ) -> Path:
+    _FAKE_IMPORTED_BBOX_BY_NAME.clear()
+    for modeled_object in modeled_objects:
+        canonical_coordinates = cast(dict[str, object], modeled_object["canonical_coordinates"])
+        raw_min_xyz = cast(list[float], canonical_coordinates["outer_bounds_min_xyz"])
+        raw_max_xyz = cast(list[float], canonical_coordinates["outer_bounds_max_xyz"])
+        bbox = (
+            float(raw_min_xyz[0]),
+            float(raw_min_xyz[1]),
+            float(raw_min_xyz[2]),
+            float(raw_max_xyz[0]),
+            float(raw_max_xyz[1]),
+            float(raw_max_xyz[2]),
+        )
+        for body_name in cast(list[str], modeled_object["expected_exported_body_names"]):
+            _FAKE_IMPORTED_BBOX_BY_NAME[body_name] = bbox
     legacy_outputs = type1_outputs_spec()
     outputs = {
         "mode": "TxRx",
@@ -429,8 +446,13 @@ def _write_txrx_step_ledger(
         "plot_type": legacy_outputs["plot_type"],
         "variables": [{"name": name, "expression": expression} for name, expression in TYPE1_OUTPUT_VARIABLES],
     }
+    source_toml_path = path.parent / "type2_fixed.toml"
+    source_toml_path.write_text("source_toml_version=1\n", encoding="utf-8")
     payload = {
-        "source_toml_path": str(path.parent / "type2_fixed.toml"),
+        "schema_version": "type2.step_ledger.v2",
+        "source_toml_path": str(source_toml_path),
+        "source_toml_sha256": hashlib.sha256(source_toml_path.read_bytes()).hexdigest(),
+        "scene_step_sha256": hashlib.sha256(scene_step_path.read_bytes()).hexdigest(),
         "output_dir": str(path.parent),
         "scene_step_path": str(scene_step_path),
         "seed": 7,
@@ -832,7 +854,8 @@ def _seed_port_sheet_edges_from_terminal_metadata(
     sheet_name: str,
 ) -> None:
     terminal_metadata = cast(dict[str, object], entry["terminal_metadata"])
-    raw_vertices = cast(list[list[float]], terminal_metadata["port_sheet_vertices_xyz"])
+    raw_vertices_key = "vertices_xyz" if terminal_metadata["kind"] == "single_coil_port_v1" else "port_sheet_vertices_xyz"
+    raw_vertices = cast(list[list[float]], terminal_metadata[raw_vertices_key])
     modeler.create_polyline(name=sheet_name, points=raw_vertices, cover_surface=False, close_surface=True, material="vacuum")
     cover_result = modeler.cover_lines(sheet_name)
     assert cover_result is not False
@@ -1895,12 +1918,14 @@ def test_assign_type2_lumped_ports_uses_world_port_sheet_vertices_for_tx_inner_s
     tx_entry = _tx_inner_single_coil_modeled_object_with_imported_names(tmp_path)
     rx_entry = _rx_single_coil_modeled_object_with_imported_names(tmp_path)
     tx_terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
-    tx_terminal_metadata["port_sheet_vertices_xyz"] = [
+    tx_terminal_metadata["vertices_xyz"] = [
         [110.0, 150.0, 250.0],
         [120.0, 150.0, 250.0],
         [120.0, 151.0, 254.0],
         [110.0, 151.0, 254.0],
     ]
+    tx_terminal_metadata["integration_line_start_xyz"] = [110.0, 150.5, 252.0]
+    tx_terminal_metadata["integration_line_end_xyz"] = [120.0, 150.5, 252.0]
 
     tx_sheet_name = cast(str, cast(list[object], tx_entry["imported_object_names"])[-1])
     rx_sheet_name = cast(str, cast(list[object], rx_entry["imported_object_names"])[-1])
@@ -2288,7 +2313,7 @@ def test_setup_type2_step_ledger_raises_when_port_sheet_vertices_are_malformed(t
     scene_step, ledger_path = _source_paths(tmp_path)
     modeled_objects = _tx_inner_rx_modeled_objects_with_imported_names(tmp_path)
     terminal_metadata = cast(dict[str, object], modeled_objects[0]["terminal_metadata"])
-    terminal_metadata["port_sheet_vertices_xyz"] = [[1.0, 2.0, 3.0]]
+    terminal_metadata["vertices_xyz"] = [[1.0, 2.0, 3.0]]
     _write_txrx_step_ledger(
         ledger_path,
         scene_step_path=scene_step,
@@ -2297,7 +2322,7 @@ def test_setup_type2_step_ledger_raises_when_port_sheet_vertices_are_malformed(t
     )
     session = _SetupReadyHfss(modeler=_SetupReadyModeler(imported_name_batches=[_tx_inner_rx_imported_name_batch()]))
 
-    with pytest.raises(ValueError, match=r"port_sheet_vertices_xyz must contain exactly 4 vertices"):
+    with pytest.raises(ValueError, match=r"vertices_xyz must contain exactly 4 vertices"):
         setup_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_setup_ready.aedt",

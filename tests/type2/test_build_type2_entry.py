@@ -24,6 +24,7 @@ from entry.build import (
 )
 from entry.sample import sample_type2
 from peetsfea.type2_runtime import Type2BuiltArtifact
+from peetsfea.type2_runtime import Type2AedtWorkerProcessError
 from peetsfea.type2_sampled import PreparedType2Build
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
 from peetsfea.type2_step_spec import NonModelTxRegionActualStackSpaceSpec
@@ -694,6 +695,199 @@ def test_build_type2_reads_aedt_builder_n_from_manifest(
     sampled_toml_paths = cast(list[Path], calls[0]["sampled_toml_paths"])
     assert len(sampled_toml_paths) == 2
     assert all(sampled_toml_path.name == "sampled.toml" for sampled_toml_path in sampled_toml_paths)
+
+
+def test_build_type2_retries_worker_process_error_with_bounded_restart(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _patch_rx_only_spec_loader(monkeypatch)
+    source_toml_path = _write_source_type2_toml(tmp_path)
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+    sampled_manifest = sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=4,
+        seed_n=1,
+        sampler_n=1,
+        aedt_builder_n=1,
+        make_step_on_sample=False,
+    )
+    manifest_entry = sampled_manifest["entries"][0]
+
+    sleeps: list[float] = []
+    calls: list[dict[str, object]] = []
+    attempted: dict[str, int] = {"count": 0}
+
+    def _fake_build_type2_sampled_tomls_best_effort(
+        sampled_toml_paths: object,
+        *,
+        jobs: int,
+        skipped_ledger_path: Path,
+        manifest_path: Path,
+        progress_reporter: object,
+        reuse_aedt: bool,
+        aedt_port_base: int,
+        aedt_launch_stagger_sec: float,
+    ) -> type2_runtime.Type2BuildBatchResult:
+        attempted["count"] += 1
+        sampled_toml_paths_list = list(cast(Iterable[str], sampled_toml_paths))
+        calls.append(
+            {
+                "jobs": jobs,
+                "sampled_toml_paths": sampled_toml_paths_list,
+                "skipped_ledger_path": skipped_ledger_path,
+                "manifest_path": manifest_path,
+                "progress_reporter": progress_reporter,
+                "reuse_aedt": reuse_aedt,
+                "aedt_port_base": aedt_port_base,
+                "aedt_launch_stagger_sec": aedt_launch_stagger_sec,
+            }
+        )
+        if attempted["count"] == 1:
+            raise Type2AedtWorkerProcessError("persistent worker process failed on attempt 1")
+        return {
+            "built": [
+                {
+                    "design_id": manifest_entry["design_id"],
+                    "sampled_toml_path": manifest_entry["sampled_toml_path"],
+                    "aedt_path": manifest_entry["aedt_path"],
+                    "source_step_ledger_path": manifest_entry["step_ledger_path"],
+                    "imported_ledger_path": manifest_entry["imported_ledger_path"],
+                }
+            ],
+            "skipped": [],
+        }
+
+    def _sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(
+        build_entry,
+        "build_type2_sampled_tomls_best_effort",
+        _fake_build_type2_sampled_tomls_best_effort,
+    )
+    results = build_type2(manifest_path=manifest_path, sleep=_sleep)
+
+    assert len(results) == 1
+    assert attempted["count"] == 2
+    assert sleeps == [60.0]
+    assert calls[0]["jobs"] == 1
+    assert calls[0]["skipped_ledger_path"] == manifest_path.parent / "type2_build_skipped.json"
+    assert calls[0]["manifest_path"] == manifest_path
+    assert calls[0]["reuse_aedt"] is True
+    assert calls[0]["aedt_port_base"] == 45000
+    assert calls[0]["aedt_launch_stagger_sec"] == 5.0
+    assert calls[0]["sampled_toml_paths"] == calls[1]["sampled_toml_paths"]
+
+
+def test_build_type2_does_not_retry_non_worker_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _patch_rx_only_spec_loader(monkeypatch)
+    source_toml_path = _write_source_type2_toml(tmp_path)
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+    sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=4,
+        seed_n=1,
+        sampler_n=1,
+        aedt_builder_n=1,
+        make_step_on_sample=False,
+    )
+
+    sleeps: list[float] = []
+    calls = 0
+
+    def _fake_build_type2_sampled_tomls_best_effort(
+        sampled_toml_paths: object,
+        *,
+        jobs: int,
+        skipped_ledger_path: Path,
+        manifest_path: Path,
+        progress_reporter: object,
+        reuse_aedt: bool,
+        aedt_port_base: int,
+        aedt_launch_stagger_sec: float,
+    ) -> type2_runtime.Type2BuildBatchResult:
+        nonlocal calls
+        calls += 1
+        raise ValueError("non-worker failure in builder")
+
+    monkeypatch.setattr(
+        build_entry,
+        "build_type2_sampled_tomls_best_effort",
+        _fake_build_type2_sampled_tomls_best_effort,
+    )
+
+    def _sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    with pytest.raises(ValueError, match="non-worker failure in builder"):
+        build_type2(manifest_path=manifest_path, sleep=_sleep)
+
+    assert calls == 1
+    assert sleeps == []
+
+
+def test_build_type2_retries_worker_process_error_three_times_then_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(build_entry, "_BUILD_RESTART_LIMIT", 3)
+    _patch_rx_only_spec_loader(monkeypatch)
+    source_toml_path = _write_source_type2_toml(tmp_path)
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+    sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=4,
+        seed_n=1,
+        sampler_n=1,
+        aedt_builder_n=1,
+        make_step_on_sample=False,
+    )
+
+    attempts = 0
+    sleeps: list[float] = []
+
+    def _fake_build_type2_sampled_tomls_best_effort(
+        sampled_toml_paths: object,
+        *,
+        jobs: int,
+        skipped_ledger_path: Path,
+        manifest_path: Path,
+        progress_reporter: object,
+        reuse_aedt: bool,
+        aedt_port_base: int,
+        aedt_launch_stagger_sec: float,
+    ) -> type2_runtime.Type2BuildBatchResult:
+        nonlocal attempts
+        attempts += 1
+        raise Type2AedtWorkerProcessError(f"persistent worker process failed on attempt {attempts}")
+
+    def _sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(
+        build_entry,
+        "build_type2_sampled_tomls_best_effort",
+        _fake_build_type2_sampled_tomls_best_effort,
+    )
+
+    with pytest.raises(Type2AedtWorkerProcessError, match="attempt 4"):
+        build_type2(manifest_path=manifest_path, sleep=_sleep)
+
+    assert attempts == 4
+    assert sleeps == [60.0, 60.0, 60.0]
 
 
 def test_build_type2_generates_missing_step_for_sample_only_manifest_before_runner(

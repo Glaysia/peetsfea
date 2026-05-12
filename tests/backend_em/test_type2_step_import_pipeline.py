@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import cast
@@ -71,6 +72,8 @@ _SINGLE_COIL_TX_TRACE_WIDTH_MM = 36.0
 _SINGLE_COIL_RX_TRACE_WIDTH_MM = 81.0
 _PLATE_STACK_STRIPE_FILL_FACTOR = 0.4
 _TX_RECT_VOID_COLUMNS_TRACE_WIDTH_MM = 5.0
+_DEFAULT_FAKE_BBOX = (0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
+_FAKE_IMPORTED_BBOX_BY_NAME: dict[str, tuple[float, float, float, float, float, float]] = {}
 
 
 def _assert_tv_aluminum_plate_ledger_contract(*, entry: dict[str, object]) -> None:
@@ -141,6 +144,12 @@ def _write_step(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
     return path
+
+
+def _sha256_hex_digest(*, path: Path, context: str) -> str:
+    if not path.is_file():
+        raise FileNotFoundError(f"{context} does not exist: {path}")
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _non_model_member_entry(
@@ -300,6 +309,12 @@ def _modeled_entry(
         copper_layer_positions_mm = [origin_z + 0.4]
     if expected_groups is None:
         expected_groups = []
+    if role == "tx_inner_single_coil":
+        sheet_name = "tx_inner_port_sheet"
+    elif role == "rx_single_coil":
+        sheet_name = "rx_port_sheet"
+    else:
+        sheet_name = "tx_port_sheet"
     if plane == "XY":
         port_sheet_vertices_xyz = [
             [origin_x, origin_y, origin_z],
@@ -334,13 +349,15 @@ def _modeled_entry(
             **({"trace_width_mm": trace_width_mm} if trace_width_mm is not None else {}),
         },
         "terminal_metadata": {
+            "kind": "single_coil_port_v1",
+            "sheet_name": sheet_name,
             "path": "A_cw_to_a",
             "outer_corner": "A",
             "inner_corner": "a",
             "direction": "cw",
-            "start_point_plane_mm": [55.0, 15.0],
-            "end_point_plane_mm": [70.0, 5.0],
-            "port_sheet_vertices_xyz": port_sheet_vertices_xyz,
+            "vertices_xyz": port_sheet_vertices_xyz,
+            "integration_line_start_xyz": [55.0, 15.0, origin_z],
+            "integration_line_end_xyz": [70.0, 5.0, origin_z],
         },
         "source_metadata_path": source_metadata_path,
     }
@@ -621,7 +638,26 @@ def _write_ledger(
     non_model_objects: list[dict[str, object]],
     modeled_objects: list[dict[str, object]],
     radiation_margin_mm: float = 3500.0,
+    source_toml_path: Path | None = None,
+    source_toml_sha256: str | None = None,
+    scene_step_sha256: str | None = None,
+    source_toml_contents: str = "source_toml_version=1\n",
 ) -> Path:
+    _FAKE_IMPORTED_BBOX_BY_NAME.clear()
+    for modeled_object in modeled_objects:
+        canonical_coordinates = cast(dict[str, object], modeled_object["canonical_coordinates"])
+        raw_min_xyz = cast(list[float], canonical_coordinates["outer_bounds_min_xyz"])
+        raw_max_xyz = cast(list[float], canonical_coordinates["outer_bounds_max_xyz"])
+        bbox = (
+            float(raw_min_xyz[0]),
+            float(raw_min_xyz[1]),
+            float(raw_min_xyz[2]),
+            float(raw_max_xyz[0]),
+            float(raw_max_xyz[1]),
+            float(raw_max_xyz[2]),
+        )
+        for body_name in cast(list[str], modeled_object["expected_exported_body_names"]):
+            _FAKE_IMPORTED_BBOX_BY_NAME[body_name] = bbox
     legacy_outputs = type1_outputs_spec()
     legacy_variable_by_name = {entry["name"]: entry["expression"] for entry in legacy_outputs["variables"]}
     outputs = {
@@ -642,8 +678,22 @@ def _write_ledger(
             {"name": "eta_rx_accept_ratio", "expression": legacy_variable_by_name["eta_rx_accept_ratio"]},
         ],
     }
+    if source_toml_path is None:
+        source_toml_path = path.parent / "type2_fixed.toml"
+    source_toml_path.write_text(source_toml_contents, encoding="utf-8")
+    calculated_source_toml_sha256 = source_toml_sha256
+    if calculated_source_toml_sha256 is None:
+        calculated_source_toml_sha256 = _sha256_hex_digest(path=source_toml_path, context="source_toml_path")
+    calculated_scene_step_sha256 = scene_step_sha256
+    if calculated_scene_step_sha256 is None:
+        calculated_scene_step_sha256 = (
+            _sha256_hex_digest(path=scene_step_path, context="scene_step_path") if scene_step_path.is_file() else "missing"
+        )
     payload = {
-        "source_toml_path": str(path.parent / "type2_fixed.toml"),
+        "schema_version": "type2.step_ledger.v2",
+        "source_toml_path": str(source_toml_path),
+        "source_toml_sha256": calculated_source_toml_sha256,
+        "scene_step_sha256": calculated_scene_step_sha256,
         "output_dir": str(path.parent),
         "scene_step_path": str(scene_step_path),
         "seed": 7,
@@ -658,8 +708,15 @@ def _write_ledger(
 
 
 class _FakeObject:
-    def __init__(self, name: str, *, valid_properties: tuple[str, ...] = ("Material", "Color", "Transparent")) -> None:
+    def __init__(
+        self,
+        name: str,
+        *,
+        valid_properties: tuple[str, ...] = ("Material", "Color", "Transparent"),
+        bounding_box: tuple[float, float, float, float, float, float] = _DEFAULT_FAKE_BBOX,
+    ) -> None:
         self.name = name
+        self.bounding_box = list(bounding_box)
         self.color = (0, 0, 0)
         self.transparency = 0.0
         self.valid_properties = list(valid_properties)
@@ -853,7 +910,7 @@ class _FakeModeler:
         next_names = self._imported_name_batches.pop(0)
         self._object_names = self._object_names + next_names
         for name in next_names:
-            self.objects[name] = _FakeObject(name)
+            self.objects[name] = _FakeObject(name, bounding_box=_FAKE_IMPORTED_BBOX_BY_NAME.get(name, _DEFAULT_FAKE_BBOX))
         return True
 
     def set_object_model_state(self, name: str, model: bool) -> object:
@@ -1467,6 +1524,40 @@ def test_load_step_ledger_accepts_tx_inner_single_coil_with_void_stack_group_con
 
     modeled_roles = [entry["entry"]["role"] for entry in ledger["modeled_objects"]]
     assert modeled_roles == ["tx_inner_single_coil", "rx_single_coil"]
+
+
+def test_load_step_ledger_rejects_single_coil_terminal_metadata_without_kind(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    tx_entry = _modeled_entry()
+    del cast(dict[str, object], tx_entry["terminal_metadata"])["kind"]
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=[tx_entry, _rx_single_coil_entry(tmp_path)],
+    )
+
+    with pytest.raises(ValueError, match=r"terminal_metadata\.kind must be 'single_coil_port_v1'"):
+        load_step_ledger(ledger_path)
+
+
+def test_load_step_ledger_rejects_single_coil_terminal_metadata_wrong_vertex_count(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    tx_entry = _modeled_entry()
+    terminal_metadata = cast(dict[str, object], tx_entry["terminal_metadata"])
+    terminal_metadata["vertices_xyz"] = [
+        [1.0, 2.0, 3.0],
+        [4.0, 5.0, 6.0],
+    ]
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=[tx_entry, _rx_single_coil_entry(tmp_path)],
+    )
+
+    with pytest.raises(ValueError, match=r"must contain exactly 4 vertices"):
+        load_step_ledger(ledger_path)
 
 
 def test_style_imported_modeled_objects_materializes_tx_inner_single_coil_void_stack_passively(tmp_path: Path) -> None:
@@ -3560,6 +3651,64 @@ def test_import_type2_step_ledger_fails_for_missing_scene_step_before_hfss_launc
         return cast(HfssSession, _FakeHfss(modeler=_FakeModeler(imported_name_batches=[])))
 
     with pytest.raises(FileNotFoundError, match=r"scene_step_path does not exist"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            hfss_factory=_factory,
+        )
+
+    assert launch_count == 0
+
+
+def test_import_type2_step_ledger_fails_for_source_toml_hash_mismatch_before_hfss_launch(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=[_modeled_entry()],
+    )
+    payload = json.loads(ledger_path.read_text(encoding="utf-8"))
+    payload["source_toml_sha256"] = "0" * 64
+    ledger_path.write_text(json.dumps(payload), encoding="utf-8")
+    launch_count = 0
+
+    def _factory(_: str) -> HfssSession:
+        nonlocal launch_count
+        launch_count += 1
+        return cast(HfssSession, _FakeHfss(modeler=_FakeModeler(imported_name_batches=[])))
+
+    with pytest.raises(ValueError, match=r"source_toml hash mismatch"):
+        import_type2_step_ledger(
+            step_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",
+            imported_ledger_path=tmp_path / "aedt" / "type2_imported_ledger.json",
+            hfss_factory=_factory,
+        )
+
+    assert launch_count == 0
+
+
+def test_import_type2_step_ledger_fails_for_scene_step_hash_mismatch_before_hfss_launch(tmp_path: Path) -> None:
+    scene_step, ledger_path = _source_paths(tmp_path)
+    _write_ledger(
+        ledger_path,
+        scene_step_path=scene_step,
+        non_model_objects=[_non_model_entry()],
+        modeled_objects=[_modeled_entry()],
+    )
+    payload = json.loads(ledger_path.read_text(encoding="utf-8"))
+    payload["scene_step_sha256"] = "1" * 64
+    ledger_path.write_text(json.dumps(payload), encoding="utf-8")
+    launch_count = 0
+
+    def _factory(_: str) -> HfssSession:
+        nonlocal launch_count
+        launch_count += 1
+        return cast(HfssSession, _FakeHfss(modeler=_FakeModeler(imported_name_batches=[])))
+
+    with pytest.raises(ValueError, match=r"scene_step hash mismatch"):
         import_type2_step_ledger(
             step_ledger_path=ledger_path,
             output_aedt_path=tmp_path / "aedt" / "type2_import.aedt",

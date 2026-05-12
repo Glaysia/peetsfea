@@ -43,16 +43,18 @@ class ImportedTxOuterCanonicalTiltMetadata(TypedDict, total=False):
 
 
 class ImportedSingleCoilTerminalMetadataBase(TypedDict):
+    kind: Literal["single_coil_port_v1"]
+    sheet_name: str
+    vertices_xyz: tuple[tuple[float, float, float], ...]
+    integration_line_start_xyz: tuple[float, float, float]
+    integration_line_end_xyz: tuple[float, float, float]
+
+
+class ImportedSingleCoilTerminalMetadata(ImportedSingleCoilTerminalMetadataBase, total=False):
     path: str
     outer_corner: Literal["A", "B", "C", "D"]
     inner_corner: Literal["a", "b", "c", "d"]
     direction: Literal["cw", "ccw"]
-    start_point_plane_mm: tuple[float, float]
-    end_point_plane_mm: tuple[float, float]
-
-
-class ImportedSingleCoilTerminalMetadata(ImportedSingleCoilTerminalMetadataBase, total=False):
-    port_sheet_vertices_xyz: tuple[tuple[float, float, float], ...]
 
 
 class ImportedPlateStackTerminalMetadata(TypedDict):
@@ -292,42 +294,67 @@ def _parse_canonical_coordinates(value: object) -> ImportedModeledObjectCanonica
 
 def _parse_single_coil_terminal_metadata(value: object) -> ImportedSingleCoilTerminalMetadata:
     node = _require_table(value, context="modeled_object.terminal_metadata")
-    if "kind" in node:
-        raw_kind = _require_non_empty_str(
-            _require_key(node, key="kind", context="modeled_object.terminal_metadata"),
-            context="modeled_object.terminal_metadata.kind",
-        )
+    kind = _require_non_empty_str(
+        _require_key(node, key="kind", context="modeled_object.terminal_metadata"),
+        context="modeled_object.terminal_metadata.kind",
+    )
+    if kind != "single_coil_port_v1":
         raise ValueError(
-            "modeled_object.terminal_metadata.kind is unsupported for coil import; "
-            f"coil roles require explicit terminal geometry metadata (actual={raw_kind!r})"
+            "modeled_object.terminal_metadata.kind must be 'single_coil_port_v1' for coil import "
+            f"(actual={kind!r})"
+        )
+    allowed_keys = {
+        "kind",
+        "sheet_name",
+        "vertices_xyz",
+        "integration_line_start_xyz",
+        "integration_line_end_xyz",
+        "path",
+        "outer_corner",
+        "inner_corner",
+        "direction",
+    }
+    extra_keys = sorted(set(node) - allowed_keys)
+    if extra_keys:
+        raise ValueError(
+            "modeled_object.terminal_metadata contains unsupported single_coil_port_v1 keys "
+            f"(actual={extra_keys})"
         )
     terminal_metadata: dict[str, object] = {
-        "path": _require_non_empty_str(
-            _require_key(node, key="path", context="modeled_object.terminal_metadata"),
-            context="modeled_object.terminal_metadata.path",
+        "kind": kind,
+        "sheet_name": _require_non_empty_str(
+            _require_key(node, key="sheet_name", context="modeled_object.terminal_metadata"),
+            context="modeled_object.terminal_metadata.sheet_name",
         ),
-        "outer_corner": _require_terminal_outer_corner(
-            _require_key(node, key="outer_corner", context="modeled_object.terminal_metadata")
+        "vertices_xyz": _require_float_triplet_sequence(
+            _require_key(node, key="vertices_xyz", context="modeled_object.terminal_metadata"),
+            context="modeled_object.terminal_metadata.vertices_xyz",
         ),
-        "inner_corner": _require_terminal_inner_corner(
-            _require_key(node, key="inner_corner", context="modeled_object.terminal_metadata")
-        ),
-        "direction": _require_terminal_direction(
-            _require_key(node, key="direction", context="modeled_object.terminal_metadata")
-        ),
-        "start_point_plane_mm": _require_float_pair(
-            _require_key(node, key="start_point_plane_mm", context="modeled_object.terminal_metadata"),
-            context="modeled_object.terminal_metadata.start_point_plane_mm",
-        ),
-        "end_point_plane_mm": _require_float_pair(
-            _require_key(node, key="end_point_plane_mm", context="modeled_object.terminal_metadata"),
-            context="modeled_object.terminal_metadata.end_point_plane_mm",
+        "integration_line_start_xyz": _require_float_triplet(
+            _require_key(node, key="integration_line_start_xyz", context="modeled_object.terminal_metadata"),
+            context="modeled_object.terminal_metadata.integration_line_start_xyz",
         ),
     }
-    if "port_sheet_vertices_xyz" in node:
-        terminal_metadata["port_sheet_vertices_xyz"] = _require_float_triplet_sequence(
-            _require_key(node, key="port_sheet_vertices_xyz", context="modeled_object.terminal_metadata"),
-            context="modeled_object.terminal_metadata.port_sheet_vertices_xyz",
+    terminal_metadata["integration_line_end_xyz"] = _require_float_triplet(
+        _require_key(node, key="integration_line_end_xyz", context="modeled_object.terminal_metadata"),
+        context="modeled_object.terminal_metadata.integration_line_end_xyz",
+    )
+    if "path" in node:
+        terminal_metadata["path"] = _require_non_empty_str(
+            _require_key(node, key="path", context="modeled_object.terminal_metadata"),
+            context="modeled_object.terminal_metadata.path",
+        )
+    if "outer_corner" in node:
+        terminal_metadata["outer_corner"] = _require_terminal_outer_corner(
+            _require_key(node, key="outer_corner", context="modeled_object.terminal_metadata")
+        )
+    if "inner_corner" in node:
+        terminal_metadata["inner_corner"] = _require_terminal_inner_corner(
+            _require_key(node, key="inner_corner", context="modeled_object.terminal_metadata")
+        )
+    if "direction" in node:
+        terminal_metadata["direction"] = _require_terminal_direction(
+            _require_key(node, key="direction", context="modeled_object.terminal_metadata")
         )
     return cast(ImportedSingleCoilTerminalMetadata, terminal_metadata)
 

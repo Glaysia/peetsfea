@@ -5,8 +5,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TypedDict, cast
 
-from peetsfea.aedt.proxies import create_group
-from peetsfea.aedt.protocols import HfssSession, ModelerSession
+from peetsfea.aedt.proxies import create_group, object_bbox
+from peetsfea.aedt.protocols import HfssSession, ModelerSession, Object3dRef
 from peetsfea.backend.pyaedt.failfast import raise_on_false
 from peetsfea.backend.pyaedt.type2_modeled_import_adapter import build_single_imported_modeled_object_entry
 from peetsfea.backend.pyaedt.type2_step_import_ledger import (
@@ -55,6 +55,72 @@ _RX_MERGED_STACK_MEMBER_NAMES: tuple[str, str, str] = (
     "rx_stack_air",
 )
 _TX_RECT_VOID_COLUMNS_ROLE = "tx_rect_void_columns"
+
+
+def _assert_imported_object_bounds_match_ledger(
+    *,
+    modeler: ModelerSession,
+    modeled_entry: dict[str, object],
+    imported_object_names: list[str],
+    context: str,
+    tolerance: float = 1e-6,
+) -> None:
+    expected_min = outer_bounds_min_xyz(modeled_entry, context=context)
+    expected_size = outer_bounds_size_xyz(modeled_entry, context=context)
+    if not imported_object_names:
+        raise ValueError(f"{context} must include at least one imported modeled object name")
+    if tolerance < 0.0:
+        raise ValueError("bbox_tolerance must be non-negative")
+    imported_bboxes: list[tuple[float, float, float, float, float, float]] = []
+    for imported_object_name in imported_object_names:
+        object_ref = cast(Object3dRef, modeler.get_object_from_name(imported_object_name))
+        raw_bbox = object_bbox(object_ref)
+        if isinstance(raw_bbox, (str, bytes)) or not isinstance(raw_bbox, Sequence):
+            raise TypeError(f"{context}.imported_object_bboxes[{imported_object_name}] must expose a 6-value bbox")
+        if len(raw_bbox) != 6:
+            raise ValueError(f"{context}.imported_object_bboxes[{imported_object_name}] must expose 6-value bbox")
+        imported_bboxes.append(
+            (
+                float(raw_bbox[0]),
+                float(raw_bbox[1]),
+                float(raw_bbox[2]),
+                float(raw_bbox[3]),
+                float(raw_bbox[4]),
+                float(raw_bbox[5]),
+            )
+        )
+    actual_min = (
+        min(bbox[0] for bbox in imported_bboxes),
+        min(bbox[1] for bbox in imported_bboxes),
+        min(bbox[2] for bbox in imported_bboxes),
+    )
+    actual_max = (
+        max(bbox[3] for bbox in imported_bboxes),
+        max(bbox[4] for bbox in imported_bboxes),
+        max(bbox[5] for bbox in imported_bboxes),
+    )
+    actual_size = (
+        actual_max[0] - actual_min[0],
+        actual_max[1] - actual_min[1],
+        actual_max[2] - actual_min[2],
+    )
+    object_id = require_non_empty_str(
+        require_key(modeled_entry, key="object_id", context=context),
+        context=f"{context}.object_id",
+    )
+    for axis_index in (0, 1, 2):
+        if abs(actual_min[axis_index] - expected_min[axis_index]) > tolerance:
+            raise ValueError(
+                f"{context} imported body bbox min drift exceeds tolerance ("
+                f"object_id={object_id!r}, imported_object_names={imported_object_names}, "
+                f"expected_min={expected_min}, actual_min={actual_min}, expected_size={expected_size}, actual_size={actual_size})"
+            )
+        if abs(actual_size[axis_index] - expected_size[axis_index]) > tolerance:
+            raise ValueError(
+                f"{context} imported body bbox size drift exceeds tolerance ("
+                f"object_id={object_id!r}, imported_object_names={imported_object_names}, "
+                f"expected_size={expected_size}, actual_size={actual_size}, expected_min={expected_min}, actual_min={actual_min})"
+            )
 
 
 def _is_tx_branch_stack_member(name: str, *, suffix: str) -> bool:
@@ -590,6 +656,12 @@ def build_imported_ledger(
             object_id=validated_entry["object_id"],
             imported_object_names=imported_object_names,
             model_state=True,
+        )
+        _assert_imported_object_bounds_match_ledger(
+            modeler=modeler,
+            modeled_entry=validated_entry["entry"],
+            imported_object_names=imported_object_names,
+            context=context,
         )
         final_imported_object_names = style_imported_modeled_objects(
             modeler=modeler,

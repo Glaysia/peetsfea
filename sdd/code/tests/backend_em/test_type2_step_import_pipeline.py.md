@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_import_pipeline.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-11 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - test
   - import
@@ -19,9 +19,11 @@ tags:
 - type2 STEP import-only pipeline behavior를 검증한다.
 - 0.2.24 SDD 기준 RX modeled import and non-modeled guide/context import are active.
 - `tx_outer_single_coil` source ledgers are rejected as inactive Type2 state before import/styling.
+- Single-coil import fixtures validate `single_coil_port_v1` sheet names, `vertices_xyz`, integration-line endpoints, ledger schema/hash fields, and imported-body bbox drift rejection before runtime sheet creation.
 
 ## Canonical state
 - Import ledger preserves source paths, seed, imported ownership, and imported object names.
+- Source TOML and scene STEP hashes are required in test ledgers so stale/mixed artifacts fail at `load_step_ledger()` instead of reaching PyAEDT styling.
 - Import ledger preserves modeled canonical `trace_width_mm` so setup-ready mesh can derive dynamic `Length1.MaxLength`.
 - Import-only path must not create boundary, ports, mesh, or reports.
 - `tx_region` may be carried as guide context only.
@@ -49,6 +51,7 @@ tags:
 
 ## Invariants / fail-fast
 - Missing RX imported bodies and generic imported names fail.
+- Imported fake object bboxes are seeded from ledger canonical coordinates; tests fail if import creates sheets before body/ledger bbox validation can run.
 - RxOnly import tests must not require TX modeled bodies.
 - Tx bridge member IDs must be claimed by `type2_non_model_scene` partitioning and cannot appear in modeled body assignments.
 - Tx positive and negative bridge member IDs must be claimed by `type2_non_model_scene` partitioning and cannot appear in modeled body assignments.
@@ -66,3 +69,4 @@ tags:
 - Related plan: [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
 - Related plan: [0.2.24 Type2 TV Aluminum Plate](../../../plans/0.2.24-type2-tv-aluminum-plate.md)
 - Related plan: [0.2.24 Type2 Trace Width Mesh Length](../../../plans/0.2.24-type2-trace-width-mesh-length.md)
+- Related plan: [0.2.25 Type2 Port Sheet Contract Rewrite](../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)

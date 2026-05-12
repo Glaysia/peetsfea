@@ -21,7 +21,6 @@ from peetsfea.type2_step_ledger import ExportedBodyGroup
 from peetsfea.tx_rect_void import BoxSpec
 from peetsfea.tx_rect_void import SingleCoilProfile
 from peetsfea.tx_rect_void import build_tx_rect_void_box_specs
-from peetsfea.tx_rect_void import build_tx_rect_void_centerline
 from peetsfea.tx_rect_void import load_tx_rect_void_spec
 from peetsfea.tx_rect_void import modeled_body_bounds_from_boxes
 from peetsfea.tx_rect_void import profile_for_modeled_role
@@ -2077,11 +2076,21 @@ def _edge_vertex_set_from_sheet_metadata(
 ) -> set[tuple[float, float, float]]:
     raw_vertices = cast(
         list[list[float]],
-        terminal_metadata["port_sheet_vertices_xyz"],
+        terminal_metadata["vertices_xyz"],
     )
     return _edge_vertex_set_from_sheet_vertices(
         sheet_vertices=_vertex_triplets(raw_vertices),
         edge_role=edge_role,
+    )
+
+
+def _edge_center_xyz(
+    edge: tuple[tuple[float, float, float], tuple[float, float, float]],
+) -> tuple[float, float, float]:
+    return (
+        (edge[0][0] + edge[1][0]) / 2.0,
+        (edge[0][1] + edge[1][1]) / 2.0,
+        (edge[0][2] + edge[1][2]) / 2.0,
     )
 
 
@@ -2128,24 +2137,7 @@ def _terminal_stub_bottom_face_square_plane_vertices(
     return (first_box, second_box)
 
 
-def _stub_centerline_perpendicular_distance(
-    *,
-    point_xy: tuple[float, float],
-    first_center_xy: tuple[float, float],
-    second_center_xy: tuple[float, float],
-) -> float:
-    delta_x = second_center_xy[0] - first_center_xy[0]
-    delta_y = second_center_xy[1] - first_center_xy[1]
-    denominator = math.hypot(delta_x, delta_y)
-    assert denominator > 1e-12
-    numerator = abs(
-        delta_x * (first_center_xy[1] - point_xy[1])
-        - (first_center_xy[0] - point_xy[0]) * delta_y
-    )
-    return numerator / denominator
-
-
-def _widest_stub_bottom_face_diagonal_vertices(
+def _facing_stub_bottom_face_edge_vertices(
     *,
     terminal_stub_boxes: tuple[tuple[tuple[float, float, float], tuple[float, float, float]], ...],
     plane: str,
@@ -2165,56 +2157,49 @@ def _widest_stub_bottom_face_diagonal_vertices(
         sum(point_xy[1] for point_xy in second_plane_vertices) / 4.0,
     )
 
-    def _selected_diagonal(
+    def _facing_edge(
         plane_vertices: tuple[tuple[float, float], ...],
+        target_center_xy: tuple[float, float],
     ) -> tuple[tuple[float, float], tuple[float, float]]:
-        best_score = -1.0
-        best_diagonal: tuple[tuple[float, float], tuple[float, float]] | None = None
-        best_key: tuple[tuple[float, float], tuple[float, float]] | None = None
-        for first_index, second_index in ((0, 2), (1, 3)):
-            diagonal_vertices = (plane_vertices[first_index], plane_vertices[second_index])
-            score = sum(
-                _stub_centerline_perpendicular_distance(
-                    point_xy=point_xy,
-                    first_center_xy=first_center_xy,
-                    second_center_xy=second_center_xy,
-                )
-                for point_xy in diagonal_vertices
-            )
-            sorted_vertices = sorted(diagonal_vertices)
-            candidate_key = (sorted_vertices[0], sorted_vertices[1])
-            if (
-                score > best_score + 1e-9
-                or (abs(score - best_score) <= 1e-9 and (best_key is None or candidate_key < best_key))
-            ):
-                best_score = score
-                best_diagonal = diagonal_vertices
-                best_key = candidate_key
-        assert best_diagonal is not None
-        return best_diagonal
+        min_u = min(point_xy[0] for point_xy in plane_vertices)
+        max_u = max(point_xy[0] for point_xy in plane_vertices)
+        min_v = min(point_xy[1] for point_xy in plane_vertices)
+        max_v = max(point_xy[1] for point_xy in plane_vertices)
+        center_u = (min_u + max_u) / 2.0
+        center_v = (min_v + max_v) / 2.0
+        delta_u = target_center_xy[0] - center_u
+        delta_v = target_center_xy[1] - center_v
+        assert math.hypot(delta_u, delta_v) > 1e-9
+        if abs(delta_u) >= abs(delta_v):
+            edge_u = max_u if delta_u > 0.0 else min_u
+            return ((edge_u, min_v), (edge_u, max_v))
+        edge_v = max_v if delta_v > 0.0 else min_v
+        return ((min_u, edge_v), (max_u, edge_v))
 
-    diagonal_vertices: list[tuple[float, float, float]] = []
-    for plane_vertices, bottom_plane_coordinate in (
-        (first_plane_vertices, first_bottom_plane_coordinate),
-        (second_plane_vertices, second_bottom_plane_coordinate),
-    ):
-        selected_diagonal = _selected_diagonal(plane_vertices)
-        for point_u, point_v in selected_diagonal:
-            if plane == "XY":
-                diagonal_vertices.append((point_u, point_v, bottom_plane_coordinate))
-            else:
-                diagonal_vertices.append((bottom_plane_coordinate, point_u, point_v))
-    return tuple(diagonal_vertices)
+    signal_edge = _facing_edge(first_plane_vertices, second_center_xy)
+    reference_edge = _facing_edge(second_plane_vertices, first_center_xy)
+
+    def _to_world(point_xy: tuple[float, float], bottom_plane_coordinate: float) -> tuple[float, float, float]:
+        if plane == "XY":
+            return (point_xy[0], point_xy[1], bottom_plane_coordinate)
+        return (bottom_plane_coordinate, point_xy[0], point_xy[1])
+
+    return (
+        _to_world(signal_edge[1], first_bottom_plane_coordinate),
+        _to_world(reference_edge[0], second_bottom_plane_coordinate),
+        _to_world(reference_edge[1], second_bottom_plane_coordinate),
+        _to_world(signal_edge[0], first_bottom_plane_coordinate),
+    )
 
 
-def _assert_sheet_vertices_bridge_stub_bottom_face_diagonals(
+def _assert_sheet_vertices_bridge_stub_bottom_face_edges(
     *,
     sheet_vertices: tuple[tuple[float, float, float], ...],
     terminal_stub_boxes: tuple[tuple[tuple[float, float, float], tuple[float, float, float]], ...],
     plane: str,
 ) -> None:
     assert len(sheet_vertices) == 4
-    expected_vertices = _widest_stub_bottom_face_diagonal_vertices(
+    expected_vertices = _facing_stub_bottom_face_edge_vertices(
         terminal_stub_boxes=terminal_stub_boxes,
         plane=plane,
     )
@@ -3493,7 +3478,7 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     assert tx_inner_entry["expected_exported_body_count"] == 4
     assert all(entry["object_id"] != "tx_outer_rect_void_coil" for entry in ledger["modeled_objects"])
     rx_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "rx_rect_void_coil")
-    assert cast(dict[str, object], rx_entry["terminal_metadata"])["port_sheet_vertices_xyz"]
+    assert cast(dict[str, object], rx_entry["terminal_metadata"])["vertices_xyz"]
 
     scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
     assert "tx_region" in scene_shapes_by_label
@@ -3731,7 +3716,7 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
         tuple[float, float, float], tx_inner_model_canonical["outer_bounds_min_xyz"]
     )
     assert tx_inner_terminal_metadata["path"] == "B_cw_to_b"
-    assert tx_inner_terminal_metadata["port_sheet_vertices_xyz"]
+    assert tx_inner_terminal_metadata["vertices_xyz"]
     assert tx_inner_outer_bounds_min_xyz[2] == pytest.approx(
         tx_inner_terminal_pcb_layer_z_positions[0] - 7.5
     )
@@ -3752,17 +3737,17 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
         tuple(round(component, 8) for component in vertex)
         for vertex in cast(
             list[list[float]],
-            tx_inner_terminal_metadata["port_sheet_vertices_xyz"],
+            tx_inner_terminal_metadata["vertices_xyz"],
         )
     } == {
         tuple(round(component, 8) for component in vertex)
-        for vertex in _widest_stub_bottom_face_diagonal_vertices(
+        for vertex in _facing_stub_bottom_face_edge_vertices(
             terminal_stub_boxes=tx_inner_terminal_stub_layer0_boxes,
             plane="XY",
         )
     }
     rx_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "rx_rect_void_coil")
-    assert cast(dict[str, object], rx_entry["terminal_metadata"])["port_sheet_vertices_xyz"]
+    assert cast(dict[str, object], rx_entry["terminal_metadata"])["vertices_xyz"]
     assert ledger["outputs"]["mode"] == "TxRx"
     assert "TX_TML" in json.dumps(ledger["outputs"], sort_keys=True)
 
@@ -3928,12 +3913,12 @@ def test_export_type2_step_artifacts_tx_positive_bridge_follows_final_tx_outer_t
     )
     baseline_tx_outer_terminal_vertices = _rounded_vertex_set(
         _vertex_triplets(
-            cast(list[list[float]], cast(dict[str, object], baseline_tx_outer_entry["terminal_metadata"])["port_sheet_vertices_xyz"]),
+            cast(list[list[float]], cast(dict[str, object], baseline_tx_outer_entry["terminal_metadata"])["vertices_xyz"]),
         )
     )
     baseline_tx_inner_terminal_vertices = _rounded_vertex_set(
         _vertex_triplets(
-            cast(list[list[float]], cast(dict[str, object], baseline_tx_inner_entry["terminal_metadata"])["port_sheet_vertices_xyz"]),
+            cast(list[list[float]], cast(dict[str, object], baseline_tx_inner_entry["terminal_metadata"])["vertices_xyz"]),
         )
     )
 
@@ -4015,10 +4000,10 @@ def test_export_type2_step_artifacts_tx_positive_bridge_follows_final_tx_outer_t
         | _edge_vertex_set_from_sheet_metadata(terminal_metadata=tx_inner_terminal_metadata, edge_role="reference")
     )
     tx_outer_term_vertices = _vertex_triplets(
-        cast(list[list[float]], tx_outer_terminal_metadata["port_sheet_vertices_xyz"]),
+        cast(list[list[float]], tx_outer_terminal_metadata["vertices_xyz"]),
     )
     tx_inner_term_vertices = _vertex_triplets(
-        cast(list[list[float]], tx_inner_terminal_metadata["port_sheet_vertices_xyz"]),
+        cast(list[list[float]], tx_inner_terminal_metadata["vertices_xyz"]),
     )
 
     positive_bridge_union_vertices = set(
@@ -5054,8 +5039,8 @@ def test_export_type2_step_artifacts_supports_multilayer_tx_port_sheet_path(
             wall_parallel_stack_present=False,
         )
     )
-    _assert_sheet_vertices_bridge_stub_bottom_face_diagonals(
-        sheet_vertices=_vertex_triplets(cast(list[list[float]], terminal_metadata["port_sheet_vertices_xyz"])),
+    _assert_sheet_vertices_bridge_stub_bottom_face_edges(
+        sheet_vertices=_vertex_triplets(cast(list[list[float]], terminal_metadata["vertices_xyz"])),
         terminal_stub_boxes=_world_terminal_stub_boxes(
             source_toml=toml_path,
             object_id="tx_rect_void_coil",
@@ -5318,7 +5303,6 @@ def test_export_type2_step_artifacts_translates_terminal_metadata_with_tx_region
     modeled_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "tx_rect_void_coil")
     local_spec = load_tx_rect_void_spec(tx_rect_void_toml_path)
     local_realized = realize_tx_rect_void_spec(local_spec, seed=0)
-    local_centerline = build_tx_rect_void_centerline(local_realized)
     local_boxes = build_tx_rect_void_box_specs(local_realized)
     local_bounds_min_xyz, _local_bounds_max_xyz, local_size_xyz = modeled_body_bounds_from_boxes(local_boxes)
     region_min_x, region_min_y, region_min_z = tx_region_member["canonical_coordinates"]["outer_bounds_min_xyz"]
@@ -5340,37 +5324,33 @@ def test_export_type2_step_artifacts_translates_terminal_metadata_with_tx_region
     assert modeled_bounds_min_xyz[2] == pytest.approx(
         placement_offset_z + local_bounds_min_xyz[2]
     )
-    assert modeled_entry["terminal_metadata"]["start_point_plane_mm"] == pytest.approx(
-        (
-            local_centerline[0][0] + placement_offset_x,
-            local_centerline[0][1] + placement_offset_y,
-        )
-    )
-    assert modeled_entry["terminal_metadata"]["end_point_plane_mm"] == pytest.approx(
-        (
-            local_centerline[-1][0] + placement_offset_x,
-            local_centerline[-1][1] + placement_offset_y,
-        )
-    )
-    expected_tx_port_sheet_vertices = tuple(
-        tuple(round(component, 8) for component in vertex)
-        for vertex in _widest_stub_bottom_face_diagonal_vertices(
-            terminal_stub_boxes=_world_terminal_stub_boxes(
-                source_toml=toml_path,
-                object_id="tx_rect_void_coil",
-                seed=0,
-            ),
-            plane="XY",
-        )
+    terminal_metadata = cast(dict[str, object], modeled_entry["terminal_metadata"])
+    assert terminal_metadata["kind"] == "single_coil_port_v1"
+    expected_tx_port_sheet_vertices = _facing_stub_bottom_face_edge_vertices(
+        terminal_stub_boxes=_world_terminal_stub_boxes(
+            source_toml=toml_path,
+            object_id="tx_rect_void_coil",
+            seed=0,
+        ),
+        plane="XY",
     )
     actual_tx_port_sheet_vertices = tuple(
         tuple(round(component, 8) for component in vertex)
         for vertex in cast(
             list[list[float]],
-            cast(dict[str, object], modeled_entry["terminal_metadata"])["port_sheet_vertices_xyz"],
+            terminal_metadata["vertices_xyz"],
         )
     )
-    assert set(actual_tx_port_sheet_vertices) == set(expected_tx_port_sheet_vertices)
+    assert set(actual_tx_port_sheet_vertices) == {
+        tuple(round(component, 8) for component in vertex)
+        for vertex in expected_tx_port_sheet_vertices
+    }
+    assert terminal_metadata["integration_line_start_xyz"] == pytest.approx(
+        _edge_center_xyz((expected_tx_port_sheet_vertices[3], expected_tx_port_sheet_vertices[0]))
+    )
+    assert terminal_metadata["integration_line_end_xyz"] == pytest.approx(
+        _edge_center_xyz((expected_tx_port_sheet_vertices[1], expected_tx_port_sheet_vertices[2]))
+    )
 
 
 def test_export_type2_step_artifacts_places_tx_plate_stack_on_tx_region_min_x_anchor(tmp_path: Path) -> None:
@@ -5631,6 +5611,8 @@ def test_export_type2_step_artifacts_reuses_first_pass_scene_data_for_terminal_v
         )
 
     def _successful_export_step(*args: object, **kwargs: object) -> bool:
+        output_path = cast(Path, args[1])
+        output_path.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
         return True
 
     monkeypatch.setattr(module_under_test, "build_modeled_scene_data", _counting_build_modeled_scene_data)
@@ -5693,6 +5675,8 @@ def test_export_type2_step_artifacts_fails_terminal_metadata_drift_against_first
         return ledger
 
     def _successful_export_step(*args: object, **kwargs: object) -> bool:
+        output_path = cast(Path, args[1])
+        output_path.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
         return True
 
     monkeypatch.setattr(module_under_test, "build_modeled_scene_data", _tagged_build_modeled_scene_data)

@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-07 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - test
   - step-export
@@ -25,6 +25,7 @@ tags:
 - Historical TX outer tilt helper tests are not active generation regressions after the 0.2.24 TX outer removal.
 - Tests cover `tx_inner_actual_region` as a non-modeled coil-fit envelope derived before modeled coil construction.
 - Tests cover ferrite/PET_PSA-priority boolean clearance for representative Type2 single-coil STEP export without changing exported body names, groups, or ledger contracts.
+- Tests now assert the single-coil `single_coil_port_v1` contract emits global-mm `vertices_xyz`, explicit integration-line endpoints, role-specific `sheet_name`, and no legacy single-coil `port_sheet_vertices_xyz` ownership.
 
 ## Canonical state
 - RX exported body names/counts and terminal metadata remain deterministic.
@@ -37,6 +38,7 @@ tags:
 - TX inner void-stack presence is controlled by `void_stack_present`; tests must cover disabled void stack while retaining bottom underlay, including the selected-size fixed example.
 - The disabled export regression fixes `underlay_repeat_count = 1` and `void_stack_present = 0`; it expects `tx_underlay_*` bodies and group membership without any `tx_void_*` scene labels.
 - TX inner terminal metadata remains deterministic and can drive `tx_inner_port_sheet` for `TxRx`.
+- Single-coil port sheets are expected to span the facing bottom-face edges of the terminal owner boxes; diagonal-based sheet expectations are no longer active for single-coil roles.
 - Fixed example parsing now asserts `tx_inner_rect_void_coil.terminal_stub_length_mm == [false, 7.5, 7.5, 1]` and `tx_inner` TX export tests assert the canonical `outer_bounds_min_xyz[2]` offset is exactly 7.5 mm above the first PCB layer `z`.
 - Active `tx_inner_rect_void_coil` example and sweep contracts are single-layer: `layer_count = [true, 1, 1, 1]`.
 - `tx_inner_rect_void_coil` is modeled geometry-only with expected active coil bodies `tx_inner_pcb_l0`
@@ -76,6 +78,7 @@ tags:
 ## Invariants / fail-fast
 - Exported body drift and generic names fail.
 - Terminal metadata drift must still fail when validation compares ledger metadata against same-call scene data.
+- STEP ledger hash metadata is part of the export contract; tests that monkeypatch `export_step` must still create a STEP file so `scene_step_sha256` can be computed.
 - The validation reuse regression must fail if `export_type2_step_artifacts()` calls `build_modeled_scene_data()` more times than the initial scene construction pass requires.
 - The same-call scene-data drift regression mutates ledger terminal metadata after first-pass scene construction; validation must compare against the first-pass scene data and fail instead of rebuilding a second expected terminal metadata value that could mask drift.
 - RxOnly EM export tests may include TX inner modeled bodies, but must not require TX terminal EM setup,
@@ -109,3 +112,4 @@ tags:
 - [0.2.24 Type2 Ferrite FR4 Boolean Clearance](../../../plans/0.2.24-type2-ferrite-fr4-boolean-clearance.md)
 - [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
 - [0.2.24 Type2 Turn Count Sweep Upper Bound](../../../plans/0.2.24-type2-turn-count-sweep-upper-bound.md)
+- [0.2.25 Type2 Port Sheet Contract Rewrite](../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)

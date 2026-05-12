@@ -1,7 +1,7 @@
 ---
 title: type2_single_coil_scene.py
 created: 2026-04-20 @ 00:00
-updated: 2026-05-07 @ 00:00
+updated: 2026-05-13 @ 00:00
 tags:
   - rx
   - scene
@@ -17,10 +17,12 @@ tags:
 ## 역할
 - RX single-coil and geometry-only TX inner single-coil scene assembly helper다; dormant TX outer helper code remains outside active export.
 - Expose shared owner-scaled sizing/placement helper data needed by non-model actual-region resolution, including the resolved visible physical body footprint and physical modeled body bounds.
+- Active port sheet coordinates are delegated to [type2_single_coil_ports.py](type2_single_coil_ports.py.md); this file must not keep a second private port-sheet resolver.
 
 ## Invariants / fail-fast
 - Invalid RX scene dimensions fail immediately.
 - Invalid TX inner scene dimensions fail immediately.
+- Scene export excludes runtime port sheet faces from active single-coil bodies; only the terminal metadata contract carries sheet coordinates.
 - TX inner scene assembly computes mm outer ranges from the resolved `tx_inner_region` owner before building the rect-void geometry.
 - TX inner scene placement is lower-X anchored: the selected physical modeled footprint min X equals `tx_inner_region` min X, Y remains centered in the owner, and top Z remains aligned to the owner top.
 - Dormant TX outer scene assembly code does not import the removed active `ModeledTxOuterSingleCoilSpec` type; active export filtering prevents it from running for current Type2 generation.
@@ -82,3 +84,4 @@ tags:
 - [0.2.24 Type2 Ferrite FR4 Boolean Clearance](../../../plans/0.2.24-type2-ferrite-fr4-boolean-clearance.md)
 - [0.2.24 Type2 TX Outer Void Stack](../../../plans/0.2.24-type2-tx-outer-void-stack.md)
 - [0.2.24 Type2 Trace Width Mesh Length](../../../plans/0.2.24-type2-trace-width-mesh-length.md)
+- [0.2.25 Type2 Port Sheet Contract Rewrite](../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)
