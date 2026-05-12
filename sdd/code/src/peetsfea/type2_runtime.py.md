@@ -36,6 +36,7 @@ tags:
 - Default batch build can request per-design best-effort attempts. In that path, each design owns its STEP generation and AEDT setup attempt, and skippable `ValueError`/`RuntimeError` failures are recorded as explicit build skipped entries.
 - Parallel best-effort output is reassembled in prepared-build input order before returning artifacts and skipped entries.
 - Default best-effort batch build treats a prepared design as already complete when its STEP ledger validates, `aedt_path` exists, and `imported_ledger_path` exists with a valid JSON payload whose `source_step_ledger_path`, `aedt_path`, and `imported_ledger_path` all match the current prepared build paths, so interrupted batches can resume without rebuilding completed sampled TOMLs.
+- Persistent AEDT workers delegate PyAEDT gRPC transport selection to the active PyAEDT settings and environment; this module does not force legacy pre-gRPC arguments or insecure transport.
 - Related plan: [0.2.24-type2-batch-resume-absolute-sample-index](../../../plans/0.2.24-type2-batch-resume-absolute-sample-index.md).
 
 ## Invariants / fail-fast
@@ -47,6 +48,7 @@ tags:
 - EM solve failures raise and do not downgrade to setup-ready success.
 - Invalid existing STEP ledger or missing scene STEP raises instead of overwriting silently.
 - Resume readiness remains the only skip mechanism used after an entry-level worker restart.
+- Persistent worker launch fails immediately when the configured PyAEDT/AEDT environment resolves to a missing executable.
 
 ## Collaborators
 - [type2_sampled.py](type2_sampled.py.md)
