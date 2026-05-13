@@ -372,16 +372,7 @@ def _build_prepared_type2_design_attempt(
     exporter: _Exporter = export_type2_step_artifacts,
     runner: _Runner = setup_type2_step_ledger,
 ) -> _Type2BuildAttempt:
-    _assert_setup_ready_supported(prepared_build)
-    try:
-        ensure_prepared_type2_step_ledger(prepared_build, exporter=exporter)
-    except (ValueError, RuntimeError) as exc:
-        return {
-            "status": "skipped",
-            "skipped": _build_type2_skipped_entry(prepared_build, phase="step", exc=exc),
-        }
-
-    if _is_resume_ready_type2_build(prepared_build):
+    if _is_target_aedt_file_ready_type2_build(prepared_build):
         return {
             "status": "built",
             "built": {
@@ -391,6 +382,14 @@ def _build_prepared_type2_design_attempt(
                 "source_step_ledger_path": str(prepared_build.step_ledger_path),
                 "imported_ledger_path": str(prepared_build.imported_ledger_path),
             },
+        }
+    _assert_setup_ready_supported(prepared_build)
+    try:
+        ensure_prepared_type2_step_ledger(prepared_build, exporter=exporter)
+    except (ValueError, RuntimeError) as exc:
+        return {
+            "status": "skipped",
+            "skipped": _build_type2_skipped_entry(prepared_build, phase="step", exc=exc),
         }
     try:
         result = runner(
@@ -424,16 +423,7 @@ def _build_prepared_type2_design_attempt_with_persistent_aedt(
     port: int,
     hfss_factory: Callable[..., object] = Hfss,
 ) -> _Type2BuildAttempt:
-    _assert_setup_ready_supported(prepared_build)
-    try:
-        ensure_prepared_type2_step_ledger(prepared_build)
-    except (ValueError, RuntimeError) as exc:
-        return {
-            "status": "skipped",
-            "skipped": _build_type2_skipped_entry(prepared_build, phase="step", exc=exc),
-        }
-
-    if _is_resume_ready_type2_build(prepared_build):
+    if _is_target_aedt_file_ready_type2_build(prepared_build):
         return {
             "status": "built",
             "built": {
@@ -443,6 +433,14 @@ def _build_prepared_type2_design_attempt_with_persistent_aedt(
                 "source_step_ledger_path": str(prepared_build.step_ledger_path),
                 "imported_ledger_path": str(prepared_build.imported_ledger_path),
             },
+        }
+    _assert_setup_ready_supported(prepared_build)
+    try:
+        ensure_prepared_type2_step_ledger(prepared_build)
+    except (ValueError, RuntimeError) as exc:
+        return {
+            "status": "skipped",
+            "skipped": _build_type2_skipped_entry(prepared_build, phase="step", exc=exc),
         }
 
     last_exc: ValueError | RuntimeError | None = None
@@ -489,54 +487,12 @@ def _build_prepared_type2_design_attempt_with_persistent_aedt(
     }
 
 
-def _resolve_relative_candidate_path(raw_path: str, *, anchor: Path) -> Path:
-    candidate_path = Path(raw_path)
-    if candidate_path.is_absolute():
-        return candidate_path.resolve(strict=False)
-    return (anchor / candidate_path).resolve(strict=False)
+def _is_target_aedt_file_ready_type2_build(prepared_build: PreparedType2Build) -> bool:
+    return prepared_build.aedt_path.is_file()
 
 
 def _is_resume_ready_type2_build(prepared_build: PreparedType2Build) -> bool:
-    if not prepared_build.aedt_path.is_file():
-        return False
-    if not prepared_build.imported_ledger_path.is_file():
-        return False
-    try:
-        raw_imported_ledger = json.loads(prepared_build.imported_ledger_path.read_text(encoding="utf-8"))
-        if not isinstance(raw_imported_ledger, dict):
-            return False
-        if "source_step_ledger_path" not in raw_imported_ledger:
-            return False
-        if "aedt_path" not in raw_imported_ledger:
-            return False
-        if "imported_ledger_path" not in raw_imported_ledger:
-            return False
-        raw_source_step_ledger_path = raw_imported_ledger["source_step_ledger_path"]
-        if not isinstance(raw_source_step_ledger_path, str):
-            return False
-        raw_aedt_path = raw_imported_ledger["aedt_path"]
-        if not isinstance(raw_aedt_path, str):
-            return False
-        raw_imported_ledger_path = raw_imported_ledger["imported_ledger_path"]
-        if not isinstance(raw_imported_ledger_path, str):
-            return False
-        imported_ledger_dir = prepared_build.imported_ledger_path.parent
-        resolved_source_step = _resolve_relative_candidate_path(
-            raw_source_step_ledger_path,
-            anchor=imported_ledger_dir,
-        )
-        resolved_aedt = _resolve_relative_candidate_path(raw_aedt_path, anchor=imported_ledger_dir)
-        resolved_imported_ledger = _resolve_relative_candidate_path(
-            raw_imported_ledger_path,
-            anchor=imported_ledger_dir,
-        )
-    except (TypeError, ValueError, OSError):
-        return False
-    return (
-        resolved_source_step == prepared_build.step_ledger_path.resolve(strict=False)
-        and resolved_aedt == prepared_build.aedt_path.resolve(strict=False)
-        and resolved_imported_ledger == prepared_build.imported_ledger_path.resolve(strict=False)
-    )
+    return _is_target_aedt_file_ready_type2_build(prepared_build)
 
 
 def _build_single_sampled_toml_attempt(sampled_toml_path_text: str) -> _Type2BuildAttempt:

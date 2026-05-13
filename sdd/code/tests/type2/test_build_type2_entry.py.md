@@ -20,8 +20,8 @@ tags:
 - solve-enabled build handoff and the geometry-only `tx_inner_single_coil` plus RX role gate are covered.
 - Sample-only manifest에서 build가 missing STEP ledger를 생성하고, existing ledger는 exporter 없이 재사용하는 계약을 검증한다.
 - Default build batch가 per-design best-effort로 STEP/AEDT skippable failure를 기록하고 나머지 design을 계속 처리하는 계약을 검증한다.
-- Default build best-effort는 유효한 STEP ledger, AEDT 파일, imported ledger(일치하는 `source_step_ledger_path` / `aedt_path` / `imported_ledger_path`)가 존재하면 runner 재호출 없이 완성 artifact를 바로 반환한다.
-- 부분 출력(누락된 imported ledger 또는 imported ledger 경로 불일치)은 정상 빌드 경로로 runner를 실행한다.
+- Default build best-effort는 target AEDT 파일명이 이미 존재하면 imported ledger의 존재 여부나 경로 일치 여부와 무관하게 STEP exporter/AEDT runner 재호출 없이 완성 artifact를 바로 반환한다.
+- Target AEDT 파일이 누락된 부분 출력은 정상 빌드 경로로 runner를 실행한다.
 - Default build entry tests cover that recorded skips are surfaced as entry failures after the skip ledger is written.
 - Related plan: [0.2.24-type2-batch-resume-absolute-sample-index](../../../plans/0.2.24-type2-batch-resume-absolute-sample-index.md).
 - TX inner X-position compatibility metadata must stay fixed zero and removed TX outer sampled owners must stay absent.
@@ -32,7 +32,7 @@ tags:
 - Build path can reuse existing STEP ledger or generate missing RX STEP artifacts.
 - Default build returns only successful artifacts while writing/propagating explicit build skip entries for failed design attempts.
 - Build CLI must not treat `built=0 skipped>0` as success.
-- Completed build reuse requires valid STEP ledger plus existing AEDT and imported ledger outputs.
+- Completed build reuse requires only the existing target AEDT path; STEP and imported ledger paths are returned from the prepared build contract without requiring their files to exist.
 - RX single-coil fixtures use the active `3.965 mm` PCB plus `0.035 mm` copper stack.
 - Synthetic TX inner fixtures use active fixed `layer_count=1` plus passive underlay defaults: repeat count `1`, PET/PSA `6.0 mm`, and ferrite `6.0 mm`.
 - `tx_region` is allowed only as non-modeled guide context and must include the required `tx_reference_line` ratios; active-shaped synthetic fixtures use the 720.0 mm TX guide X span.
@@ -62,11 +62,9 @@ tags:
 
 ### Build resume contract covered here
 - `_is_resume_ready_type2_build()`의 조건을 실무 계약으로 검증: 
-  - `step_ledger_path`에 유효한 STEP ledger가 존재
-  - `aedt_path` 파일이 존재
-  - `imported_ledger_path` 파일이 존재
-  - imported ledger JSON의 `source_step_ledger_path`, `aedt_path`, `imported_ledger_path`가 각각 현 design의 경로와 정규화 후 일치
-- 위 조건 중 하나라도 실패하면 best-effort가 runner를 실행해 완료 artifact를 새로 생성한다.
+  - `aedt_path` 파일이 존재하면 resume-ready로 간주한다.
+  - imported ledger 파일이 없거나 imported ledger JSON의 `source_step_ledger_path`, `aedt_path`, `imported_ledger_path`가 현 design 경로와 불일치해도 runner/exporter를 호출하지 않는다.
+  - `aedt_path` 파일이 없으면 best-effort가 정상 빌드 경로로 runner를 실행해 완료 artifact를 새로 생성한다.
 
 ## Collaborators
 - [build.py](../../entry/build.py.md)

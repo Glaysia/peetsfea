@@ -1504,7 +1504,9 @@ def test_build_prepared_type2_design_accepts_existing_rx_only_step_ledger(tmp_pa
     assert runner_calls[0]["imported_ledger_path"] == imported_ledger_path
 
 
-def test_build_prepared_type2_designs_best_effort_skips_aedt_and_import_runner_for_resume_ready_artifact(tmp_path: Path) -> None:
+def test_build_prepared_type2_designs_best_effort_skips_aedt_and_import_runner_for_existing_aedt(
+    tmp_path: Path,
+) -> None:
     design_id = "design-rx-resume"
     design_dir = tmp_path / design_id
     design_dir.mkdir()
@@ -1513,18 +1515,10 @@ def test_build_prepared_type2_designs_best_effort_skips_aedt_and_import_runner_f
     source_toml_path = tmp_path / "source.toml"
     source_toml_path.write_text("[design]\n", encoding="utf-8")
     scene_step_path = design_dir / "type2_scene.step"
-    scene_step_path.write_text("STEP", encoding="utf-8")
     step_ledger_path = design_dir / "type2_step_ledger.json"
-    step_ledger_path.write_text(json.dumps({"scene_step_path": str(scene_step_path)}, indent=2), encoding="utf-8")
     output_aedt_path = design_dir / f"{design_id}.aedt"
     output_aedt_path.write_text("AEDT", encoding="utf-8")
     imported_ledger_path = design_dir / "type2_imported_ledger.json"
-    imported_ledger_payload = {
-        "source_step_ledger_path": str(step_ledger_path),
-        "aedt_path": str(output_aedt_path),
-        "imported_ledger_path": str(imported_ledger_path),
-    }
-    imported_ledger_path.write_text(json.dumps(imported_ledger_payload, indent=2), encoding="utf-8")
     design_variables = (("rx_outer_x_usage_ratio", "0.5"),)
     prepared_build = PreparedType2Build(
         design_id=design_id,
@@ -1573,7 +1567,9 @@ def test_build_prepared_type2_designs_best_effort_skips_aedt_and_import_runner_f
     assert runner_calls == []
 
 
-def test_build_prepared_type2_designs_best_effort_calls_runner_when_imported_ledger_is_missing(tmp_path: Path) -> None:
+def test_build_prepared_type2_designs_best_effort_skips_runner_when_imported_ledger_is_missing(
+    tmp_path: Path,
+) -> None:
     design_id = "design-rx-missing-imported"
     design_dir = tmp_path / design_id
     design_dir.mkdir()
@@ -1603,7 +1599,12 @@ def test_build_prepared_type2_designs_best_effort_calls_runner_when_imported_led
         design_variables=(("rx_outer_x_usage_ratio", "0.5"),),
     )
 
+    exporter_calls: list[dict[str, object]] = []
     runner_calls: list[dict[str, object]] = []
+
+    def _fake_exporter(**kwargs: object) -> object:
+        exporter_calls.append(dict(kwargs))
+        return {"ok": True}
 
     def _fake_runner(**kwargs: object) -> _Type2BuildRunnerResult:
         runner_calls.append(dict(kwargs))
@@ -1616,19 +1617,22 @@ def test_build_prepared_type2_designs_best_effort_calls_runner_when_imported_led
     batch = type2_runtime.build_prepared_type2_designs_best_effort(
         (prepared_build,),
         jobs=1,
+        exporter=_fake_exporter,
         runner=_fake_runner,
     )
 
     assert batch["skipped"] == []
     assert len(batch["built"]) == 1
-    assert len(runner_calls) == 1
     assert batch["built"][0]["aedt_path"] == str(output_aedt_path)
-    assert cast(Path, runner_calls[0]["step_ledger_path"]) == step_ledger_path
-    assert cast(Path, runner_calls[0]["output_aedt_path"]) == output_aedt_path
-    assert cast(Path, runner_calls[0]["imported_ledger_path"]) == imported_ledger_path
+    assert batch["built"][0]["source_step_ledger_path"] == str(step_ledger_path)
+    assert batch["built"][0]["imported_ledger_path"] == str(imported_ledger_path)
+    assert exporter_calls == []
+    assert runner_calls == []
 
 
-def test_build_prepared_type2_designs_best_effort_calls_runner_when_imported_ledger_paths_mismatch_manifest(tmp_path: Path) -> None:
+def test_build_prepared_type2_designs_best_effort_skips_runner_when_imported_ledger_paths_mismatch_manifest(
+    tmp_path: Path,
+) -> None:
     design_id = "design-rx-bad-imported"
     design_dir = tmp_path / design_id
     design_dir.mkdir()
@@ -1649,6 +1653,66 @@ def test_build_prepared_type2_designs_best_effort_calls_runner_when_imported_led
         "imported_ledger_path": str(imported_ledger_path),
     }
     imported_ledger_path.write_text(json.dumps(imported_ledger_payload, indent=2), encoding="utf-8")
+    prepared_build = PreparedType2Build(
+        design_id=design_id,
+        seed=1,
+        source_toml_path=source_toml_path,
+        sampled_toml_path=sampled_toml_path,
+        design_dir=design_dir,
+        scene_step_path=scene_step_path,
+        step_ledger_path=step_ledger_path,
+        imported_ledger_path=imported_ledger_path,
+        aedt_path=output_aedt_path,
+        sampled_owner_paths=("modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",),
+        modeled_roles=("rx_single_coil",),
+        design_variables=(("rx_outer_x_usage_ratio", "0.5"),),
+    )
+
+    exporter_calls: list[dict[str, object]] = []
+    runner_calls: list[dict[str, object]] = []
+
+    def _fake_exporter(**kwargs: object) -> object:
+        exporter_calls.append(dict(kwargs))
+        return {"ok": True}
+
+    def _fake_runner(**kwargs: object) -> _Type2BuildRunnerResult:
+        runner_calls.append(dict(kwargs))
+        return {
+            "aedt_path": str(cast(Path, kwargs["output_aedt_path"])),
+            "source_step_ledger_path": str(cast(Path, kwargs["step_ledger_path"])),
+            "imported_ledger_path": str(cast(Path, kwargs["imported_ledger_path"])),
+        }
+
+    batch = type2_runtime.build_prepared_type2_designs_best_effort(
+        (prepared_build,),
+        jobs=1,
+        exporter=_fake_exporter,
+        runner=_fake_runner,
+    )
+
+    assert batch["skipped"] == []
+    assert len(batch["built"]) == 1
+    assert batch["built"][0]["aedt_path"] == str(output_aedt_path)
+    assert batch["built"][0]["source_step_ledger_path"] == str(step_ledger_path)
+    assert batch["built"][0]["imported_ledger_path"] == str(imported_ledger_path)
+    assert exporter_calls == []
+    assert runner_calls == []
+
+
+def test_build_prepared_type2_designs_best_effort_calls_runner_when_aedt_is_missing(tmp_path: Path) -> None:
+    design_id = "design-rx-missing-aedt"
+    design_dir = tmp_path / design_id
+    design_dir.mkdir()
+    sampled_toml_path = design_dir / "sampled.toml"
+    sampled_toml_path.write_text("[sampled]\n", encoding="utf-8")
+    source_toml_path = tmp_path / "source.toml"
+    source_toml_path.write_text("[design]\n", encoding="utf-8")
+    scene_step_path = design_dir / "type2_scene.step"
+    scene_step_path.write_text("STEP", encoding="utf-8")
+    step_ledger_path = design_dir / "type2_step_ledger.json"
+    step_ledger_path.write_text(json.dumps({"scene_step_path": str(scene_step_path)}, indent=2), encoding="utf-8")
+    output_aedt_path = design_dir / f"{design_id}.aedt"
+    imported_ledger_path = design_dir / "type2_imported_ledger.json"
     prepared_build = PreparedType2Build(
         design_id=design_id,
         seed=1,
