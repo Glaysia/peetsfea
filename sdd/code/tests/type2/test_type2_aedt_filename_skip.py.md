@@ -18,8 +18,8 @@ tags:
 ## Single Responsibility
 - Focused pure-Python coverage for the type2 target-AEDT filename skip policy.
 - Documents that sampled TOML metadata derives the design ID from sampled bytes and maps the target AEDT file to `<design_dir>/<design_id>.aedt`.
-- Documents that default best-effort build treats an existing exact target AEDT file as already built without requiring an imported ledger.
-- Documents that a missing exact target AEDT file remains eligible for the normal runner path.
+- Documents that default best-effort build treats an existing exact target AEDT file or exact `<target>.aedt.done` marker as already built without requiring an imported ledger.
+- Documents that a missing exact target AEDT file and missing exact marker remains eligible for the normal runner path.
 
 ## Inputs / Outputs
 - Inputs: synthetic `sampled.toml` metadata, a synthetic source TOML path, local STEP ledger JSON, local AEDT marker files, and local fake runner/exporter callables.
@@ -27,15 +27,15 @@ tags:
 
 ## Canonical State
 - `sampled.toml` bytes are the canonical input for the generated hash component of `design_id`.
-- The target AEDT path is canonical only when it exactly equals the prepared build path `<design_id>.aedt`.
-- A sibling or differently named AEDT file must not satisfy the skip policy.
+- The target AEDT path is canonical only when it exactly equals the prepared build path `<design_id>.aedt`; the marker path is exactly `<design_id>.aedt.done`.
+- A sibling or differently named AEDT file or done marker must not satisfy the skip policy.
 
 ## Invariants
 - Tests must not launch AEDT and must not require PyAEDT.
 - The local prepared build uses an active supported role set: `("rx_single_coil",)`.
 - The STEP ledger is valid when testing imported-ledger independence so the test isolates AEDT filename skip behavior.
-- The runner must not be called when the exact target AEDT file already exists.
-- The runner must be called with the hash-derived target AEDT path when that exact file does not exist.
+- The runner must not be called when the exact target AEDT file or exact target done marker already exists.
+- The runner must be called with the hash-derived target AEDT path when neither exact readiness file exists.
 
 ## Fail-Fast Points
 - Unexpected exporter or runner calls raise `AssertionError`.

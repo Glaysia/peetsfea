@@ -32,7 +32,7 @@ tags:
   5. optional STEP inspection via `notebooks/view_step_files.ipynb`
 - `entry/sample.py` always writes `sampled.toml` and may also write STEP artifacts depending on `MAKE_STEP_ON_SAMPLE`.
 - `entry/build.py` owns `.aedt` generation and reuses existing STEP artifacts or generates missing STEP per entry before AEDT build.
-- Default `entry/build.py` skips AEDT regeneration when the hash-derived target `.aedt` filename already exists; the imported ledger is not required for this skip decision.
+- Default `entry/build.py` skips AEDT regeneration when the hash-derived target `.aedt` file or exact `<target>.aedt.done` marker already exists; the imported ledger is not required for this skip decision.
 - Changed TOML content resolves to a different `design_id` and `.aedt` filename, so it builds normally instead of reusing the old artifact.
 - For active type2 manifests, `entry/build.py` routes AEDT generation through the setup-ready facade, not the import-only helper.
 - `entry/build.py --solve` keeps the setup-ready HFSS session alive, runs `Setup1`, exports `Output Variables Table1` to CSV next to the design `.aedt`, and saves the project again.

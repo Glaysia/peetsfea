@@ -372,7 +372,7 @@ def _build_prepared_type2_design_attempt(
     exporter: _Exporter = export_type2_step_artifacts,
     runner: _Runner = setup_type2_step_ledger,
 ) -> _Type2BuildAttempt:
-    if _is_target_aedt_file_ready_type2_build(prepared_build):
+    if _is_target_aedt_ready_type2_build(prepared_build):
         return {
             "status": "built",
             "built": {
@@ -423,7 +423,7 @@ def _build_prepared_type2_design_attempt_with_persistent_aedt(
     port: int,
     hfss_factory: Callable[..., object] = Hfss,
 ) -> _Type2BuildAttempt:
-    if _is_target_aedt_file_ready_type2_build(prepared_build):
+    if _is_target_aedt_ready_type2_build(prepared_build):
         return {
             "status": "built",
             "built": {
@@ -487,12 +487,16 @@ def _build_prepared_type2_design_attempt_with_persistent_aedt(
     }
 
 
-def _is_target_aedt_file_ready_type2_build(prepared_build: PreparedType2Build) -> bool:
-    return prepared_build.aedt_path.is_file()
+def _target_aedt_done_marker_path(prepared_build: PreparedType2Build) -> Path:
+    return Path(str(prepared_build.aedt_path) + ".done")
+
+
+def _is_target_aedt_ready_type2_build(prepared_build: PreparedType2Build) -> bool:
+    return prepared_build.aedt_path.is_file() or _target_aedt_done_marker_path(prepared_build).is_file()
 
 
 def _is_resume_ready_type2_build(prepared_build: PreparedType2Build) -> bool:
-    return _is_target_aedt_file_ready_type2_build(prepared_build)
+    return _is_target_aedt_ready_type2_build(prepared_build)
 
 
 def _build_single_sampled_toml_attempt(sampled_toml_path_text: str) -> _Type2BuildAttempt:

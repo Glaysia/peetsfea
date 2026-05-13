@@ -35,7 +35,7 @@ tags:
 - A manifest entry's `step_ledger_path` is canonical for build input; if it exists, validate and reuse it, and if it is missing, regenerate it from the sampled TOML.
 - Default batch build can request per-design best-effort attempts. In that path, each design owns its STEP generation and AEDT setup attempt, and skippable `ValueError`/`RuntimeError` failures are recorded as explicit build skipped entries.
 - Parallel best-effort output is reassembled in prepared-build input order before returning artifacts and skipped entries.
-- Default best-effort batch build treats a prepared design as already complete when its target `aedt_path` exists as a file. This target-file check happens before STEP ledger generation or imported-ledger inspection, so interrupted batches can resume by reusing completed hash-derived sampled TOML targets.
+- Default best-effort batch build treats a prepared design as already complete when its target `aedt_path` exists as a file or when the adjacent `<target>.aedt.done` marker exists. This target readiness check happens before STEP ledger generation or imported-ledger inspection, so interrupted batches can resume by reusing completed hash-derived sampled TOML targets.
 - Persistent AEDT workers delegate PyAEDT gRPC transport selection to the active PyAEDT settings and environment; this module does not force legacy pre-gRPC arguments or insecure transport.
 - Persistent AEDT worker process start events use the configured launch stagger as a process-start interval; the default is `1.0` second, and readiness is collected after all worker starts have been issued.
 - Related plan: [0.2.24-type2-batch-resume-absolute-sample-index](../../../plans/0.2.24-type2-batch-resume-absolute-sample-index.md).
@@ -45,10 +45,10 @@ tags:
 - Runtime failures are fail-fast unless the caller explicitly requests skip-recording for validation/infeasible sample attempts or default build-batch continuation.
 - Build skipped entries preserve `design_id`, `seed`, `sampled_toml_path`, coarse failure phase, exception type, and exception message.
 - Best-effort build only catches `ValueError` and `RuntimeError`; structural errors such as type errors, missing files outside the skippable generation path, and assertion failures still abort.
-- Resume reuse is keyed only by the target AEDT file path for best-effort build attempts; partial outputs without the target AEDT file still run the normal STEP/setup-ready path.
+- Resume reuse is keyed only by target AEDT readiness for best-effort build attempts: either the target `.aedt` file exists or the exact `<target>.aedt.done` marker exists. Partial outputs without either target readiness file still run the normal STEP/setup-ready path.
 - EM solve failures raise and do not downgrade to setup-ready success.
 - Invalid existing STEP ledger or missing scene STEP raises instead of overwriting silently.
-- Target AEDT file readiness remains the only build-reuse mechanism used after an entry-level worker restart.
+- Target AEDT/marker readiness remains the only build-reuse mechanism used after an entry-level worker restart.
 - Persistent worker launch fails immediately when the configured PyAEDT/AEDT environment resolves to a missing executable.
 - Worker readiness messages may arrive out of order after launch starts; missing, duplicate, invalid, fatal, or unexpected initialization messages fail immediately.
 

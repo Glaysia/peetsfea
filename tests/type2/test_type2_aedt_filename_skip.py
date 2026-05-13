@@ -103,12 +103,91 @@ def test_existing_exact_hash_derived_target_aedt_is_built_without_imported_ledge
     ]
 
 
+def test_existing_exact_hash_derived_target_done_marker_is_built_without_imported_ledger(
+    tmp_path: Path,
+) -> None:
+    sampled_toml_path = _write_sampled_toml(tmp_path)
+    prepared_build = _prepared_build_from_sampled_toml(sampled_toml_path)
+    _write_valid_step_ledger(prepared_build)
+    prepared_build.aedt_path.with_suffix(".aedt.done").write_text(
+        "existing AEDT completion marker\n",
+        encoding="utf-8",
+    )
+    assert not prepared_build.aedt_path.exists()
+    assert not prepared_build.imported_ledger_path.exists()
+
+    def _unexpected_exporter(**kwargs: object) -> object:
+        raise AssertionError(f"exact AEDT done marker skip must not export STEP artifacts: {kwargs!r}")
+
+    def _unexpected_runner(**kwargs: object) -> type2_runtime._Type2BuildRunnerResult:
+        raise AssertionError(f"exact AEDT done marker skip must not run AEDT setup: {kwargs!r}")
+
+    batch = type2_runtime.build_prepared_type2_designs_best_effort(
+        (prepared_build,),
+        jobs=1,
+        exporter=_unexpected_exporter,
+        runner=_unexpected_runner,
+    )
+
+    assert batch["skipped"] == []
+    assert batch["built"] == [
+        {
+            "design_id": prepared_build.design_id,
+            "sampled_toml_path": str(sampled_toml_path.resolve(strict=False)),
+            "aedt_path": str(prepared_build.aedt_path),
+            "source_step_ledger_path": str(prepared_build.step_ledger_path),
+            "imported_ledger_path": str(prepared_build.imported_ledger_path),
+        }
+    ]
+
+
 def test_missing_exact_hash_derived_target_aedt_runs_normal_build_path(tmp_path: Path) -> None:
     sampled_toml_path = _write_sampled_toml(tmp_path)
     prepared_build = _prepared_build_from_sampled_toml(sampled_toml_path)
     _write_valid_step_ledger(prepared_build)
     (prepared_build.design_dir / "other_existing.aedt").write_text("not the target\n", encoding="utf-8")
     assert not prepared_build.aedt_path.exists()
+
+    runner_calls: list[dict[str, object]] = []
+
+    def _unexpected_exporter(**kwargs: object) -> object:
+        raise AssertionError(f"valid existing STEP ledger must not call exporter: {kwargs!r}")
+
+    def _fake_runner(**kwargs: object) -> type2_runtime._Type2BuildRunnerResult:
+        runner_calls.append(dict(kwargs))
+        return {
+            "aedt_path": str(cast(Path, kwargs["output_aedt_path"])),
+            "source_step_ledger_path": str(cast(Path, kwargs["step_ledger_path"])),
+            "imported_ledger_path": str(cast(Path, kwargs["imported_ledger_path"])),
+        }
+
+    batch = type2_runtime.build_prepared_type2_designs_best_effort(
+        (prepared_build,),
+        jobs=1,
+        exporter=_unexpected_exporter,
+        runner=_fake_runner,
+    )
+
+    assert batch["skipped"] == []
+    assert len(batch["built"]) == 1
+    assert batch["built"][0]["design_id"] == prepared_build.design_id
+    assert batch["built"][0]["aedt_path"] == str(prepared_build.aedt_path)
+    assert len(runner_calls) == 1
+    assert runner_calls[0]["design_name"] == prepared_build.design_id
+    assert runner_calls[0]["output_aedt_path"] == prepared_build.aedt_path
+    assert runner_calls[0]["imported_ledger_path"] == prepared_build.imported_ledger_path
+
+
+def test_unrelated_done_marker_does_not_skip_hash_derived_target_aedt(tmp_path: Path) -> None:
+    sampled_toml_path = _write_sampled_toml(tmp_path)
+    prepared_build = _prepared_build_from_sampled_toml(sampled_toml_path)
+    _write_valid_step_ledger(prepared_build)
+    (prepared_build.design_dir / "other_existing.aedt.done").write_text(
+        "not the target marker\n",
+        encoding="utf-8",
+    )
+    assert not prepared_build.aedt_path.exists()
+    assert not prepared_build.aedt_path.with_suffix(".aedt.done").exists()
 
     runner_calls: list[dict[str, object]] = []
 

@@ -21,7 +21,7 @@ tags:
 - `--solve` 옵션으로 setup-ready 생성 직후 active HFSS setup을 해석하고 report CSV를 export한다.
 - Manifest의 `config.make_step_on_sample`와 entry STEP 경로를 기준으로, solve/debug runner 실행 전에 STEP ledger를 보장한다.
 - 기본 `build.py` 배치 실행은 sampled design별 STEP 생성과 AEDT setup을 개별 시도하고, skippable 실패는 build skip ledger로 남긴 뒤 batch 내부 처리는 계속하되 CLI 성공으로 숨기지 않는다.
-- 기본 `build.py` 배치 실행은 hash-derived `.aedt` filename이 이미 존재하면 해당 sampled design의 AEDT 생성을 건너뛰어 중단된 배치를 재개한다.
+- 기본 `build.py` 배치 실행은 hash-derived `.aedt` filename 또는 같은 target의 `.aedt.done` marker가 이미 존재하면 해당 sampled design의 AEDT 생성을 건너뛰어 중단된 배치를 재개한다.
 - 기본 Type2 batch path retries persistent AEDT worker/session failures by restarting the same manifest after 60 seconds, bounded to the production restart limit.
 - The restart path uses an injectable sleep callback so tests can avoid waiting on real time.
 - Related plan: [0.2.24-type2-batch-resume-absolute-sample-index](../../plans/0.2.24-type2-batch-resume-absolute-sample-index.md).
@@ -33,7 +33,7 @@ tags:
 - RxOnly build does not require TX modeled geometry.
 - Existing STEP ledgers are validated and reused; missing STEP ledgers are generated before AEDT setup.
 - The generated build skip ledger is written beside the manifest as `type2_build_skipped.json` so stale skip state is overwritten on every default build run.
-- Resume reuse is filename-only for AEDT artifacts: the hash-derived target `.aedt` path must already exist. The imported ledger is not required for the skip decision.
+- Resume reuse is filename-only for AEDT artifacts: the hash-derived target `.aedt` path or exact `<target>.aedt.done` marker must already exist. The imported ledger is not required for the skip decision.
 - Changed TOML content resolves to a different `design_id` and `.aedt` filename, so it is not treated as completed and builds normally.
 - Only `Type2AedtWorkerProcessError` is restartable; validation, stale artifact, and coordinate drift failures remain fail-fast.
 - The production restart limit is intentionally high for large AEDT batch runs; tests monkeypatch the limit down to keep failure-path coverage fast.
