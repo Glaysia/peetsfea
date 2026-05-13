@@ -18,6 +18,7 @@ tags:
 - 0.2.24 SDD 기준 active default path is RxOnly setup-ready.
 - 선택된 호출 경로에서 setup-ready 이후 EM solve/report export까지 실행할 수 있다.
 - Prepared build 집합의 STEP ledger를 AEDT runner 전에 보장한다.
+- Persistent AEDT worker launch failures are surfaced as `Type2AedtWorkerLaunchError` so the entry layer can wait before retrying launch against the same default manifest.
 - Persistent AEDT worker process failures are surfaced as `Type2AedtWorkerProcessError` so the entry layer can restart the default manifest build.
 
 ## 입력 / 출력
@@ -49,8 +50,9 @@ tags:
 - EM solve failures raise and do not downgrade to setup-ready success.
 - Invalid existing STEP ledger or missing scene STEP raises instead of overwriting silently.
 - Target AEDT/marker readiness remains the only build-reuse mechanism used after an entry-level worker restart.
-- Persistent worker launch fails immediately when the configured PyAEDT/AEDT environment resolves to a missing executable.
-- Worker readiness messages may arrive out of order after launch starts; missing, duplicate, invalid, fatal, or unexpected initialization messages fail immediately.
+- Persistent worker launch fails immediately when the configured PyAEDT/AEDT environment resolves to a missing executable or AEDT reports launch-time license exhaustion such as `Licensed number of users already reached`.
+- Worker readiness messages may arrive out of order after launch starts; missing, duplicate, invalid, fatal, or unexpected initialization messages fail immediately as `Type2AedtWorkerLaunchError`.
+- Worker readiness collection polls the current `batch.log` during launch initialization so AEDT launch failures that are written only to the log can abort before the full worker-init timeout.
 
 ## Collaborators
 - [type2_sampled.py](type2_sampled.py.md)

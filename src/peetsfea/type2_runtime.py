@@ -36,7 +36,14 @@ _WORKER_SPEC_CACHE: dict[Path, Type2StepSpec] = {}
 DEFAULT_AEDT_PORT_BASE = 45000
 DEFAULT_AEDT_LAUNCH_STAGGER_SEC = 1.0
 _PERSISTENT_WORKER_INIT_TIMEOUT_SEC = 900.0
+_PERSISTENT_WORKER_INIT_POLL_SEC = 1.0
 _PERSISTENT_WORKER_QUEUE_FACTOR = 2
+_AEDT_WORKER_LAUNCH_LOG_PATH = Path("batch.log")
+_AEDT_WORKER_LAUNCH_LOG_MARKERS: tuple[str, ...] = (
+    "licensed number of users already reached",
+    "does not exist in the licensing pool",
+    "failed to connect to desktop session",
+)
 _RX_ONLY_MODELED_ROLES: tuple[str] = ("rx_single_coil",)
 _RX_ONLY_WITH_TV_ALUMINUM_PLATE_MODELED_ROLES: tuple[str, ...] = ("rx_single_coil", "tv_aluminum_plate")
 _RX_WITH_TX_INNER_GEOMETRY_MODELED_ROLES: tuple[str, ...] = ("rx_single_coil", "tx_inner_single_coil")
@@ -637,9 +644,52 @@ def _format_worker_exception(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {exc}"
 
 
-def _raise_if_worker_launch_message(message: str) -> None:
+def _is_aedt_worker_launch_failure_text(message: str) -> bool:
     lowered_message = message.lower()
-    if "does not exist in the licensing pool" in lowered_message or "failed to connect to desktop session" in lowered_message:
+    return any(marker in lowered_message for marker in _AEDT_WORKER_LAUNCH_LOG_MARKERS)
+
+
+def _aedt_worker_launch_failure_excerpt(message: str) -> str:
+    lines = tuple(line.strip() for line in message.splitlines() if line.strip() != "")
+    for index, line in enumerate(lines):
+        if _is_aedt_worker_launch_failure_text(line):
+            excerpt_start = max(0, index - 2)
+            excerpt_end = min(len(lines), index + 5)
+            return " | ".join(lines[excerpt_start:excerpt_end])
+    return message[-1000:]
+
+
+def _aedt_worker_launch_log_offset(log_path: Path) -> int:
+    if not log_path.is_file():
+        return 0
+    return log_path.stat().st_size
+
+
+def _read_aedt_worker_launch_log_since(log_path: Path, *, offset: int) -> str:
+    if not log_path.is_file():
+        return ""
+    with log_path.open("rb") as file_obj:
+        file_obj.seek(0, os.SEEK_END)
+        file_size = file_obj.tell()
+        read_offset = offset
+        if read_offset > file_size:
+            read_offset = 0
+        file_obj.seek(read_offset, os.SEEK_SET)
+        return file_obj.read().decode("utf-8", errors="replace")
+
+
+def _raise_if_aedt_worker_launch_log_failure(log_path: Path, *, offset: int) -> None:
+    log_tail = _read_aedt_worker_launch_log_since(log_path, offset=offset)
+    if _is_aedt_worker_launch_failure_text(log_tail):
+        excerpt = _aedt_worker_launch_failure_excerpt(log_tail)
+        raise Type2AedtWorkerLaunchError(
+            "Persistent AEDT worker launch failure was reported in batch.log. "
+            f"Details: {excerpt}"
+        )
+
+
+def _raise_if_worker_launch_message(message: str) -> None:
+    if _is_aedt_worker_launch_failure_text(message):
         raise Type2AedtWorkerLaunchError(
             "Persistent AEDT worker failed during launch or license checkout. "
             f"Reduce aedt_builder_n or check the license pool. Details: {message}"
@@ -695,52 +745,65 @@ def _start_persistent_build_workers(
     sleep: _Sleep,
 ) -> list[Process]:
     workers: list[Process] = []
-    for worker_index in range(jobs):
-        port = aedt_port_base + worker_index
-        process = Process(
-            target=_persistent_build_worker_main,
-            kwargs={
-                "worker_index": worker_index,
-                "port": port,
-                "task_queue": task_queue,
-                "result_queue": result_queue,
-            },
-        )
-        process.start()
-        workers.append(process)
-        if worker_index != jobs - 1 and aedt_launch_stagger_sec > 0:
-            sleep(aedt_launch_stagger_sec)
+    launch_log_offset = _aedt_worker_launch_log_offset(_AEDT_WORKER_LAUNCH_LOG_PATH)
+    try:
+        for worker_index in range(jobs):
+            port = aedt_port_base + worker_index
+            process = Process(
+                target=_persistent_build_worker_main,
+                kwargs={
+                    "worker_index": worker_index,
+                    "port": port,
+                    "task_queue": task_queue,
+                    "result_queue": result_queue,
+                },
+            )
+            process.start()
+            workers.append(process)
+            _raise_if_aedt_worker_launch_log_failure(_AEDT_WORKER_LAUNCH_LOG_PATH, offset=launch_log_offset)
+            if worker_index != jobs - 1 and aedt_launch_stagger_sec > 0:
+                sleep(aedt_launch_stagger_sec)
 
-    ready_worker_indexes: set[int] = set()
-    while len(ready_worker_indexes) < jobs:
-        try:
-            raw_message = result_queue.get(timeout=_PERSISTENT_WORKER_INIT_TIMEOUT_SEC)
-        except Empty as exc:
-            missing_worker_indexes = sorted(set(range(jobs)) - ready_worker_indexes)
+        ready_worker_indexes: set[int] = set()
+        init_deadline = time.monotonic() + _PERSISTENT_WORKER_INIT_TIMEOUT_SEC
+        while len(ready_worker_indexes) < jobs:
+            _raise_if_aedt_worker_launch_log_failure(_AEDT_WORKER_LAUNCH_LOG_PATH, offset=launch_log_offset)
+            remaining_timeout = init_deadline - time.monotonic()
+            if remaining_timeout <= 0:
+                missing_worker_indexes = sorted(set(range(jobs)) - ready_worker_indexes)
+                raise Type2AedtWorkerLaunchError(
+                    "Persistent AEDT workers did not report ready within "
+                    f"{_PERSISTENT_WORKER_INIT_TIMEOUT_SEC:.0f}s "
+                    f"(missing_worker_indexes={missing_worker_indexes})"
+                )
+            try:
+                raw_message = result_queue.get(
+                    timeout=min(_PERSISTENT_WORKER_INIT_POLL_SEC, remaining_timeout)
+                )
+            except Empty:
+                continue
+            message_type, message_worker_index, payload = cast(_PersistentResultMessage, raw_message)
+            if message_worker_index < 0 or message_worker_index >= jobs:
+                raise Type2AedtWorkerLaunchError(
+                    "Persistent AEDT worker reported invalid readiness index "
+                    f"(actual={message_worker_index}, type={message_type})"
+                )
+            if message_worker_index in ready_worker_indexes:
+                raise Type2AedtWorkerLaunchError(
+                    "Persistent AEDT worker reported duplicate readiness "
+                    f"(worker_index={message_worker_index}, type={message_type})"
+                )
+            if message_type == "ready":
+                ready_worker_indexes.add(message_worker_index)
+                continue
+            if message_type == "fatal":
+                _raise_if_worker_launch_message(cast(str, payload))
             raise Type2AedtWorkerLaunchError(
-                "Persistent AEDT workers did not report ready within "
-                f"{_PERSISTENT_WORKER_INIT_TIMEOUT_SEC:.0f}s "
-                f"(missing_worker_indexes={missing_worker_indexes})"
-            ) from exc
-        message_type, message_worker_index, payload = cast(_PersistentResultMessage, raw_message)
-        if message_worker_index < 0 or message_worker_index >= jobs:
-            raise Type2AedtWorkerLaunchError(
-                "Persistent AEDT worker reported invalid readiness index "
-                f"(actual={message_worker_index}, type={message_type})"
+                f"Unexpected persistent AEDT worker init message: type={message_type}, payload={payload!r}"
             )
-        if message_worker_index in ready_worker_indexes:
-            raise Type2AedtWorkerLaunchError(
-                "Persistent AEDT worker reported duplicate readiness "
-                f"(worker_index={message_worker_index}, type={message_type})"
-            )
-        if message_type == "ready":
-            ready_worker_indexes.add(message_worker_index)
-            continue
-        if message_type == "fatal":
-            _raise_if_worker_launch_message(cast(str, payload))
-        raise Type2AedtWorkerLaunchError(
-            f"Unexpected persistent AEDT worker init message: type={message_type}, payload={payload!r}"
-        )
+    except BaseException:
+        _terminate_persistent_build_workers(workers)
+        raise
     return workers
 
 
@@ -755,6 +818,14 @@ def _join_persistent_build_workers(workers: list[Process]) -> None:
         if worker.is_alive():
             worker.terminate()
             worker.join(timeout=30)
+
+
+def _terminate_persistent_build_workers(workers: list[Process]) -> None:
+    for worker in workers:
+        if worker.is_alive():
+            worker.terminate()
+    for worker in workers:
+        worker.join(timeout=30)
 
 
 def _iter_persistent_aedt_build_attempts(
@@ -849,10 +920,7 @@ def _iter_persistent_aedt_build_attempts(
                     f"Persistent AEDT worker {worker_index} failed during shutdown: {payload}"
                 )
     finally:
-        for worker in workers:
-            if worker.is_alive():
-                worker.terminate()
-                worker.join(timeout=30)
+        _terminate_persistent_build_workers(workers)
 
 
 def build_type2_sampled_tomls_best_effort(

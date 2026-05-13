@@ -25,7 +25,9 @@ tags:
 - Default build entry tests cover that recorded skips are surfaced as entry failures after the skip ledger is written.
 - Related plan: [0.2.24-type2-batch-resume-absolute-sample-index](../../../plans/0.2.24-type2-batch-resume-absolute-sample-index.md).
 - TX inner X-position compatibility metadata must stay fixed zero and removed TX outer sampled owners must stay absent.
-- Default Type2 build retries only `Type2AedtWorkerProcessError` from the persistent AEDT worker path, waits 60 seconds between restarts, and stops after the configured production restart limit.
+- Default Type2 build retries `Type2AedtWorkerLaunchError` from the persistent AEDT worker launch path, waits 300 seconds between launch restarts, and stops after the configured production restart limit.
+- Default Type2 build still retries `Type2AedtWorkerProcessError` from the persistent AEDT worker processing path with the existing 60-second wait.
+- CLI coverage asserts `--retry-all-errors` opts into 5-second retry for otherwise fail-fast `Exception` failures.
 - Persistent AEDT worker launch coverage asserts the default 1-second start-event stagger and verifies the starter does not wait for each worker's ready message before starting the next worker.
 
 ## Canonical state
@@ -56,7 +58,7 @@ tags:
 - TX modeled build dependencies, including TX columns paired with RX, must not reach the setup-ready runner.
 - Prepared build validation must reject missing or nonzero TX inner X-position compatibility ranges before setup-ready execution.
 - Best-effort build tests catch only declared skippable runtime exceptions; unsupported role validation remains fail-fast before skip recording.
-- Worker restart tests assert non-worker exceptions are not retried and persistent worker failures re-raise after the bounded restart limit; failure-path tests monkeypatch the production limit down to three restarts.
+- Worker restart tests assert non-worker exceptions are not retried by default, opt-in retry-all exceptions use the 5-second retry delay, and persistent worker launch/process failures re-raise after the bounded restart limit; failure-path tests monkeypatch the production limit down to three restarts.
 - Worker startup tests must distinguish process start-event staggering from AEDT readiness serialization.
 - Skipped validation or AEDT setup failures are not persistent-worker restart candidates; they are reported through the skip ledger and then raised by the entry boundary.
 

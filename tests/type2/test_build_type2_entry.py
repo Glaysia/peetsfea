@@ -24,6 +24,7 @@ from entry.build import (
 )
 from entry.sample import sample_type2
 from peetsfea.type2_runtime import Type2BuiltArtifact
+from peetsfea.type2_runtime import Type2AedtWorkerLaunchError
 from peetsfea.type2_runtime import Type2AedtWorkerProcessError
 from peetsfea.type2_sampled import PreparedType2Build
 from peetsfea.type2_step_spec import NonModelTxRegionActualSpec
@@ -838,6 +839,74 @@ def test_build_type2_retries_worker_process_error_with_bounded_restart(
     assert calls[0]["sampled_toml_paths"] == calls[1]["sampled_toml_paths"]
 
 
+def test_build_type2_retries_worker_launch_error_with_five_minute_delay(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _patch_rx_only_spec_loader(monkeypatch)
+    source_toml_path = _write_source_type2_toml(tmp_path)
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+    sampled_manifest = sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=4,
+        seed_n=1,
+        sampler_n=1,
+        aedt_builder_n=1,
+        make_step_on_sample=False,
+    )
+    manifest_entry = sampled_manifest["entries"][0]
+
+    sleeps: list[float] = []
+    attempted: dict[str, int] = {"count": 0}
+
+    def _fake_build_type2_sampled_tomls_best_effort(
+        sampled_toml_paths: object,
+        *,
+        jobs: int,
+        skipped_ledger_path: Path,
+        manifest_path: Path,
+        progress_reporter: object,
+        reuse_aedt: bool,
+        aedt_port_base: int,
+        aedt_launch_stagger_sec: float,
+    ) -> type2_runtime.Type2BuildBatchResult:
+        attempted["count"] += 1
+        _ = list(cast(Iterable[str], sampled_toml_paths))
+        _ = jobs, skipped_ledger_path, manifest_path, progress_reporter
+        _ = reuse_aedt, aedt_port_base, aedt_launch_stagger_sec
+        if attempted["count"] == 1:
+            raise Type2AedtWorkerLaunchError("persistent worker launch failed on attempt 1")
+        return {
+            "built": [
+                {
+                    "design_id": manifest_entry["design_id"],
+                    "sampled_toml_path": manifest_entry["sampled_toml_path"],
+                    "aedt_path": manifest_entry["aedt_path"],
+                    "source_step_ledger_path": manifest_entry["step_ledger_path"],
+                    "imported_ledger_path": manifest_entry["imported_ledger_path"],
+                }
+            ],
+            "skipped": [],
+        }
+
+    def _sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(
+        build_entry,
+        "build_type2_sampled_tomls_best_effort",
+        _fake_build_type2_sampled_tomls_best_effort,
+    )
+    results = build_type2(manifest_path=manifest_path, sleep=_sleep)
+
+    assert len(results) == 1
+    assert attempted["count"] == 2
+    assert sleeps == [300.0]
+
+
 def test_build_type2_does_not_retry_non_worker_exception(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -889,6 +958,75 @@ def test_build_type2_does_not_retry_non_worker_exception(
 
     assert calls == 1
     assert sleeps == []
+
+
+def test_build_type2_retries_non_worker_exception_when_retry_all_errors_is_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _patch_rx_only_spec_loader(monkeypatch)
+    source_toml_path = _write_source_type2_toml(tmp_path)
+    output_dir = tmp_path / "run" / "sampled" / "type2"
+    manifest_path = output_dir / "manifest.json"
+    sampled_manifest = sample_type2(
+        source_toml_path=source_toml_path,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        seed_first=4,
+        seed_n=1,
+        sampler_n=1,
+        aedt_builder_n=1,
+        make_step_on_sample=False,
+    )
+    manifest_entry = sampled_manifest["entries"][0]
+
+    sleeps: list[float] = []
+    attempted: dict[str, int] = {"count": 0}
+
+    def _fake_build_type2_sampled_tomls_best_effort(
+        sampled_toml_paths: object,
+        *,
+        jobs: int,
+        skipped_ledger_path: Path,
+        manifest_path: Path,
+        progress_reporter: object,
+        reuse_aedt: bool,
+        aedt_port_base: int,
+        aedt_launch_stagger_sec: float,
+    ) -> type2_runtime.Type2BuildBatchResult:
+        attempted["count"] += 1
+        _ = list(cast(Iterable[str], sampled_toml_paths))
+        _ = jobs, skipped_ledger_path, manifest_path, progress_reporter
+        _ = reuse_aedt, aedt_port_base, aedt_launch_stagger_sec
+        if attempted["count"] == 1:
+            raise ValueError("transient non-worker failure")
+        return {
+            "built": [
+                {
+                    "design_id": manifest_entry["design_id"],
+                    "sampled_toml_path": manifest_entry["sampled_toml_path"],
+                    "aedt_path": manifest_entry["aedt_path"],
+                    "source_step_ledger_path": manifest_entry["step_ledger_path"],
+                    "imported_ledger_path": manifest_entry["imported_ledger_path"],
+                }
+            ],
+            "skipped": [],
+        }
+
+    def _sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(
+        build_entry,
+        "build_type2_sampled_tomls_best_effort",
+        _fake_build_type2_sampled_tomls_best_effort,
+    )
+
+    results = build_type2(manifest_path=manifest_path, retry_all_errors=True, sleep=_sleep)
+
+    assert len(results) == 1
+    assert attempted["count"] == 2
+    assert sleeps == [5.0]
 
 
 def test_build_type2_raises_after_streaming_skipped_ledger_is_written(
@@ -2805,6 +2943,101 @@ def test_start_persistent_build_workers_treats_license_launch_failure_as_batch_f
         )
 
 
+def test_start_persistent_build_workers_treats_licensed_number_message_as_launch_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeProcess:
+        def __init__(self, *, target: object, kwargs: dict[str, object]) -> None:
+            self.kwargs = kwargs
+            self.pid = 123
+            self.exitcode = None
+
+        def start(self) -> None:
+            cast(LocalQueue[object], self.kwargs["result_queue"]).put(
+                (
+                    "fatal",
+                    cast(int, self.kwargs["worker_index"]),
+                    "RuntimeError: [error] Licensed number of users already reached. "
+                    "Feature electronics3d_gui.",
+                )
+            )
+
+        def is_alive(self) -> bool:
+            return False
+
+        def join(self, timeout: float | None = None) -> None:
+            _ = timeout
+
+        def terminate(self) -> None:
+            pass
+
+    monkeypatch.setattr(type2_runtime, "Process", _FakeProcess)
+    task_queue: LocalQueue[Any] = LocalQueue()
+    result_queue: LocalQueue[Any] = LocalQueue()
+
+    with pytest.raises(type2_runtime.Type2AedtWorkerLaunchError, match=r"license checkout"):
+        type2_runtime._start_persistent_build_workers(
+            jobs=1,
+            aedt_port_base=46000,
+            aedt_launch_stagger_sec=5.0,
+            task_queue=cast(Any, task_queue),
+            result_queue=cast(Any, result_queue),
+            sleep=lambda _: None,
+        )
+
+
+def test_start_persistent_build_workers_raises_from_batch_log_launch_failure_and_cleans_up(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    Path("batch.log").write_text("stale previous launch log\n", encoding="utf-8")
+    started_processes: list[Any] = []
+
+    class _FakeProcess:
+        def __init__(self, *, target: object, kwargs: dict[str, object]) -> None:
+            self.kwargs = kwargs
+            self.pid = 123
+            self.exitcode = None
+            self.alive = True
+            self.terminated = False
+            self.join_timeouts: list[float | None] = []
+
+        def start(self) -> None:
+            started_processes.append(self)
+            with Path("batch.log").open("a", encoding="utf-8") as log_file:
+                log_file.write("[error] Licensed number of users already reached.\n")
+                log_file.write("Feature electronics3d_gui\n")
+
+        def is_alive(self) -> bool:
+            return self.alive
+
+        def join(self, timeout: float | None = None) -> None:
+            self.join_timeouts.append(timeout)
+
+        def terminate(self) -> None:
+            self.terminated = True
+            self.alive = False
+
+    monkeypatch.setattr(type2_runtime, "Process", _FakeProcess)
+    task_queue: LocalQueue[Any] = LocalQueue()
+    result_queue: LocalQueue[Any] = LocalQueue()
+
+    with pytest.raises(type2_runtime.Type2AedtWorkerLaunchError, match=r"batch\.log"):
+        type2_runtime._start_persistent_build_workers(
+            jobs=3,
+            aedt_port_base=46000,
+            aedt_launch_stagger_sec=0.0,
+            task_queue=cast(Any, task_queue),
+            result_queue=cast(Any, result_queue),
+            sleep=lambda _: None,
+        )
+
+    assert len(started_processes) == 1
+    assert started_processes[0].terminated is True
+    assert started_processes[0].join_timeouts == [30]
+
+
 def test_run_build_cli_passes_design_id_to_headless_build(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -2819,12 +3052,14 @@ def test_run_build_cli_passes_design_id_to_headless_build(
         manifest_path: Path,
         selected_design_ids: tuple[str, ...],
         reuse_aedt: bool,
+        retry_all_errors: bool,
         aedt_port_base: int,
         aedt_launch_stagger_sec: float,
     ) -> list[Type2BuiltArtifact]:
         calls["manifest_path"] = manifest_path
         calls["selected_design_ids"] = selected_design_ids
         calls["reuse_aedt"] = reuse_aedt
+        calls["retry_all_errors"] = retry_all_errors
         calls["aedt_port_base"] = aedt_port_base
         calls["aedt_launch_stagger_sec"] = aedt_launch_stagger_sec
         return []
@@ -2835,11 +3070,12 @@ def test_run_build_cli_passes_design_id_to_headless_build(
     assert calls["manifest_path"] == manifest_path
     assert calls["selected_design_ids"] == ("abc",)
     assert calls["reuse_aedt"] is True
+    assert calls["retry_all_errors"] is False
     assert calls["aedt_port_base"] == 45000
     assert calls["aedt_launch_stagger_sec"] == 1.0
 
 
-def test_run_build_cli_passes_aedt_reuse_knobs_to_headless_build(
+def test_run_build_cli_passes_aedt_reuse_and_retry_knobs_to_headless_build(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -2852,12 +3088,14 @@ def test_run_build_cli_passes_aedt_reuse_knobs_to_headless_build(
         manifest_path: Path,
         selected_design_ids: tuple[str, ...],
         reuse_aedt: bool,
+        retry_all_errors: bool,
         aedt_port_base: int,
         aedt_launch_stagger_sec: float,
     ) -> list[Type2BuiltArtifact]:
         calls["manifest_path"] = manifest_path
         calls["selected_design_ids"] = selected_design_ids
         calls["reuse_aedt"] = reuse_aedt
+        calls["retry_all_errors"] = retry_all_errors
         calls["aedt_port_base"] = aedt_port_base
         calls["aedt_launch_stagger_sec"] = aedt_launch_stagger_sec
         return []
@@ -2870,6 +3108,7 @@ def test_run_build_cli_passes_aedt_reuse_knobs_to_headless_build(
                 "--manifest",
                 str(manifest_path),
                 "--no-aedt-reuse",
+                "--retry-all-errors",
                 "--aedt-port-base",
                 "47000",
                 "--aedt-launch-stagger-sec",
@@ -2882,6 +3121,7 @@ def test_run_build_cli_passes_aedt_reuse_knobs_to_headless_build(
         "manifest_path": manifest_path,
         "selected_design_ids": (),
         "reuse_aedt": False,
+        "retry_all_errors": True,
         "aedt_port_base": 47000,
         "aedt_launch_stagger_sec": 7.5,
     }

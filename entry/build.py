@@ -25,6 +25,7 @@ from peetsfea.type2_runtime import (
     DEFAULT_AEDT_PORT_BASE,
     Type2BuiltArtifact,
     Type2EmArtifact,
+    Type2AedtWorkerLaunchError,
     Type2AedtWorkerProcessError,
     build_type2_sampled_tomls_best_effort,
     build_prepared_type2_designs_best_effort,
@@ -43,6 +44,8 @@ from peetsfea.type2_sampled import (
 )
 
 _Exporter = Callable[..., object]
+_BUILD_LAUNCH_RETRY_SLEEP_SEC: float = 300.0
+_BUILD_RETRY_ALL_ERRORS_SLEEP_SEC: float = 5.0
 _BUILD_RESTART_SLEEP_SEC: float = 60.0
 _BUILD_RESTART_LIMIT: int = 500
 
@@ -96,6 +99,7 @@ def build_type2(
     exporter: _Exporter = export_type2_step_artifacts,
     runner: _Runner = setup_type2_step_ledger,
     reuse_aedt: bool = True,
+    retry_all_errors: bool = False,
     aedt_port_base: int = DEFAULT_AEDT_PORT_BASE,
     aedt_launch_stagger_sec: float = DEFAULT_AEDT_LAUNCH_STAGGER_SEC,
     sleep: Callable[[float], None] = time.sleep,
@@ -132,11 +136,24 @@ def build_type2(
                     aedt_launch_stagger_sec=aedt_launch_stagger_sec,
                 )
                 break
+            except Type2AedtWorkerLaunchError:
+                restart_attempt += 1
+                if restart_attempt > _BUILD_RESTART_LIMIT:
+                    raise
+                sleep(_BUILD_LAUNCH_RETRY_SLEEP_SEC)
             except Type2AedtWorkerProcessError:
                 restart_attempt += 1
                 if restart_attempt > _BUILD_RESTART_LIMIT:
                     raise
                 sleep(_BUILD_RESTART_SLEEP_SEC)
+            except Exception:
+                if not retry_all_errors:
+                    raise
+                restart_attempt += 1
+                if restart_attempt > _BUILD_RESTART_LIMIT:
+                    raise
+                sleep(_BUILD_RETRY_ALL_ERRORS_SLEEP_SEC)
+
     if len(batch["skipped"]) > 0:
         print(f"skipped design count: {len(batch['skipped'])}")
         print(f"build skipped ledger: {skipped_ledger_path}")
@@ -230,6 +247,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=float(os.environ.get("PEETSFEA_AEDT_LAUNCH_STAGGER_SEC", str(DEFAULT_AEDT_LAUNCH_STAGGER_SEC))),
     )
     parser.add_argument("--no-aedt-reuse", action="store_true")
+    parser.add_argument(
+        "--retry-all-errors",
+        action="store_true",
+        dest="retry_all_errors",
+        help="Retry any build exception after 5 seconds instead of failing fast.",
+    )
     return parser
 
 
@@ -263,6 +286,7 @@ def run_build_cli(argv: Sequence[str]) -> list[Type2BuiltArtifact] | list[Type2E
             manifest_path=args.manifest,
             selected_design_ids=selected_design_ids,
             reuse_aedt=not args.no_aedt_reuse,
+            retry_all_errors=args.retry_all_errors,
             aedt_port_base=args.aedt_port_base,
             aedt_launch_stagger_sec=args.aedt_launch_stagger_sec,
         )
