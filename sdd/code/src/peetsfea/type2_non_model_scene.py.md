@@ -50,7 +50,9 @@ tags:
 - `tx_region` z-gap resolution requires `tv` and `rx_region_max` lower-Z planes to match and requires a finite positive realized gap.
 - `tx_inner_region` must derive from `tx_region`; a base box named `tx_inner_region` without reference-line provenance is rejected.
 - Ledger construction for `tx_inner_region` requires matching creation-time provenance in the registry.
-- `tx_inner_actual_region` requires exactly one `tx_inner_single_coil` modeled spec and must use the placement helper's design outer box so selected `outer_x_usage_ratio`/`outer_y_usage_ratio`, lower-X wall-side anchoring, and Y centering are reflected exactly once. It must not use the smaller copper/PCB decomposed body bbox as canonical actual-region bounds.
+- `tx_inner_actual_region` requires exactly one `tx_inner_single_coil` modeled spec and must use the placement helper's design outer box so selected `x_ratio`/`y_ratio`, lower-X wall-side anchoring, and Y centering are reflected exactly once. It must not use the smaller copper/PCB decomposed body bbox as canonical actual-region bounds.
+- `tx_inner_actual_region` provenance keeps the existing `x_usage_ratio*`/`y_usage_ratio*` ledger field names for actual-region semantics, but their owner-path values must point to active public `modeled_objects.<id>.x_ratio` and `.y_ratio` ranges.
+- Dormant TX outer actual-region code follows the same active `x_ratio`/`y_ratio` single-coil type contract when directly called by transitional code.
 - `tx_inner_actual_region.tx_actual_region.physical_modeled_body_bounds` must come from `fit_envelope.physical_modeled_body_bounds_*`, while `actual_region_bounds` remains the design outer box from `fit_envelope.design_outer_bounds_*`.
 - Active resolution must not append `tx_outer_region` after `tx_inner_actual_region`.
 - Base non-model specs named `tx_outer_region` or `tx_outer_actual_region` are unsupported and must raise immediately.

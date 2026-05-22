@@ -116,6 +116,10 @@ _TV_ALUMINUM_PLATE_SHEET_VERTICES_XYZ = (
     (9.0, 921.0, 1225.0),
     (9.0, -921.0, 1225.0),
 )
+_TX_REGION_Z_GAP_OWNER_FIELD = "z_gap_from_rx_plane_mm"
+_LEGACY_TX_REGION_X_OFFSET_OWNER_FIELD = "x_offset_from_rx_plane_mm"
+_TX_REGION_FIXED_Z_GAP_MM = 80.0
+_TX_REGION_CHANGED_Z_GAP_MM = 45.0
 
 _OBSOLETE_GENERIC_TX_ACTIVE_RXONLY_TEST_NAME_PARTS = (
     "parses_tx_rect_void_columns_parser_surface",
@@ -176,7 +180,7 @@ def _outputs_spec_text() -> str:
         "[outputs]",
         'mode = "RxOnly"',
         'report_name = "Output Variables Table1"',
-        'solution_name = "Setup1 : Sweep"',
+        'solution_name = "Setup1 : LastAdaptive"',
         'primary_sweep = "Freq"',
         'report_category = "Terminal Solution Data"',
         'plot_type = "Data Table"',
@@ -257,9 +261,11 @@ def _assert_tv_aluminum_plate_spec_contract(*, spec: Type2StepSpec) -> None:
     assert tv_entry.thickness_mm == pytest.approx(0.04)
     assert tv_entry.sheet_present.start in (0.0, 1.0)
     assert tv_entry.sheet_present.end in (0.0, 1.0)
+    if tv_entry.sheet_present.count == 1:
+        assert tv_entry.sheet_present.start == pytest.approx(tv_entry.sheet_present.end)
 
 
-def _assert_tv_aluminum_plate_ledger_contract(*, entry: dict[str, object]) -> None:
+def _assert_tv_aluminum_plate_ledger_contract(*, entry: dict[str, object], expected_sheet_present: int = 0) -> None:
     assert entry["object_id"] == _TV_ALUMINUM_PLATE_OBJECT_ID
     assert entry["role"] == _TV_ALUMINUM_PLATE_ROLE
     assert entry["material"] == "aluminum"
@@ -268,13 +274,14 @@ def _assert_tv_aluminum_plate_ledger_contract(*, entry: dict[str, object]) -> No
     assert entry["expected_exported_body_names"] == ()
     assert entry["expected_exported_body_count"] == 0
     assert entry["expected_exported_body_groups"] == ()
-    assert entry["sheet_present"] == 1
+    assert expected_sheet_present in (0, 1)
+    assert entry["sheet_present"] == expected_sheet_present
     canonical_coordinates = cast(dict[str, object], entry["canonical_coordinates"])
     assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_MIN_XYZ)
     assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ)
     assert canonical_coordinates["source_non_model_object_id"] == "tv"
     assert canonical_coordinates["source_face"] == "+X"
-    assert canonical_coordinates["sheet_present"] is True
+    assert canonical_coordinates["sheet_present"] is bool(expected_sheet_present)
     assert canonical_coordinates["sheet_thickness_mm"] == pytest.approx(0.04)
     sheet_vertices = cast(Sequence[Sequence[float]], canonical_coordinates["sheet_vertices_xyz"])
     assert len(sheet_vertices) == 4
@@ -283,6 +290,7 @@ def _assert_tv_aluminum_plate_ledger_contract(*, entry: dict[str, object]) -> No
     exported_coordinates = cast(dict[str, object], entry["exported_body_canonical_coordinates"])
     assert exported_coordinates["outer_bounds_min_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_MIN_XYZ)
     assert exported_coordinates["outer_bounds_size_xyz"] == pytest.approx(_TV_ALUMINUM_PLATE_CANONICAL_SIZE_XYZ)
+    assert exported_coordinates["sheet_present"] is bool(expected_sheet_present)
 
 
 def _max_x_z(min_xyz: tuple[float, float, float], size_xyz: tuple[float, float, float]) -> tuple[float, float]:
@@ -347,7 +355,8 @@ def _type2_spec_text(
     *,
     modeled_object_id: str = "rx_rect_void_coil",
     modeled_role: str = "rx_single_coil",
-    terminal_path: str = "A_cw_to_a",
+    terminal_start: int = 0,
+    turn_qcount_range: str | None = None,
     layer_count: int = 1,
     radiation_margin_mm: float = 3500.0,
     underlay_repeat_count_range: str | None = None,
@@ -409,6 +418,13 @@ range = {underlay_ferrite_thickness_range}
 [modeled_objects.void_stack_present]
 range = {void_stack_present_range}
 """.rstrip()
+    elif modeled_role == "rx_single_coil":
+        if void_stack_present_range is None:
+            void_stack_present_range = _range(True, 0.0, 0.0, 1)
+        tx_inner_void_stack_present_section = f"""
+[modeled_objects.void_stack_present]
+range = {void_stack_present_range}
+""".rstrip()
     elif underlay_pet_psa_thickness_range is not None or underlay_ferrite_thickness_range is not None:
         raise ValueError("tx_inner underlay thickness ranges are only valid for tx_inner_single_coil test specs")
     elif void_stack_present_range is not None:
@@ -416,15 +432,17 @@ range = {void_stack_present_range}
 [modeled_objects.void_stack_present]
 range = {void_stack_present_range}
 """.rstrip()
+    if turn_qcount_range is None:
+        turn_qcount_range = _range(True, 8.0, 8.0, 1)
     if modeled_role == "tx_single_coil":
-        outer_x_usage_ratio_range = _range(False, 50.0 / 160.0, 50.0 / 160.0, 1)
-        outer_y_usage_ratio_range = _range(False, 60.0 / 280.0, 60.0 / 280.0, 1)
+        x_ratio_range = _range(False, 50.0 / 160.0, 50.0 / 160.0, 1)
+        y_ratio_range = _range(False, 60.0 / 280.0, 60.0 / 280.0, 1)
     elif modeled_role == "rx_single_coil":
-        outer_x_usage_ratio_range = _range(False, 50.0 / 200.0, 50.0 / 200.0, 1)
-        outer_y_usage_ratio_range = _range(False, 60.0 / 200.0, 60.0 / 200.0, 1)
+        x_ratio_range = _range(False, 50.0 / 200.0, 50.0 / 200.0, 1)
+        y_ratio_range = _range(False, 60.0 / 200.0, 60.0 / 200.0, 1)
     else:
-        outer_x_usage_ratio_range = _range(False, 50.0 / 160.0, 50.0 / 160.0, 1)
-        outer_y_usage_ratio_range = _range(False, 60.0 / 280.0, 60.0 / 280.0, 1)
+        x_ratio_range = _range(False, 50.0 / 160.0, 50.0 / 160.0, 1)
+        y_ratio_range = _range(False, 60.0 / 280.0, 60.0 / 280.0, 1)
     return f"""
 spec_version = "0.2.22"
 schema_id = "peetsfea.type2.step.v8"
@@ -524,14 +542,14 @@ model_state = true
 pcb_thickness_mm = 3.965
 copper_thickness_mm = 0.035
 
-[modeled_objects.outer_x_usage_ratio]
-range = {outer_x_usage_ratio_range}
-[modeled_objects.outer_y_usage_ratio]
-range = {outer_y_usage_ratio_range}
+[modeled_objects.x_ratio]
+range = {x_ratio_range}
+[modeled_objects.y_ratio]
+range = {y_ratio_range}
 [modeled_objects.x_position_ratio]
 range = {_range(False, 0.0, 0.0, 1)}
-[modeled_objects.turn_count]
-range = {_range(True, 2.0, 2.0, 1)}
+[modeled_objects.turn_qcount]
+range = {turn_qcount_range}
 [modeled_objects.layer_count]
 range = {_range(True, float(layer_count), float(layer_count), 1)}
 [modeled_objects.underlay_repeat_count]
@@ -544,14 +562,14 @@ range = {underlay_repeat_count_range}
 range = {_range(False, 2.0, 2.0, 1)}
 [modeled_objects.terminal_stub_length_mm]
 range = {_range(False, 5.0, 5.0, 1)}
-[modeled_objects.void_usage_ratio]
+[modeled_objects.void_factor]
 range = {_range(False, 0.2, 0.2, 1)}
 [modeled_objects.margin_ratio]
 range = {_range(False, 0.05, 0.05, 1)}
 [modeled_objects.metal_fill_factor]
 range = {_range(False, 0.5, 0.5, 1)}
-    [modeled_objects.terminal_path]
-    value = "{terminal_path}"
+[modeled_objects.terminal_start]
+range = {_range(True, float(terminal_start), float(terminal_start), 1)}
     """.strip()
 
 
@@ -738,8 +756,8 @@ def _type2_tx_plate_stack_spec_text(
     )
 
 
-def _tx_rect_void_spec_text(*, terminal_path: str = "A_cw_to_a") -> str:
-    return _tx_rect_void_spec_text_with_layer_count(terminal_path=terminal_path, layer_count=1)
+def _tx_rect_void_spec_text() -> str:
+    return _tx_rect_void_spec_text_with_layer_count(layer_count=1)
 
 
 def _type2_tx_rect_void_columns_spec_text(
@@ -884,9 +902,10 @@ value = "A_cw_to_a"
 
 def _tx_rect_void_spec_text_with_layer_count(
     *,
-    terminal_path: str = "A_cw_to_a",
+    terminal_start: int = 0,
+    turn_qcount_range: str = "[true, 8.0, 8.0, 1]",
     layer_count: int = 1,
-    void_usage_ratio_range: str = "[false, 0.2, 0.2, 1]",
+    void_factor_range: str = "[false, 0.2, 0.2, 1]",
 ) -> str:
     return f"""
 spec_version = "0.2.22"
@@ -904,22 +923,22 @@ copper_thickness_mm = 0.035
 range = {_range(False, 50.0, 50.0, 1)}
 [tx_coil.outer_y_mm]
 range = {_range(False, 60.0, 60.0, 1)}
-[tx_coil.turn_count]
-range = {_range(True, 2.0, 2.0, 1)}
+[tx_coil.turn_qcount]
+range = {turn_qcount_range}
 [tx_coil.layer_count]
 range = {_range(True, float(layer_count), float(layer_count), 1)}
 [tx_coil.layer_gap_mm]
 range = {_range(False, 2.0, 2.0, 1)}
 [tx_coil.terminal_stub_length_mm]
 range = {_range(False, 5.0, 5.0, 1)}
-[tx_coil.void_usage_ratio]
-range = {void_usage_ratio_range}
+[tx_coil.void_factor]
+range = {void_factor_range}
 [tx_coil.margin_ratio]
 range = {_range(False, 0.05, 0.05, 1)}
 [tx_coil.metal_fill_factor]
 range = {_range(False, 0.5, 0.5, 1)}
-[tx_coil.terminal_path]
-value = "{terminal_path}"
+[tx_coil.terminal_start]
+range = {_range(True, float(terminal_start), float(terminal_start), 1)}
 """.strip()
 
 
@@ -927,6 +946,35 @@ def _write_spec(tmp_path: Path, text: str) -> Path:
     path = tmp_path / "type2_fixed.toml"
     path.write_text(text, encoding="utf-8")
     return path
+
+
+def _type2_fixed_text_with_tx_z_gap_owner(
+    source_toml: Path,
+    *,
+    z_gap_mm: float = _TX_REGION_FIXED_Z_GAP_MM,
+) -> str:
+    raw_spec, _source_bytes = load_toml_bytes(source_toml)
+    non_model_objects = cast(list[dict[str, object]], raw_spec["non_model_objects"])
+    tx_region = next(non_model_object for non_model_object in non_model_objects if non_model_object["id"] == "tx_region")
+    if _LEGACY_TX_REGION_X_OFFSET_OWNER_FIELD in tx_region:
+        del tx_region[_LEGACY_TX_REGION_X_OFFSET_OWNER_FIELD]
+    tx_region[_TX_REGION_Z_GAP_OWNER_FIELD] = {
+        "range": [False, z_gap_mm, z_gap_mm, 1],
+        "description": "TX guide top-Z gap from the RX/TV lower-Z reference plane(mm)",
+    }
+    return toml_dumps(raw_spec)
+
+
+def _write_type2_fixed_with_tx_z_gap_owner(
+    tmp_path: Path,
+    source_toml: Path,
+    *,
+    z_gap_mm: float = _TX_REGION_FIXED_Z_GAP_MM,
+) -> Path:
+    return _write_spec(
+        tmp_path,
+        _type2_fixed_text_with_tx_z_gap_owner(source_toml, z_gap_mm=z_gap_mm),
+    )
 
 
 def _find_member_object(
@@ -938,6 +986,56 @@ def _find_member_object(
         if cast(str, member["object_id"]) == object_id:
             return member
     raise AssertionError(f"missing non-model member object: {object_id}")
+
+
+def _modeled_ledger_entry(
+    *,
+    ledger: Mapping[str, object],
+    object_id: str,
+) -> dict[str, object]:
+    modeled_objects = cast(Sequence[dict[str, object]], ledger["modeled_objects"])
+    for modeled_entry in modeled_objects:
+        if cast(str, modeled_entry["object_id"]) == object_id:
+            return modeled_entry
+    raise AssertionError(f"missing modeled ledger object: {object_id}")
+
+
+def _non_model_member_objects(*, ledger: Mapping[str, object]) -> Sequence[dict[str, object]]:
+    non_model_objects = cast(Sequence[dict[str, object]], ledger["non_model_objects"])
+    if len(non_model_objects) != 1:
+        raise AssertionError(f"type2 export must contain exactly one non-model scene entry: {len(non_model_objects)}")
+    return cast(Sequence[dict[str, object]], non_model_objects[0]["member_objects"])
+
+
+def _assert_bounds_shifted_z_only(
+    *,
+    baseline_min_xyz: tuple[float, float, float],
+    baseline_max_xyz: tuple[float, float, float],
+    baseline_size_xyz: tuple[float, float, float],
+    changed_min_xyz: tuple[float, float, float],
+    changed_max_xyz: tuple[float, float, float],
+    changed_size_xyz: tuple[float, float, float],
+    z_shift_mm: float,
+) -> None:
+    assert changed_min_xyz[:2] == pytest.approx(baseline_min_xyz[:2])
+    assert changed_max_xyz[:2] == pytest.approx(baseline_max_xyz[:2])
+    assert changed_min_xyz[2] == pytest.approx(baseline_min_xyz[2] + z_shift_mm)
+    assert changed_max_xyz[2] == pytest.approx(baseline_max_xyz[2] + z_shift_mm)
+    assert changed_size_xyz == pytest.approx(baseline_size_xyz)
+
+
+def _assert_bounds_unchanged(
+    *,
+    baseline_min_xyz: tuple[float, float, float],
+    baseline_max_xyz: tuple[float, float, float],
+    baseline_size_xyz: tuple[float, float, float],
+    changed_min_xyz: tuple[float, float, float],
+    changed_max_xyz: tuple[float, float, float],
+    changed_size_xyz: tuple[float, float, float],
+) -> None:
+    assert changed_min_xyz == pytest.approx(baseline_min_xyz)
+    assert changed_max_xyz == pytest.approx(baseline_max_xyz)
+    assert changed_size_xyz == pytest.approx(baseline_size_xyz)
 
 
 def _assert_bridge_member_thickness_metadata(
@@ -1310,8 +1408,19 @@ def _synthetic_step_group_child_labels(
             raise AssertionError(f"RX copper STEP group must contain exactly one child (actual={child_count})")
         return ("rx_plate_copper",)
     if group_label == _RX_FERRITE_GROUP_NAME:
+        if child_count == 2:
+            return ("rx_void_ferrite_u0", "rx_void_pet_psa_u0")
+        if child_count > 3 and (child_count - 3) % 2 == 0:
+            labels = ["under_rx_ferrite_u0", "under_rx_pet_psa_u0", "under_rx_air_u0"]
+            for pair_index in range((child_count - 3) // 2):
+                labels.append(f"rx_void_ferrite_u{pair_index}")
+                labels.append(f"rx_void_pet_psa_u{pair_index}")
+            return tuple(labels)
         if child_count != 3:
-            raise AssertionError(f"RX ferrite STEP group must contain exactly three children (actual={child_count})")
+            raise AssertionError(
+                "RX ferrite STEP group must contain three underlay children, two void-stack children, "
+                f"or an underlay-plus-void combination (actual={child_count})"
+            )
         if {"rx_pcb_wall", "rx_pcb_coil"}.issubset(top_level_labels):
             return ("rx_stack_pet_psa", "rx_stack_ferrite", "rx_stack_air")
         return ("under_rx_ferrite_u0", "under_rx_pet_psa_u0", "under_rx_air_u0")
@@ -1449,6 +1558,15 @@ def _rx_underlay_expected_body_names(*, repeat_count: int) -> tuple[str, ...]:
     )
 
 
+def _rx_void_stack_expected_body_names(*, present: bool) -> tuple[str, ...]:
+    if not present:
+        return ()
+    return (
+        "rx_void_ferrite_u0",
+        "rx_void_pet_psa_u0",
+    )
+
+
 def _tx_expected_body_names(
     *,
     pcb_layer_count: int,
@@ -1496,9 +1614,10 @@ def _tx_outer_expected_base_body_names(*, layer_count: int) -> tuple[str, ...]:
     return tuple(names)
 
 
-def _rx_expected_body_names(*, underlay_repeat_count: int) -> tuple[str, ...]:
+def _rx_expected_body_names(*, underlay_repeat_count: int, void_stack_present: bool = False) -> tuple[str, ...]:
     names = ["rx_pcb_l0", "rx_copper_l0"]
     names.extend(_rx_underlay_expected_body_names(repeat_count=underlay_repeat_count))
+    names.extend(_rx_void_stack_expected_body_names(present=void_stack_present))
     return tuple(names)
 
 
@@ -2368,18 +2487,23 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert tx_region_entry.size_xyz == pytest.approx((720.0, 1200.0, 90.0))
     assert tx_region_entry.z_gap_from_rx_plane_mm == RangeSpec(False, 80.0, 80.0, 1)
     assert tx_region_entry.tx_reference_line.x_ratio == RangeSpec(False, 0.99, 0.99, 1)
-    assert tx_region_entry.tx_reference_line.y_usage_ratio == RangeSpec(False, 0.83732238334605169, 0.83732238334605169, 1)
-    assert tx_region_entry.tx_reference_line.z_ratio == RangeSpec(False, 0.96414549614306921, 0.96414549614306921, 1)
+    assert tx_region_entry.tx_reference_line.y_usage_ratio == RangeSpec(
+        False, 0.8373223833460517, 0.8373223833460517, 1
+    )
+    assert tx_region_entry.tx_reference_line.z_ratio == RangeSpec(
+        False, 0.9641454961430692, 0.9641454961430692, 1
+    )
     tx_inner_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_inner_rect_void_coil")
     assert tx_inner_entry.role == "tx_inner_single_coil"
     assert tx_inner_entry.pcb_thickness_mm == pytest.approx(0.3)
     assert tx_inner_entry.copper_thickness_mm == pytest.approx(0.035)
-    assert tx_inner_entry.outer_x_usage_ratio.start == pytest.approx(0.86242457612505696)
-    assert tx_inner_entry.outer_y_usage_ratio.start == pytest.approx(0.86839691770398653)
+    assert tx_inner_entry.x_ratio.start == pytest.approx(0.862424576125057)
+    assert tx_inner_entry.y_ratio.start == pytest.approx(0.8683969177039865)
     assert tx_inner_entry.x_position_ratio.start == pytest.approx(0.0)
     assert tx_inner_entry.x_position_ratio.end == pytest.approx(0.0)
     assert tx_inner_entry.x_position_ratio.count == 1
-    assert tx_inner_entry.turn_count.start == pytest.approx(1.0)
+    assert tx_inner_entry.turn_qcount.start == pytest.approx(4.0)
+    assert tx_inner_entry.terminal_start.start == pytest.approx(1.0)
     assert tx_inner_entry.layer_count.start == pytest.approx(1.0)
     assert tx_inner_entry.layer_count.end == pytest.approx(1.0)
     assert tx_inner_entry.layer_count.count == 1
@@ -2396,19 +2520,20 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert rx_entry.role == "rx_single_coil"
     assert rx_entry.pcb_thickness_mm == pytest.approx(3.965)
     assert rx_entry.copper_thickness_mm == pytest.approx(0.035)
-    assert rx_entry.outer_x_usage_ratio.start == pytest.approx(0.51909954351372767)
-    assert rx_entry.outer_y_usage_ratio.start == pytest.approx(0.99205127847200558)
+    assert rx_entry.x_ratio.start == pytest.approx(0.5190995435137277)
+    assert rx_entry.y_ratio.start == pytest.approx(0.9920512784720056)
     assert rx_entry.outer_x_mm.start == pytest.approx(934.3791783247098)
-    assert rx_entry.outer_y_mm.start == pytest.approx(357.138460250722)
-    assert rx_entry.turn_count.start == pytest.approx(1.0)
+    assert rx_entry.outer_y_mm.start == pytest.approx(357.138460249922)
+    assert rx_entry.turn_qcount.start == pytest.approx(4.0)
+    assert rx_entry.terminal_start.start == pytest.approx(0.0)
     assert rx_entry.layer_count.start == pytest.approx(1.0)
     assert rx_entry.underlay_repeat_count.start == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.end == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.count == 1
-    assert rx_entry.void_usage_ratio.start == pytest.approx(0.18815820448507281)
-    assert rx_entry.void_usage_ratio.end == pytest.approx(0.18815820448507281)
-    assert rx_entry.void_usage_ratio.count == 1
-    assert rx_entry.metal_fill_factor.start == pytest.approx(0.47496926247510463)
+    assert rx_entry.void_factor.start == pytest.approx(0.1881582044850728)
+    assert rx_entry.void_factor.end == pytest.approx(0.1881582044850728)
+    assert rx_entry.void_factor.count == 1
+    assert rx_entry.metal_fill_factor.start == pytest.approx(0.4749692624751046)
     _assert_tv_aluminum_plate_spec_contract(spec=spec)
 
 
@@ -2430,7 +2555,8 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     assert tx_inner_entry.underlay_repeat_count.count == 1
     assert tx_inner_entry.underlay_pet_psa_thickness_mm == RangeSpec(False, 6.0, 6.0, 1)
     assert tx_inner_entry.underlay_ferrite_thickness_mm == RangeSpec(False, 6.0, 6.0, 1)
-    assert tx_inner_entry.terminal_path == "B_cw_to_b"
+    assert tx_inner_entry.terminal_start == RangeSpec(True, 1.0, 1.0, 1)
+    assert tx_inner_entry.turn_qcount == RangeSpec(True, 4.0, 4.0, 1)
     assert tx_inner_entry.terminal_stub_length_mm == RangeSpec(False, 7.5, 7.5, 1)
     tx_inner_profile = profile_for_modeled_role(cast(Literal["tx_inner_single_coil"], tx_inner_entry.role))
     assert tx_inner_profile.plane == "XY"
@@ -2447,10 +2573,11 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     assert rx_entry.underlay_repeat_count.start == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.end == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.count == 1
-    assert rx_entry.void_usage_ratio.start == pytest.approx(0.18815820448507281)
-    assert rx_entry.void_usage_ratio.end == pytest.approx(0.18815820448507281)
-    assert rx_entry.void_usage_ratio.count == 1
-    assert rx_entry.terminal_path == "A_cw_to_a"
+    assert rx_entry.void_factor.start == pytest.approx(0.1881582044850728)
+    assert rx_entry.void_factor.end == pytest.approx(0.1881582044850728)
+    assert rx_entry.void_factor.count == 1
+    assert rx_entry.terminal_start == RangeSpec(True, 0.0, 0.0, 1)
+    assert rx_entry.turn_qcount == RangeSpec(True, 4.0, 4.0, 1)
     rx_profile = profile_for_modeled_role(cast(Literal["rx_single_coil"], rx_entry.role))
     assert rx_profile.plane == "YZ"
     assert rx_profile.object_id == "rx_rect_void_coil"
@@ -2478,33 +2605,36 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     assert tx_inner_entry.layer_count.start == pytest.approx(1.0)
     assert tx_inner_entry.layer_count.end == pytest.approx(1.0)
     assert tx_inner_entry.layer_count.count == 1
-    assert tx_inner_entry.turn_count == RangeSpec(True, 1.0, 3.0, 3)
+    assert tx_inner_entry.turn_qcount == RangeSpec(True, 4.0, 12.0, 9)
+    assert tx_inner_entry.terminal_start == RangeSpec(True, 0.0, 3.0, 4)
     assert tx_inner_entry.underlay_repeat_count.start == pytest.approx(1.0)
     assert tx_inner_entry.underlay_repeat_count.end == pytest.approx(1.0)
     assert tx_inner_entry.underlay_repeat_count.count == 1
     assert tx_inner_entry.underlay_pet_psa_thickness_mm == RangeSpec(False, 6.0, 6.0, 1)
     assert tx_inner_entry.underlay_ferrite_thickness_mm == RangeSpec(False, 6.0, 6.0, 1)
-    assert tx_inner_entry.outer_x_usage_ratio == RangeSpec(False, 0.4, 0.9, 75)
-    assert tx_inner_entry.outer_y_usage_ratio == RangeSpec(False, 0.2, 0.9, 150)
-    assert tx_inner_entry.void_usage_ratio == RangeSpec(False, 0.08, 0.8, 125)
+    assert tx_inner_entry.x_ratio == RangeSpec(False, 0.4, 0.9, 75)
+    assert tx_inner_entry.y_ratio == RangeSpec(False, 0.2, 0.9, 150)
+    assert tx_inner_entry.void_factor == RangeSpec(False, 0.08, 0.8, 125)
+    assert tx_inner_entry.void_stack_present == RangeSpec(True, 0.0, 1.0, 2)
     assert all(entry.object_id != "tx_outer_rect_void_coil" for entry in spec.modeled_objects)
     assert all(entry.role != "tx_outer_single_coil" for entry in spec.modeled_objects)
     rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
     assert rx_entry.object_id == "rx_rect_void_coil"
     assert rx_entry.role == "rx_single_coil"
-    assert rx_entry.outer_x_usage_ratio == RangeSpec(False, 0.1, 1.0, 90)
-    assert rx_entry.outer_y_usage_ratio == RangeSpec(False, 0.1, 1.0, 160)
-    assert rx_entry.void_usage_ratio == RangeSpec(False, 0.08, 0.8, 125)
+    assert rx_entry.x_ratio == RangeSpec(False, 0.1, 1.0, 90)
+    assert rx_entry.y_ratio == RangeSpec(False, 0.1, 1.0, 160)
+    assert rx_entry.void_factor == RangeSpec(False, 0.08, 0.8, 125)
     assert rx_entry.outer_x_mm == RangeSpec(False, 180.0, 1800.0, 90)
     assert rx_entry.outer_y_mm == RangeSpec(False, 36.0, 360.0, 160)
     assert rx_entry.layer_count.start == pytest.approx(1.0)
     assert rx_entry.layer_count.end == pytest.approx(1.0)
     assert rx_entry.layer_count.count == 1
-    assert rx_entry.turn_count == RangeSpec(True, 1.0, 3.0, 3)
+    assert rx_entry.turn_qcount == RangeSpec(True, 4.0, 12.0, 9)
+    assert rx_entry.terminal_start == RangeSpec(True, 0.0, 3.0, 4)
     assert rx_entry.underlay_repeat_count.start == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.end == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.count == 1
-    assert rx_entry.terminal_path == "A_cw_to_a"
+    assert rx_entry.void_stack_present == RangeSpec(True, 0.0, 1.0, 2)
     _assert_tv_aluminum_plate_spec_contract(spec=spec)
 
 
@@ -2848,9 +2978,44 @@ def test_load_type2_step_spec_rejects_rx_plate_stack_when_pcb_budget_is_not_larg
         load_type2_step_spec(toml_path)
 
 
+def test_load_type2_step_spec_parses_quarter_turn_single_coil_fields(tmp_path: Path) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_spec_text(
+            modeled_object_id="rx_rect_void_coil",
+            modeled_role="rx_single_coil",
+            terminal_start=1,
+            turn_qcount_range=_range(True, 1.0, 12.0, 12),
+            void_stack_present_range=_range(True, 0.0, 1.0, 2),
+        ),
+    )
+
+    spec = load_type2_step_spec(toml_path)
+
+    rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
+    assert rx_entry.role == "rx_single_coil"
+    assert rx_entry.x_ratio == RangeSpec(False, 0.25, 0.25, 1)
+    assert rx_entry.y_ratio == RangeSpec(False, 0.3, 0.3, 1)
+    assert rx_entry.turn_qcount == RangeSpec(True, 1.0, 12.0, 12)
+    assert rx_entry.void_factor == RangeSpec(False, 0.2, 0.2, 1)
+    assert rx_entry.metal_fill_factor == RangeSpec(False, 0.5, 0.5, 1)
+    assert rx_entry.terminal_start == RangeSpec(True, 1.0, 1.0, 1)
+    assert rx_entry.void_stack_present == RangeSpec(True, 0.0, 1.0, 2)
+    assert not hasattr(rx_entry, "terminal_path")
+    assert not hasattr(rx_entry, "turn_count")
+    assert not hasattr(rx_entry, "outer_x_usage_ratio")
+    assert not hasattr(rx_entry, "outer_y_usage_ratio")
+    assert not hasattr(rx_entry, "void_usage_ratio")
+
+
 @pytest.mark.parametrize(
     "legacy_key",
     (
+        "terminal_path",
+        "turn_count",
+        "outer_x_usage_ratio",
+        "outer_y_usage_ratio",
+        "void_usage_ratio",
         "outer_x_mm",
         "outer_y_mm",
         "void_x_over_outer_x",
@@ -2863,7 +3028,12 @@ def test_load_type2_step_spec_rejects_single_coil_legacy_public_keys(
     tmp_path: Path,
     legacy_key: str,
 ) -> None:
-    legacy_section = f"[modeled_objects.{legacy_key}]\nrange = [false, 0.3, 0.3, 1]"
+    if legacy_key == "terminal_path":
+        legacy_section = "[modeled_objects.terminal_path]\nvalue = \"A_cw_to_a\""
+    elif legacy_key == "turn_count":
+        legacy_section = "[modeled_objects.turn_count]\nrange = [true, 1, 1, 1]"
+    else:
+        legacy_section = f"[modeled_objects.{legacy_key}]\nrange = [false, 0.3, 0.3, 1]"
     toml_path = _write_spec(
         tmp_path,
         _type2_spec_text().replace(
@@ -2897,20 +3067,20 @@ def test_load_type2_step_spec_rejects_plate_stack_metal_fill_factor_above_suppor
 
 
 @pytest.mark.parametrize("invalid_value", (0.0, 1.0))
-def test_load_type2_step_spec_rejects_single_coil_non_open_interval_void_usage_ratio(
+def test_load_type2_step_spec_rejects_single_coil_non_open_interval_void_factor(
     tmp_path: Path,
     invalid_value: float,
 ) -> None:
     toml_path = _write_spec(
         tmp_path,
         _type2_spec_text().replace(
-            "[modeled_objects.void_usage_ratio]\nrange = [false, 0.2, 0.2, 1]",
-            f"[modeled_objects.void_usage_ratio]\nrange = [false, {invalid_value}, {invalid_value}, 1]",
+            "[modeled_objects.void_factor]\nrange = [false, 0.2, 0.2, 1]",
+            f"[modeled_objects.void_factor]\nrange = [false, {invalid_value}, {invalid_value}, 1]",
             1,
         ),
     )
 
-    with pytest.raises(ValueError, match=r"void_usage_ratio must realize to values > 0 and < 1"):
+    with pytest.raises(ValueError, match=r"void_factor must realize to values > 0 and < 1"):
         load_type2_step_spec(toml_path)
 
 
@@ -3004,10 +3174,10 @@ def test_load_type2_step_spec_rejects_plate_stack_with_removed_shoe_depth_field(
 
 
 def test_load_type2_step_spec_rejects_missing_required_modeled_field(tmp_path: Path) -> None:
-    toml_text = _type2_spec_text().replace('[modeled_objects.terminal_path]\n    value = "A_cw_to_a"', "", 1)
+    toml_text = _type2_spec_text().replace("[modeled_objects.terminal_start]\nrange = [true, 0.0, 0.0, 1]", "", 1)
     toml_path = _write_spec(tmp_path, toml_text)
 
-    with pytest.raises(ValueError, match=r"modeled_objects\[0\] is missing required key 'terminal_path'"):
+    with pytest.raises(ValueError, match=r"modeled_objects\[0\] is missing required key 'terminal_start'"):
         load_type2_step_spec(toml_path)
 
 
@@ -3199,30 +3369,21 @@ def test_load_type2_step_spec_accepts_tx_inner_canonical_void_stack_present(tmp_
     assert resolve_modeled_tx_inner_void_stack_present(tx_inner_entry, seed=0) in (False, True)
 
 
-@pytest.mark.parametrize(
-    ("modeled_role", "modeled_object_id"),
-    (
-        ("tx_single_coil", "tx_rect_void_coil"),
-        ("rx_single_coil", "rx_rect_void_coil"),
-    ),
-)
-def test_load_type2_step_spec_rejects_void_stack_present_for_non_tx_inner_single_coil(
+def test_load_type2_step_spec_rejects_generic_tx_single_coil_even_with_void_stack_present(
     tmp_path: Path,
-    modeled_role: Literal["tx_single_coil", "rx_single_coil"],
-    modeled_object_id: str,
 ) -> None:
     toml_path = _write_spec(
         tmp_path,
         _type2_spec_text(
-            modeled_object_id=modeled_object_id,
-            modeled_role=modeled_role,
+            modeled_object_id="tx_rect_void_coil",
+            modeled_role="tx_single_coil",
             void_stack_present_range=_range(True, 1.0, 1.0, 1),
         ),
     )
 
     with pytest.raises(
         ValueError,
-        match=rf"modeled_objects\[0\] contains unsupported keys for {modeled_role} .*void_stack_present",
+        match=r"modeled_objects\[0\]\.role is unsupported in active RxOnly type2 mode \(actual='tx_single_coil'\)",
     ):
         load_type2_step_spec(toml_path)
 
@@ -3242,23 +3403,43 @@ def test_load_type2_step_spec_rejects_missing_tx_inner_void_stack_present(tmp_pa
         load_type2_step_spec(toml_path)
 
 
+def test_load_type2_step_spec_rejects_missing_rx_void_stack_present(tmp_path: Path) -> None:
+    toml_text = _type2_spec_text(
+        modeled_object_id="rx_rect_void_coil",
+        modeled_role="rx_single_coil",
+        underlay_repeat_count_range=_range(True, 1.0, 1.0, 1),
+    )
+    section_start = toml_text.index("[modeled_objects.void_stack_present]")
+    next_section_start = toml_text.index("\n[", section_start + 1)
+    toml_text = toml_text[:section_start] + toml_text[next_section_start + 1 :]
+    toml_path = _write_spec(tmp_path, toml_text)
+
+    with pytest.raises(ValueError, match=r"modeled_objects\[0\] is missing required key 'void_stack_present'"):
+        load_type2_step_spec(toml_path)
+
+
 @pytest.mark.parametrize(
-    "void_stack_present_range",
+    ("modeled_object_id", "modeled_role", "void_stack_present_range"),
     (
-        _range(True, 0.0, 2.0, 3),
-        _range(True, 2.0, 2.0, 1),
-        _range(False, 0.0, 1.0, 2),
+        ("tx_inner_rect_void_coil", "tx_inner_single_coil", _range(True, 0.0, 2.0, 3)),
+        ("tx_inner_rect_void_coil", "tx_inner_single_coil", _range(True, 2.0, 2.0, 1)),
+        ("tx_inner_rect_void_coil", "tx_inner_single_coil", _range(False, 0.0, 1.0, 2)),
+        ("rx_rect_void_coil", "rx_single_coil", _range(True, 0.0, 2.0, 3)),
+        ("rx_rect_void_coil", "rx_single_coil", _range(True, 2.0, 2.0, 1)),
+        ("rx_rect_void_coil", "rx_single_coil", _range(False, 0.0, 1.0, 2)),
     ),
 )
-def test_load_type2_step_spec_rejects_invalid_tx_inner_void_stack_present(
+def test_load_type2_step_spec_rejects_invalid_single_coil_void_stack_present(
     tmp_path: Path,
+    modeled_object_id: str,
+    modeled_role: Literal["tx_inner_single_coil", "rx_single_coil"],
     void_stack_present_range: str,
 ) -> None:
     toml_path = _write_spec(
         tmp_path,
         _type2_spec_text(
-            modeled_object_id="tx_inner_rect_void_coil",
-            modeled_role="tx_inner_single_coil",
+            modeled_object_id=modeled_object_id,
+            modeled_role=modeled_role,
             underlay_repeat_count_range=_range(True, 1.0, 1.0, 1),
             void_stack_present_range=void_stack_present_range,
         ),
@@ -3347,7 +3528,7 @@ def test_load_type2_step_spec_rejects_empty_outputs_variables(tmp_path: Path) ->
             "[outputs]",
             'mode = "RxOnly"',
             'report_name = "Output Variables Table1"',
-            'solution_name = "Setup1 : Sweep"',
+            'solution_name = "Setup1 : LastAdaptive"',
             'primary_sweep = "Freq"',
             'report_category = "Terminal Solution Data"',
             'plot_type = "Data Table"',
@@ -3458,19 +3639,24 @@ def test_render_tx_rect_void_toml_omits_type2_underlay_fields_from_core_bridge(t
     assert "underlay_repeat_count" not in rendered
     assert "underlay_gap_mm" not in rendered
     assert "wall_parallel_stack_present" not in rendered
-    assert "[tx_coil.void_usage_ratio]" in rendered
+    assert "[tx_coil.turn_qcount]" in rendered
+    assert "[tx_coil.terminal_start]" in rendered
+    assert "[tx_coil.void_factor]" in rendered
+    assert "[tx_coil.turn_count]" not in rendered
+    assert "[tx_coil.terminal_path]" not in rendered
+    assert "[tx_coil.void_usage_ratio]" not in rendered
     assert "void_x_over_outer_x" not in rendered
     assert "void_y_over_outer_y" not in rendered
     assert "void_center_x_over_outer_x" not in rendered
     assert "void_center_y_over_outer_y" not in rendered
 
 
-def test_realize_tx_rect_void_spec_uses_single_void_usage_ratio_for_x_and_y(tmp_path: Path) -> None:
+def test_realize_tx_rect_void_spec_uses_single_void_factor_for_x_and_y(tmp_path: Path) -> None:
     tx_rect_void_toml_path = tmp_path / "tx_rect_void.toml"
     tx_rect_void_toml_path.write_text(
         _tx_rect_void_spec_text_with_layer_count(
             layer_count=1,
-            void_usage_ratio_range=_range(False, 0.2, 0.8, 10),
+            void_factor_range=_range(False, 0.2, 0.8, 10),
         ),
         encoding="utf-8",
     )
@@ -3481,6 +3667,181 @@ def test_realize_tx_rect_void_spec_uses_single_void_usage_ratio_for_x_and_y(tmp_
     assert realized.void_x_over_outer_x == pytest.approx(realized.void_y_over_outer_y)
     assert realized.void_center_x_over_outer_x == pytest.approx(0.0)
     assert realized.void_center_y_over_outer_y == pytest.approx(0.0)
+
+
+@pytest.mark.parametrize(
+    ("turn_qcount", "expected_terminal_path"),
+    (
+        (1, "B_cw_to_c"),
+        (2, "B_cw_to_d"),
+        (3, "B_cw_to_a"),
+        (4, "B_cw_to_b"),
+    ),
+)
+def test_export_type2_step_artifacts_derives_terminal_metadata_from_start_and_quarter_turns(
+    tmp_path: Path,
+    turn_qcount: int,
+    expected_terminal_path: str,
+) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_spec_text(
+            modeled_object_id="rx_rect_void_coil",
+            modeled_role="rx_single_coil",
+            terminal_start=1,
+            turn_qcount_range=_range(True, float(turn_qcount), float(turn_qcount), 1),
+            underlay_repeat_count_range=_range(True, 0.0, 0.0, 1),
+            void_stack_present_range=_range(True, 0.0, 0.0, 1),
+        ),
+    )
+
+    ledger = export_type2_step_artifacts(
+        toml_path=toml_path,
+        output_dir=tmp_path / "out",
+        ledger_path=tmp_path / "out" / "ledger.json",
+        seed=0,
+    )
+
+    rx_entry = _modeled_ledger_entry(ledger=ledger, object_id="rx_rect_void_coil")
+    terminal_metadata = cast(dict[str, object], rx_entry["terminal_metadata"])
+    assert terminal_metadata["kind"] == "single_coil_port_v1"
+    assert terminal_metadata["path"] == expected_terminal_path
+    assert terminal_metadata["outer_corner"] == "B"
+    assert terminal_metadata["inner_corner"] == expected_terminal_path.rsplit("_", maxsplit=1)[1]
+    assert terminal_metadata["direction"] == "cw"
+    assert len(cast(list[list[float]], terminal_metadata["vertices_xyz"])) == 4
+
+
+@pytest.mark.parametrize(("turn_qcount", "legacy_turn_count"), ((4, 1), (8, 2), (12, 3)))
+def test_render_tx_rect_void_toml_preserves_full_turn_geometry_for_quarter_turn_counts(
+    tmp_path: Path,
+    turn_qcount: int,
+    legacy_turn_count: int,
+) -> None:
+    type2_toml_path = _write_spec(
+        tmp_path,
+        _type2_spec_text(
+            modeled_object_id="rx_rect_void_coil",
+            modeled_role="rx_single_coil",
+            terminal_start=1,
+            turn_qcount_range=_range(True, float(turn_qcount), float(turn_qcount), 1),
+        ),
+    )
+    type2_spec = load_type2_step_spec(type2_toml_path)
+    modeled_spec = next(entry for entry in type2_spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
+    assert modeled_spec.role == "rx_single_coil"
+    rendered_path = tmp_path / f"quarter_{turn_qcount}.toml"
+    rendered_path.write_text(render_tx_rect_void_toml(cast(ModeledSingleCoilSpec, modeled_spec)), encoding="utf-8")
+    legacy_path = tmp_path / f"legacy_{legacy_turn_count}.toml"
+    legacy_path.write_text(
+        _tx_rect_void_spec_text_with_layer_count(
+            terminal_start=1,
+            turn_qcount_range=_range(True, float(legacy_turn_count * 4), float(legacy_turn_count * 4), 1),
+        ),
+        encoding="utf-8",
+    )
+    profile = profile_for_modeled_role(cast(Literal["rx_single_coil"], "rx_single_coil"))
+
+    rendered_realized = realize_tx_rect_void_spec(load_tx_rect_void_spec(rendered_path), seed=0, profile=profile)
+    legacy_realized = realize_tx_rect_void_spec(load_tx_rect_void_spec(legacy_path), seed=0, profile=profile)
+
+    assert rendered_realized.terminal_path == "B_cw_to_b"
+    assert rendered_realized.turn_count == legacy_turn_count
+    assert build_tx_rect_void_box_specs(rendered_realized, profile=profile) == build_tx_rect_void_box_specs(
+        legacy_realized,
+        profile=profile,
+    )
+
+
+@pytest.mark.parametrize("turn_qcount", (1, 2, 3))
+def test_export_type2_step_artifacts_partial_turn_qcount_builds_axis_aligned_geometry_and_valid_port(
+    tmp_path: Path,
+    turn_qcount: int,
+) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_spec_text(
+            modeled_object_id="rx_rect_void_coil",
+            modeled_role="rx_single_coil",
+            terminal_start=1,
+            turn_qcount_range=_range(True, float(turn_qcount), float(turn_qcount), 1),
+            underlay_repeat_count_range=_range(True, 0.0, 0.0, 1),
+            void_stack_present_range=_range(True, 0.0, 0.0, 1),
+        ),
+    )
+
+    ledger = export_type2_step_artifacts(
+        toml_path=toml_path,
+        output_dir=tmp_path / "out",
+        ledger_path=tmp_path / "out" / "ledger.json",
+        seed=0,
+    )
+
+    rx_entry = _modeled_ledger_entry(ledger=ledger, object_id="rx_rect_void_coil")
+    expected_names = cast(tuple[str, ...], rx_entry["expected_exported_body_names"])
+    assert expected_names == ("rx_pcb_l0", "rx_copper_l0")
+    assert rx_entry["expected_exported_body_count"] == len(expected_names)
+    terminal_metadata = cast(dict[str, object], rx_entry["terminal_metadata"])
+    assert terminal_metadata["kind"] == "single_coil_port_v1"
+    assert terminal_metadata["path"] in {"B_cw_to_c", "B_cw_to_d", "B_cw_to_a"}
+    assert len(cast(list[list[float]], terminal_metadata["vertices_xyz"])) == 4
+    assert terminal_metadata["integration_line_start_xyz"] != terminal_metadata["integration_line_end_xyz"]
+
+    scene_shapes_by_label = _step_shapes_by_label(Path(cast(str, ledger["scene_step_path"])))
+    for body_name in expected_names:
+        assert body_name in scene_shapes_by_label
+        body_shape = scene_shapes_by_label[body_name]
+        assert _shape_volume(body_shape) > 0.0
+        _assert_shape_faces_axis_aligned(body_shape)
+
+
+@pytest.mark.parametrize(("raw_present", "expected_present"), ((0, False), (1, True)))
+def test_export_type2_step_artifacts_rx_void_stack_present_controls_body_labels_and_ledger_metadata(
+    tmp_path: Path,
+    raw_present: int,
+    expected_present: bool,
+) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_spec_text(
+            modeled_object_id="rx_rect_void_coil",
+            modeled_role="rx_single_coil",
+            terminal_start=0,
+            turn_qcount_range=_range(True, 4.0, 4.0, 1),
+            underlay_repeat_count_range=_range(True, 0.0, 0.0, 1),
+            void_stack_present_range=_range(True, float(raw_present), float(raw_present), 1),
+        ),
+    )
+
+    ledger = export_type2_step_artifacts(
+        toml_path=toml_path,
+        output_dir=tmp_path / "out",
+        ledger_path=tmp_path / "out" / "ledger.json",
+        seed=0,
+    )
+
+    rx_entry = _modeled_ledger_entry(ledger=ledger, object_id="rx_rect_void_coil")
+    expected_names = cast(tuple[str, ...], rx_entry["expected_exported_body_names"])
+    expected_void_names = _rx_void_stack_expected_body_names(present=expected_present)
+    assert all(name in expected_names for name in expected_void_names)
+    assert all(name.startswith("rx_void_") for name in expected_void_names)
+    assert any(name.startswith("rx_void_") for name in expected_names) is expected_present
+    assert rx_entry["void_stack_present"] is expected_present
+    canonical_coordinates = cast(dict[str, object], rx_entry["canonical_coordinates"])
+    assert canonical_coordinates["void_stack_present"] is expected_present
+
+    expected_groups = _normalized_body_groups(rx_entry["expected_exported_body_groups"])
+    if expected_present:
+        assert expected_groups == [
+            {
+                "group_name": _RX_FERRITE_GROUP_NAME,
+                "member_body_names": list(expected_void_names),
+            }
+        ]
+        scene_shapes_by_label = _step_shapes_by_label(Path(cast(str, ledger["scene_step_path"])))
+        assert all(name in scene_shapes_by_label for name in expected_void_names)
+    else:
+        assert expected_groups == []
 
 
 def test_export_type2_step_artifacts_rejects_tx_rect_void_columns_modeled_role(tmp_path: Path) -> None:
@@ -3616,15 +3977,15 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     )
     reference_line = cast(dict[str, object], tx_inner_member["tx_reference_line"])
     assert reference_line["x_ratio"] == pytest.approx(0.99)
-    assert reference_line["y_usage_ratio"] == pytest.approx(0.83732238334605169)
-    assert reference_line["z_ratio"] == pytest.approx(0.96414549614306921)
-    assert tx_inner_min_xyz == pytest.approx((0.0, -900.0, 0.0))
-    assert tx_inner_size_xyz == pytest.approx((158.4, 1800.0, 81.0))
+    assert reference_line["y_usage_ratio"] == pytest.approx(0.8373223833460517)
+    assert reference_line["z_ratio"] == pytest.approx(0.9641454961430692)
+    assert tx_inner_min_xyz == pytest.approx((0.0, -502.393430007631, 0.0))
+    assert tx_inner_size_xyz == pytest.approx((712.8, 1004.786860015262, 86.77309465287622))
     assert tx_inner_actual_min_xyz[0] == pytest.approx(0.0)
-    assert tx_inner_actual_min_xyz[1] == pytest.approx(-791.171320754717)
-    assert tx_inner_actual_max_xyz[1] == pytest.approx(791.171320754717)
-    assert tx_inner_actual_size_xyz[0] == pytest.approx(104.90264150943396)
-    assert tx_inner_actual_size_xyz[1] == pytest.approx(1582.342641509434)
+    assert tx_inner_actual_min_xyz[1] == pytest.approx(-349.5870018518657)
+    assert tx_inner_actual_max_xyz[1] == pytest.approx(349.5870018518657)
+    assert tx_inner_actual_size_xyz[0] == pytest.approx(441.3564293789515)
+    assert tx_inner_actual_size_xyz[1] == pytest.approx(699.1740037037314)
     tx_region_actual_members = [member for member in member_objects if cast(str, member["role"]) == "tx_region_actual"]
     assert tx_region_actual_members == []
     tx_region_actual_stack_space_members = [
@@ -3644,8 +4005,9 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     assert tx_inner_entry["expected_exported_body_names"] == _tx_inner_expected_body_names(
         layer_count=1,
         underlay_repeat_count=1,
+        void_stack_count=8,
     )
-    assert tx_inner_entry["expected_exported_body_count"] == 4
+    assert tx_inner_entry["expected_exported_body_count"] == 12
     assert all(entry["object_id"] != "tx_outer_rect_void_coil" for entry in ledger["modeled_objects"])
     rx_entry = next(entry for entry in ledger["modeled_objects"] if entry["object_id"] == "rx_rect_void_coil")
     assert cast(dict[str, object], rx_entry["terminal_metadata"])["vertices_xyz"]
@@ -3805,6 +4167,292 @@ def test_export_type2_step_artifacts_tx_inner_exported_bounds_include_passive_un
     )
 
 
+def test_load_type2_fixed_example_accepts_fixed_tx_region_z_gap_owner(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    source_toml = repo_root / "examples" / "type2_fixed.toml"
+    fixed_z_gap_toml = _write_type2_fixed_with_tx_z_gap_owner(tmp_path, source_toml)
+
+    spec = load_type2_step_spec(fixed_z_gap_toml)
+
+    tx_region = next(non_model_spec for non_model_spec in spec.non_model_objects if non_model_spec.object_id == "tx_region")
+    assert isinstance(tx_region, NonModelTxRegionSpec)
+    assert hasattr(tx_region, _TX_REGION_Z_GAP_OWNER_FIELD)
+    z_gap_range = cast(RangeSpec, getattr(tx_region, _TX_REGION_Z_GAP_OWNER_FIELD))
+    assert z_gap_range == RangeSpec(False, _TX_REGION_FIXED_Z_GAP_MM, _TX_REGION_FIXED_Z_GAP_MM, 1)
+
+
+def test_type2_fixed_tx_region_z_gap_owner_keeps_tx_non_model_members_at_existing_80_mm_z_gap(
+    tmp_path: Path,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    source_toml = repo_root / "examples" / "type2_fixed.toml"
+    fixed_z_gap_toml = _write_type2_fixed_with_tx_z_gap_owner(tmp_path, source_toml)
+
+    ledger = export_type2_step_artifacts(
+        toml_path=fixed_z_gap_toml,
+        output_dir=tmp_path / "out",
+        ledger_path=tmp_path / "out" / "ledger.json",
+        seed=0,
+    )
+
+    member_objects = _non_model_member_objects(ledger=ledger)
+    tx_region_member = _find_member_object(member_objects=member_objects, object_id="tx_region")
+    tx_inner_member = _find_member_object(member_objects=member_objects, object_id="tx_inner_region")
+    tx_inner_actual_member = _find_member_object(member_objects=member_objects, object_id="tx_inner_actual_region")
+    tx_region_min_xyz, tx_region_max_xyz, tx_region_size_xyz = _canonical_bounds(tx_region_member)
+    assert tx_region_min_xyz == pytest.approx((0.0, -600.0, 0.0))
+    assert tx_region_max_xyz == pytest.approx((720.0, 600.0, 90.0))
+    assert tx_region_size_xyz == pytest.approx((720.0, 1200.0, 90.0))
+
+    tv_min_xyz, _tv_max_xyz, _tv_size_xyz = _canonical_bounds(
+        _find_member_object(member_objects=member_objects, object_id="tv")
+    )
+    rx_min_xyz, _rx_max_xyz, _rx_size_xyz = _canonical_bounds(
+        _find_member_object(member_objects=member_objects, object_id="rx_region_max")
+    )
+    assert tv_min_xyz[2] - tx_region_max_xyz[2] == pytest.approx(_TX_REGION_FIXED_Z_GAP_MM)
+    assert rx_min_xyz[2] - tx_region_max_xyz[2] == pytest.approx(_TX_REGION_FIXED_Z_GAP_MM)
+
+    for tx_member in (tx_inner_member, tx_inner_actual_member):
+        tx_min_xyz, tx_max_xyz, _tx_size_xyz = _canonical_bounds(tx_member)
+        assert tx_min_xyz[0] == pytest.approx(0.0)
+        assert tx_max_xyz[0] <= tx_region_max_xyz[0] + 1e-9
+        assert tx_min_xyz[2] >= tx_region_min_xyz[2] - 1e-9
+        assert tx_max_xyz[2] <= tx_region_max_xyz[2] + 1e-9
+
+    tx_reference_line = cast(dict[str, object], tx_inner_member["tx_reference_line"])
+    assert tx_reference_line["x_ratio_owner_path"] == "non_model_objects.tx_region.tx_reference_line.x_ratio"
+    assert tx_reference_line["line_start_xyz"] == pytest.approx((712.8, -502.393430007631, 86.77309465287622))
+    assert tx_reference_line["line_end_xyz"] == pytest.approx((712.8, 502.393430007631, 86.77309465287622))
+
+
+def test_type2_fixed_tx_region_z_gap_owner_keeps_modeled_tx_inner_on_existing_actual_region(
+    tmp_path: Path,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    source_toml = repo_root / "examples" / "type2_fixed.toml"
+    fixed_z_gap_toml = _write_type2_fixed_with_tx_z_gap_owner(tmp_path, source_toml)
+
+    ledger = export_type2_step_artifacts(
+        toml_path=fixed_z_gap_toml,
+        output_dir=tmp_path / "out",
+        ledger_path=tmp_path / "out" / "ledger.json",
+        seed=0,
+    )
+
+    member_objects = _non_model_member_objects(ledger=ledger)
+    tx_inner_actual_member = _find_member_object(member_objects=member_objects, object_id="tx_inner_actual_region")
+    tx_inner_entry = _modeled_ledger_entry(ledger=ledger, object_id="tx_inner_rect_void_coil")
+    assert tx_inner_entry["placement_owner_id"] == "tx_inner_region"
+
+    actual_min_xyz, actual_max_xyz, actual_size_xyz = _canonical_bounds(tx_inner_actual_member)
+    model_min_xyz, model_max_xyz, model_size_xyz = _canonical_bounds(tx_inner_entry)
+    assert actual_min_xyz[0] == pytest.approx(0.0)
+    assert model_min_xyz[0] == pytest.approx(0.0)
+    assert model_min_xyz == pytest.approx(actual_min_xyz)
+    assert model_max_xyz == pytest.approx(actual_max_xyz)
+    assert model_size_xyz == pytest.approx(actual_size_xyz)
+
+    tx_actual_region = cast(dict[str, object], tx_inner_actual_member["tx_actual_region"])
+    actual_region_bounds = cast(dict[str, object], tx_actual_region["actual_region_bounds"])
+    physical_bounds = cast(dict[str, object], tx_actual_region["physical_modeled_body_bounds"])
+    assert actual_region_bounds["min_xyz"] == pytest.approx(actual_min_xyz)
+    assert actual_region_bounds["max_xyz"] == pytest.approx(actual_max_xyz)
+    assert actual_region_bounds["size_xyz"] == pytest.approx(actual_size_xyz)
+    assert physical_bounds["min_xyz"] == pytest.approx(model_min_xyz)
+    assert physical_bounds["max_xyz"] == pytest.approx(model_max_xyz)
+    assert physical_bounds["size_xyz"] == pytest.approx(model_size_xyz)
+
+
+def test_type2_fixed_tx_region_z_gap_owner_keeps_tx_step_bodies_and_terminal_in_existing_z_band(
+    tmp_path: Path,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    source_toml = repo_root / "examples" / "type2_fixed.toml"
+    fixed_z_gap_toml = _write_type2_fixed_with_tx_z_gap_owner(tmp_path, source_toml)
+
+    ledger = export_type2_step_artifacts(
+        toml_path=fixed_z_gap_toml,
+        output_dir=tmp_path / "out",
+        ledger_path=tmp_path / "out" / "ledger.json",
+        seed=0,
+    )
+
+    member_objects = _non_model_member_objects(ledger=ledger)
+    tx_region_member = _find_member_object(member_objects=member_objects, object_id="tx_region")
+    tv_member = _find_member_object(member_objects=member_objects, object_id="tv")
+    rx_region_member = _find_member_object(member_objects=member_objects, object_id="rx_region_max")
+    tx_inner_actual_member = _find_member_object(member_objects=member_objects, object_id="tx_inner_actual_region")
+    _tx_region_min_xyz, tx_region_max_xyz, _tx_region_size_xyz = _canonical_bounds(tx_region_member)
+    tv_min_xyz, _tv_max_xyz, _tv_size_xyz = _canonical_bounds(tv_member)
+    rx_min_xyz, _rx_max_xyz, _rx_size_xyz = _canonical_bounds(rx_region_member)
+    assert tv_min_xyz[2] - tx_region_max_xyz[2] == pytest.approx(_TX_REGION_FIXED_Z_GAP_MM)
+    assert rx_min_xyz[2] - tx_region_max_xyz[2] == pytest.approx(_TX_REGION_FIXED_Z_GAP_MM)
+
+    tx_actual_min_xyz, tx_actual_max_xyz, _tx_actual_size_xyz = _canonical_bounds(tx_inner_actual_member)
+    tx_inner_entry = _modeled_ledger_entry(ledger=ledger, object_id="tx_inner_rect_void_coil")
+    scene_shapes_by_label = _step_shapes_by_label(Path(cast(str, ledger["scene_step_path"])))
+    tx_body_names = cast(Sequence[str], tx_inner_entry["expected_exported_body_names"])
+    assert tx_body_names
+
+    for body_name in tx_body_names:
+        assert body_name in scene_shapes_by_label
+        bbox = scene_shapes_by_label[body_name].bounding_box()
+        assert tx_actual_min_xyz[0] == pytest.approx(0.0)
+        assert bbox.min.X >= tx_actual_min_xyz[0] - 1e-8
+        assert bbox.max.X <= tx_actual_max_xyz[0] + 1e-8
+        if body_name.startswith("tx_inner_"):
+            assert bbox.min.X == pytest.approx(tx_actual_min_xyz[0], abs=1e-8)
+            assert bbox.max.X == pytest.approx(tx_actual_max_xyz[0], abs=1e-8)
+            assert bbox.min.Z >= tx_actual_min_xyz[2] - 1e-8
+            assert bbox.max.Z <= tx_actual_max_xyz[2] + 1e-8
+        if body_name.startswith("tx_underlay_"):
+            assert bbox.max.Z <= tx_actual_min_xyz[2] + 1e-8
+
+    terminal_metadata = cast(dict[str, object], tx_inner_entry["terminal_metadata"])
+    terminal_vertices = _vertex_triplets(cast(list[list[float]], terminal_metadata["vertices_xyz"]))
+    assert terminal_vertices
+    for vertex in terminal_vertices:
+        assert vertex[0] >= tx_actual_min_xyz[0] - 1e-8
+        assert vertex[0] <= tx_actual_max_xyz[0] + 1e-8
+        assert vertex[1] >= tx_actual_min_xyz[1] - 1e-8
+        assert vertex[1] <= tx_actual_max_xyz[1] + 1e-8
+        assert vertex[2] >= tx_actual_min_xyz[2] - 1e-8
+        assert vertex[2] <= tx_actual_max_xyz[2] + 1e-8
+
+
+def test_type2_fixed_tx_region_z_gap_owner_shifts_only_tx_z_against_current_baseline(
+    tmp_path: Path,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    source_toml = repo_root / "examples" / "type2_fixed.toml"
+    fixed_z_gap_dir = tmp_path / "fixed_z_gap"
+    fixed_z_gap_dir.mkdir()
+    changed_z_gap_dir = tmp_path / "changed_z_gap"
+    changed_z_gap_dir.mkdir()
+    fixed_z_gap_toml = _write_type2_fixed_with_tx_z_gap_owner(
+        fixed_z_gap_dir,
+        source_toml,
+        z_gap_mm=_TX_REGION_FIXED_Z_GAP_MM,
+    )
+    changed_z_gap_toml = _write_type2_fixed_with_tx_z_gap_owner(
+        changed_z_gap_dir,
+        source_toml,
+        z_gap_mm=_TX_REGION_CHANGED_Z_GAP_MM,
+    )
+    z_shift_mm = _TX_REGION_FIXED_Z_GAP_MM - _TX_REGION_CHANGED_Z_GAP_MM
+
+    baseline_ledger = export_type2_step_artifacts(
+        toml_path=fixed_z_gap_toml,
+        output_dir=tmp_path / "baseline_out",
+        ledger_path=tmp_path / "baseline_out" / "ledger.json",
+        seed=0,
+    )
+    changed_ledger = export_type2_step_artifacts(
+        toml_path=changed_z_gap_toml,
+        output_dir=tmp_path / "changed_out",
+        ledger_path=tmp_path / "changed_out" / "ledger.json",
+        seed=0,
+    )
+
+    baseline_member_objects = _non_model_member_objects(ledger=baseline_ledger)
+    changed_member_objects = _non_model_member_objects(ledger=changed_ledger)
+    for object_id in ("tv", "rx_region_max"):
+        baseline_bounds = _canonical_bounds(_find_member_object(member_objects=baseline_member_objects, object_id=object_id))
+        changed_bounds = _canonical_bounds(_find_member_object(member_objects=changed_member_objects, object_id=object_id))
+        _assert_bounds_unchanged(
+            baseline_min_xyz=baseline_bounds[0],
+            baseline_max_xyz=baseline_bounds[1],
+            baseline_size_xyz=baseline_bounds[2],
+            changed_min_xyz=changed_bounds[0],
+            changed_max_xyz=changed_bounds[1],
+            changed_size_xyz=changed_bounds[2],
+        )
+
+    for object_id in ("tx_region", "tx_inner_region", "tx_inner_actual_region"):
+        baseline_bounds = _canonical_bounds(_find_member_object(member_objects=baseline_member_objects, object_id=object_id))
+        changed_bounds = _canonical_bounds(_find_member_object(member_objects=changed_member_objects, object_id=object_id))
+        _assert_bounds_shifted_z_only(
+            baseline_min_xyz=baseline_bounds[0],
+            baseline_max_xyz=baseline_bounds[1],
+            baseline_size_xyz=baseline_bounds[2],
+            changed_min_xyz=changed_bounds[0],
+            changed_max_xyz=changed_bounds[1],
+            changed_size_xyz=changed_bounds[2],
+            z_shift_mm=z_shift_mm,
+        )
+
+    baseline_tx_entry = _modeled_ledger_entry(ledger=baseline_ledger, object_id="tx_inner_rect_void_coil")
+    changed_tx_entry = _modeled_ledger_entry(ledger=changed_ledger, object_id="tx_inner_rect_void_coil")
+    baseline_tx_bounds = _canonical_bounds(baseline_tx_entry)
+    changed_tx_bounds = _canonical_bounds(changed_tx_entry)
+    _assert_bounds_shifted_z_only(
+        baseline_min_xyz=baseline_tx_bounds[0],
+        baseline_max_xyz=baseline_tx_bounds[1],
+        baseline_size_xyz=baseline_tx_bounds[2],
+        changed_min_xyz=changed_tx_bounds[0],
+        changed_max_xyz=changed_tx_bounds[1],
+        changed_size_xyz=changed_tx_bounds[2],
+        z_shift_mm=z_shift_mm,
+    )
+
+    baseline_rx_entry = _modeled_ledger_entry(ledger=baseline_ledger, object_id="rx_rect_void_coil")
+    changed_rx_entry = _modeled_ledger_entry(ledger=changed_ledger, object_id="rx_rect_void_coil")
+    baseline_rx_bounds = _canonical_bounds(baseline_rx_entry)
+    changed_rx_bounds = _canonical_bounds(changed_rx_entry)
+    _assert_bounds_unchanged(
+        baseline_min_xyz=baseline_rx_bounds[0],
+        baseline_max_xyz=baseline_rx_bounds[1],
+        baseline_size_xyz=baseline_rx_bounds[2],
+        changed_min_xyz=changed_rx_bounds[0],
+        changed_max_xyz=changed_rx_bounds[1],
+        changed_size_xyz=changed_rx_bounds[2],
+    )
+
+    baseline_step_path = Path(cast(str, baseline_ledger["scene_step_path"]))
+    changed_step_path = Path(cast(str, changed_ledger["scene_step_path"]))
+    for body_name in cast(Sequence[str], baseline_tx_entry["expected_exported_body_names"]):
+        baseline_min_xyz, baseline_max_xyz = _body_bbox(baseline_step_path, label=body_name)
+        changed_min_xyz, changed_max_xyz = _body_bbox(changed_step_path, label=body_name)
+        baseline_size_xyz = cast(
+            tuple[float, float, float],
+            tuple(baseline_max_xyz[index] - baseline_min_xyz[index] for index in range(3)),
+        )
+        changed_size_xyz = cast(
+            tuple[float, float, float],
+            tuple(changed_max_xyz[index] - changed_min_xyz[index] for index in range(3)),
+        )
+        _assert_bounds_shifted_z_only(
+            baseline_min_xyz=baseline_min_xyz,
+            baseline_max_xyz=baseline_max_xyz,
+            baseline_size_xyz=baseline_size_xyz,
+            changed_min_xyz=changed_min_xyz,
+            changed_max_xyz=changed_max_xyz,
+            changed_size_xyz=changed_size_xyz,
+            z_shift_mm=z_shift_mm,
+        )
+
+    for body_name in cast(Sequence[str], baseline_rx_entry["expected_exported_body_names"]):
+        baseline_min_xyz, baseline_max_xyz = _body_bbox(baseline_step_path, label=body_name)
+        changed_min_xyz, changed_max_xyz = _body_bbox(changed_step_path, label=body_name)
+        baseline_size_xyz = cast(
+            tuple[float, float, float],
+            tuple(baseline_max_xyz[index] - baseline_min_xyz[index] for index in range(3)),
+        )
+        changed_size_xyz = cast(
+            tuple[float, float, float],
+            tuple(changed_max_xyz[index] - changed_min_xyz[index] for index in range(3)),
+        )
+        _assert_bounds_unchanged(
+            baseline_min_xyz=baseline_min_xyz,
+            baseline_max_xyz=baseline_max_xyz,
+            baseline_size_xyz=baseline_size_xyz,
+            changed_min_xyz=changed_min_xyz,
+            changed_max_xyz=changed_max_xyz,
+            changed_size_xyz=changed_size_xyz,
+        )
+
+
 def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_ledger(
     tmp_path: Path,
 ) -> None:
@@ -3858,21 +4506,23 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert tx_inner_actual_member["material"] == "vacuum"
 
     canonical_coordinates = cast(dict[str, object], tx_inner_member["canonical_coordinates"])
-    assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx((0.0, -900.0, 0.0))
-    assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx((158.4, 1800.0, 81.0))
+    assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx((0.0, -502.393430007631, 0.0))
+    assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx(
+        (712.8, 1004.786860015262, 86.77309465287622)
+    )
     tx_inner_region_min_xyz, tx_inner_region_size_xyz = _canonical_min_size(tx_inner_member)
     reference_line = cast(dict[str, object], tx_inner_member["tx_reference_line"])
     assert reference_line["source_region_id"] == "tx_region"
     assert reference_line["x_ratio"] == pytest.approx(0.99)
-    assert reference_line["y_usage_ratio"] == pytest.approx(1.0)
-    assert reference_line["z_ratio"] == pytest.approx(0.9)
-    assert reference_line["line_start_xyz"] == pytest.approx((158.4, -900.0, 81.0))
-    assert reference_line["line_end_xyz"] == pytest.approx((158.4, 900.0, 81.0))
+    assert reference_line["y_usage_ratio"] == pytest.approx(0.8373223833460517)
+    assert reference_line["z_ratio"] == pytest.approx(0.9641454961430692)
+    assert reference_line["line_start_xyz"] == pytest.approx((712.8, -502.393430007631, 86.77309465287622))
+    assert reference_line["line_end_xyz"] == pytest.approx((712.8, 502.393430007631, 86.77309465287622))
     tx_inner_actual_region = cast(dict[str, object], tx_inner_actual_member["tx_actual_region"])
     assert tx_inner_actual_region["source_guide_id"] == "tx_inner_region"
     assert tx_inner_actual_region["modeled_source_id"] == "tx_inner_rect_void_coil"
-    assert tx_inner_actual_region["x_usage_ratio"] == pytest.approx(0.9)
-    assert tx_inner_actual_region["y_usage_ratio"] == pytest.approx(0.9)
+    assert tx_inner_actual_region["x_usage_ratio"] == pytest.approx(0.862424576125057)
+    assert tx_inner_actual_region["y_usage_ratio"] == pytest.approx(0.8683969177039865)
     tx_inner_actual_region_bounds = cast(dict[str, object], tx_inner_actual_region["actual_region_bounds"])
     tx_inner_actual_region_min_xyz = cast(tuple[float, float, float], tx_inner_actual_region_bounds["min_xyz"])
     tx_inner_actual_region_max_xyz = cast(tuple[float, float, float], tx_inner_actual_region_bounds["max_xyz"])
@@ -3922,10 +4572,10 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert tx_inner_actual_min_xyz[0] == pytest.approx(tx_inner_region_min_xyz[0])
     assert model_min_xyz[0] == pytest.approx(tx_inner_region_min_xyz[0])
     assert model_min_xyz[0] == pytest.approx(tx_inner_actual_min_xyz[0])
-    assert tx_inner_actual_min_xyz[1] == pytest.approx(-791.171320754717)
-    assert tx_inner_actual_max_xyz[1] == pytest.approx(791.171320754717)
-    assert tx_inner_actual_size_xyz[0] == pytest.approx(104.90264150943396)
-    assert tx_inner_actual_size_xyz[1] == pytest.approx(1582.342641509434)
+    assert tx_inner_actual_min_xyz[1] == pytest.approx(-349.5870018518657)
+    assert tx_inner_actual_max_xyz[1] == pytest.approx(349.5870018518657)
+    assert tx_inner_actual_size_xyz[0] == pytest.approx(441.3564293789515)
+    assert tx_inner_actual_size_xyz[1] == pytest.approx(699.1740037037314)
     assert tx_inner_actual_min_xyz[0] <= model_min_xyz[0]
     assert model_max_xyz[0] <= tx_inner_actual_max_xyz[0]
     assert tx_inner_actual_min_xyz[1] <= model_min_xyz[1]
@@ -3952,8 +4602,9 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert tx_inner_entry["expected_exported_body_names"] == _tx_inner_expected_body_names(
         layer_count=1,
         underlay_repeat_count=1,
+        void_stack_count=8,
     )
-    assert tx_inner_entry["expected_exported_body_count"] == 4
+    assert tx_inner_entry["expected_exported_body_count"] == 12
     tx_inner_terminal_metadata = cast(dict[str, object], tx_inner_entry["terminal_metadata"])
     tx_inner_model_canonical = cast(dict[str, object], tx_inner_entry["canonical_coordinates"])
     tx_inner_terminal_pcb_layer_z_positions = cast(
@@ -4006,29 +4657,40 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     assert "tx_outer_actual_region" not in scene_shapes_by_label
     assert "tx_region_actual" not in scene_shapes_by_label
     assert "tx_region_actual_stack_space" not in scene_shapes_by_label
-    expected_tx_inner_underlay_names = tuple(
+    expected_tx_inner_passive_names = tuple(
         name
-        for name in _tx_inner_expected_body_names(layer_count=1, underlay_repeat_count=1)
-        if name.startswith("tx_underlay_")
+        for name in _tx_inner_expected_body_names(
+            layer_count=1,
+            underlay_repeat_count=1,
+            void_stack_count=8,
+        )
+        if name.startswith(("tx_underlay_", "tx_void_"))
     )
-    assert expected_tx_inner_underlay_names == (
+    assert expected_tx_inner_passive_names == (
         "tx_underlay_pet_psa_u0",
         "tx_underlay_ferrite_u0",
+        "tx_void_ferrite_u0",
+        "tx_void_pet_psa_u0",
+        "tx_void_ferrite_u1",
+        "tx_void_pet_psa_u1",
+        "tx_void_ferrite_u2",
+        "tx_void_pet_psa_u2",
+        "tx_void_ferrite_u3",
+        "tx_void_pet_psa_u3",
     )
-    assert all(name in scene_shapes_by_label for name in expected_tx_inner_underlay_names)
-    assert all(not name.startswith("tx_void_") for name in scene_shapes_by_label)
+    assert all(name in scene_shapes_by_label for name in expected_tx_inner_passive_names)
     assert _normalized_body_groups(tx_inner_entry["expected_exported_body_groups"]) == _normalized_body_groups(
         (
             {
                 "group_name": _TX_FERRITE_GROUP_NAME,
-                "member_body_names": expected_tx_inner_underlay_names,
+                "member_body_names": expected_tx_inner_passive_names,
             },
         )
     )
     _assert_ferrite_family_pcb_clearance_contract(
         scene_shapes_by_label=scene_shapes_by_label,
         ferrite_group_name=_TX_FERRITE_GROUP_NAME,
-        ferrite_member_names=expected_tx_inner_underlay_names,
+        ferrite_member_names=expected_tx_inner_passive_names,
         pcb_body_names=("tx_inner_pcb_l0",),
     )
     assert all(
@@ -4048,11 +4710,11 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
             assert bbox.min.Y == pytest.approx(tx_inner_actual_min_xyz[1])
             assert bbox.max.Y == pytest.approx(tx_inner_actual_max_xyz[1])
         assert pet_bbox.max.Z == pytest.approx(previous_top_z)
-        assert pet_bbox.min.Z == pytest.approx(previous_top_z - 2.0)
+        assert pet_bbox.min.Z == pytest.approx(previous_top_z - 6.0)
         assert ferrite_bbox.max.Z == pytest.approx(pet_bbox.min.Z)
-        assert ferrite_bbox.min.Z == pytest.approx(pet_bbox.min.Z - 2.0)
+        assert ferrite_bbox.min.Z == pytest.approx(pet_bbox.min.Z - 6.0)
         previous_top_z = ferrite_bbox.min.Z
-    assert tx_inner_actual_min_xyz[2] - previous_top_z == pytest.approx(4.0)
+    assert tx_inner_actual_min_xyz[2] - previous_top_z == pytest.approx(12.0)
 
 
 def test_export_type2_fixed_example_exports_tx_positive_bridge_non_model_geometry(
@@ -4294,7 +4956,7 @@ def test_export_type2_step_artifacts_centers_tx_inner_region_y_usage_ratio(
     repo_root = Path(__file__).resolve().parents[2]
     source_text = (repo_root / "examples" / "type2_fixed.toml").read_text(encoding="utf-8")
     source_text = source_text.replace(
-        "range = [false, 1.0, 1.0, 1]",
+        "range = [false, 0.83732238334605169, 0.83732238334605169, 1]",
         "range = [false, 0.5, 0.5, 1]",
         1,
     )
@@ -4311,12 +4973,12 @@ def test_export_type2_step_artifacts_centers_tx_inner_region_y_usage_ratio(
     member_objects = cast(Sequence[dict[str, object]], non_model_entry["member_objects"])
     tx_inner_member = next(member for member in member_objects if member["object_id"] == "tx_inner_region")
     canonical_coordinates = cast(dict[str, object], tx_inner_member["canonical_coordinates"])
-    assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx((0.0, -450.0, 0.0))
-    assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx((158.4, 900.0, 81.0))
+    assert canonical_coordinates["outer_bounds_min_xyz"] == pytest.approx((0.0, -300.0, 0.0))
+    assert canonical_coordinates["outer_bounds_size_xyz"] == pytest.approx((712.8, 600.0, 86.77309465287622))
     reference_line = cast(dict[str, object], tx_inner_member["tx_reference_line"])
     assert reference_line["y_usage_ratio"] == pytest.approx(0.5)
-    assert reference_line["line_start_xyz"] == pytest.approx((158.4, -450.0, 81.0))
-    assert reference_line["line_end_xyz"] == pytest.approx((158.4, 450.0, 81.0))
+    assert reference_line["line_start_xyz"] == pytest.approx((712.8, -300.0, 86.77309465287622))
+    assert reference_line["line_end_xyz"] == pytest.approx((712.8, 300.0, 86.77309465287622))
     assert all(member["object_id"] != "tx_outer_region" for member in member_objects)
     assert all(member["object_id"] != "tx_outer_actual_region" for member in member_objects)
 
@@ -4334,10 +4996,10 @@ def test_export_type2_step_artifacts_resizes_tx_inner_actual_region_without_resi
         for modeled_object in modeled_objects
         if modeled_object["object_id"] == "tx_inner_rect_void_coil"
     )
-    outer_x_usage_ratio = cast(dict[str, object], tx_inner_object["outer_x_usage_ratio"])
-    outer_y_usage_ratio = cast(dict[str, object], tx_inner_object["outer_y_usage_ratio"])
-    outer_x_usage_ratio["range"] = [False, 0.25, 0.25, 1]
-    outer_y_usage_ratio["range"] = [False, 0.3, 0.3, 1]
+    x_ratio = cast(dict[str, object], tx_inner_object["x_ratio"])
+    y_ratio = cast(dict[str, object], tx_inner_object["y_ratio"])
+    x_ratio["range"] = [False, 0.25, 0.25, 1]
+    y_ratio["range"] = [False, 0.3, 0.3, 1]
     changed_text = toml_dumps(changed_spec)
     assert changed_text != source_text
     baseline_dir = tmp_path / "baseline"
@@ -4694,9 +5356,9 @@ def test_load_type2_step_spec_rejects_invalid_tx_reference_line_ratio(
     repo_root = Path(__file__).resolve().parents[2]
     source_text = (repo_root / "examples" / "type2_fixed.toml").read_text(encoding="utf-8")
     valid_range_by_ratio = {
-        "x_ratio": "[false, 0.99, 0.99, 1]",
-        "y_usage_ratio": "[false, 1.0, 1.0, 1]",
-        "z_ratio": "[false, 0.9, 0.9, 1]",
+        "x_ratio": "[false, 0.98999999999999999, 0.98999999999999999, 1]",
+        "y_usage_ratio": "[false, 0.83732238334605169, 0.83732238334605169, 1]",
+        "z_ratio": "[false, 0.96414549614306921, 0.96414549614306921, 1]",
     }
     assert ratio_name in valid_range_by_ratio
     valid_range = valid_range_by_ratio[ratio_name]
@@ -5949,13 +6611,58 @@ def test_export_type2_step_artifacts_fails_terminal_metadata_drift_against_first
     assert build_call_index == 1
 
 
-def test_export_type2_step_artifacts_fails_for_invalid_terminal_path(tmp_path: Path) -> None:
-    toml_path = _write_spec(tmp_path, _type2_spec_text(terminal_path="A_cw_to_b"))
+def test_load_type2_step_spec_rejects_terminal_start_outside_corner_index_range(tmp_path: Path) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_spec_text(terminal_start=4),
+    )
+
+    with pytest.raises(ValueError, match=r"terminal_start must realize to integer values in \[0, 3\]"):
+        load_type2_step_spec(toml_path)
+
+
+def test_export_type2_step_artifacts_fails_for_terminal_metadata_drift_from_derived_quarter_turn_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import peetsfea.type2_step_export as module_under_test
+
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_spec_text(
+            modeled_object_id="rx_rect_void_coil",
+            modeled_role="rx_single_coil",
+            terminal_start=1,
+            turn_qcount_range=_range(True, 1.0, 1.0, 1),
+        ),
+    )
     output_dir = tmp_path / "out"
     ledger_path = tmp_path / "out" / "ledger.json"
+    original_build_type2_step_ledger = module_under_test.build_type2_step_ledger
 
-    with pytest.raises(ValueError, match=r"matching outer/inner corners"):
-        export_type2_step_artifacts(
+    def _drifted_build_type2_step_ledger(*args: object, **kwargs: object) -> object:
+        ledger = cast(dict[str, object], original_build_type2_step_ledger(*args, **kwargs))
+        modeled_entry = next(
+            entry for entry in cast(list[dict[str, object]], ledger["modeled_objects"])
+            if entry["object_id"] == "rx_rect_void_coil"
+        )
+        terminal_metadata = dict(cast(dict[str, object], modeled_entry["terminal_metadata"]))
+        terminal_metadata["path"] = "B_cw_to_b"
+        modeled_entry["terminal_metadata"] = terminal_metadata
+        return ledger
+
+    def _successful_export_step(*args: object, **kwargs: object) -> bool:
+        output_path = cast(Path, args[1])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
+        return True
+
+    monkeypatch.setattr(module_under_test, "build_type2_step_ledger", _drifted_build_type2_step_ledger)
+    monkeypatch.setattr(module_under_test.bd, "export_step", _successful_export_step)
+    monkeypatch.setattr(module_under_test, "_stamp_scene_step_brep_names", lambda **_kwargs: None)
+
+    with pytest.raises(RuntimeError, match=r"type2 port sheet metadata must match modeled scene construction contract"):
+        module_under_test.export_type2_step_artifacts(
             toml_path=toml_path,
             output_dir=output_dir,
             ledger_path=ledger_path,

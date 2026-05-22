@@ -712,11 +712,11 @@ def _resolved_tx_inner_actual_region_spec_from_tx_inner_region(
         owner_spec=tx_inner_region_spec,
         seed=seed,
     )
-    x_usage_ratio_owner_path = f"modeled_objects.{tx_inner_single_coil_spec.object_id}.outer_x_usage_ratio"
-    y_usage_ratio_owner_path = f"modeled_objects.{tx_inner_single_coil_spec.object_id}.outer_y_usage_ratio"
+    x_usage_ratio_owner_path = f"modeled_objects.{tx_inner_single_coil_spec.object_id}.x_ratio"
+    y_usage_ratio_owner_path = f"modeled_objects.{tx_inner_single_coil_spec.object_id}.y_ratio"
     x_usage_ratio = _validated_tx_actual_region_usage_ratio(
         ratio=_selected_float_candidate(
-            range_spec=tx_inner_single_coil_spec.outer_x_usage_ratio,
+            range_spec=tx_inner_single_coil_spec.x_ratio,
             owner_path=x_usage_ratio_owner_path,
             seed=seed,
         ),
@@ -724,7 +724,7 @@ def _resolved_tx_inner_actual_region_spec_from_tx_inner_region(
     )
     y_usage_ratio = _validated_tx_actual_region_usage_ratio(
         ratio=_selected_float_candidate(
-            range_spec=tx_inner_single_coil_spec.outer_y_usage_ratio,
+            range_spec=tx_inner_single_coil_spec.y_ratio,
             owner_path=y_usage_ratio_owner_path,
             seed=seed,
         ),
@@ -782,11 +782,11 @@ def _resolved_tx_outer_actual_region_spec_from_tx_outer_region(
         owner_spec=tx_outer_region_spec,
         seed=seed,
     )
-    x_usage_ratio_owner_path = f"modeled_objects.{tx_outer_single_coil_spec.object_id}.outer_x_usage_ratio"
-    y_usage_ratio_owner_path = f"modeled_objects.{tx_outer_single_coil_spec.object_id}.outer_y_usage_ratio"
+    x_usage_ratio_owner_path = f"modeled_objects.{tx_outer_single_coil_spec.object_id}.x_ratio"
+    y_usage_ratio_owner_path = f"modeled_objects.{tx_outer_single_coil_spec.object_id}.y_ratio"
     x_usage_ratio = _validated_tx_actual_region_usage_ratio(
         ratio=_selected_float_candidate(
-            range_spec=tx_outer_single_coil_spec.outer_x_usage_ratio,
+            range_spec=tx_outer_single_coil_spec.x_ratio,
             owner_path=x_usage_ratio_owner_path,
             seed=seed,
         ),
@@ -794,7 +794,7 @@ def _resolved_tx_outer_actual_region_spec_from_tx_outer_region(
     )
     y_usage_ratio = _validated_tx_actual_region_usage_ratio(
         ratio=_selected_float_candidate(
-            range_spec=tx_outer_single_coil_spec.outer_y_usage_ratio,
+            range_spec=tx_outer_single_coil_spec.y_ratio,
             owner_path=y_usage_ratio_owner_path,
             seed=seed,
         ),

@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-27 @ 00:00
+updated: 2026-05-19 @ 00:00
 tags:
   - test
   - step-export
@@ -24,11 +24,18 @@ tags:
 - Tests assert the active export omits derived `tx_outer_single_coil` modeled geometry, `tx_outer_region`, outer actual-region members, outer ferrite groups, and inner/outer bridge members while keeping TX inner and RX modeled entries active.
 - Historical TX outer tilt helper tests are not active generation regressions after the 0.2.24 TX outer removal.
 - Tests cover `tx_inner_actual_region` as a non-modeled coil-fit envelope derived before modeled coil construction.
+- Tests cover the pending fixed TX Z-gap owner `non_model_objects.tx_region.z_gap_from_rx_plane_mm`
+  as a red-test contract before implementation; the initial fixed value is `[false, 80.0, 80.0, 1]`.
 - Tests cover ferrite/PET_PSA-priority boolean clearance for representative Type2 single-coil STEP export without changing exported body names, groups, or ledger contracts.
 - Tests now assert the single-coil `single_coil_port_v1` contract emits global-mm `vertices_xyz`, explicit integration-line endpoints, role-specific `sheet_name`, and no legacy single-coil `port_sheet_vertices_xyz` ownership.
 - Tests assert modeled ledger entries expose both semantic `canonical_coordinates` and full exported-body `exported_body_canonical_coordinates`.
 - Tests assert the AEDT-facing STEP emits exact leaf body labels in `MANIFOLD_SOLID_BREP` records and does not export ferrite-family group wrappers as scene bodies.
 - Tests assert `tv_aluminum_plate` remains in the modeled ledger as zero-body sheet metadata and is absent from STEP `MANIFOLD_SOLID_BREP` names.
+- Tests cover quarter-turn single-coil ownership: active Type2 TOML and rendered core bridge TOML use
+  `x_ratio`, `y_ratio`, `turn_qcount`, `void_factor`, `metal_fill_factor`, `terminal_start`, and
+  `void_stack_present`, while legacy `terminal_path`/`turn_count`/outer usage/void usage keys fail fast.
+- Tests cover derived clockwise terminal metadata, including `terminal_start = B` with `turn_qcount = 1,2,3,4`
+  mapping to `B_cw_to_c`, `B_cw_to_d`, `B_cw_to_a`, and `B_cw_to_b`.
 
 ## Canonical state
 - RX exported body names/counts and terminal metadata remain deterministic.
@@ -36,12 +43,10 @@ tags:
 - RX full-backing thickness assertions derive the active coil stack thickness from exported PCB/copper bounds.
 - TX inner active example geometry uses `pcb_thickness_mm = 0.3` and one-ounce `copper_thickness_mm = 0.035`.
 - Fixed-example TX inner guide assertions use `tx_reference_line.z_ratio = 0.9`, so the expected `tx_inner_region` Z span is 81.0 mm.
-- Fixed-example `tx_region` parsing asserts `z_gap_from_rx_plane_mm = [false, 80.0, 80.0, 1]`, and local fixture templates align `tv` and `rx_region_max` lower-Z so scene resolution can derive `tx_region.origin_z` from the shared reference plane.
-- Active example fixture text now expects `outputs.solution_name = "Setup1 : Sweep"` for the type2 sweep-report contract.
-- TX inner fixed passive defaults are `underlay_repeat_count = 1`, `underlay_pet_psa_thickness_mm = 2.0`,
-  and `underlay_ferrite_thickness_mm = 2.0`; parsed example assertions should fail if those defaults drift.
-- TX inner void-stack presence is controlled by `void_stack_present`; tests must cover disabled void stack while retaining bottom underlay, including the selected-size fixed example.
-- The disabled export regression fixes `underlay_repeat_count = 1` and `void_stack_present = 0`; it expects `tx_underlay_*` bodies and group membership without any `tx_void_*` scene labels.
+- TX inner fixed passive defaults are `underlay_repeat_count = 1`, `underlay_pet_psa_thickness_mm = 6.0`,
+  and `underlay_ferrite_thickness_mm = 6.0`; parsed example assertions should fail if those defaults drift.
+- TX inner void-stack presence is controlled by `void_stack_present`; tests must cover both disabled underlay-only scenes and the selected-size fixed example with enabled `tx_void_*` passive bodies.
+- The disabled export regression fixes `underlay_repeat_count = 1` and `void_stack_present = 0`; it expects `tx_underlay_*` bodies and group membership without any `tx_void_*` scene labels, while the fixed example expects the enabled void-stack group.
 - TX inner terminal metadata remains deterministic and can drive `tx_inner_port_sheet` for `TxRx`.
 - Single-coil port sheets are expected to span the facing bottom-face edges of the terminal owner boxes; diagonal-based sheet expectations are no longer active for single-coil roles.
 - Fixed example parsing now asserts `tx_inner_rect_void_coil.terminal_stub_length_mm == [false, 7.5, 7.5, 1]` and `tx_inner` TX export tests assert the canonical `outer_bounds_min_xyz[2]` offset is exactly 7.5 mm above the first PCB layer `z`.
@@ -50,8 +55,8 @@ tags:
   and `tx_inner_copper_l0`; fixed examples also emit `tx_underlay_pet_psa_u0` and
   `tx_underlay_ferrite_u0`; it must not create `TX_TML`.
 - `tx_inner_rect_void_coil` must pin owner-local visible physical min X to `tx_inner_region` min X while keeping visible physical Y centered in the owner.
-- TX inner actual-underlay tests must verify only `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0` are emitted, share `tx_inner_actual_region` X/Y bounds, and stack downward in fixed-example 2.0 mm PET/PSA then 2.0 mm ferrite order for a 4.0 mm total bottom underlay.
-- TX inner void-stack enabled tests verify generated void-stack bodies separately from the fixed example, because the selected-size fixed example disables the stack.
+- TX inner actual-underlay tests must verify only `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0` are emitted, share `tx_inner_actual_region` X/Y bounds, and stack downward in fixed-example 6.0 mm PET/PSA then 6.0 mm ferrite order for a 12.0 mm total bottom underlay.
+- TX inner void-stack enabled tests verify generated void-stack bodies in both focused fixtures and the selected-size fixed example.
 - TX inner ferrite-family clearance tests must verify the `g_ferrite_tx` member order remains the exported PET_PSA/ferrite underlay members, with void-stack members included only for enabled-stack cases, while every ferrite-family body and every PCB body remains a positive-volume solid.
 - TX/RX ferrite group names remain ledger grouping contracts, but generated STEP labels expose only their exact leaf members for AEDT import.
 - Active generation regressions must verify no `tx_outer_region`, `tx_outer_void_*`, `tx_outer_underlay_*`, `tx_outer_pcb_*`, `tx_outer_copper_*`, `tx_outer_actual_region`, `g_ferrite_tx_outer`, or TX inner/outer bridge members are emitted.
@@ -60,13 +65,23 @@ tags:
 - `tx_inner_rect_void_coil` fixed-example X placement must satisfy lower-X wall-side anchoring; the physical modeled body bbox is the placement authority for imported geometry.
 - TX outer X placement uses the `tx_outer_region_prism` local frame rather than post-tilt world-X AABB centering; tests validate the actual/design footprint against the prism-local center interval, including the `0.5942857142857143` regression ratio.
 - `tx_outer_rect_void_coil` must be validated in the `tx_outer_region_prism` local frame. Tests derive prism-local axes and X/Y bounds from the prism provenance vertices, then assert exported body vertices remain inside those local spans.
-- `examples/type2_sweep.toml` parsing must assert active TX inner and RX usage-ratio ranges, including RX inclusive `1.0` upper endpoints and shared `void_usage_ratio = [false, 0.08, 0.8, 125]`, remain parseable and scale to owner spans; it also asserts TX inner and RX `turn_count` sweep ranges are lowered to `RangeSpec(True, 1.0, 3.0, 3)`.
+- `examples/type2_sweep.toml` parsing must assert active TX inner and RX `x_ratio`/`y_ratio` ranges,
+  including RX inclusive `1.0` upper endpoints and shared `void_factor = [false, 0.08, 0.8, 125]`,
+  remain parseable and scale to owner spans; it also asserts the current staged TX inner and RX
+  `turn_qcount` sweep ranges are `RangeSpec(True, 4.0, 12.0, 9)` with
+  `terminal_start = [true, 0, 3, 4]`, while focused fixtures cover partial quarter turns.
 - `tx_outer_rect_void_coil` may protrude slightly in world +X after tilted stacking; tests should assert prism-local containment, semantic tilt, and Y/Z consistency rather than clipping to the axis-aligned prism bbox.
 - `tx_outer_rect_void_coil` must preserve outer-frame tilt normals:
   each modeled outer body is validated to have a face whose normal is nearly parallel to the local normal of
   `tx_outer_region_prism.top_inner_start→top_outer_start` and whose frame `local_x` projection is non-zero.
 - `tx_region` may be present as guide context only.
-- Fixed examples must verify fixed non-modeled `tx_region` Y width `1800.0`, fixed `x_ratio=0.99`, preserved `y_usage_ratio`, maximum fixed TX/RX outer usage ratios, disabled TX inner void stack, fixed TX one-layer/one-turn state, and fixed RX one-turn state.
+- Fixed examples must verify fixed non-modeled `tx_region` Y width `1200.0`, fixed `x_ratio=0.99`, preserved `y_usage_ratio`, maximum fixed TX/RX active `x_ratio`/`y_ratio` ownership, enabled TX inner void stack, fixed TX one-layer/full-turn state, and fixed RX full-turn state.
+- Full-turn quarter-turn regressions compare `turn_qcount = 4, 8, 12` against the old same-corner 1/2/3-turn
+  core geometry through the rendered internal rect-void TOML.
+- Partial-turn regressions require `turn_qcount = 1, 2, 3` to export non-empty axis-aligned RX bodies and valid
+  `single_coil_port_v1` metadata.
+- RX `void_stack_present` export regressions require disabled cases to omit `rx_void_*` labels and enabled cases
+  to include RX void-stack ferrite/PET-PSA labels plus matching ledger metadata.
 - Deterministic active tx_inner body-name contract is explicitly covered for a fixed `layer_count=1` realization:
   expected exported bodies are `tx_inner_pcb_l0` and `tx_inner_copper_l0`.
 - STEP-only positive and negative inner/outer bridge geometry must be absent from active fixed-example TX paths.
@@ -78,10 +93,16 @@ tags:
 - Example mutation tests should edit parsed TOML data and re-render it instead of brittle adjacent-line string replacement, because official range owners may carry `description` metadata beside `range`.
 - Active fixed-example export must not emit `tx_outer_region`; historical prism-local TX outer assertions stay xfailed with obsolete outer-modeled contracts.
 - `tx_inner_actual_region` must match the resolved TX inner visible physical body box for the same TOML and seed while leaving `tx_inner_region` as the larger guide region. Its `tx_actual_region.actual_region_bounds` must equal the canonical actual-region ledger bounds, and `physical_modeled_body_bounds` must equal the modeled `tx_inner_rect_void_coil` canonical physical bounds.
-- Changing TX inner `outer_x_usage_ratio` may resize `tx_inner_actual_region` and the modeled physical body, but their min X must remain equal to the unchanged `tx_inner_region` min X and their Y centers must remain equal to the owner Y center.
+- Changing TX inner `x_ratio` may resize `tx_inner_actual_region` and the modeled physical body, but
+  their min X must remain equal to the unchanged `tx_inner_region` min X and their Y centers must remain
+  equal to the owner Y center.
 - `tx_outer_region` and `tx_outer_actual_region` must be absent from active fixed-example export because no active `tx_outer_rect_void_coil` exists.
 - TX inner passive underlay/void-stack tests verify exported-body coordinates include passive body depth while semantic coordinates stay tied to the modeled coil/actual-region contract.
 - TV aluminum sheet assertions use zero-thickness `tv` `+X` face bounds, four canonical sheet vertices, top-level resolved integer `sheet_present`, canonical boolean `sheet_present`, and `sheet_thickness_mm = 0.04`.
+- Pending TX fixed-Z-gap tests use the RX/TV lower-Z reference plane and require the gap from `tx_region`
+  top Z to RX/TV lower Z to stay exactly `80.0 mm` for the fixed example. X/Y placement must remain at the
+  current fixed-example coordinates, including TX min X = `0.0`; changing the Z gap shifts only TX guide,
+  actual, modeled, terminal, and STEP-body Z coordinates while RX/TV geometry stays unchanged.
 
 ## Invariants / fail-fast
 - Exported body drift and generic names fail.
@@ -109,6 +130,8 @@ tags:
 - Ferrite/PET_PSA-priority clearance assertions fail if any exported ferrite-family member has positive-volume intersection with `tx_inner_pcb_l*`, if a PCB body is emptied, or if the `g_ferrite_tx` group drops/reorders members.
 - STEP label assertions fail if build123d output keeps blank BREP names or if imported/round-tripped labels regress to `SOLID*`.
 - TV aluminum sheet tests fail if the ledger returns an exported body name/count for `tv_aluminum_plate` or if the combined STEP file contains a `tv_aluminum_plate` solid name.
+- Quarter-turn tests fail if active single-coil TOML accepts legacy key ownership, derives stale same-corner
+  metadata for partial turns, emits empty/tilted partial-turn bodies, or omits RX void-stack ledger provenance.
 
 ## Collaborators
 - [generate_type2_step.py](../../entry/generate_type2_step.py.md)
@@ -125,3 +148,4 @@ tags:
 - [0.2.25 Type2 Port Sheet Contract Rewrite](../../../plans/0.2.25-type2-port-sheet-contract-rewrite.md)
 - [0.2.25 Type2 Exported Body Bounds Import Validation](../../../plans/0.2.25-type2-exported-body-bounds-import-validation.md)
 - [0.2.25 Type2 TV Aluminum Sheet Presence](../../../plans/0.2.25-type2-tv-aluminum-sheet-presence.md)
+- [0.2.25 Type2 Quarter-Turn Single Coil](../../../plans/0.2.25-type2-quarter-turn-single-coil.md)

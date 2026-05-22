@@ -1,7 +1,7 @@
 ---
 title: type2_single_coil_underlay.py
 created: 2026-04-20 @ 00:00
-updated: 2026-05-13 @ 00:00
+updated: 2026-05-21 @ 00:00
 tags:
   - rx
   - non-model
@@ -18,6 +18,7 @@ tags:
 - RX single-coil backing/context geometry helper다.
 - TX inner actual-region underlay geometry helper다.
 - TX inner void YZ sheet-stack geometry helper다.
+- RX void-stack parity geometry helper다.
 - Type2 single-coil ferrite/PET_PSA priority boolean-clearance helper다.
 - TX outer prism-local void sheet-stack geometry helper다.
 - TX outer prism-local bottom-underlay sheet-stack geometry helper다.
@@ -31,6 +32,7 @@ tags:
 - ordered scene child tuple에서 ferrite/PET_PSA tool과 PCB/FR4 blank를 식별하고, build123d/OCC cut으로 PCB/FR4 blank만 절단한 새 ordered tuple을 반환한다.
 - `tx_outer_single_coil` void 내부 prism-local 스택을 생성한다. body prefix는 `tx_outer_void_ferrite_u{n}` / `tx_outer_void_pet_psa_u{n}`이며 raw top을 prism-local top보다 위로 뻗긴 뒤 outer scene builder가 top-face clipping과 tilt transform을 적용한다.
 - `tx_outer_single_coil` 하부 prism-local 스택을 생성한다. body prefix는 `tx_outer_underlay_pet_psa_u{n}` / `tx_outer_underlay_ferrite_u{n}`이며 inner underlay와 같은 PET/PSA→ferrite ordering을 사용한다.
+- `rx_single_coil` void 내부 스택을 생성한다. body prefix는 `rx_void_ferrite_u0` / `rx_void_pet_psa_u0`이며 local void-X가 world Y로 변환된 축을 따라 단일 ferrite/PET_PSA pair를 배치하고, central corridor는 world Z, coil thickness span은 world X를 따른다.
 
 ## Canonical state
 - `resolve_tx_inner_single_coil_underlay_placement_descriptor`는 `owner_spec`와 실제 영역 footprint (`fit_envelope.outer_bounds_*`)를 검증한 뒤 반복 횟수/두께 합이 `tx_inner_region` 바닥을 침범하지 않으면 descriptor를 만든다.
@@ -38,6 +40,8 @@ tags:
 - `resolve_tx_outer_single_coil_underlay_placement_descriptor` validates the prism-local outer design/actual footprint and derived stack thickness against the virtual outer owner thickness before creating the shared underlay descriptor.
 - TX outer central void stack and bottom underlay stack are derived from inner repeat/thickness state and use separate outer label prefixes.
 - TX inner void stack descriptor는 realized void X world bounds, copper-free central corridor Y world bounds, `tx_inner_actual_region.min_z`, `tx_region.max_z`, nominal PET/PSA/ferrite thickness를 canonical state로 가진다.
+- RX void stack descriptor는 realized void local-X world Y bounds, copper-free central corridor world Z bounds, modeled coil world X span, and nominal PET/PSA/ferrite thickness를 canonical state로 가진다.
+- RX void stack labels are deterministic and emitted in low-world-Y order as `rx_void_ferrite_u0` followed by `rx_void_pet_psa_u0`.
 - boolean-clearance helper의 canonical state는 caller가 넘긴 ordered scene shapes, explicit ferrite/PET_PSA tool labels/groups 또는 narrow label predicate, 그리고 explicit PCB/FR4 blank labels다.
 - `single_coil_scene_children_with_grouped_ferrite_family()` validates group membership/order against the ledger contract and then returns `base_scene_children + underlay_scene_children`; the function name is historical, but the runtime export contract no longer emits `g_ferrite_*` as a STEP body.
 
@@ -49,6 +53,7 @@ tags:
 - inner void YZ stack은 `void.min_x`에서 ferrite로 시작해 PET/PSA가 `+X` 방향으로 뒤따르는 pair를 만든다. 1..4개 중 각 pair span이 최소 ferrite 두께+최소 PET/PSA 두께 이상인 가장 큰 pair 수를 선택하고, pair별 leftover X 폭을 ferrite/PET_PSA에 절반씩 더해 모든 pair가 균등 폭으로 정확히 `void.max_x`에서 끝난다. 어떤 1-pair 최소 스택도 들어가지 않으면 즉시 실패한다. Y span은 descriptor가 제공한 central corridor 전체를 사용한다.
 - outer void stack도 같은 sheet ordering and X truncation contract를 따르되, raw Z는 prism-local top을 한 PET/PSA+ferrite pair만큼 넘어선다. scene 조립 단계가 top-face clipping과 최종 회전/이동을 적용한다.
 - outer bottom underlay stack must use the outer design/actual footprint, stack downward in local `-Z`, and fail if its derived thickness cannot fit inside the virtual outer owner thickness.
+- RX void stack uses the unambiguous `rx_void_*` body label prefix and must preserve deterministic single-pair ferrite-then-PET/PSA order from low world Y to high world Y.
 - 레이블 길이 제한(<=32), 볼륨 양의 값, 바디 수 일관성 등 기존 underlay 실패 규칙은 유지한다.
 - boolean-clearance helper는 입력/출력 top-level body count와 label order를 보존하며, ferrite/PET_PSA tools는 절단하지 않고 PCB/FR4 blanks만 절단한다.
 - expected cut path에서 tool 또는 blank가 비어 있으면 즉시 실패한다.
