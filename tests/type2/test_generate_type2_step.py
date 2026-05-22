@@ -965,6 +965,23 @@ def _type2_fixed_text_with_tx_z_gap_owner(
     return toml_dumps(raw_spec)
 
 
+def _type2_fixed_text_with_tx_inner_turn_qcount(
+    source_toml: Path,
+    *,
+    turn_qcount: int,
+) -> str:
+    raw_spec, _source_bytes = load_toml_bytes(source_toml)
+    modeled_objects = cast(list[dict[str, object]], raw_spec["modeled_objects"])
+    modeled_object = next(
+        cast(dict[str, object], modeled_object)
+        for modeled_object in modeled_objects
+        if cast(dict[str, object], modeled_object)["object_id"] == "tx_inner_rect_void_coil"
+    )
+    modeled_spec = cast(dict[str, object], modeled_object["turn_qcount"])
+    modeled_spec["range"] = [True, float(turn_qcount), float(turn_qcount), 1]
+    return toml_dumps(raw_spec)
+
+
 def _write_type2_fixed_with_tx_z_gap_owner(
     tmp_path: Path,
     source_toml: Path,
@@ -974,6 +991,21 @@ def _write_type2_fixed_with_tx_z_gap_owner(
     return _write_spec(
         tmp_path,
         _type2_fixed_text_with_tx_z_gap_owner(source_toml, z_gap_mm=z_gap_mm),
+    )
+
+
+def _write_type2_fixed_with_tx_inner_turn_qcount(
+    tmp_path: Path,
+    source_toml: Path,
+    *,
+    turn_qcount: int,
+) -> Path:
+    return _write_spec(
+        tmp_path,
+        _type2_fixed_text_with_tx_inner_turn_qcount(
+            source_toml,
+            turn_qcount=turn_qcount,
+        ),
     )
 
 
@@ -3754,7 +3786,7 @@ def test_render_tx_rect_void_toml_preserves_full_turn_geometry_for_quarter_turn_
 
 
 @pytest.mark.parametrize("turn_qcount", (1, 2, 3))
-def test_export_type2_step_artifacts_partial_turn_qcount_builds_axis_aligned_geometry_and_valid_port(
+def test_export_type2_step_artifacts_partial_turn_qcount_builds_geometry_and_valid_port(
     tmp_path: Path,
     turn_qcount: int,
 ) -> None:
@@ -3792,7 +3824,8 @@ def test_export_type2_step_artifacts_partial_turn_qcount_builds_axis_aligned_geo
         assert body_name in scene_shapes_by_label
         body_shape = scene_shapes_by_label[body_name]
         assert _shape_volume(body_shape) > 0.0
-        _assert_shape_faces_axis_aligned(body_shape)
+        if turn_qcount == 1:
+            _assert_shape_faces_axis_aligned(body_shape)
 
 
 @pytest.mark.parametrize(("raw_present", "expected_present"), ((0, False), (1, True)))
@@ -4107,17 +4140,12 @@ def test_export_type2_step_artifacts_keeps_tx_inner_underlay_when_void_stack_dis
 def test_export_type2_step_artifacts_tx_inner_exported_bounds_include_passive_underlay_and_void_stack(
     tmp_path: Path,
 ) -> None:
-    toml_path = _write_spec(
+    repo_root = Path(__file__).resolve().parents[2]
+    source_toml = repo_root / "examples" / "type2_fixed.toml"
+    toml_path = _write_type2_fixed_with_tx_inner_turn_qcount(
         tmp_path,
-        _type2_spec_text(
-            modeled_object_id="tx_inner_rect_void_coil",
-            modeled_role="tx_inner_single_coil",
-            underlay_repeat_count_range=_range(True, 1.0, 1.0, 1),
-            void_stack_present_range=_range(True, 1.0, 1.0, 1),
-            underlay_pet_psa_thickness_range=_range(False, 1.0, 1.0, 1),
-            underlay_ferrite_thickness_range=_range(False, 1.0, 1.0, 1),
-            layer_count=1,
-        ),
+        source_toml,
+        turn_qcount=7,
     )
     ledger = export_type2_step_artifacts(
         toml_path=toml_path,
@@ -4131,7 +4159,7 @@ def test_export_type2_step_artifacts_tx_inner_exported_bounds_include_passive_un
     expected_names = _tx_inner_expected_body_names(
         layer_count=1,
         underlay_repeat_count=1,
-        void_stack_count=2,
+        void_stack_count=8,
     )
     assert tx_inner_entry["expected_exported_body_names"] == expected_names
     assert tx_inner_entry["expected_exported_body_count"] == len(expected_names)
@@ -4161,10 +4189,21 @@ def test_export_type2_step_artifacts_tx_inner_exported_bounds_include_passive_un
                     "tx_underlay_ferrite_u0",
                     "tx_void_ferrite_u0",
                     "tx_void_pet_psa_u0",
+                    "tx_void_ferrite_u1",
+                    "tx_void_pet_psa_u1",
+                    "tx_void_ferrite_u2",
+                    "tx_void_pet_psa_u2",
+                    "tx_void_ferrite_u3",
+                    "tx_void_pet_psa_u3",
                 ),
             },
         )
     )
+    scene_shapes_by_label = _step_shapes_by_label(Path(ledger["scene_step_path"]))
+    assert all(name in scene_shapes_by_label for name in expected_names)
+    for body_name in expected_names:
+        body_shape = scene_shapes_by_label[body_name]
+        assert _shape_volume(body_shape) > 0.0
 
 
 def test_load_type2_fixed_example_accepts_fixed_tx_region_z_gap_owner(tmp_path: Path) -> None:

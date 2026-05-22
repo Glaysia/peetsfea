@@ -1,7 +1,7 @@
 ---
 title: test_tx_rect_void.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-21 @ 00:00
+updated: 2026-05-22 @ 00:00
 tags:
   - test
   - rx
@@ -27,6 +27,14 @@ tags:
 - TX underlay/multilayer contracts are not covered by this note.
 - Reusable copper primitive helpers must expose deterministic, finite central corridor Y bounds for TX inner-compatible rect-void geometry.
 - The central corridor Y bounds must contain the realized central void Y bounds and exceed the realized void span for fixed-like 2-turn geometry where the copper-free central corridor is larger than the rectangular void; copper that starts at one void edge may keep that side coincident with the realized void.
+- Partial-turn TX inner-compatible geometry with an open side must use the realized outer Y boundary on that open side while preserving the copper-overlap proof.
+- Quarter-turn centerline invariants now include:
+  - q=1 remains straight axis-aligned with no blunt-corner segment.
+  - q=2 and q=3 produce blunt-corner centerline segments.
+  - q=4 and q=8 preserve full-turn outer-terminal seeding behavior and do not reuse points.
+- Partial-turn and extended-turn validation includes q=5 validity and q=7 routing-depth coverage:
+  - q=5 remains valid for box-spec generation and central corridor bounding.
+  - q=7 must generate box specs and central corridor bounds without reporting copper/void overlap.
 - If the central corridor helper accepts primitive input, empty primitive input must fail fast instead of producing guessed bounds.
 
 ## Graph links

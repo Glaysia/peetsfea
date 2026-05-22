@@ -57,6 +57,8 @@ tags:
 - `tx_inner_rect_void_coil` must pin owner-local visible physical min X to `tx_inner_region` min X while keeping visible physical Y centered in the owner.
 - TX inner actual-underlay tests must verify only `tx_underlay_pet_psa_u0` and `tx_underlay_ferrite_u0` are emitted, share `tx_inner_actual_region` X/Y bounds, and stack downward in fixed-example 6.0 mm PET/PSA then 6.0 mm ferrite order for a 12.0 mm total bottom underlay.
 - TX inner void-stack enabled tests verify generated void-stack bodies in both focused fixtures and the selected-size fixed example.
+  The fixed-like q=7 case mutates fixed TOML via parsed helpers and validates full passive underlay/void-stack
+  naming (`tx_void_ferrite_u0`~`tx_void_pet_psa_u3`) plus positive exported body volume.
 - TX inner ferrite-family clearance tests must verify the `g_ferrite_tx` member order remains the exported PET_PSA/ferrite underlay members, with void-stack members included only for enabled-stack cases, while every ferrite-family body and every PCB body remains a positive-volume solid.
 - TX/RX ferrite group names remain ledger grouping contracts, but generated STEP labels expose only their exact leaf members for AEDT import.
 - Active generation regressions must verify no `tx_outer_region`, `tx_outer_void_*`, `tx_outer_underlay_*`, `tx_outer_pcb_*`, `tx_outer_copper_*`, `tx_outer_actual_region`, `g_ferrite_tx_outer`, or TX inner/outer bridge members are emitted.
@@ -78,8 +80,12 @@ tags:
 - Fixed examples must verify fixed non-modeled `tx_region` Y width `1200.0`, fixed `x_ratio=0.99`, preserved `y_usage_ratio`, maximum fixed TX/RX active `x_ratio`/`y_ratio` ownership, enabled TX inner void stack, fixed TX one-layer/full-turn state, and fixed RX full-turn state.
 - Full-turn quarter-turn regressions compare `turn_qcount = 4, 8, 12` against the old same-corner 1/2/3-turn
   core geometry through the rendered internal rect-void TOML.
-- Partial-turn regressions require `turn_qcount = 1, 2, 3` to export non-empty axis-aligned RX bodies and valid
-  `single_coil_port_v1` metadata.
+- Partial-turn regressions require `turn_qcount = 1, 2, 3` to export non-empty RX bodies and valid
+  `single_coil_port_v1` metadata; only q=1 keeps axis-aligned face assertions, while q=2/q=3 may contain
+  blunt-corner bevel faces and are no longer axis-aligned-only contracts.
+- Fixed-like TX inner q=7 regressions mutate fixed-like `type2_fixed.toml` data via parsed TOML APIs, set
+  `tx_inner_rect_void_coil.turn_qcount = 7`, and assert enabled void-stack bodies keep centered underlay depth behavior
+  while exporting expanded Z bounds in the passive underlay/void stack set.
 - RX `void_stack_present` export regressions require disabled cases to omit `rx_void_*` labels and enabled cases
   to include RX void-stack ferrite/PET-PSA labels plus matching ledger metadata.
 - Deterministic active tx_inner body-name contract is explicitly covered for a fixed `layer_count=1` realization:

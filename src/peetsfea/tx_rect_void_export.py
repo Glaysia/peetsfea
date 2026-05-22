@@ -462,17 +462,19 @@ def _central_corridor_bounds_from_copper_primitives(
             # constraints, not above/below blockers for the central corridor.
             continue
 
-    if len(below_blocker_max_y_values) == 0 or len(above_blocker_min_y_values) == 0:
-        raise ValueError(
-            "central corridor requires copper blockers above and below the realized void X strip "
-            f"(below_count={len(below_blocker_max_y_values)}, above_count={len(above_blocker_min_y_values)}, "
-            f"void_bounds={void_bounds})"
-        )
-    corridor_min_y = max(below_blocker_max_y_values)
-    corridor_max_y = min(above_blocker_min_y_values)
+    corridor_min_y = (
+        max(below_blocker_max_y_values)
+        if len(below_blocker_max_y_values) != 0
+        else realized.outer_bounds.min_y
+    )
+    corridor_max_y = (
+        min(above_blocker_min_y_values)
+        if len(above_blocker_min_y_values) != 0
+        else realized.outer_bounds.max_y
+    )
     if corridor_max_y <= corridor_min_y:
         raise ValueError(
-            "central corridor requires positive Y bounds between nearest copper blockers "
+            "central corridor requires positive Y bounds between resolved corridor boundaries "
             f"(min_y={corridor_min_y}, max_y={corridor_max_y}, void_bounds={void_bounds})"
         )
     corridor_bounds = RectBounds(

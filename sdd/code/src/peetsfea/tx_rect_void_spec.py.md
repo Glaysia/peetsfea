@@ -25,7 +25,10 @@ tags:
 ## Canonical state
 - module-level mutable state는 없다.
 - canonical realized geometry inputs는 `SingleCoilRectVoidSpec`와 `RealizedSingleCoilRectVoid`다.
-- Winding ownership is the integer public range `tx_coil.turn_qcount`; effective turn count is `turn_qcount / 4.0` for pitch/trace/gap calculations.
+- Winding ownership is the integer public range `tx_coil.turn_qcount`; realized metadata keeps `effective_turn_count = turn_qcount / 4.0`, while pitch/trace/gap sizing uses `sizing_turn_count = max(effective_turn_count, routing_depth)`.
+- Routing depth is computed as:
+  - `0` when `turn_qcount < 4`
+  - `(turn_qcount + 2) // 4` otherwise
 - Terminal ownership is the integer public range `tx_coil.terminal_start`, with `0=A`, `1=B`, `2=C`, `3=D`, fixed `cw` direction, and derived end corner `(terminal_start + turn_qcount) % 4`.
 - void keepout size is TOML-owned by canonical `tx_coil.void_factor`; the loader maps that one table into the existing internal `SingleCoilRangeSpec.void_usage_ratio` field as the single bridge location, and realization applies the selected value to both local X and local Y while keeping the void centered.
 - `terminal_stub_length_mm`는 TOML `tx_coil.terminal_stub_length_mm` range에서 `_select_range_value`로 결정되며,
@@ -39,6 +42,8 @@ tags:
 - TOML legacy split/centered `void_*` keys, legacy `void_usage_ratio`, legacy `turn_count`, and raw `terminal_path` are unsupported and fail immediately instead of changing geometry.
 - `void_factor` must realize to `0 < ratio < 1`; invalid candidates fail before geometry construction.
 - `turn_qcount` resolved value must be in `1..SingleCoilProfile.max_turn_count * 4`; invalid quarter-turn counts fail before geometry construction.
+- `routing_depth` must resolve to `0` for `turn_qcount < 4`, or `(turn_qcount + 2) // 4` for `turn_qcount >= 4`; the realized side-geometry pitch/trace/gap uses `max(effective_turn_count, routing_depth)`.
+- Quarter-turn paths that reach a deeper ring, such as `turn_qcount=7`, must not size pitch solely from `turn_qcount / 4.0`; realized geometry must keep copper outside the centered void keepout.
 - `terminal_start` resolved value must be in `0..3`; invalid terminal owners fail before derived metadata is built.
 - `rx_single_coil.layer_count != 1`은 계속 fail-fast한다.
 

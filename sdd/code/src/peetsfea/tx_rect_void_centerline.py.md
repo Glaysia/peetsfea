@@ -23,14 +23,14 @@ tags:
 
 ## Canonical state
 - module-level mutable state는 없다.
-- canonical centerline is a sharp axis-aligned path for partial quarter-turns and a blunt-corner-shaped path for full-turn geometry.
+- canonical centerline uses one quarter-turn pipeline for partial and full turns: build the axis-aligned skeleton, then apply blunt-corner shaping wherever an internal corner exists.
 
 ## Invariants / fail-fast
 - canonical terminal ownership comes from realized `terminal_start`, `terminal_end_corner`, fixed `cw` direction, and `turn_qcount`; raw `terminal_path` is not parsed for centerline construction.
 - Partial quarter paths are valid: `turn_qcount=1` yields the first side segment, `2` yields a half turn, `3` yields three quarters, and `4n` must match the previous same-corner `n`-turn geometry.
-- `turn_qcount < 4` remains on the outer ring only; it must not allocate or validate ring 1 because no full inner ring exists before a complete turn.
-- `turn_qcount < 4` stays sharp and axis-aligned so partial-turn exported copper does not introduce beveled STEP faces.
-- full-turn blunt corner는 45-degree bevel contract를 유지해야 한다.
+- `turn_qcount=1` has no internal corner and remains straight; `turn_qcount=2` and `3` stay on the outer-ring skeleton and then apply the same blunt-corner processing used by longer paths.
+- q < 4 paths do not execute full-turn terminal seeding.
+- blunt corner는 45-degree bevel contract를 유지해야 한다.
 - full-turn paths keep the previous outer terminal next-ring coordinate seed; shorter partial-quarter paths may terminate at the requested side endpoints because no complete inner ring exists yet.
 
 ## 직접 의존

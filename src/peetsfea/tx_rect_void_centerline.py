@@ -128,6 +128,7 @@ def _build_quarter_turn_centerline_sharp(
                 ),
             )
         return tuple(points)
+
     for quarter_index in range(1, realized.turn_qcount + 1):
         quarter_mod = quarter_index % 4
         if quarter_mod == 1:
@@ -347,17 +348,14 @@ def _apply_blunt_corner_to_polyline(
 
 def build_tx_rect_void_centerline(realized: RealizedSingleCoilRectVoid) -> tuple[tuple[float, float], ...]:
     sharp_points = _build_quarter_turn_centerline_sharp(realized=realized)
-    if realized.turn_qcount < 4:
-        points = list(sharp_points)
-    else:
-        points = list(
-            _apply_blunt_corner_to_polyline(
-                sharp_points,
-                trace=realized.trace_width_mm,
-                gap=realized.gap_width_mm,
-                forbidden_polygon=_void_polygon(realized),
-            )
+    points = list(
+        _apply_blunt_corner_to_polyline(
+            sharp_points,
+            trace=realized.trace_width_mm,
+            gap=realized.gap_width_mm,
+            forbidden_polygon=_void_polygon(realized),
         )
+    )
     if len(points) < 2:
         raise ValueError("tx rect/void centerline must contain at least two points")
     if len(points) != len(set(points)):

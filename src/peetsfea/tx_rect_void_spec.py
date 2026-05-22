@@ -253,6 +253,16 @@ def _validate_finite_positive(value: Number, *, path: str) -> float:
     return resolved_value
 
 
+def _routing_depth(turn_qcount: int) -> int:
+    if isinstance(turn_qcount, bool) or not isinstance(turn_qcount, int):
+        raise TypeError(f"turn_qcount must be an int (actual={turn_qcount!r})")
+    if turn_qcount < 1:
+        raise ValueError(f"turn_qcount must be >= 1 (actual={turn_qcount})")
+    if turn_qcount < 4:
+        return 0
+    return (turn_qcount + 2) // 4
+
+
 def realize_tx_rect_void_spec(
     spec: SingleCoilRectVoidSpec,
     *,
@@ -293,6 +303,8 @@ def realize_tx_rect_void_spec(
             f"(actual={turn_qcount}, profile={profile.object_id})"
         )
     effective_turn_count = float(turn_qcount) / 4.0
+    routing_depth = _routing_depth(turn_qcount)
+    sizing_turn_count = max(effective_turn_count, float(routing_depth))
     terminal_start_corner = terminal_start_corner_label(terminal_start)
     terminal_end_corner = terminal_end_corner_label(terminal_start=terminal_start, turn_qcount=turn_qcount)
     terminal_path = terminal_path_from_quarter_turns(terminal_start=terminal_start, turn_qcount=turn_qcount)
@@ -338,7 +350,7 @@ def realize_tx_rect_void_spec(
         outer.max_y - void.max_y,
         void.min_y - outer.min_y,
     )
-    uniform_geometry = _uniform_side_geometry(uniform_band_width_mm, effective_turn_count, metal_fill_factor)
+    uniform_geometry = _uniform_side_geometry(uniform_band_width_mm, sizing_turn_count, metal_fill_factor)
     side_geometry = SingleCoilSideGeometry(
         left=uniform_geometry,
         right=uniform_geometry,

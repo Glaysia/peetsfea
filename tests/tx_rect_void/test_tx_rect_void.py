@@ -179,6 +179,31 @@ def _has_blunt_corner_segment(points: tuple[tuple[float, float], ...]) -> bool:
     return False
 
 
+def _all_segments_axis_aligned(points: tuple[tuple[float, float], ...]) -> bool:
+    for first, second in zip(points[:-1], points[1:]):
+        if abs(second[0] - first[0]) > 1e-9 and abs(second[1] - first[1]) > 1e-9:
+            return False
+    return True
+
+
+def _terminal_corner_point(realized: RealizedSingleCoilRectVoid) -> tuple[float, float]:
+    inner_x = realized.trace_width_mm / 2.0
+    inner_y = realized.trace_width_mm / 2.0
+    x_left = realized.outer_bounds.min_x + inner_x
+    x_right = realized.outer_bounds.max_x - inner_x
+    y_bottom = realized.outer_bounds.min_y + inner_y
+    y_top = realized.outer_bounds.max_y - inner_y
+    if realized.terminal_start == 0:
+        return (x_left, y_top)
+    if realized.terminal_start == 1:
+        return (x_right, y_top)
+    if realized.terminal_start == 2:
+        return (x_right, y_bottom)
+    if realized.terminal_start == 3:
+        return (x_left, y_bottom)
+    raise ValueError(f"terminal_start must be 0..3 (actual={realized.terminal_start})")
+
+
 def _point_distance_2d(first: tuple[float, float], second: tuple[float, float]) -> float:
     dx = first[0] - second[0]
     dy = first[1] - second[1]
@@ -402,6 +427,37 @@ def _fixed_like_tx_inner_realized_with_copper_primitives(
     return realized, copper_primitives
 
 
+def _partial_turn_open_top_tx_inner_realized_with_copper_primitives(
+    tmp_path: Path,
+) -> tuple[RealizedSingleCoilRectVoid, tuple[CopperPrimitive, ...]]:
+    toml_path = _write_spec(
+        tmp_path,
+        _spec_text(
+            outer_x=100.0,
+            outer_y=100.0,
+            turn_qcount=3,
+            terminal_start=1,
+            void_factor=0.2,
+            margin_ratio=0.05,
+            metal_fill_factor=0.5,
+        ),
+    )
+    realized = realize_tx_rect_void_spec(
+        load_tx_rect_void_spec(toml_path),
+        seed=0,
+        profile=TX_INNER_SINGLE_COIL_PROFILE,
+    )
+    centerline = build_tx_rect_void_centerline(realized)
+    copper_primitives = _copper_primitives_for_layer(
+        realized=realized,
+        centerline=centerline,
+        layer_index=0,
+        pcb_z=0.0,
+        profile=TX_INNER_SINGLE_COIL_PROFILE,
+    )
+    return realized, copper_primitives
+
+
 def _call_central_corridor_y_bounds_helper(
     helper: Callable[..., RectBounds],
     *,
@@ -567,6 +623,105 @@ def test_geometry_routes_around_void_for_supported_corners(
 
     assert len(centerline) >= 2
     assert len([box for box in boxes if box.role == "pcb"]) == realized.layer_count
+    assert _has_blunt_corner_segment(centerline)
+
+
+def test_qcount_five_still_valid_and_has_central_corridor(tmp_path: Path) -> None:
+    toml_path = _write_spec(tmp_path, _spec_text(turn_qcount=5, terminal_start=1))
+    realized = realize_tx_rect_void_spec(load_tx_rect_void_spec(toml_path), seed=0)
+    boxes = build_tx_rect_void_box_specs(realized)
+    centerline = build_tx_rect_void_centerline(realized)
+    copper_primitives = _copper_primitives_for_layer(
+        realized=realized,
+        centerline=centerline,
+        layer_index=0,
+        pcb_z=0.0,
+        profile=TX_INNER_SINGLE_COIL_PROFILE,
+    )
+    helper = _central_corridor_y_bounds_helper()
+    corridor_bounds = _call_central_corridor_y_bounds_helper(
+        helper,
+        realized=realized,
+        copper_primitives=copper_primitives,
+    )
+
+    assert realized.turn_qcount == 5
+    assert realized.effective_turn_count == pytest.approx(1.25)
+    assert _has_blunt_corner_segment(centerline)
+    assert corridor_bounds.min_y <= realized.void_bounds.min_y
+    assert corridor_bounds.max_y >= realized.void_bounds.max_y
+    assert len(boxes) > 0
+    assert len(boxes) == len(set(box.label for box in boxes))
+
+
+def test_qcount_seven_central_corridor_and_box_specs_do_not_report_copper_void_overlap_after_routing_depth_sizing(
+    tmp_path: Path,
+) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _spec_text(
+            turn_qcount=7,
+            terminal_start=1,
+            outer_x=100.0,
+            outer_y=100.0,
+            void_factor=0.2,
+            margin_ratio=0.05,
+            metal_fill_factor=0.3,
+        ),
+    )
+    realized = realize_tx_rect_void_spec(load_tx_rect_void_spec(toml_path), seed=0)
+    centerline = build_tx_rect_void_centerline(realized)
+    boxes = build_tx_rect_void_box_specs(realized)
+    copper_primitives = _copper_primitives_for_layer(
+        realized=realized,
+        centerline=centerline,
+        layer_index=0,
+        pcb_z=0.0,
+        profile=TX_INNER_SINGLE_COIL_PROFILE,
+    )
+    helper = _central_corridor_y_bounds_helper()
+
+    assert realized.turn_qcount == 7
+    assert len(boxes) > 0
+    assert len(copper_primitives) > 0
+    assert len(boxes) == len(set(box.label for box in boxes))
+    corridor_bounds = _call_central_corridor_y_bounds_helper(
+        helper,
+        realized=realized,
+        copper_primitives=copper_primitives,
+    )
+    assert math.isfinite(corridor_bounds.min_y)
+    assert math.isfinite(corridor_bounds.max_y)
+    assert corridor_bounds.min_y < corridor_bounds.max_y
+    assert corridor_bounds.min_y <= realized.void_bounds.min_y
+    assert corridor_bounds.max_y >= realized.void_bounds.max_y
+
+
+@pytest.mark.parametrize("turn_qcount", (1, 2, 3))
+def test_partial_quarter_turn_centerline_corner_pipeline(tmp_path: Path, turn_qcount: int) -> None:
+    toml_path = _write_spec(tmp_path, _spec_text(turn_qcount=turn_qcount, terminal_path="A_cw_to_a"))
+    realized = realize_tx_rect_void_spec(load_tx_rect_void_spec(toml_path), seed=0)
+    centerline = build_tx_rect_void_centerline(realized)
+
+    assert len(centerline) == len(set(centerline))
+    if turn_qcount == 1:
+        assert _all_segments_axis_aligned(centerline)
+        assert len(centerline) == 2
+    else:
+        assert _has_blunt_corner_segment(centerline)
+        assert not _all_segments_axis_aligned(centerline)
+        assert len(centerline) > turn_qcount + 1
+
+
+@pytest.mark.parametrize("turn_qcount", (4, 8))
+def test_full_turn_centerline_keeps_outer_terminal_seed(tmp_path: Path, turn_qcount: int) -> None:
+    toml_path = _write_spec(tmp_path, _spec_text(turn_qcount=turn_qcount, terminal_start=0))
+    realized = realize_tx_rect_void_spec(load_tx_rect_void_spec(toml_path), seed=0)
+    centerline = build_tx_rect_void_centerline(realized)
+    start_corner = _terminal_corner_point(realized)
+
+    assert centerline[0] != pytest.approx(start_corner)
+    assert len(centerline) == len(set(centerline))
     assert _has_blunt_corner_segment(centerline)
 
 
@@ -749,6 +904,23 @@ def test_central_corridor_y_bounds_contain_and_exceed_void_for_tx_inner_fixed_li
         corridor_bounds.min_y < realized.void_bounds.min_y
         or corridor_bounds.max_y > realized.void_bounds.max_y
     )
+    assert corridor_bounds.max_y - corridor_bounds.min_y > realized.void_y_mm
+
+
+def test_central_corridor_y_bounds_use_outer_boundary_for_partial_turn_open_side(
+    tmp_path: Path,
+) -> None:
+    helper = _central_corridor_y_bounds_helper()
+    realized, copper_primitives = _partial_turn_open_top_tx_inner_realized_with_copper_primitives(tmp_path)
+
+    corridor_bounds = _call_central_corridor_y_bounds_helper(
+        helper,
+        realized=realized,
+        copper_primitives=copper_primitives,
+    )
+
+    assert corridor_bounds.min_y < realized.void_bounds.min_y
+    assert corridor_bounds.max_y == pytest.approx(realized.outer_bounds.max_y)
     assert corridor_bounds.max_y - corridor_bounds.min_y > realized.void_y_mm
 
 
