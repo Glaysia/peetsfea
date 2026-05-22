@@ -1,7 +1,7 @@
 ---
 title: test_tx_rect_void.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-21 @ 00:00
 tags:
   - test
   - rx
@@ -17,10 +17,11 @@ tags:
 
 ## 역할
 - Reusable rectangular void single-coil core behavior를 검증한다.
-- 0.2.24 SDD 기준 RX/reusable core only.
+- 0.2.25 quarter-turn schema 기준 RX/reusable core only.
 
 ## Invariants / fail-fast
 - `tx_coil.terminal_stub_length_mm` is treated as TOML-owned when present in the sampled range, and realization must use the selected value directly.
+- Core fixtures use active `turn_qcount`, `terminal_start`, and `void_factor`; legacy `turn_count`, `terminal_path`, and `void_usage_ratio` must fail as unsupported schema input.
 - Invalid geometry fails immediately.
 - `tx_coil.terminal_stub_length_mm` resolve must be finite and > 0; non-positive values fail fast at realization.
 - TX underlay/multilayer contracts are not covered by this note.

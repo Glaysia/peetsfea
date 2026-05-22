@@ -25,7 +25,7 @@ tags:
 ## Canonical state
 - module-level mutable state는 없다.
 - canonical profile registry `_PROFILE_BY_ROLE`만 이 파일이 소유한다.
-- `SingleCoilRangeSpec` owns sampled/public ranges accepted by the core TOML, including canonical `void_usage_ratio`.
+- `SingleCoilRangeSpec` owns sampled/public ranges accepted by the core TOML, including canonical `turn_qcount` and `terminal_start`; its internal `void_usage_ratio` field is populated only from the public core TOML key `tx_coil.void_factor`.
 - `tx_inner_single_coil` owns explicit inner TX identity, `tx_inner_rect_void_coil` object id, XY plane, `tx_inner_region` placement owner, and `tx_inner_*` body prefixes.
 - `tx_outer_single_coil` owns explicit outer TX identity, `tx_outer_rect_void_coil` object id, XY plane, `tx_outer_region` placement owner, and `tx_outer_*` body prefixes. Its profile identity is concrete even when its numeric ranges are derived from the inner TX spec.
 
@@ -34,10 +34,11 @@ tags:
 - TX parallel rect-void roles share multilayer bus behavior, but only the explicit role names decide whether the caller may use them.
 - TX inner/outer companion roles share multilayer bus behavior and sampling topology, but each role owns distinct object/body names and placement owner ids.
 - `TX_PARALLEL_SINGLE_COIL_ROLES` includes the outer companion role so downstream geometry/export code can classify it as TX parallel-capable without guessing from object id text.
-- `SingleCoilProfile.max_turn_count`는 core public single-coil path와 internal type2 TX columns 재사용 path의 turn cap을 분리한다.
+- `SingleCoilProfile.max_turn_count`는 core public single-coil path와 internal type2 TX columns 재사용 path의 effective-turn cap을 분리한다; realized `turn_qcount` is capped at `max_turn_count * 4`.
 - runtime/state type는 nullable fallback 없이 required field를 유지해야 한다.
-- `SingleCoilRangeSpec`는 public TOML sampled fields만 소유하며 legacy split/centered `void_*` range ownership을 포함하지 않는다.
-- realized state may retain derived split void dimensions/bounds needed by geometry, but canonical input ownership is the single `void_usage_ratio` range.
+- `SingleCoilRangeSpec`는 public TOML sampled fields만 소유하며 legacy split/centered `void_*` range ownership, legacy `turn_count`, and legacy raw `terminal_path` ownership을 포함하지 않는다.
+- realized state may retain derived split void dimensions/bounds needed by geometry, but canonical input ownership is the single `void_factor` range.
+- `RealizedSingleCoilRectVoid` carries canonical quarter-turn terminal state: integer `turn_qcount`, float `effective_turn_count`, integer `terminal_start`, derived start/end corner labels, fixed `cw` direction, and a derived compatibility path string.
 
 ## 직접 의존
 - 표준 라이브러리 `dataclasses`, `typing`.

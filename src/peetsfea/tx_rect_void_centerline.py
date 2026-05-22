@@ -9,10 +9,12 @@ from peetsfea.tx_rect_void_geometry import (
     Point2,
     Polygon2,
 )
-from peetsfea.tx_rect_void_spec import _parse_terminal_path
-from peetsfea.tx_rect_void_types import CornerLabel, PathDirection, RealizedSingleCoilRectVoid
-
-_CORNER_INDEX_BY_LABEL: dict[CornerLabel, int] = {"A": 0, "B": 1, "C": 2, "D": 3}
+from peetsfea.tx_rect_void_types import (
+    PathDirection,
+    RealizedSingleCoilRectVoid,
+    TERMINAL_START_CORNERS_CW,
+    terminal_start_index_for_corner,
+)
 
 
 def _direction_step(direction: PathDirection) -> int:
@@ -85,58 +87,105 @@ def _mixed_transition_point(
     return (last_corner[0], next_start_corner[1])
 
 
-def _build_same_corner_centerline_sharp(
+def _build_quarter_turn_centerline_sharp(
     *,
     realized: RealizedSingleCoilRectVoid,
-    start_corner: CornerLabel,
-    direction: PathDirection,
 ) -> tuple[tuple[float, float], ...]:
-    start_corner_index = _CORNER_INDEX_BY_LABEL[start_corner]
-    step = _direction_step(direction)
-    prep_corner_index = (start_corner_index + step) % 4
-    enter_corner_index = (start_corner_index + (2 * step)) % 4
-    end_ring_index = realized.turn_count
-    _ = _corner_point_by_index(realized=realized, corner_index=start_corner_index, ring_index=end_ring_index)
+    if realized.turn_qcount < 1:
+        raise ValueError(f"tx rect/void turn_qcount must be >= 1 (actual={realized.turn_qcount})")
+    if realized.terminal_direction != "cw":
+        raise ValueError(
+            "tx rect/void quarter-turn centerline requires fixed cw direction "
+            f"(actual={realized.terminal_direction})"
+        )
+    start_corner_index = terminal_start_index_for_corner(realized.terminal_start_corner)
+    if start_corner_index != realized.terminal_start:
+        raise ValueError(
+            "tx rect/void terminal_start does not match terminal_start_corner "
+            f"(terminal_start={realized.terminal_start}, terminal_start_corner={realized.terminal_start_corner})"
+        )
+    expected_end_corner = TERMINAL_START_CORNERS_CW[
+        (realized.terminal_start + realized.turn_qcount) % len(TERMINAL_START_CORNERS_CW)
+    ]
+    if realized.terminal_end_corner != expected_end_corner:
+        raise ValueError(
+            "tx rect/void terminal_end_corner does not match terminal_start + turn_qcount "
+            f"(terminal_start={realized.terminal_start}, turn_qcount={realized.turn_qcount}, "
+            f"expected={expected_end_corner}, actual={realized.terminal_end_corner})"
+        )
+    step = _direction_step(realized.terminal_direction)
     points = [
         _corner_point_by_index(realized=realized, corner_index=start_corner_index, ring_index=0),
-        _corner_point_by_index(realized=realized, corner_index=prep_corner_index, ring_index=0),
     ]
-    for ring_index in range(1, end_ring_index + 1):
-        transition_point = _mixed_transition_point(
-            realized=realized,
-            start_corner_index=enter_corner_index,
-            direction=direction,
-            last_corner_ring_index=ring_index - 1,
-            next_start_ring_index=ring_index,
-        )
-        _append_point(points, transition_point)
-        enter_corner = _corner_point_by_index(
-            realized=realized,
-            corner_index=enter_corner_index,
-            ring_index=ring_index,
-        )
-        _append_point(points, enter_corner)
-        current_corner_index = enter_corner_index
-        while current_corner_index != start_corner_index:
-            current_corner_index = (current_corner_index + step) % 4
+    if realized.turn_qcount < 4:
+        for quarter_index in range(1, realized.turn_qcount + 1):
             _append_point(
                 points,
                 _corner_point_by_index(
                     realized=realized,
-                    corner_index=current_corner_index,
-                    ring_index=ring_index,
+                    corner_index=(start_corner_index + (quarter_index * step)) % 4,
+                    ring_index=0,
                 ),
             )
-        if ring_index < end_ring_index:
+        return tuple(points)
+    for quarter_index in range(1, realized.turn_qcount + 1):
+        quarter_mod = quarter_index % 4
+        if quarter_mod == 1:
+            ring_index = (quarter_index - 1) // 4
+            target_corner_index = (start_corner_index + step) % 4
             _append_point(
                 points,
                 _corner_point_by_index(
                     realized=realized,
-                    corner_index=prep_corner_index,
+                    corner_index=target_corner_index,
                     ring_index=ring_index,
                 ),
             )
-    return tuple(_seed_outer_terminal_points(points))
+        elif quarter_mod == 2:
+            ring_index = (quarter_index + 2) // 4
+            enter_corner_index = (start_corner_index + (2 * step)) % 4
+            _append_point(
+                points,
+                _mixed_transition_point(
+                    realized=realized,
+                    start_corner_index=enter_corner_index,
+                    direction=realized.terminal_direction,
+                    last_corner_ring_index=ring_index - 1,
+                    next_start_ring_index=ring_index,
+                ),
+            )
+            _append_point(
+                points,
+                _corner_point_by_index(
+                    realized=realized,
+                    corner_index=enter_corner_index,
+                    ring_index=ring_index,
+                ),
+            )
+        elif quarter_mod == 3:
+            ring_index = (quarter_index + 1) // 4
+            target_corner_index = (start_corner_index + (3 * step)) % 4
+            _append_point(
+                points,
+                _corner_point_by_index(
+                    realized=realized,
+                    corner_index=target_corner_index,
+                    ring_index=ring_index,
+                ),
+            )
+        else:
+            ring_index = quarter_index // 4
+            _append_point(
+                points,
+                _corner_point_by_index(
+                    realized=realized,
+                    corner_index=start_corner_index,
+                    ring_index=ring_index,
+                ),
+            )
+    if realized.turn_qcount >= 4:
+        return tuple(_seed_outer_terminal_points(points))
+    return tuple(points)
 
 
 def _seed_outer_terminal_points(points: tuple[tuple[float, float], ...] | list[tuple[float, float]]) -> tuple[tuple[float, float], ...]:
@@ -297,19 +346,18 @@ def _apply_blunt_corner_to_polyline(
 
 
 def build_tx_rect_void_centerline(realized: RealizedSingleCoilRectVoid) -> tuple[tuple[float, float], ...]:
-    terminal = _parse_terminal_path(realized.terminal_path)
-    points = list(
-        _apply_blunt_corner_to_polyline(
-            _build_same_corner_centerline_sharp(
-                realized=realized,
-                start_corner=terminal.outer_corner,
-                direction=terminal.direction,
-            ),
-            trace=realized.trace_width_mm,
-            gap=realized.gap_width_mm,
-            forbidden_polygon=_void_polygon(realized),
+    sharp_points = _build_quarter_turn_centerline_sharp(realized=realized)
+    if realized.turn_qcount < 4:
+        points = list(sharp_points)
+    else:
+        points = list(
+            _apply_blunt_corner_to_polyline(
+                sharp_points,
+                trace=realized.trace_width_mm,
+                gap=realized.gap_width_mm,
+                forbidden_polygon=_void_polygon(realized),
+            )
         )
-    )
     if len(points) < 2:
         raise ValueError("tx rect/void centerline must contain at least two points")
     if len(points) != len(set(points)):

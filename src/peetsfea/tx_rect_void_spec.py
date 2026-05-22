@@ -7,10 +7,7 @@ from pathlib import Path
 from typing import cast
 
 from peetsfea.tx_rect_void_types import (
-    CornerLabel,
-    InnerCornerLabel,
     Number,
-    PathDirection,
     RangeSpec,
     RectBounds,
     RealizedSingleCoilRectVoid,
@@ -19,22 +16,21 @@ from peetsfea.tx_rect_void_types import (
     SingleCoilRectVoidSpec,
     SingleCoilSideGeometry,
     SingleCoilProfile,
-    TerminalPath,
     TX_SINGLE_COIL_PROFILE,
     ManufacturingSpec,
+    terminal_end_corner_label,
+    terminal_path_from_quarter_turns,
+    terminal_start_corner_label,
 )
 
-_OUTER_TO_INNER_CORNER: dict[CornerLabel, InnerCornerLabel] = {
-    "A": "a",
-    "B": "b",
-    "C": "c",
-    "D": "d",
-}
 _MIN_COPPER_TRACE_WIDTH_MM = 0.5
 _FIXED_VOID_CENTER_X_OVER_OUTER_X_RATIO = 0.0
 _FIXED_VOID_CENTER_Y_OVER_OUTER_Y_RATIO = 0.0
-_UNSUPPORTED_TX_COIL_VOID_KEYS: frozenset[str] = frozenset(
+_UNSUPPORTED_TX_COIL_KEYS: frozenset[str] = frozenset(
     {
+        "terminal_path",
+        "turn_count",
+        "void_usage_ratio",
         "void_x_over_outer_x",
         "void_y_over_outer_y",
         "void_center_x_over_outer_x",
@@ -43,15 +39,15 @@ _UNSUPPORTED_TX_COIL_VOID_KEYS: frozenset[str] = frozenset(
 )
 
 
-def _fail_if_unsupported_tx_void_ranges(tx_table: dict[str, object]) -> None:
+def _fail_if_unsupported_tx_coil_keys(tx_table: dict[str, object]) -> None:
     present_unsupported_keys = tuple(
-        key for key in _UNSUPPORTED_TX_COIL_VOID_KEYS if key in tx_table
+        key for key in _UNSUPPORTED_TX_COIL_KEYS if key in tx_table
     )
     if len(present_unsupported_keys) == 0:
         return
     unsupported_keys_text = ", ".join(f"tx_coil.{key}" for key in sorted(present_unsupported_keys))
     raise ValueError(
-        "Unsupported tx_rect_void schema input; legacy void range tables are removed "
+        "Unsupported tx_rect_void schema input; legacy single-coil ownership keys are removed "
         f"(keys={unsupported_keys_text})"
     )
 
@@ -113,32 +109,6 @@ def _require_range_table(table: dict[str, object], key: str, context: str, *, ex
     return RangeSpec(path=f"{context}.{key}", is_integer=raw_is_integer, start=start, end=end, count=raw_count)
 
 
-def _parse_terminal_path(value: str) -> TerminalPath:
-    parts = value.split("_")
-    if len(parts) != 4 or parts[2] != "to":
-        raise ValueError(f"tx_coil.terminal_path must match '<outer>_<cw|ccw>_to_<inner>' (actual={value})")
-    raw_outer = parts[0]
-    raw_direction = parts[1]
-    raw_inner = parts[3]
-    if raw_outer not in _OUTER_TO_INNER_CORNER:
-        raise ValueError(f"tx_coil.terminal_path outer corner must be one of A/B/C/D (actual={raw_outer})")
-    if raw_direction not in ("cw", "ccw"):
-        raise ValueError(f"tx_coil.terminal_path direction must be cw or ccw (actual={raw_direction})")
-    outer_corner = cast(CornerLabel, raw_outer)
-    expected_inner = _OUTER_TO_INNER_CORNER[outer_corner]
-    if raw_inner != expected_inner:
-        raise ValueError(
-            "tx_coil.terminal_path v1 requires matching outer/inner corners "
-            f"(outer={outer_corner}, expected_inner={expected_inner}, actual_inner={raw_inner})"
-        )
-    return TerminalPath(
-        raw=value,
-        outer_corner=outer_corner,
-        direction=cast(PathDirection, raw_direction),
-        inner_corner=expected_inner,
-    )
-
-
 def load_tx_rect_void_spec(toml_path: Path) -> SingleCoilRectVoidSpec:
     raw_spec = tomllib.loads(toml_path.read_text(encoding="utf-8"))
     root = cast(dict[str, object], raw_spec)
@@ -156,22 +126,17 @@ def load_tx_rect_void_spec(toml_path: Path) -> SingleCoilRectVoidSpec:
     if manufacturing.copper_thickness_mm <= 0.0:
         raise ValueError("manufacturing.copper_thickness_mm must be > 0")
     tx_table = _require_table(_require_key(root, "tx_coil", toml_path.name), "tx_coil")
-    _fail_if_unsupported_tx_void_ranges(tx_table)
-    terminal_table = _require_table(_require_key(tx_table, "terminal_path", "tx_coil"), "tx_coil.terminal_path")
-    if set(terminal_table.keys()) != {"value"}:
-        raise ValueError("tx_coil.terminal_path must contain only ['value']")
-    terminal_path = _parse_terminal_path(_require_str_value(terminal_table, "value", "tx_coil.terminal_path"))
+    _fail_if_unsupported_tx_coil_keys(tx_table)
     schema_id = _require_str_value(root, "schema_id", toml_path.name)
     return SingleCoilRectVoidSpec(
         schema_id=schema_id,
         units="mm",
         manufacturing=manufacturing,
-        terminal_path=terminal_path,
         tx_coil=SingleCoilRangeSpec(
             outer_x_mm=_require_range_table(tx_table, "outer_x_mm", "tx_coil", expect_integer=False),
             outer_y_mm=_require_range_table(tx_table, "outer_y_mm", "tx_coil", expect_integer=False),
-            void_usage_ratio=_require_range_table(tx_table, "void_usage_ratio", "tx_coil", expect_integer=False),
-            turn_count=_require_range_table(tx_table, "turn_count", "tx_coil", expect_integer=True),
+            void_usage_ratio=_require_range_table(tx_table, "void_factor", "tx_coil", expect_integer=False),
+            turn_qcount=_require_range_table(tx_table, "turn_qcount", "tx_coil", expect_integer=True),
             layer_count=_require_range_table(tx_table, "layer_count", "tx_coil", expect_integer=True),
             layer_gap_mm=_require_range_table(tx_table, "layer_gap_mm", "tx_coil", expect_integer=False),
             terminal_stub_length_mm=_require_range_table(
@@ -180,6 +145,7 @@ def load_tx_rect_void_spec(toml_path: Path) -> SingleCoilRectVoidSpec:
                 "tx_coil",
                 expect_integer=False,
             ),
+            terminal_start=_require_range_table(tx_table, "terminal_start", "tx_coil", expect_integer=True),
             margin_ratio=_require_range_table(tx_table, "margin_ratio", "tx_coil", expect_integer=False),
             metal_fill_factor=_require_range_table(tx_table, "metal_fill_factor", "tx_coil", expect_integer=False),
         ),
@@ -221,10 +187,16 @@ def _validate_ratio(value: float, *, path: str) -> None:
         raise ValueError(f"{path} must be > 0 and < 1 (actual={value})")
 
 
-def _uniform_side_geometry(band_width_mm: float, turn_count: int, metal_fill_factor: float) -> SideGeometry:
+def _uniform_side_geometry(
+    band_width_mm: float,
+    effective_turn_count: float,
+    metal_fill_factor: float,
+) -> SideGeometry:
     if band_width_mm <= 0.0:
         raise ValueError(f"tx_coil uniform band width must be > 0 (actual={band_width_mm})")
-    pitch = band_width_mm / (float(turn_count) + metal_fill_factor)
+    if effective_turn_count <= 0.0:
+        raise ValueError(f"tx_coil effective turn count must be > 0 (actual={effective_turn_count})")
+    pitch = band_width_mm / (effective_turn_count + metal_fill_factor)
     trace = pitch * metal_fill_factor
     gap = pitch * (1.0 - metal_fill_factor)
     if trace <= 0.0:
@@ -290,12 +262,13 @@ def realize_tx_rect_void_spec(
     coil = spec.tx_coil
     outer_x_mm = float(_select_range_value(coil.outer_x_mm, seed=seed))
     outer_y_mm = float(_select_range_value(coil.outer_y_mm, seed=seed))
-    turn_count = int(_select_range_value(coil.turn_count, seed=seed))
+    turn_qcount = int(_select_range_value(coil.turn_qcount, seed=seed))
+    terminal_start = int(_select_range_value(coil.terminal_start, seed=seed))
     layer_count = int(_select_range_value(coil.layer_count, seed=seed))
     layer_gap_mm = float(_select_range_value(coil.layer_gap_mm, seed=seed))
-    void_usage_ratio = float(_select_range_value(coil.void_usage_ratio, seed=seed))
-    void_x_ratio = void_usage_ratio
-    void_y_ratio = void_usage_ratio
+    void_factor = float(_select_range_value(coil.void_usage_ratio, seed=seed))
+    void_x_ratio = void_factor
+    void_y_ratio = void_factor
     void_center_x_ratio = _FIXED_VOID_CENTER_X_OVER_OUTER_X_RATIO
     void_center_y_ratio = _FIXED_VOID_CENTER_Y_OVER_OUTER_Y_RATIO
     margin_ratio = float(_select_range_value(coil.margin_ratio, seed=seed))
@@ -313,8 +286,16 @@ def realize_tx_rect_void_spec(
             "single-coil profile max_turn_count must be >= 1 "
             f"(profile={profile.object_id}, actual={profile.max_turn_count})"
         )
-    if turn_count < 1 or turn_count > profile.max_turn_count:
-        raise ValueError(f"tx_coil.turn_count must resolve to [1,{profile.max_turn_count}] (actual={turn_count})")
+    max_turn_qcount = profile.max_turn_count * 4
+    if turn_qcount < 1 or turn_qcount > max_turn_qcount:
+        raise ValueError(
+            f"tx_coil.turn_qcount must resolve to [1,{max_turn_qcount}] "
+            f"(actual={turn_qcount}, profile={profile.object_id})"
+        )
+    effective_turn_count = float(turn_qcount) / 4.0
+    terminal_start_corner = terminal_start_corner_label(terminal_start)
+    terminal_end_corner = terminal_end_corner_label(terminal_start=terminal_start, turn_qcount=turn_qcount)
+    terminal_path = terminal_path_from_quarter_turns(terminal_start=terminal_start, turn_qcount=turn_qcount)
     if layer_count < 1:
         raise ValueError(f"tx_coil.layer_count must resolve to >= 1 (actual={layer_count})")
     if profile.role == "rx_single_coil" and layer_count != 1:
@@ -324,7 +305,7 @@ def realize_tx_rect_void_spec(
         )
     if layer_gap_mm < 2.0:
         raise ValueError(f"tx_coil.layer_gap_mm must be >= 2.0 (actual={layer_gap_mm})")
-    _validate_ratio(void_usage_ratio, path="tx_coil.void_usage_ratio")
+    _validate_ratio(void_factor, path=coil.void_usage_ratio.path)
     _validate_ratio(margin_ratio, path="tx_coil.margin_ratio")
     _validate_ratio(metal_fill_factor, path="tx_coil.metal_fill_factor")
     if metal_fill_factor < 0.15 or metal_fill_factor > 0.60:
@@ -357,7 +338,7 @@ def realize_tx_rect_void_spec(
         outer.max_y - void.max_y,
         void.min_y - outer.min_y,
     )
-    uniform_geometry = _uniform_side_geometry(uniform_band_width_mm, turn_count, metal_fill_factor)
+    uniform_geometry = _uniform_side_geometry(uniform_band_width_mm, effective_turn_count, metal_fill_factor)
     side_geometry = SingleCoilSideGeometry(
         left=uniform_geometry,
         right=uniform_geometry,
@@ -367,10 +348,16 @@ def realize_tx_rect_void_spec(
     _validate_min_trace_width(side_geometry)
     return RealizedSingleCoilRectVoid(
         seed=seed,
-        terminal_path=spec.terminal_path.raw,
+        terminal_path=terminal_path,
+        terminal_start=terminal_start,
+        terminal_start_corner=terminal_start_corner,
+        terminal_end_corner=terminal_end_corner,
+        terminal_direction="cw",
+        turn_qcount=turn_qcount,
+        effective_turn_count=effective_turn_count,
         outer_x_mm=outer_x_mm,
         outer_y_mm=outer_y_mm,
-        turn_count=turn_count,
+        turn_count=effective_turn_count,
         layer_count=layer_count,
         layer_gap_mm=layer_gap_mm,
         terminal_stub_length_mm=terminal_stub_length_mm,

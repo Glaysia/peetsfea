@@ -14,6 +14,46 @@ Plane = Literal["XY", "YZ"]
 ModeledObjectRole = Literal["tx_single_coil", "tx_inner_single_coil", "tx_outer_single_coil", "rx_single_coil"]
 ModeledObjectMaterial = Literal["composite"]
 
+TERMINAL_START_CORNERS_CW: tuple[CornerLabel, ...] = ("A", "B", "C", "D")
+_TERMINAL_START_BY_CORNER: dict[CornerLabel, int] = {"A": 0, "B": 1, "C": 2, "D": 3}
+_INNER_CORNER_BY_OUTER_CORNER: dict[CornerLabel, InnerCornerLabel] = {
+    "A": "a",
+    "B": "b",
+    "C": "c",
+    "D": "d",
+}
+
+
+def terminal_start_corner_label(terminal_start: int) -> CornerLabel:
+    if isinstance(terminal_start, bool) or not isinstance(terminal_start, int):
+        raise TypeError(f"terminal_start must be an integer in 0..3 (actual={terminal_start!r})")
+    if terminal_start < 0 or terminal_start >= len(TERMINAL_START_CORNERS_CW):
+        raise ValueError(f"terminal_start must be in 0..3 (actual={terminal_start})")
+    return TERMINAL_START_CORNERS_CW[terminal_start]
+
+
+def terminal_start_index_for_corner(corner: CornerLabel) -> int:
+    return _TERMINAL_START_BY_CORNER[corner]
+
+
+def terminal_end_corner_label(*, terminal_start: int, turn_qcount: int) -> CornerLabel:
+    terminal_start_corner_label(terminal_start)
+    if isinstance(turn_qcount, bool) or not isinstance(turn_qcount, int):
+        raise TypeError(f"turn_qcount must be an integer >= 1 (actual={turn_qcount!r})")
+    if turn_qcount < 1:
+        raise ValueError(f"turn_qcount must be >= 1 (actual={turn_qcount})")
+    return TERMINAL_START_CORNERS_CW[(terminal_start + turn_qcount) % len(TERMINAL_START_CORNERS_CW)]
+
+
+def inner_corner_label_for_outer_corner(corner: CornerLabel) -> InnerCornerLabel:
+    return _INNER_CORNER_BY_OUTER_CORNER[corner]
+
+
+def terminal_path_from_quarter_turns(*, terminal_start: int, turn_qcount: int) -> str:
+    start_corner = terminal_start_corner_label(terminal_start)
+    end_corner = terminal_end_corner_label(terminal_start=terminal_start, turn_qcount=turn_qcount)
+    return f"{start_corner}_cw_to_{inner_corner_label_for_outer_corner(end_corner)}"
+
 
 @dataclass(frozen=True)
 class SingleCoilProfile:
@@ -137,10 +177,11 @@ class SingleCoilRangeSpec:
     outer_x_mm: RangeSpec
     outer_y_mm: RangeSpec
     void_usage_ratio: RangeSpec
-    turn_count: RangeSpec
+    turn_qcount: RangeSpec
     layer_count: RangeSpec
     layer_gap_mm: RangeSpec
     terminal_stub_length_mm: RangeSpec
+    terminal_start: RangeSpec
     margin_ratio: RangeSpec
     metal_fill_factor: RangeSpec
 
@@ -165,7 +206,6 @@ class SingleCoilRectVoidSpec:
     units: Literal["mm"]
     manufacturing: ManufacturingSpec
     tx_coil: SingleCoilRangeSpec
-    terminal_path: TerminalPath
 
 
 @dataclass(frozen=True)
@@ -188,9 +228,15 @@ class SingleCoilSideGeometry:
 class RealizedSingleCoilRectVoid:
     seed: int
     terminal_path: str
+    terminal_start: int
+    terminal_start_corner: CornerLabel
+    terminal_end_corner: CornerLabel
+    terminal_direction: Literal["cw"]
+    turn_qcount: int
+    effective_turn_count: float
     outer_x_mm: float
     outer_y_mm: float
-    turn_count: int
+    turn_count: float
     layer_count: int
     layer_gap_mm: float
     terminal_stub_length_mm: float
@@ -298,5 +344,11 @@ __all__ = [
     "SingleCoilProfile",
     "TerminalPath",
     "TX_SINGLE_COIL_PROFILE",
+    "TERMINAL_START_CORNERS_CW",
     "profile_for_modeled_role",
+    "inner_corner_label_for_outer_corner",
+    "terminal_end_corner_label",
+    "terminal_path_from_quarter_turns",
+    "terminal_start_corner_label",
+    "terminal_start_index_for_corner",
 ]

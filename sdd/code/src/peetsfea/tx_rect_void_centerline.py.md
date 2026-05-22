@@ -15,7 +15,7 @@ tags:
 - Primary graph owner: [type2-rect-void-boundary](../../../architecture/type2-rect-void-boundary.md)
 
 ## 역할
-- same-corner terminal planner, ring traversal, blunt-corner shaping을 통해 canonical centerline을 만든다.
+- quarter-turn terminal planner, ring traversal, blunt-corner shaping을 통해 canonical centerline을 만든다.
 
 ## 입력 / 출력
 - 입력: `RealizedSingleCoilRectVoid`
@@ -23,12 +23,15 @@ tags:
 
 ## Canonical state
 - module-level mutable state는 없다.
-- canonical centerline은 sharp seed path가 아니라 blunt corner가 적용된 point sequence다.
+- canonical centerline is a sharp axis-aligned path for partial quarter-turns and a blunt-corner-shaped path for full-turn geometry.
 
 ## Invariants / fail-fast
-- same-corner seed ownership은 type1-derived contract를 유지해야 한다.
-- blunt corner는 45-degree bevel contract를 유지해야 한다.
-- outer terminal은 next-ring coordinate seed를 유지해야 하며 raw corner에 남으면 안 된다.
+- canonical terminal ownership comes from realized `terminal_start`, `terminal_end_corner`, fixed `cw` direction, and `turn_qcount`; raw `terminal_path` is not parsed for centerline construction.
+- Partial quarter paths are valid: `turn_qcount=1` yields the first side segment, `2` yields a half turn, `3` yields three quarters, and `4n` must match the previous same-corner `n`-turn geometry.
+- `turn_qcount < 4` remains on the outer ring only; it must not allocate or validate ring 1 because no full inner ring exists before a complete turn.
+- `turn_qcount < 4` stays sharp and axis-aligned so partial-turn exported copper does not introduce beveled STEP faces.
+- full-turn blunt corner는 45-degree bevel contract를 유지해야 한다.
+- full-turn paths keep the previous outer terminal next-ring coordinate seed; shorter partial-quarter paths may terminate at the requested side endpoints because no complete inner ring exists yet.
 
 ## 직접 의존
 - [tx_rect_void_types.py](tx_rect_void_types.py.md)
