@@ -1,7 +1,7 @@
 ---
 title: type2_sampled_sampling.py
 created: 2026-04-20 @ 00:00
-updated: 2026-05-13 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - sampling
 ---
@@ -31,7 +31,7 @@ tags:
 - TX inner `x_position_ratio` is fixed-zero compatibility state and must not appear as a sampled owner or design variable.
 - Active `count > 1` range owners must appear in `sampled_owner_paths` regardless of modeled/non-modeled ownership.
 - When `void_stack_present` uses `[true, 0, 1, 2]`, it is an active sampled owner and must freeze to an integer singleton in sampled TOML.
-- `tx_region.tx_reference_line.x_ratio`, `tx_region.tx_reference_line.y_usage_ratio`, and `tx_region.tx_reference_line.z_ratio` are active non-modeled guide/context sampled owners.
+- `tx_region.z_gap_from_rx_plane_mm`, `tx_region.tx_reference_line.x_ratio`, `tx_region.tx_reference_line.y_usage_ratio`, and `tx_region.tx_reference_line.z_ratio` are active non-modeled guide/context owner registrations.
 - `tx_region_actual` and `tx_region_actual_stack_space` are not active RxOnly sampled owner sources.
 - `tx_outer_single_coil` is not an active sampled modeled object. `modeled_objects.tx_outer_rect_void_coil.*` owner paths are unsupported.
 

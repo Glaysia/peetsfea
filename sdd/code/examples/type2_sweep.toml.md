@@ -1,7 +1,7 @@
 ---
 title: type2_sweep.toml
 created: 2026-05-03 @ 00:00
-updated: 2026-05-13 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - examples
   - type2
@@ -23,6 +23,7 @@ tags:
 
 ## Canonical state
 - `tx_region` is fixed non-modeled guide state; its X/Y bounds use `size_xyz[0] = 720.0`, `origin_xyz[1] = -600.0`, and `size_xyz[1] = 1200.0`.
+- `non_model_objects.tx_region.z_gap_from_rx_plane_mm` samples `[false, 45.0, 130.0, 37]` and is the canonical TX guide Z-placement owner.
 - `non_model_objects.tx_region.tx_reference_line.x_ratio` is fixed at `[false, 0.99, 0.99, 1]` and is not an exported sampled owner.
 - `non_model_objects.tx_region.tx_reference_line.y_usage_ratio` remains sampled at `[false, 0.2, 1.0, 85]`; it continues to size `tx_inner_region` inside fixed `tx_region`.
 - `non_model_objects.tx_region.tx_reference_line.z_ratio` remains sampled at `[false, 0.75, 1.0, 65]`; its lower bound keeps the maximum current TX inner stack closer to the TX guide top while staying below the resolved reference line.
@@ -38,12 +39,13 @@ tags:
 - `modeled_objects.rx_rect_void_coil.turn_count` samples the official active sweep range `[true, 1, 3, 3]`.
 - `modeled_objects.tv_aluminum_plate` is a `primitive = "sheet"` modeled surface on the TV `+X` face, not a STEP solid.
 - `modeled_objects.tv_aluminum_plate.thickness_mm = 0.04` remains the finite-conductivity boundary thickness, not exported body thickness.
-- `modeled_objects.tv_aluminum_plate.sheet_present` sweeps `[true, 0, 1, 2]`, raising the official active sampled owner count to 14.
+- `modeled_objects.tv_aluminum_plate.sheet_present` sweeps `[true, 0, 1, 2]`, raising the official active sampled owner count to 15.
 - No active example field declares `tx_outer_terminal_path` or `tx_outer_x_position_ratio`.
 
 ## Invariants / fail-fast
 - Candidate values must satisfy `0.0 <= value <= 1.0`.
 - TX reference-line X ratio remains parser-validated strict interior; Z ratio may reach `1.0` and must stay in `(0, 1]`.
+- TX guide z-gap candidates must all be finite positive millimeter values.
 - Active sampled owners must not include `modeled_objects.tx_outer_rect_void_coil.*`.
 - Active sampled owners must not include `modeled_objects.tx_inner_rect_void_coil.layer_count`.
 - `modeled_objects.tv_aluminum_plate.sheet_present` must realize only `0` or `1`.
@@ -53,6 +55,7 @@ tags:
 ## Collaborators
 - [type2_step_spec_modeled.py](../src/peetsfea/type2_step_spec_modeled.py.md)
 - [type2_sampled_sampling.py](../src/peetsfea/type2_sampled_sampling.py.md)
+- [0.2.25-type2-tx-region-z-gap-owner](../../plans/0.2.25-type2-tx-region-z-gap-owner.md)
 - [0.2.25-type2-tv-aluminum-sheet-presence](../../plans/0.2.25-type2-tv-aluminum-sheet-presence.md)
 - [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
 - [0.2.24-type2-turn-count-sweep-upper-bound](../../plans/0.2.24-type2-turn-count-sweep-upper-bound.md)

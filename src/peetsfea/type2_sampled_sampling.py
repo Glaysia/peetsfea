@@ -721,6 +721,10 @@ def _tx_region_reference_line_range_owner_specs(
 ) -> tuple[tuple[str, RangeSpec], ...]:
     return (
         (
+            f"non_model_objects.{non_model_spec.object_id}.z_gap_from_rx_plane_mm",
+            non_model_spec.z_gap_from_rx_plane_mm,
+        ),
+        (
             f"non_model_objects.{non_model_spec.object_id}.tx_reference_line.x_ratio",
             non_model_spec.tx_reference_line.x_ratio,
         ),

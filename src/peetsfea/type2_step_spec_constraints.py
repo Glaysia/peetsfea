@@ -203,6 +203,7 @@ def _constraint_reference_paths(spec: Type2StepSpec) -> set[str]:
     for non_model_spec in spec.non_model_objects:
         if isinstance(non_model_spec, NonModelTxRegionSpec):
             base = f"non_model_objects.{non_model_spec.object_id}.tx_reference_line"
+            paths.add(f"non_model_objects.{non_model_spec.object_id}.z_gap_from_rx_plane_mm")
             paths.update(
                 (
                     f"{base}.x_ratio",

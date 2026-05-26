@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-13 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - test
   - step-export
@@ -36,6 +36,7 @@ tags:
 - RX full-backing thickness assertions derive the active coil stack thickness from exported PCB/copper bounds.
 - TX inner active example geometry uses `pcb_thickness_mm = 0.3` and one-ounce `copper_thickness_mm = 0.035`.
 - Fixed-example TX inner guide assertions use `tx_reference_line.z_ratio = 0.9`, so the expected `tx_inner_region` Z span is 81.0 mm.
+- Fixed-example `tx_region` parsing asserts `z_gap_from_rx_plane_mm = [false, 80.0, 80.0, 1]`, and local fixture templates align `tv` and `rx_region_max` lower-Z so scene resolution can derive `tx_region.origin_z` from the shared reference plane.
 - TX inner fixed passive defaults are `underlay_repeat_count = 1`, `underlay_pet_psa_thickness_mm = 2.0`,
   and `underlay_ferrite_thickness_mm = 2.0`; parsed example assertions should fail if those defaults drift.
 - TX inner void-stack presence is controlled by `void_stack_present`; tests must cover disabled void stack while retaining bottom underlay, including the selected-size fixed example.

@@ -1,7 +1,7 @@
 ---
 title: test_sample_type2_entry.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-13 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - test
   - sampling
@@ -24,6 +24,7 @@ tags:
 - Sampling remains deterministic by source TOML, version, seed, and retry number.
 - RX single-coil sampled fixtures preserve the active `3.965 mm` PCB plus `0.035 mm` copper stack.
 - `tx_region` is fixed guide context only; singleton `tx_reference_line.x_ratio` is not an exported sampled owner.
+- `tx_region.z_gap_from_rx_plane_mm` is an effective sampled owner when its range has `count > 1`.
 - `tx_reference_line.y_usage_ratio` remains an effective sampled owner when its range has `count > 1`.
 - `tx_reference_line.z_ratio` remains an effective sampled owner with active sweep bounds `[false, 0.75, 1.0, 65]`.
 - RxOnly sampled-owner fixtures contain RX coil owners plus active count>1 non-modeled guide owners; TX derived non-model owners are absent.
@@ -41,7 +42,7 @@ tags:
 
 ## Invariants / fail-fast
 - Unknown owner paths fail immediately.
-- `sampled_owner_paths` must include every active `count > 1` range owner, including non-modeled Y/Z guide ranges and TX inner `void_stack_present`, and exclude fixed singleton X guide ranges.
+- `sampled_owner_paths` must include every active `count > 1` range owner, including non-modeled TX guide z-gap plus Y/Z guide ranges and TX inner `void_stack_present`, and exclude fixed singleton X guide ranges.
 - `sampled_owner_paths` must include TV aluminum `sheet_present` when it has `count > 1`, and sampled TOML must freeze it to a singleton integer range.
 - RxOnly sampling tests must not require TX modeled owners.
 - RxOnly sampling tests must not require `tx_region_actual` or `tx_region_actual_stack_space`.

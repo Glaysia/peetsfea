@@ -25,6 +25,7 @@ from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 
 _EXPECTED_SAMPLED_OWNER_PATHS = [
+    "non_model_objects.tx_region.z_gap_from_rx_plane_mm",
     "non_model_objects.tx_region.tx_reference_line.y_usage_ratio",
     "non_model_objects.tx_region.tx_reference_line.z_ratio",
     "modeled_objects.tx_inner_rect_void_coil.outer_y_usage_ratio",
@@ -135,6 +136,7 @@ def _patch_rx_only_spec_loader(
     rx_margin_ratio = RangeSpec(is_integer=False, start=0.05, end=0.05, count=1)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
     tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=6.0, end=6.0, count=1)
+    tx_region_z_gap = RangeSpec(is_integer=False, start=45.0, end=130.0, count=37)
     tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.99, end=0.99, count=1)
     tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
     tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.75, end=1.0, count=13)
@@ -151,6 +153,7 @@ def _patch_rx_only_spec_loader(
                 plane="YZ",
                 origin_xyz=(0.0, -140.0, 0.0),
                 size_xyz=(160.0, 280.0, 90.0),
+                z_gap_from_rx_plane_mm=tx_region_z_gap,
                 tx_reference_line=NonModelTxReferenceLineSpec(
                     x_ratio=tx_reference_line_x_ratio,
                     y_usage_ratio=tx_reference_line_y_usage_ratio,
@@ -301,7 +304,7 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "YZ"
-origin_xyz = [0.0, -5.0, 5.0]
+origin_xyz = [0.0, -5.0, 0.0]
 size_xyz = [1.0, 10.0, 4.0]
 
 [[non_model_objects]]
@@ -314,6 +317,8 @@ material = "vacuum"
 plane = "YZ"
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
+[non_model_objects.z_gap_from_rx_plane_mm]
+range = [false, 45.0, 130.0, 37]
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.99, 0.99, 1]
 [non_model_objects.tx_reference_line.y_usage_ratio]
@@ -1155,6 +1160,8 @@ material = "vacuum"
 plane = "YZ"
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
+[non_model_objects.z_gap_from_rx_plane_mm]
+range = [false, 45.0, 130.0, 37]
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.99, 0.99, 1]
 [non_model_objects.tx_reference_line.y_usage_ratio]

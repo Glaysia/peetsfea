@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec_constraints.py
 created: 2026-04-21 @ 20:35
-updated: 2026-05-13 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - spec
   - constraints
@@ -28,7 +28,7 @@ tags:
 - Active operator set and constraint AST types are shared with [type2_step_spec_types.py](type2_step_spec_types.py.md).
 - Active constraint rule shape requires `id`, `kind`, `message`, `enabled`, `lhs`, `op`, and `rhs`.
 - Constraint operands are limited to `path`, `value`, and `func` payload tables with a single key each.
-- Constraint owner-path validation includes sampled `tx_region.tx_reference_line.*` owners, derived non-model owners, and modeled owners.
+- Constraint owner-path validation includes `tx_region.z_gap_from_rx_plane_mm`, sampled `tx_region.tx_reference_line.*` owners, derived non-model owners, and modeled owners.
 - Constraint owner-path validation includes `modeled_objects.tv_aluminum_plate.sheet_present` for the aluminum sheet presence owner.
 
 ## Invariants / fail-fast

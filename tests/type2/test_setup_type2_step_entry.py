@@ -11,19 +11,21 @@ from peetsfea.type2_spec_tools import type2_sampled_owner_paths
 
 _TX_MODELED_ROLES = {"tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"}
 _TX_SAMPLED_OWNER_IDS = {"tx_region_actual", "tx_region_actual_stack_space"}
-_FIXED_TX_REGION_ORIGIN_XYZ = [0.0, -900.0, 0.0]
-_FIXED_TX_REGION_SIZE_XYZ = [160.0, 1800.0, 90.0]
+_FIXED_TX_REGION_ORIGIN_XYZ = [0.0, -600.0, 0.0]
+_FIXED_TX_REGION_SIZE_XYZ = [720.0, 1200.0, 90.0]
 _SAMPLED_TX_REGION_ORIGIN_XYZ = [0.0, -600.0, 0.0]
 _SAMPLED_TX_REGION_SIZE_XYZ = [720.0, 1200.0, 90.0]
-_FIXED_TX_REFERENCE_LINE_RATIOS = (0.99, 1.0, 0.9)
+_FIXED_TX_REGION_Z_GAP_RANGE = (False, 80.0, 80.0, 1)
+_SAMPLED_TX_REGION_Z_GAP_RANGE = (False, 45.0, 130.0, 37)
+_FIXED_TX_REFERENCE_LINE_RATIOS = (0.99, 0.83732238334605169, 0.96414549614306921)
 _SAMPLED_TX_REFERENCE_LINE_RANGES = ((0.99, 0.99, 1), (0.2, 1.0, 85), (0.75, 1.0, 65))
 _TV_ALUMINUM_PLATE_OBJECT_ID = "tv_aluminum_plate"
 _TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
 _TV_ALUMINUM_PLATE_SHEET_PRESENT_OWNER_PATH = "modeled_objects.tv_aluminum_plate.sheet_present"
 _TV_ALUMINUM_PLATE_THICKNESS_MM = 0.04
-_FIXED_TV_ALUMINUM_PLATE_SHEET_PRESENT_RANGE = [True, 1, 1, 1]
+_FIXED_TV_ALUMINUM_PLATE_SHEET_PRESENT_RANGE = [True, 0, 0, 1]
 _SAMPLED_TV_ALUMINUM_PLATE_SHEET_PRESENT_RANGE = [True, 0, 1, 2]
-_SAMPLED_TYPE2_OWNER_COUNT = 14
+_SAMPLED_TYPE2_OWNER_COUNT = 15
 _FIXED_TURN_COUNT_RANGE = [True, 1, 1, 1]
 _SAMPLED_TURN_COUNT_RANGE = [True, 1, 3, 3]
 
@@ -79,6 +81,22 @@ def _tx_reference_line_ratio_range(payload: dict[str, object], ratio_name: str) 
     return (raw_is_integer, raw_start, raw_end, raw_count)
 
 
+def _tx_region_z_gap_range(payload: dict[str, object]) -> tuple[bool, float, float, int]:
+    tx_region = next(table for table in _tables(payload, "non_model_objects") if table["id"] == "tx_region")
+    raw_gap = tx_region["z_gap_from_rx_plane_mm"]
+    assert isinstance(raw_gap, dict)
+    gap = cast(dict[str, object], raw_gap)
+    raw_range = gap["range"]
+    assert isinstance(raw_range, list)
+    assert len(raw_range) == 4
+    raw_is_integer, raw_start, raw_end, raw_count = raw_range
+    assert isinstance(raw_is_integer, bool)
+    assert isinstance(raw_start, float)
+    assert isinstance(raw_end, float)
+    assert isinstance(raw_count, int)
+    return (raw_is_integer, raw_start, raw_end, raw_count)
+
+
 def _raw_table_list(payload: dict[str, object], key: str) -> list[object]:
     raw_tables = payload[key]
     assert isinstance(raw_tables, list)
@@ -119,8 +137,8 @@ def _assert_txrx_payload(payload: dict[str, object], *, example_name: str) -> No
     if example_name == "type2_fixed.toml":
         assert cast(dict[str, object], tx_inner["turn_count"])["range"] == _FIXED_TURN_COUNT_RANGE
         assert cast(dict[str, object], rx["turn_count"])["range"] == _FIXED_TURN_COUNT_RANGE
-        assert cast(dict[str, object], tx_inner["underlay_pet_psa_thickness_mm"])["range"] == [False, 2.0, 2.0, 1]
-        assert cast(dict[str, object], tx_inner["underlay_ferrite_thickness_mm"])["range"] == [False, 2.0, 2.0, 1]
+        assert cast(dict[str, object], tx_inner["underlay_pet_psa_thickness_mm"])["range"] == [False, 6.0, 6.0, 1]
+        assert cast(dict[str, object], tx_inner["underlay_ferrite_thickness_mm"])["range"] == [False, 6.0, 6.0, 1]
     elif example_name == "type2_sweep.toml":
         assert cast(dict[str, object], tx_inner["turn_count"])["range"] == _SAMPLED_TURN_COUNT_RANGE
         assert cast(dict[str, object], rx["turn_count"])["range"] == _SAMPLED_TURN_COUNT_RANGE
@@ -165,9 +183,12 @@ def _assert_tx_region_payload(payload: dict[str, object], *, example_name: str) 
 
 
 def _assert_tx_reference_line_payload(payload: dict[str, object], *, example_name: str) -> None:
+    z_gap_range = _tx_region_z_gap_range(payload)
     x_range = _tx_reference_line_ratio_range(payload, "x_ratio")
     y_range = _tx_reference_line_ratio_range(payload, "y_usage_ratio")
     z_range = _tx_reference_line_ratio_range(payload, "z_ratio")
+    assert z_gap_range[0] is False
+    assert 0.0 < z_gap_range[1] <= z_gap_range[2]
     assert x_range[0] is False
     assert y_range[0] is False
     assert z_range[0] is False
@@ -175,11 +196,13 @@ def _assert_tx_reference_line_payload(payload: dict[str, object], *, example_nam
     assert 0.0 < y_range[1] <= y_range[2] <= 1.0
     assert 0.0 < z_range[1] <= z_range[2] <= 1.0
     if example_name == "type2_fixed.toml":
+        assert z_gap_range == _FIXED_TX_REGION_Z_GAP_RANGE
         assert x_range == (False, _FIXED_TX_REFERENCE_LINE_RATIOS[0], _FIXED_TX_REFERENCE_LINE_RATIOS[0], 1)
         assert y_range == (False, _FIXED_TX_REFERENCE_LINE_RATIOS[1], _FIXED_TX_REFERENCE_LINE_RATIOS[1], 1)
         assert z_range == (False, _FIXED_TX_REFERENCE_LINE_RATIOS[2], _FIXED_TX_REFERENCE_LINE_RATIOS[2], 1)
         return
     if example_name == "type2_sweep.toml":
+        assert z_gap_range == _SAMPLED_TX_REGION_Z_GAP_RANGE
         expected_x_start, expected_x_end, expected_x_count = _SAMPLED_TX_REFERENCE_LINE_RANGES[0]
         expected_y_start, expected_y_end, expected_y_count = _SAMPLED_TX_REFERENCE_LINE_RANGES[1]
         expected_z_start, expected_z_end, expected_z_count = _SAMPLED_TX_REFERENCE_LINE_RANGES[2]

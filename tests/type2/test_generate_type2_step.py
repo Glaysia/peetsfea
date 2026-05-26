@@ -479,7 +479,7 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "YZ"
-origin_xyz = [0.0, -5.0, 5.0]
+origin_xyz = [0.0, -5.0, 0.0]
 size_xyz = [1.0, 10.0, 4.0]
 
 [[non_model_objects]]
@@ -492,6 +492,9 @@ material = "vacuum"
 plane = "XY"
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
+
+[non_model_objects.z_gap_from_rx_plane_mm]
+range = [false, 80.0, 80.0, 1]
 
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.35, 0.35, 1]
@@ -622,7 +625,7 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "YZ"
-origin_xyz = [0.0, -5.0, 5.0]
+origin_xyz = [0.0, -5.0, 0.0]
 size_xyz = [1.0, 10.0, 4.0]
 
 [[non_model_objects]]
@@ -635,6 +638,9 @@ material = "vacuum"
 plane = "XY"
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
+
+[non_model_objects.z_gap_from_rx_plane_mm]
+range = [false, 80.0, 80.0, 1]
 
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.35, 0.35, 1]
@@ -805,7 +811,7 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "YZ"
-origin_xyz = [0.0, -5.0, 5.0]
+origin_xyz = [0.0, -5.0, 0.0]
 size_xyz = [1.0, 10.0, 4.0]
 
 [[non_model_objects]]
@@ -818,6 +824,9 @@ material = "vacuum"
 plane = "XY"
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
+
+[non_model_objects.z_gap_from_rx_plane_mm]
+range = [false, 80.0, 80.0, 1]
 
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.35, 0.35, 1]
@@ -2355,10 +2364,12 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert _TV_ALUMINUM_PLATE_OBJECT_ID not in [entry.object_id for entry in spec.non_model_objects]
     tx_region_entry = next(entry for entry in spec.non_model_objects if entry.object_id == "tx_region")
     assert isinstance(tx_region_entry, NonModelTxRegionSpec)
-    assert tx_region_entry.origin_xyz == pytest.approx((0.0, -900.0, 0.0))
-    assert tx_region_entry.size_xyz == pytest.approx((160.0, 1800.0, 90.0))
+    assert tx_region_entry.origin_xyz == pytest.approx((0.0, -600.0, 0.0))
+    assert tx_region_entry.size_xyz == pytest.approx((720.0, 1200.0, 90.0))
+    assert tx_region_entry.z_gap_from_rx_plane_mm == RangeSpec(False, 80.0, 80.0, 1)
     assert tx_region_entry.tx_reference_line.x_ratio == RangeSpec(False, 0.99, 0.99, 1)
-    assert tx_region_entry.tx_reference_line.y_usage_ratio == RangeSpec(False, 1.0, 1.0, 1)
+    assert tx_region_entry.tx_reference_line.y_usage_ratio == RangeSpec(False, 0.83732238334605169, 0.83732238334605169, 1)
+    assert tx_region_entry.tx_reference_line.z_ratio == RangeSpec(False, 0.96414549614306921, 0.96414549614306921, 1)
     tx_inner_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "tx_inner_rect_void_coil")
     assert tx_inner_entry.role == "tx_inner_single_coil"
     assert tx_inner_entry.pcb_thickness_mm == pytest.approx(0.3)
@@ -3593,8 +3604,8 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     assert tx_region_member["model_state"] is False
     assert tx_region_member["non_model"] is True
     tx_region_min_xyz, tx_region_size_xyz = _canonical_min_size(tx_region_member)
-    assert tx_region_min_xyz == pytest.approx((0.0, -900.0, 0.0))
-    assert tx_region_size_xyz == pytest.approx((160.0, 1800.0, 90.0))
+    assert tx_region_min_xyz == pytest.approx((0.0, -600.0, 0.0))
+    assert tx_region_size_xyz == pytest.approx((720.0, 1200.0, 90.0))
     tx_inner_member = next(member for member in member_objects if cast(str, member["object_id"]) == "tx_inner_region")
     tx_inner_actual_member = next(
         member for member in member_objects if cast(str, member["object_id"]) == "tx_inner_actual_region"
@@ -3605,7 +3616,8 @@ def test_export_type2_step_artifacts_keeps_tx_region_as_guide_only_for_rxonly(tm
     )
     reference_line = cast(dict[str, object], tx_inner_member["tx_reference_line"])
     assert reference_line["x_ratio"] == pytest.approx(0.99)
-    assert reference_line["y_usage_ratio"] == pytest.approx(1.0)
+    assert reference_line["y_usage_ratio"] == pytest.approx(0.83732238334605169)
+    assert reference_line["z_ratio"] == pytest.approx(0.96414549614306921)
     assert tx_inner_min_xyz == pytest.approx((0.0, -900.0, 0.0))
     assert tx_inner_size_xyz == pytest.approx((158.4, 1800.0, 81.0))
     assert tx_inner_actual_min_xyz[0] == pytest.approx(0.0)
@@ -3834,8 +3846,8 @@ def test_export_type2_fixed_example_adds_tx_inner_region_guide_only_step_and_led
     tx_inner_member = next(member for member in member_objects if member["object_id"] == "tx_inner_region")
     tx_inner_actual_member = next(member for member in member_objects if member["object_id"] == "tx_inner_actual_region")
     tx_region_min_xyz, tx_region_size_xyz = _canonical_min_size(tx_region_member)
-    assert tx_region_min_xyz == pytest.approx((0.0, -900.0, 0.0))
-    assert tx_region_size_xyz == pytest.approx((160.0, 1800.0, 90.0))
+    assert tx_region_min_xyz == pytest.approx((0.0, -600.0, 0.0))
+    assert tx_region_size_xyz == pytest.approx((720.0, 1200.0, 90.0))
     assert tx_inner_member["role"] == "tx_inner_region"
     assert tx_inner_member["model_state"] is False
     assert tx_inner_member["non_model"] is True

@@ -100,6 +100,7 @@ class NonModelTxReferenceLineSpec:
 class NonModelTxRegionSpec(NonModelBoxSpec):
     object_id: Literal["tx_region"]
     kind: Literal["tx_region"]
+    z_gap_from_rx_plane_mm: RangeSpec
     tx_reference_line: NonModelTxReferenceLineSpec
 
 

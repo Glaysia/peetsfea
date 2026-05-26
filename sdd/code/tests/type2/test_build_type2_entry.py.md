@@ -1,7 +1,7 @@
 ---
 title: test_build_type2_entry.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-13 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - test
   - build
@@ -38,10 +38,10 @@ tags:
 - RX single-coil fixtures use the active `3.965 mm` PCB plus `0.035 mm` copper stack.
 - Synthetic TX inner fixtures use active fixed `layer_count=1` plus passive underlay defaults: repeat count `1`, PET/PSA `6.0 mm`, and ferrite `6.0 mm`.
 - `tx_region` is allowed only as non-modeled guide context and must include the required `tx_reference_line` ratios; active-shaped synthetic fixtures use the 720.0 mm TX guide X span.
-- Synthetic TX guide fixtures mirror the active sweep Z reference range `[false, 0.75, 1.0, 65]`.
+- Synthetic TX guide fixtures mirror the active sweep `z_gap_from_rx_plane_mm = [false, 45.0, 130.0, 37]` plus the active TX reference-line Z range `[false, 0.75, 1.0, 65]`.
 - Fake RxOnly specs used by entry tests mirror the current `Type2StepSpec` shape, including `non_model_objects`.
 - `config.make_step_on_sample=false` manifest는 build-time STEP generation path를 대표한다.
-- Expected sampled owner/design-variable order includes TX inner sampled owners such as `modeled_objects.tx_inner_rect_void_coil.void_stack_present`, but excludes fixed TX inner `x_position_ratio`, before RX coil sampled owners.
+- Expected sampled owner/design-variable order starts with `non_model_objects.tx_region.z_gap_from_rx_plane_mm`, then TX guide reference-line/runtime owners, and excludes fixed TX inner `x_position_ratio`.
 - Expected sampled owner/design-variable order includes `modeled_objects.tv_aluminum_plate.sheet_present` after the RX coil sampled owners when the source sheet presence range has `count > 1`.
 - Synthetic source TOML and `ModeledTxInnerSingleCoilSpec` fixtures must expose `void_stack_present` as a sampled integer owner when build design-variable handoff is under test.
 - Active single-coil turn-count sweep fixtures cap sampled upper bounds at one below the former maximum: synthetic RX single-coil `turn_count` uses `2.0..5.0` with `count=4`, embedded sampled TOML uses `[true, 2, 5, 4]`, and non-`turn_count` owners remain unchanged; fixed singleton `turn_count` ranges remain unchanged.

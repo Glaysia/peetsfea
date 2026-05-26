@@ -1,7 +1,7 @@
 ---
 title: test_setup_type2_step_entry.py
 created: 2026-04-17 @ 09:09
-updated: 2026-05-13 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - hfss-import
   - em
@@ -30,6 +30,7 @@ tags:
 
 ## Canonical state
 - active example TOML payload가 canonical assertion surface다.
+- active examples define `non_model_objects.tx_region.z_gap_from_rx_plane_mm`, fixed at `80.0 mm` in `type2_fixed.toml` and sampled at `[45.0, 130.0]` with `count=37` in `type2_sweep.toml`.
 - active examples fix `tx_reference_line.x_ratio = 0.99` while preserving fixed/sampled `y_usage_ratio` for
   retained non-modeled `tx_inner_region` guide export.
 - active sweep samples `tx_reference_line.z_ratio` over `[false, 0.75, 1.0, 65]` so current maximum TX inner stack height fits under the reference line.
@@ -43,7 +44,7 @@ tags:
 - active examples fix `tx_inner_rect_void_coil.layer_count = [true, 1, 1, 1]` and must not expect
   `tx_inner_copper_stack` in fixed/sweep body-name contracts.
 - active examples define `tv_aluminum_plate` as optional finite-conductivity sheet metadata sourced from the `tv` `+X` face, not as a STEP solid.
-- active sweep exposes `modeled_objects.tv_aluminum_plate.sheet_present = [true, 0, 1, 2]`, raising the active sampled-owner count to 14.
+- active sweep exposes `modeled_objects.tv_aluminum_plate.sheet_present = [true, 0, 1, 2]`; together with TX guide z-gap this raises the active sampled-owner count to 15.
 - active fixed exposes `modeled_objects.tv_aluminum_plate.sheet_present = [true, 1, 1, 1]`, preserving a sheet-present fixed realization.
 
 ## Invariants / fail-fast
@@ -55,7 +56,7 @@ tags:
 - fixed example `turn_count` ranges must stay singleton one-turn ranges while the official sweep upper bound stays at three turns.
 - active examples must not expose `modeled_objects.tx_inner_rect_void_coil.layer_count` as a sampled owner.
 - active examples must not declare `tv_aluminum_plate.primitive = "box"` or any other STEP-solid primitive.
-- active sweep sampled-owner paths must include `modeled_objects.tv_aluminum_plate.sheet_present` and have length 14.
+- active sweep sampled-owner paths must include `non_model_objects.tx_region.z_gap_from_rx_plane_mm`, include `modeled_objects.tv_aluminum_plate.sheet_present`, and have length 15.
 - `tx_reference_line.x_ratio`, `tx_reference_line.y_usage_ratio`, and `tx_reference_line.z_ratio` are guide-only
   inputs and may derive TX inner geometry context, but must not imply TX ports, reports, generic TX modeled roles,
   or active TX sampled owners.
