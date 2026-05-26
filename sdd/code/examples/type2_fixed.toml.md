@@ -23,6 +23,7 @@ tags:
 
 ## Canonical state
 - `tx_region` is fixed non-modeled guide state; its Y bounds use `origin_xyz[1] = -900.0` and `size_xyz[1] = 1800.0`.
+- `outputs.solution_name` is `Setup1 : Sweep` for the active type2 sweep report/export contract.
 - `non_model_objects.tx_region.z_gap_from_rx_plane_mm` is fixed at `[false, 80.0, 80.0, 1]`, preserving the current fixed-example realized TX guide Z placement.
 - `non_model_objects.tx_region.tx_reference_line.x_ratio` is fixed at `[false, 0.99, 0.99, 1]`.
 - `non_model_objects.tx_region.tx_reference_line.y_usage_ratio` remains fixed at `[false, 1.0, 1.0, 1]`; it continues to size `tx_inner_region` inside fixed `tx_region`.

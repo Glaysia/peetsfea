@@ -35,6 +35,7 @@ tags:
 - Embedded TOML fixtures keep `modeled_objects.tx_inner_rect_void_coil.x_position_ratio` as a fixed zero compatibility field for lower-X wall-side anchoring.
 - Synthetic source TOML fixtures include sampled `modeled_objects.tx_inner_rect_void_coil.void_stack_present` so manifest metadata exercises the active TX inner void-stack owner.
 - Synthetic source TOML fixtures include sampled `modeled_objects.tv_aluminum_plate.sheet_present` so manifest metadata and sampled TOML freeze behavior exercise the active TV aluminum sheet presence owner.
+- Synthetic source TOML fixtures now use `outputs.solution_name = "Setup1 : Sweep"` for the staged type2 sweep-report contract.
 - `seed_first` is the absolute sample index floor; emitted sample metadata and `design_id` prefixes match absolute indices (for example `seed_first=12000` produces `s012000_*`).
 - Active fixed/sweep source fixtures use `modeled_objects.tx_inner_rect_void_coil.layer_count = [true, 1, 1, 1]`.
 - `modeled_objects.tx_outer_rect_void_coil.*` paths are not active sampled owners.

@@ -54,7 +54,7 @@ radiation_margin_mm = 3500.0
 # Active TxRx setup creates TX inner + RX report variables.
 mode = "TxRx"
 report_name = "Output Variables Table1"
-solution_name = "Setup1 : LastAdaptive"
+solution_name = "Setup1 : Sweep"
 primary_sweep = "Freq"
 report_category = "Terminal Solution Data"
 plot_type = "Data Table"

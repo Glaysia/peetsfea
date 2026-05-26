@@ -37,6 +37,7 @@ tags:
 - TX inner active example geometry uses `pcb_thickness_mm = 0.3` and one-ounce `copper_thickness_mm = 0.035`.
 - Fixed-example TX inner guide assertions use `tx_reference_line.z_ratio = 0.9`, so the expected `tx_inner_region` Z span is 81.0 mm.
 - Fixed-example `tx_region` parsing asserts `z_gap_from_rx_plane_mm = [false, 80.0, 80.0, 1]`, and local fixture templates align `tv` and `rx_region_max` lower-Z so scene resolution can derive `tx_region.origin_z` from the shared reference plane.
+- Active example fixture text now expects `outputs.solution_name = "Setup1 : Sweep"` for the type2 sweep-report contract.
 - TX inner fixed passive defaults are `underlay_repeat_count = 1`, `underlay_pet_psa_thickness_mm = 2.0`,
   and `underlay_ferrite_thickness_mm = 2.0`; parsed example assertions should fail if those defaults drift.
 - TX inner void-stack presence is controlled by `void_stack_present`; tests must cover disabled void stack while retaining bottom underlay, including the selected-size fixed example.

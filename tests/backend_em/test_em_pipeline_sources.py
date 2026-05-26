@@ -213,6 +213,11 @@ def test_build_post_templates_supports_rx_only_expression_without_tx_placeholder
 
     assert len(built) == 1
     assert len(fake_hfss.created_output_variables) == 1
+    assert [report_name for report_name in fake_hfss.report_names] == [
+        "rx-only-report",
+        "Table1",
+        "Table2",
+    ]
     _, expression, _ = fake_hfss.created_output_variables[0]
     assert "RX_TML" in expression
     assert "TX_TML" not in expression

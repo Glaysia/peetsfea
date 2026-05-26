@@ -445,7 +445,7 @@ radiation_margin_mm = 3500.0
 [outputs]
 mode = "RxOnly"
 report_name = "Output Variables Table1"
-solution_name = "Setup1 : LastAdaptive"
+solution_name = "Setup1 : Sweep"
 primary_sweep = "Freq"
 report_category = "Terminal Solution Data"
 plot_type = "Data Table"
@@ -645,7 +645,7 @@ radiation_margin_mm = 3500.0
 [outputs]
 mode = "RxOnly"
 report_name = "Output Variables Table1"
-solution_name = "Setup1 : LastAdaptive"
+solution_name = "Setup1 : Sweep"
 primary_sweep = "Freq"
 report_category = "Terminal Solution Data"
 plot_type = "Data Table"

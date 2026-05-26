@@ -394,8 +394,7 @@ def _imported_ledger_payload(path: Path) -> dict[str, object]:
 
 
 def _expected_output_variables() -> list[tuple[str, str, str]]:
-    outputs = type1_outputs_spec()
-    solution_name = outputs["solution_name"]
+    solution_name = "Setup1 : Sweep"
     return [
         (
             name,
@@ -407,8 +406,7 @@ def _expected_output_variables() -> list[tuple[str, str, str]]:
 
 
 def _expected_rx_only_output_variables() -> list[tuple[str, str, str]]:
-    outputs = type1_outputs_spec()
-    solution_name = outputs["solution_name"]
+    solution_name = "Setup1 : Sweep"
     source_by_name = dict(TYPE1_OUTPUT_VARIABLES)
     expected_names = [
         "Lrx_uH",
@@ -1149,10 +1147,15 @@ def test_setup_type2_step_ledger_builds_mesh_boundary_ports_analysis_and_validat
     outputs = type1_outputs_spec()
     expected_trace_names = [name for name, _ in TYPE1_OUTPUT_VARIABLES]
     assert session.created_output_variables == _expected_output_variables()
-    assert session.created_reports[0]["plot_name"] == "Output Variables Table1"
+    assert [cast(str, report["plot_name"]) for report in session.created_reports] == [
+        "Output Variables Table1",
+        "Table1",
+        "Table2",
+    ]
     assert session.created_reports[0]["report_category"] == outputs["report_category"]
     assert session.created_reports[0]["plot_type"] == outputs["plot_type"]
-    assert session.created_reports[0]["setup_sweep_name"] == outputs["solution_name"]
+    assert session.created_reports[0]["setup_sweep_name"] == "Setup1 : Sweep"
+    assert session.created_reports[0]["context"] == ["Domain:=", "Sweep"]
     assert session.created_reports[0]["variations"] == [f"{outputs['primary_sweep']}:=", ["All"]]
     assert session.created_reports[0]["components"] == [
         "X Component:=",
@@ -1160,6 +1163,8 @@ def test_setup_type2_step_ledger_builds_mesh_boundary_ports_analysis_and_validat
         "Y Component:=",
         expected_trace_names,
     ]
+    assert session.created_reports[1]["setup_sweep_name"] == "Setup1 : LastAdaptive"
+    assert session.created_reports[2]["setup_sweep_name"] == "Setup1 : AdaptivePass"
     assert session.save_project_calls == [str(output_aedt_path)]
     assert session.desktop_class.release_calls == [(True, True)]
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}

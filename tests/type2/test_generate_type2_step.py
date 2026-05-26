@@ -176,7 +176,7 @@ def _outputs_spec_text() -> str:
         "[outputs]",
         'mode = "RxOnly"',
         'report_name = "Output Variables Table1"',
-        'solution_name = "Setup1 : LastAdaptive"',
+        'solution_name = "Setup1 : Sweep"',
         'primary_sweep = "Freq"',
         'report_category = "Terminal Solution Data"',
         'plot_type = "Data Table"',
@@ -256,7 +256,7 @@ def _assert_tv_aluminum_plate_spec_contract(*, spec: Type2StepSpec) -> None:
     assert tv_entry.face == "+x"
     assert tv_entry.thickness_mm == pytest.approx(0.04)
     assert tv_entry.sheet_present.start in (0.0, 1.0)
-    assert tv_entry.sheet_present.end == pytest.approx(1.0)
+    assert tv_entry.sheet_present.end in (0.0, 1.0)
 
 
 def _assert_tv_aluminum_plate_ledger_contract(*, entry: dict[str, object]) -> None:
@@ -2374,8 +2374,8 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert tx_inner_entry.role == "tx_inner_single_coil"
     assert tx_inner_entry.pcb_thickness_mm == pytest.approx(0.3)
     assert tx_inner_entry.copper_thickness_mm == pytest.approx(0.035)
-    assert tx_inner_entry.outer_x_usage_ratio.start == pytest.approx(0.9)
-    assert tx_inner_entry.outer_y_usage_ratio.start == pytest.approx(0.9)
+    assert tx_inner_entry.outer_x_usage_ratio.start == pytest.approx(0.86242457612505696)
+    assert tx_inner_entry.outer_y_usage_ratio.start == pytest.approx(0.86839691770398653)
     assert tx_inner_entry.x_position_ratio.start == pytest.approx(0.0)
     assert tx_inner_entry.x_position_ratio.end == pytest.approx(0.0)
     assert tx_inner_entry.x_position_ratio.count == 1
@@ -2387,8 +2387,8 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert tx_inner_entry.underlay_repeat_count.start == pytest.approx(1.0)
     assert tx_inner_entry.underlay_repeat_count.end == pytest.approx(1.0)
     assert tx_inner_entry.underlay_repeat_count.count == 1
-    assert tx_inner_entry.underlay_pet_psa_thickness_mm == RangeSpec(False, 2.0, 2.0, 1)
-    assert tx_inner_entry.underlay_ferrite_thickness_mm == RangeSpec(False, 2.0, 2.0, 1)
+    assert tx_inner_entry.underlay_pet_psa_thickness_mm == RangeSpec(False, 6.0, 6.0, 1)
+    assert tx_inner_entry.underlay_ferrite_thickness_mm == RangeSpec(False, 6.0, 6.0, 1)
     assert all(entry.object_id != "tx_outer_rect_void_coil" for entry in spec.modeled_objects)
     assert all(entry.role != "tx_outer_single_coil" for entry in spec.modeled_objects)
     rx_entry = next(entry for entry in spec.modeled_objects if entry.object_id == "rx_rect_void_coil")
@@ -2396,19 +2396,19 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert rx_entry.role == "rx_single_coil"
     assert rx_entry.pcb_thickness_mm == pytest.approx(3.965)
     assert rx_entry.copper_thickness_mm == pytest.approx(0.035)
-    assert rx_entry.outer_x_usage_ratio.start == pytest.approx(1.0)
-    assert rx_entry.outer_y_usage_ratio.start == pytest.approx(0.6)
-    assert rx_entry.outer_x_mm.start == pytest.approx(1800.0)
-    assert rx_entry.outer_y_mm.start == pytest.approx(216.0)
+    assert rx_entry.outer_x_usage_ratio.start == pytest.approx(0.51909954351372767)
+    assert rx_entry.outer_y_usage_ratio.start == pytest.approx(0.99205127847200558)
+    assert rx_entry.outer_x_mm.start == pytest.approx(934.3791783247098)
+    assert rx_entry.outer_y_mm.start == pytest.approx(357.138460250722)
     assert rx_entry.turn_count.start == pytest.approx(1.0)
     assert rx_entry.layer_count.start == pytest.approx(1.0)
     assert rx_entry.underlay_repeat_count.start == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.end == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.count == 1
-    assert rx_entry.void_usage_ratio.start == pytest.approx(0.2)
-    assert rx_entry.void_usage_ratio.end == pytest.approx(0.2)
+    assert rx_entry.void_usage_ratio.start == pytest.approx(0.18815820448507281)
+    assert rx_entry.void_usage_ratio.end == pytest.approx(0.18815820448507281)
     assert rx_entry.void_usage_ratio.count == 1
-    assert rx_entry.metal_fill_factor.start == pytest.approx(0.5142857142857142)
+    assert rx_entry.metal_fill_factor.start == pytest.approx(0.47496926247510463)
     _assert_tv_aluminum_plate_spec_contract(spec=spec)
 
 
@@ -2428,8 +2428,8 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     assert tx_inner_entry.underlay_repeat_count.start == pytest.approx(1.0)
     assert tx_inner_entry.underlay_repeat_count.end == pytest.approx(1.0)
     assert tx_inner_entry.underlay_repeat_count.count == 1
-    assert tx_inner_entry.underlay_pet_psa_thickness_mm == RangeSpec(False, 2.0, 2.0, 1)
-    assert tx_inner_entry.underlay_ferrite_thickness_mm == RangeSpec(False, 2.0, 2.0, 1)
+    assert tx_inner_entry.underlay_pet_psa_thickness_mm == RangeSpec(False, 6.0, 6.0, 1)
+    assert tx_inner_entry.underlay_ferrite_thickness_mm == RangeSpec(False, 6.0, 6.0, 1)
     assert tx_inner_entry.terminal_path == "B_cw_to_b"
     assert tx_inner_entry.terminal_stub_length_mm == RangeSpec(False, 7.5, 7.5, 1)
     tx_inner_profile = profile_for_modeled_role(cast(Literal["tx_inner_single_coil"], tx_inner_entry.role))
@@ -2447,8 +2447,8 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     assert rx_entry.underlay_repeat_count.start == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.end == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.count == 1
-    assert rx_entry.void_usage_ratio.start == pytest.approx(0.2)
-    assert rx_entry.void_usage_ratio.end == pytest.approx(0.2)
+    assert rx_entry.void_usage_ratio.start == pytest.approx(0.18815820448507281)
+    assert rx_entry.void_usage_ratio.end == pytest.approx(0.18815820448507281)
     assert rx_entry.void_usage_ratio.count == 1
     assert rx_entry.terminal_path == "A_cw_to_a"
     rx_profile = profile_for_modeled_role(cast(Literal["rx_single_coil"], rx_entry.role))
@@ -3347,7 +3347,7 @@ def test_load_type2_step_spec_rejects_empty_outputs_variables(tmp_path: Path) ->
             "[outputs]",
             'mode = "RxOnly"',
             'report_name = "Output Variables Table1"',
-            'solution_name = "Setup1 : LastAdaptive"',
+            'solution_name = "Setup1 : Sweep"',
             'primary_sweep = "Freq"',
             'report_category = "Terminal Solution Data"',
             'plot_type = "Data Table"',

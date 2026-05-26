@@ -20,11 +20,161 @@ def _format_frequency_mhz(frequency_hz: float) -> str:
     return f"{frequency_mhz:g}MHz"
 
 
+def _build_frequency_sweep_payload() -> list[object]:
+    return [
+        "NAME:Sweep",
+        "IsEnabled:=",
+        True,
+        "RangeType:=",
+        "LogScale",
+        "RangeStart:=",
+        "0.1MHz",
+        "RangeEnd:=",
+        "100MHz",
+        "RangeCount:=",
+        401,
+        "RangeSamples:=",
+        100,
+        [
+            "NAME:SweepRanges",
+            [
+                "NAME:Subrange",
+                "RangeType:=",
+                "LinearCount",
+                "RangeStart:=",
+                "0MHz",
+                "RangeEnd:=",
+                "0MHz",
+                "RangeCount:=",
+                1,
+            ],
+        ],
+        "Type:=",
+        "Interpolating",
+        "SaveFields:=",
+        False,
+        "SaveRadFields:=",
+        False,
+        "InterpTolerance:=",
+        0.5,
+        "InterpMaxSolns:=",
+        250,
+        "InterpMinSolns:=",
+        0,
+        "InterpMinSubranges:=",
+        1,
+        "MinSolvedFreq:=",
+        "0.01GHz",
+        "InterpUseS:=",
+        True,
+        "InterpUsePortImped:=",
+        True,
+        "InterpUsePropConst:=",
+        True,
+        "UseDerivativeConvergence:=",
+        False,
+        "InterpDerivTolerance:=",
+        0.2,
+        "UseFullBasis:=",
+        True,
+        "EnforcePassivity:=",
+        True,
+        "PassivityErrorTolerance:=",
+        0.0001,
+        "EnforceCausality:=",
+        False,
+        "UseQ3DForDCSolve:=",
+        True,
+        "SMatrixOnlySolveMode:=",
+        "Auto",
+    ]
+
+
+_DIAGNOSTIC_REPORT_TABLE_1_TRACES = [
+    "Ltx_uH",
+    "Lrx_uH",
+    "M_uH",
+    "k_ratio",
+    "Qtx_ratio",
+    "Qrx_ratio",
+    "FOM_ratio",
+    "Rtx_ac_ohm",
+    "Rrx_ac_ohm",
+    "Xtx_ohm",
+    "Xrx_ohm",
+    "M_over_Ltx_ratio",
+    "M_over_Lrx_ratio",
+    "Gtx_S",
+    "Btx_S",
+    "Grx_S",
+    "Brx_S",
+    "S11_mag_ratio",
+    "S21_mag_ratio",
+    "S21_phase_deg",
+    "S22_mag_ratio",
+    "eta_s21_power_ratio",
+    "eta_tx_accept_ratio",
+    "eta_rx_accept_ratio",
+    "eta_match_product_ratio",
+    "eta_s21_from_tx_accept_ratio",
+    "eta_s21_from_rx_accept_ratio",
+    "eta_s21_two_sided_norm_ratio",
+    "eta_fom_max_ratio",
+    "Volume(under_rx_air_u0)",
+    "Volume(under_rx_pet_psa_u0)",
+    "Volume(under_rx_ferrite_u0)",
+    "Volume(rx_copper_l0)",
+    "Volume(rx_pcb_l0)",
+    "Volume(tx_underlay_ferrite_u0)",
+    "Volume(tx_underlay_pet_psa_u0)",
+    "Volume(tx_inner_tube_l0)",
+    "Area(tx_inner_port_sheet)",
+    "Area(rx_port_sheet)",
+    "Volume(Region_Abs_3500mm)",
+]
+
+
+_DIAGNOSTIC_REPORT_TABLE_2_TRACES = [
+    "Ltx_uH",
+    "Lrx_uH",
+    "M_uH",
+    "k_ratio",
+    "Qtx_ratio",
+    "Qrx_ratio",
+    "FOM_ratio",
+    "Rtx_ac_ohm",
+    "Rrx_ac_ohm",
+    "Xtx_ohm",
+    "Xrx_ohm",
+    "M_over_Ltx_ratio",
+    "M_over_Lrx_ratio",
+    "Gtx_S",
+    "Btx_S",
+    "Grx_S",
+    "Brx_S",
+    "S11_mag_ratio",
+    "S21_mag_ratio",
+    "S21_phase_deg",
+    "S22_mag_ratio",
+    "eta_s21_power_ratio",
+    "eta_tx_accept_ratio",
+    "eta_rx_accept_ratio",
+    "eta_match_product_ratio",
+    "eta_s21_from_tx_accept_ratio",
+    "eta_s21_from_rx_accept_ratio",
+    "eta_s21_two_sided_norm_ratio",
+    "eta_fom_max_ratio",
+    "SolvedElements",
+    "MaxMagDeltaS",
+]
+
+
 def build_analysis(hfss: HfssSession, policy: EmPolicy) -> dict[str, float | str]:
     setup_name = "Setup1"
     setup_frequency_hz = policy["setup_frequency_hz"]
-    sweep_start_hz = policy["sweep_start_hz"]
-    sweep_stop_hz = policy["sweep_stop_hz"]
+    sweep_name = "Sweep"
+    sweep_start_hz = 0.1e6
+    sweep_stop_hz = 100.0e6
     if setup_name in hfss.setup_names:
         raise_on_false(
             hfss.delete_setup(setup_name),
@@ -118,12 +268,23 @@ def build_analysis(hfss: HfssSession, policy: EmPolicy) -> dict[str, float | str
         operation="InsertSetup",
         context={"setup_name": setup_name, "setup_frequency_hz": setup_frequency_hz},
     )
-    # Frequency sweep creation is temporarily disabled. Keep policy values in the
-    # returned payload so downstream callers can still inspect the configured range.
+    raise_on_false(
+        analysis_module.InsertFrequencySweep(
+            setup_name,
+            _build_frequency_sweep_payload(),
+        ),
+        operation="InsertFrequencySweep",
+        context={
+            "setup_name": setup_name,
+            "sweep_name": sweep_name,
+            "sweep_start_hz": sweep_start_hz,
+            "sweep_stop_hz": sweep_stop_hz,
+        },
+    )
     return {
         "setup_name": setup_name,
         "setup_frequency_hz": setup_frequency_hz,
-        "sweep_name": "disabled",
+        "sweep_name": sweep_name,
         "sweep_start_hz": sweep_start_hz,
         "sweep_stop_hz": sweep_stop_hz,
     }
@@ -222,11 +383,14 @@ def build_post_templates(hfss: HfssSession, outputs: OutputsSpec, ports: EmPorts
     s_function = terms["s_function"]
     built: list[PostTemplateResult] = []
     for template in templates:
+        is_output_variables_report = template["report_name"] == "Output Variables Table1"
+        report_solution_name = "Setup1 : Sweep" if is_output_variables_report else template["solution_name"]
+        report_context: list[object] = ["Domain:=", "Sweep"] if is_output_variables_report else []
         for output_variable in template["output_variables"]:
             expression = output_variable["expression"]
             create_output_context: dict[str, object] = {
                 "name": output_variable["name"],
-                "solution": template["solution_name"],
+                "solution": report_solution_name,
                 "rx_port": rx_port_name,
                 "mode": terms["mode"],
             }
@@ -246,12 +410,11 @@ def build_post_templates(hfss: HfssSession, outputs: OutputsSpec, ports: EmPorts
                 hfss.create_output_variable(
                     variable=output_variable["name"],
                     expression=expression,
-                    solution=template["solution_name"],
+                    solution=report_solution_name,
                 ),
                 operation="create_output_variable",
                 context=create_output_context,
             )
-        context: list[object] = []
         variations: list[object] = []
         for key, values in template["variations"].items():
             variations.extend([f"{key}:=", list(values)])
@@ -266,8 +429,8 @@ def build_post_templates(hfss: HfssSession, outputs: OutputsSpec, ports: EmPorts
                 template["report_name"],
                 template["report_category"],
                 template["plot_type"],
-                template["solution_name"],
-                context,
+                report_solution_name,
+                report_context,
                 variations,
                 components,
                 [],
@@ -275,7 +438,7 @@ def build_post_templates(hfss: HfssSession, outputs: OutputsSpec, ports: EmPorts
             operation="CreateReport",
             context={
                 "report_name": template["report_name"],
-                "solution_name": template["solution_name"],
+                "solution_name": report_solution_name,
             },
         )
         report_names = report_setup.GetAllReportNames()
@@ -288,9 +451,78 @@ def build_post_templates(hfss: HfssSession, outputs: OutputsSpec, ports: EmPorts
             {
                 "template_id": template["template_id"],
                 "report_name": template["report_name"],
-                "solution_name": template["solution_name"],
+                "solution_name": report_solution_name,
                 "traces": list(template["traces"]),
                 "output_variables": [entry["name"] for entry in template["output_variables"]],
             }
         )
+
+    report_category = templates[0]["report_category"]
+    plot_type = templates[0]["plot_type"]
+    report_primary_sweep = templates[0]["primary_sweep"]
+    diagnostic_reports = [
+        {
+            "report_name": "Table1",
+            "solution_name": "Setup1 : LastAdaptive",
+            "context": [],
+            "variations": [
+                "Freq:=",
+                ["All"],
+            ],
+            "traces": _DIAGNOSTIC_REPORT_TABLE_1_TRACES,
+        },
+        {
+            "report_name": "Table2",
+            "solution_name": "Setup1 : AdaptivePass",
+            "context": [],
+            "variations": [
+                "Freq:=",
+                ["All"],
+                "Pass:=",
+                ["All"],
+            ],
+            "traces": _DIAGNOSTIC_REPORT_TABLE_2_TRACES,
+        },
+    ]
+    for report in diagnostic_reports:
+        raise_on_false(
+            report_setup.CreateReport(
+                report["report_name"],
+                report_category,
+                plot_type,
+                report["solution_name"],
+                report["context"],
+                report["variations"],
+                [
+                    "X Component:=",
+                    report_primary_sweep,
+                    "Y Component:=",
+                    report["traces"],
+                ],
+                [],
+            ),
+            operation="CreateReport",
+            context={
+                "report_name": report["report_name"],
+                "solution_name": report["solution_name"],
+                "report_category": report_category,
+                "plot_type": plot_type,
+            },
+        )
+        report_names = report_setup.GetAllReportNames()
+        if report["report_name"] not in set(report_names):
+            raise ValueError(
+                "Failed to create required AEDT report in Results tree "
+                f"(report_name={report['report_name']}, solution={report['solution_name']})"
+            )
+
+    report_names = set(report_setup.GetAllReportNames())
+    expected_report_names = {"Table1", "Table2"}
+    expected_report_names.update({template["report_name"] for template in templates})
+    for report_name in expected_report_names:
+        if report_name not in report_names:
+            raise ValueError(
+                "Failed to create required AEDT report in Results tree "
+                f"(report_name={report_name!r})"
+            )
     return built
