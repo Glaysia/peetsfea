@@ -38,15 +38,20 @@ from peetsfea.type2_step_spec import load_type2_step_spec
 
 _EXPECTED_SAMPLED_OWNER_PATHS = (
     "non_model_objects.tx_region.z_gap_from_rx_plane_mm",
-    "non_model_objects.tx_region.tx_reference_line.y_usage_ratio",
-    "non_model_objects.tx_region.tx_reference_line.z_ratio",
+    "modeled_objects.tx_inner_rect_void_coil.x_ratio",
+    "modeled_objects.tx_inner_rect_void_coil.y_ratio",
+    "modeled_objects.tx_inner_rect_void_coil.turn_qcount",
+    "modeled_objects.tx_inner_rect_void_coil.void_factor",
+    "modeled_objects.tx_inner_rect_void_coil.metal_fill_factor",
+    "modeled_objects.tx_inner_rect_void_coil.terminal_start",
     "modeled_objects.tx_inner_rect_void_coil.void_stack_present",
-    "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
-    "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
-    "modeled_objects.rx_rect_void_coil.void_usage_ratio",
-    "modeled_objects.rx_rect_void_coil.turn_count",
+    "modeled_objects.rx_rect_void_coil.x_ratio",
+    "modeled_objects.rx_rect_void_coil.y_ratio",
+    "modeled_objects.rx_rect_void_coil.turn_qcount",
+    "modeled_objects.rx_rect_void_coil.void_factor",
     "modeled_objects.rx_rect_void_coil.metal_fill_factor",
-    "modeled_objects.tv_aluminum_plate.sheet_present",
+    "modeled_objects.rx_rect_void_coil.terminal_start",
+    "modeled_objects.rx_rect_void_coil.void_stack_present",
 )
 _RX_NON_SAMPLED_OWNER_PATHS = (
     "modeled_objects.rx_rect_void_coil.layer_count",
@@ -68,49 +73,73 @@ def _expected_design_variables_for_sampled_toml(sampled_toml_path: Path) -> tupl
     modeled_by_id: dict[str, dict[str, object]] = {
         cast(str, modeled_object["object_id"]): modeled_object for modeled_object in modeled_objects
     }
-    tx_region_z_gap_range = cast(
+    tx_region = non_model_by_id["tx_region"]
+    tx_region_z_gap_range = cast(list[object], cast(dict[str, object], tx_region["z_gap_from_rx_plane_mm"])["range"])
+    tx_inner_outer_x_range = cast(
         list[object],
-        cast(dict[str, object], non_model_by_id["tx_region"]["z_gap_from_rx_plane_mm"])["range"],
+        cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["x_ratio"])["range"],
     )
-    tx_reference_line = cast(dict[str, object], non_model_by_id["tx_region"]["tx_reference_line"])
-    tx_reference_line_y_range = cast(
-        list[object], cast(dict[str, object], tx_reference_line["y_usage_ratio"])["range"]
+    tx_inner_outer_y_range = cast(
+        list[object],
+        cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["y_ratio"])["range"],
     )
-    tx_reference_line_z_range = cast(list[object], cast(dict[str, object], tx_reference_line["z_ratio"])["range"])
-    rx_outer_x_range = cast(
-        list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["outer_x_usage_ratio"])["range"]
+    tx_inner_turn_range = cast(
+        list[object],
+        cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["turn_qcount"])["range"],
     )
-    rx_outer_y_range = cast(
-        list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["outer_y_usage_ratio"])["range"]
+    tx_inner_void_ratio_range = cast(
+        list[object],
+        cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["void_factor"])["range"],
     )
-    rx_void_ratio_range = cast(
-        list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["void_usage_ratio"])["range"]
+    tx_inner_fill_range = cast(
+        list[object],
+        cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["metal_fill_factor"])["range"],
     )
-    rx_turn_range = cast(
-        list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["turn_count"])["range"]
-    )
-    rx_fill_range = cast(
-        list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["metal_fill_factor"])["range"]
+    tx_inner_terminal_start_range = cast(
+        list[object],
+        cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["terminal_start"])["range"],
     )
     tx_inner_void_stack_present_range = cast(
         list[object],
         cast(dict[str, object], modeled_by_id["tx_inner_rect_void_coil"]["void_stack_present"])["range"],
     )
-    tv_aluminum_sheet_present_range = cast(
-        list[object],
-        cast(dict[str, object], modeled_by_id["tv_aluminum_plate"]["sheet_present"])["range"],
+    rx_outer_x_range = cast(
+        list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["x_ratio"])["range"]
+    )
+    rx_outer_y_range = cast(
+        list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["y_ratio"])["range"]
+    )
+    rx_turn_range = cast(
+        list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["turn_qcount"])["range"]
+    )
+    rx_void_ratio_range = cast(
+        list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["void_factor"])["range"]
+    )
+    rx_fill_range = cast(
+        list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["metal_fill_factor"])["range"]
+    )
+    rx_terminal_start_range = cast(
+        list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["terminal_start"])["range"]
+    )
+    rx_void_stack_present_range = cast(
+        list[object], cast(dict[str, object], modeled_by_id["rx_rect_void_coil"]["void_stack_present"])["range"]
     )
     return (
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[0], str(float(cast(int | float, tx_region_z_gap_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, tx_reference_line_y_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(float(cast(int | float, tx_reference_line_z_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(int(cast(int | float, tx_inner_void_stack_present_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, rx_outer_x_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, rx_outer_y_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(float(cast(int | float, rx_void_ratio_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[7], str(int(cast(int | float, rx_turn_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[8], str(float(cast(int | float, rx_fill_range[1])))),
-        (_EXPECTED_DESIGN_VARIABLE_NAMES[9], str(int(cast(int | float, tv_aluminum_sheet_present_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[0], f"{float(cast(int | float, tx_region_z_gap_range[1]))}mm"),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[1], str(float(cast(int | float, tx_inner_outer_x_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[2], str(float(cast(int | float, tx_inner_outer_y_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[3], str(int(cast(int | float, tx_inner_turn_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[4], str(float(cast(int | float, tx_inner_void_ratio_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[5], str(float(cast(int | float, tx_inner_fill_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[6], str(int(cast(int | float, tx_inner_terminal_start_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[7], str(int(cast(int | float, tx_inner_void_stack_present_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[8], str(float(cast(int | float, rx_outer_x_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[9], str(float(cast(int | float, rx_outer_y_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[10], str(int(cast(int | float, rx_turn_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[11], str(float(cast(int | float, rx_void_ratio_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[12], str(float(cast(int | float, rx_fill_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[13], str(int(cast(int | float, rx_terminal_start_range[1])))),
+        (_EXPECTED_DESIGN_VARIABLE_NAMES[14], str(int(cast(int | float, rx_void_stack_present_range[1])))),
     )
 
 
@@ -136,23 +165,30 @@ class _FakeRxOnlyType2Spec:
 
 def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     source_spec_loader = load_type2_step_spec
-    rx_outer_x_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.6, count=17)
-    rx_outer_y_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.6, count=17)
+    rx_x_ratio = RangeSpec(is_integer=False, start=0.1, end=0.6, count=17)
+    rx_y_ratio = RangeSpec(is_integer=False, start=0.1, end=0.6, count=17)
     rx_void_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.6, count=17)
     rx_outer_x = RangeSpec(is_integer=False, start=20.0, end=120.0, count=17)
     rx_outer_y = RangeSpec(is_integer=False, start=20.0, end=120.0, count=17)
-    rx_turn_count = RangeSpec(is_integer=True, start=2.0, end=5.0, count=4)
+    rx_turn_count = RangeSpec(is_integer=True, start=4.0, end=12.0, count=9)
     rx_layer_count = RangeSpec(is_integer=True, start=1.0, end=1.0, count=1)
     rx_underlay_repeat_count = RangeSpec(is_integer=True, start=8.0, end=8.0, count=1)
     rx_layer_gap = RangeSpec(is_integer=False, start=2.0, end=2.0, count=1)
     rx_terminal_stub = RangeSpec(is_integer=False, start=5.0, end=5.0, count=1)
     rx_margin_ratio = RangeSpec(is_integer=False, start=0.05, end=0.05, count=1)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
+    rx_terminal_start = RangeSpec(is_integer=True, start=0.0, end=3.0, count=4)
+    rx_void_stack_present = RangeSpec(is_integer=True, start=0.0, end=1.0, count=2)
     tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=6.0, end=6.0, count=1)
-    tx_region_z_gap = RangeSpec(is_integer=False, start=45.0, end=130.0, count=37)
+    tx_inner_terminal_start = RangeSpec(is_integer=True, start=0.0, end=3.0, count=4)
+    tx_region_z_gap = RangeSpec(is_integer=False, start=45.0, end=130.0, count=17)
     tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.99, end=0.99, count=1)
-    tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
-    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.75, end=1.0, count=13)
+    tx_reference_line_y_usage_ratio = RangeSpec(
+        is_integer=False, start=0.8373223833460517, end=0.8373223833460517, count=1
+    )
+    tx_reference_line_z_ratio = RangeSpec(
+        is_integer=False, start=0.9641454961430692, end=0.9641454961430692, count=1
+    )
     fake_spec = _FakeRxOnlyType2Spec(
         non_model_objects=(
             NonModelTxRegionSpec(
@@ -182,11 +218,11 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 model_state=True,
                 pcb_thickness_mm=0.3,
                 copper_thickness_mm=0.035,
-                outer_x_usage_ratio=RangeSpec(is_integer=False, start=0.5, end=0.5, count=1),
-                outer_y_usage_ratio=RangeSpec(is_integer=False, start=0.6, end=0.6, count=1),
+                x_ratio=RangeSpec(is_integer=False, start=0.4, end=0.9, count=75),
+                y_ratio=RangeSpec(is_integer=False, start=0.2, end=0.9, count=150),
                 outer_x_mm=RangeSpec(is_integer=False, start=100.0, end=100.0, count=1),
                 outer_y_mm=RangeSpec(is_integer=False, start=80.0, end=80.0, count=1),
-                turn_count=RangeSpec(is_integer=True, start=2.0, end=2.0, count=1),
+                turn_qcount=RangeSpec(is_integer=True, start=4.0, end=12.0, count=9),
                 layer_count=RangeSpec(is_integer=True, start=1.0, end=1.0, count=1),
                 underlay_repeat_count=RangeSpec(is_integer=True, start=1.0, end=1.0, count=1),
                 void_stack_present=RangeSpec(is_integer=True, start=0.0, end=1.0, count=2),
@@ -194,10 +230,10 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 underlay_ferrite_thickness_mm=tx_inner_underlay_thickness,
                 layer_gap_mm=RangeSpec(is_integer=False, start=2.0, end=2.0, count=1),
                 terminal_stub_length_mm=RangeSpec(is_integer=False, start=7.5, end=7.5, count=1),
-                void_usage_ratio=RangeSpec(is_integer=False, start=0.2, end=0.2, count=1),
+                void_factor=RangeSpec(is_integer=False, start=0.08, end=0.8, count=125),
                 margin_ratio=RangeSpec(is_integer=False, start=0.05, end=0.05, count=1),
-                metal_fill_factor=RangeSpec(is_integer=False, start=0.5, end=0.5, count=1),
-                terminal_path="B_cw_to_b",
+                metal_fill_factor=RangeSpec(is_integer=False, start=0.2, end=0.6, count=75),
+                terminal_start=tx_inner_terminal_start,
                 x_position_ratio=RangeSpec(is_integer=False, start=0.0, end=0.0, count=1),
             ),
             ModeledRxSingleCoilSpec(
@@ -207,19 +243,20 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 model_state=True,
                 pcb_thickness_mm=3.965,
                 copper_thickness_mm=0.035,
-                outer_x_usage_ratio=rx_outer_x_usage_ratio,
-                outer_y_usage_ratio=rx_outer_y_usage_ratio,
-                void_usage_ratio=rx_void_usage_ratio,
+                x_ratio=rx_x_ratio,
+                y_ratio=rx_y_ratio,
+                void_factor=rx_void_usage_ratio,
                 outer_x_mm=rx_outer_x,
                 outer_y_mm=rx_outer_y,
-                turn_count=rx_turn_count,
+                turn_qcount=rx_turn_count,
                 layer_count=rx_layer_count,
                 underlay_repeat_count=rx_underlay_repeat_count,
                 layer_gap_mm=rx_layer_gap,
                 terminal_stub_length_mm=rx_terminal_stub,
                 margin_ratio=rx_margin_ratio,
                 metal_fill_factor=rx_fill_factor,
-                terminal_path="A_cw_to_a",
+                terminal_start=rx_terminal_start,
+                void_stack_present=rx_void_stack_present,
                 x_position_ratio=RangeSpec(is_integer=False, start=0.0, end=0.0, count=1),
             ),
             _FakeTvAluminumPlateSpec(
@@ -231,7 +268,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 source_non_model_object_id="tv",
                 face="+x",
                 thickness_mm=0.04,
-                sheet_present=RangeSpec(is_integer=True, start=0.0, end=1.0, count=2),
+                sheet_present=RangeSpec(is_integer=True, start=0.0, end=0.0, count=1),
             ),
         )
     )
@@ -264,15 +301,12 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
             count=cast(int, range_values[3]),
         )
 
-    def _range_from_tx_region_gap(payload: dict[str, object]) -> RangeSpec:
+    def _range_from_tx_region(payload: dict[str, object], *, field_name: str) -> RangeSpec:
         non_model_objects = cast(list[dict[str, object]], payload["non_model_objects"])
         non_model_by_id = {
             cast(str, non_model_object["id"]): non_model_object for non_model_object in non_model_objects
         }
-        range_values = cast(
-            list[object],
-            cast(dict[str, object], non_model_by_id["tx_region"]["z_gap_from_rx_plane_mm"])["range"],
-        )
+        range_values = cast(list[object], cast(dict[str, object], non_model_by_id["tx_region"][field_name])["range"])
         return RangeSpec(
             is_integer=cast(bool, range_values[0]),
             start=float(cast(int | float, range_values[1])),
@@ -294,7 +328,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                     plane="YZ",
                     origin_xyz=(0.0, -600.0, 0.0),
                     size_xyz=(720.0, 1200.0, 90.0),
-                    z_gap_from_rx_plane_mm=_range_from_tx_region_gap(payload),
+                    z_gap_from_rx_plane_mm=_range_from_tx_region(payload, field_name="z_gap_from_rx_plane_mm"),
                     tx_reference_line=NonModelTxReferenceLineSpec(
                         x_ratio=_range_from_tx_reference_line(payload, field_name="x_ratio"),
                         y_usage_ratio=_range_from_tx_reference_line(payload, field_name="y_usage_ratio"),
@@ -311,16 +345,16 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                     model_state=True,
                     pcb_thickness_mm=0.3,
                     copper_thickness_mm=0.035,
-                    outer_x_usage_ratio=_range_from_modeled(
-                        payload, object_id="tx_inner_rect_void_coil", field_name="outer_x_usage_ratio"
+                    x_ratio=_range_from_modeled(
+                        payload, object_id="tx_inner_rect_void_coil", field_name="x_ratio"
                     ),
-                    outer_y_usage_ratio=_range_from_modeled(
-                        payload, object_id="tx_inner_rect_void_coil", field_name="outer_y_usage_ratio"
+                    y_ratio=_range_from_modeled(
+                        payload, object_id="tx_inner_rect_void_coil", field_name="y_ratio"
                     ),
                     outer_x_mm=RangeSpec(is_integer=False, start=100.0, end=100.0, count=1),
                     outer_y_mm=RangeSpec(is_integer=False, start=80.0, end=80.0, count=1),
-                    turn_count=_range_from_modeled(
-                        payload, object_id="tx_inner_rect_void_coil", field_name="turn_count"
+                    turn_qcount=_range_from_modeled(
+                        payload, object_id="tx_inner_rect_void_coil", field_name="turn_qcount"
                     ),
                     layer_count=_range_from_modeled(
                         payload, object_id="tx_inner_rect_void_coil", field_name="layer_count"
@@ -347,8 +381,8 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                     terminal_stub_length_mm=_range_from_modeled(
                         payload, object_id="tx_inner_rect_void_coil", field_name="terminal_stub_length_mm"
                     ),
-                    void_usage_ratio=_range_from_modeled(
-                        payload, object_id="tx_inner_rect_void_coil", field_name="void_usage_ratio"
+                    void_factor=_range_from_modeled(
+                        payload, object_id="tx_inner_rect_void_coil", field_name="void_factor"
                     ),
                     margin_ratio=_range_from_modeled(
                         payload, object_id="tx_inner_rect_void_coil", field_name="margin_ratio"
@@ -356,7 +390,9 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                     metal_fill_factor=_range_from_modeled(
                         payload, object_id="tx_inner_rect_void_coil", field_name="metal_fill_factor"
                     ),
-                    terminal_path="B_cw_to_b",
+                    terminal_start=_range_from_modeled(
+                        payload, object_id="tx_inner_rect_void_coil", field_name="terminal_start"
+                    ),
                     x_position_ratio=_range_from_modeled(
                         payload, object_id="tx_inner_rect_void_coil", field_name="x_position_ratio"
                     ),
@@ -368,18 +404,18 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                     model_state=True,
                     pcb_thickness_mm=3.965,
                     copper_thickness_mm=0.035,
-                    outer_x_usage_ratio=_range_from_modeled(
-                        payload, object_id="rx_rect_void_coil", field_name="outer_x_usage_ratio"
+                    x_ratio=_range_from_modeled(
+                        payload, object_id="rx_rect_void_coil", field_name="x_ratio"
                     ),
-                    outer_y_usage_ratio=_range_from_modeled(
-                        payload, object_id="rx_rect_void_coil", field_name="outer_y_usage_ratio"
+                    y_ratio=_range_from_modeled(
+                        payload, object_id="rx_rect_void_coil", field_name="y_ratio"
                     ),
-                    void_usage_ratio=_range_from_modeled(
-                        payload, object_id="rx_rect_void_coil", field_name="void_usage_ratio"
+                    void_factor=_range_from_modeled(
+                        payload, object_id="rx_rect_void_coil", field_name="void_factor"
                     ),
                     outer_x_mm=RangeSpec(is_integer=False, start=20.0, end=120.0, count=17),
                     outer_y_mm=RangeSpec(is_integer=False, start=20.0, end=120.0, count=17),
-                    turn_count=_range_from_modeled(payload, object_id="rx_rect_void_coil", field_name="turn_count"),
+                    turn_qcount=_range_from_modeled(payload, object_id="rx_rect_void_coil", field_name="turn_qcount"),
                     layer_count=_range_from_modeled(payload, object_id="rx_rect_void_coil", field_name="layer_count"),
                     underlay_repeat_count=_range_from_modeled(
                         payload, object_id="rx_rect_void_coil", field_name="underlay_repeat_count"
@@ -394,7 +430,12 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                     metal_fill_factor=_range_from_modeled(
                         payload, object_id="rx_rect_void_coil", field_name="metal_fill_factor"
                     ),
-                    terminal_path="A_cw_to_a",
+                    terminal_start=_range_from_modeled(
+                        payload, object_id="rx_rect_void_coil", field_name="terminal_start"
+                    ),
+                    void_stack_present=_range_from_modeled(
+                        payload, object_id="rx_rect_void_coil", field_name="void_stack_present"
+                    ),
                     x_position_ratio=_range_from_modeled(
                         payload, object_id="rx_rect_void_coil", field_name="x_position_ratio"
                     ),
@@ -445,7 +486,7 @@ radiation_margin_mm = 3500.0
 [outputs]
 mode = "RxOnly"
 report_name = "Output Variables Table1"
-solution_name = "Setup1 : Sweep"
+solution_name = "Setup1 : LastAdaptive"
 primary_sweep = "Freq"
 report_category = "Terminal Solution Data"
 plot_type = "Data Table"
@@ -510,16 +551,16 @@ origin_xyz = [0.0, -600.0, 0.0]
 size_xyz = [720.0, 1200.0, 90.0]
 
 [non_model_objects.z_gap_from_rx_plane_mm]
-range = [false, 45.0, 130.0, 37]
+range = [false, 45.0, 130.0, 17]
 
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.99, 0.99, 1]
 
 [non_model_objects.tx_reference_line.y_usage_ratio]
-range = [false, 0.2, 1.0, 85]
+range = [false, 0.83732238334605169, 0.83732238334605169, 1]
 
 [non_model_objects.tx_reference_line.z_ratio]
-range = [false, 0.75, 1.0, 65]
+range = [false, 0.96414549614306921, 0.96414549614306921, 1]
 
 [[non_model_objects]]
 id = "rx_region_max"
@@ -539,18 +580,18 @@ size_xyz = [10.0, 200.0, 200.0]
     model_state = true
     pcb_thickness_mm = 0.3
     copper_thickness_mm = 0.035
-    [modeled_objects.outer_x_usage_ratio]
-    range = [false, 0.5, 0.5, 1]
-    [modeled_objects.outer_y_usage_ratio]
-    range = [false, 0.6, 0.6, 1]
+    [modeled_objects.x_ratio]
+    range = [false, 0.4, 0.9, 75]
+    [modeled_objects.y_ratio]
+    range = [false, 0.2, 0.9, 150]
     [modeled_objects.x_position_ratio]
     range = [false, 0.0, 0.0, 1]
-    [modeled_objects.turn_count]
-    range = [true, 2, 2, 1]
+    [modeled_objects.turn_qcount]
+    range = [true, 4, 12, 9]
     [modeled_objects.layer_count]
-    range = [true, 2, 2, 1]
+    range = [true, 1, 1, 1]
     [modeled_objects.underlay_repeat_count]
-    range = [true, 0, 0, 1]
+    range = [true, 1, 1, 1]
     [modeled_objects.void_stack_present]
     range = [true, 0, 1, 2]
     [modeled_objects.underlay_pet_psa_thickness_mm]
@@ -564,11 +605,11 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.margin_ratio]
     range = [false, 0.05, 0.05, 1]
     [modeled_objects.metal_fill_factor]
-    range = [false, 0.5, 0.5, 1]
-    [modeled_objects.void_usage_ratio]
-    range = [false, 0.2, 0.2, 1]
-    [modeled_objects.terminal_path]
-    value = "B_cw_to_b"
+    range = [false, 0.2, 0.6, 75]
+    [modeled_objects.void_factor]
+    range = [false, 0.08, 0.8, 125]
+    [modeled_objects.terminal_start]
+    range = [true, 0, 3, 4]
 
 [[modeled_objects]]
     object_id = "rx_rect_void_coil"
@@ -577,16 +618,16 @@ size_xyz = [10.0, 200.0, 200.0]
     model_state = true
     pcb_thickness_mm = 3.965
     copper_thickness_mm = 0.035
-    [modeled_objects.outer_x_usage_ratio]
+    [modeled_objects.x_ratio]
     range = [false, 0.1, 0.6, 85]
-    [modeled_objects.outer_y_usage_ratio]
+    [modeled_objects.y_ratio]
     range = [false, 0.1, 0.6, 85]
     [modeled_objects.x_position_ratio]
     range = [false, 0.0, 0.0, 1]
-    [modeled_objects.void_usage_ratio]
+    [modeled_objects.void_factor]
     range = [false, 0.1, 0.6, 85]
-    [modeled_objects.turn_count]
-    range = [true, 2, 5, 4]
+    [modeled_objects.turn_qcount]
+    range = [true, 4, 12, 9]
     [modeled_objects.layer_count]
     range = [true, 1, 1, 1]
     [modeled_objects.underlay_repeat_count]
@@ -599,8 +640,10 @@ size_xyz = [10.0, 200.0, 200.0]
     range = [false, 0.05, 0.05, 1]
     [modeled_objects.metal_fill_factor]
     range = [false, 0.2, 0.6, 75]
-    [modeled_objects.terminal_path]
-    value = "A_cw_to_a"
+    [modeled_objects.terminal_start]
+    range = [true, 0, 3, 4]
+    [modeled_objects.void_stack_present]
+    range = [true, 0, 1, 2]
 
 [[modeled_objects]]
     object_id = "tv_aluminum_plate"
@@ -612,7 +655,7 @@ size_xyz = [10.0, 200.0, 200.0]
     face = "+x"
     thickness_mm = 0.04
     [modeled_objects.sheet_present]
-    range = [true, 0, 1, 2]
+    range = [true, 0, 0, 1]
 
 """.strip()
 
@@ -645,7 +688,7 @@ radiation_margin_mm = 3500.0
 [outputs]
 mode = "RxOnly"
 report_name = "Output Variables Table1"
-solution_name = "Setup1 : Sweep"
+solution_name = "Setup1 : LastAdaptive"
 primary_sweep = "Freq"
 report_category = "Terminal Solution Data"
 plot_type = "Data Table"
@@ -690,7 +733,7 @@ range = [true, 1, 4, 4]
 range = [false, 1.0, 1.8, 5]
 [modeled_objects.terminal_stub_length_mm]
 range = [false, 10.0, 10.0, 1]
-[modeled_objects.void_usage_ratio]
+[modeled_objects.void_factor]
 range = [false, 0.2, 0.2, 1]
 [modeled_objects.margin_ratio]
 range = [false, 0.05, 0.05, 1]
@@ -706,8 +749,6 @@ range = [false, 0.5, 1.5, 5]
 range = [false, -0.5, 0.5, 21]
 [modeled_objects.turn_weight_c]
 range = [false, -0.3, 0.3, 21]
-[modeled_objects.terminal_path]
-value = "A_cw_to_a"
 """.strip(),
         encoding="utf-8",
     )
@@ -1623,7 +1664,7 @@ def test_build_prepared_type2_design_accepts_existing_rx_only_step_ledger(tmp_pa
     step_ledger_path.write_text(json.dumps({"scene_step_path": str(scene_step_path)}, indent=2), encoding="utf-8")
     output_aedt_path = design_dir / f"{design_id}.aedt"
     imported_ledger_path = design_dir / "type2_imported_ledger.json"
-    design_variables = (("rx_outer_x_usage_ratio", "0.5"), ("rx_outer_y_usage_ratio", "0.6"))
+    design_variables = (("rx_x_ratio", "0.5"), ("rx_y_ratio", "0.6"))
     prepared_build = PreparedType2Build(
         design_id=design_id,
         seed=1,
@@ -1634,7 +1675,7 @@ def test_build_prepared_type2_design_accepts_existing_rx_only_step_ledger(tmp_pa
         step_ledger_path=step_ledger_path,
         imported_ledger_path=imported_ledger_path,
         aedt_path=output_aedt_path,
-        sampled_owner_paths=("modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",),
+        sampled_owner_paths=("modeled_objects.rx_rect_void_coil.x_ratio",),
         modeled_roles=("rx_single_coil",),
         design_variables=design_variables,
     )
@@ -1688,7 +1729,7 @@ def test_build_prepared_type2_designs_best_effort_skips_aedt_and_import_runner_f
     output_aedt_path = design_dir / f"{design_id}.aedt"
     output_aedt_path.write_text("AEDT", encoding="utf-8")
     imported_ledger_path = design_dir / "type2_imported_ledger.json"
-    design_variables = (("rx_outer_x_usage_ratio", "0.5"),)
+    design_variables = (("rx_x_ratio", "0.5"),)
     prepared_build = PreparedType2Build(
         design_id=design_id,
         seed=1,
@@ -1699,7 +1740,7 @@ def test_build_prepared_type2_designs_best_effort_skips_aedt_and_import_runner_f
         step_ledger_path=step_ledger_path,
         imported_ledger_path=imported_ledger_path,
         aedt_path=output_aedt_path,
-        sampled_owner_paths=("modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",),
+        sampled_owner_paths=("modeled_objects.rx_rect_void_coil.x_ratio",),
         modeled_roles=("rx_single_coil",),
         design_variables=design_variables,
     )
@@ -1761,9 +1802,9 @@ def test_build_prepared_type2_designs_best_effort_skips_runner_for_exact_aedt_do
         step_ledger_path=step_ledger_path,
         imported_ledger_path=imported_ledger_path,
         aedt_path=output_aedt_path,
-        sampled_owner_paths=("modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",),
+        sampled_owner_paths=("modeled_objects.rx_rect_void_coil.x_ratio",),
         modeled_roles=("rx_single_coil",),
-        design_variables=(("rx_outer_x_usage_ratio", "0.5"),),
+        design_variables=(("rx_x_ratio", "0.5"),),
     )
 
     exporter_calls: list[dict[str, object]] = []
@@ -1828,9 +1869,9 @@ def test_build_prepared_type2_designs_best_effort_skips_runner_when_imported_led
         step_ledger_path=step_ledger_path,
         imported_ledger_path=imported_ledger_path,
         aedt_path=output_aedt_path,
-        sampled_owner_paths=("modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",),
+        sampled_owner_paths=("modeled_objects.rx_rect_void_coil.x_ratio",),
         modeled_roles=("rx_single_coil",),
-        design_variables=(("rx_outer_x_usage_ratio", "0.5"),),
+        design_variables=(("rx_x_ratio", "0.5"),),
     )
 
     exporter_calls: list[dict[str, object]] = []
@@ -1897,9 +1938,9 @@ def test_build_prepared_type2_designs_best_effort_skips_runner_when_imported_led
         step_ledger_path=step_ledger_path,
         imported_ledger_path=imported_ledger_path,
         aedt_path=output_aedt_path,
-        sampled_owner_paths=("modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",),
+        sampled_owner_paths=("modeled_objects.rx_rect_void_coil.x_ratio",),
         modeled_roles=("rx_single_coil",),
-        design_variables=(("rx_outer_x_usage_ratio", "0.5"),),
+        design_variables=(("rx_x_ratio", "0.5"),),
     )
 
     exporter_calls: list[dict[str, object]] = []
@@ -1957,9 +1998,9 @@ def test_build_prepared_type2_designs_best_effort_calls_runner_when_aedt_is_miss
         step_ledger_path=step_ledger_path,
         imported_ledger_path=imported_ledger_path,
         aedt_path=output_aedt_path,
-        sampled_owner_paths=("modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",),
+        sampled_owner_paths=("modeled_objects.rx_rect_void_coil.x_ratio",),
         modeled_roles=("rx_single_coil",),
-        design_variables=(("rx_outer_x_usage_ratio", "0.5"),),
+        design_variables=(("rx_x_ratio", "0.5"),),
     )
 
     runner_calls: list[dict[str, object]] = []
@@ -2086,9 +2127,9 @@ def test_build_prepared_type2_design_accepts_rx_with_tx_inner_geometry_role(tmp_
         step_ledger_path=step_ledger_path,
         imported_ledger_path=imported_ledger_path,
         aedt_path=output_aedt_path,
-        sampled_owner_paths=("modeled_objects.tx_inner_rect_void_coil.outer_x_usage_ratio",),
+        sampled_owner_paths=("modeled_objects.tx_inner_rect_void_coil.x_ratio",),
         modeled_roles=("rx_single_coil", "tx_inner_single_coil"),
-        design_variables=(("tx_inner_outer_x_usage_ratio", "0.5"),),
+        design_variables=(("tx_inner_x_ratio", "0.5"),),
     )
 
     runner_calls: list[dict[str, object]] = []
@@ -2127,9 +2168,9 @@ def test_build_prepared_type2_designs_best_effort_skips_step_value_error(tmp_pat
                 step_ledger_path=design_dir / "type2_step_ledger.json",
                 imported_ledger_path=design_dir / "type2_imported_ledger.json",
                 aedt_path=design_dir / f"{design_id}.aedt",
-                sampled_owner_paths=("modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",),
+                sampled_owner_paths=("modeled_objects.rx_rect_void_coil.x_ratio",),
                 modeled_roles=("rx_single_coil",),
-                design_variables=(("rx_outer_x_usage_ratio", "0.5"),),
+                design_variables=(("rx_x_ratio", "0.5"),),
             )
         )
 
@@ -2190,12 +2231,12 @@ def test_build_prepared_type2_design_accepts_rx_with_tx_inner_and_outer_geometry
         imported_ledger_path=imported_ledger_path,
         aedt_path=output_aedt_path,
         sampled_owner_paths=(
-            "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
+            "modeled_objects.rx_rect_void_coil.x_ratio",
             "modeled_objects.tx_inner_rect_void_coil.void_stack_present",
         ),
         modeled_roles=("rx_single_coil", "tx_inner_single_coil"),
         design_variables=(
-            ("rx_outer_x_usage_ratio", "0.5"),
+            ("rx_x_ratio", "0.5"),
             ("tx_inner_void_stack_present", "1"),
         ),
     )
@@ -2243,9 +2284,9 @@ def test_build_prepared_type2_design_accepts_passive_tv_aluminum_plate_with_txrx
         step_ledger_path=step_ledger_path,
         imported_ledger_path=imported_ledger_path,
         aedt_path=output_aedt_path,
-        sampled_owner_paths=("modeled_objects.tx_inner_rect_void_coil.outer_x_usage_ratio",),
+        sampled_owner_paths=("modeled_objects.tx_inner_rect_void_coil.x_ratio",),
         modeled_roles=("rx_single_coil", "tx_inner_single_coil", "tv_aluminum_plate"),
-        design_variables=(("tx_inner_outer_x_usage_ratio", "0.5"),),
+        design_variables=(("tx_inner_x_ratio", "0.5"),),
     )
 
     runner_calls: list[dict[str, object]] = []
@@ -2288,9 +2329,9 @@ def test_build_prepared_type2_design_rejects_tx_only_modeled_role_before_runner(
         step_ledger_path=step_ledger_path,
         imported_ledger_path=imported_ledger_path,
         aedt_path=output_aedt_path,
-        sampled_owner_paths=("modeled_objects.tx_single_coil.outer_x_usage_ratio",),
+        sampled_owner_paths=("modeled_objects.tx_single_coil.x_ratio",),
         modeled_roles=("tx_single_coil",),
-        design_variables=(("tx_single_outer_x_usage_ratio", "0.5"), ("tx_single_outer_y_usage_ratio", "0.6")),
+        design_variables=(("tx_single_x_ratio", "0.5"), ("tx_single_y_ratio", "0.6")),
     )
 
     runner_calls: list[dict[str, object]] = []
@@ -2822,7 +2863,7 @@ def test_persistent_build_attempt_attaches_per_design_and_closes_only_project(
         aedt_path=aedt_path,
         sampled_owner_paths=(),
         modeled_roles=("rx_single_coil",),
-        design_variables=(("rx_outer_x_usage_ratio", "0.5"),),
+        design_variables=(("rx_x_ratio", "0.5"),),
     )
     create_calls: list[dict[str, object]] = []
     setup_calls: list[dict[str, object]] = []

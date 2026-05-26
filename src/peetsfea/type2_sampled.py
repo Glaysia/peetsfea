@@ -35,6 +35,8 @@ DesignVariableEntry = tuple[str, str]
 _SampleExporter = Callable[..., object]
 _INTEGER_RANGE_FIELD_NAMES = (
     "turn_count",
+    "turn_qcount",
+    "terminal_start",
     "connection_mode",
     "layer_count",
     "underlay_repeat_count",
@@ -165,9 +167,17 @@ class PreparedType2Build:
     design_variables: tuple[DesignVariableEntry, ...]
 
 
-load_type2_step_spec = _load_type2_step_spec
-
 _MANIFEST_STREAM_CHUNK_SIZE: Final[int] = 1024 * 1024
+
+
+def load_type2_step_spec(toml_path: str | Path) -> Type2StepSpec:
+    if isinstance(toml_path, str):
+        normalized_toml_path = Path(toml_path)
+    elif isinstance(toml_path, Path):
+        normalized_toml_path = toml_path
+    else:
+        raise TypeError(f"type2 TOML path must be str or Path (actual={type(toml_path).__name__})")
+    return _load_type2_step_spec(normalized_toml_path)
 
 
 def _hash4_from_bytes(payload: bytes) -> str:

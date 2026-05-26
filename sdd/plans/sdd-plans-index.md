@@ -37,6 +37,7 @@ tags:
 - [0.2.24-type2-tx-region-y-1800-x-reference-fixed](0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
 - [0.2.25-type2-exported-body-bounds-import-validation](0.2.25-type2-exported-body-bounds-import-validation.md)
 - [0.2.25-type2-tv-aluminum-sheet-presence](0.2.25-type2-tv-aluminum-sheet-presence.md)
+- [0.2.25-type2-quarter-turn-single-coil](0.2.25-type2-quarter-turn-single-coil.md)
 
 ## 0.2.24 Reset Note
 - TX shape-specifying SDD has been pruned.

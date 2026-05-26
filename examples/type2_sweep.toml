@@ -263,29 +263,26 @@ material = "composite"
 model_state = true
 pcb_thickness_mm = 0.3
 copper_thickness_mm = 0.035
-[modeled_objects.outer_x_usage_ratio]
+[modeled_objects.x_ratio]
 # TX inner coil X size ratio against resolved tx_inner_region.
 range = [false, 0.4, 0.9, 75]
 description = "TX inner 배치 영역 대비 local X 방향 외곽 크기 비율"
-[modeled_objects.outer_y_usage_ratio]
+[modeled_objects.y_ratio]
 # TX inner coil Y size ratio against resolved tx_inner_region.
 range = [false, 0.2, 0.9, 150]
 description = "TX inner 배치 영역 대비 local Y 방향 외곽 크기 비율"
 [modeled_objects.x_position_ratio]
 range = [false, 0.0, 0.0, 1]
 description = "TX inner lower-X wall-side anchoring compatibility field; fixed at zero"
-[modeled_objects.turn_count]
-range = [true, 1, 3, 3]
-description = "TX inner spiral turn 수"
+[modeled_objects.turn_qcount]
+range = [true, 4, 12, 9]
+description = "TX inner spiral quarter-turn 수"
 [modeled_objects.layer_count]
 range = [true, 1, 1, 1]
 description = "TX inner coil 적층 layer 수"
 [modeled_objects.underlay_repeat_count]
 range = [true, 1, 1, 1]
 description = "TX inner underlay 반복 개수"
-[modeled_objects.void_stack_present]
-range = [true, 0, 1, 2]
-description = "TX inner 중앙 void stack 생성 여부"
 [modeled_objects.underlay_pet_psa_thickness_mm]
 range = [false, 6.0, 6.0, 1]
 description = "TX inner PET_PSA underlay thickness(mm)"
@@ -298,7 +295,7 @@ description = "TX inner layer 사이 z 방향 간격(mm)"
 [modeled_objects.terminal_stub_length_mm]
 range = [false, 7.5, 7.5, 1]
 description = "TX inner terminal stub 길이(mm)"
-[modeled_objects.void_usage_ratio]
+[modeled_objects.void_factor]
 range = [false, 0.08, 0.8, 125]
 description = "TX inner 중앙 void keepout의 X/Y 공통 크기 비율"
 [modeled_objects.margin_ratio]
@@ -307,8 +304,12 @@ description = "TX inner void와 외곽 사이 최소 margin 비율"
 [modeled_objects.metal_fill_factor]
 range = [false, 0.2, 0.6, 75]
 description = "TX inner trace/gap pitch 안에서 copper가 차지하는 비율"
-[modeled_objects.terminal_path]
-value = "B_cw_to_b"
+[modeled_objects.terminal_start]
+range = [true, 0, 3, 4]
+description = "TX inner terminal start corner index(A=0, B=1, C=2, D=3)"
+[modeled_objects.void_stack_present]
+range = [true, 0, 1, 2]
+description = "TX inner 중앙 void stack 생성 여부"
 
 [[modeled_objects]]
 object_id = "rx_rect_void_coil"
@@ -319,21 +320,21 @@ model_state = true
 # 아래 RX fields는 sampled TOML과 build design variables에 실제로 반영된다.
 pcb_thickness_mm = 3.965
 copper_thickness_mm = 0.035
-[modeled_objects.outer_x_usage_ratio]
+[modeled_objects.x_ratio]
 # RX placement owner span 대비 local X outer size ratio.
 range = [false, 0.1, 1.0, 90]
 description = "RX 배치 영역 대비 local X 방향 외곽 크기 비율"
-[modeled_objects.outer_y_usage_ratio]
+[modeled_objects.y_ratio]
 # RX placement owner span 대비 local Y outer size ratio.
 range = [false, 0.1, 1.0, 160]
 description = "RX 배치 영역 대비 local Y 방향 외곽 크기 비율"
 [modeled_objects.x_position_ratio]
 range = [false, 0.0, 0.0, 1]
 description = "RX 배치 영역 안에서 local X 방향 위치 비율"
-[modeled_objects.turn_count]
-# RX spiral turn count. RX single-coil은 현재 layer_count=1만 지원한다.
-range = [true, 1, 3, 3]
-description = "RX spiral turn 수"
+[modeled_objects.turn_qcount]
+# RX spiral quarter-turn count. RX single-coil은 현재 layer_count=1만 지원한다.
+range = [true, 4, 12, 9]
+description = "RX spiral quarter-turn 수"
 [modeled_objects.layer_count]
 # RX multilayer는 아직 지원하지 않으므로 1로 고정한다.
 range = [true, 1, 1, 1]
@@ -350,7 +351,7 @@ description = "RX layer 사이 z 방향 간격(mm)"
 # RX terminal stub length.
 range = [false, 5, 5, 1]
 description = "RX terminal stub 길이(mm)"
-[modeled_objects.void_usage_ratio]
+[modeled_objects.void_factor]
 # centered void keepout의 X/Y 공통 size ratio다.
 range = [false, 0.08, 0.8, 125]
 description = "중앙 void keepout의 X/Y 공통 크기 비율"
@@ -362,9 +363,12 @@ description = "void와 외곽 사이 최소 margin 비율"
 # trace/gap pitch 안에서 copper가 차지하는 비율.
 range = [false, 0.2, 0.6, 75]
 description = "trace/gap pitch 안에서 copper가 차지하는 비율"
-[modeled_objects.terminal_path]
-# terminal path는 same-corner format '<outer>_<cw|ccw>_to_<inner>'를 사용한다.
-value = "A_cw_to_a"
+[modeled_objects.terminal_start]
+range = [true, 0, 3, 4]
+description = "RX terminal start corner index(A=0, B=1, C=2, D=3)"
+[modeled_objects.void_stack_present]
+range = [true, 0, 1, 2]
+description = "RX 중앙 void stack 생성 여부"
 
 [[modeled_objects]]
 object_id = "tv_aluminum_plate"

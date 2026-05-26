@@ -27,6 +27,8 @@ DesignVariableEntry = tuple[str, str]
 _SampleExporter = Callable[..., object]
 _INTEGER_RANGE_FIELD_NAMES = (
     "turn_count",
+    "turn_qcount",
+    "terminal_start",
     "connection_mode",
     "layer_count",
     "underlay_repeat_count",
@@ -46,6 +48,23 @@ _UNSUPPORTED_RXONLY_TX_MODELED_ROLES: frozenset[str] = frozenset(
 )
 _TYPE2_CONSTRAINT_RETRY_LIMIT: Final[int] = 64
 _CONSTRAINT_COMPARISON_OPERATORS: Final[frozenset[str]] = frozenset({"<", "<=", ">", ">=", "==", "!="})
+_SINGLE_COIL_QUARTER_TURN_OWNER_FIELD_NAMES: Final[tuple[str, ...]] = (
+    "x_ratio",
+    "y_ratio",
+    "turn_qcount",
+    "void_factor",
+    "metal_fill_factor",
+    "terminal_start",
+    "void_stack_present",
+)
+_SINGLE_COIL_FIXED_OWNER_FIELD_NAMES: Final[tuple[str, ...]] = (
+    "x_position_ratio",
+    "layer_count",
+    "underlay_repeat_count",
+    "layer_gap_mm",
+    "terminal_stub_length_mm",
+    "margin_ratio",
+)
 
 
 class _ConstraintPathRef(TypedDict):
@@ -494,28 +513,28 @@ def _resolve_tx_inner_min_trace_width_mm(
 
     modeled_spec = _require_tx_inner_single_coil_spec(source, object_id=object_id, context=context)
     owner_prefix = f"modeled_objects.{modeled_spec.object_id}"
-    outer_x_usage_ratio = _resolve_float_constraint_path_value(
+    x_ratio = _resolve_float_constraint_path_value(
         source,
         sampled_values,
-        f"{owner_prefix}.outer_x_usage_ratio",
+        f"{owner_prefix}.x_ratio",
         context=context,
     )
-    outer_y_usage_ratio = _resolve_float_constraint_path_value(
+    y_ratio = _resolve_float_constraint_path_value(
         source,
         sampled_values,
-        f"{owner_prefix}.outer_y_usage_ratio",
+        f"{owner_prefix}.y_ratio",
         context=context,
     )
-    turn_count = _resolve_int_constraint_path_value(
+    turn_qcount = _resolve_int_constraint_path_value(
         source,
         sampled_values,
-        f"{owner_prefix}.turn_count",
+        f"{owner_prefix}.turn_qcount",
         context=context,
     )
-    void_usage_ratio = _resolve_float_constraint_path_value(
+    void_factor = _resolve_float_constraint_path_value(
         source,
         sampled_values,
-        f"{owner_prefix}.void_usage_ratio",
+        f"{owner_prefix}.void_factor",
         context=context,
     )
     margin_ratio = _resolve_float_constraint_path_value(
@@ -531,10 +550,10 @@ def _resolve_tx_inner_min_trace_width_mm(
         context=context,
     )
     return min_centered_rect_void_trace_width_mm(
-        outer_x_mm=inner_region_x_mm * outer_x_usage_ratio,
-        outer_y_mm=inner_region_y_mm * outer_y_usage_ratio,
-        turn_count=turn_count,
-        void_usage_ratio=void_usage_ratio,
+        outer_x_mm=inner_region_x_mm * x_ratio,
+        outer_y_mm=inner_region_y_mm * y_ratio,
+        turn_count=_trace_turn_count_from_qcount(turn_qcount, context=context),
+        void_usage_ratio=void_factor,
         margin_ratio=margin_ratio,
         metal_fill_factor=metal_fill_factor,
     )
@@ -558,28 +577,28 @@ def _resolve_rx_min_trace_width_mm(
     _owner_size_x, owner_size_y, owner_size_z = rx_region_spec.size_xyz
     modeled_spec = _require_rx_single_coil_spec(source, object_id=object_id, context=context)
     owner_prefix = f"modeled_objects.{modeled_spec.object_id}"
-    outer_x_usage_ratio = _resolve_float_constraint_path_value(
+    x_ratio = _resolve_float_constraint_path_value(
         source,
         sampled_values,
-        f"{owner_prefix}.outer_x_usage_ratio",
+        f"{owner_prefix}.x_ratio",
         context=context,
     )
-    outer_y_usage_ratio = _resolve_float_constraint_path_value(
+    y_ratio = _resolve_float_constraint_path_value(
         source,
         sampled_values,
-        f"{owner_prefix}.outer_y_usage_ratio",
+        f"{owner_prefix}.y_ratio",
         context=context,
     )
-    turn_count = _resolve_int_constraint_path_value(
+    turn_qcount = _resolve_int_constraint_path_value(
         source,
         sampled_values,
-        f"{owner_prefix}.turn_count",
+        f"{owner_prefix}.turn_qcount",
         context=context,
     )
-    void_usage_ratio = _resolve_float_constraint_path_value(
+    void_factor = _resolve_float_constraint_path_value(
         source,
         sampled_values,
-        f"{owner_prefix}.void_usage_ratio",
+        f"{owner_prefix}.void_factor",
         context=context,
     )
     margin_ratio = _resolve_float_constraint_path_value(
@@ -595,10 +614,10 @@ def _resolve_rx_min_trace_width_mm(
         context=context,
     )
     return min_centered_rect_void_trace_width_mm(
-        outer_x_mm=owner_size_y * outer_x_usage_ratio,
-        outer_y_mm=owner_size_z * outer_y_usage_ratio,
-        turn_count=turn_count,
-        void_usage_ratio=void_usage_ratio,
+        outer_x_mm=owner_size_y * x_ratio,
+        outer_y_mm=owner_size_z * y_ratio,
+        turn_count=_trace_turn_count_from_qcount(turn_qcount, context=context),
+        void_usage_ratio=void_factor,
         margin_ratio=margin_ratio,
         metal_fill_factor=metal_fill_factor,
     )
@@ -658,6 +677,14 @@ def _resolve_int_constraint_path_value(
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{context} expected integer owner value for {path} (actual={value!r})")
     return value
+
+
+def _trace_turn_count_from_qcount(turn_qcount: int, *, context: str) -> int:
+    if isinstance(turn_qcount, bool) or not isinstance(turn_qcount, int):
+        raise ValueError(f"{context} expected integer turn_qcount (actual={turn_qcount!r})")
+    if turn_qcount < 1:
+        raise ValueError(f"{context} expected turn_qcount >= 1 (actual={turn_qcount})")
+    return max(1, math.ceil(float(turn_qcount) / 4.0))
 
 
 def _evaluate_comparison(lhs: int | float | str, op: str, rhs: int | float | str) -> bool:
@@ -794,32 +821,11 @@ def _all_range_owner_specs(spec: Type2StepSpec) -> tuple[tuple[str, RangeSpec], 
 def _single_coil_range_owner_specs(
     modeled_spec: ModeledTxSingleCoilSpec | ModeledTxInnerSingleCoilSpec | ModeledRxSingleCoilSpec,
 ) -> tuple[tuple[str, RangeSpec], ...]:
-    owner_specs: list[tuple[str, RangeSpec]] = [
-        (f"modeled_objects.{modeled_spec.object_id}.outer_x_usage_ratio", modeled_spec.outer_x_usage_ratio),
-        (f"modeled_objects.{modeled_spec.object_id}.outer_y_usage_ratio", modeled_spec.outer_y_usage_ratio),
-    ]
-    if not isinstance(modeled_spec, ModeledTxInnerSingleCoilSpec):
-        owner_specs.append(
-            (f"modeled_objects.{modeled_spec.object_id}.x_position_ratio", modeled_spec.x_position_ratio)
-        )
-    owner_specs.extend(
-        (
-            (f"modeled_objects.{modeled_spec.object_id}.void_usage_ratio", modeled_spec.void_usage_ratio),
-            (f"modeled_objects.{modeled_spec.object_id}.turn_count", modeled_spec.turn_count),
-            (f"modeled_objects.{modeled_spec.object_id}.layer_count", modeled_spec.layer_count),
-            (
-                f"modeled_objects.{modeled_spec.object_id}.underlay_repeat_count",
-                modeled_spec.underlay_repeat_count,
-            ),
-            (f"modeled_objects.{modeled_spec.object_id}.layer_gap_mm", modeled_spec.layer_gap_mm),
-            (
-                f"modeled_objects.{modeled_spec.object_id}.terminal_stub_length_mm",
-                modeled_spec.terminal_stub_length_mm,
-            ),
-            (f"modeled_objects.{modeled_spec.object_id}.margin_ratio", modeled_spec.margin_ratio),
-            (f"modeled_objects.{modeled_spec.object_id}.metal_fill_factor", modeled_spec.metal_fill_factor),
-        )
-    )
+    owner_specs: list[tuple[str, RangeSpec]] = []
+    for field_name in _SINGLE_COIL_QUARTER_TURN_OWNER_FIELD_NAMES:
+        owner_specs.append(_modeled_range_owner_spec(modeled_spec, field_name))
+    for field_name in _SINGLE_COIL_FIXED_OWNER_FIELD_NAMES:
+        owner_specs.append(_modeled_range_owner_spec(modeled_spec, field_name))
     if isinstance(modeled_spec, ModeledTxSingleCoilSpec):
         owner_specs.extend(
             (
@@ -834,10 +840,6 @@ def _single_coil_range_owner_specs(
         owner_specs.extend(
             (
                 (
-                    f"modeled_objects.{modeled_spec.object_id}.void_stack_present",
-                    modeled_spec.void_stack_present,
-                ),
-                (
                     f"modeled_objects.{modeled_spec.object_id}.underlay_pet_psa_thickness_mm",
                     modeled_spec.underlay_pet_psa_thickness_mm,
                 ),
@@ -848,6 +850,18 @@ def _single_coil_range_owner_specs(
             )
         )
     return tuple(owner_specs)
+
+
+def _modeled_range_owner_spec(modeled_spec: object, field_name: str) -> tuple[str, RangeSpec]:
+    assert hasattr(modeled_spec, "object_id"), "modeled sampled owner spec must expose object_id"
+    raw_object_id = getattr(modeled_spec, "object_id")
+    assert isinstance(raw_object_id, str), "modeled sampled owner object_id must be str"
+    assert raw_object_id != "", "modeled sampled owner object_id must be non-empty"
+    owner_path = f"modeled_objects.{raw_object_id}.{field_name}"
+    assert hasattr(modeled_spec, field_name), f"{owner_path} must expose RangeSpec"
+    raw_range_spec = getattr(modeled_spec, field_name)
+    assert isinstance(raw_range_spec, RangeSpec), f"{owner_path} must be a RangeSpec"
+    return (owner_path, raw_range_spec)
 
 
 def _plate_stack_range_owner_specs(

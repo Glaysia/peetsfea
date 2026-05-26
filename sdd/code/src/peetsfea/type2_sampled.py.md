@@ -1,7 +1,7 @@
 ---
 title: type2_sampled.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-13 @ 00:00
+updated: 2026-05-21 @ 00:00
 tags:
   - sampling
   - build
@@ -17,7 +17,7 @@ tags:
 ## 역할
 - 공개 sampling/build-prep orchestration 경계다.
 - source type2 TOML에서 deterministic sampled TOML, manifest entry, skipped entry, build metadata를 만든다.
-- 0.2.24 SDD 기준 active sampled owner는 RX path와 shared execution metadata 중심이다.
+- 0.2.25 SDD 기준 active sampled owner는 TX/RX single-coil quarter-turn owner paths와 shared execution metadata 중심이다.
 
 ## 입력 / 출력
 - 입력: source type2 TOML, seed range, manifest/sampled path
@@ -26,9 +26,11 @@ tags:
 ## Canonical state
 - sampled owner canonical paths are rooted at `modeled_objects.<object_id>` or `non_model_objects.<object_id>` and may address nested TOML tables.
 - `tx_region` remains guide context; its `tx_reference_line` nested range fields are sampled non-modeled owner coordinates, not TX modeled geometry.
-- `modeled_objects.tx_inner_rect_void_coil.void_stack_present` is an integer sampled owner when the source uses the canonical two-state switch.
+- `modeled_objects.<single_coil>.turn_qcount`, `terminal_start`, and `void_stack_present` are integer sampled owners when the source uses non-singleton ranges.
+- Single-coil sampled metadata and design variables use the public owner names `x_ratio`, `y_ratio`, `turn_qcount`, `void_factor`, `metal_fill_factor`, `terminal_start`, and `void_stack_present`.
 - `modeled_objects.tv_aluminum_plate.sheet_present` is an integer sampled owner when the source uses the canonical sheet presence switch; sampled TOML, manifests, prepared builds, and design variables use `0` or `1`.
 - `modeled_objects.tx_outer_rect_void_coil.x_position_ratio` is an exportable sampled owner even though its source TOML range is selected by `modeled_objects.tx_inner_rect_void_coil.tx_outer_x_position_ratio`; freeze logic must write the selected value back to that source selector.
+- The public `load_type2_step_spec()` re-export accepts `str` and `Path` TOML paths and normalizes to `Path` before delegating to the parser loader.
 - constraints are preserved in sampled TOML and evaluated as deterministic sampling feasibility filters.
 - `retry_number` records the first constraint-satisfying retry attempt and remains part of the `design_id`.
 - manifest `entries` contains only successful sampled designs; validation/infeasible attempts are recorded in top-level `skipped`.
@@ -41,8 +43,9 @@ tags:
 - sampled metadata owner list must exactly match the source exportable sampled owner set.
 - sampled TOML freeze logic must support every sampled owner path shape emitted by owner discovery, including nested non-modeled paths.
 - sampled TOML freeze logic must preserve the derived outer companion source structure and must not require an explicit `tx_outer_rect_void_coil` TOML table.
-- usage-ratio design variables are unitless; only `_mm` owners receive `mm` expressions.
-- Integer presence design variables, including `sheet_present`, are rendered as bare integer expressions.
+- ratio/factor design variables are unitless; only `_mm` owners receive `mm` expressions.
+- Integer presence and quarter-turn design variables, including `turn_qcount`, `terminal_start`, `void_stack_present`, and `sheet_present`, are rendered as bare integer expressions.
+- Non-string/non-Path public loader inputs fail immediately before parser delegation.
 - RxOnly sampling must not require TX modeled owners.
 - type2 constraints must be evaluated before sampled TOML is written.
 - constraint retry budget is fixed; exhausted candidates are recorded as skipped only for expected validation/infeasible failures.
@@ -59,11 +62,12 @@ tags:
 - [type2_step_export.py](type2_step_export.py.md)
 - [type2_sampled_skip.py](type2_sampled_skip.py.md)
 - [0.2.25 Type2 TV Aluminum Sheet Presence](../../../plans/0.2.25-type2-tv-aluminum-sheet-presence.md)
+- [0.2.25 Type2 Quarter-Turn Single Coil](../../../plans/0.2.25-type2-quarter-turn-single-coil.md)
 
 ## 관련 테스트
 - [test_sample_type2_entry.py](../../tests/type2/test_sample_type2_entry.py.md)
 - [test_build_type2_entry.py](../../tests/type2/test_build_type2_entry.py.md)
 
 ## 변경 시 주의점
-- TX shape sampled owners must not be reintroduced while the 0.2.24 reset is active.
+- Legacy single-coil owner names must not be reintroduced into sampled metadata after the 0.2.25 quarter-turn contract.
 - Replay metadata exact-match guards must stay synchronized with active RX owner paths.

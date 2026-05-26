@@ -36,6 +36,9 @@ from peetsfea.type2_step_spec_sampling import resolve_modeled_plate_stack_metal_
 from peetsfea.type2_step_spec_sampling import resolve_modeled_plate_stack_turn_count
 from peetsfea.type2_step_spec_sampling import resolve_modeled_plate_stack_y_usage_ratio
 from peetsfea.type2_step_spec_sampling import resolve_modeled_plate_stack_z_usage_ratio
+from peetsfea.type2_step_spec_sampling import resolve_modeled_single_coil_terminal_start
+from peetsfea.type2_step_spec_sampling import resolve_modeled_single_coil_turn_qcount
+from peetsfea.type2_step_spec_sampling import resolve_modeled_single_coil_void_stack_present
 from peetsfea.type2_step_spec_sampling import resolve_modeled_tx_array_x_usage_ratio
 from peetsfea.type2_step_spec_sampling import resolve_modeled_tx_coil_count
 from peetsfea.type2_step_spec_sampling import resolve_modeled_tx_inner_void_stack_present
@@ -150,6 +153,7 @@ __all__ = [
     "ModeledSingleCoilCommonSpec",
     "ModeledSingleCoilSpec",
     "ModeledTxPlateStackSpec",
+    "ModeledTxInnerSingleCoilSpec",
     "ModeledTxSingleCoilSpec",
     "ModeledTxRectVoidColumnsSpec",
     "ModeledTvAluminumPlateSpec",
@@ -161,8 +165,10 @@ __all__ = [
     "Type2ConstraintComparableRef",
     "NonModelBoxSpec",
     "NonModelDerivedSpec",
+    "NonModelTxReferenceLineSpec",
     "NonModelTxRegionActualSpec",
     "NonModelTxRegionActualStackSpaceSpec",
+    "NonModelTxRegionSpec",
     "Point3",
     "RangeSpec",
     "Type2SimulationPolicy",
@@ -175,6 +181,9 @@ __all__ = [
     "resolve_modeled_plate_stack_turn_count",
     "resolve_modeled_plate_stack_z_usage_ratio",
     "resolve_modeled_plate_stack_y_usage_ratio",
+    "resolve_modeled_single_coil_terminal_start",
+    "resolve_modeled_single_coil_turn_qcount",
+    "resolve_modeled_single_coil_void_stack_present",
     "resolve_modeled_tx_array_x_usage_ratio",
     "resolve_modeled_tx_coil_count",
     "resolve_modeled_tx_inner_void_stack_present",

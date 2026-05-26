@@ -229,16 +229,18 @@ def _constraint_reference_paths(spec: Type2StepSpec) -> set[str]:
         if isinstance(modeled_spec, ModeledTxSingleCoilSpec):
             paths.update(
                 (
-                    f"{base}.outer_x_usage_ratio",
-                    f"{base}.outer_y_usage_ratio",
-                    f"{base}.turn_count",
+                    f"{base}.x_ratio",
+                    f"{base}.y_ratio",
+                    f"{base}.turn_qcount",
                     f"{base}.layer_count",
                     f"{base}.underlay_repeat_count",
                     f"{base}.layer_gap_mm",
                     f"{base}.terminal_stub_length_mm",
-                    f"{base}.void_usage_ratio",
+                    f"{base}.void_factor",
                     f"{base}.margin_ratio",
                     f"{base}.metal_fill_factor",
+                    f"{base}.terminal_start",
+                    f"{base}.void_stack_present",
                     f"{base}.underlay_gap_mm",
                     f"{base}.wall_parallel_stack_present",
                 )
@@ -247,16 +249,18 @@ def _constraint_reference_paths(spec: Type2StepSpec) -> set[str]:
         if isinstance(modeled_spec, (ModeledTxInnerSingleCoilSpec, ModeledRxSingleCoilSpec)):
             paths.update(
                 (
-                    f"{base}.outer_x_usage_ratio",
-                    f"{base}.outer_y_usage_ratio",
-                    f"{base}.turn_count",
+                    f"{base}.x_ratio",
+                    f"{base}.y_ratio",
+                    f"{base}.turn_qcount",
                     f"{base}.layer_count",
                     f"{base}.underlay_repeat_count",
                     f"{base}.layer_gap_mm",
                     f"{base}.terminal_stub_length_mm",
-                    f"{base}.void_usage_ratio",
+                    f"{base}.void_factor",
                     f"{base}.margin_ratio",
                     f"{base}.metal_fill_factor",
+                    f"{base}.terminal_start",
+                    f"{base}.void_stack_present",
                 )
             )
             continue
