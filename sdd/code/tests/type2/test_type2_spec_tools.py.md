@@ -1,7 +1,7 @@
 ---
 title: test_type2_spec_tools.py
 created: 2026-04-29 @ 00:00
-updated: 2026-05-13 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - test
   - type2
@@ -32,13 +32,13 @@ tags:
 ## Canonical State
 - `peetsfea.type2_spec_tools` must remain usable without importing CAD/AEDT modules.
 - Public sampled owner mappings must match the active exportable sampled owner set exactly, including TX inner and RX `void_stack_present` switches when sampled.
-- Public sampled owner mappings must include `non_model_objects.tx_region.z_gap_from_rx_plane_mm` and exclude fixed TV sheet presence/reference-line ratios for the active sweep, bringing `examples/type2_sweep.toml` to 15 sampled dimensions.
+- Public sampled owner mappings must include `non_model_objects.tx_region.z_gap_from_rx_plane_mm`, sampled `tx_reference_line.y_usage_ratio` / `z_ratio`, and sampled TV sheet presence for the active sweep, bringing `examples/type2_sweep.toml` to 18 sampled dimensions.
 - Constraint and retry tests use the same quarter-turn owner names as the sampled ledger; stale
   `outer_*_usage_ratio`, `turn_count`, `void_usage_ratio`, or `terminal_path` constraint paths must fail
   rather than silently aliasing to active owners.
 - Official type2 examples must describe every discovered range owner path.
 - Official and generated sampled TOML must carry the Korean TX inner `void_stack_present` description and freeze the sampled integer owner to `[true, value, value, 1]`.
-- Generated sampled TOML must freeze TV aluminum `sheet_present` to `[true, value, value, 1]` with value `0` or `1`.
+- Generated sampled TOML must freeze sampled TV aluminum `sheet_present` to `[true, value, value, 1]` with value `0` or `1`.
 - Generated sampled TOML must not include `modeled_objects.tx_outer_rect_void_coil.*` in `[sampled].sampled_owner_paths`.
 - Generated sampled TOML must remain loadable and usable by the notebook-facing description helper.
 - TX inner `terminal_stub_length_mm` in `examples/type2_sweep.toml` and `examples/type2_fixed.toml` must remain a fixed range with value `7.5` for deterministic ownership.
@@ -53,7 +53,7 @@ tags:
 - Notebook-equivalent coverage must generate its sampled TOML under pytest `tmp_path` and must not depend on stale local manifest artifacts.
 - Invalid constraint references must raise during `load_type2_step_spec`.
 - Retry coverage must use `make_step_on_sample=False` and must not require STEP/CAD export.
-- Active sweep dimension audit must fail if the TX Z-gap owner drops from the exportable sampled owner set or if fixed TV/reference-line owners re-enter it.
+- Active sweep dimension audit must fail if the TX Z-gap owner drops from the exportable sampled owner set or if the sampled TV/reference-line owners drift out of the official sweep surface.
 - Active sweep dimension audit must fail if any legacy single-coil owner path (`outer_x_usage_ratio`,
   `outer_y_usage_ratio`, `turn_count`, `void_usage_ratio`, or `terminal_path`) re-enters the sampled owner set.
 

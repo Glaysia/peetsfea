@@ -402,3 +402,12 @@ enabled = true
 lhs = { func = "rx_min_trace_width_mm(rx_rect_void_coil)" }
 op = ">="
 rhs = { value = 0.5 }
+
+[[constraints.rules]]
+id = "rx_void_corridor_height"
+kind = "comparison"
+message = "RX void-stack samples must preserve a positive central corridor."
+enabled = true
+lhs = { func = "rx_void_corridor_height_mm(rx_rect_void_coil)" }
+op = ">="
+rhs = { value = 0.0 }

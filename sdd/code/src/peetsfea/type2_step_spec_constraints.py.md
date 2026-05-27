@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec_constraints.py
 created: 2026-04-21 @ 20:35
-updated: 2026-05-13 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - spec
   - constraints
@@ -34,7 +34,7 @@ tags:
 
 ## Invariants / fail-fast
 - Malformed rules, duplicate rule ids, unsupported operators, unsupported functions, and unknown owner paths must raise immediately.
-- Supported function forms are loader-validated explicitly; `sum(...)` handles scalar owner arithmetic, while `tx_inner_min_trace_width_mm(tx_inner_rect_void_coil)` and `rx_min_trace_width_mm(rx_rect_void_coil)` handle type2 rect/void trace feasibility.
+- Supported function forms are loader-validated explicitly; `sum(...)` handles scalar owner arithmetic, while `tx_inner_min_trace_width_mm(tx_inner_rect_void_coil)`, `rx_min_trace_width_mm(rx_rect_void_coil)`, and `rx_void_corridor_height_mm(rx_rect_void_coil)` handle single-coil feasibility checks.
 - Trace-width functions must name exactly one modeled object with the expected single-coil role.
 - Constraint path validation only accepts paths present in the realized step spec owner-path registry.
 - `non_model_objects.tx_region.z_gap_from_rx_plane_mm` is a valid constraint path because it is a realized range owner in `NonModelTxRegionSpec`.

@@ -8,6 +8,13 @@ from pathlib import Path
 from typing import Final, Literal, TypedDict, cast
 
 from peetsfea.spec.loader import TOMLTable
+from peetsfea.tx_rect_void import ManufacturingSpec as TxRectVoidManufacturingSpec
+from peetsfea.tx_rect_void import RX_SINGLE_COIL_PROFILE
+from peetsfea.tx_rect_void import RangeSpec as TxRectVoidRangeSpec
+from peetsfea.tx_rect_void import SingleCoilRangeSpec
+from peetsfea.tx_rect_void import SingleCoilRectVoidSpec
+from peetsfea.tx_rect_void import local_central_void_corridor_y_bounds
+from peetsfea.tx_rect_void import realize_tx_rect_void_spec
 from peetsfea.type2_rect_void_feasibility import min_centered_rect_void_trace_width_mm
 from peetsfea.type2_step_spec import ModeledPlateStackSpec
 from peetsfea.type2_step_spec import ModeledRxSingleCoilSpec
@@ -184,13 +191,21 @@ def _parse_constraint_func(raw_text: str, context: str) -> tuple[str, tuple[str,
     if not text.endswith(")") or "(" not in text:
         raise ValueError(
             f"{context}.func must be in the form sum(arg_1, arg_2, ...), "
-            "tx_inner_min_trace_width_mm(tx_inner_rect_void_coil), or rx_min_trace_width_mm(rx_rect_void_coil)"
+            "tx_inner_min_trace_width_mm(tx_inner_rect_void_coil), "
+            "rx_min_trace_width_mm(rx_rect_void_coil), or "
+            "rx_void_corridor_height_mm(rx_rect_void_coil)"
         )
     open_index = text.find("(")
     function_name = text[:open_index].strip()
-    if function_name not in ("sum", "tx_inner_min_trace_width_mm", "rx_min_trace_width_mm"):
+    if function_name not in (
+        "sum",
+        "tx_inner_min_trace_width_mm",
+        "rx_min_trace_width_mm",
+        "rx_void_corridor_height_mm",
+    ):
         raise ValueError(
-            f"{context}.func must use one of ['sum', 'tx_inner_min_trace_width_mm', 'rx_min_trace_width_mm'] "
+            f"{context}.func must use one of "
+            "['sum', 'tx_inner_min_trace_width_mm', 'rx_min_trace_width_mm', 'rx_void_corridor_height_mm'] "
             f"(actual={function_name!r})"
         )
     body = text[open_index + 1 : -1].strip()
@@ -201,6 +216,8 @@ def _parse_constraint_func(raw_text: str, context: str) -> tuple[str, tuple[str,
         raise ValueError(f"{context}.func tx_inner_min_trace_width_mm() must contain exactly one argument")
     if function_name == "rx_min_trace_width_mm" and len(args) != 1:
         raise ValueError(f"{context}.func rx_min_trace_width_mm() must contain exactly one argument")
+    if function_name == "rx_void_corridor_height_mm" and len(args) != 1:
+        raise ValueError(f"{context}.func rx_void_corridor_height_mm() must contain exactly one argument")
     return function_name, tuple(args)
 
 
@@ -372,6 +389,16 @@ def _validate_constraint_paths(sampled_source: Type2StepSpec, *, constraints: li
                         context=f"constraints.rules[{rule['id']}]",
                     )
                     continue
+                if func_name == "rx_void_corridor_height_mm":
+                    _validate_single_coil_min_trace_width_arg(
+                        sampled_source,
+                        args[0],
+                        expected_type=ModeledRxSingleCoilSpec,
+                        function_name=func_name,
+                        expected_role="rx_single_coil",
+                        context=f"constraints.rules[{rule['id']}]",
+                    )
+                    continue
                 raise ValueError(f"constraints.rules[{rule['id']}].func unsupported function: {func_name}")
 
 
@@ -451,6 +478,13 @@ def _resolve_constraint_operand(
         )
     if function_name == "rx_min_trace_width_mm":
         return _resolve_rx_min_trace_width_mm(
+            source,
+            sampled_values,
+            object_id=args[0],
+            context=context,
+        )
+    if function_name == "rx_void_corridor_height_mm":
+        return _resolve_rx_void_corridor_height_mm(
             source,
             sampled_values,
             object_id=args[0],
@@ -621,6 +655,187 @@ def _resolve_rx_min_trace_width_mm(
         margin_ratio=margin_ratio,
         metal_fill_factor=metal_fill_factor,
     )
+
+
+def _single_value_tx_rect_void_range(*, path: str, is_integer: bool, value: int | float) -> TxRectVoidRangeSpec:
+    return TxRectVoidRangeSpec(
+        path=path,
+        is_integer=is_integer,
+        start=float(value),
+        end=float(value),
+        count=1,
+    )
+
+
+def _resolve_rx_void_corridor_height_mm(
+    source: Type2StepSpec,
+    sampled_values: dict[str, SampledScalar],
+    *,
+    object_id: str,
+    context: str,
+) -> float:
+    modeled_spec = _require_rx_single_coil_spec(source, object_id=object_id, context=context)
+    owner_prefix = f"modeled_objects.{modeled_spec.object_id}"
+    void_stack_present = _resolve_int_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.void_stack_present",
+        context=context,
+    )
+    if void_stack_present == 0:
+        return 0.0
+    if void_stack_present != 1:
+        raise ValueError(
+            f"{context}.func rx_void_corridor_height_mm() expected void_stack_present in {{0,1}} "
+            f"(actual={void_stack_present})"
+        )
+
+    rx_region_matches = [
+        non_model_spec for non_model_spec in source.non_model_objects if non_model_spec.object_id == "rx_region_max"
+    ]
+    if len(rx_region_matches) != 1:
+        raise ValueError(f"{context}.func requires exactly one rx_region_max source object")
+    rx_region_spec = rx_region_matches[0]
+    if rx_region_spec.plane != "YZ":
+        raise ValueError(f"{context}.func rx_region_max plane must be YZ (actual={rx_region_spec.plane})")
+    _owner_size_x, owner_size_y, owner_size_z = rx_region_spec.size_xyz
+
+    x_ratio = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.x_ratio",
+        context=context,
+    )
+    y_ratio = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.y_ratio",
+        context=context,
+    )
+    turn_qcount = _resolve_int_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.turn_qcount",
+        context=context,
+    )
+    void_factor = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.void_factor",
+        context=context,
+    )
+    margin_ratio = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.margin_ratio",
+        context=context,
+    )
+    metal_fill_factor = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.metal_fill_factor",
+        context=context,
+    )
+    terminal_start = _resolve_int_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.terminal_start",
+        context=context,
+    )
+    layer_count = _resolve_int_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.layer_count",
+        context=context,
+    )
+    layer_gap_mm = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.layer_gap_mm",
+        context=context,
+    )
+    terminal_stub_length_mm = _resolve_float_constraint_path_value(
+        source,
+        sampled_values,
+        f"{owner_prefix}.terminal_stub_length_mm",
+        context=context,
+    )
+
+    realized = realize_tx_rect_void_spec(
+        SingleCoilRectVoidSpec(
+            schema_id="peetsfea.type2.constraint.rx_void_corridor.v1",
+            units="mm",
+            manufacturing=TxRectVoidManufacturingSpec(
+                pcb_thickness_mm=modeled_spec.pcb_thickness_mm,
+                copper_thickness_mm=modeled_spec.copper_thickness_mm,
+            ),
+            tx_coil=SingleCoilRangeSpec(
+                outer_x_mm=_single_value_tx_rect_void_range(
+                    path=f"{owner_prefix}.outer_x_mm",
+                    is_integer=False,
+                    value=owner_size_y * x_ratio,
+                ),
+                outer_y_mm=_single_value_tx_rect_void_range(
+                    path=f"{owner_prefix}.outer_y_mm",
+                    is_integer=False,
+                    value=owner_size_z * y_ratio,
+                ),
+                void_usage_ratio=_single_value_tx_rect_void_range(
+                    path=f"{owner_prefix}.void_factor",
+                    is_integer=False,
+                    value=void_factor,
+                ),
+                turn_qcount=_single_value_tx_rect_void_range(
+                    path=f"{owner_prefix}.turn_qcount",
+                    is_integer=True,
+                    value=turn_qcount,
+                ),
+                layer_count=_single_value_tx_rect_void_range(
+                    path=f"{owner_prefix}.layer_count",
+                    is_integer=True,
+                    value=layer_count,
+                ),
+                layer_gap_mm=_single_value_tx_rect_void_range(
+                    path=f"{owner_prefix}.layer_gap_mm",
+                    is_integer=False,
+                    value=layer_gap_mm,
+                ),
+                terminal_stub_length_mm=_single_value_tx_rect_void_range(
+                    path=f"{owner_prefix}.terminal_stub_length_mm",
+                    is_integer=False,
+                    value=terminal_stub_length_mm,
+                ),
+                terminal_start=_single_value_tx_rect_void_range(
+                    path=f"{owner_prefix}.terminal_start",
+                    is_integer=True,
+                    value=terminal_start,
+                ),
+                margin_ratio=_single_value_tx_rect_void_range(
+                    path=f"{owner_prefix}.margin_ratio",
+                    is_integer=False,
+                    value=margin_ratio,
+                ),
+                metal_fill_factor=_single_value_tx_rect_void_range(
+                    path=f"{owner_prefix}.metal_fill_factor",
+                    is_integer=False,
+                    value=metal_fill_factor,
+                ),
+            ),
+        ),
+        seed=0,
+        profile=RX_SINGLE_COIL_PROFILE,
+    )
+    corridor_min_y, corridor_max_y = local_central_void_corridor_y_bounds(
+        realized,
+        profile=RX_SINGLE_COIL_PROFILE,
+    )
+    corridor_height_mm = corridor_max_y - corridor_min_y
+    if corridor_height_mm <= 0.0:
+        raise ValueError(
+            f"{context}.func rx_void_corridor_height_mm() must resolve to positive corridor height "
+            f"(actual={corridor_height_mm})"
+        )
+    return corridor_height_mm
 
 
 def _require_tx_inner_single_coil_spec(

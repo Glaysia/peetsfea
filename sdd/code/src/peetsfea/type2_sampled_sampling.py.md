@@ -1,7 +1,7 @@
 ---
 title: type2_sampled_sampling.py
 created: 2026-04-20 @ 00:00
-updated: 2026-05-21 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - sampling
 ---
@@ -15,7 +15,7 @@ tags:
 
 ## 역할
 - sampled owner candidate selection, retry, and freeze logic을 구현한다.
-- type2 sample-time constraint evaluation을 구현한다, including `sum(...)`, `tx_inner_min_trace_width_mm(...)`, and `rx_min_trace_width_mm(...)`.
+- type2 sample-time constraint evaluation을 구현한다, including `sum(...)`, `tx_inner_min_trace_width_mm(...)`, `rx_min_trace_width_mm(...)`, and `rx_void_corridor_height_mm(...)`.
 - 0.2.25 SDD 기준 TX/RX single-coil quarter-turn sampled owners and shared constraints are active.
 
 ## 입력 / 출력
@@ -31,10 +31,10 @@ tags:
 - TX inner `x_position_ratio` is fixed-zero compatibility state and must not appear as a sampled owner or design variable.
 - Active `count > 1` range owners must appear in `sampled_owner_paths` regardless of modeled/non-modeled ownership.
 - When `void_stack_present`, `turn_qcount`, or `terminal_start` use non-singleton integer ranges, they are active sampled owners and must freeze to integer singletons in sampled TOML.
-- `tx_region.z_gap_from_rx_plane_mm`, `tx_region.tx_reference_line.x_ratio`, `tx_region.tx_reference_line.y_usage_ratio`, and `tx_region.tx_reference_line.z_ratio` remain discoverable non-modeled guide/context owners; official examples only sample the Z-gap because the reference-line ratios are singleton ranges.
+- `tx_region.z_gap_from_rx_plane_mm`, `tx_region.tx_reference_line.x_ratio`, `tx_region.tx_reference_line.y_usage_ratio`, and `tx_region.tx_reference_line.z_ratio` remain discoverable non-modeled guide/context owners; the active sweep example samples the Z-gap plus `y_usage_ratio` and `z_ratio`, while `x_ratio` remains singleton.
 - `tx_region_actual` and `tx_region_actual_stack_space` are not active RxOnly sampled owner sources.
 - `tx_outer_single_coil` is not an active sampled modeled object. `modeled_objects.tx_outer_rect_void_coil.*` owner paths are unsupported.
-- The active sweep contract is `tx_region.z_gap_from_rx_plane_mm` plus seven sampled owners per single coil, for 15 active sampled owners.
+- The active sweep contract includes `tx_region.z_gap_from_rx_plane_mm`, sampled `tx_reference_line.y_usage_ratio` / `z_ratio`, `tv_aluminum_plate.sheet_present`, and seven sampled owners per single coil, for 18 active sampled owners.
 
 ## Invariants / fail-fast
 - Unknown owner paths fail immediately.
@@ -49,6 +49,7 @@ tags:
 - Quarter-turn trace-width feasibility maps `turn_qcount` to a conservative full-turn occupancy with `ceil(turn_qcount / 4)` before calling the shared rect-void feasibility helper.
 - `tx_inner_min_trace_width_mm(tx_inner_rect_void_coil)` resolves `tx_inner_region` dimensions from the sampled `tx_region.tx_reference_line.*` owners and the active retry number before applying the rect/void trace-width feasibility helper with the quarter-turn owner contract.
 - `rx_min_trace_width_mm(rx_rect_void_coil)` applies the same trace-width feasibility helper against the resolved RX placement owner dimensions with the quarter-turn owner contract.
+- `rx_void_corridor_height_mm(rx_rect_void_coil)` rebuilds the resolved RX quarter-turn geometry in pure Python and rejects sampled `void_stack_present=1` candidates when the derived central corridor is invalid or overlapped by copper.
 - Non-validation exceptions remain fail-fast.
 
 ## Collaborators

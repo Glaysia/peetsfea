@@ -28,6 +28,8 @@ TX_REFERENCE_LINE_Y_OWNER_PATH = "non_model_objects.tx_region.tx_reference_line.
 TX_REFERENCE_LINE_Z_OWNER_PATH = "non_model_objects.tx_region.tx_reference_line.z_ratio"
 EXPECTED_SWEEP_SAMPLED_OWNER_PATHS = (
     TX_REGION_Z_GAP_OWNER_PATH,
+    TX_REFERENCE_LINE_Y_OWNER_PATH,
+    TX_REFERENCE_LINE_Z_OWNER_PATH,
     "modeled_objects.tx_inner_rect_void_coil.x_ratio",
     "modeled_objects.tx_inner_rect_void_coil.y_ratio",
     "modeled_objects.tx_inner_rect_void_coil.turn_qcount",
@@ -42,6 +44,7 @@ EXPECTED_SWEEP_SAMPLED_OWNER_PATHS = (
     "modeled_objects.rx_rect_void_coil.metal_fill_factor",
     "modeled_objects.rx_rect_void_coil.terminal_start",
     RX_VOID_STACK_OWNER_PATH,
+    TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH,
 )
 
 
@@ -225,9 +228,9 @@ def test_type2_sampled_toml_from_values_renders_loadable_toml(tmp_path: Path) ->
     assert TX_REGION_Z_GAP_OWNER_PATH in sampled_owner_path_strings
     assert TX_INNER_VOID_STACK_OWNER_PATH in sampled_owner_path_strings
     assert RX_VOID_STACK_OWNER_PATH in sampled_owner_path_strings
-    assert TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH not in sampled_owner_path_strings
-    assert TX_REFERENCE_LINE_Y_OWNER_PATH not in sampled_owner_path_strings
-    assert TX_REFERENCE_LINE_Z_OWNER_PATH not in sampled_owner_path_strings
+    assert TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH in sampled_owner_path_strings
+    assert TX_REFERENCE_LINE_Y_OWNER_PATH in sampled_owner_path_strings
+    assert TX_REFERENCE_LINE_Z_OWNER_PATH in sampled_owner_path_strings
     assert sampled_tx_region_z_gap_range == [
         False,
         owner_values[TX_REGION_Z_GAP_OWNER_PATH],
@@ -242,8 +245,8 @@ def test_type2_sampled_toml_from_values_renders_loadable_toml(tmp_path: Path) ->
     ]
     assert sampled_tv_sheet_present_range == [
         True,
-        0,
-        0,
+        owner_values[TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH],
+        owner_values[TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH],
         1,
     ]
     assert all(
@@ -290,18 +293,18 @@ def test_type2_range_owner_descriptions_for_official_sweep_example() -> None:
     _assert_complete_range_owner_descriptions(TYPE2_SWEEP_TOML)
 
 
-def test_type2_sweep_has_quarter_turn_sampled_dimensions_with_fixed_tv_and_reference_line_owners() -> None:
+def test_type2_sweep_has_quarter_turn_sampled_dimensions_with_sampled_tv_and_reference_line_owners() -> None:
     owner_values = _sampled_owner_value_mapping(load_type2_step_spec(TYPE2_SWEEP_TOML), seed=0)
 
     assert tuple(owner_values) == EXPECTED_SWEEP_SAMPLED_OWNER_PATHS
-    assert len(owner_values) == 15
+    assert len(owner_values) == 18
     assert TX_REGION_Z_GAP_OWNER_PATH in owner_values
     assert 45.0 <= float(owner_values[TX_REGION_Z_GAP_OWNER_PATH]) <= 130.0
     assert TX_INNER_VOID_STACK_OWNER_PATH in owner_values
     assert RX_VOID_STACK_OWNER_PATH in owner_values
-    assert TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH not in owner_values
-    assert TX_REFERENCE_LINE_Y_OWNER_PATH not in owner_values
-    assert TX_REFERENCE_LINE_Z_OWNER_PATH not in owner_values
+    assert TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH in owner_values
+    assert TX_REFERENCE_LINE_Y_OWNER_PATH in owner_values
+    assert TX_REFERENCE_LINE_Z_OWNER_PATH in owner_values
 
 
 def test_type2_range_owner_descriptions_for_fixed_official_example() -> None:
@@ -354,9 +357,9 @@ def test_type2_range_owner_descriptions_accept_generated_sampled_toml_for_notebo
 
     assert TX_INNER_VOID_STACK_OWNER_PATH in sampled_owner_path_strings
     assert RX_VOID_STACK_OWNER_PATH in sampled_owner_path_strings
-    assert TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH not in sampled_owner_path_strings
-    assert TX_REFERENCE_LINE_Y_OWNER_PATH not in sampled_owner_path_strings
-    assert TX_REFERENCE_LINE_Z_OWNER_PATH not in sampled_owner_path_strings
+    assert TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH in sampled_owner_path_strings
+    assert TX_REFERENCE_LINE_Y_OWNER_PATH in sampled_owner_path_strings
+    assert TX_REFERENCE_LINE_Z_OWNER_PATH in sampled_owner_path_strings
     assert sampled_void_stack_range == [
         True,
         owner_values[TX_INNER_VOID_STACK_OWNER_PATH],

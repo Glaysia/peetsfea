@@ -1,7 +1,7 @@
 ---
 title: type2_step_export.py
 created: 2026-04-28 @ 00:00
-updated: 2026-05-13 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - step-export
   - type2
@@ -48,6 +48,7 @@ tags:
 - `tx_inner_single_coil` expected body validation includes actual-region bottom-underlay members in PET/PSA then ferrite order when its repeat count is positive.
 - `tx_inner_single_coil` expected body validation includes generated YZ void-stack members (`tx_void_ferrite_u*` / `tx_void_pet_psa_u*`) only when `void_stack_present` resolves true.
 - `tx_inner_single_coil` expected validation derives `tx_void_*` members from actual exported ledger names, then cross-checks those names against the resolved `void_stack_present` boolean.
+- `rx_single_coil` expected body validation includes both RX backing underlay members and RX void-stack members when `void_stack_present` resolves true; the ferrite export group must carry the combined member list in underlay-then-void order.
 - `tx_region.max_z` is resolved once from non-modeled scene state and passed into modeled scene construction/validation so TX inner void-stack sheets fill to the TX region top.
 - `tx_outer_single_coil` specs, if still present from an in-flight loader during the removal work, are filtered out before non-model resolution, modeled scene construction, ledger creation, and terminal contract validation.
 - Post-export terminal metadata validation uses the first-pass `ModeledObjectSceneData` keyed by object ID as canonical expected state for the same export call.

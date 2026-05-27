@@ -3859,7 +3859,6 @@ def test_export_type2_step_artifacts_rx_void_stack_present_controls_body_labels_
     assert all(name in expected_names for name in expected_void_names)
     assert all(name.startswith("rx_void_") for name in expected_void_names)
     assert any(name.startswith("rx_void_") for name in expected_names) is expected_present
-    assert rx_entry["void_stack_present"] is expected_present
     canonical_coordinates = cast(dict[str, object], rx_entry["canonical_coordinates"])
     assert canonical_coordinates["void_stack_present"] is expected_present
 
@@ -3875,6 +3874,42 @@ def test_export_type2_step_artifacts_rx_void_stack_present_controls_body_labels_
         assert all(name in scene_shapes_by_label for name in expected_void_names)
     else:
         assert expected_groups == []
+
+
+def test_export_type2_step_artifacts_rx_underlay_and_void_stack_share_expected_body_contract(
+    tmp_path: Path,
+) -> None:
+    toml_path = _write_spec(
+        tmp_path,
+        _type2_spec_text(
+            modeled_object_id="rx_rect_void_coil",
+            modeled_role="rx_single_coil",
+            terminal_start=0,
+            turn_qcount_range=_range(True, 4.0, 4.0, 1),
+            underlay_repeat_count_range=_range(True, 1.0, 1.0, 1),
+            void_stack_present_range=_range(True, 1.0, 1.0, 1),
+        ),
+    )
+
+    ledger = export_type2_step_artifacts(
+        toml_path=toml_path,
+        output_dir=tmp_path / "out",
+        ledger_path=tmp_path / "out" / "ledger.json",
+        seed=0,
+    )
+
+    rx_entry = _modeled_ledger_entry(ledger=ledger, object_id="rx_rect_void_coil")
+    expected_names = cast(tuple[str, ...], rx_entry["expected_exported_body_names"])
+    assert expected_names == _rx_expected_body_names(underlay_repeat_count=1, void_stack_present=True)
+    expected_groups = _normalized_body_groups(rx_entry["expected_exported_body_groups"])
+    assert expected_groups == [
+        {
+            "group_name": _RX_FERRITE_GROUP_NAME,
+            "member_body_names": list(
+                _rx_underlay_expected_body_names(repeat_count=1) + _rx_void_stack_expected_body_names(present=True)
+            ),
+        }
+    ]
 
 
 def test_export_type2_step_artifacts_rejects_tx_rect_void_columns_modeled_role(tmp_path: Path) -> None:

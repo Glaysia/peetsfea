@@ -107,9 +107,10 @@ def _parse_constraint_func(value: object, *, dotted_path: str) -> str:
     name = text[:open_index].strip()
     if name == "":
         raise ValueError(f"{dotted_path}.func name must be non-empty")
-    if name not in ("sum", "tx_inner_min_trace_width_mm", "rx_min_trace_width_mm"):
+    if name not in ("sum", "tx_inner_min_trace_width_mm", "rx_min_trace_width_mm", "rx_void_corridor_height_mm"):
         raise ValueError(
-            f"{dotted_path}.func must be one of ['sum(...)', 'tx_inner_min_trace_width_mm(...)', 'rx_min_trace_width_mm(...)'] "
+            f"{dotted_path}.func must be one of "
+            "['sum(...)', 'tx_inner_min_trace_width_mm(...)', 'rx_min_trace_width_mm(...)', 'rx_void_corridor_height_mm(...)'] "
             f"(actual={name!r})"
         )
     body = text[open_index + 1 : -1].strip()
@@ -123,6 +124,8 @@ def _parse_constraint_func(value: object, *, dotted_path: str) -> str:
         raise ValueError(f"{dotted_path}.func tx_inner_min_trace_width_mm() must contain exactly one argument")
     if name == "rx_min_trace_width_mm" and len(args) != 1:
         raise ValueError(f"{dotted_path}.func rx_min_trace_width_mm() must contain exactly one argument")
+    if name == "rx_void_corridor_height_mm" and len(args) != 1:
+        raise ValueError(f"{dotted_path}.func rx_void_corridor_height_mm() must contain exactly one argument")
     return raw_func
 
 
@@ -356,6 +359,18 @@ def _validate_constraint_func_ref(func: str, *, spec: Type2StepSpec, dotted_path
             )
         return
     if name == "rx_min_trace_width_mm":
+        object_id = args[0]
+        matches = [modeled_spec for modeled_spec in spec.modeled_objects if modeled_spec.object_id == object_id]
+        if len(matches) != 1:
+            raise ValueError(f"{dotted_path}.func references unknown modeled object: {object_id!r}")
+        modeled_spec = matches[0]
+        if not isinstance(modeled_spec, ModeledRxSingleCoilSpec):
+            raise ValueError(
+                f"{dotted_path}.func requires an rx_single_coil modeled object "
+                f"(actual={modeled_spec.object_id!r})"
+            )
+        return
+    if name == "rx_void_corridor_height_mm":
         object_id = args[0]
         matches = [modeled_spec for modeled_spec in spec.modeled_objects if modeled_spec.object_id == object_id]
         if len(matches) != 1:

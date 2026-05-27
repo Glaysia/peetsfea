@@ -88,6 +88,9 @@ tags:
   while exporting expanded Z bounds in the passive underlay/void stack set.
 - RX `void_stack_present` export regressions require disabled cases to omit `rx_void_*` labels and enabled cases
   to include RX void-stack ferrite/PET-PSA labels plus matching ledger metadata.
+- RX export regressions must also cover the combined underlay-plus-void case so `expected_exported_body_names`
+  and `g_ferrite_rx` membership stay aligned with the scene builder when both passive families are present.
+- RX void-stack ledger metadata is asserted through `canonical_coordinates["void_stack_present"]`; it is not a required top-level modeled ledger key.
 - Deterministic active tx_inner body-name contract is explicitly covered for a fixed `layer_count=1` realization:
   expected exported bodies are `tx_inner_pcb_l0` and `tx_inner_copper_l0`.
 - STEP-only positive and negative inner/outer bridge geometry must be absent from active fixed-example TX paths.
