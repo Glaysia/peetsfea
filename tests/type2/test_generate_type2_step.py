@@ -2534,7 +2534,7 @@ def test_load_example_type2_toml_parses_expected_registry_shape() -> None:
     assert tx_inner_entry.x_position_ratio.start == pytest.approx(0.0)
     assert tx_inner_entry.x_position_ratio.end == pytest.approx(0.0)
     assert tx_inner_entry.x_position_ratio.count == 1
-    assert tx_inner_entry.turn_qcount.start == pytest.approx(4.0)
+    assert tx_inner_entry.turn_qcount.start == pytest.approx(3.0)
     assert tx_inner_entry.terminal_start.start == pytest.approx(1.0)
     assert tx_inner_entry.layer_count.start == pytest.approx(1.0)
     assert tx_inner_entry.layer_count.end == pytest.approx(1.0)
@@ -2588,7 +2588,7 @@ def test_load_example_type2_toml_preserves_rx_single_coil_contract() -> None:
     assert tx_inner_entry.underlay_pet_psa_thickness_mm == RangeSpec(False, 6.0, 6.0, 1)
     assert tx_inner_entry.underlay_ferrite_thickness_mm == RangeSpec(False, 6.0, 6.0, 1)
     assert tx_inner_entry.terminal_start == RangeSpec(True, 1.0, 1.0, 1)
-    assert tx_inner_entry.turn_qcount == RangeSpec(True, 4.0, 4.0, 1)
+    assert tx_inner_entry.turn_qcount == RangeSpec(True, 3.0, 3.0, 1)
     assert tx_inner_entry.terminal_stub_length_mm == RangeSpec(False, 7.5, 7.5, 1)
     tx_inner_profile = profile_for_modeled_role(cast(Literal["tx_inner_single_coil"], tx_inner_entry.role))
     assert tx_inner_profile.plane == "XY"
@@ -2637,7 +2637,7 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     assert tx_inner_entry.layer_count.start == pytest.approx(1.0)
     assert tx_inner_entry.layer_count.end == pytest.approx(1.0)
     assert tx_inner_entry.layer_count.count == 1
-    assert tx_inner_entry.turn_qcount == RangeSpec(True, 4.0, 12.0, 9)
+    assert tx_inner_entry.turn_qcount == RangeSpec(True, 3.0, 7.0, 5)
     assert tx_inner_entry.terminal_start == RangeSpec(True, 0.0, 3.0, 4)
     assert tx_inner_entry.underlay_repeat_count.start == pytest.approx(1.0)
     assert tx_inner_entry.underlay_repeat_count.end == pytest.approx(1.0)
@@ -2661,7 +2661,7 @@ def test_load_type2_sweep_toml_preserves_rx_single_coil_contract() -> None:
     assert rx_entry.layer_count.start == pytest.approx(1.0)
     assert rx_entry.layer_count.end == pytest.approx(1.0)
     assert rx_entry.layer_count.count == 1
-    assert rx_entry.turn_qcount == RangeSpec(True, 4.0, 12.0, 9)
+    assert rx_entry.turn_qcount == RangeSpec(True, 3.0, 7.0, 5)
     assert rx_entry.terminal_start == RangeSpec(True, 0.0, 3.0, 4)
     assert rx_entry.underlay_repeat_count.start == pytest.approx(8.0)
     assert rx_entry.underlay_repeat_count.end == pytest.approx(8.0)

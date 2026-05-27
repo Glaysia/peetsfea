@@ -1,7 +1,7 @@
 ---
 title: test_build_type2_entry.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-13 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - test
   - build
@@ -46,7 +46,7 @@ tags:
 - Expected sampled owner/design-variable order excludes fixed `modeled_objects.tv_aluminum_plate.sheet_present`.
 - Expected RX sampled owner/design-variable order mirrors the TX quarter-turn owner set and includes both `terminal_start` and `void_stack_present`.
 - Synthetic source TOML and single-coil spec fixtures must expose `void_stack_present` as a sampled integer owner for both TX inner and RX when build design-variable handoff is under test.
-- Active single-coil quarter-turn sweep fixtures use `turn_qcount` ranges such as `[true, 4, 12, 9]`; fixed singleton `turn_qcount` ranges remain unchanged.
+- Active single-coil quarter-turn sweep fixtures use `turn_qcount` ranges such as `[true, 3, 7, 5]`; fixed singleton `turn_qcount` ranges remain unchanged.
 - Active fixed/sweep source fixtures use `modeled_objects.tx_inner_rect_void_coil.layer_count = [true, 1, 1, 1]`, and build design variables exclude layer count.
 - Fixed singleton TX guide ratios must not become build design variables.
 - Build design variables must not include `modeled_objects_tx_outer_rect_void_coil_*`.

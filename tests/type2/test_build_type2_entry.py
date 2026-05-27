@@ -170,7 +170,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     rx_void_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.6, count=17)
     rx_outer_x = RangeSpec(is_integer=False, start=20.0, end=120.0, count=17)
     rx_outer_y = RangeSpec(is_integer=False, start=20.0, end=120.0, count=17)
-    rx_turn_count = RangeSpec(is_integer=True, start=4.0, end=12.0, count=9)
+    rx_turn_count = RangeSpec(is_integer=True, start=3.0, end=7.0, count=5)
     rx_layer_count = RangeSpec(is_integer=True, start=1.0, end=1.0, count=1)
     rx_underlay_repeat_count = RangeSpec(is_integer=True, start=8.0, end=8.0, count=1)
     rx_layer_gap = RangeSpec(is_integer=False, start=2.0, end=2.0, count=1)
@@ -222,7 +222,7 @@ def _patch_rx_only_spec_loader(monkeypatch: pytest.MonkeyPatch) -> None:
                 y_ratio=RangeSpec(is_integer=False, start=0.2, end=0.9, count=150),
                 outer_x_mm=RangeSpec(is_integer=False, start=100.0, end=100.0, count=1),
                 outer_y_mm=RangeSpec(is_integer=False, start=80.0, end=80.0, count=1),
-                turn_qcount=RangeSpec(is_integer=True, start=4.0, end=12.0, count=9),
+                turn_qcount=RangeSpec(is_integer=True, start=3.0, end=7.0, count=5),
                 layer_count=RangeSpec(is_integer=True, start=1.0, end=1.0, count=1),
                 underlay_repeat_count=RangeSpec(is_integer=True, start=1.0, end=1.0, count=1),
                 void_stack_present=RangeSpec(is_integer=True, start=0.0, end=1.0, count=2),
@@ -587,7 +587,7 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.x_position_ratio]
     range = [false, 0.0, 0.0, 1]
     [modeled_objects.turn_qcount]
-    range = [true, 4, 12, 9]
+    range = [true, 3, 7, 5]
     [modeled_objects.layer_count]
     range = [true, 1, 1, 1]
     [modeled_objects.underlay_repeat_count]
@@ -627,7 +627,7 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.void_factor]
     range = [false, 0.1, 0.6, 85]
     [modeled_objects.turn_qcount]
-    range = [true, 4, 12, 9]
+    range = [true, 3, 7, 5]
     [modeled_objects.layer_count]
     range = [true, 1, 1, 1]
     [modeled_objects.underlay_repeat_count]

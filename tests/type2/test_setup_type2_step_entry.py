@@ -16,12 +16,12 @@ _FIXED_TX_REGION_SIZE_XYZ = [720.0, 1200.0, 90.0]
 _SAMPLED_TX_REGION_ORIGIN_XYZ = [0.0, -600.0, 0.0]
 _SAMPLED_TX_REGION_SIZE_XYZ = [720.0, 1200.0, 90.0]
 _FIXED_TX_REGION_Z_GAP_RANGE = (False, 80.0, 80.0, 1)
-_SAMPLED_TX_REGION_Z_GAP_RANGE = (False, 45.0, 130.0, 17)
+_SAMPLED_TX_REGION_Z_GAP_RANGE = (False, 45.0, 130.0, 37)
 _FIXED_TX_REFERENCE_LINE_RATIOS = (0.99, 0.8373223833460517, 0.9641454961430692)
 _SAMPLED_TX_REFERENCE_LINE_RANGES = (
     (0.99, 0.99, 1),
-    (0.8373223833460517, 0.8373223833460517, 1),
-    (0.9641454961430692, 0.9641454961430692, 1),
+    (0.2, 1.0, 85),
+    (0.75, 1.0, 65),
 )
 _TV_ALUMINUM_PLATE_OBJECT_ID = "tv_aluminum_plate"
 _TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
@@ -29,12 +29,12 @@ _TX_REGION_Z_GAP_OWNER_PATH = "non_model_objects.tx_region.z_gap_from_rx_plane_m
 _TV_ALUMINUM_PLATE_SHEET_PRESENT_OWNER_PATH = "modeled_objects.tv_aluminum_plate.sheet_present"
 _TV_ALUMINUM_PLATE_THICKNESS_MM = 0.04
 _FIXED_TV_ALUMINUM_PLATE_SHEET_PRESENT_RANGE = [True, 0, 0, 1]
-_SAMPLED_TV_ALUMINUM_PLATE_SHEET_PRESENT_RANGE = [True, 0, 0, 1]
-_SAMPLED_TYPE2_OWNER_COUNT = 15
-_FIXED_TX_TURN_QCOUNT_RANGE = [True, 4, 4, 1]
+_SAMPLED_TV_ALUMINUM_PLATE_SHEET_PRESENT_RANGE = [True, 0, 1, 2]
+_SAMPLED_TYPE2_OWNER_COUNT = 18
+_FIXED_TX_TURN_QCOUNT_RANGE = [True, 3, 3, 1]
 _FIXED_RX_TURN_QCOUNT_RANGE = [True, 4, 4, 1]
-_SAMPLED_TX_TURN_QCOUNT_RANGE = [True, 4, 12, 9]
-_SAMPLED_RX_TURN_QCOUNT_RANGE = [True, 4, 12, 9]
+_SAMPLED_TX_TURN_QCOUNT_RANGE = [True, 3, 7, 5]
+_SAMPLED_RX_TURN_QCOUNT_RANGE = [True, 3, 7, 5]
 _FIXED_TX_TERMINAL_START_RANGE = [True, 1, 1, 1]
 _FIXED_RX_TERMINAL_START_RANGE = [True, 0, 0, 1]
 _SAMPLED_TERMINAL_START_RANGE = [True, 0, 3, 4]
@@ -43,6 +43,8 @@ _FIXED_RX_VOID_STACK_PRESENT_RANGE = [True, 0, 0, 1]
 _SAMPLED_VOID_STACK_PRESENT_RANGE = [True, 0, 1, 2]
 _EXPECTED_SAMPLED_OWNER_PATHS = (
     "non_model_objects.tx_region.z_gap_from_rx_plane_mm",
+    "non_model_objects.tx_region.tx_reference_line.y_usage_ratio",
+    "non_model_objects.tx_region.tx_reference_line.z_ratio",
     "modeled_objects.tx_inner_rect_void_coil.x_ratio",
     "modeled_objects.tx_inner_rect_void_coil.y_ratio",
     "modeled_objects.tx_inner_rect_void_coil.turn_qcount",
@@ -57,6 +59,7 @@ _EXPECTED_SAMPLED_OWNER_PATHS = (
     "modeled_objects.rx_rect_void_coil.metal_fill_factor",
     "modeled_objects.rx_rect_void_coil.terminal_start",
     "modeled_objects.rx_rect_void_coil.void_stack_present",
+    "modeled_objects.tv_aluminum_plate.sheet_present",
 )
 
 
@@ -292,15 +295,15 @@ def test_active_type2_examples_are_txrx(example_name: str) -> None:
     _assert_tx_reference_line_payload(payload, example_name=example_name)
 
 
-def test_active_type2_sweep_has_15_sampled_dimensions_with_fixed_tv_and_reference_line_owners() -> None:
+def test_active_type2_sweep_has_18_sampled_dimensions_with_quarter_turn_auxiliary_owners() -> None:
     owner_paths = type2_sampled_owner_paths(_repo_root() / "examples" / "type2_sweep.toml")
 
     assert len(owner_paths) == _SAMPLED_TYPE2_OWNER_COUNT
     assert owner_paths == _EXPECTED_SAMPLED_OWNER_PATHS
     assert _TX_REGION_Z_GAP_OWNER_PATH in owner_paths
-    assert _TV_ALUMINUM_PLATE_SHEET_PRESENT_OWNER_PATH not in owner_paths
-    assert "non_model_objects.tx_region.tx_reference_line.y_usage_ratio" not in owner_paths
-    assert "non_model_objects.tx_region.tx_reference_line.z_ratio" not in owner_paths
+    assert _TV_ALUMINUM_PLATE_SHEET_PRESENT_OWNER_PATH in owner_paths
+    assert "non_model_objects.tx_region.tx_reference_line.y_usage_ratio" in owner_paths
+    assert "non_model_objects.tx_region.tx_reference_line.z_ratio" in owner_paths
     assert "modeled_objects.tv_aluminum_plate.thickness_mm" not in owner_paths
 
 

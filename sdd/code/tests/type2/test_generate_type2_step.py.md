@@ -1,7 +1,7 @@
 ---
 title: test_generate_type2_step.py
 created: 2026-04-18 @ 09:09
-updated: 2026-05-19 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - test
   - step-export
@@ -69,8 +69,8 @@ tags:
 - `tx_outer_rect_void_coil` must be validated in the `tx_outer_region_prism` local frame. Tests derive prism-local axes and X/Y bounds from the prism provenance vertices, then assert exported body vertices remain inside those local spans.
 - `examples/type2_sweep.toml` parsing must assert active TX inner and RX `x_ratio`/`y_ratio` ranges,
   including RX inclusive `1.0` upper endpoints and shared `void_factor = [false, 0.08, 0.8, 125]`,
-  remain parseable and scale to owner spans; it also asserts the current staged TX inner and RX
-  `turn_qcount` sweep ranges are `RangeSpec(True, 4.0, 12.0, 9)` with
+  remain parseable and scale to owner spans; it also asserts the active TX inner and RX
+  `turn_qcount` sweep ranges are `RangeSpec(True, 3.0, 7.0, 5)` with
   `terminal_start = [true, 0, 3, 4]`, while focused fixtures cover partial quarter turns.
 - `tx_outer_rect_void_coil` may protrude slightly in world +X after tilted stacking; tests should assert prism-local containment, semantic tilt, and Y/Z consistency rather than clipping to the axis-aligned prism bbox.
 - `tx_outer_rect_void_coil` must preserve outer-frame tilt normals:
