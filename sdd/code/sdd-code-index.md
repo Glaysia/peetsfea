@@ -15,6 +15,7 @@ This hub indexes code notes created for forward SDD coverage. Parent hub: [sdd-i
 - Example: `src/peetsfea/minimal_step.py` -> `sdd/code/src/peetsfea/minimal_step.py.md`
 
 ## Current Active Notes
+- [entry/debug_view_step_files.py](entry/debug_view_step_files.py.md)
 - [entry/sample.py](entry/sample.py.md)
 - [entry/build.py](entry/build.py.md)
 - [examples/minimal_step_two_port.toml](examples/minimal_step_two_port.toml.md)

@@ -3,1333 +3,748 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>peetsfea Type2 Geometry Atlas</title>
+  <title>peetsfea 0.3.0 Minimal Structure</title>
   <style>
     :root {
       color-scheme: light;
-      --bg: #f7f8f6;
-      --surface: #ffffff;
-      --surface-alt: #eef4f2;
-      --ink: #1d2420;
-      --muted: #5e6b64;
-      --line: #d9e0dc;
-      --green: #247a56;
-      --green-soft: #dff1e7;
-      --blue: #236b8e;
-      --blue-soft: #e1eff5;
-      --amber: #9a6a12;
-      --amber-soft: #f6edd7;
-      --red: #9d3f32;
-      --red-soft: #f4e2de;
-      --violet: #6250a4;
-      --violet-soft: #ebe7f7;
-      --shadow: 0 18px 40px rgba(28, 42, 36, 0.08);
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --bg: #f7f7f3;
+      --ink: #1d2522;
+      --muted: #5f6c66;
+      --line: #d8ded7;
+      --panel: #ffffff;
+      --panel-strong: #edf3ef;
+      --green: #1f7a5b;
+      --blue: #275f9f;
+      --amber: #9a6418;
+      --red: #a3403b;
+      --shadow: 0 12px 30px rgba(29, 37, 34, 0.08);
     }
 
     * {
       box-sizing: border-box;
     }
 
+    html {
+      scroll-behavior: smooth;
+    }
+
     body {
       margin: 0;
       background: var(--bg);
       color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
       line-height: 1.55;
     }
 
-    header {
-      border-bottom: 1px solid var(--line);
-      background: var(--surface);
+    a {
+      color: inherit;
+      text-decoration-color: rgba(39, 95, 159, 0.45);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.18em;
     }
 
-    main {
-      padding-bottom: 48px;
-    }
-
-    h1,
-    h2,
-    h3,
-    h4,
-    p,
-    ul {
-      margin: 0;
-    }
-
-    h1 {
-      font-size: clamp(2rem, 4vw, 3.1rem);
-      line-height: 1.08;
-      letter-spacing: 0;
-    }
-
-    h2 {
-      font-size: 1.18rem;
-      line-height: 1.25;
-      letter-spacing: 0;
-    }
-
-    h3 {
-      font-size: 1rem;
-      line-height: 1.3;
-      letter-spacing: 0;
-    }
-
-    h4 {
-      font-size: 0.9rem;
-      line-height: 1.3;
-      letter-spacing: 0;
+    a:hover {
+      color: var(--blue);
+      text-decoration-color: var(--blue);
     }
 
     code {
+      padding: 0.12rem 0.32rem;
+      border: 1px solid rgba(216, 222, 215, 0.9);
+      border-radius: 4px;
+      background: #f4f6f4;
+      color: #24312d;
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-      font-size: 0.94em;
+      font-size: 0.92em;
+      white-space: nowrap;
     }
 
-    p,
-    li,
-    a,
-    code,
-    .meta-value,
-    .path-step,
-    .shape-title h4 {
-      overflow-wrap: anywhere;
+    .shell {
+      display: block;
+      width: 100%;
+      overflow-x: auto;
+      margin: 0;
+      padding: 0.86rem 1rem;
+      border: 1px solid #d0d8d1;
+      border-radius: 6px;
+      background: #17211d;
+      color: #eff7f1;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.88rem;
+      line-height: 1.5;
+      white-space: pre;
     }
 
-    a {
-      color: var(--blue);
-      text-decoration-thickness: 1px;
-      text-underline-offset: 3px;
-    }
-
-    .wrap {
-      width: min(1220px, calc(100% - 32px));
+    .page {
+      max-width: 1180px;
       margin: 0 auto;
+      padding: 32px 22px 56px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 0 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .mark {
+      display: grid;
+      width: 38px;
+      height: 38px;
+      place-items: center;
+      border: 1px solid rgba(31, 122, 91, 0.35);
+      border-radius: 8px;
+      background: #e7f3ec;
+      color: var(--green);
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .brand-title {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .brand-subtitle {
+      margin: 0.1rem 0 0;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .nav {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .nav a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 0 0.72rem;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.68);
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-weight: 700;
+      text-decoration: none;
     }
 
     .hero {
       display: grid;
-      grid-template-columns: minmax(0, 1.55fr) minmax(260px, 0.8fr);
+      grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
       gap: 28px;
-      align-items: end;
-      padding: 38px 0 28px;
+      align-items: center;
+      padding: 42px 0 30px;
     }
 
-    .subtitle {
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--green);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    h1 {
       max-width: 780px;
-      margin-top: 14px;
-      color: var(--muted);
-      font-size: 1rem;
+      font-size: clamp(2.2rem, 6vw, 4.6rem);
+      font-weight: 850;
     }
 
-    .meta {
-      display: grid;
-      gap: 10px;
-      padding: 16px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--surface-alt);
+    h2 {
+      font-size: 1.8rem;
+      font-weight: 820;
     }
 
-    .meta-row {
-      display: grid;
-      grid-template-columns: 96px minmax(0, 1fr);
-      gap: 12px;
-      font-size: 0.92rem;
+    h3 {
+      font-size: 1.02rem;
+      font-weight: 820;
     }
 
-    .meta-key {
-      color: var(--muted);
+    .lead {
+      max-width: 760px;
+      margin: 18px 0 0;
+      color: #3f4d48;
+      font-size: 1.08rem;
     }
 
-    .meta-value {
-      font-weight: 650;
-    }
-
-    .band {
-      padding: 26px 0 0;
-    }
-
-    .merge-summary {
-      display: grid;
-      gap: 16px;
-      padding: 18px 20px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--surface);
-      box-shadow: var(--shadow);
-    }
-
-    .merge-summary h2 {
-      margin-bottom: 4px;
-    }
-
-    .merge-summary p {
-      color: var(--muted);
-      font-size: 0.92rem;
-    }
-
-    .merge-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    .merge-item {
-      display: grid;
-      gap: 6px;
-      min-height: 98px;
-      padding: 12px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fbfcfb;
-    }
-
-    .merge-item strong {
-      font-size: 0.9rem;
-    }
-
-    .next-note {
-      padding: 12px 14px;
-      border: 1px solid var(--amber);
-      border-radius: 8px;
-      background: var(--amber-soft);
-      color: #4a3309;
-      font-size: 0.9rem;
-    }
-
-    .flow-panel,
-    .atlas-shell,
-    .detail-panel {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--surface);
-      box-shadow: var(--shadow);
-    }
-
-    .flow-panel {
-      overflow: hidden;
-    }
-
-    .section-head {
-      display: flex;
-      gap: 14px;
-      align-items: baseline;
-      justify-content: space-between;
-      padding: 18px 20px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .section-head p {
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-
-    .diagram-body {
-      overflow-x: auto;
-      padding: 20px;
-      background: #fbfcfb;
-    }
-
-    .mermaid {
-      min-width: 920px;
-      text-align: center;
-    }
-
-    .atlas-layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 390px;
-      gap: 18px;
-      align-items: start;
-    }
-
-    .atlas-shell {
-      overflow: hidden;
-    }
-
-    .atlas-group {
-      padding: 18px 20px 20px;
-      border-top: 1px solid var(--line);
-    }
-
-    .atlas-group:first-of-type {
-      border-top: 0;
-    }
-
-    .atlas-group h3 {
-      margin-bottom: 12px;
-    }
-
-    .shape-grid {
+    .summary-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
     }
 
-    .shape-card {
-      display: grid;
-      gap: 10px;
-      width: 100%;
-      min-height: 132px;
+    .summary-item {
+      min-height: 104px;
       padding: 14px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #fbfcfb;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .summary-item strong {
+      display: block;
       color: var(--ink);
-      cursor: pointer;
-      font: inherit;
-      text-align: left;
-      transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+      font-size: 1.6rem;
+      line-height: 1;
     }
 
-    .shape-card:hover,
-    .shape-card:focus-visible {
-      border-color: var(--green);
-      background: var(--green-soft);
-      outline: 0;
-    }
-
-    .shape-card[aria-pressed="true"] {
-      border-color: var(--green);
-      background: var(--green-soft);
-      transform: translateY(-1px);
-    }
-
-    .shape-title {
-      display: flex;
-      gap: 8px;
-      align-items: start;
-      justify-content: space-between;
-    }
-
-    .shape-card p {
+    .summary-item span {
+      display: block;
+      margin-top: 8px;
       color: var(--muted);
-      font-size: 0.89rem;
+      font-size: 0.88rem;
+    }
+
+    .section {
+      margin-top: 34px;
+      padding-top: 28px;
+      border-top: 1px solid var(--line);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .section-head p {
+      max-width: 560px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.96rem;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(145px, 1fr));
+      gap: 12px;
+    }
+
+    .flow-step {
+      position: relative;
+      min-height: 150px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .flow-step::after {
+      content: "";
+      position: absolute;
+      top: 52px;
+      right: -9px;
+      width: 16px;
+      height: 16px;
+      border-top: 2px solid rgba(31, 122, 91, 0.45);
+      border-right: 2px solid rgba(31, 122, 91, 0.45);
+      transform: rotate(45deg);
+      background: var(--bg);
+    }
+
+    .flow-step:last-child::after {
+      display: none;
+    }
+
+    .step-no {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      margin-bottom: 14px;
+      border-radius: 50%;
+      background: #e5f1eb;
+      color: var(--green);
+      font-size: 0.78rem;
+      font-weight: 850;
+    }
+
+    .flow-step p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .card p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .card ul {
+      margin: 12px 0 0;
+      padding-left: 1.1rem;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .card li + li {
+      margin-top: 0.38rem;
+    }
+
+    .accent-green {
+      border-top: 4px solid var(--green);
+    }
+
+    .accent-blue {
+      border-top: 4px solid var(--blue);
+    }
+
+    .accent-amber {
+      border-top: 4px solid var(--amber);
+    }
+
+    .accent-red {
+      border-top: 4px solid var(--red);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    table {
+      width: 100%;
+      min-width: 720px;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--panel-strong);
+      color: #34423d;
+      font-size: 0.84rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    td {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    td:first-child {
+      color: var(--ink);
+      font-weight: 780;
+    }
+
+    .command-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .command {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fffdf7;
+      box-shadow: var(--shadow);
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
     }
 
     .badge {
       display: inline-flex;
       align-items: center;
-      width: fit-content;
-      max-width: 100%;
-      padding: 3px 8px;
+      min-height: 30px;
+      padding: 0 0.68rem;
       border: 1px solid var(--line);
       border-radius: 999px;
-      background: var(--surface);
+      background: #fff;
       color: var(--muted);
-      font-size: 0.76rem;
-      font-weight: 700;
-      white-space: nowrap;
+      font-size: 0.84rem;
+      font-weight: 720;
     }
 
-    .badge.active {
-      border-color: var(--green);
-      background: var(--green-soft);
-      color: var(--green);
+    .removed {
+      background: #fff8f7;
     }
 
-    .badge.geometry {
-      border-color: var(--blue);
-      background: var(--blue-soft);
-      color: var(--blue);
-    }
-
-    .badge.ledger {
-      border-color: var(--violet);
-      background: var(--violet-soft);
-      color: var(--violet);
-    }
-
-    .badge.future {
-      border-color: var(--amber);
-      background: var(--amber-soft);
-      color: var(--amber);
-    }
-
-    .badge.excluded {
-      border-color: var(--red);
-      background: var(--red-soft);
-      color: var(--red);
-    }
-
-    .detail-panel {
-      position: sticky;
-      top: 16px;
-      overflow: hidden;
-    }
-
-    .detail-main {
-      display: grid;
-      gap: 18px;
-      padding: 18px 20px 20px;
-    }
-
-    .detail-title {
-      display: grid;
-      gap: 8px;
-    }
-
-    .detail-title p {
+    .footer {
+      margin-top: 42px;
+      padding-top: 22px;
+      border-top: 1px solid var(--line);
       color: var(--muted);
-      font-size: 0.92rem;
-    }
-
-    .detail-section {
-      display: grid;
-      gap: 8px;
-    }
-
-    .detail-section ul {
-      display: grid;
-      gap: 7px;
-      padding-left: 18px;
-      color: var(--muted);
-      font-size: 0.91rem;
-    }
-
-    .path-chain {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-    }
-
-    .path-step {
-      display: inline-flex;
-      align-items: center;
-      min-height: 32px;
-      padding: 5px 9px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fbfcfb;
-      color: var(--ink);
-      font-size: 0.82rem;
-      font-weight: 650;
-    }
-
-    .path-arrow {
-      color: var(--muted);
-      font-size: 0.8rem;
-    }
-
-    .link-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    .link-list a {
-      display: inline-flex;
-      align-items: center;
-      min-height: 30px;
-      padding: 4px 8px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fbfcfb;
-      font-size: 0.82rem;
-      font-weight: 650;
-      text-decoration: none;
-    }
-
-    .legacy-note {
-      margin-top: 12px;
-      padding: 13px 14px;
-      border: 1px solid var(--red);
-      border-radius: 8px;
-      background: var(--red-soft);
-      color: #512019;
       font-size: 0.9rem;
     }
 
-    .render-error {
-      margin: 20px;
-      padding: 14px 16px;
-      border: 1px solid var(--red);
-      border-radius: 8px;
-      background: var(--red-soft);
-      color: var(--red);
-      font-weight: 650;
-    }
-
-    @media (max-width: 1040px) {
+    @media (max-width: 980px) {
       .hero,
-      .atlas-layout,
-      .merge-grid {
+      .grid,
+      .command-grid {
         grid-template-columns: 1fr;
       }
 
-      .detail-panel {
-        position: static;
-      }
-    }
-
-    @media (max-width: 760px) {
-      .shape-grid {
+      .flow {
         grid-template-columns: 1fr;
       }
+
+      .flow-step::after {
+        top: auto;
+        right: 50%;
+        bottom: -10px;
+        transform: translateX(50%) rotate(135deg);
+      }
     }
 
-    @media (max-width: 640px) {
-      .wrap {
-        width: min(100% - 20px, 1220px);
+    @media (max-width: 680px) {
+      .page {
+        padding: 20px 14px 40px;
+      }
+
+      .topbar,
+      .section-head {
+        display: block;
+      }
+
+      .nav {
+        justify-content: flex-start;
+        margin-top: 16px;
       }
 
       .hero {
-        padding-top: 28px;
+        padding-top: 30px;
       }
 
-      .section-head {
-        display: grid;
+      .summary-grid {
+        grid-template-columns: 1fr;
       }
 
-      .diagram-body {
-        padding: 14px;
-      }
-
-      .mermaid {
-        min-width: 780px;
-      }
-
-      .meta-row {
-        grid-template-columns: 82px minmax(0, 1fr);
+      code {
+        white-space: normal;
+        overflow-wrap: anywhere;
       }
     }
   </style>
 </head>
 <body>
-  <header>
-    <div class="wrap hero">
-      <div>
-        <h1>Type2 형상 생성 규칙 atlas</h1>
-        <p class="subtitle">
-          Type2에서 형상이 생기는 지점, 입력 owner, 생성 규칙, STEP/ledger/import/setup-ready 경로를 한 화면에서 추적합니다.
-          type1 legacy internals는 legacy excluded로 분리합니다.
-        </p>
-      </div>
-      <section class="meta" aria-label="문서 메타데이터">
-        <div class="meta-row">
-          <span class="meta-key">기준</span>
-          <span class="meta-value">Type2 geometry paths</span>
-        </div>
-        <div class="meta-row">
-          <span class="meta-key">형식</span>
-          <span class="meta-value">static HTML + Mermaid</span>
-        </div>
-        <div class="meta-row">
-          <span class="meta-key">제외</span>
-          <span class="meta-value">type1 legacy excluded</span>
-        </div>
-      </section>
-    </div>
-  </header>
-
-  <main>
-    <section class="band">
-      <div class="wrap merge-summary" aria-labelledby="merge-title">
+  <main class="page">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark">0.3</div>
         <div>
-          <h2 id="merge-title">Merged from dev/3</h2>
-          <p>
-            현재 문서는 `84dac65 Merge branch 'dev/3' into small/1` 이후의 Type2 형상 계약을 기준으로 합니다.
-            merge 전 atlas의 구식 single-coil owner 설명은 quarter-turn 계약으로 갱신했습니다.
-          </p>
+          <p class="brand-title">peetsfea project structure</p>
+          <p class="brand-subtitle">minimal STEP two-port baseline</p>
         </div>
-        <div class="merge-grid">
-          <div class="merge-item">
-            <strong>quarter-turn single-coil</strong>
-            <p>`turn_qcount`, `terminal_start`, `void_factor` 중심으로 TX inner/RX single-coil realization이 결정됩니다.</p>
-          </div>
-          <div class="merge-item">
-            <strong>TX region Z-gap owner</strong>
-            <p>`non_model_objects.tx_region.z_gap_from_rx_plane_mm`가 RX/TV lower-Z 기준 plane에서 TX guide Z를 소유합니다.</p>
-          </div>
-          <div class="merge-item">
-            <strong>sweep/report + viewer</strong>
-            <p>`Output Variables Table1`은 `Setup1 : Sweep` 기준이며, STEP 확인용 `debug_view_step_files.py` entry가 추가되었습니다.</p>
-          </div>
+      </div>
+      <nav class="nav" aria-label="sections">
+        <a href="#flow">Flow</a>
+        <a href="#contracts">Contracts</a>
+        <a href="#files">Files</a>
+        <a href="#vscode">VS Code</a>
+      </nav>
+    </header>
+
+    <section class="hero" aria-labelledby="title">
+      <div>
+        <p class="eyebrow">active path only</p>
+        <h1 id="title">0.3.0 Minimal STEP Two-Port</h1>
+        <p class="lead">
+          현재 구조는 기존 형상 생성 코드를 걷어내고, TOML의 non-model box 위에
+          Tx/Rx 금속 포트 셀만 생성하는 기본 EM 파이프라인이다. STEP 생성,
+          HFSS import, mesh, terminal port, setup, sweep, report export까지 한 흐름으로 유지한다.
+        </p>
+        <div class="badge-row">
+          <span class="badge">TOML SSOT</span>
+          <span class="badge">headless AEDT</span>
+          <span class="badge">fail-fast</span>
+          <span class="badge">zero sampled dimensions</span>
         </div>
-        <div class="next-note">
-          0.3.0 다음 목표: TX 코일을 제거하고 영역 오른쪽 끝 단자 2개만 만드는 설계는 아직 merge된 현재 동작이 아니므로 active/default 계약으로 표시하지 않습니다.
+      </div>
+      <div class="summary-grid" aria-label="summary">
+        <div class="summary-item">
+          <strong>1</strong>
+          <span>authoring TOML: <code>examples/minimal_step_two_port.toml</code></span>
+        </div>
+        <div class="summary-item">
+          <strong>2</strong>
+          <span>generated port cells: Tx <code>1_T1</code>, Rx <code>2_T1</code></span>
+        </div>
+        <div class="summary-item">
+          <strong>4</strong>
+          <span>mesh target copper pads recorded in <code>minimal_step_ledger.json</code></span>
+        </div>
+        <div class="summary-item">
+          <strong>0</strong>
+          <span>sampled degrees of freedom in <code>dataset.toml</code></span>
         </div>
       </div>
     </section>
 
-    <section class="band">
-      <div class="wrap flow-panel">
-        <div class="section-head">
-          <h2>Type2 형상 흐름</h2>
-          <p>SSOT에서 sampled owners, quarter-turn realization, STEP, ledger, HFSS setup-ready까지</p>
-        </div>
-        <div class="diagram-body">
-          <pre class="mermaid">
-flowchart LR
-    Spec["TOML Spec&lt;br/&gt;non_model_objects / modeled_objects"]
-    Resolve["Parse + sampled range resolution&lt;br/&gt;seeded canonical owners"]
-    Owners["Quarter-turn owners&lt;br/&gt;x/y ratio / turn_qcount / terminal_start / void_factor"]
-    Guides["Non-model guides&lt;br/&gt;tv / tx_region z-gap / rx_region_max"]
-    Derived["Derived guides&lt;br/&gt;tx_inner_region / tx_inner_actual_region"]
-    Core["Quarter-turn rect-void core&lt;br/&gt;cw centerline / polygons / boxes"]
-    Modeled["Modeled scene data&lt;br/&gt;TX inner / RX / plate / columns"]
-    Metadata["Terminal + sheet metadata&lt;br/&gt;derived end corner / port sheets / tv aluminum"]
-    Step["STEP + type2_step_ledger.json&lt;br/&gt;hash-bound handoff"]
-    Import["HFSS import&lt;br/&gt;partition / style / sheet reconstruction"]
-    Setup["Setup-ready EM&lt;br/&gt;mesh / ports / Setup1 : Sweep report"]
-
-    Spec --> Resolve
-    Resolve --> Owners
-    Resolve --> Guides
-    Guides --> Derived
-    Derived --> Modeled
-    Owners --> Core
-    Core --> Modeled
-    Modeled --> Metadata
-    Modeled --> Step
-    Metadata --> Step
-    Step --> Import
-    Import --> Setup
-
-    classDef spec fill:#dff1e7,stroke:#247a56,color:#17382a,stroke-width:1.5px;
-    classDef geom fill:#e1eff5,stroke:#236b8e,color:#17364a,stroke-width:1.5px;
-    classDef handoff fill:#f6edd7,stroke:#9a6a12,color:#4a3309,stroke-width:1.5px;
-    class Spec,Resolve,Owners spec;
-    class Guides,Derived,Core,Modeled geom;
-    class Metadata,Step,Import,Setup handoff;
-          </pre>
-        </div>
+    <section id="flow" class="section" aria-labelledby="flow-title">
+      <div class="section-head">
+        <h2 id="flow-title">Runtime Flow</h2>
+        <p>모든 기본 실행은 <code>run/</code>에서 시작하고, sample 단계가 STEP과 manifest를 만든 뒤 build 단계가 AEDT를 설정한다.</p>
       </div>
-    </section>
-
-    <section class="band">
-      <div class="wrap atlas-layout">
-        <article class="atlas-shell" aria-labelledby="atlas-title">
-          <div class="section-head">
-            <h2 id="atlas-title">Type2 형상 지도</h2>
-            <p>상태와 ownership 기준으로 묶은 형상 생성 표면</p>
-          </div>
-          <div class="atlas-group">
-            <h3>Active/current Type2</h3>
-            <div class="shape-grid" id="active-shape-grid"></div>
-          </div>
-          <div class="atlas-group">
-            <h3>Implemented or documented Type2 boundaries</h3>
-            <div class="shape-grid" id="future-shape-grid"></div>
-          </div>
-          <div class="atlas-group">
-            <h3>Excluded boundary</h3>
-            <div class="shape-grid" id="excluded-shape-grid"></div>
-          </div>
+      <div class="flow">
+        <article class="flow-step">
+          <span class="step-no">1</span>
+          <h3>TOML</h3>
+          <p><a href="../examples/minimal_step_two_port.toml">minimal_step_two_port.toml</a>에는 <code>[design]</code>과 <code>[[non_model_objects]]</code>만 남긴다.</p>
         </article>
-
-        <aside class="detail-panel" aria-live="polite" aria-labelledby="detail-heading">
-          <div class="section-head">
-            <h2 id="detail-heading">상세 규칙</h2>
-            <p id="detail-status-label">selected Type2 element</p>
-          </div>
-          <div class="detail-main" id="detail-main"></div>
-        </aside>
+        <article class="flow-step">
+          <span class="step-no">2</span>
+          <h3>Sample</h3>
+          <p><a href="../entry/sample.py">entry/sample.py</a>가 source, repro, dataset snapshot과 manifest를 쓴다.</p>
+        </article>
+        <article class="flow-step">
+          <span class="step-no">3</span>
+          <h3>STEP</h3>
+          <p><a href="../src/peetsfea/minimal_step.py">minimal_step.py</a>가 non-model body와 Tx/Rx port cell을 내보낸다.</p>
+        </article>
+        <article class="flow-step">
+          <span class="step-no">4</span>
+          <h3>Build</h3>
+          <p><a href="../entry/debug_view_step_files.py">debug_view_step_files.py</a>가 STEP을 생성하고 OCP CAD Viewer로 보낸다.</p>
+        </article>
+        <article class="flow-step">
+          <span class="step-no">5</span>
+          <h3>Solve</h3>
+          <p><code>entry/build.py --solve</code>가 <code>Setup1</code>을 실행하고 report CSV를 export한다.</p>
+        </article>
       </div>
     </section>
+
+    <section id="contracts" class="section" aria-labelledby="contracts-title">
+      <div class="section-head">
+        <h2 id="contracts-title">Contracts</h2>
+        <p>0.3.0의 핵심은 형상 자유도를 최소화하고, generated port 셀과 ledger 이름을 EM 쪽 계약으로 고정하는 것이다.</p>
+      </div>
+      <div class="grid">
+        <article class="card accent-green">
+          <h3>TOML parser</h3>
+          <p><a href="../src/peetsfea/minimal_spec.py">minimal_spec.py</a>는 <code>spec_version = "0.3.0"</code>, <code>[design] units = "mm"</code>, non-model box만 허용한다.</p>
+          <ul>
+            <li><code>modeled_objects</code>, <code>simulation</code>, <code>backend</code>, <code>constraints</code>는 즉시 거부한다.</li>
+            <li>seed는 받지만 sampled dimension은 없다.</li>
+          </ul>
+        </article>
+        <article class="card accent-blue">
+          <h3>STEP exporter</h3>
+          <p><a href="../src/peetsfea/minimal_step.py">minimal_step.py</a>는 중앙 근처에 Tx/Rx 금속 포트 셀을 생성하고, canonical body name을 ledger에 기록한다.</p>
+          <ul>
+            <li>각 포트 셀은 signal pad, reference pad, vacuum port sheet로 구성된다.</li>
+            <li>출력 파일은 <code>minimal_scene.step</code>와 <code>minimal_step_ledger.json</code>이다.</li>
+          </ul>
+        </article>
+        <article class="card accent-amber">
+          <h3>HFSS backend</h3>
+          <p><a href="../src/peetsfea/backend/pyaedt/minimal_em.py">minimal_em.py</a>가 import 이후 mesh, terminal ports, sources, setup, sweep, report를 소유한다.</p>
+          <ul>
+            <li>mesh target은 네 개 copper pad다.</li>
+            <li>Tx source는 <code>1V @ 0deg</code>, Rx source는 <code>0V @ 0deg</code>다.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="files" class="section" aria-labelledby="files-title">
+      <div class="section-head">
+        <h2 id="files-title">Active Files</h2>
+        <p>지금 제품 경로에 남아 있는 파일만 기준으로 정리한다. Type2와 legacy geometry surface는 active flow에서 제외한다.</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Layer</th>
+              <th>Source</th>
+              <th>Responsibility</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Example spec</td>
+              <td><a href="../examples/minimal_step_two_port.toml">examples/minimal_step_two_port.toml</a></td>
+              <td>0.3.0 authoring input. Non-model air context만 포함한다.</td>
+            </tr>
+            <tr>
+              <td>Sample entry</td>
+              <td><a href="../entry/sample.py">entry/sample.py</a></td>
+              <td>sampled/repro/source/dataset TOML, STEP artifacts, manifest를 생성한다.</td>
+            </tr>
+            <tr>
+              <td>Debug entry</td>
+              <td><a href="../entry/debug_view_step_files.py">entry/debug_view_step_files.py</a></td>
+              <td>VS Code F5에서 STEP을 생성하고 OCP CAD Viewer에 표시한다.</td>
+            </tr>
+            <tr>
+              <td>Build entry</td>
+              <td><a href="../entry/build.py">entry/build.py</a></td>
+              <td>manifest entry를 선택하고 missing STEP artifact를 재생성한 뒤 setup 또는 solve를 실행한다.</td>
+            </tr>
+            <tr>
+              <td>Spec parser</td>
+              <td><a href="../src/peetsfea/minimal_spec.py">src/peetsfea/minimal_spec.py</a></td>
+              <td>minimal TOML schema를 load/validate하고 old sections를 fail-fast로 거부한다.</td>
+            </tr>
+            <tr>
+              <td>STEP owner</td>
+              <td><a href="../src/peetsfea/minimal_step.py">src/peetsfea/minimal_step.py</a></td>
+              <td>cadquery STEP scene과 canonical STEP ledger를 만든다.</td>
+            </tr>
+            <tr>
+              <td>EM owner</td>
+              <td><a href="../src/peetsfea/backend/pyaedt/minimal_em.py">src/peetsfea/backend/pyaedt/minimal_em.py</a></td>
+              <td>headless HFSS import/setup/solve/report export를 담당한다.</td>
+            </tr>
+            <tr>
+              <td>Pipeline doc</td>
+              <td><a href="current-pipeline.md">docs/current-pipeline.md</a></td>
+              <td>현재 active path와 STEP/EM contract의 Markdown source이다.</td>
+            </tr>
+            <tr>
+              <td>Plan note</td>
+              <td><a href="../sdd/plans/0.3.0-minimal-step-two-port-reset.md">sdd/plans/0.3.0-minimal-step-two-port-reset.md</a></td>
+              <td>0.3.0 reset의 구현 경계와 검증 범위를 기록한다.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="artifacts-title">
+      <div class="section-head">
+        <h2 id="artifacts-title">Artifacts</h2>
+        <p>sample 결과물은 기본적으로 <code>run/sampled/minimal/</code> 아래 단일 design directory에 모인다.</p>
+      </div>
+      <div class="grid">
+        <article class="card accent-green">
+          <h3>Sample outputs</h3>
+          <ul>
+            <li><code>manifest.json</code></li>
+            <li><code>sampled.toml</code></li>
+            <li><code>minimal_*.source.toml</code></li>
+            <li><code>minimal_*.repro.toml</code></li>
+            <li><code>minimal_*.dataset.toml</code></li>
+          </ul>
+        </article>
+        <article class="card accent-blue">
+          <h3>STEP outputs</h3>
+          <ul>
+            <li><code>minimal_scene.step</code></li>
+            <li><code>minimal_step_ledger.json</code></li>
+            <li>non-model air body</li>
+            <li>Tx/Rx copper pads and port sheets</li>
+          </ul>
+        </article>
+        <article class="card accent-amber">
+          <h3>EM outputs</h3>
+          <ul>
+            <li><code>minimal_*.aedt</code></li>
+            <li><code>minimal_imported_ledger.json</code></li>
+            <li><code>Output Variables Table1</code> CSV on solve</li>
+            <li>saved HFSS project after setup and solve</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="vscode" class="section" aria-labelledby="vscode-title">
+      <div class="section-head">
+        <h2 id="vscode-title">VS Code Launches</h2>
+        <p><code>.vscode/launch.json</code>에는 F5용 entrypoint 하나만 둔다. 실행하면 <code>entry/debug_view_step_files.py</code>가 STEP을 생성하고 OCP CAD Viewer로 보낸다.</p>
+      </div>
+      <div class="command-grid">
+        <article class="command">
+          <h3>Debug Minimal STEP OCP Viewer</h3>
+          <pre class="shell">cd run
+../.venv/bin/python ../entry/debug_view_step_files.py</pre>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="removed-title">
+      <div class="section-head">
+        <h2 id="removed-title">Removed Surface</h2>
+        <p>이 문서는 active 구조만 보여준다. 아래 계열은 0.3.0 minimal reset에서 기본 실행 경로가 아니다.</p>
+      </div>
+      <div class="grid">
+        <article class="card accent-red removed">
+          <h3>Type2 geometry</h3>
+          <p><code>type2</code> coil, void, split connector, old fixed STEP viewer path는 active sample/build flow에서 제거되었다.</p>
+        </article>
+        <article class="card accent-red removed">
+          <h3>Old modeled TOML</h3>
+          <p><code>modeled_objects</code>, backend/simulation/output/constraint sections는 minimal parser가 거부한다.</p>
+        </article>
+        <article class="card accent-red removed">
+          <h3>Legacy generation</h3>
+          <p>legacy 형상 생성 모듈과 notebook/viewer 중심 흐름은 새 baseline의 source of truth가 아니다.</p>
+        </article>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>Updated for peetsfea 0.3.0 minimal STEP two-port reset. Source of truth: <a href="current-pipeline.md">docs/current-pipeline.md</a>.</p>
+    </footer>
   </main>
-
-  <script defer src="assets/mermaid-11.15.0.min.js"></script>
-  <script defer>
-    const STATUS_LABELS = {
-      active: "active default",
-      geometry: "geometry-only",
-      ledger: "ledger/import",
-      future: "inactive/future Type2",
-      excluded: "excluded legacy"
-    };
-
-    const GEOMETRY_DETAILS = [
-      {
-        id: "non-model-guides",
-        group: "active",
-        title: "non-model guides",
-        badge: "active",
-        summary: "floor, shelf, wall, tv, tx_region, rx_region_max를 visible guide/context box로 만든다.",
-        rules: [
-          "`[[non_model_objects]]`의 box spec을 fail-fast로 파싱하고 origin/size/plane/present/material을 검증한다.",
-          "`tv`는 `tv_aluminum_plate`의 source owner이고, `tx_region`은 TX guide reference line과 Z-gap owner를 함께 가진다.",
-          "`tx_region.z_gap_from_rx_plane_mm`는 `tv`와 `rx_region_max`의 common lower-Z reference plane에서 TX guide top-Z gap을 소유한다.",
-          "`rx_region_max`는 RX single-coil과 RX plate-stack placement owner다.",
-          "이 guide/context body들은 conductor mesh target이 아니며, modeled geometry의 placement와 ledger provenance를 제공한다."
-        ],
-        path: ["type2 TOML", "load_type2_step_spec", "parse non_model_objects", "resolve_non_model_scene_specs", "build_non_model_scene_shapes", "non-model ledger"],
-        handoff: [
-          "`tx_region`에서 `tx_inner_region`이 파생된다.",
-          "`tv`의 +X face에서 `tv_aluminum_plate` sheet metadata가 파생된다.",
-          "Import 단계는 non-modeled context를 partition/style 대상으로만 취급한다."
-        ],
-        sources: [
-          ["examples/type2_sweep.toml", "../examples/type2_sweep.toml"],
-          ["type2_step_spec_non_model.py", "../src/peetsfea/type2_step_spec_non_model.py"],
-          ["type2_non_model_scene.py", "../src/peetsfea/type2_non_model_scene.py"],
-          ["type2_non_model_scene.py.md", "../sdd/code/src/peetsfea/type2_non_model_scene.py.md"]
-        ],
-        tests: [
-          "tests/type2/test_build_type2_entry.py",
-          "tests/type2/test_generate_type2_step.py"
-        ]
-      },
-      {
-        id: "tx-region-z-gap-owner",
-        group: "active",
-        title: "tx_region z-gap owner",
-        badge: "active",
-        summary: "merge 후 추가된 TX guide Z placement의 canonical sampled owner.",
-        rules: [
-          "`non_model_objects.tx_region.z_gap_from_rx_plane_mm`가 RX/TV lower-Z reference plane에서 TX guide top-Z gap을 소유한다.",
-          "`tv` lower Z와 `rx_region_max` lower Z가 다르면 reference plane ambiguity로 fail-fast한다.",
-          "`tx_region.origin_z = reference_lower_z - z_gap_from_rx_plane_mm - tx_region.size_z`로 계산한다.",
-          "`origin_x`, `origin_y`, `size_xyz`는 기존 parser-owned source values로 남고 Z-gap만 sampled owner가 된다.",
-          "fixed example은 80.0mm, sweep example은 45.0mm부터 130.0mm까지 37 candidates를 가진다."
-        ],
-        path: ["type2 TOML", "tx_region z_gap_from_rx_plane_mm", "sampled range resolution", "reference lower-Z validation", "tx_region origin_z derivation", "non-model scene ledger"],
-        handoff: [
-          "`tx_inner_region`과 TX inner modeled placement는 resolved `tx_region` provenance를 읽는다.",
-          "Import/setup 단계는 post-import body 위치에서 TX guide Z를 역산하지 않는다."
-        ],
-        sources: [
-          ["examples/type2_sweep.toml", "../examples/type2_sweep.toml"],
-          ["type2_step_spec_non_model.py", "../src/peetsfea/type2_step_spec_non_model.py"],
-          ["type2_non_model_scene.py", "../src/peetsfea/type2_non_model_scene.py"],
-          ["0.2.25-type2-tx-region-z-gap-owner.md", "../sdd/plans/0.2.25-type2-tx-region-z-gap-owner.md"]
-        ],
-        tests: [
-          "tests/type2/test_type2_spec_tools.py",
-          "tests/type2/test_setup_type2_step_entry.py",
-          "tests/type2/test_build_type2_entry.py"
-        ]
-      },
-      {
-        id: "tx-inner-region",
-        group: "active",
-        title: "tx_inner_region",
-        badge: "active",
-        summary: "tx_region.tx_reference_line에서 만들어지는 TX inner placement guide.",
-        rules: [
-          "`x_ratio`는 `tx_region` 내부의 strict `(0, 1)` 위치여야 하고, `y_usage_ratio`와 `z_ratio`는 `(0, 1]` 범위여야 한다.",
-          "resolved reference line endpoint와 centered Y usage가 creation-time provenance로 registry와 ledger에 남는다.",
-          "base non-model object로 직접 선언된 `tx_inner_region`은 허용하지 않고, `tx_region`에서 파생되어야 한다.",
-          "실제 conductor가 아니라 `tx_inner_single_coil` 배치용 visible guide body다."
-        ],
-        path: ["tx_region table", "tx_reference_line ranges", "seeded ratio selection", "resolve tx_inner_region", "ledger provenance", "TX inner placement owner"],
-        handoff: [
-          "`tx_inner_single_coil` scene builder가 이 owner의 bounds를 읽는다.",
-          "다운스트림은 import body에서 reference line을 역산하지 않고 ledger provenance를 사용한다."
-        ],
-        sources: [
-          ["type2_non_model_scene.py", "../src/peetsfea/type2_non_model_scene.py"],
-          ["type2_step_ledger.py", "../src/peetsfea/type2_step_ledger.py"],
-          ["type2_step_export.py.md", "../sdd/code/src/peetsfea/type2_step_export.py.md"]
-        ],
-        tests: [
-          "tests/type2/test_build_type2_entry.py",
-          "tests/type2/test_generate_type2_step.py"
-        ]
-      },
-      {
-        id: "tx-inner-actual-region",
-        group: "active",
-        title: "tx_inner_actual_region",
-        badge: "active",
-        summary: "tx_inner_single_coil의 concrete fit envelope에서 파생되는 actual-region guide.",
-        rules: [
-          "`tx_inner_single_coil`의 selected outer usage ratios와 fit envelope를 기준으로 만든다.",
-          "lower-X wall-side anchoring과 centered Y placement가 한 번만 반영되어야 한다.",
-          "actual-region bounds는 design outer box이고, diagnostic physical modeled-body bounds는 별도로 기록한다.",
-          "import된 body bbox에서 post-hoc으로 역산하지 않는다."
-        ],
-        path: ["modeled TX inner spec", "fit envelope placement", "design outer bounds", "tx_inner_actual_region body", "ledger actual-region provenance", "passive stack alignment"],
-        handoff: [
-          "TX inner underlay/void-stack 정렬은 이 actual-region/fit-envelope provenance를 따른다.",
-          "모델링 body보다 작은 copper/PCB decomposed bbox를 actual-region canonical source로 쓰지 않는다."
-        ],
-        sources: [
-          ["type2_non_model_scene.py", "../src/peetsfea/type2_non_model_scene.py"],
-          ["type2_single_coil_scene.py", "../src/peetsfea/type2_single_coil_scene.py"],
-          ["type2_non_model_scene.py.md", "../sdd/code/src/peetsfea/type2_non_model_scene.py.md"],
-          ["type2_single_coil_scene.py.md", "../sdd/code/src/peetsfea/type2_single_coil_scene.py.md"]
-        ],
-        tests: [
-          "tests/type2/test_generate_type2_step.py",
-          "tests/type2/test_type2_tx_outer_centering.py"
-        ]
-      },
-      {
-        id: "tx-inner-single-coil",
-        group: "active",
-        title: "tx_inner_single_coil",
-        badge: "geometry",
-        summary: "active Type2 STEP에 포함될 수 있는 geometry-only TX inner rect-void coil.",
-        rules: [
-          "`object_id = tx_inner_rect_void_coil`, `role = tx_inner_single_coil`, placement owner는 `tx_inner_region`이다.",
-          "XY plane에서 owner lower-X wall side에 붙고, Y는 centered, top Z는 owner top에 맞춘다.",
-          "`x_ratio`, `y_ratio`, `turn_qcount`, `void_factor`, `metal_fill_factor`, `terminal_start`, `void_stack_present`가 active sampled owner contract다.",
-          "`terminal_start`는 A/B/C/D index이고 end corner는 `(terminal_start + turn_qcount) % 4`로 파생되며 winding direction은 fixed `cw`다.",
-          "`underlay_repeat_count > 0`이면 PET/PSA -> ferrite 순서로 -Z 방향 underlay를 만들고, `void_stack_present`가 true이면 YZ void-stack을 `tx_region.max_z`까지 채운다.",
-          "port sheet는 STEP body가 아니라 `single_coil_port_v1` terminal metadata로 ledger에 기록된다."
-        ],
-        path: ["ModeledTxInnerSingleCoilSpec", "resolve quarter-turn owners", "quarter-turn rect-void core", "single coil scene", "underlay/void-stack helpers", "STEP bodies + terminal metadata"],
-        handoff: [
-          "`canonical_coordinates`는 semantic modeled-body bbox와 trace width를 보존한다.",
-          "`exported_body_canonical_coordinates`는 passive underlay/void-stack까지 포함한 declared STEP body bounds validation에 쓰인다.",
-          "현재 기본 EM setup에서는 TX geometry를 active mesh/source/report owner로 취급하지 않는다."
-        ],
-        sources: [
-          ["type2_single_coil_scene.py", "../src/peetsfea/type2_single_coil_scene.py"],
-          ["type2_single_coil_underlay.py", "../src/peetsfea/type2_single_coil_underlay.py"],
-          ["type2_single_coil_ports.py", "../src/peetsfea/type2_single_coil_ports.py"],
-          ["type2_single_coil_scene.py.md", "../sdd/code/src/peetsfea/type2_single_coil_scene.py.md"]
-        ],
-        tests: [
-          "tests/type2/test_generate_type2_step.py",
-          "tests/type2/test_type2_single_coil_underlay_boolean_clearance.py",
-          "tests/backend_em/test_type2_port_sheet_runtime_contract.py"
-        ]
-      },
-      {
-        id: "rx-single-coil",
-        group: "active",
-        title: "rx_single_coil",
-        badge: "active",
-        summary: "RxOnly setup-ready 경로의 active RX rect-void coil.",
-        rules: [
-          "`object_id = rx_rect_void_coil`, `role = rx_single_coil`, placement owner는 `rx_region_max`다.",
-          "YZ plane에서 owner bounds와 sampled `x_ratio`/`y_ratio`로 size를 정하고, current RX path는 `layer_count = 1`만 지원한다.",
-          "`turn_qcount`, `terminal_start`, `void_factor`, `metal_fill_factor`, `void_stack_present`가 TX inner와 같은 quarter-turn owner semantics를 따른다.",
-          "quarter-turn rect-void core가 PCB/copper body와 terminal metadata를 만들며, RX port sheet는 runtime에서 reconstructed sheet로 생성된다.",
-          "`underlay_repeat_count`가 있으면 RX full backing underlay leaf bodies가 만들어지고 ferrite-family group contract는 ledger에 기록된다.",
-          "merge 후 RX `void_stack_present`가 sampled/exported contract로 복구되어 `rx_void_*` passive stack body를 독립적으로 제어한다.",
-          "Setup-ready mesh ownership은 RX conductor-only이고 reconstructed sheet/context bodies는 mesh target이 아니다."
-        ],
-        path: ["ModeledRxSingleCoilSpec", "quarter-turn range resolution", "rect-void core", "single coil scene", "STEP + ledger", "import reconstructed port sheet", "RxOnly mesh/port/report"],
-        handoff: [
-          "RX terminal metadata는 setup-ready port assignment의 canonical input이다.",
-          "Report variables는 active RxOnly/TxRx output contract에서 validated names only로 생성된다."
-        ],
-        sources: [
-          ["type2_single_coil_scene.py", "../src/peetsfea/type2_single_coil_scene.py"],
-          ["tx_rect_void.py", "../src/peetsfea/tx_rect_void.py"],
-          ["type2_step_setup_ready.py", "../src/peetsfea/backend/pyaedt/type2_step_setup_ready.py"],
-          ["type2-em-setup-boundary.md", "../sdd/architecture/type2-em-setup-boundary.md"]
-        ],
-        tests: [
-          "tests/type2/test_generate_type2_step.py",
-          "tests/tx_rect_void/test_tx_rect_void.py",
-          "tests/backend_em/test_type2_step_setup_ready.py"
-        ]
-      },
-      {
-        id: "tv-aluminum-plate",
-        group: "active",
-        title: "tv_aluminum_plate",
-        badge: "ledger",
-        summary: "tv +X face에 붙는 optional aluminum sheet metadata; STEP solid가 아니다.",
-        rules: [
-          "`source_non_model_object_id = tv`, `face = +x`, `thickness_mm = 0.04` 계약을 가진다.",
-          "`sheet_present`는 canonical boolean integer range `(0, 1)`에서 seed로 resolve된다.",
-          "canonical coordinates는 `tv` +X face의 zero-thickness 4 vertices와 sheet thickness metadata다.",
-          "expected exported body count는 0이고 body names, groups, terminal metadata를 선언하면 실패한다.",
-          "Import/setup-ready는 ledger metadata에서 HFSS sheet를 만들고 present일 때 finite conductivity setup을 적용한다."
-        ],
-        path: ["tv non-model owner", "ModeledTvAluminumPlateSpec", "resolve sheet_present", "zero-body modeled ledger entry", "import sheet reconstruction", "setup finite-conductivity boundary"],
-        handoff: [
-          "STEP scene에는 body가 없고 ledger/import/setup chain에만 존재한다.",
-          "source tv bounds가 invalid이면 sheet metadata 생성 전에 fail-fast한다."
-        ],
-        sources: [
-          ["type2_step_scene.py", "../src/peetsfea/type2_step_scene.py"],
-          ["type2_step_ledger.py", "../src/peetsfea/type2_step_ledger.py"],
-          ["type2_step_import_style.py", "../src/peetsfea/backend/pyaedt/type2_step_import_style.py"],
-          ["type2_step_scene.py.md", "../sdd/code/src/peetsfea/type2_step_scene.py.md"]
-        ],
-        tests: [
-          "tests/type2/test_setup_type2_step_entry.py",
-          "tests/type2/test_build_type2_entry.py",
-          "tests/backend_em/test_type2_step_setup_ready.py"
-        ]
-      },
-      {
-        id: "rect-void-core",
-        group: "active",
-        title: "quarter-turn rect-void core",
-        badge: "active",
-        summary: "single-coil의 reusable quarter-turn centered rectangular void geometry core.",
-        rules: [
-          "`RealizedSingleCoilRectVoid`에서 `terminal_start`, derived end corner, fixed `cw` direction, `turn_qcount`를 읽어 centerline을 만든다.",
-          "`turn_qcount / 4.0`이 effective turn count이고, q=1/2/3 partial turn과 q=4n full-turn이 같은 pipeline을 탄다.",
-          "routing depth가 partial lap보다 깊어지는 경우 copper가 centered void keepout에 들어가지 않도록 pitch sizing에 반영한다.",
-          "centerline segment별 joined polygon이 canonical copper primitive owner다.",
-          "`void_factor`, `margin_ratio`, `metal_fill_factor`, `turn_qcount`, terminal stub geometry가 trace width, gap, terminal body를 결정한다.",
-          "central void corridor는 copper primitive polygon overlap proof로만 계산하며, 추측이나 spacing-only fallback은 없다.",
-          "port sheet는 metadata-only이며 STEP body로 export하지 않는다."
-        ],
-        path: ["single-coil sampled owners", "realize quarter-turn spec", "build centerline", "build box specs", "build123d solids", "terminal metadata"],
-        handoff: [
-          "TX inner와 RX single-coil scene builders가 이 reusable core를 사용한다.",
-          "`trace_width_mm`는 mesh length derivation과 ledger metadata에 이어진다."
-        ],
-        sources: [
-          ["tx_rect_void.py", "../src/peetsfea/tx_rect_void.py"],
-          ["tx_rect_void_centerline.py", "../src/peetsfea/tx_rect_void_centerline.py"],
-          ["tx_rect_void_export.py", "../src/peetsfea/tx_rect_void_export.py"],
-          ["type2-rect-void-boundary.md", "../sdd/architecture/type2-rect-void-boundary.md"],
-          ["0.2.25-type2-quarter-turn-single-coil.md", "../sdd/plans/0.2.25-type2-quarter-turn-single-coil.md"]
-        ],
-        tests: [
-          "tests/tx_rect_void/test_tx_rect_void.py",
-          "tests/type2/test_generate_type2_step.py"
-        ]
-      },
-      {
-        id: "rx-void-stack-exports",
-        group: "active",
-        title: "RX void-stack exports",
-        badge: "geometry",
-        summary: "merge 후 복구된 RX centered void-stack passive body export contract.",
-        rules: [
-          "`rx_rect_void_coil.void_stack_present`가 RX central void-stack 생성 여부를 소유한다.",
-          "`rx_void_ferrite_u*` / `rx_void_pet_psa_u*` bodies는 passive void-stack exports이며 normal RX backing underlay와 독립적이다.",
-          "비활성화해도 `under_rx_*` full backing bodies를 suppress하지 않는다.",
-          "RX scene data는 resolved `void_stack_present` boolean을 canonical coordinates와 owned scene-data payload에 기록한다.",
-          "final top-level ledger propagation은 scene-data payload copier가 소유한다."
-        ],
-        path: ["rx_single_coil sampled owners", "void_stack_present resolution", "single coil scene", "rx_void_* body export", "canonical coordinates", "STEP ledger"],
-        handoff: [
-          "RX void-stack bodies are passive setup inputs; mesh ownership remains RX conductor-only.",
-          "Ledger/import validation uses deterministic labels and exported body bounds."
-        ],
-        sources: [
-          ["type2_single_coil_scene.py", "../src/peetsfea/type2_single_coil_scene.py"],
-          ["type2_single_coil_underlay.py", "../src/peetsfea/type2_single_coil_underlay.py"],
-          ["type2_step_export.py", "../src/peetsfea/type2_step_export.py"],
-          ["type2_single_coil_scene.py.md", "../sdd/code/src/peetsfea/type2_single_coil_scene.py.md"]
-        ],
-        tests: [
-          "tests/type2/test_generate_type2_step.py",
-          "tests/type2/test_setup_type2_step_entry.py",
-          "tests/backend_em/test_type2_step_setup_ready.py"
-        ]
-      },
-      {
-        id: "ports-terminal-metadata",
-        group: "active",
-        title: "single-coil terminal metadata",
-        badge: "ledger",
-        summary: "single-coil terminal boxes에서 runtime port sheet 계약을 생성한다.",
-        rules: [
-          "`terminal_metadata.kind = single_coil_port_v1`가 `sheet_name`, `vertices_xyz`, `integration_line_start_xyz`, `integration_line_end_xyz`를 가진다.",
-          "coordinates는 STEP generation time terminal stub boxes와 realized quarter-turn metadata에서 계산하며 AEDT imported bbox에서 역산하지 않는다.",
-          "`terminal_start`는 `0..3`에서 A/B/C/D로 mapping되고, inner corner는 `(terminal_start + turn_qcount) % 4`로 파생된다.",
-          "compatibility path string은 realized `&lt;outer&gt;_cw_to_&lt;inner&gt;`로 계산되며 active TOML owner로 직접 받지 않는다.",
-          "vertices `[3] -> [0]`은 signal edge, `[1] -> [2]`는 reference edge다.",
-          "self-intersecting sheet loop, degenerate edge, missing terminal stub, ambiguous terminal geometry는 즉시 실패한다.",
-          "Import style layer가 ledger vertices로 port sheet polyline을 만들고 setup-ready port assignment가 이를 사용한다."
-        ],
-        path: ["single coil terminal boxes", "terminal_start + turn_qcount", "derive cw path", "build port sheet vertices", "ledger terminal_metadata", "import CreatePolyline", "AssignLumpedPort"],
-        handoff: [
-          "RX setup creates one explicit RX lumped port in RxOnly.",
-          "TX inner terminal metadata may exist for geometry contract, but default RxOnly setup does not promote generic TX ports."
-        ],
-        sources: [
-          ["type2_single_coil_ports.py", "../src/peetsfea/type2_single_coil_ports.py"],
-          ["type2_step_port_assignment.py", "../src/peetsfea/backend/pyaedt/type2_step_port_assignment.py"],
-          ["type2_step_import_style.py", "../src/peetsfea/backend/pyaedt/type2_step_import_style.py"],
-          ["type2_single_coil_ports.py.md", "../sdd/code/src/peetsfea/type2_single_coil_ports.py.md"]
-        ],
-        tests: [
-          "tests/backend_em/test_type2_port_sheet_runtime_contract.py",
-          "tests/type2/test_generate_type2_step.py"
-        ]
-      },
-      {
-        id: "step-ledger-import",
-        group: "active",
-        title: "STEP ledger / import / setup",
-        badge: "ledger",
-        summary: "build123d STEP scene과 hash-bound ledger를 HFSS setup-ready 상태로 넘기는 handoff.",
-        rules: [
-          "Ledger는 schema/version, source TOML SHA-256, scene STEP SHA-256, modeled/non-modeled canonical coordinates를 가진다.",
-          "`canonical_coordinates`는 semantic placement/mesh/terminal contract이고, `exported_body_canonical_coordinates`는 exact body import drift validation contract다.",
-          "Import는 hash mismatch, generic `SOLID*` drift, expected body bounds mismatch를 fail-fast로 거부한다.",
-          "Import-only는 mesh/boundary/ports/reports를 만들지 않고, setup-ready runtime이 RX mesh, radiation boundary, lumped port, source, analysis/report, validation/save를 수행한다.",
-          "merge 후 setup-ready analysis는 enabled interpolating `Sweep`을 만들고 `Output Variables Table1`을 `Setup1 : Sweep` / `Domain := Sweep` 기준으로 export한다.",
-          "Runtime summaries는 ledger owner가 아니며 setup state는 HFSS project에 생성된다."
-        ],
-        path: ["export_type2_step_artifacts", "build scene data", "export STEP", "build_type2_step_ledger", "import partition/style", "setup-ready EM chain", "Setup1 : Sweep report"],
-        handoff: [
-          "`type2_step_ledger.json` is the source of truth for import/setup handoff.",
-          "`type2_imported_ledger.json` preserves imported ownership/object names, not mesh/solve summaries."
-        ],
-        sources: [
-          ["type2_step_export.py", "../src/peetsfea/type2_step_export.py"],
-          ["type2_step_ledger.py", "../src/peetsfea/type2_step_ledger.py"],
-          ["type2_step_import_core.py", "../src/peetsfea/backend/pyaedt/type2_step_import_core.py"],
-          ["type2-step-to-em-validate-pipeline.md", "../sdd/architecture/type2-step-to-em-validate-pipeline.md"],
-          ["0.2.25-type2-sweep-report-contract.md", "../sdd/plans/0.2.25-type2-sweep-report-contract.md"]
-        ],
-        tests: [
-          "tests/type2/test_generate_type2_step.py",
-          "tests/backend_em/test_type2_step_import_pipeline.py",
-          "tests/backend_em/test_type2_step_setup_ready.py"
-        ]
-      },
-      {
-        id: "sweep-report-contract",
-        group: "active",
-        title: "sweep / report contract",
-        badge: "ledger",
-        summary: "merge 후 active Type2 setup-ready path에 복구된 AEDT sweep/report output 계약.",
-        rules: [
-          "Type2 setup-ready creates an enabled interpolating sweep named `Sweep`.",
-          "Sweep range는 staged AEDT contract에 맞춰 `LogScale`, `0.1MHz` to `100MHz`, `RangeCount=401`, `RangeSamples=100`, recorded DC subrange를 사용한다.",
-          "`Output Variables Table1` is the active CSV export report.",
-          "Report solution은 `Setup1 : Sweep`, context는 `Domain := Sweep`이다.",
-          "이 계약은 setup-ready/optional solve output surface이며 STEP ledger body ownership을 바꾸지 않는다."
-        ],
-        path: ["type2 setup-ready import", "analysis setup", "enabled Sweep", "Output Variables Table1", "optional solve/report CSV"],
-        handoff: [
-          "Generated CSV output is optional solve/report output, not a geometry artifact.",
-          "Report variable names are validated through backend EM tests before export."
-        ],
-        sources: [
-          ["analysis.py", "../src/peetsfea/backend/pyaedt/em_pipeline/steps/analysis.py"],
-          ["examples/type2_sweep.toml", "../examples/type2_sweep.toml"],
-          ["docs/current-pipeline.md", "current-pipeline.md"],
-          ["0.2.25-type2-sweep-report-contract.md", "../sdd/plans/0.2.25-type2-sweep-report-contract.md"]
-        ],
-        tests: [
-          "tests/backend_em/test_type2_step_setup_ready.py",
-          "tests/type2/test_build_type2_entry.py",
-          "tests/type2/test_setup_type2_step_entry.py"
-        ]
-      },
-      {
-        id: "debug-step-viewer",
-        group: "active",
-        title: "STEP viewer debug entry",
-        badge: "ledger",
-        summary: "merge 후 notebook viewer를 대체한 tracked STEP 확인 entrypoint.",
-        rules: [
-          "`entry/debug_view_step_files.py`는 generated STEP artifacts를 local inspection 대상으로 여는 debug entry다.",
-          "VS Code launch config는 이 entrypoint를 workspace 기준으로 실행하도록 추가되었다.",
-          "형상 생성 규칙이나 TOML schema를 바꾸지 않으며, generated STEP files를 확인하는 developer surface다.",
-          "AEDT GUI validation path가 아니며 AGENTS의 headless/default execution rule을 약화하지 않는다.",
-          "Notebook `notebooks/view_step_files.ipynb`는 merge에서 제거되었다."
-        ],
-        path: ["generated STEP artifacts", "entry/debug_view_step_files.py", "VS Code debug launch", "local visual inspection"],
-        handoff: [
-          "Viewer entrypoint is documentation/debug surface only.",
-          "Runtime truth remains TOML -> generated STEP -> ledger/import tests."
-        ],
-        sources: [
-          ["debug_view_step_files.py", "../entry/debug_view_step_files.py"],
-          ["debug_view_step_files.py.md", "../sdd/code/entry/debug_view_step_files.py.md"],
-          [".vscode/launch.json", "../.vscode/launch.json"]
-        ],
-        tests: [
-          "Manual debug launch inspection only",
-          "Geometry correctness remains covered by Type2 STEP/export/import tests"
-        ]
-      },
-      {
-        id: "rx-plate-stack",
-        group: "future",
-        title: "rx_plate_stack",
-        badge: "future",
-        summary: "RX role-local plate-stack option; active default는 single-coil RxOnly다.",
-        rules: [
-          "`object_id = rx_plate_stack`, `role = rx_plate_stack`, placement owner는 `rx_region_max`다.",
-          "`turn_count >= 2`, `metal_fill_factor <= 0.6`, `z_usage_ratio/y_usage_ratio`가 active YZ window와 stripe layout을 정한다.",
-          "RX active Y window는 global `Y=0` 중심이고 Z window는 `rx_region_max` bottom에서 시작한다.",
-          "Final RX conductor handoff는 united conductor body이고 ferrite-family bodies는 material slabs다.",
-          "RX terminal metadata may feed RxOnly setup when this RX path is explicitly selected."
-        ],
-        path: ["ModeledRxPlateStackSpec", "build_plate_stack_scene_data", "striped copper/ferrite bodies", "STEP + ledger", "RX mesh/port setup if selected"],
-        handoff: [
-          "`trace_width_mm` is persisted for post-import mesh length derivation.",
-          "TX plate-stack contracts are not implied by this RX-local reference."
-        ],
-        sources: [
-          ["type2_plate_stack.py", "../src/peetsfea/type2_plate_stack.py"],
-          ["type2_rx_plate_stack.py", "../src/peetsfea/type2_rx_plate_stack.py"],
-          ["docs/type2-rx-plate-stack.md", "type2-rx-plate-stack.md"],
-          ["type2_plate_stack.py.md", "../sdd/code/src/peetsfea/type2_plate_stack.py.md"]
-        ],
-        tests: [
-          "tests/type2/test_generate_type2_step.py",
-          "tests/backend_em/test_type2_modeled_import_adapter.py"
-        ]
-      },
-      {
-        id: "tx-plate-stack-array",
-        group: "future",
-        title: "tx_plate_stack_array / tx_plate_stack",
-        badge: "future",
-        summary: "generic TX plate-stack array implementation boundary; active default Type2 export policy is limited.",
-        rules: [
-          "Input owners are modeled TX plate-stack spec, `tx_region` context, `rx_region_max` context, and deterministic seed.",
-          "`tx_coil_count`, sampled X/Y/Z usage ratios, branch hinge edges, copied-branch rotation angles are resolved inside the array builder.",
-          "`g_ferrite_tx` and `g_copper_tx` are grouping contracts; exact leaf body labels remain deterministic.",
-          "Ferrite/PET_PSA priority clearance cuts only branch PCB/FR4 blanks and must preserve ferrite-family member labels/order.",
-          "Current active/default docs do not present this as the default EM setup path."
-        ],
-        path: ["ModeledTxPlateStackSpec", "tx_region/rx_region context", "type2_tx_plate_stack_array", "boolean clearance", "ModeledObjectSceneData", "future export/import consumer"],
-        handoff: [
-          "Generic TX roles may be rejected by active RxOnly parser/export paths unless a later plan explicitly activates the two-terminal route.",
-          "Existing tests cover deterministic body/group contracts for the implementation boundary."
-        ],
-        sources: [
-          ["type2_tx_plate_stack_array.py", "../src/peetsfea/type2_tx_plate_stack_array.py"],
-          ["type2_plate_stack.py", "../src/peetsfea/type2_plate_stack.py"],
-          ["type2_tx_plate_stack_array.py.md", "../sdd/code/src/peetsfea/type2_tx_plate_stack_array.py.md"],
-          ["docs/type2-plate-stack.md", "type2-plate-stack.md"]
-        ],
-        tests: [
-          "tests/type2/test_type2_tx_plate_stack_array_export.py",
-          "tests/backend_em/test_type2_tx_plate_stack_array_import.py"
-        ]
-      },
-      {
-        id: "tx-rect-void-columns",
-        group: "future",
-        title: "tx_rect_void_columns",
-        badge: "future",
-        summary: "TX stack-space tile별 rect-void columns, turn allocation, collector generation boundary.",
-        rules: [
-          "Placement owner is `tx_region_actual_stack_space`; tile IDs must parse as contiguous zero-based stack-space indices.",
-          "`layer_count` resolves in `[1, 4]`, layer gap and stack height must fit the stack-space owner.",
-          "Each tile reuses the rect-void core, scales/translates local boxes to its stack-space, and emits deterministic body/stub labels.",
-          "`connection_mode = 0` uses parallel turn allocation/collectors; `connection_mode = 1` uses series allocation/collectors.",
-          "Collector builders validate balanced pickups, no positive-volume shortcut intersections, shared copper thickness, and deterministic source labels."
-        ],
-        path: ["ModeledTxRectVoidColumnsSpec", "stack-space tile parsing", "resolve_tx_turns", "rect-void core per tile", "tile terminal anchors", "parallel/series collectors", "ModeledObjectSceneData"],
-        handoff: [
-          "This is a Type2 implemented/documented boundary, not the current active default geometry path.",
-          "Trace-width metadata can be recovered from terminal anchor boxes for ledger canonical coordinates."
-        ],
-        sources: [
-          ["type2_tx_rect_void_columns.py", "../src/peetsfea/type2_tx_rect_void_columns.py"],
-          ["type2_tx_turns.py", "../src/peetsfea/type2_tx_turns.py"],
-          ["type2_tx_rect_void_collectors.py", "../src/peetsfea/type2_tx_rect_void_collectors.py"],
-          ["type2_step_spec_types.py", "../src/peetsfea/type2_step_spec_types.py"]
-        ],
-        tests: [
-          "tests/type2/test_type2_tx_rect_void_collectors.py",
-          "tests/type2/test_type2_tx_turns.py",
-          "tests/type2/test_generate_type2_step.py"
-        ]
-      },
-      {
-        id: "legacy-excluded",
-        group: "excluded",
-        title: "type1 legacy excluded",
-        badge: "excluded",
-        summary: "frozen type1 internals are intentionally outside this Type2 geometry atlas.",
-        rules: [
-          "Legacy type1 paths live under explicit legacy boundaries and are opt-in only.",
-          "This atlas does not document type1 geometry builders, type1 placement rules, or legacy AEDT builder internals.",
-          "When a Type2 rule appears similar to a legacy rule, the Type2 source/SDD path listed here remains the authority.",
-          "Legacy references may explain historical context but must not be treated as active/default Type2 behavior."
-        ],
-        path: ["legacy/type1 source", "excluded from atlas", "Type2 docs remain authority"],
-        handoff: [
-          "No Type2 shape card links to legacy implementation internals.",
-          "The exclusion prevents mixing frozen type1 geometry rules into active Type2 decisions."
-        ],
-        sources: [
-          ["AGENTS.md", "../AGENTS.md"],
-          ["docs/legacy/type1.md", "legacy/type1.md"],
-          ["docs/current-pipeline.md", "current-pipeline.md"]
-        ],
-        tests: [
-          "tests/legacy/type1 is excluded from default pytest collection",
-          "Type2 tests under tests/type2 and tests/backend_em are the relevant verification surface"
-        ]
-      }
-    ];
-
-    const GROUP_TARGETS = {
-      active: document.getElementById("active-shape-grid"),
-      future: document.getElementById("future-shape-grid"),
-      excluded: document.getElementById("excluded-shape-grid")
-    };
-
-    function detailById(id) {
-      const detail = GEOMETRY_DETAILS.find((entry) => entry.id === id);
-      if (!detail) {
-        throw new Error(`missing Type2 geometry detail record: ${id}`);
-      }
-      return detail;
-    }
-
-    function appendList(parent, items) {
-      const list = document.createElement("ul");
-      for (const item of items) {
-        const listItem = document.createElement("li");
-        listItem.innerHTML = item;
-        list.appendChild(listItem);
-      }
-      parent.appendChild(list);
-    }
-
-    function appendLinks(parent, links) {
-      const container = document.createElement("div");
-      container.className = "link-list";
-      for (const [label, href] of links) {
-        const link = document.createElement("a");
-        link.href = href;
-        link.textContent = label;
-        container.appendChild(link);
-      }
-      parent.appendChild(container);
-    }
-
-    function appendPath(parent, steps) {
-      const chain = document.createElement("div");
-      chain.className = "path-chain";
-      steps.forEach((step, index) => {
-        const stepNode = document.createElement("span");
-        stepNode.className = "path-step";
-        stepNode.textContent = step;
-        chain.appendChild(stepNode);
-        if (index < steps.length - 1) {
-          const arrow = document.createElement("span");
-          arrow.className = "path-arrow";
-          arrow.textContent = "->";
-          chain.appendChild(arrow);
-        }
-      });
-      parent.appendChild(chain);
-    }
-
-    function appendDetailSection(parent, title, build) {
-      const section = document.createElement("section");
-      section.className = "detail-section";
-      const heading = document.createElement("h4");
-      heading.textContent = title;
-      section.appendChild(heading);
-      build(section);
-      parent.appendChild(section);
-    }
-
-    function renderDetail(id) {
-      const detail = detailById(id);
-      document.getElementById("detail-status-label").textContent = STATUS_LABELS[detail.badge];
-
-      for (const button of document.querySelectorAll(".shape-card")) {
-        button.setAttribute("aria-pressed", String(button.dataset.detailId === id));
-      }
-
-      const main = document.getElementById("detail-main");
-      main.replaceChildren();
-
-      const titleBlock = document.createElement("div");
-      titleBlock.className = "detail-title";
-      const badge = document.createElement("span");
-      badge.className = `badge ${detail.badge}`;
-      badge.textContent = STATUS_LABELS[detail.badge];
-      const title = document.createElement("h3");
-      title.textContent = detail.title;
-      const summary = document.createElement("p");
-      summary.textContent = detail.summary;
-      titleBlock.append(badge, title, summary);
-      main.appendChild(titleBlock);
-
-      appendDetailSection(main, "Shape generation rules", (section) => appendList(section, detail.rules));
-      appendDetailSection(main, "Path / method chain", (section) => appendPath(section, detail.path));
-      appendDetailSection(main, "Ledger / import / setup handoff", (section) => appendList(section, detail.handoff));
-      appendDetailSection(main, "Source links", (section) => appendLinks(section, detail.sources));
-      appendDetailSection(main, "Verification surface", (section) => appendList(section, detail.tests));
-
-      if (detail.id === "legacy-excluded") {
-        const note = document.createElement("div");
-        note.className = "legacy-note";
-        note.textContent = "legacy excluded: this page is intentionally Type2-only.";
-        main.appendChild(note);
-      }
-    }
-
-    function renderCards() {
-      for (const target of Object.values(GROUP_TARGETS)) {
-        target.replaceChildren();
-      }
-
-      for (const detail of GEOMETRY_DETAILS) {
-        const target = GROUP_TARGETS[detail.group];
-        if (!target) {
-          throw new Error(`missing atlas group target: ${detail.group}`);
-        }
-
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "shape-card";
-        button.dataset.detailId = detail.id;
-        button.setAttribute("aria-pressed", "false");
-
-        const titleRow = document.createElement("div");
-        titleRow.className = "shape-title";
-        const title = document.createElement("h4");
-        title.textContent = detail.title;
-        const badge = document.createElement("span");
-        badge.className = `badge ${detail.badge}`;
-        badge.textContent = STATUS_LABELS[detail.badge];
-        titleRow.append(title, badge);
-
-        const summary = document.createElement("p");
-        summary.textContent = detail.summary;
-        button.append(titleRow, summary);
-        button.addEventListener("click", () => renderDetail(detail.id));
-        target.appendChild(button);
-      }
-    }
-
-    window.addEventListener("DOMContentLoaded", async () => {
-      renderCards();
-      renderDetail("tx-inner-single-coil");
-
-      if (!window.mermaid) {
-        document.body.insertAdjacentHTML(
-          "beforeend",
-          '<div class="wrap"><div class="render-error">Mermaid runtime을 찾을 수 없습니다.</div></div>',
-        );
-        return;
-      }
-
-      window.mermaid.initialize({
-        startOnLoad: false,
-        securityLevel: "strict",
-        theme: "base",
-        deterministicIds: true,
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        flowchart: {
-          htmlLabels: true,
-          curve: "basis",
-          useMaxWidth: true
-        },
-        themeVariables: {
-          primaryColor: "#dff1e7",
-          primaryTextColor: "#17382a",
-          primaryBorderColor: "#247a56",
-          lineColor: "#5e6b64",
-          secondaryColor: "#e1eff5",
-          tertiaryColor: "#f6edd7",
-          fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-        }
-      });
-
-      try {
-        await window.mermaid.run({ querySelector: ".mermaid" });
-      } catch (error) {
-        console.error(error);
-        document.querySelectorAll(".diagram-body").forEach((node) => {
-          node.insertAdjacentHTML(
-            "afterbegin",
-            '<div class="render-error">Mermaid 다이어그램 렌더링에 실패했습니다. 브라우저 콘솔을 확인하세요.</div>',
-          );
-        });
-      }
-    });
-  </script>
 </body>
 </html>
