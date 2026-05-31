@@ -1,7 +1,7 @@
 ---
 title: Commit Policy
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-06-01 @ 00:00
 tags:
   - governance
 ---
@@ -34,7 +34,7 @@ tags:
 
 ## Commit Message
 - 기본 형식은 `<area>: <summary>`다.
-- `area`는 `sdd`, `type2`, `tx_rect_void`, `spec`, `aedt`, `tests`처럼 변경의 주 소유 영역을 쓴다.
+- `area`는 `minimal`, `sdd`, `aedt`, `tests`, `docs`처럼 변경의 주 소유 영역을 쓴다.
 - summary는 명령형 또는 명사형 중 하나로 짧게 쓰되, 같은 작업 묶음에서는 일관성을 유지한다.
 - 릴리스 커밋은 기존 release 형식을 따른다.
 

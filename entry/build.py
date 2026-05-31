@@ -1,308 +1,112 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable, Sequence
-import os
 import sys
-import time
 from pathlib import Path
-from typing import TypedDict, cast
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from entry.sample import MANIFEST_PATH
-from peetsfea.aedt import Hfss
-from peetsfea.aedt.protocols import HfssSession
-from peetsfea.backend.pyaedt.type2_step_setup_ready import (
-    setup_and_solve_type2_step_ledger,
-    setup_type2_step_ledger,
-    setup_type2_step_ledger_into_hfss,
-)
-from peetsfea.backend.pyaedt.type2_step_em_solve import Type2EmSolveResult
-from peetsfea.type2_runtime import (
-    DEFAULT_AEDT_LAUNCH_STAGGER_SEC,
-    DEFAULT_AEDT_PORT_BASE,
-    Type2BuiltArtifact,
-    Type2EmArtifact,
-    Type2AedtWorkerLaunchError,
-    Type2AedtWorkerProcessError,
-    build_type2_sampled_tomls_best_effort,
-    build_prepared_type2_designs_best_effort,
-    build_prepared_type2_designs,
-    ensure_prepared_type2_step_ledgers,
-    write_type2_build_skipped_ledger,
-    solve_type2_sampled_tomls,
-)
-from peetsfea.type2_runtime import solve_prepared_type2_designs
-from peetsfea.type2_step_export import export_type2_step_artifacts
-from peetsfea.type2_sampled import (
-    DesignVariableEntry,
-    iter_type2_sample_manifest_entries,
-    load_type2_sample_manifest_config,
-    prepared_builds_from_manifest,
-)
-
-_Exporter = Callable[..., object]
-_BUILD_LAUNCH_RETRY_SLEEP_SEC: float = 300.0
-_BUILD_RETRY_ALL_ERRORS_SLEEP_SEC: float = 5.0
-_BUILD_RESTART_SLEEP_SEC: float = 60.0
-_BUILD_RESTART_LIMIT: int = 500
+from entry.sample import MANIFEST_PATH, MinimalManifestEntry, load_minimal_manifest
+from peetsfea.backend.pyaedt.minimal_em import MinimalSetupResult, MinimalSolveResult
+from peetsfea.backend.pyaedt.minimal_em import setup_minimal_step_ledger, solve_minimal_step_ledger
+from peetsfea.minimal_step import export_minimal_step_artifacts
 
 
-class _Type2BuildRunnerResult(TypedDict):
-    aedt_path: str
-    source_step_ledger_path: str
-    imported_ledger_path: str
-
-
-_Runner = Callable[..., _Type2BuildRunnerResult]
-
-
-class _Type2SolveRunnerResult(_Type2BuildRunnerResult):
-    em_solve: Type2EmSolveResult
-
-
-_SolveRunner = Callable[..., _Type2SolveRunnerResult]
-
-
-def _create_gui_hfss(design_name: str) -> HfssSession:
-    return cast(HfssSession, Hfss(design=design_name, non_graphical=False, new_desktop=True, close_on_exit=False))
-
-
-def _setup_type2_step_ledger_gui_debug(
+def _selected_entries(
     *,
-    step_ledger_path: Path,
-    output_aedt_path: Path,
-    imported_ledger_path: Path,
-    design_name: str,
-    design_variables: tuple[DesignVariableEntry, ...],
-) -> _Type2BuildRunnerResult:
-    hfss = _create_gui_hfss(design_name)
-    return cast(
-        _Type2BuildRunnerResult,
-        setup_type2_step_ledger_into_hfss(
-            hfss=hfss,
-            step_ledger_path=step_ledger_path,
-            output_aedt_path=output_aedt_path,
-            imported_ledger_path=imported_ledger_path,
-            design_variables=design_variables,
-            run_aedt_design_validation=False,
-        ),
+    manifest_path: Path,
+    selected_design_id: str,
+) -> list[MinimalManifestEntry]:
+    manifest = load_minimal_manifest(manifest_path)
+    entries = manifest["entries"]
+    if not isinstance(entries, list):
+        raise TypeError("minimal manifest entries must be a list")
+    typed_entries: list[MinimalManifestEntry] = []
+    for index, raw_entry in enumerate(entries):
+        if not isinstance(raw_entry, dict):
+            raise TypeError(f"minimal manifest entries[{index}] must be an object")
+        entry = raw_entry
+        if selected_design_id != "" and entry["design_id"] != selected_design_id:
+            continue
+        typed_entries.append(entry)
+    if not typed_entries:
+        raise ValueError(f"no minimal manifest entries selected (design_id={selected_design_id!r})")
+    return typed_entries
+
+
+def _ensure_step_artifacts(entry: MinimalManifestEntry) -> None:
+    ledger_path = Path(entry["step_ledger_path"])
+    step_path = Path(entry["step_path"])
+    if ledger_path.is_file() and step_path.is_file():
+        return
+    export_minimal_step_artifacts(
+        source_toml_path=Path(entry["sampled_toml_path"]),
+        output_dir=ledger_path.parent,
+        seed=entry["seed"],
+        scene_step_path=step_path,
+        ledger_path=ledger_path,
     )
 
 
-def build_type2(
+def build_minimal(
     *,
     manifest_path: Path = MANIFEST_PATH,
-    selected_design_ids: tuple[str, ...] = (),
-    exporter: _Exporter = export_type2_step_artifacts,
-    runner: _Runner = setup_type2_step_ledger,
-    reuse_aedt: bool = True,
-    retry_all_errors: bool = False,
-    aedt_port_base: int = DEFAULT_AEDT_PORT_BASE,
-    aedt_launch_stagger_sec: float = DEFAULT_AEDT_LAUNCH_STAGGER_SEC,
-    sleep: Callable[[float], None] = time.sleep,
-) -> list[Type2BuiltArtifact]:
-    config = load_type2_sample_manifest_config(manifest_path)
-    jobs = config["aedt_builder_n"]
-    skipped_ledger_path = manifest_path.parent / "type2_build_skipped.json"
-    if exporter is not export_type2_step_artifacts or runner is not setup_type2_step_ledger:
-        batch = build_prepared_type2_designs_best_effort(
-            prepared_builds_from_manifest(manifest_path, selected_design_ids=selected_design_ids),
-            jobs=jobs,
-            exporter=exporter,
-            runner=runner,
+    selected_design_id: str = "",
+) -> list[MinimalSetupResult]:
+    results: list[MinimalSetupResult] = []
+    for entry in _selected_entries(manifest_path=manifest_path, selected_design_id=selected_design_id):
+        _ensure_step_artifacts(entry)
+        results.append(
+            setup_minimal_step_ledger(
+                step_ledger_path=Path(entry["step_ledger_path"]),
+                output_aedt_path=Path(entry["aedt_path"]),
+                imported_ledger_path=Path(entry["imported_ledger_path"]),
+                design_name=entry["design_id"],
+            )
         )
-        write_type2_build_skipped_ledger(skipped_ledger_path, manifest_path=manifest_path, skipped=batch["skipped"])
-    else:
-        restart_attempt = 0
-        while True:
-            try:
-                batch = build_type2_sampled_tomls_best_effort(
-                    (
-                        entry["sampled_toml_path"]
-                        for entry in iter_type2_sample_manifest_entries(
-                            manifest_path,
-                            selected_design_ids=selected_design_ids,
-                        )
-                    ),
-                    jobs=jobs,
-                    skipped_ledger_path=skipped_ledger_path,
-                    manifest_path=manifest_path,
-                    progress_reporter=_build_progress_reporter("build"),
-                    reuse_aedt=reuse_aedt,
-                    aedt_port_base=aedt_port_base,
-                    aedt_launch_stagger_sec=aedt_launch_stagger_sec,
-                )
-                break
-            except Type2AedtWorkerLaunchError:
-                restart_attempt += 1
-                if restart_attempt > _BUILD_RESTART_LIMIT:
-                    raise
-                sleep(_BUILD_LAUNCH_RETRY_SLEEP_SEC)
-            except Type2AedtWorkerProcessError:
-                restart_attempt += 1
-                if restart_attempt > _BUILD_RESTART_LIMIT:
-                    raise
-                sleep(_BUILD_RESTART_SLEEP_SEC)
-            except Exception:
-                if not retry_all_errors:
-                    raise
-                restart_attempt += 1
-                if restart_attempt > _BUILD_RESTART_LIMIT:
-                    raise
-                sleep(_BUILD_RETRY_ALL_ERRORS_SLEEP_SEC)
+    return results
 
-    if len(batch["skipped"]) > 0:
-        print(f"skipped design count: {len(batch['skipped'])}")
-        print(f"build skipped ledger: {skipped_ledger_path}")
-        raise RuntimeError(
-            f"type2 build skipped {len(batch['skipped'])} design(s); "
-            f"see skipped ledger at {skipped_ledger_path}"
+
+def solve_minimal(
+    *,
+    manifest_path: Path = MANIFEST_PATH,
+    selected_design_id: str = "",
+) -> list[MinimalSolveResult]:
+    results: list[MinimalSolveResult] = []
+    for entry in _selected_entries(manifest_path=manifest_path, selected_design_id=selected_design_id):
+        _ensure_step_artifacts(entry)
+        results.append(
+            solve_minimal_step_ledger(
+                step_ledger_path=Path(entry["step_ledger_path"]),
+                output_aedt_path=Path(entry["aedt_path"]),
+                imported_ledger_path=Path(entry["imported_ledger_path"]),
+                design_name=entry["design_id"],
+            )
         )
-    return batch["built"]
-
-
-def build_type2_debug(
-    *,
-    manifest_path: Path = MANIFEST_PATH,
-    design_id: str,
-    exporter: _Exporter = export_type2_step_artifacts,
-    runner: _Runner = _setup_type2_step_ledger_gui_debug,
-) -> list[Type2BuiltArtifact]:
-    if design_id == "":
-        raise ValueError("design_id is required for debug mode")
-    prepared_builds = prepared_builds_from_manifest(manifest_path, selected_design_ids=(design_id,))
-    ensure_prepared_type2_step_ledgers(prepared_builds, jobs=1, exporter=exporter)
-    return build_prepared_type2_designs(
-        prepared_builds,
-        jobs=1,
-        exporter=exporter,
-        runner=runner,
-    )
-
-
-def solve_type2(
-    *,
-    manifest_path: Path = MANIFEST_PATH,
-    selected_design_ids: tuple[str, ...] = (),
-    exporter: _Exporter = export_type2_step_artifacts,
-    runner: _SolveRunner = setup_and_solve_type2_step_ledger,
-) -> list[Type2EmArtifact]:
-    config = load_type2_sample_manifest_config(manifest_path)
-    jobs = config["aedt_builder_n"]
-    if exporter is export_type2_step_artifacts and runner is setup_and_solve_type2_step_ledger:
-        return solve_type2_sampled_tomls(
-            (
-                entry["sampled_toml_path"]
-                for entry in iter_type2_sample_manifest_entries(manifest_path, selected_design_ids=selected_design_ids)
-            ),
-            jobs=jobs,
-            progress_reporter=_build_progress_reporter("solve"),
-        )
-    prepared_builds = prepared_builds_from_manifest(manifest_path, selected_design_ids=selected_design_ids)
-    ensure_prepared_type2_step_ledgers(prepared_builds, jobs=jobs, exporter=exporter)
-    return solve_prepared_type2_designs(
-        prepared_builds,
-        jobs=jobs,
-        exporter=exporter,
-        runner=runner,
-    )
-
-
-def solve_type2_debug(
-    *,
-    manifest_path: Path = MANIFEST_PATH,
-    design_id: str,
-    exporter: _Exporter = export_type2_step_artifacts,
-    runner: _SolveRunner = setup_and_solve_type2_step_ledger,
-) -> list[Type2EmArtifact]:
-    if design_id == "":
-        raise ValueError("design_id is required for debug solve mode")
-    prepared_builds = prepared_builds_from_manifest(manifest_path, selected_design_ids=(design_id,))
-    ensure_prepared_type2_step_ledgers(prepared_builds, jobs=1, exporter=exporter)
-    return solve_prepared_type2_designs(
-        prepared_builds,
-        jobs=1,
-        exporter=exporter,
-        runner=runner,
-    )
+    return results
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=MANIFEST_PATH)
-    parser.add_argument("--debug", action="store_true")
     parser.add_argument("--design-id", default="")
     parser.add_argument("--solve", action="store_true")
-    parser.add_argument(
-        "--aedt-port-base",
-        type=int,
-        default=int(os.environ.get("PEETSFEA_AEDT_PORT_BASE", str(DEFAULT_AEDT_PORT_BASE))),
-    )
-    parser.add_argument(
-        "--aedt-launch-stagger-sec",
-        type=float,
-        default=float(os.environ.get("PEETSFEA_AEDT_LAUNCH_STAGGER_SEC", str(DEFAULT_AEDT_LAUNCH_STAGGER_SEC))),
-    )
-    parser.add_argument("--no-aedt-reuse", action="store_true")
-    parser.add_argument(
-        "--retry-all-errors",
-        action="store_true",
-        dest="retry_all_errors",
-        help="Retry any build exception after 5 seconds instead of failing fast.",
-    )
     return parser
 
 
-def _build_progress_reporter(stage: str) -> Callable[[int, int, int], None]:
-    last_report_at = 0.0
-
-    def report(completed_count: int, built_count: int, skipped_count: int) -> None:
-        nonlocal last_report_at
-        now = time.monotonic()
-        if completed_count == 1 or completed_count % 100 == 0 or now - last_report_at >= 30:
-            last_report_at = now
-            print(f"{stage} progress: completed={completed_count} built={built_count} skipped={skipped_count}", flush=True)
-
-    return report
-
-
-def run_build_cli(argv: Sequence[str]) -> list[Type2BuiltArtifact] | list[Type2EmArtifact]:
-    parser = _build_arg_parser()
-    args = parser.parse_args(argv)
-    if args.debug and args.design_id == "":
-        parser.error("--debug requires --design-id")
-    selected_design_ids = (args.design_id,) if args.design_id != "" else tuple()
-    if args.solve and args.debug:
-        results = solve_type2_debug(manifest_path=args.manifest, design_id=args.design_id)
-    elif args.solve:
-        results = solve_type2(manifest_path=args.manifest, selected_design_ids=selected_design_ids)
-    elif args.debug:
-        results = build_type2_debug(manifest_path=args.manifest, design_id=args.design_id)
-    else:
-        results = build_type2(
-            manifest_path=args.manifest,
-            selected_design_ids=selected_design_ids,
-            reuse_aedt=not args.no_aedt_reuse,
-            retry_all_errors=args.retry_all_errors,
-            aedt_port_base=args.aedt_port_base,
-            aedt_launch_stagger_sec=args.aedt_launch_stagger_sec,
-        )
-
-    print(f"manifest: {args.manifest}")
-    stage_label = "solved" if args.solve else "built"
-    print(f"{stage_label} design count: {len(results)}")
-    for result in results:
-        print(f"{result['design_id']}: {result['aedt_path']}")
-        if "em_solve" in result:
-            print(f"{result['design_id']} report: {result['em_solve']['report_csv_path']}")
-    return results
-
-
-def main() -> list[Type2BuiltArtifact] | list[Type2EmArtifact]:
-    return run_build_cli(tuple(sys.argv[1:]))
+def main() -> list[MinimalSetupResult] | list[MinimalSolveResult]:
+    args = _build_arg_parser().parse_args()
+    if args.solve:
+        solved = solve_minimal(manifest_path=args.manifest, selected_design_id=args.design_id)
+        for result in solved:
+            print(f"solved: {result['setup']['aedt_path']}")
+            print(f"report: {result['report_csv_path']}")
+        return solved
+    built = build_minimal(manifest_path=args.manifest, selected_design_id=args.design_id)
+    for result in built:
+        print(f"built: {result['aedt_path']}")
+    return built
 
 
 if __name__ == "__main__":

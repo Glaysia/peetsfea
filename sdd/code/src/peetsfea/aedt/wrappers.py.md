@@ -1,7 +1,7 @@
 ---
 title: wrappers.py
 created: 2026-04-17 @ 09:09
-updated: 2026-05-13 @ 00:00
+updated: 2026-06-01 @ 00:00
 tags:
   - aedt
 ---
@@ -46,11 +46,11 @@ tags:
 
 ## 이 파일을 쓰는 곳
 - `peetsfea.aedt` top-level exports
-- backend geometry and EM pipeline code that imports `Hfss`, `Modeler3D`, `Object3d`
-- `sdd/code/entry/import_non_model_step_to_hfss.py.md`
+- minimal EM setup/solve code that imports `Hfss`, `Modeler3D`, `Object3d`
+- AEDT sidecar fake-session tests
 
 ## 관련 테스트
-- `sdd/code/tests/backend_em/test_type2_step_import_smoke.py.md`
+- [\_aedt_sidecar_support.py](../../../tests/backend_em/_aedt_sidecar_support.py.md)
 - `tests/backend_em/test_aedt_sidecar_modeler.py`
 - `tests/backend_em/test_aedt_sidecar_session.py`
 
@@ -62,4 +62,4 @@ tags:
 ## Graph links
 - Primary owner: [pyaedt-boundary](../../../../architecture/pyaedt-boundary.md)
 - Direct handoff: [protocols.py](protocols.py.md)
-- Representative verification: [test_type2_step_import_smoke.py](../../../tests/backend_em/test_type2_step_import_smoke.py.md)
+- Representative verification: [_aedt_sidecar_support.py](../../../tests/backend_em/_aedt_sidecar_support.py.md)

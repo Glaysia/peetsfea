@@ -1,7 +1,7 @@
 ---
 title: SDD Vault Layout
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-06-01 @ 00:00
 tags:
   - sdd
 ---
@@ -24,9 +24,9 @@ tags:
 ## Path mapping
 - 코드 노트는 소스 경로를 그대로 미러링한다.
 - 예시:
-  - `src/peetsfea/spec/loader.py` -> [loader.py](../code/src/peetsfea/spec/loader.py.md)
-  - `entry/legacy/type1/sample.py` -> [sample.py](../code/entry/legacy/type1/sample.py.md)
-  - `tests/spec_resolver/test_sampling_registry.py` -> [test_sampling_registry.py](../code/tests/spec_resolver/test_sampling_registry.py.md)
+  - `src/peetsfea/minimal_spec.py` -> [minimal_spec.py](../code/src/peetsfea/minimal_spec.py.md)
+  - `entry/sample.py` -> [sample.py](../code/entry/sample.py.md)
+  - `tests/test_minimal_spec.py` -> [test_minimal_spec.py](../code/tests/test_minimal_spec.py.md)
 - `__init__.py`도 예외 없이 같은 규칙을 따른다.
 
 ## Link style

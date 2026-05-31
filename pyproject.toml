@@ -1,7 +1,7 @@
 [project]
 name = "peetsfea"
 version = "0.3.0"
-description = "Spec-first deterministic device design with Pyaedt."
+description = "Minimal STEP-based two-port HFSS baseline."
 readme = "README.md"
 requires-python = "==3.12.12"
 license = { text = "MIT" }
@@ -11,15 +11,7 @@ dependencies = [
 [project.optional-dependencies]
 all = [
   "build123d>=0.10.0",
-  "cadquery>=2.6.1",
-  "dearpygui>=2.1.1",
-  "ipykernel>=7.2.0",
-  "ocp-tessellate==3.1.2",
-  "ocp-vscode>=3.1.2",
-  "pandas>=2.3.3",
   "pyaedt[graphics]==0.25.1",
-  "pyvista>=0.46.5",
-  "sympy>=1.14.0",
   "pytest",
   "pytest-cov",
   "ruff",
@@ -55,6 +47,4 @@ reportMissingModuleSource = "none"
 markers = [
   "contract: pure-Python acceptance/contract tests for default CI",
   "pyaedt_integration: optional integration tests that require AEDT/Pyaedt runtime",
-  "legacy_type1: frozen legacy type1 tests excluded from default collection",
 ]
-norecursedirs = ["tests/legacy"]
