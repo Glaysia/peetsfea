@@ -1,7 +1,7 @@
 ---
 title: type2_single_coil_scene.py
 created: 2026-04-20 @ 00:00
-updated: 2026-05-13 @ 00:00
+updated: 2026-05-21 @ 00:00
 tags:
   - rx
   - scene
@@ -17,14 +17,16 @@ tags:
 ## 역할
 - RX single-coil and geometry-only TX inner single-coil scene assembly helper다; dormant TX outer helper code remains outside active export.
 - Expose shared owner-scaled sizing/placement helper data needed by non-model actual-region resolution, including the resolved visible physical body footprint and physical modeled body bounds.
-- Active port sheet coordinates are delegated to [type2_single_coil_ports.py](type2_single_coil_ports.py.md); this file must not keep a second private port-sheet resolver.
+- Active port sheet coordinates and compatibility terminal fields are delegated to [type2_single_coil_ports.py](type2_single_coil_ports.py.md); this file must not keep a second private port-sheet or terminal-path resolver.
 - Single-coil scene data must expose a full exported-body bbox separate from the semantic modeled-body bbox.
 
 ## Invariants / fail-fast
 - Invalid RX scene dimensions fail immediately.
 - Invalid TX inner scene dimensions fail immediately.
 - Scene export excludes runtime port sheet faces from active single-coil bodies; only the terminal metadata contract carries sheet coordinates.
-- TX inner scene assembly computes mm outer ranges from the resolved `tx_inner_region` owner before building the rect-void geometry.
+- Single-coil scene assembly computes mm outer ranges from the resolved placement owner and active quarter-turn `x_ratio` / `y_ratio` owners before building the rect-void geometry.
+- The private temp TOML bridge preserves active Type2 `void_factor` for the current core rect-void loader with exact-header validation; it must fail if the renderer/header contract drifts or legacy `void_usage_ratio` returns.
+- Active single-coil terminal metadata must be requested from the realized core terminal quarter-turn contract, not from TOML `terminal_path`.
 - TX inner scene placement is lower-X anchored: the selected physical modeled footprint min X equals `tx_inner_region` min X, Y remains centered in the owner, and top Z remains aligned to the owner top.
 - Dormant TX outer scene assembly code does not import the removed active `ModeledTxOuterSingleCoilSpec` type; active export filtering prevents it from running for current Type2 generation.
 - TX outer scene assembly uses a rigid tilted frame derived from `tx_outer_region_prism`: local +X follows the semantic inner-to-outer top edge, local +Y follows world +Y, and local +Z is the rotated stack normal.
@@ -62,9 +64,13 @@ tags:
 - `tx_inner_single_coil` requires first PET/PSA top to align with actual-region min Z and must fail if stacked thickness exceeds `tx_inner_region` bottom; `tx_outer_single_coil` uses the same bottom-underlay ordering with outer-specific labels.
 - `expected_exported_body_groups` for `tx_inner_single_coil` now includes `g_ferrite_tx` with underlay members in exported repeat order.
 - `tx_outer_single_coil` terminal metadata must use the final world coordinates after outer placement: port-sheet vertices are transformed by the same world-Y tilt rotation/translation around `tilt_frame.frame_origin_xyz` used for exported scene children.
-- Underlay-bearing TX single-coil, TX inner, and RX scene paths pass ordered base+underlay children through the single-coil ferrite/PET_PSA-priority boolean-clearance helper before ferrite grouping.
+- Underlay-bearing TX single-coil, TX inner, and RX backing scene paths pass ordered base+underlay children through the single-coil ferrite/PET_PSA-priority boolean-clearance helper before ferrite grouping.
+- RX `rx_void_*` bodies are passive void-stack exports and are not FR4-clearance tools; they must not alter the normal `under_rx_*` backing clearance behavior or fragment `rx_pcb_l0`.
 - The scene owns the path-specific PCB/FR4 blank labels and ferrite/PET_PSA tool labels for the helper call, while `type2_single_coil_underlay.py` owns the build123d/OCC cut implementation.
 - TX outer passive void-stack and bottom-underlay ferrite/PET contracts are active for exported/imported geometry-only bodies and remain passive setup inputs.
+- RX scene assembly emits normal RX backing from `underlay_repeat_count` exactly as before and independently emits `rx_void_*` central void-stack bodies only when the realized RX `void_stack_present` switch resolves true.
+- Disabling RX `void_stack_present` suppresses only `rx_void_ferrite_u*` / `rx_void_pet_psa_u*`; it must not suppress `under_rx_*` backing bodies.
+- RX scene data records the resolved `void_stack_present` boolean in canonical coordinates and in the owned scene-data payload; final top-level ledger propagation is owned by the ledger copier.
 
 ## Contracts
 - `TxOuterSingleCoilScenePlacement`:
@@ -76,6 +82,7 @@ tags:
 - `resolve_tx_outer_single_coil_scene_placement()` is the shared creation-time placement contract for both `tx_outer_actual_region` provenance and `tx_outer_single_coil` modeled output.
 - `_world_aabb_from_tx_outer_prism_local_bounds` is the canonical helper for converting an axis-aligned design box in virtual outer-owner space into final prism-local world AABB.
 - `_apply_single_coil_ferrite_fr4_boolean_clearance()` preserves body count, body order, and labels from the modeled scene contract; any missing helper dependency or label/order drift fails immediately.
+- RX void-stack body labels use the deterministic `rx_void_*` prefix documented in [type2_single_coil_underlay.py](type2_single_coil_underlay.py.md) and participate in the same exported body ordering/grouping validation as the normal backing bodies.
 
 ## Collaborators
 - [type2_step_scene.py](type2_step_scene.py.md)

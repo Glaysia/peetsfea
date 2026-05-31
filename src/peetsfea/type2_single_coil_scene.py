@@ -14,7 +14,6 @@ from peetsfea.tx_rect_void import BoxSpec
 from peetsfea.tx_rect_void import RealizedSingleCoilRectVoid
 from peetsfea.tx_rect_void import SingleCoilProfile
 from peetsfea.tx_rect_void import build_tx_rect_void_box_specs
-from peetsfea.tx_rect_void import build_tx_rect_void_centerline
 from peetsfea.tx_rect_void import build_tx_rect_void_step_scene
 from peetsfea.tx_rect_void import local_central_void_corridor_y_bounds
 from peetsfea.tx_rect_void import load_tx_rect_void_spec
@@ -22,6 +21,7 @@ from peetsfea.tx_rect_void import modeled_body_bounds_from_boxes
 from peetsfea.tx_rect_void import profile_for_modeled_role
 from peetsfea.tx_rect_void import realize_tx_rect_void_spec
 from peetsfea.type2_single_coil_underlay import build_rx_underlay_scene_shapes
+from peetsfea.type2_single_coil_underlay import build_rx_single_coil_void_stack_shapes
 from peetsfea.type2_single_coil_underlay import build_tx_wall_parallel_scene_shapes
 from peetsfea.type2_single_coil_underlay import build_tx_inner_single_coil_underlay_shapes
 from peetsfea.type2_single_coil_underlay import build_tx_inner_single_coil_void_stack_shapes
@@ -31,6 +31,7 @@ from peetsfea.type2_single_coil_underlay import resolve_tx_inner_single_coil_und
 from peetsfea.type2_single_coil_underlay import resolve_tx_inner_single_coil_void_stack_placement_descriptor
 from peetsfea.type2_single_coil_underlay import resolve_tx_outer_single_coil_underlay_placement_descriptor
 from peetsfea.type2_single_coil_underlay import resolve_tx_underlay_placement_descriptor
+from peetsfea.type2_single_coil_underlay import resolve_rx_single_coil_void_stack_placement_descriptor
 from peetsfea.type2_single_coil_underlay import single_coil_expected_ferrite_groups
 from peetsfea.type2_single_coil_underlay import single_coil_scene_children_with_ferrite_pet_psa_clearance
 from peetsfea.type2_single_coil_underlay import single_coil_scene_children_with_grouped_ferrite_family
@@ -45,6 +46,7 @@ from peetsfea.type2_step_spec import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec import NonModelBoxSpec
 from peetsfea.type2_step_spec import Point3
 from peetsfea.type2_step_spec import render_tx_rect_void_toml
+from peetsfea.type2_step_spec import resolve_modeled_single_coil_void_stack_present
 from peetsfea.type2_step_spec import resolve_modeled_underlay_gap_mm
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
 from peetsfea.type2_step_spec import resolve_modeled_tx_inner_void_stack_present
@@ -567,19 +569,41 @@ def _spec_with_owner_scaled_outer_ranges(
     else:
         outer_x_owner_span_mm = owner_size_y
         outer_y_owner_span_mm = owner_size_z
+    assert hasattr(spec, "x_ratio")
+    raw_x_ratio = object.__getattribute__(spec, "x_ratio")
+    assert isinstance(raw_x_ratio, RangeSpec)
+    assert hasattr(spec, "y_ratio")
+    raw_y_ratio = object.__getattribute__(spec, "y_ratio")
+    assert isinstance(raw_y_ratio, RangeSpec)
     return replace(
         spec,
         outer_x_mm=_scaled_outer_mm_range_from_owner(
-            ratio_range=spec.outer_x_usage_ratio,
+            ratio_range=raw_x_ratio,
             owner_span_mm=outer_x_owner_span_mm,
             owner_path=f"{owner_spec.object_id}.x",
         ),
         outer_y_mm=_scaled_outer_mm_range_from_owner(
-            ratio_range=spec.outer_y_usage_ratio,
+            ratio_range=raw_y_ratio,
             owner_span_mm=outer_y_owner_span_mm,
             owner_path=f"{owner_spec.object_id}.y",
         ),
     )
+
+
+def _render_core_tx_rect_void_toml_for_scene(spec: ModeledSingleCoilSpec) -> str:
+    rendered_toml = render_tx_rect_void_toml(spec)
+    active_void_factor_header = "[tx_coil.void_factor]"
+    legacy_void_usage_ratio_header = "[tx_coil.void_usage_ratio]"
+    if rendered_toml.count(active_void_factor_header) != 1:
+        raise RuntimeError(
+            "type2 single-coil scene temp TOML renderer must emit exactly one active void_factor section "
+            f"(count={rendered_toml.count(active_void_factor_header)})"
+        )
+    if legacy_void_usage_ratio_header in rendered_toml:
+        raise RuntimeError(
+            "type2 single-coil scene temp TOML renderer must not pre-emit core void_usage_ratio section"
+        )
+    return rendered_toml
 
 
 def resolve_modeled_single_coil_fit_envelope(
@@ -596,7 +620,7 @@ def resolve_modeled_single_coil_fit_envelope(
             owner_spec=owner_spec,
             profile=profile,
         )
-        temp_toml_path.write_text(render_tx_rect_void_toml(owner_scaled_spec), encoding="utf-8")
+        temp_toml_path.write_text(_render_core_tx_rect_void_toml_for_scene(owner_scaled_spec), encoding="utf-8")
         tx_rect_void_spec = load_tx_rect_void_spec(temp_toml_path)
         realized = realize_tx_rect_void_spec(tx_rect_void_spec, seed=seed, profile=profile)
     local_boxes = build_tx_rect_void_box_specs(realized, profile=profile)
@@ -994,7 +1018,6 @@ def _build_tx_outer_single_coil_scene_data(
         seed=seed,
     )
     fit_envelope = placement.fit_envelope
-    centerline = build_tx_rect_void_centerline(fit_envelope.realized)
     base_scene_children = placement.scene_children
     underlay_repeat_count = _resolve_modeled_single_coil_underlay_repeat_count(spec, profile=profile, seed=seed)
     if underlay_repeat_count > 0:
@@ -1108,8 +1131,7 @@ def _build_tx_outer_single_coil_scene_data(
     if underlay_repeat_count > 0:
         canonical_coordinates["outer_void_stack_raw_overshoot_mm"] = raw_overshoot_mm
     terminal_metadata = modeled_terminal_metadata(
-        terminal_path=fit_envelope.realized.terminal_path,
-        centerline=centerline,
+        realized=fit_envelope.realized,
         profile=profile,
         frame_origin_xyz=fit_envelope.frame_origin_xyz,
         transformed_boxes=fit_envelope.transformed_boxes,
@@ -1193,7 +1215,6 @@ def build_modeled_single_coil_scene_data(
             seed=seed,
         )
     fit_envelope = resolve_modeled_single_coil_fit_envelope(spec, owner_spec=owner_spec, seed=seed)
-    centerline = build_tx_rect_void_centerline(fit_envelope.realized)
     modeled_scene = build_tx_rect_void_step_scene(
         fit_envelope.realized,
         fit_envelope.transformed_boxes,
@@ -1206,6 +1227,7 @@ def build_modeled_single_coil_scene_data(
     if len(base_scene_children) == 0:
         raise RuntimeError(f"type2 modeled scene must expose child bodies: {spec.object_id}")
     underlay_repeat_count = _resolve_modeled_single_coil_underlay_repeat_count(spec, profile=profile, seed=seed)
+    single_coil_void_stack_present = False
     if profile.role == "tx_single_coil":
         if cast(Literal["XY", "YZ"], profile.plane) != "XY":
             raise RuntimeError(f"type2 tx underlay requires XY modeled plane (actual={profile.plane})")
@@ -1229,6 +1251,7 @@ def build_modeled_single_coil_scene_data(
             underlay_scene_children = wall_underlay_scene_children
         else:
             underlay_scene_children = ()
+        clearance_underlay_scene_children = underlay_scene_children
     elif profile.role == "tx_inner_single_coil":
         if not isinstance(spec, ModeledTxInnerSingleCoilSpec):
             raise RuntimeError(f"type2 tx inner underlay requires tx inner spec (object_id={spec.object_id})")
@@ -1252,7 +1275,8 @@ def build_modeled_single_coil_scene_data(
             bottom_underlay_scene_children = build_tx_inner_single_coil_underlay_shapes(tx_inner_underlay_descriptor)
         else:
             bottom_underlay_scene_children = ()
-        if resolve_modeled_tx_inner_void_stack_present(spec, seed=seed):
+        single_coil_void_stack_present = resolve_modeled_tx_inner_void_stack_present(spec, seed=seed)
+        if single_coil_void_stack_present:
             void_bounds = fit_envelope.realized.void_bounds
             local_corridor_min_y, local_corridor_max_y = local_central_void_corridor_y_bounds(
                 fit_envelope.realized,
@@ -1273,14 +1297,16 @@ def build_modeled_single_coil_scene_data(
         else:
             void_stack_scene_children = ()
         underlay_scene_children = bottom_underlay_scene_children + void_stack_scene_children
+        clearance_underlay_scene_children = underlay_scene_children
     elif profile.role == "tx_outer_single_coil":
         if underlay_repeat_count != 0:
             raise RuntimeError(
                 f"type2 {profile.role} underlay repeat count must remain zero (actual={underlay_repeat_count})"
             )
         underlay_scene_children = ()
-    else:
-        underlay_scene_children = (
+        clearance_underlay_scene_children = underlay_scene_children
+    elif profile.role == "rx_single_coil":
+        rx_backing_scene_children = (
             build_rx_underlay_scene_shapes(
                 owner_spec=owner_spec,
                 repeat_count=underlay_repeat_count,
@@ -1290,11 +1316,60 @@ def build_modeled_single_coil_scene_data(
             if underlay_repeat_count > 0
             else ()
         )
-    base_scene_children, underlay_scene_children = _apply_single_coil_ferrite_fr4_boolean_clearance(
-        base_scene_children=base_scene_children,
-        underlay_scene_children=underlay_scene_children,
-        object_id=spec.object_id,
-    )
+        single_coil_void_stack_present = resolve_modeled_single_coil_void_stack_present(spec, seed=seed)
+        if single_coil_void_stack_present:
+            void_bounds = fit_envelope.realized.void_bounds
+            local_corridor_min_y, local_corridor_max_y = local_central_void_corridor_y_bounds(
+                fit_envelope.realized,
+                profile=profile,
+            )
+            frame_origin_xyz = fit_envelope.frame_origin_xyz
+            min_void_corridor_world_xyz = profile.world_point(
+                (void_bounds.min_x, local_corridor_min_y, 0.0),
+                frame_origin_xyz=frame_origin_xyz,
+            )
+            max_void_corridor_world_xyz = profile.world_point(
+                (void_bounds.max_x, local_corridor_max_y, 0.0),
+                frame_origin_xyz=frame_origin_xyz,
+            )
+            rx_void_stack_descriptor = resolve_rx_single_coil_void_stack_placement_descriptor(
+                x_min=fit_envelope.outer_bounds_min_xyz[0],
+                x_max=fit_envelope.outer_bounds_max_xyz[0],
+                void_min_y=min_void_corridor_world_xyz[1],
+                void_max_y=max_void_corridor_world_xyz[1],
+                void_min_z=min_void_corridor_world_xyz[2],
+                void_max_z=max_void_corridor_world_xyz[2],
+            )
+            rx_void_stack_scene_children = build_rx_single_coil_void_stack_shapes(rx_void_stack_descriptor)
+        else:
+            rx_void_stack_scene_children = ()
+        underlay_scene_children = rx_backing_scene_children + rx_void_stack_scene_children
+        clearance_underlay_scene_children = rx_backing_scene_children
+    else:
+        raise RuntimeError(f"unsupported single-coil modeled role for scene assembly: {profile.role}")
+    if len(clearance_underlay_scene_children) == 0:
+        if len(underlay_scene_children) != 0 and profile.role != "rx_single_coil":
+            raise RuntimeError(
+                "type2 single-coil non-RX underlay children require ferrite/FR4 clearance tools "
+                f"(object_id={spec.object_id}, underlay_labels={tuple(shape.label for shape in underlay_scene_children)})"
+            )
+    else:
+        base_scene_children, cleared_underlay_scene_children = _apply_single_coil_ferrite_fr4_boolean_clearance(
+            base_scene_children=base_scene_children,
+            underlay_scene_children=clearance_underlay_scene_children,
+            object_id=spec.object_id,
+        )
+        if profile.role == "rx_single_coil":
+            rx_passive_void_stack_scene_children = underlay_scene_children[len(clearance_underlay_scene_children):]
+            underlay_scene_children = cleared_underlay_scene_children + rx_passive_void_stack_scene_children
+        else:
+            if len(cleared_underlay_scene_children) != len(underlay_scene_children):
+                raise RuntimeError(
+                    "type2 single-coil ferrite/FR4 clearance output must match underlay count "
+                    f"(object_id={spec.object_id}, expected={len(underlay_scene_children)}, "
+                    f"actual={len(cleared_underlay_scene_children)})"
+                )
+            underlay_scene_children = cleared_underlay_scene_children
     expected_exported_body_names = tuple(shape.label for shape in (base_scene_children + underlay_scene_children))
     if len(set(expected_exported_body_names)) != len(expected_exported_body_names):
         raise RuntimeError(
@@ -1317,36 +1392,37 @@ def build_modeled_single_coil_scene_data(
         frame_origin_xyz=fit_envelope.frame_origin_xyz,
     )
     canonical_coordinates["trace_width_mm"] = fit_envelope.realized.trace_width_mm
+    if profile.role == "rx_single_coil":
+        canonical_coordinates["void_stack_present"] = single_coil_void_stack_present
     exported_body_canonical_coordinates = _exported_body_canonical_coordinates(
         scene_children=scene_children,
         expected_exported_body_names=expected_exported_body_names,
         object_id=spec.object_id,
     )
     terminal_metadata = modeled_terminal_metadata(
-        terminal_path=fit_envelope.realized.terminal_path,
-        centerline=centerline,
+        realized=fit_envelope.realized,
         profile=profile,
         frame_origin_xyz=fit_envelope.frame_origin_xyz,
         transformed_boxes=fit_envelope.transformed_boxes,
     )
 
-    return (
-        scene_children,
-        {
-            "object_id": spec.object_id,
-            "role": spec.role,
-            "plane": cast(Literal["XY", "YZ"], profile.plane),
-            "placement_owner_id": profile.placement_owner_id,
-            "material": spec.material,
-            "model_state": True,
-            "expected_exported_body_names": expected_exported_body_names,
-            "expected_exported_body_count": len(expected_exported_body_names),
-            "expected_exported_body_groups": expected_exported_body_groups,
-            "canonical_coordinates": canonical_coordinates,
-            "exported_body_canonical_coordinates": exported_body_canonical_coordinates,
-            "terminal_metadata": terminal_metadata,
-        },
-    )
+    scene_data: dict[str, object] = {
+        "object_id": spec.object_id,
+        "role": spec.role,
+        "plane": cast(Literal["XY", "YZ"], profile.plane),
+        "placement_owner_id": profile.placement_owner_id,
+        "material": spec.material,
+        "model_state": True,
+        "expected_exported_body_names": expected_exported_body_names,
+        "expected_exported_body_count": len(expected_exported_body_names),
+        "expected_exported_body_groups": expected_exported_body_groups,
+        "canonical_coordinates": canonical_coordinates,
+        "exported_body_canonical_coordinates": exported_body_canonical_coordinates,
+        "terminal_metadata": terminal_metadata,
+    }
+    if profile.role == "rx_single_coil":
+        scene_data["void_stack_present"] = single_coil_void_stack_present
+    return (scene_children, cast(ModeledObjectSceneData, scene_data))
 
 
 __all__ = [

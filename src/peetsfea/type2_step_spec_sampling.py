@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import math
 
+from peetsfea.tx_rect_void import profile_for_modeled_role
 from peetsfea.type2_step_spec_types import ModeledPlateStackSpec
 from peetsfea.type2_step_spec_types import ModeledTxInnerSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledTxPlateStackSpec
@@ -10,11 +11,12 @@ from peetsfea.type2_step_spec_types import ModeledTxSingleCoilSpec
 from peetsfea.type2_step_spec_types import ModeledSingleCoilSpec
 from peetsfea.type2_step_spec_types import NonModelTxRegionActualStackSpaceSpec
 from peetsfea.type2_step_spec_types import RangeSpec
+from peetsfea.type2_step_spec_types import _SINGLE_COIL_TERMINAL_START_CANDIDATES
+from peetsfea.type2_step_spec_types import _SINGLE_COIL_VOID_STACK_PRESENT_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_COUNT
 from peetsfea.type2_step_spec_types import _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_END
 from peetsfea.type2_step_spec_types import _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_START
 from peetsfea.type2_step_spec_types import _TX_PLATE_STACK_COIL_COUNT_CANDIDATES
-from peetsfea.type2_step_spec_types import _TX_INNER_VOID_STACK_PRESENT_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_REGION_ACTUAL_STACK_SPACE_TILT_ENABLED_VALUE
 from peetsfea.type2_step_spec_types import _TX_UNDERLAY_GAP_MM_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES
@@ -116,18 +118,52 @@ def resolve_modeled_tx_inner_underlay_ferrite_thickness_mm(
     return candidates[0]
 
 
-def resolve_modeled_tx_inner_void_stack_present(
-    spec: ModeledTxInnerSingleCoilSpec,
-    *,
-    seed: int,
-) -> bool:
-    candidates = _integer_range_candidates(spec.void_stack_present)
-    if candidates != _TX_INNER_VOID_STACK_PRESENT_CANDIDATES and not (
-        len(candidates) == 1 and candidates[0] in _TX_INNER_VOID_STACK_PRESENT_CANDIDATES
+def resolve_modeled_single_coil_terminal_start(spec: ModeledSingleCoilSpec, *, seed: int) -> int:
+    candidates = _integer_range_candidates(spec.terminal_start)
+    if any(candidate < 0 or candidate > 3 for candidate in candidates):
+        raise ValueError(
+            f"{spec.role}.terminal_start must realize to integer values in [0, 3] "
+            f"(actual={candidates})"
+        )
+    if candidates != _SINGLE_COIL_TERMINAL_START_CANDIDATES and not (
+        len(candidates) == 1 and candidates[0] in _SINGLE_COIL_TERMINAL_START_CANDIDATES
     ):
         raise ValueError(
-            "tx_inner_single_coil.void_stack_present must realize to canonical candidates "
-            f"{_TX_INNER_VOID_STACK_PRESENT_CANDIDATES} or a fixed single candidate from that set "
+            f"{spec.role}.terminal_start must realize to canonical candidates "
+            f"{_SINGLE_COIL_TERMINAL_START_CANDIDATES} or a fixed single candidate from that set "
+            f"(actual={candidates})"
+        )
+    if len(candidates) == 1:
+        return candidates[0]
+    range_path = f"modeled_objects.{spec.object_id}.terminal_start"
+    index = _resolve_seeded_candidate_index(seed=seed, range_path=range_path, candidate_count=len(candidates))
+    return candidates[index]
+
+
+def resolve_modeled_single_coil_turn_qcount(spec: ModeledSingleCoilSpec, *, seed: int) -> int:
+    candidates = _integer_range_candidates(spec.turn_qcount)
+    profile = profile_for_modeled_role(spec.role)
+    max_turn_qcount = profile.max_turn_count * 4
+    if any(candidate < 1 or candidate > max_turn_qcount for candidate in candidates):
+        raise ValueError(
+            f"{spec.role}.turn_qcount must realize to integers in [1,{max_turn_qcount}] "
+            f"(actual={candidates})"
+        )
+    if len(candidates) == 1:
+        return candidates[0]
+    range_path = f"modeled_objects.{spec.object_id}.turn_qcount"
+    index = _resolve_seeded_candidate_index(seed=seed, range_path=range_path, candidate_count=len(candidates))
+    return candidates[index]
+
+
+def resolve_modeled_single_coil_void_stack_present(spec: ModeledSingleCoilSpec, *, seed: int) -> bool:
+    candidates = _integer_range_candidates(spec.void_stack_present)
+    if candidates != _SINGLE_COIL_VOID_STACK_PRESENT_CANDIDATES and not (
+        len(candidates) == 1 and candidates[0] in _SINGLE_COIL_VOID_STACK_PRESENT_CANDIDATES
+    ):
+        raise ValueError(
+            f"{spec.role}.void_stack_present must realize to canonical candidates "
+            f"{_SINGLE_COIL_VOID_STACK_PRESENT_CANDIDATES} or a fixed single candidate from that set "
             f"(actual={candidates})"
         )
     if len(candidates) == 1:
@@ -135,6 +171,14 @@ def resolve_modeled_tx_inner_void_stack_present(
     range_path = f"modeled_objects.{spec.object_id}.void_stack_present"
     index = _resolve_seeded_candidate_index(seed=seed, range_path=range_path, candidate_count=len(candidates))
     return bool(candidates[index])
+
+
+def resolve_modeled_tx_inner_void_stack_present(
+    spec: ModeledTxInnerSingleCoilSpec,
+    *,
+    seed: int,
+) -> bool:
+    return resolve_modeled_single_coil_void_stack_present(spec, seed=seed)
 
 
 def resolve_modeled_underlay_gap_mm(spec: ModeledTxSingleCoilSpec, *, seed: int) -> float:
@@ -295,6 +339,9 @@ __all__ = [
     "resolve_modeled_plate_stack_turn_count",
     "resolve_modeled_plate_stack_y_usage_ratio",
     "resolve_modeled_plate_stack_z_usage_ratio",
+    "resolve_modeled_single_coil_terminal_start",
+    "resolve_modeled_single_coil_turn_qcount",
+    "resolve_modeled_single_coil_void_stack_present",
     "resolve_modeled_tx_array_x_usage_ratio",
     "resolve_modeled_tx_coil_count",
     "resolve_modeled_tx_inner_void_stack_present",

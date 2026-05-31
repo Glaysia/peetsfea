@@ -1,7 +1,7 @@
 ---
 title: type2_fixed.toml
 created: 2026-05-03 @ 00:00
-updated: 2026-05-13 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - examples
   - type2
@@ -23,6 +23,8 @@ tags:
 
 ## Canonical state
 - `tx_region` is fixed non-modeled guide state; its Y bounds use `origin_xyz[1] = -900.0` and `size_xyz[1] = 1800.0`.
+- `outputs.solution_name` is `Setup1 : Sweep` for the active type2 sweep report/export contract.
+- `non_model_objects.tx_region.z_gap_from_rx_plane_mm` is fixed at `[false, 80.0, 80.0, 1]`, preserving the current fixed-example realized TX guide Z placement.
 - `non_model_objects.tx_region.tx_reference_line.x_ratio` is fixed at `[false, 0.99, 0.99, 1]`.
 - `non_model_objects.tx_region.tx_reference_line.y_usage_ratio` remains fixed at `[false, 1.0, 1.0, 1]`; it continues to size `tx_inner_region` inside fixed `tx_region`.
 - `modeled_objects.tx_inner_rect_void_coil.outer_x_usage_ratio` and `outer_y_usage_ratio` remain fixed at their sweep maxima `[false, 0.9, 0.9, 1]`.
@@ -43,6 +45,7 @@ tags:
 ## Invariants / fail-fast
 - Candidate values must satisfy `0.0 <= value <= 1.0`.
 - TX reference-line X ratio remains parser-validated strict interior; Z ratio may reach `1.0` and must stay in `(0, 1]`.
+- Fixed TX guide z-gap must remain a finite positive singleton millimeter value.
 - Active sampled owners must not include `modeled_objects.tx_outer_rect_void_coil.*`.
 - Active sampled owners must not include `modeled_objects.tx_inner_rect_void_coil.layer_count`.
 - `modeled_objects.tv_aluminum_plate.sheet_present` must realize only `1` in the fixed example.
@@ -52,6 +55,7 @@ tags:
 ## Collaborators
 - [type2_step_spec_modeled.py](../src/peetsfea/type2_step_spec_modeled.py.md)
 - [type2_sampled.py](../src/peetsfea/type2_sampled.py.md)
+- [0.2.25-type2-tx-region-z-gap-owner](../../plans/0.2.25-type2-tx-region-z-gap-owner.md)
 - [0.2.25-type2-tv-aluminum-sheet-presence](../../plans/0.2.25-type2-tv-aluminum-sheet-presence.md)
 - [0.2.24-type2-tx-region-y-1800-x-reference-fixed](../../plans/0.2.24-type2-tx-region-y-1800-x-reference-fixed.md)
 - [0.2.24-type2-turn-count-sweep-upper-bound](../../plans/0.2.24-type2-turn-count-sweep-upper-bound.md)

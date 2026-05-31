@@ -107,9 +107,10 @@ def _parse_constraint_func(value: object, *, dotted_path: str) -> str:
     name = text[:open_index].strip()
     if name == "":
         raise ValueError(f"{dotted_path}.func name must be non-empty")
-    if name not in ("sum", "tx_inner_min_trace_width_mm", "rx_min_trace_width_mm"):
+    if name not in ("sum", "tx_inner_min_trace_width_mm", "rx_min_trace_width_mm", "rx_void_corridor_height_mm"):
         raise ValueError(
-            f"{dotted_path}.func must be one of ['sum(...)', 'tx_inner_min_trace_width_mm(...)', 'rx_min_trace_width_mm(...)'] "
+            f"{dotted_path}.func must be one of "
+            "['sum(...)', 'tx_inner_min_trace_width_mm(...)', 'rx_min_trace_width_mm(...)', 'rx_void_corridor_height_mm(...)'] "
             f"(actual={name!r})"
         )
     body = text[open_index + 1 : -1].strip()
@@ -123,6 +124,8 @@ def _parse_constraint_func(value: object, *, dotted_path: str) -> str:
         raise ValueError(f"{dotted_path}.func tx_inner_min_trace_width_mm() must contain exactly one argument")
     if name == "rx_min_trace_width_mm" and len(args) != 1:
         raise ValueError(f"{dotted_path}.func rx_min_trace_width_mm() must contain exactly one argument")
+    if name == "rx_void_corridor_height_mm" and len(args) != 1:
+        raise ValueError(f"{dotted_path}.func rx_void_corridor_height_mm() must contain exactly one argument")
     return raw_func
 
 
@@ -203,6 +206,7 @@ def _constraint_reference_paths(spec: Type2StepSpec) -> set[str]:
     for non_model_spec in spec.non_model_objects:
         if isinstance(non_model_spec, NonModelTxRegionSpec):
             base = f"non_model_objects.{non_model_spec.object_id}.tx_reference_line"
+            paths.add(f"non_model_objects.{non_model_spec.object_id}.z_gap_from_rx_plane_mm")
             paths.update(
                 (
                     f"{base}.x_ratio",
@@ -228,16 +232,18 @@ def _constraint_reference_paths(spec: Type2StepSpec) -> set[str]:
         if isinstance(modeled_spec, ModeledTxSingleCoilSpec):
             paths.update(
                 (
-                    f"{base}.outer_x_usage_ratio",
-                    f"{base}.outer_y_usage_ratio",
-                    f"{base}.turn_count",
+                    f"{base}.x_ratio",
+                    f"{base}.y_ratio",
+                    f"{base}.turn_qcount",
                     f"{base}.layer_count",
                     f"{base}.underlay_repeat_count",
                     f"{base}.layer_gap_mm",
                     f"{base}.terminal_stub_length_mm",
-                    f"{base}.void_usage_ratio",
+                    f"{base}.void_factor",
                     f"{base}.margin_ratio",
                     f"{base}.metal_fill_factor",
+                    f"{base}.terminal_start",
+                    f"{base}.void_stack_present",
                     f"{base}.underlay_gap_mm",
                     f"{base}.wall_parallel_stack_present",
                 )
@@ -246,16 +252,18 @@ def _constraint_reference_paths(spec: Type2StepSpec) -> set[str]:
         if isinstance(modeled_spec, (ModeledTxInnerSingleCoilSpec, ModeledRxSingleCoilSpec)):
             paths.update(
                 (
-                    f"{base}.outer_x_usage_ratio",
-                    f"{base}.outer_y_usage_ratio",
-                    f"{base}.turn_count",
+                    f"{base}.x_ratio",
+                    f"{base}.y_ratio",
+                    f"{base}.turn_qcount",
                     f"{base}.layer_count",
                     f"{base}.underlay_repeat_count",
                     f"{base}.layer_gap_mm",
                     f"{base}.terminal_stub_length_mm",
-                    f"{base}.void_usage_ratio",
+                    f"{base}.void_factor",
                     f"{base}.margin_ratio",
                     f"{base}.metal_fill_factor",
+                    f"{base}.terminal_start",
+                    f"{base}.void_stack_present",
                 )
             )
             continue
@@ -351,6 +359,18 @@ def _validate_constraint_func_ref(func: str, *, spec: Type2StepSpec, dotted_path
             )
         return
     if name == "rx_min_trace_width_mm":
+        object_id = args[0]
+        matches = [modeled_spec for modeled_spec in spec.modeled_objects if modeled_spec.object_id == object_id]
+        if len(matches) != 1:
+            raise ValueError(f"{dotted_path}.func references unknown modeled object: {object_id!r}")
+        modeled_spec = matches[0]
+        if not isinstance(modeled_spec, ModeledRxSingleCoilSpec):
+            raise ValueError(
+                f"{dotted_path}.func requires an rx_single_coil modeled object "
+                f"(actual={modeled_spec.object_id!r})"
+            )
+        return
+    if name == "rx_void_corridor_height_mm":
         object_id = args[0]
         matches = [modeled_spec for modeled_spec in spec.modeled_objects if modeled_spec.object_id == object_id]
         if len(matches) != 1:

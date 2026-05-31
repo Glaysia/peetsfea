@@ -1,7 +1,7 @@
 ---
 title: test_type2_step_spec_import_surface.py
 created: 2026-04-21 @ 17:45
-updated: 2026-05-03 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - tests
   - type2
@@ -30,6 +30,7 @@ tags:
 - `resolve_modeled_tx_inner_void_stack_present` is part of the facade resolver contract and must resolve from `type2_step_spec_sampling`
 - import-path coverage includes `type2_step_spec_modeled` and `type2_step_spec_sampling` owner paths for split-owned functions
 - failures should be fail-fast when the facade cannot import
+- output-surface examples in this file now treat `Setup1 : Sweep` as the active type2 report solution contract.
 
 ## 불변식 / 실패-즉시
 - `type2_step_spec.__all__` must exist and equal `test_type2_step_spec_import_surface._EXPECTED_PUBLIC_SURFACE`

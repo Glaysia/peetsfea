@@ -22,6 +22,7 @@ _EXPECTED_PUBLIC_SURFACE: set[str] = {
     "ModeledTxPlateStackSpec",
     "ModeledTxSingleCoilSpec",
     "ModeledTxRectVoidColumnsSpec",
+    "ModeledTvAluminumPlateSpec",
     "Type2ConstraintComparisonOperator",
     "Type2ConstraintComparableRef",
     "Type2ConstraintFuncRef",
@@ -108,7 +109,7 @@ def test_outputs_parser_accepts_rx_only_variable_contract() -> None:
         {
             "mode": "RxOnly",
             "report_name": "Output Variables Table1",
-            "solution_name": "Setup1 : LastAdaptive",
+            "solution_name": "Setup1 : Sweep",
             "primary_sweep": "Freq",
             "report_category": "Terminal Solution Data",
             "plot_type": "Data Table",
@@ -128,7 +129,7 @@ def test_outputs_parser_accepts_txrx_variable_contract() -> None:
         {
             "mode": "TxRx",
             "report_name": "Output Variables Table1",
-            "solution_name": "Setup1 : LastAdaptive",
+            "solution_name": "Setup1 : Sweep",
             "primary_sweep": "Freq",
             "report_category": "Terminal Solution Data",
             "plot_type": "Data Table",
@@ -176,7 +177,7 @@ def test_outputs_parser_rejects_unknown_variable_in_txrx_mode() -> None:
             {
                 "mode": "TxRx",
                 "report_name": "Output Variables Table1",
-                "solution_name": "Setup1 : LastAdaptive",
+                "solution_name": "Setup1 : Sweep",
                 "primary_sweep": "Freq",
                 "report_category": "Terminal Solution Data",
                 "plot_type": "Data Table",
@@ -195,7 +196,7 @@ def test_outputs_parser_rejects_tx_variable_in_rx_only_mode() -> None:
             {
                 "mode": "RxOnly",
                 "report_name": "Output Variables Table1",
-                "solution_name": "Setup1 : LastAdaptive",
+                "solution_name": "Setup1 : Sweep",
                 "primary_sweep": "Freq",
                 "report_category": "Terminal Solution Data",
                 "plot_type": "Data Table",

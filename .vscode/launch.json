@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Type2 STEP Viewer",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/entry/debug_view_step_files.py",
+      "cwd": "${workspaceFolder}",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {}
+    }
+  ]
+}

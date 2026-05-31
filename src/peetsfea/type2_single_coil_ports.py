@@ -1,20 +1,27 @@
 from __future__ import annotations
 
 import math
+from typing import Literal
 from typing import cast
 
 import build123d as bd
 from build123d.topology import Shape
 
 from peetsfea.tx_rect_void import BoxSpec
+from peetsfea.tx_rect_void import RealizedSingleCoilRectVoid
 from peetsfea.tx_rect_void import SingleCoilProfile
 from peetsfea.tx_rect_void import TX_PARALLEL_SINGLE_COIL_ROLES
+from peetsfea.tx_rect_void_types import inner_corner_label_for_outer_corner
+from peetsfea.tx_rect_void_types import terminal_end_corner_label
+from peetsfea.tx_rect_void_types import terminal_path_from_quarter_turns
+from peetsfea.tx_rect_void_types import terminal_start_corner_label
 from peetsfea.type2_step_spec import Point3
+
+_DERIVED_TERMINAL_DIRECTION: Literal["cw"] = "cw"
 
 
 def local_terminal_plane_points(
     *,
-    terminal_path: str,
     centerline: tuple[tuple[float, float], ...],
     transformed_boxes: tuple[BoxSpec, ...],
     profile: SingleCoilProfile,
@@ -41,7 +48,6 @@ def local_terminal_plane_points(
             end_bus_matches[0].origin_xyz[1] + (end_bus_matches[0].size_xyz[1] / 2.0),
         )
     else:
-        _outer_corner, _direction, _inner_corner = parse_terminal_path_components(terminal_path)
         start_point_world = profile.plane_point(centerline[0], frame_origin_xyz=frame_origin_xyz)
         end_point_world = profile.plane_point(centerline[-1], frame_origin_xyz=frame_origin_xyz)
     local_origin_plane = profile.plane_point((0.0, 0.0), frame_origin_xyz=frame_origin_xyz)
@@ -359,15 +365,69 @@ def parse_terminal_path_components(raw_terminal_path: str) -> tuple[str, str, st
     return (outer_corner, direction, inner_corner)
 
 
+def _realized_derived_terminal_fields(
+    realized: RealizedSingleCoilRectVoid,
+) -> tuple[str, Literal["A", "B", "C", "D"], Literal["cw"], Literal["a", "b", "c", "d"]]:
+    raw_terminal_start = realized.terminal_start
+    if not isinstance(raw_terminal_start, int) or isinstance(raw_terminal_start, bool):
+        raise RuntimeError(
+            "type2 single-coil realized terminal_start must be an integer index "
+            f"(actual={raw_terminal_start!r})"
+        )
+    raw_turn_qcount = realized.turn_qcount
+    if not isinstance(raw_turn_qcount, int) or isinstance(raw_turn_qcount, bool):
+        raise RuntimeError(
+            "type2 single-coil realized turn_qcount must be an integer quarter-turn count "
+            f"(actual={raw_turn_qcount!r})"
+        )
+    if raw_turn_qcount <= 0:
+        raise RuntimeError(
+            "type2 single-coil realized turn_qcount must be positive "
+            f"(actual={raw_turn_qcount})"
+        )
+    outer_corner = terminal_start_corner_label(raw_terminal_start)
+    end_corner = terminal_end_corner_label(terminal_start=raw_terminal_start, turn_qcount=raw_turn_qcount)
+    expected_path = terminal_path_from_quarter_turns(
+        terminal_start=raw_terminal_start,
+        turn_qcount=raw_turn_qcount,
+    )
+    if realized.terminal_start_corner != outer_corner:
+        raise RuntimeError(
+            "type2 single-coil realized terminal_start_corner must match terminal_start "
+            f"(terminal_start={raw_terminal_start}, actual={realized.terminal_start_corner}, expected={outer_corner})"
+        )
+    if realized.terminal_end_corner != end_corner:
+        raise RuntimeError(
+            "type2 single-coil realized terminal_end_corner must match terminal_start + turn_qcount "
+            f"(terminal_start={raw_terminal_start}, turn_qcount={raw_turn_qcount}, "
+            f"actual={realized.terminal_end_corner}, expected={end_corner})"
+        )
+    if realized.terminal_direction != _DERIVED_TERMINAL_DIRECTION:
+        raise RuntimeError(
+            "type2 single-coil realized terminal direction must be fixed clockwise "
+            f"(actual={realized.terminal_direction})"
+        )
+    if realized.terminal_path != expected_path:
+        raise RuntimeError(
+            "type2 single-coil realized terminal_path must match quarter-turn metadata "
+            f"(actual={realized.terminal_path}, expected={expected_path})"
+        )
+    return (
+        realized.terminal_path,
+        outer_corner,
+        _DERIVED_TERMINAL_DIRECTION,
+        inner_corner_label_for_outer_corner(end_corner),
+    )
+
+
 def modeled_terminal_metadata(
     *,
-    terminal_path: str,
-    centerline: tuple[tuple[float, float], ...],
+    realized: RealizedSingleCoilRectVoid,
     profile: SingleCoilProfile,
     frame_origin_xyz: Point3,
     transformed_boxes: tuple[BoxSpec, ...],
 ) -> dict[str, object]:
-    outer_corner, direction, inner_corner = parse_terminal_path_components(terminal_path)
+    terminal_path, outer_corner, direction, inner_corner = _realized_derived_terminal_fields(realized)
     vertices_xyz = single_coil_port_sheet_vertices(
         transformed_boxes=transformed_boxes,
         profile=profile,

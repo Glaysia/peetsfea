@@ -22,6 +22,8 @@ from peetsfea.type2_step_spec_types import modeled_plane_for_role
 from peetsfea.type2_step_spec_types import placement_owner_id_for_role
 from peetsfea.type2_step_spec_types import NonModelBoxSpec
 from peetsfea.type2_step_spec_types import RangeSpec
+from peetsfea.type2_step_spec_types import _SINGLE_COIL_TERMINAL_START_CANDIDATES
+from peetsfea.type2_step_spec_types import _SINGLE_COIL_VOID_STACK_PRESENT_CANDIDATES
 from peetsfea.type2_step_spec_types import _UNDERLAY_REPEAT_COUNT_CANDIDATES
 from peetsfea.type2_step_spec_types import _UNDERLAY_REPEAT_COUNT_FIXED_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_PLATE_STACK_COIL_COUNT_CANDIDATES
@@ -51,7 +53,6 @@ from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_R
 from peetsfea.type2_step_spec_types import _TX_RECT_VOID_COLUMNS_TURN_WEIGHT_C_RANGE_START
 from peetsfea.type2_step_spec_types import _TV_ALUMINUM_SHEET_PRESENT_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_UNDERLAY_GAP_MM_CANDIDATES
-from peetsfea.type2_step_spec_types import _TX_INNER_VOID_STACK_PRESENT_CANDIDATES
 from peetsfea.type2_step_spec_types import _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES
 from peetsfea.type2_step_spec_non_model import _float_range_candidates
 from peetsfea.type2_step_spec_non_model import _integer_range_candidates
@@ -215,26 +216,73 @@ def _require_wall_parallel_stack_present_range(
     )
 
 
-def _require_tx_inner_void_stack_present_range(
+def _require_single_coil_terminal_start_range(
     table: dict[str, object],
     *,
     context: str,
+    role: ModeledSingleCoilRole,
 ) -> RangeSpec:
-    range_spec = _require_range(table, "void_stack_present", context, expect_integer=True)
+    range_spec = _require_range(table, "terminal_start", context, expect_integer=True)
     candidates = _integer_range_candidates(range_spec)
-    if candidates == _TX_INNER_VOID_STACK_PRESENT_CANDIDATES:
+    if any(candidate < 0 or candidate > 3 for candidate in candidates):
+        raise ValueError(
+            f"{context}.terminal_start must realize to integer values in [0, 3] for {role} "
+            f"(actual={candidates})"
+        )
+    if candidates == _SINGLE_COIL_TERMINAL_START_CANDIDATES:
         return range_spec
     if (
         range_spec.count == 1
         and range_spec.start == range_spec.end
         and len(candidates) == 1
-        and candidates[0] in _TX_INNER_VOID_STACK_PRESENT_CANDIDATES
+    ):
+        return range_spec
+    raise ValueError(
+        f"{context}.terminal_start.range must be canonical [true, 0, 3, 4] "
+        f"or fixed [true, n, n, 1] for n in {_SINGLE_COIL_TERMINAL_START_CANDIDATES} for {role} "
+        f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
+    )
+
+
+def _require_single_coil_turn_qcount_range(
+    table: dict[str, object],
+    *,
+    context: str,
+    role: ModeledSingleCoilRole,
+) -> RangeSpec:
+    range_spec = _require_range(table, "turn_qcount", context, expect_integer=True)
+    candidates = _integer_range_candidates(range_spec)
+    profile = profile_for_modeled_role(role)
+    max_turn_qcount = profile.max_turn_count * 4
+    if any(candidate < 1 or candidate > max_turn_qcount for candidate in candidates):
+        raise ValueError(
+            f"{context}.turn_qcount must realize to integers in [1,{max_turn_qcount}] for {role} "
+            f"(actual={candidates})"
+        )
+    return range_spec
+
+
+def _require_single_coil_void_stack_present_range(
+    table: dict[str, object],
+    *,
+    context: str,
+    role: ModeledSingleCoilRole,
+) -> RangeSpec:
+    range_spec = _require_range(table, "void_stack_present", context, expect_integer=True)
+    candidates = _integer_range_candidates(range_spec)
+    if candidates == _SINGLE_COIL_VOID_STACK_PRESENT_CANDIDATES:
+        return range_spec
+    if (
+        range_spec.count == 1
+        and range_spec.start == range_spec.end
+        and len(candidates) == 1
+        and candidates[0] in _SINGLE_COIL_VOID_STACK_PRESENT_CANDIDATES
     ):
         return range_spec
     raise ValueError(
         f"{context}.void_stack_present.range must be canonical [true, 0, 1, 2] "
-        f"or fixed [true, b, b, 1] for b in {_TX_INNER_VOID_STACK_PRESENT_CANDIDATES} "
-        "for tx_inner_single_coil "
+        f"or fixed [true, b, b, 1] for b in {_SINGLE_COIL_VOID_STACK_PRESENT_CANDIDATES} "
+        f"for {role} "
         f"(actual={[range_spec.is_integer, range_spec.start, range_spec.end, range_spec.count]})"
     )
 
@@ -524,8 +572,8 @@ def _resolve_single_coil_outer_mm_ranges(
     *,
     role: ModeledSingleCoilRole,
     owner_spec: NonModelBoxSpec,
-    outer_x_usage_ratio: RangeSpec,
-    outer_y_usage_ratio: RangeSpec,
+    x_ratio: RangeSpec,
+    y_ratio: RangeSpec,
     context: str,
 ) -> tuple[RangeSpec, RangeSpec]:
     profile = profile_for_modeled_role(role)
@@ -542,14 +590,14 @@ def _resolve_single_coil_outer_mm_ranges(
         outer_x_owner_span_mm = owner_size_y
         outer_y_owner_span_mm = owner_size_z
     outer_x_mm = _scaled_mm_range_from_usage_ratio(
-        outer_x_usage_ratio,
+        x_ratio,
         span_mm=outer_x_owner_span_mm,
-        path=f"{context}.outer_x_usage_ratio",
+        path=f"{context}.x_ratio",
     )
     outer_y_mm = _scaled_mm_range_from_usage_ratio(
-        outer_y_usage_ratio,
+        y_ratio,
         span_mm=outer_y_owner_span_mm,
-        path=f"{context}.outer_y_usage_ratio",
+        path=f"{context}.y_ratio",
     )
     return (outer_x_mm, outer_y_mm)
 
@@ -595,14 +643,14 @@ def _parse_modeled_single_coil(
     if material != "composite":
         raise ValueError(f"{context}.material must be 'composite' (actual={material})")
 
-    terminal_node = _require_table(_require_key(table, "terminal_path", context), f"{context}.terminal_path")
-    if set(terminal_node.keys()) != {"value"}:
-        raise ValueError(f"{context}.terminal_path must contain only ['value']")
-    terminal_path = _require_non_empty_str(terminal_node, "value", f"{context}.terminal_path")
-
     unsupported_legacy_single_coil_keys = sorted(
         key
         for key in (
+            "outer_x_usage_ratio",
+            "outer_y_usage_ratio",
+            "turn_count",
+            "void_usage_ratio",
+            "terminal_path",
             "outer_x_mm",
             "outer_y_mm",
             "void_x_over_outer_x",
@@ -631,8 +679,8 @@ def _parse_modeled_single_coil(
         assert placement_owner_id in non_model_specs_by_id
         owner_spec = non_model_specs_by_id[placement_owner_id]
 
-    outer_x_usage_ratio = _require_range(table, "outer_x_usage_ratio", context, expect_integer=False)
-    outer_y_usage_ratio = _require_range(table, "outer_y_usage_ratio", context, expect_integer=False)
+    x_ratio = _require_range(table, "x_ratio", context, expect_integer=False)
+    y_ratio = _require_range(table, "y_ratio", context, expect_integer=False)
     if modeled_role == "tx_inner_single_coil":
         x_position_ratio = _require_tx_inner_x_position_ratio_range(table, context=context)
     else:
@@ -640,11 +688,11 @@ def _parse_modeled_single_coil(
     outer_x_mm, outer_y_mm = _resolve_single_coil_outer_mm_ranges(
         role=modeled_role,
         owner_spec=owner_spec,
-        outer_x_usage_ratio=outer_x_usage_ratio,
-        outer_y_usage_ratio=outer_y_usage_ratio,
+        x_ratio=x_ratio,
+        y_ratio=y_ratio,
         context=context,
     )
-    turn_count = _require_range(table, "turn_count", context, expect_integer=True)
+    turn_qcount = _require_single_coil_turn_qcount_range(table, context=context, role=modeled_role)
     layer_count = _require_range(table, "layer_count", context, expect_integer=True)
     underlay_repeat_count = _require_underlay_repeat_count_range(
         table,
@@ -653,15 +701,17 @@ def _parse_modeled_single_coil(
     )
     layer_gap_mm = _require_range(table, "layer_gap_mm", context, expect_integer=False)
     terminal_stub_length_mm = _require_range(table, "terminal_stub_length_mm", context, expect_integer=False)
-    void_usage_ratio = _require_range(table, "void_usage_ratio", context, expect_integer=False)
-    void_usage_ratio_candidates = _float_range_candidates(void_usage_ratio)
-    if any(candidate <= 0.0 or candidate >= 1.0 for candidate in void_usage_ratio_candidates):
+    void_factor = _require_range(table, "void_factor", context, expect_integer=False)
+    void_factor_candidates = _float_range_candidates(void_factor)
+    if any(candidate <= 0.0 or candidate >= 1.0 for candidate in void_factor_candidates):
         raise ValueError(
-            f"{context}.void_usage_ratio must realize to values > 0 and < 1 "
-            f"(actual={void_usage_ratio_candidates})"
+            f"{context}.void_factor must realize to values > 0 and < 1 "
+            f"(actual={void_factor_candidates})"
         )
     margin_ratio = _require_range(table, "margin_ratio", context, expect_integer=False)
     metal_fill_factor = _require_range(table, "metal_fill_factor", context, expect_integer=False)
+    terminal_start = _require_single_coil_terminal_start_range(table, context=context, role=modeled_role)
+    void_stack_present = _require_single_coil_void_stack_present_range(table, context=context, role=modeled_role)
     tx_allowed_keys = {
         "object_id",
         "role",
@@ -669,20 +719,21 @@ def _parse_modeled_single_coil(
         "model_state",
         "pcb_thickness_mm",
         "copper_thickness_mm",
-        "outer_x_usage_ratio",
-        "outer_y_usage_ratio",
+        "x_ratio",
+        "y_ratio",
         "x_position_ratio",
-        "turn_count",
+        "turn_qcount",
         "layer_count",
         "underlay_repeat_count",
         "underlay_gap_mm",
         "wall_parallel_stack_present",
         "layer_gap_mm",
         "terminal_stub_length_mm",
-        "void_usage_ratio",
+        "void_factor",
         "margin_ratio",
         "metal_fill_factor",
-        "terminal_path",
+        "terminal_start",
+        "void_stack_present",
     }
     rx_allowed_keys = {
         "object_id",
@@ -691,21 +742,21 @@ def _parse_modeled_single_coil(
         "model_state",
         "pcb_thickness_mm",
         "copper_thickness_mm",
-        "outer_x_usage_ratio",
-        "outer_y_usage_ratio",
+        "x_ratio",
+        "y_ratio",
         "x_position_ratio",
-        "turn_count",
+        "turn_qcount",
         "layer_count",
         "underlay_repeat_count",
         "layer_gap_mm",
         "terminal_stub_length_mm",
-        "void_usage_ratio",
+        "void_factor",
         "margin_ratio",
         "metal_fill_factor",
-        "terminal_path",
+        "terminal_start",
+        "void_stack_present",
     }
     tx_inner_allowed_keys = rx_allowed_keys | {
-        "void_stack_present",
         "underlay_pet_psa_thickness_mm",
         "underlay_ferrite_thickness_mm",
     }
@@ -723,20 +774,21 @@ def _parse_modeled_single_coil(
             model_state=True,
             pcb_thickness_mm=pcb_thickness_mm,
             copper_thickness_mm=copper_thickness_mm,
-            outer_x_usage_ratio=outer_x_usage_ratio,
-            outer_y_usage_ratio=outer_y_usage_ratio,
+            x_ratio=x_ratio,
+            y_ratio=y_ratio,
             x_position_ratio=x_position_ratio,
             outer_x_mm=outer_x_mm,
             outer_y_mm=outer_y_mm,
-            turn_count=turn_count,
+            turn_qcount=turn_qcount,
             layer_count=layer_count,
             underlay_repeat_count=underlay_repeat_count,
             layer_gap_mm=layer_gap_mm,
             terminal_stub_length_mm=terminal_stub_length_mm,
-            void_usage_ratio=void_usage_ratio,
+            void_factor=void_factor,
             margin_ratio=margin_ratio,
             metal_fill_factor=metal_fill_factor,
-            terminal_path=terminal_path,
+            terminal_start=terminal_start,
+            void_stack_present=void_stack_present,
             underlay_gap_mm=_require_underlay_gap_range(table, context=context),
             wall_parallel_stack_present=_require_wall_parallel_stack_present_range(table, context=context),
         )
@@ -755,7 +807,6 @@ def _parse_modeled_single_coil(
             key="underlay_ferrite_thickness_mm",
             context=context,
         )
-        void_stack_present = _require_tx_inner_void_stack_present_range(table, context=context)
         extra_keys = sorted(set(table.keys()) - tx_inner_allowed_keys)
         if extra_keys:
             raise ValueError(
@@ -769,12 +820,12 @@ def _parse_modeled_single_coil(
             model_state=True,
             pcb_thickness_mm=pcb_thickness_mm,
             copper_thickness_mm=copper_thickness_mm,
-            outer_x_usage_ratio=outer_x_usage_ratio,
-            outer_y_usage_ratio=outer_y_usage_ratio,
+            x_ratio=x_ratio,
+            y_ratio=y_ratio,
             x_position_ratio=x_position_ratio,
             outer_x_mm=outer_x_mm,
             outer_y_mm=outer_y_mm,
-            turn_count=turn_count,
+            turn_qcount=turn_qcount,
             layer_count=layer_count,
             underlay_repeat_count=underlay_repeat_count,
             void_stack_present=void_stack_present,
@@ -782,10 +833,10 @@ def _parse_modeled_single_coil(
             underlay_ferrite_thickness_mm=underlay_ferrite_thickness_mm,
             layer_gap_mm=layer_gap_mm,
             terminal_stub_length_mm=terminal_stub_length_mm,
-            void_usage_ratio=void_usage_ratio,
+            void_factor=void_factor,
             margin_ratio=margin_ratio,
             metal_fill_factor=metal_fill_factor,
-            terminal_path=terminal_path,
+            terminal_start=terminal_start,
         )
     if "underlay_gap_mm" in table:
         raise ValueError(f"{context}.underlay_gap_mm is unsupported for rx_single_coil")
@@ -804,20 +855,21 @@ def _parse_modeled_single_coil(
         model_state=True,
         pcb_thickness_mm=pcb_thickness_mm,
         copper_thickness_mm=copper_thickness_mm,
-        outer_x_usage_ratio=outer_x_usage_ratio,
-        outer_y_usage_ratio=outer_y_usage_ratio,
+        x_ratio=x_ratio,
+        y_ratio=y_ratio,
         x_position_ratio=x_position_ratio,
         outer_x_mm=outer_x_mm,
         outer_y_mm=outer_y_mm,
-        turn_count=turn_count,
+        turn_qcount=turn_qcount,
         layer_count=layer_count,
         underlay_repeat_count=underlay_repeat_count,
         layer_gap_mm=layer_gap_mm,
         terminal_stub_length_mm=terminal_stub_length_mm,
-        void_usage_ratio=void_usage_ratio,
+        void_factor=void_factor,
         margin_ratio=margin_ratio,
         metal_fill_factor=metal_fill_factor,
-        terminal_path=terminal_path,
+        terminal_start=terminal_start,
+        void_stack_present=void_stack_present,
     )
 
 
@@ -1245,8 +1297,6 @@ def parse_modeled_object(
     context = f"modeled_objects[{index}]"
     table = _require_table(raw_object, context)
     role = _require_non_empty_str(table, "role", context)
-    if role == "tx_single_coil" and "void_stack_present" in table:
-        raise ValueError(f"{context} contains unsupported keys for tx_single_coil (actual=['void_stack_present'])")
     if role in ("tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"):
         raise ValueError(f"{context}.role is unsupported in active RxOnly type2 mode (actual={role!r})")
     if role == "tx_inner_single_coil":
@@ -1298,22 +1348,22 @@ def render_tx_rect_void_toml(spec: ModeledSingleCoilCommonSpec) -> str:
             f"range = {_format_range(spec.outer_x_mm)}",
             "[tx_coil.outer_y_mm]",
             f"range = {_format_range(spec.outer_y_mm)}",
-            "[tx_coil.turn_count]",
-            f"range = {_format_range(spec.turn_count)}",
+            "[tx_coil.turn_qcount]",
+            f"range = {_format_range(spec.turn_qcount)}",
             "[tx_coil.layer_count]",
             f"range = {_format_range(spec.layer_count)}",
             "[tx_coil.layer_gap_mm]",
             f"range = {_format_range(spec.layer_gap_mm)}",
             "[tx_coil.terminal_stub_length_mm]",
             f"range = {_format_range(spec.terminal_stub_length_mm)}",
-            "[tx_coil.void_usage_ratio]",
-            f"range = {_format_range(spec.void_usage_ratio)}",
+            "[tx_coil.void_factor]",
+            f"range = {_format_range(spec.void_factor)}",
             "[tx_coil.margin_ratio]",
             f"range = {_format_range(spec.margin_ratio)}",
             "[tx_coil.metal_fill_factor]",
             f"range = {_format_range(spec.metal_fill_factor)}",
-            "[tx_coil.terminal_path]",
-            f'value = "{spec.terminal_path}"',
+            "[tx_coil.terminal_start]",
+            f"range = {_format_range(spec.terminal_start)}",
             "",
         )
     )

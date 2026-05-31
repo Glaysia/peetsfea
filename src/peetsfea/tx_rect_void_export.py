@@ -24,7 +24,7 @@ from peetsfea.tx_rect_void_geometry import (
     RectBounds,
     TerminalColumn,
 )
-from peetsfea.tx_rect_void_spec import _parse_terminal_path, load_tx_rect_void_spec, realize_tx_rect_void_spec
+from peetsfea.tx_rect_void_spec import load_tx_rect_void_spec, realize_tx_rect_void_spec
 from peetsfea.tx_rect_void_types import (
     BoxSpec,
     ModeledObjectCanonicalCoordinates,
@@ -37,6 +37,8 @@ from peetsfea.tx_rect_void_types import (
     TX_INNER_SINGLE_COIL_PROFILE,
     TX_SINGLE_COIL_PROFILE,
     TX_PARALLEL_SINGLE_COIL_ROLES,
+    inner_corner_label_for_outer_corner,
+    terminal_path_from_quarter_turns,
 )
 
 _TERMINAL_STUB_SIDE_RATIO = 0.60
@@ -460,17 +462,19 @@ def _central_corridor_bounds_from_copper_primitives(
             # constraints, not above/below blockers for the central corridor.
             continue
 
-    if len(below_blocker_max_y_values) == 0 or len(above_blocker_min_y_values) == 0:
-        raise ValueError(
-            "central corridor requires copper blockers above and below the realized void X strip "
-            f"(below_count={len(below_blocker_max_y_values)}, above_count={len(above_blocker_min_y_values)}, "
-            f"void_bounds={void_bounds})"
-        )
-    corridor_min_y = max(below_blocker_max_y_values)
-    corridor_max_y = min(above_blocker_min_y_values)
+    corridor_min_y = (
+        max(below_blocker_max_y_values)
+        if len(below_blocker_max_y_values) != 0
+        else realized.outer_bounds.min_y
+    )
+    corridor_max_y = (
+        min(above_blocker_min_y_values)
+        if len(above_blocker_min_y_values) != 0
+        else realized.outer_bounds.max_y
+    )
     if corridor_max_y <= corridor_min_y:
         raise ValueError(
-            "central corridor requires positive Y bounds between nearest copper blockers "
+            "central corridor requires positive Y bounds between resolved corridor boundaries "
             f"(min_y={corridor_min_y}, max_y={corridor_max_y}, void_bounds={void_bounds})"
         )
     corridor_bounds = RectBounds(
@@ -530,7 +534,23 @@ def _face_from_polygon_xy(polygon_xy: Polygon2) -> bd.Face:
     wires = tuple(line.wires())
     if len(wires) != 1:
         raise RuntimeError(f"polygon face builder must produce exactly one wire (actual={len(wires)})")
-    return cast(bd.Face, bd.make_face(edges=tuple(wires[0].edges())))
+    return _single_face_from_result(
+        bd.make_face(edges=tuple(wires[0].edges())),
+        context="polygon face builder",
+    )
+
+
+def _single_face_from_result(result: object, *, context: str) -> bd.Face:
+    if isinstance(result, bd.ShapeList):
+        raise RuntimeError(f"{context} returned multiple shapes (result_count={len(result)})")
+    if isinstance(result, bd.Sketch):
+        faces = tuple(result.faces())
+        if len(faces) != 1:
+            raise RuntimeError(f"{context} sketch must contain exactly one face (actual={len(faces)})")
+        return cast(bd.Face, faces[0])
+    if isinstance(result, bd.Face):
+        return result
+    raise TypeError(f"{context} returned unsupported type: {type(result).__name__}")
 
 
 def _plane_for_local_z(
@@ -938,18 +958,14 @@ def _trace_outline_face_from_centerline(
         )
         for segment_index in range(segment_count)
     )
-    fused_face: object = segment_faces[0]
+    fused_face = segment_faces[0]
     for segment_face in segment_faces[1:]:
-        fused_face = cast(bd.Face, fused_face).fuse(segment_face)
-    if isinstance(fused_face, bd.ShapeList):
-        raise RuntimeError(
-            "trace outline face fuse returned multiple shapes "
-            f"(centerline_count={len(centerline)}, segment_count={segment_count}, result_count={len(fused_face)})"
-        )
-    if not isinstance(fused_face, bd.Face):
-        raise TypeError(
-            "trace outline face fuse returned unsupported type "
-            f"(type={type(fused_face).__name__})"
+        fused_face = _single_face_from_result(
+            fused_face.fuse(segment_face),
+            context=(
+                "trace outline face fuse "
+                f"(centerline_count={len(centerline)}, segment_count={segment_count})"
+            ),
         )
     if len(tuple(fused_face.wires())) != 1:
         raise RuntimeError(
@@ -1250,7 +1266,21 @@ def _build_modeled_object_entry(
     placement_offset_xyz: tuple[float, float, float],
     boxes: tuple[BoxSpec, ...],
 ) -> ModeledObjectEntry:
-    terminal_path = _parse_terminal_path(realized.terminal_path)
+    if realized.terminal_direction != "cw":
+        raise ValueError(
+            "single-coil terminal metadata requires fixed cw direction "
+            f"(actual={realized.terminal_direction})"
+        )
+    expected_terminal_path = terminal_path_from_quarter_turns(
+        terminal_start=realized.terminal_start,
+        turn_qcount=realized.turn_qcount,
+    )
+    if realized.terminal_path != expected_terminal_path:
+        raise ValueError(
+            "single-coil realized terminal_path must match derived quarter-turn metadata "
+            f"(expected={expected_terminal_path}, actual={realized.terminal_path})"
+        )
+    terminal_inner_corner = inner_corner_label_for_outer_corner(realized.terminal_end_corner)
     centerline = build_tx_rect_void_centerline(realized)
     world_bounds_min_xyz, world_bounds_max_xyz, world_bounds_size_xyz = modeled_body_bounds_from_boxes(boxes)
     pcb_boxes = tuple(box for box in boxes if box.role == "pcb")
@@ -1301,10 +1331,10 @@ def _build_modeled_object_entry(
             copper_layer_z_positions_mm=copper_layer_world_positions_mm,
         ),
         terminal_metadata=ModeledObjectTerminalMetadata(
-            path=terminal_path.raw,
-            outer_corner=terminal_path.outer_corner,
-            inner_corner=terminal_path.inner_corner,
-            direction=terminal_path.direction,
+            path=realized.terminal_path,
+            outer_corner=realized.terminal_start_corner,
+            inner_corner=terminal_inner_corner,
+            direction=realized.terminal_direction,
             start_point_plane_mm=start_point_plane_mm,
             end_point_plane_mm=end_point_plane_mm,
         ),

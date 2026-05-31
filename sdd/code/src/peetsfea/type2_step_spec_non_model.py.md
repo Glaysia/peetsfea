@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec_non_model.py
 created: 2026-04-20 @ 00:00
-updated: 2026-04-28 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - spec
   - non-model
@@ -23,6 +23,7 @@ tags:
 
 ## Canonical state
 - `tx_region` remains as future placement guide context.
+- `tx_region.z_gap_from_rx_plane_mm` is a required positive float `RangeSpec` owner for TX guide Z placement relative to the shared RX/TV lower-Z plane.
 - `tx_region.tx_reference_line.x_ratio`, `tx_region.tx_reference_line.y_usage_ratio`, and `tx_region.tx_reference_line.z_ratio` are required `RangeSpec` owners for the TX reference-line anchor and inner Y span ratios.
 - TX reference-line ratios remain parser/spec state only in this slice; scene/export code owns realization.
 - RX region/context objects remain available to RX export/setup paths.
@@ -31,7 +32,7 @@ tags:
 ## Invariants / fail-fast
 - Missing required non-model context or unsupported object ids fail immediately.
 - Range owner tables may carry optional `description` metadata next to `range`; malformed descriptions fail immediately but do not become runtime spec state.
-- `tx_region` must contain `tx_reference_line` and that table must contain only `x_ratio`, `y_usage_ratio`, and `z_ratio`.
+- `tx_region` must contain `z_gap_from_rx_plane_mm` plus `tx_reference_line`, and `z_gap_from_rx_plane_mm` candidates must all be strictly positive.
 - TX reference-line X ratio ranges must be float ranges whose realized candidates are strictly inside `(0, 1)`.
 - TX reference-line Z ratio ranges must be float ranges whose realized candidates are in `(0, 1]`.
 - TX inner Y usage ratio range must be a float range whose realized candidates are in `(0, 1]`.

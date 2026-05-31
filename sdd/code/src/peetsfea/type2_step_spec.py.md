@@ -1,7 +1,7 @@
 ---
 title: type2_step_spec.py
 created: 2026-04-17 @ 09:09
-updated: 2026-05-06 @ 00:00
+updated: 2026-05-21 @ 00:00
 tags:
   - step-export
   - spec
@@ -27,10 +27,12 @@ tags:
 - active schema facade는 RX single-coil / RX plate-stack 관련 parsing surface를 유지한다.
 - `tx_region`은 future TX placement guide로만 보존한다.
 - `NonModelTxRegionSpec`과 `NonModelTxReferenceLineSpec`은 facade에서 재노출되어 non-model scene/export가 concrete parser state를 공유한다.
+- `ModeledTxInnerSingleCoilSpec`, `NonModelTxReferenceLineSpec`, and `NonModelTxRegionSpec` are included in the facade export list so scene, sampling, and tests can import the concrete active type2 parser types from one boundary.
 - `tx_region_actual`과 `tx_region_actual_stack_space`는 active RxOnly 입력에서 제거된 TX 형상 파생 객체다.
 - `outputs.mode = "RxOnly"`는 TX port를 만들지 않고 RX 변수만 요청하는 모드다.
 - active modeled object parsing rejects generic/legacy TX modeled roles before downstream sampling/export can treat them as runtime state.
-- `tx_inner_single_coil` is parsed as geometry-only modeled state for STEP export/import, and the facade re-exports its `void_stack_present` resolver as the public switch-sampling surface.
+- `tx_inner_single_coil` is parsed as geometry-only modeled state for STEP export/import, and the facade re-exports the shared single-coil `void_stack_present` resolver as the public switch-sampling surface for TX inner and RX.
+- Single-coil active schema fields exposed through this facade are `x_ratio`, `y_ratio`, `turn_qcount`, `void_factor`, `metal_fill_factor`, `terminal_start`, and `void_stack_present`; legacy `outer_x_usage_ratio`, `outer_y_usage_ratio`, `turn_count`, `void_usage_ratio`, and `terminal_path` fail during load.
 - two-terminal output variable 이름은 [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)에서 shape-independent dormant contract로 보존한다.
 - constraints parsing remains declarative and deterministic.
 
@@ -46,6 +48,7 @@ tags:
 - malformed constraints, duplicate rule ids, unknown owner paths, unsupported functions, and unsupported operators fail during type2 source loading or sampling preflight.
 - Facade re-exports the fixed modeled plate type `ModeledTvAluminumPlateSpec` so downstream entrypoints can reference the fixed role type uniformly with other modeled spec classes.
 - Active modeled TOML parsing in this surface now accepts fixed `tv_aluminum_plate` modeled objects (object_id `tv_aluminum_plate`) through the modeled parser dependency without introducing sampled owner paths.
+- Facade resolver exports include single-coil terminal-start, quarter-turn-count, and void-stack presence helpers so scene/sampling code can derive clockwise terminal metadata without TOML-owned terminal paths.
 
 ## Collaborators
 - [type2_step_spec_non_model.py](type2_step_spec_non_model.py.md)
@@ -55,6 +58,7 @@ tags:
 - [type2_step_spec_constraints.py](type2_step_spec_constraints.py.md)
 - [type2_sampled.py](type2_sampled.py.md)
 - [type2-em-report-contract](../../../architecture/type2-em-report-contract.md)
+- [0.2.25 Type2 Quarter-Turn Single Coil](../../../plans/0.2.25-type2-quarter-turn-single-coil.md)
 - [0.2.24 Type2 TX Outer Single Coil](../../../plans/0.2.24-type2-tx-outer-single-coil.md)
 
 ## 관련 테스트

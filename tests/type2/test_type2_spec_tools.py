@@ -20,8 +20,32 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TYPE2_SWEEP_TOML = REPO_ROOT / "examples" / "type2_sweep.toml"
 TYPE2_FIXED_TOML = REPO_ROOT / "examples" / "type2_fixed.toml"
 TX_INNER_VOID_STACK_OWNER_PATH = "modeled_objects.tx_inner_rect_void_coil.void_stack_present"
+RX_VOID_STACK_OWNER_PATH = "modeled_objects.rx_rect_void_coil.void_stack_present"
 TX_INNER_VOID_STACK_DESCRIPTION = "TX inner 중앙 void stack 생성 여부"
 TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH = "modeled_objects.tv_aluminum_plate.sheet_present"
+TX_REGION_Z_GAP_OWNER_PATH = "non_model_objects.tx_region.z_gap_from_rx_plane_mm"
+TX_REFERENCE_LINE_Y_OWNER_PATH = "non_model_objects.tx_region.tx_reference_line.y_usage_ratio"
+TX_REFERENCE_LINE_Z_OWNER_PATH = "non_model_objects.tx_region.tx_reference_line.z_ratio"
+EXPECTED_SWEEP_SAMPLED_OWNER_PATHS = (
+    TX_REGION_Z_GAP_OWNER_PATH,
+    TX_REFERENCE_LINE_Y_OWNER_PATH,
+    TX_REFERENCE_LINE_Z_OWNER_PATH,
+    "modeled_objects.tx_inner_rect_void_coil.x_ratio",
+    "modeled_objects.tx_inner_rect_void_coil.y_ratio",
+    "modeled_objects.tx_inner_rect_void_coil.turn_qcount",
+    "modeled_objects.tx_inner_rect_void_coil.void_factor",
+    "modeled_objects.tx_inner_rect_void_coil.metal_fill_factor",
+    "modeled_objects.tx_inner_rect_void_coil.terminal_start",
+    TX_INNER_VOID_STACK_OWNER_PATH,
+    "modeled_objects.rx_rect_void_coil.x_ratio",
+    "modeled_objects.rx_rect_void_coil.y_ratio",
+    "modeled_objects.rx_rect_void_coil.turn_qcount",
+    "modeled_objects.rx_rect_void_coil.void_factor",
+    "modeled_objects.rx_rect_void_coil.metal_fill_factor",
+    "modeled_objects.rx_rect_void_coil.terminal_start",
+    RX_VOID_STACK_OWNER_PATH,
+    TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH,
+)
 
 
 def _load_type2_spec_tools() -> ModuleType:
@@ -192,11 +216,27 @@ def test_type2_sampled_toml_from_values_renders_loadable_toml(tmp_path: Path) ->
     )
     sampled_tv_sheet_present_range = sampled_tv_sheet_present["range"]
     assert isinstance(sampled_tv_sheet_present_range, list)
+    sampled_tx_region_z_gap = _range_owner_field_from_path(
+        raw_sampled_spec,
+        owner_path=TX_REGION_Z_GAP_OWNER_PATH,
+    )
+    sampled_tx_region_z_gap_range = sampled_tx_region_z_gap["range"]
+    assert isinstance(sampled_tx_region_z_gap_range, list)
 
     assert len(sampled_spec.modeled_objects) == len(source_spec.modeled_objects)
     assert sampled_owner_path_strings == list(owner_values)
+    assert TX_REGION_Z_GAP_OWNER_PATH in sampled_owner_path_strings
     assert TX_INNER_VOID_STACK_OWNER_PATH in sampled_owner_path_strings
+    assert RX_VOID_STACK_OWNER_PATH in sampled_owner_path_strings
     assert TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH in sampled_owner_path_strings
+    assert TX_REFERENCE_LINE_Y_OWNER_PATH in sampled_owner_path_strings
+    assert TX_REFERENCE_LINE_Z_OWNER_PATH in sampled_owner_path_strings
+    assert sampled_tx_region_z_gap_range == [
+        False,
+        owner_values[TX_REGION_Z_GAP_OWNER_PATH],
+        owner_values[TX_REGION_Z_GAP_OWNER_PATH],
+        1,
+    ]
     assert sampled_void_stack_range == [
         True,
         owner_values[TX_INNER_VOID_STACK_OWNER_PATH],
@@ -253,13 +293,18 @@ def test_type2_range_owner_descriptions_for_official_sweep_example() -> None:
     _assert_complete_range_owner_descriptions(TYPE2_SWEEP_TOML)
 
 
-def test_type2_sweep_has_14_sampled_dimensions_including_tv_aluminum_sheet_present() -> None:
+def test_type2_sweep_has_quarter_turn_sampled_dimensions_with_sampled_tv_and_reference_line_owners() -> None:
     owner_values = _sampled_owner_value_mapping(load_type2_step_spec(TYPE2_SWEEP_TOML), seed=0)
 
-    assert len(owner_values) == 14
+    assert tuple(owner_values) == EXPECTED_SWEEP_SAMPLED_OWNER_PATHS
+    assert len(owner_values) == 18
+    assert TX_REGION_Z_GAP_OWNER_PATH in owner_values
+    assert 45.0 <= float(owner_values[TX_REGION_Z_GAP_OWNER_PATH]) <= 130.0
+    assert TX_INNER_VOID_STACK_OWNER_PATH in owner_values
+    assert RX_VOID_STACK_OWNER_PATH in owner_values
     assert TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH in owner_values
-    assert owner_values[TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH] in {0, 1}
-    assert isinstance(owner_values[TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH], int)
+    assert TX_REFERENCE_LINE_Y_OWNER_PATH in owner_values
+    assert TX_REFERENCE_LINE_Z_OWNER_PATH in owner_values
 
 
 def test_type2_range_owner_descriptions_for_fixed_official_example() -> None:
@@ -311,7 +356,10 @@ def test_type2_range_owner_descriptions_accept_generated_sampled_toml_for_notebo
     descriptions = cast(dict[str, str], tools.type2_range_owner_descriptions(sampled_toml_path))
 
     assert TX_INNER_VOID_STACK_OWNER_PATH in sampled_owner_path_strings
+    assert RX_VOID_STACK_OWNER_PATH in sampled_owner_path_strings
     assert TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH in sampled_owner_path_strings
+    assert TX_REFERENCE_LINE_Y_OWNER_PATH in sampled_owner_path_strings
+    assert TX_REFERENCE_LINE_Z_OWNER_PATH in sampled_owner_path_strings
     assert sampled_void_stack_range == [
         True,
         owner_values[TX_INNER_VOID_STACK_OWNER_PATH],
@@ -320,8 +368,8 @@ def test_type2_range_owner_descriptions_accept_generated_sampled_toml_for_notebo
     ]
     assert sampled_tv_sheet_present_range == [
         True,
-        owner_values[TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH],
-        owner_values[TV_ALUMINUM_SHEET_PRESENT_OWNER_PATH],
+        0,
+        0,
         1,
     ]
     assert all(
@@ -352,13 +400,13 @@ def test_tx_inner_terminal_stub_length_mm_is_fixed_to_7_5_mm(example_toml: Path)
             "must provide a non-empty description",
         ),
         (
-            "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
+            "modeled_objects.rx_rect_void_coil.x_ratio",
             "empty",
             ValueError,
             "must be non-empty",
         ),
         (
-            "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
+            "modeled_objects.rx_rect_void_coil.y_ratio",
             "nonstr",
             TypeError,
             "must be str",
@@ -391,7 +439,7 @@ def test_load_type2_step_spec_rejects_constraint_unknown_tx_inner_owner(tmp_path
 id = "bad_tx_inner_owner"
 kind = "comparison"
 message = "invalid tx inner owner must fail"
-lhs = { path = "modeled_objects.not_tx_inner_rect_void_coil.outer_x_usage_ratio" }
+lhs = { path = "modeled_objects.not_tx_inner_rect_void_coil.x_ratio" }
 op = ">="
 rhs = { value = 0.1 }
 """,
@@ -409,7 +457,7 @@ def test_load_type2_step_spec_rejects_unknown_constraint_function(tmp_path: Path
 id = "bad_function"
 kind = "comparison"
 message = "unknown function must fail"
-lhs = { func = "mean(modeled_objects.tx_inner_rect_void_coil.outer_x_usage_ratio)" }
+lhs = { func = "mean(modeled_objects.tx_inner_rect_void_coil.x_ratio)" }
 op = ">="
 rhs = { value = 0.1 }
 """,

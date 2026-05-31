@@ -557,6 +557,7 @@ def resolve_non_model_scene_specs(
             "tx_outer_actual_region must be resolved from tx_outer_region and tx_outer_single_coil sizing; "
             "base non-model box specs for tx_outer_actual_region are unsupported"
         )
+    base_specs = _resolved_base_specs_with_tx_region_z_gap(base_specs=base_specs, seed=seed)
     resolved_specs = list(base_specs)
     tx_region_spec = require_non_model_object_spec(base_specs, object_id=_TX_INNER_REGION_SOURCE_REGION_ID)
     tx_inner_region_resolved = isinstance(tx_region_spec, NonModelTxRegionSpec)
@@ -711,11 +712,11 @@ def _resolved_tx_inner_actual_region_spec_from_tx_inner_region(
         owner_spec=tx_inner_region_spec,
         seed=seed,
     )
-    x_usage_ratio_owner_path = f"modeled_objects.{tx_inner_single_coil_spec.object_id}.outer_x_usage_ratio"
-    y_usage_ratio_owner_path = f"modeled_objects.{tx_inner_single_coil_spec.object_id}.outer_y_usage_ratio"
+    x_usage_ratio_owner_path = f"modeled_objects.{tx_inner_single_coil_spec.object_id}.x_ratio"
+    y_usage_ratio_owner_path = f"modeled_objects.{tx_inner_single_coil_spec.object_id}.y_ratio"
     x_usage_ratio = _validated_tx_actual_region_usage_ratio(
         ratio=_selected_float_candidate(
-            range_spec=tx_inner_single_coil_spec.outer_x_usage_ratio,
+            range_spec=tx_inner_single_coil_spec.x_ratio,
             owner_path=x_usage_ratio_owner_path,
             seed=seed,
         ),
@@ -723,7 +724,7 @@ def _resolved_tx_inner_actual_region_spec_from_tx_inner_region(
     )
     y_usage_ratio = _validated_tx_actual_region_usage_ratio(
         ratio=_selected_float_candidate(
-            range_spec=tx_inner_single_coil_spec.outer_y_usage_ratio,
+            range_spec=tx_inner_single_coil_spec.y_ratio,
             owner_path=y_usage_ratio_owner_path,
             seed=seed,
         ),
@@ -781,11 +782,11 @@ def _resolved_tx_outer_actual_region_spec_from_tx_outer_region(
         owner_spec=tx_outer_region_spec,
         seed=seed,
     )
-    x_usage_ratio_owner_path = f"modeled_objects.{tx_outer_single_coil_spec.object_id}.outer_x_usage_ratio"
-    y_usage_ratio_owner_path = f"modeled_objects.{tx_outer_single_coil_spec.object_id}.outer_y_usage_ratio"
+    x_usage_ratio_owner_path = f"modeled_objects.{tx_outer_single_coil_spec.object_id}.x_ratio"
+    y_usage_ratio_owner_path = f"modeled_objects.{tx_outer_single_coil_spec.object_id}.y_ratio"
     x_usage_ratio = _validated_tx_actual_region_usage_ratio(
         ratio=_selected_float_candidate(
-            range_spec=tx_outer_single_coil_spec.outer_x_usage_ratio,
+            range_spec=tx_outer_single_coil_spec.x_ratio,
             owner_path=x_usage_ratio_owner_path,
             seed=seed,
         ),
@@ -793,7 +794,7 @@ def _resolved_tx_outer_actual_region_spec_from_tx_outer_region(
     )
     y_usage_ratio = _validated_tx_actual_region_usage_ratio(
         ratio=_selected_float_candidate(
-            range_spec=tx_outer_single_coil_spec.outer_y_usage_ratio,
+            range_spec=tx_outer_single_coil_spec.y_ratio,
             owner_path=y_usage_ratio_owner_path,
             seed=seed,
         ),
@@ -913,6 +914,94 @@ def _validated_tx_inner_region_y_usage_ratio(*, ratio: float, owner_path: str) -
     if ratio <= 0.0 or ratio > 1.0:
         raise RuntimeError(f"{owner_path} must resolve in (0, 1] (actual={ratio})")
     return ratio
+
+
+def _validated_tx_region_z_gap_mm(*, z_gap_mm: float, owner_path: str) -> float:
+    if not math.isfinite(z_gap_mm):
+        raise RuntimeError(f"{owner_path} must resolve to a finite distance (actual={z_gap_mm})")
+    if z_gap_mm <= 0.0:
+        raise RuntimeError(f"{owner_path} must resolve to a distance > 0 (actual={z_gap_mm})")
+    return z_gap_mm
+
+
+def _tx_region_z_reference_lower_z(
+    *,
+    tv_spec: NonModelBoxSpec,
+    rx_region_max_spec: NonModelBoxSpec,
+) -> float:
+    tv_lower_z = tv_spec.origin_xyz[2]
+    rx_lower_z = rx_region_max_spec.origin_xyz[2]
+    if not math.isclose(tv_lower_z, rx_lower_z, rel_tol=0.0, abs_tol=1e-9):
+        raise RuntimeError(
+            "tx_region z-gap reference requires matching tv and rx_region_max lower-Z planes "
+            f"(tv_lower_z={tv_lower_z}, rx_region_max_lower_z={rx_lower_z})"
+        )
+    return tv_lower_z
+
+
+def _resolved_tx_region_spec_with_z_gap(
+    *,
+    tx_region_spec: NonModelTxRegionSpec,
+    tv_spec: NonModelBoxSpec,
+    rx_region_max_spec: NonModelBoxSpec,
+    seed: int,
+) -> NonModelTxRegionSpec:
+    z_gap_mm = _validated_tx_region_z_gap_mm(
+        z_gap_mm=_selected_float_candidate(
+            range_spec=tx_region_spec.z_gap_from_rx_plane_mm,
+            owner_path="non_model_objects.tx_region.z_gap_from_rx_plane_mm",
+            seed=seed,
+        ),
+        owner_path="non_model_objects.tx_region.z_gap_from_rx_plane_mm",
+    )
+    reference_lower_z = _tx_region_z_reference_lower_z(
+        tv_spec=tv_spec,
+        rx_region_max_spec=rx_region_max_spec,
+    )
+    origin_x, origin_y, _origin_z = tx_region_spec.origin_xyz
+    size_x, size_y, size_z = tx_region_spec.size_xyz
+    resolved_origin_z = reference_lower_z - z_gap_mm - size_z
+    return NonModelTxRegionSpec(
+        object_id="tx_region",
+        kind="tx_region",
+        primitive="box",
+        present=True,
+        non_model=True,
+        material=tx_region_spec.material,
+        plane=tx_region_spec.plane,
+        origin_xyz=(origin_x, origin_y, resolved_origin_z),
+        size_xyz=(size_x, size_y, size_z),
+        z_gap_from_rx_plane_mm=tx_region_spec.z_gap_from_rx_plane_mm,
+        tx_reference_line=tx_region_spec.tx_reference_line,
+    )
+
+
+def _resolved_base_specs_with_tx_region_z_gap(
+    *,
+    base_specs: tuple[NonModelBoxSpec, ...],
+    seed: int,
+) -> tuple[NonModelBoxSpec, ...]:
+    tx_region_spec = require_non_model_object_spec(base_specs, object_id=_TX_INNER_REGION_SOURCE_REGION_ID)
+    if not isinstance(tx_region_spec, NonModelTxRegionSpec):
+        raise RuntimeError(
+            "tx_region z-gap resolution requires parsed NonModelTxRegionSpec with z_gap_from_rx_plane_mm "
+            f"(actual={type(tx_region_spec).__name__})"
+        )
+    tv_spec = require_non_model_object_spec(base_specs, object_id="tv")
+    rx_region_max_spec = require_non_model_object_spec(base_specs, object_id="rx_region_max")
+    resolved_tx_region_spec = _resolved_tx_region_spec_with_z_gap(
+        tx_region_spec=tx_region_spec,
+        tv_spec=tv_spec,
+        rx_region_max_spec=rx_region_max_spec,
+        seed=seed,
+    )
+    resolved_specs: list[NonModelBoxSpec] = []
+    for base_spec in base_specs:
+        if base_spec.object_id == _TX_INNER_REGION_SOURCE_REGION_ID:
+            resolved_specs.append(resolved_tx_region_spec)
+            continue
+        resolved_specs.append(base_spec)
+    return tuple(resolved_specs)
 
 
 def _resolved_tx_inner_region_spec_from_tx_region_spec(

@@ -23,7 +23,8 @@ _UNDERLAY_REPEAT_COUNT_CANDIDATES = (0, 2, 4, 6, 8)
 _UNDERLAY_REPEAT_COUNT_FIXED_CANDIDATES = (0, 1, 2, 4, 6, 8)
 _TX_UNDERLAY_GAP_MM_CANDIDATES = (1.0, 4.0, 7.0, 10.0)
 _TX_WALL_PARALLEL_STACK_PRESENT_CANDIDATES = (0, 1)
-_TX_INNER_VOID_STACK_PRESENT_CANDIDATES = (0, 1)
+_SINGLE_COIL_VOID_STACK_PRESENT_CANDIDATES = (0, 1)
+_SINGLE_COIL_TERMINAL_START_CANDIDATES = (0, 1, 2, 3)
 _TV_ALUMINUM_SHEET_PRESENT_CANDIDATES = (0, 1)
 _TX_PLATE_STACK_COIL_COUNT_CANDIDATES = (1, 2, 3, 4)
 _TX_PLATE_STACK_ARRAY_X_USAGE_RATIO_START = 0.1
@@ -100,6 +101,7 @@ class NonModelTxReferenceLineSpec:
 class NonModelTxRegionSpec(NonModelBoxSpec):
     object_id: Literal["tx_region"]
     kind: Literal["tx_region"]
+    z_gap_from_rx_plane_mm: RangeSpec
     tx_reference_line: NonModelTxReferenceLineSpec
 
 
@@ -169,20 +171,21 @@ class ModeledSingleCoilCommonSpec:
     model_state: Literal[True]
     pcb_thickness_mm: float
     copper_thickness_mm: float
-    outer_x_usage_ratio: RangeSpec
-    outer_y_usage_ratio: RangeSpec
+    x_ratio: RangeSpec
+    y_ratio: RangeSpec
     x_position_ratio: RangeSpec
     outer_x_mm: RangeSpec
     outer_y_mm: RangeSpec
-    turn_count: RangeSpec
+    turn_qcount: RangeSpec
     layer_count: RangeSpec
     underlay_repeat_count: RangeSpec
     layer_gap_mm: RangeSpec
     terminal_stub_length_mm: RangeSpec
-    void_usage_ratio: RangeSpec
+    void_factor: RangeSpec
     margin_ratio: RangeSpec
     metal_fill_factor: RangeSpec
-    terminal_path: str
+    terminal_start: RangeSpec
+    void_stack_present: RangeSpec
 
 
 @dataclass(frozen=True)
@@ -195,7 +198,6 @@ class ModeledTxSingleCoilSpec(ModeledSingleCoilCommonSpec):
 @dataclass(frozen=True)
 class ModeledTxInnerSingleCoilSpec(ModeledSingleCoilCommonSpec):
     role: Literal["tx_inner_single_coil"]
-    void_stack_present: RangeSpec
     underlay_pet_psa_thickness_mm: RangeSpec
     underlay_ferrite_thickness_mm: RangeSpec
 

@@ -25,16 +25,21 @@ from peetsfea.type2_step_spec import Type2StepSpec
 from peetsfea.type2_step_spec import load_type2_step_spec
 
 _EXPECTED_SAMPLED_OWNER_PATHS = [
-    "non_model_objects.tx_region.tx_reference_line.y_usage_ratio",
-    "non_model_objects.tx_region.tx_reference_line.z_ratio",
-    "modeled_objects.tx_inner_rect_void_coil.outer_y_usage_ratio",
+    "non_model_objects.tx_region.z_gap_from_rx_plane_mm",
+    "modeled_objects.tx_inner_rect_void_coil.x_ratio",
+    "modeled_objects.tx_inner_rect_void_coil.y_ratio",
+    "modeled_objects.tx_inner_rect_void_coil.turn_qcount",
+    "modeled_objects.tx_inner_rect_void_coil.void_factor",
+    "modeled_objects.tx_inner_rect_void_coil.metal_fill_factor",
+    "modeled_objects.tx_inner_rect_void_coil.terminal_start",
     "modeled_objects.tx_inner_rect_void_coil.void_stack_present",
-    "modeled_objects.rx_rect_void_coil.outer_x_usage_ratio",
-    "modeled_objects.rx_rect_void_coil.outer_y_usage_ratio",
-    "modeled_objects.rx_rect_void_coil.void_usage_ratio",
-    "modeled_objects.rx_rect_void_coil.turn_count",
+    "modeled_objects.rx_rect_void_coil.x_ratio",
+    "modeled_objects.rx_rect_void_coil.y_ratio",
+    "modeled_objects.rx_rect_void_coil.turn_qcount",
+    "modeled_objects.rx_rect_void_coil.void_factor",
     "modeled_objects.rx_rect_void_coil.metal_fill_factor",
-    "modeled_objects.tv_aluminum_plate.sheet_present",
+    "modeled_objects.rx_rect_void_coil.terminal_start",
+    "modeled_objects.rx_rect_void_coil.void_stack_present",
 ]
 _RX_NON_SAMPLED_OWNER_PATHS = [
     "modeled_objects.rx_rect_void_coil.layer_count",
@@ -78,12 +83,12 @@ def _tx_inner_single_coil_spec() -> ModeledTxInnerSingleCoilSpec:
         model_state=True,
         pcb_thickness_mm=0.3,
         copper_thickness_mm=0.035,
-        outer_x_usage_ratio=_range_spec(False, 0.2, 0.8, 7),
-        outer_y_usage_ratio=_range_spec(False, 0.2, 0.8, 7),
+        x_ratio=_range_spec(False, 0.2, 0.8, 7),
+        y_ratio=_range_spec(False, 0.2, 0.8, 7),
         outer_x_mm=_range_spec(False, 100.0, 100.0, 1),
         outer_y_mm=_range_spec(False, 80.0, 80.0, 1),
-        void_usage_ratio=_range_spec(False, 0.3, 0.3, 1),
-        turn_count=_range_spec(True, 2.0, 5.0, 4),
+        void_factor=_range_spec(False, 0.3, 0.3, 1),
+        turn_qcount=_range_spec(True, 8.0, 20.0, 13),
         layer_count=_range_spec(True, 1.0, 1.0, 1),
         underlay_repeat_count=fixed_one,
         void_stack_present=fixed_void_stack_present,
@@ -93,7 +98,7 @@ def _tx_inner_single_coil_spec() -> ModeledTxInnerSingleCoilSpec:
         terminal_stub_length_mm=_range_spec(False, 5.0, 5.0, 1),
         margin_ratio=_range_spec(False, 0.05, 0.05, 1),
         metal_fill_factor=fixed_float,
-        terminal_path="B_cw_to_b",
+        terminal_start=_range_spec(True, 0.0, 3.0, 4),
         x_position_ratio=_range_spec(False, 0.0, 0.0, 1),
     )
 
@@ -109,9 +114,10 @@ def test_exportable_sampled_owner_paths_exclude_tx_outer_derived_owners() -> Non
 
     owner_paths = type2_sampled.exportable_sampled_owner_paths_for_seed(cast(Type2StepSpec, spec), seed=11)
 
-    assert "modeled_objects.tx_inner_rect_void_coil.outer_x_usage_ratio" in owner_paths
-    assert "modeled_objects.tx_inner_rect_void_coil.outer_y_usage_ratio" in owner_paths
-    assert "modeled_objects.tx_inner_rect_void_coil.turn_count" in owner_paths
+    assert "modeled_objects.tx_inner_rect_void_coil.x_ratio" in owner_paths
+    assert "modeled_objects.tx_inner_rect_void_coil.y_ratio" in owner_paths
+    assert "modeled_objects.tx_inner_rect_void_coil.turn_qcount" in owner_paths
+    assert "modeled_objects.tx_inner_rect_void_coil.terminal_start" in owner_paths
     assert "modeled_objects.tx_inner_rect_void_coil.x_position_ratio" not in owner_paths
     assert all(not owner_path.startswith("modeled_objects.tx_outer_rect_void_coil.") for owner_path in owner_paths)
 
@@ -127,17 +133,25 @@ def _patch_rx_only_spec_loader(
     rx_void_usage_ratio = RangeSpec(is_integer=False, start=0.1, end=0.6, count=17)
     rx_outer_x = RangeSpec(is_integer=False, start=20.0, end=120.0, count=17)
     rx_outer_y = RangeSpec(is_integer=False, start=20.0, end=120.0, count=17)
-    rx_turn_count = RangeSpec(is_integer=True, start=2.0, end=5.0, count=4)
+    rx_turn_count = RangeSpec(is_integer=True, start=3.0, end=7.0, count=5)
     rx_layer_count = RangeSpec(is_integer=True, start=1.0, end=1.0, count=1)
     rx_underlay_repeat_count = RangeSpec(is_integer=True, start=8.0, end=8.0, count=1)
     rx_layer_gap = RangeSpec(is_integer=False, start=2.0, end=2.0, count=1)
     rx_terminal_stub = RangeSpec(is_integer=False, start=5.0, end=5.0, count=1)
     rx_margin_ratio = RangeSpec(is_integer=False, start=0.05, end=0.05, count=1)
     rx_fill_factor = RangeSpec(is_integer=False, start=0.2, end=0.6, count=15)
+    rx_terminal_start = RangeSpec(is_integer=True, start=0.0, end=3.0, count=4)
+    rx_void_stack_present = RangeSpec(is_integer=True, start=0.0, end=1.0, count=2)
     tx_inner_underlay_thickness = RangeSpec(is_integer=False, start=6.0, end=6.0, count=1)
+    tx_inner_terminal_start = RangeSpec(is_integer=True, start=0.0, end=3.0, count=4)
+    tx_region_z_gap = RangeSpec(is_integer=False, start=45.0, end=130.0, count=17)
     tx_reference_line_x_ratio = RangeSpec(is_integer=False, start=0.99, end=0.99, count=1)
-    tx_reference_line_y_usage_ratio = RangeSpec(is_integer=False, start=0.2, end=1.0, count=17)
-    tx_reference_line_z_ratio = RangeSpec(is_integer=False, start=0.75, end=1.0, count=13)
+    tx_reference_line_y_usage_ratio = RangeSpec(
+        is_integer=False, start=0.8373223833460517, end=0.8373223833460517, count=1
+    )
+    tx_reference_line_z_ratio = RangeSpec(
+        is_integer=False, start=0.9641454961430692, end=0.9641454961430692, count=1
+    )
 
     fake_spec = _FakeRxOnlyType2Spec(
         non_model_objects=(
@@ -151,6 +165,7 @@ def _patch_rx_only_spec_loader(
                 plane="YZ",
                 origin_xyz=(0.0, -140.0, 0.0),
                 size_xyz=(160.0, 280.0, 90.0),
+                z_gap_from_rx_plane_mm=tx_region_z_gap,
                 tx_reference_line=NonModelTxReferenceLineSpec(
                     x_ratio=tx_reference_line_x_ratio,
                     y_usage_ratio=tx_reference_line_y_usage_ratio,
@@ -167,12 +182,12 @@ def _patch_rx_only_spec_loader(
                 model_state=True,
                 pcb_thickness_mm=0.3,
                 copper_thickness_mm=0.035,
-                outer_x_usage_ratio=RangeSpec(is_integer=False, start=0.5, end=0.5, count=1),
-                outer_y_usage_ratio=RangeSpec(is_integer=False, start=0.2, end=0.9, count=15),
+                x_ratio=RangeSpec(is_integer=False, start=0.4, end=0.9, count=75),
+                y_ratio=RangeSpec(is_integer=False, start=0.2, end=0.9, count=150),
                 outer_x_mm=RangeSpec(is_integer=False, start=100.0, end=100.0, count=1),
                 outer_y_mm=RangeSpec(is_integer=False, start=80.0, end=80.0, count=1),
-                void_usage_ratio=RangeSpec(is_integer=False, start=0.2, end=0.2, count=1),
-                turn_count=RangeSpec(is_integer=True, start=2.0, end=2.0, count=1),
+                void_factor=RangeSpec(is_integer=False, start=0.08, end=0.8, count=125),
+                turn_qcount=RangeSpec(is_integer=True, start=3.0, end=7.0, count=5),
                 layer_count=RangeSpec(is_integer=True, start=1.0, end=1.0, count=1),
                 underlay_repeat_count=RangeSpec(is_integer=True, start=1.0, end=1.0, count=1),
                 void_stack_present=RangeSpec(is_integer=True, start=0.0, end=1.0, count=2),
@@ -181,8 +196,8 @@ def _patch_rx_only_spec_loader(
                 layer_gap_mm=RangeSpec(is_integer=False, start=2.0, end=2.0, count=1),
                 terminal_stub_length_mm=RangeSpec(is_integer=False, start=7.5, end=7.5, count=1),
                 margin_ratio=RangeSpec(is_integer=False, start=0.05, end=0.05, count=1),
-                metal_fill_factor=RangeSpec(is_integer=False, start=0.5, end=0.5, count=1),
-                terminal_path="B_cw_to_b",
+                metal_fill_factor=RangeSpec(is_integer=False, start=0.2, end=0.6, count=75),
+                terminal_start=tx_inner_terminal_start,
                 x_position_ratio=RangeSpec(is_integer=False, start=0.0, end=0.0, count=1),
             ),
             ModeledRxSingleCoilSpec(
@@ -192,19 +207,20 @@ def _patch_rx_only_spec_loader(
                 model_state=True,
                 pcb_thickness_mm=3.965,
                 copper_thickness_mm=0.035,
-                outer_x_usage_ratio=rx_outer_x_usage_ratio,
-                outer_y_usage_ratio=rx_outer_y_usage_ratio,
-                void_usage_ratio=rx_void_usage_ratio,
+                x_ratio=rx_outer_x_usage_ratio,
+                y_ratio=rx_outer_y_usage_ratio,
+                void_factor=rx_void_usage_ratio,
                 outer_x_mm=rx_outer_x,
                 outer_y_mm=rx_outer_y,
-                turn_count=rx_turn_count,
+                turn_qcount=rx_turn_count,
                 layer_count=rx_layer_count,
                 underlay_repeat_count=rx_underlay_repeat_count,
                 layer_gap_mm=rx_layer_gap,
                 terminal_stub_length_mm=rx_terminal_stub,
                 margin_ratio=rx_margin_ratio,
                 metal_fill_factor=rx_fill_factor,
-                terminal_path="A_cw_to_a",
+                terminal_start=rx_terminal_start,
+                void_stack_present=rx_void_stack_present,
                 x_position_ratio=RangeSpec(is_integer=False, start=0.0, end=0.0, count=1),
             ),
             _FakeTvAluminumPlateSpec(
@@ -216,7 +232,7 @@ def _patch_rx_only_spec_loader(
                 source_non_model_object_id="tv",
                 face="+x",
                 thickness_mm=0.04,
-                sheet_present=RangeSpec(is_integer=True, start=0.0, end=1.0, count=2),
+                sheet_present=RangeSpec(is_integer=True, start=0.0, end=0.0, count=1),
             ),
         )
     )
@@ -301,7 +317,7 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "YZ"
-origin_xyz = [0.0, -5.0, 5.0]
+origin_xyz = [0.0, -5.0, 0.0]
 size_xyz = [1.0, 10.0, 4.0]
 
 [[non_model_objects]]
@@ -314,12 +330,14 @@ material = "vacuum"
 plane = "YZ"
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
+[non_model_objects.z_gap_from_rx_plane_mm]
+range = [false, 45.0, 130.0, 17]
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.99, 0.99, 1]
 [non_model_objects.tx_reference_line.y_usage_ratio]
-range = [false, 0.2, 1.0, 85]
+range = [false, 0.83732238334605169, 0.83732238334605169, 1]
 [non_model_objects.tx_reference_line.z_ratio]
-range = [false, 0.75, 1.0, 65]
+range = [false, 0.96414549614306921, 0.96414549614306921, 1]
 
 [[non_model_objects]]
 id = "rx_region_max"
@@ -339,18 +357,18 @@ size_xyz = [10.0, 200.0, 200.0]
     model_state = true
     pcb_thickness_mm = 0.3
     copper_thickness_mm = 0.035
-    [modeled_objects.outer_x_usage_ratio]
-    range = [false, 0.5, 0.5, 1]
-    [modeled_objects.outer_y_usage_ratio]
+    [modeled_objects.x_ratio]
+    range = [false, 0.4, 0.9, 75]
+    [modeled_objects.y_ratio]
     range = [false, 0.2, 0.9, 150]
     [modeled_objects.x_position_ratio]
     range = [false, 0.0, 0.0, 1]
-    [modeled_objects.turn_count]
-    range = [true, 2, 2, 1]
+    [modeled_objects.turn_qcount]
+    range = [true, 3, 7, 5]
     [modeled_objects.layer_count]
-    range = [true, 2, 2, 1]
+    range = [true, 1, 1, 1]
     [modeled_objects.underlay_repeat_count]
-    range = [true, 0, 0, 1]
+    range = [true, 1, 1, 1]
     [modeled_objects.void_stack_present]
     range = [true, 0, 1, 2]
     [modeled_objects.layer_gap_mm]
@@ -360,11 +378,11 @@ size_xyz = [10.0, 200.0, 200.0]
     [modeled_objects.margin_ratio]
     range = [false, 0.05, 0.05, 1]
     [modeled_objects.metal_fill_factor]
-    range = [false, 0.5, 0.5, 1]
-    [modeled_objects.void_usage_ratio]
-    range = [false, 0.2, 0.2, 1]
-    [modeled_objects.terminal_path]
-    value = "B_cw_to_b"
+    range = [false, 0.2, 0.6, 75]
+    [modeled_objects.void_factor]
+    range = [false, 0.08, 0.8, 125]
+    [modeled_objects.terminal_start]
+    range = [true, 0, 3, 4]
 
 [[modeled_objects]]
     object_id = "rx_rect_void_coil"
@@ -373,16 +391,16 @@ size_xyz = [10.0, 200.0, 200.0]
     model_state = true
     pcb_thickness_mm = 3.965
     copper_thickness_mm = 0.035
-    [modeled_objects.outer_x_usage_ratio]
+    [modeled_objects.x_ratio]
     range = [false, 0.1, 0.6, 85]
-    [modeled_objects.outer_y_usage_ratio]
+    [modeled_objects.y_ratio]
     range = [false, 0.1, 0.6, 85]
     [modeled_objects.x_position_ratio]
     range = [false, 0.0, 0.0, 1]
-    [modeled_objects.void_usage_ratio]
+    [modeled_objects.void_factor]
     range = [false, 0.1, 0.6, 85]
-    [modeled_objects.turn_count]
-    range = [true, 2, 5, 4]
+    [modeled_objects.turn_qcount]
+    range = [true, 3, 7, 5]
     [modeled_objects.layer_count]
     range = [true, 1, 1, 1]
     [modeled_objects.underlay_repeat_count]
@@ -395,8 +413,10 @@ size_xyz = [10.0, 200.0, 200.0]
     range = [false, 0.05, 0.05, 1]
     [modeled_objects.metal_fill_factor]
     range = [false, 0.2, 0.6, 75]
-    [modeled_objects.terminal_path]
-    value = "A_cw_to_a"
+    [modeled_objects.terminal_start]
+    range = [true, 0, 3, 4]
+    [modeled_objects.void_stack_present]
+    range = [true, 0, 1, 2]
 
 [[modeled_objects]]
     object_id = "tv_aluminum_plate"
@@ -408,7 +428,7 @@ size_xyz = [10.0, 200.0, 200.0]
     face = "+x"
     thickness_mm = 0.04
     [modeled_objects.sheet_present]
-    range = [true, 0, 1, 2]
+    range = [true, 0, 0, 1]
 """.strip()
 
 
@@ -433,10 +453,10 @@ def test_load_type2_step_spec_rejects_tx_inner_x_position_ratio_non_fixed_zero(
 ) -> None:
     fixed_block = """    [modeled_objects.x_position_ratio]
     range = [false, 0.0, 0.0, 1]
-    [modeled_objects.turn_count]"""
+    [modeled_objects.turn_qcount]"""
     invalid_block = f"""    [modeled_objects.x_position_ratio]
     {range_line}
-    [modeled_objects.turn_count]"""
+    [modeled_objects.turn_qcount]"""
     source_toml_path = tmp_path / "type2_invalid_tx_inner_x_position.toml"
     source_toml_path.write_text(
         _source_type2_toml_text().replace(fixed_block, invalid_block, 1),
@@ -752,6 +772,13 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
 
     non_model_objects = cast(list[dict[str, object]], sampled_payload["non_model_objects"])
     tx_region_object = next(non_model for non_model in non_model_objects if non_model["id"] == "tx_region")
+    tx_region_z_gap_range = cast(
+        list[object], cast(dict[str, object], tx_region_object["z_gap_from_rx_plane_mm"])["range"]
+    )
+    assert tx_region_z_gap_range[0] is False
+    assert tx_region_z_gap_range[3] == 1
+    assert tx_region_z_gap_range[1] == tx_region_z_gap_range[2]
+    assert 45.0 <= float(cast(int | float, tx_region_z_gap_range[1])) <= 130.0
     tx_reference_line = cast(dict[str, object], tx_region_object["tx_reference_line"])
     tx_reference_line_x_range = cast(list[object], cast(dict[str, object], tx_reference_line["x_ratio"])["range"])
     assert tx_reference_line_x_range[0] is False
@@ -764,19 +791,19 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert tx_reference_line_y_range[0] is False
     assert tx_reference_line_y_range[3] == 1
     assert tx_reference_line_y_range[1] == tx_reference_line_y_range[2]
-    assert 0.2 <= float(cast(int | float, tx_reference_line_y_range[1])) <= 1.0
+    assert float(cast(int | float, tx_reference_line_y_range[1])) == pytest.approx(0.8373223833460517)
     tx_reference_line_z_range = cast(list[object], cast(dict[str, object], tx_reference_line["z_ratio"])["range"])
     assert tx_reference_line_z_range[0] is False
     assert tx_reference_line_z_range[3] == 1
     assert tx_reference_line_z_range[1] == tx_reference_line_z_range[2]
-    assert 0.75 <= float(cast(int | float, tx_reference_line_z_range[1])) <= 1.0
+    assert float(cast(int | float, tx_reference_line_z_range[1])) == pytest.approx(0.9641454961430692)
 
     modeled_objects_by_id = {
         cast(str, modeled_object["object_id"]): modeled_object
         for modeled_object in cast(list[dict[str, object]], sampled_payload["modeled_objects"])
     }
     tx_inner_modeled_object = modeled_objects_by_id["tx_inner_rect_void_coil"]
-    tx_inner_outer_y = cast(dict[str, object], tx_inner_modeled_object["outer_y_usage_ratio"])
+    tx_inner_outer_y = cast(dict[str, object], tx_inner_modeled_object["y_ratio"])
     tx_inner_outer_y_range = cast(list[object], tx_inner_outer_y["range"])
     assert tx_inner_outer_y_range[0] is False
     assert tx_inner_outer_y_range[3] == 1
@@ -790,6 +817,13 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert tx_inner_x_position_range[1] == 0.0
     assert "tx_outer_x_position_ratio" not in tx_inner_modeled_object
     assert "tx_outer_terminal_path" not in tx_inner_modeled_object
+    assert "terminal_path" not in tx_inner_modeled_object
+    tx_inner_terminal_start = cast(dict[str, object], tx_inner_modeled_object["terminal_start"])
+    tx_inner_terminal_start_range = cast(list[object], tx_inner_terminal_start["range"])
+    assert tx_inner_terminal_start_range[0] is True
+    assert tx_inner_terminal_start_range[3] == 1
+    assert tx_inner_terminal_start_range[1] == tx_inner_terminal_start_range[2]
+    assert tx_inner_terminal_start_range[1] in {0, 1, 2, 3}
 
     rx_modeled_object = modeled_objects_by_id["rx_rect_void_coil"]
     assert rx_modeled_object["object_id"] == "rx_rect_void_coil"
@@ -797,30 +831,30 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert rx_modeled_object["pcb_thickness_mm"] == 3.965
     assert rx_modeled_object["copper_thickness_mm"] == 0.035
     assert "ferrite_set_count" not in rx_modeled_object
-    rx_outer_x = cast(dict[str, object], rx_modeled_object["outer_x_usage_ratio"])
+    rx_outer_x = cast(dict[str, object], rx_modeled_object["x_ratio"])
     rx_outer_x_range = cast(list[object], rx_outer_x["range"])
     assert rx_outer_x_range[0] is False
     assert rx_outer_x_range[3] == 1
     assert rx_outer_x_range[1] == rx_outer_x_range[2]
     assert 0.1 <= float(cast(int | float, rx_outer_x_range[1])) <= 1.0
-    rx_outer_y = cast(dict[str, object], rx_modeled_object["outer_y_usage_ratio"])
+    rx_outer_y = cast(dict[str, object], rx_modeled_object["y_ratio"])
     rx_outer_y_range = cast(list[object], rx_outer_y["range"])
     assert rx_outer_y_range[0] is False
     assert rx_outer_y_range[3] == 1
     assert rx_outer_y_range[1] == rx_outer_y_range[2]
     assert 0.1 <= float(cast(int | float, rx_outer_y_range[1])) <= 1.0
-    rx_void_ratio = cast(dict[str, object], rx_modeled_object["void_usage_ratio"])
+    rx_void_ratio = cast(dict[str, object], rx_modeled_object["void_factor"])
     rx_void_ratio_range = cast(list[object], rx_void_ratio["range"])
     assert rx_void_ratio_range[0] is False
     assert rx_void_ratio_range[3] == 1
     assert rx_void_ratio_range[1] == rx_void_ratio_range[2]
     assert 0.1 <= float(cast(int | float, rx_void_ratio_range[1])) <= 0.6
-    rx_turn = cast(dict[str, object], rx_modeled_object["turn_count"])
+    rx_turn = cast(dict[str, object], rx_modeled_object["turn_qcount"])
     rx_turn_range = cast(list[object], rx_turn["range"])
     assert rx_turn_range[0] is True
     assert rx_turn_range[3] == 1
     assert rx_turn_range[1] == rx_turn_range[2]
-    assert rx_turn_range[1] in {2, 3, 4, 5}
+    assert rx_turn_range[1] in set(range(4, 13))
     rx_underlay_repeat_count = cast(dict[str, object], rx_modeled_object["underlay_repeat_count"])
     rx_underlay_repeat_count_range = cast(list[object], rx_underlay_repeat_count["range"])
     assert rx_underlay_repeat_count_range[0] is True
@@ -846,9 +880,20 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert "void_center_x_over_outer_x" not in rx_modeled_object
     assert "void_center_y_over_outer_y" not in rx_modeled_object
     rx_margin = cast(dict[str, object], rx_modeled_object["margin_ratio"])
-    rx_terminal_path = cast(dict[str, object], rx_modeled_object["terminal_path"])
     assert rx_margin["range"] == [False, 0.05, 0.05, 1]
-    assert rx_terminal_path["value"] == "A_cw_to_a"
+    assert "terminal_path" not in rx_modeled_object
+    rx_terminal_start = cast(dict[str, object], rx_modeled_object["terminal_start"])
+    rx_terminal_start_range = cast(list[object], rx_terminal_start["range"])
+    assert rx_terminal_start_range[0] is True
+    assert rx_terminal_start_range[3] == 1
+    assert rx_terminal_start_range[1] == rx_terminal_start_range[2]
+    assert rx_terminal_start_range[1] in {0, 1, 2, 3}
+    rx_void_stack_present = cast(dict[str, object], rx_modeled_object["void_stack_present"])
+    rx_void_stack_present_range = cast(list[object], rx_void_stack_present["range"])
+    assert rx_void_stack_present_range[0] is True
+    assert rx_void_stack_present_range[3] == 1
+    assert rx_void_stack_present_range[1] == rx_void_stack_present_range[2]
+    assert rx_void_stack_present_range[1] in {0, 1}
     assert "z_usage_ratio" not in rx_modeled_object
     assert "y_usage_ratio" not in rx_modeled_object
     assert "pcb_total_thickness_mm" not in rx_modeled_object
@@ -860,7 +905,7 @@ def test_sample_type2_writes_manifest_object_sampled_tomls_and_step_artifacts(
     assert sheet_present_range[0] is True
     assert sheet_present_range[3] == 1
     assert sheet_present_range[1] == sheet_present_range[2]
-    assert sheet_present_range[1] in {0, 1}
+    assert sheet_present_range[1] == 0
 
     resolved_entry = manifest_entry_for_sample_index(manifest_path, sample_index=12000)
     assert resolved_entry["design_id"] == first_entry["design_id"]
@@ -1155,6 +1200,8 @@ material = "vacuum"
 plane = "YZ"
 origin_xyz = [0.0, -140.0, 0.0]
 size_xyz = [160.0, 280.0, 90.0]
+[non_model_objects.z_gap_from_rx_plane_mm]
+range = [false, 45.0, 130.0, 17]
 [non_model_objects.tx_reference_line.x_ratio]
 range = [false, 0.99, 0.99, 1]
 [non_model_objects.tx_reference_line.y_usage_ratio]
@@ -1180,16 +1227,16 @@ material = "composite"
 model_state = true
 pcb_thickness_mm = 3.965
 copper_thickness_mm = 0.035
-[modeled_objects.outer_x_usage_ratio]
+[modeled_objects.x_ratio]
 range = [false, 0.1, 0.6, 17]
-[modeled_objects.outer_y_usage_ratio]
+[modeled_objects.y_ratio]
 range = [false, 0.1, 0.6, 17]
 [modeled_objects.x_position_ratio]
 range = [false, 0.0, 0.0, 1]
-[modeled_objects.void_usage_ratio]
+[modeled_objects.void_factor]
 range = [false, 0.1, 0.6, 17]
-[modeled_objects.turn_count]
-range = [true, 2, 5, 4]
+[modeled_objects.turn_qcount]
+range = [true, 3, 7, 5]
 [modeled_objects.layer_count]
 range = [true, 1, 1, 1]
 [modeled_objects.underlay_repeat_count]
@@ -1202,8 +1249,10 @@ range = [false, 5, 5, 1]
 range = [false, 0.05, 0.05, 1]
 [modeled_objects.metal_fill_factor]
 range = [false, 0.2, 0.6, 15]
-[modeled_objects.terminal_path]
-value = "A_cw_to_a"
+[modeled_objects.terminal_start]
+range = [true, 0, 3, 4]
+[modeled_objects.void_stack_present]
+range = [true, 0, 1, 2]
 
 [[modeled_objects]]
 object_id = "tx_rect_void_columns"
@@ -1218,14 +1267,12 @@ range = [true, 1, 4, 4]
 range = [false, 1.0, 1.8, 5]
 [modeled_objects.terminal_stub_length_mm]
 range = [false, 10.0, 10.0, 1]
-[modeled_objects.void_usage_ratio]
+[modeled_objects.void_factor]
 range = [false, 0.1, 0.6, 17]
 [modeled_objects.margin_ratio]
 range = [false, 0.05, 0.05, 1]
 [modeled_objects.metal_fill_factor]
 range = [false, 0.2, 0.6, 15]
-[modeled_objects.terminal_path]
-value = "A_cw_to_a"
 [modeled_objects.connection_mode]
 range = [true, 0, 1, 2]
 [modeled_objects.equivalent_turn_count]

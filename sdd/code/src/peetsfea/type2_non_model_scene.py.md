@@ -1,7 +1,7 @@
 ---
 title: type2_non_model_scene.py
 created: 2026-04-28 @ 00:00
-updated: 2026-05-07 @ 00:00
+updated: 2026-05-27 @ 00:00
 tags:
   - step-export
   - type2
@@ -25,7 +25,7 @@ tags:
 
 ## Inputs / Outputs
 - Inputs: non-model base specs, legacy inactive derived specs, active modeled specs needed for `tx_inner_actual_region`, deterministic seed.
-- Expected parser interface: the parsed `tx_region` non-model spec is a concrete `NonModelTxRegionSpec` with a `tx_reference_line` object containing `x_ratio`, `y_usage_ratio`, and `z_ratio` `RangeSpec` fields.
+- Expected parser interface: the parsed `tx_region` non-model spec is a concrete `NonModelTxRegionSpec` with positive `z_gap_from_rx_plane_mm` plus a `tx_reference_line` object containing `x_ratio`, `y_usage_ratio`, and `z_ratio` `RangeSpec` fields.
 - Outputs: non-modeled scene shapes and ledger entries.
 - Key helpers:
   - `require_tx_outer_region_prism_provenance(object_id: Literal["tx_outer_region"]) -> TxOuterRegionPrismProvenance`
@@ -35,6 +35,7 @@ tags:
 - `environment`, `tv`, `tx_region`, and `rx_region_max` are the baseline visible non-modeled scene members.
 - `tv` is a separate visible non-modeled member so modeled `tv_aluminum_plate` can use `placement_owner_id = "tv"` without depending on the broader `environment` fused body.
 - `tx_inner_region` is a visible non-modeled guide body resolved from `tx_region.tx_reference_line` ratios.
+- `tx_region` is first re-resolved in Z from `tv`/`rx_region_max` lower-Z plus `z_gap_from_rx_plane_mm` before any downstream TX guide or modeled placement derivation runs.
 - `tx_inner_actual_region` is a visible non-modeled body resolved before modeled coil construction and sized to the TX inner design `outer_x_mm`/`outer_y_mm` box.
 - `tx_outer_region` and `tx_outer_actual_region` are inactive remnants of the removed outer TX coil and must not appear in active generated non-model scene members.
 - `tx_region_actual` and `tx_region_actual_stack_space` derived specs are inactive for RxOnly scene export.
@@ -46,9 +47,12 @@ tags:
 - Visible groups must resolve from required specs.
 - Grouped visible geometry must form exactly one solid.
 - `tx_inner_region` X ratio must be finite and strictly inside `(0, 1)`, while Z and Y ratios must be finite and in `(0, 1]`.
+- `tx_region` z-gap resolution requires `tv` and `rx_region_max` lower-Z planes to match and requires a finite positive realized gap.
 - `tx_inner_region` must derive from `tx_region`; a base box named `tx_inner_region` without reference-line provenance is rejected.
 - Ledger construction for `tx_inner_region` requires matching creation-time provenance in the registry.
-- `tx_inner_actual_region` requires exactly one `tx_inner_single_coil` modeled spec and must use the placement helper's design outer box so selected `outer_x_usage_ratio`/`outer_y_usage_ratio`, lower-X wall-side anchoring, and Y centering are reflected exactly once. It must not use the smaller copper/PCB decomposed body bbox as canonical actual-region bounds.
+- `tx_inner_actual_region` requires exactly one `tx_inner_single_coil` modeled spec and must use the placement helper's design outer box so selected `x_ratio`/`y_ratio`, lower-X wall-side anchoring, and Y centering are reflected exactly once. It must not use the smaller copper/PCB decomposed body bbox as canonical actual-region bounds.
+- `tx_inner_actual_region` provenance keeps the existing `x_usage_ratio*`/`y_usage_ratio*` ledger field names for actual-region semantics, but their owner-path values must point to active public `modeled_objects.<id>.x_ratio` and `.y_ratio` ranges.
+- Dormant TX outer actual-region code follows the same active `x_ratio`/`y_ratio` single-coil type contract when directly called by transitional code.
 - `tx_inner_actual_region.tx_actual_region.physical_modeled_body_bounds` must come from `fit_envelope.physical_modeled_body_bounds_*`, while `actual_region_bounds` remains the design outer box from `fit_envelope.design_outer_bounds_*`.
 - Active resolution must not append `tx_outer_region` after `tx_inner_actual_region`.
 - Base non-model specs named `tx_outer_region` or `tx_outer_actual_region` are unsupported and must raise immediately.

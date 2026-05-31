@@ -11,21 +11,56 @@ from peetsfea.type2_spec_tools import type2_sampled_owner_paths
 
 _TX_MODELED_ROLES = {"tx_single_coil", "tx_rect_void_columns", "tx_plate_stack"}
 _TX_SAMPLED_OWNER_IDS = {"tx_region_actual", "tx_region_actual_stack_space"}
-_FIXED_TX_REGION_ORIGIN_XYZ = [0.0, -900.0, 0.0]
-_FIXED_TX_REGION_SIZE_XYZ = [160.0, 1800.0, 90.0]
+_FIXED_TX_REGION_ORIGIN_XYZ = [0.0, -600.0, 0.0]
+_FIXED_TX_REGION_SIZE_XYZ = [720.0, 1200.0, 90.0]
 _SAMPLED_TX_REGION_ORIGIN_XYZ = [0.0, -600.0, 0.0]
 _SAMPLED_TX_REGION_SIZE_XYZ = [720.0, 1200.0, 90.0]
-_FIXED_TX_REFERENCE_LINE_RATIOS = (0.99, 1.0, 0.9)
-_SAMPLED_TX_REFERENCE_LINE_RANGES = ((0.99, 0.99, 1), (0.2, 1.0, 85), (0.75, 1.0, 65))
+_FIXED_TX_REGION_Z_GAP_RANGE = (False, 80.0, 80.0, 1)
+_SAMPLED_TX_REGION_Z_GAP_RANGE = (False, 45.0, 130.0, 37)
+_FIXED_TX_REFERENCE_LINE_RATIOS = (0.99, 0.8373223833460517, 0.9641454961430692)
+_SAMPLED_TX_REFERENCE_LINE_RANGES = (
+    (0.99, 0.99, 1),
+    (0.2, 1.0, 85),
+    (0.75, 1.0, 65),
+)
 _TV_ALUMINUM_PLATE_OBJECT_ID = "tv_aluminum_plate"
 _TV_ALUMINUM_PLATE_ROLE = "tv_aluminum_plate"
+_TX_REGION_Z_GAP_OWNER_PATH = "non_model_objects.tx_region.z_gap_from_rx_plane_mm"
 _TV_ALUMINUM_PLATE_SHEET_PRESENT_OWNER_PATH = "modeled_objects.tv_aluminum_plate.sheet_present"
 _TV_ALUMINUM_PLATE_THICKNESS_MM = 0.04
-_FIXED_TV_ALUMINUM_PLATE_SHEET_PRESENT_RANGE = [True, 1, 1, 1]
+_FIXED_TV_ALUMINUM_PLATE_SHEET_PRESENT_RANGE = [True, 0, 0, 1]
 _SAMPLED_TV_ALUMINUM_PLATE_SHEET_PRESENT_RANGE = [True, 0, 1, 2]
-_SAMPLED_TYPE2_OWNER_COUNT = 14
-_FIXED_TURN_COUNT_RANGE = [True, 1, 1, 1]
-_SAMPLED_TURN_COUNT_RANGE = [True, 1, 3, 3]
+_SAMPLED_TYPE2_OWNER_COUNT = 18
+_FIXED_TX_TURN_QCOUNT_RANGE = [True, 3, 3, 1]
+_FIXED_RX_TURN_QCOUNT_RANGE = [True, 4, 4, 1]
+_SAMPLED_TX_TURN_QCOUNT_RANGE = [True, 3, 7, 5]
+_SAMPLED_RX_TURN_QCOUNT_RANGE = [True, 3, 7, 5]
+_FIXED_TX_TERMINAL_START_RANGE = [True, 1, 1, 1]
+_FIXED_RX_TERMINAL_START_RANGE = [True, 0, 0, 1]
+_SAMPLED_TERMINAL_START_RANGE = [True, 0, 3, 4]
+_FIXED_TX_VOID_STACK_PRESENT_RANGE = [True, 1, 1, 1]
+_FIXED_RX_VOID_STACK_PRESENT_RANGE = [True, 0, 0, 1]
+_SAMPLED_VOID_STACK_PRESENT_RANGE = [True, 0, 1, 2]
+_EXPECTED_SAMPLED_OWNER_PATHS = (
+    "non_model_objects.tx_region.z_gap_from_rx_plane_mm",
+    "non_model_objects.tx_region.tx_reference_line.y_usage_ratio",
+    "non_model_objects.tx_region.tx_reference_line.z_ratio",
+    "modeled_objects.tx_inner_rect_void_coil.x_ratio",
+    "modeled_objects.tx_inner_rect_void_coil.y_ratio",
+    "modeled_objects.tx_inner_rect_void_coil.turn_qcount",
+    "modeled_objects.tx_inner_rect_void_coil.void_factor",
+    "modeled_objects.tx_inner_rect_void_coil.metal_fill_factor",
+    "modeled_objects.tx_inner_rect_void_coil.terminal_start",
+    "modeled_objects.tx_inner_rect_void_coil.void_stack_present",
+    "modeled_objects.rx_rect_void_coil.x_ratio",
+    "modeled_objects.rx_rect_void_coil.y_ratio",
+    "modeled_objects.rx_rect_void_coil.turn_qcount",
+    "modeled_objects.rx_rect_void_coil.void_factor",
+    "modeled_objects.rx_rect_void_coil.metal_fill_factor",
+    "modeled_objects.rx_rect_void_coil.terminal_start",
+    "modeled_objects.rx_rect_void_coil.void_stack_present",
+    "modeled_objects.tv_aluminum_plate.sheet_present",
+)
 
 
 def _repo_root() -> Path:
@@ -79,6 +114,22 @@ def _tx_reference_line_ratio_range(payload: dict[str, object], ratio_name: str) 
     return (raw_is_integer, raw_start, raw_end, raw_count)
 
 
+def _tx_region_z_gap_range(payload: dict[str, object]) -> tuple[bool, float, float, int]:
+    tx_region = next(table for table in _tables(payload, "non_model_objects") if table["id"] == "tx_region")
+    raw_z_gap = tx_region["z_gap_from_rx_plane_mm"]
+    assert isinstance(raw_z_gap, dict)
+    z_gap = cast(dict[str, object], raw_z_gap)
+    raw_range = z_gap["range"]
+    assert isinstance(raw_range, list)
+    assert len(raw_range) == 4
+    raw_is_integer, raw_start, raw_end, raw_count = raw_range
+    assert isinstance(raw_is_integer, bool)
+    assert isinstance(raw_start, float)
+    assert isinstance(raw_end, float)
+    assert isinstance(raw_count, int)
+    return (raw_is_integer, raw_start, raw_end, raw_count)
+
+
 def _raw_table_list(payload: dict[str, object], key: str) -> list[object]:
     raw_tables = payload[key]
     assert isinstance(raw_tables, list)
@@ -115,15 +166,35 @@ def _assert_txrx_payload(payload: dict[str, object], *, example_name: str) -> No
     tx_inner = modeled_by_id["tx_inner_rect_void_coil"]
     rx = modeled_by_id["rx_rect_void_coil"]
     assert tx_inner["role"] == "tx_inner_single_coil"
+    for coil in (tx_inner, rx):
+        assert "x_ratio" in coil
+        assert "y_ratio" in coil
+        assert "turn_qcount" in coil
+        assert "void_factor" in coil
+        assert "terminal_start" in coil
+        assert "void_stack_present" in coil
+        assert "outer_x_usage_ratio" not in coil
+        assert "outer_y_usage_ratio" not in coil
+        assert "turn_count" not in coil
+        assert "void_usage_ratio" not in coil
+        assert "terminal_path" not in coil
     assert cast(dict[str, object], tx_inner["underlay_repeat_count"])["range"] == [True, 1, 1, 1]
     if example_name == "type2_fixed.toml":
-        assert cast(dict[str, object], tx_inner["turn_count"])["range"] == _FIXED_TURN_COUNT_RANGE
-        assert cast(dict[str, object], rx["turn_count"])["range"] == _FIXED_TURN_COUNT_RANGE
-        assert cast(dict[str, object], tx_inner["underlay_pet_psa_thickness_mm"])["range"] == [False, 2.0, 2.0, 1]
-        assert cast(dict[str, object], tx_inner["underlay_ferrite_thickness_mm"])["range"] == [False, 2.0, 2.0, 1]
+        assert cast(dict[str, object], tx_inner["turn_qcount"])["range"] == _FIXED_TX_TURN_QCOUNT_RANGE
+        assert cast(dict[str, object], rx["turn_qcount"])["range"] == _FIXED_RX_TURN_QCOUNT_RANGE
+        assert cast(dict[str, object], tx_inner["terminal_start"])["range"] == _FIXED_TX_TERMINAL_START_RANGE
+        assert cast(dict[str, object], rx["terminal_start"])["range"] == _FIXED_RX_TERMINAL_START_RANGE
+        assert cast(dict[str, object], tx_inner["void_stack_present"])["range"] == _FIXED_TX_VOID_STACK_PRESENT_RANGE
+        assert cast(dict[str, object], rx["void_stack_present"])["range"] == _FIXED_RX_VOID_STACK_PRESENT_RANGE
+        assert cast(dict[str, object], tx_inner["underlay_pet_psa_thickness_mm"])["range"] == [False, 6.0, 6.0, 1]
+        assert cast(dict[str, object], tx_inner["underlay_ferrite_thickness_mm"])["range"] == [False, 6.0, 6.0, 1]
     elif example_name == "type2_sweep.toml":
-        assert cast(dict[str, object], tx_inner["turn_count"])["range"] == _SAMPLED_TURN_COUNT_RANGE
-        assert cast(dict[str, object], rx["turn_count"])["range"] == _SAMPLED_TURN_COUNT_RANGE
+        assert cast(dict[str, object], tx_inner["turn_qcount"])["range"] == _SAMPLED_TX_TURN_QCOUNT_RANGE
+        assert cast(dict[str, object], rx["turn_qcount"])["range"] == _SAMPLED_RX_TURN_QCOUNT_RANGE
+        assert cast(dict[str, object], tx_inner["terminal_start"])["range"] == _SAMPLED_TERMINAL_START_RANGE
+        assert cast(dict[str, object], rx["terminal_start"])["range"] == _SAMPLED_TERMINAL_START_RANGE
+        assert cast(dict[str, object], tx_inner["void_stack_present"])["range"] == _SAMPLED_VOID_STACK_PRESENT_RANGE
+        assert cast(dict[str, object], rx["void_stack_present"])["range"] == _SAMPLED_VOID_STACK_PRESENT_RANGE
         assert cast(dict[str, object], tx_inner["underlay_pet_psa_thickness_mm"])["range"] == [False, 6.0, 6.0, 1]
         assert cast(dict[str, object], tx_inner["underlay_ferrite_thickness_mm"])["range"] == [False, 6.0, 6.0, 1]
     else:
@@ -154,12 +225,15 @@ def _assert_txrx_payload(payload: dict[str, object], *, example_name: str) -> No
 
 def _assert_tx_region_payload(payload: dict[str, object], *, example_name: str) -> None:
     tx_region = next(table for table in _tables(payload, "non_model_objects") if table["id"] == "tx_region")
+    z_gap_range = _tx_region_z_gap_range(payload)
     if example_name == "type2_fixed.toml":
         assert tx_region["origin_xyz"] == _FIXED_TX_REGION_ORIGIN_XYZ
         assert tx_region["size_xyz"] == _FIXED_TX_REGION_SIZE_XYZ
+        assert z_gap_range == _FIXED_TX_REGION_Z_GAP_RANGE
     elif example_name == "type2_sweep.toml":
         assert tx_region["origin_xyz"] == _SAMPLED_TX_REGION_ORIGIN_XYZ
         assert tx_region["size_xyz"] == _SAMPLED_TX_REGION_SIZE_XYZ
+        assert z_gap_range == _SAMPLED_TX_REGION_Z_GAP_RANGE
     else:
         raise AssertionError(f"unsupported type2 example {example_name!r}")
 
@@ -221,11 +295,15 @@ def test_active_type2_examples_are_txrx(example_name: str) -> None:
     _assert_tx_reference_line_payload(payload, example_name=example_name)
 
 
-def test_active_type2_sweep_has_tv_aluminum_sheet_presence_dimension() -> None:
+def test_active_type2_sweep_has_18_sampled_dimensions_with_quarter_turn_auxiliary_owners() -> None:
     owner_paths = type2_sampled_owner_paths(_repo_root() / "examples" / "type2_sweep.toml")
 
     assert len(owner_paths) == _SAMPLED_TYPE2_OWNER_COUNT
+    assert owner_paths == _EXPECTED_SAMPLED_OWNER_PATHS
+    assert _TX_REGION_Z_GAP_OWNER_PATH in owner_paths
     assert _TV_ALUMINUM_PLATE_SHEET_PRESENT_OWNER_PATH in owner_paths
+    assert "non_model_objects.tx_region.tx_reference_line.y_usage_ratio" in owner_paths
+    assert "non_model_objects.tx_region.tx_reference_line.z_ratio" in owner_paths
     assert "modeled_objects.tv_aluminum_plate.thickness_mm" not in owner_paths
 
 

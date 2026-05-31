@@ -49,6 +49,7 @@ from peetsfea.type2_step_spec import load_type2_step_spec
 from peetsfea.type2_step_spec import placement_owner_id_for_role
 from peetsfea.type2_step_spec import resolve_modeled_plate_stack_turn_count
 from peetsfea.type2_step_spec import resolve_modeled_tx_coil_count
+from peetsfea.type2_step_spec import resolve_modeled_single_coil_void_stack_present
 from peetsfea.type2_step_spec import resolve_modeled_tx_inner_void_stack_present
 from peetsfea.type2_step_spec import resolve_modeled_underlay_repeat_count
 from peetsfea.type2_step_spec import resolve_modeled_wall_parallel_stack_present
@@ -1209,6 +1210,15 @@ def _rx_underlay_expected_body_names(*, repeat_count: int) -> list[str]:
     ]
 
 
+def _rx_void_stack_expected_body_names(*, present: bool) -> list[str]:
+    if not present:
+        return []
+    return [
+        "rx_void_ferrite_u0",
+        "rx_void_pet_psa_u0",
+    ]
+
+
 def _plate_stack_expected_body_names(
     *,
     spec: ModeledTxPlateStackSpec | ModeledRxPlateStackSpec,
@@ -1951,15 +1961,18 @@ def _require_modeled_expected_body_contract(
             rx_underlay_names = _rx_underlay_expected_body_names(
                 repeat_count=resolve_modeled_underlay_repeat_count(modeled_spec, seed=seed)
             )
+            rx_void_stack_present = resolve_modeled_single_coil_void_stack_present(modeled_spec, seed=seed)
+            rx_void_names = _rx_void_stack_expected_body_names(present=rx_void_stack_present)
             expected_names.extend(rx_underlay_names)
+            expected_names.extend(rx_void_names)
             expected_groups = (
                 [
                     {
                         "group_name": _ferrite_group_name_for_modeled_role(role=role),
-                        "member_body_names": tuple(rx_underlay_names),
+                        "member_body_names": tuple(rx_underlay_names + rx_void_names),
                     }
                 ]
-                if len(rx_underlay_names) > 0
+                if len(rx_underlay_names) + len(rx_void_names) > 0
                 else []
             )
         elif role in ("tx_plate_stack", "rx_plate_stack"):
