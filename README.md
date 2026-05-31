@@ -22,7 +22,7 @@ peetsfea는 TOML 명세에서 HFSS(AEDT) 설계를 결정적으로 생성하는 
 - 단일 설계 생성과 데이터셋 생성을 같은 계약 인터페이스에 둡니다.
 
 ## 현재 문서 기준선
-- 현재 문서 기준선은 `0.2.25.1`입니다.
+- 현재 문서 기준선은 `0.3.0`입니다.
 - 이 README는 공개 요약입니다. 현재 설계 노트는 `sdd/` 아래에 있고, 활성 build123d/AEDT 가져오기 계획은 `PLANS/` 아래에 있습니다.
 - 구현 규칙은 [AGENTS.md](AGENTS.md)를 참고하세요. 현재 build123d/AEDT 가져오기 계획은 [PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md](PLANS/V0_2_22_BUILD123D_AEDT_IMPORT_PLAN.md)를 참고하세요.
 
@@ -67,7 +67,7 @@ cd run
   - `<design_id>.source.toml`
 - `manifest_<design_id>.json`과 `geometry_metadata_<design_id>.json`은 기본적으로 비활성화되어 있으며 선택 사항입니다.
 
-## 0.2.25.1의 주요 계약
+## 0.3.0의 주요 계약
 - Active type2 기본 경로는 TxRx example surface와 RxOnly setup-ready backend의 조합입니다.
 - Active type2는 RX modeled geometry, RX mesh, RX lumped port, RX report variables만 setup-ready 대상으로 삼습니다.
 - 송신 형상, 송신 포트, 송신 출력 변수는 active type2 계약에서 제거되었습니다.

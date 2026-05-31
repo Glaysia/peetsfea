@@ -85,6 +85,16 @@
       font-size: 0.94em;
     }
 
+    p,
+    li,
+    a,
+    code,
+    .meta-value,
+    .path-step,
+    .shape-title h4 {
+      overflow-wrap: anywhere;
+    }
+
     a {
       color: var(--blue);
       text-decoration-thickness: 1px;
@@ -137,6 +147,54 @@
 
     .band {
       padding: 26px 0 0;
+    }
+
+    .merge-summary {
+      display: grid;
+      gap: 16px;
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .merge-summary h2 {
+      margin-bottom: 4px;
+    }
+
+    .merge-summary p {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .merge-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .merge-item {
+      display: grid;
+      gap: 6px;
+      min-height: 98px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfb;
+    }
+
+    .merge-item strong {
+      font-size: 0.9rem;
+    }
+
+    .next-note {
+      padding: 12px 14px;
+      border: 1px solid var(--amber);
+      border-radius: 8px;
+      background: var(--amber-soft);
+      color: #4a3309;
+      font-size: 0.9rem;
     }
 
     .flow-panel,
@@ -394,7 +452,8 @@
 
     @media (max-width: 1040px) {
       .hero,
-      .atlas-layout {
+      .atlas-layout,
+      .merge-grid {
         grid-template-columns: 1fr;
       }
 
@@ -465,30 +524,61 @@
 
   <main>
     <section class="band">
+      <div class="wrap merge-summary" aria-labelledby="merge-title">
+        <div>
+          <h2 id="merge-title">Merged from dev/3</h2>
+          <p>
+            현재 문서는 `84dac65 Merge branch 'dev/3' into small/1` 이후의 Type2 형상 계약을 기준으로 합니다.
+            merge 전 atlas의 구식 single-coil owner 설명은 quarter-turn 계약으로 갱신했습니다.
+          </p>
+        </div>
+        <div class="merge-grid">
+          <div class="merge-item">
+            <strong>quarter-turn single-coil</strong>
+            <p>`turn_qcount`, `terminal_start`, `void_factor` 중심으로 TX inner/RX single-coil realization이 결정됩니다.</p>
+          </div>
+          <div class="merge-item">
+            <strong>TX region Z-gap owner</strong>
+            <p>`non_model_objects.tx_region.z_gap_from_rx_plane_mm`가 RX/TV lower-Z 기준 plane에서 TX guide Z를 소유합니다.</p>
+          </div>
+          <div class="merge-item">
+            <strong>sweep/report + viewer</strong>
+            <p>`Output Variables Table1`은 `Setup1 : Sweep` 기준이며, STEP 확인용 `debug_view_step_files.py` entry가 추가되었습니다.</p>
+          </div>
+        </div>
+        <div class="next-note">
+          0.3.0 다음 목표: TX 코일을 제거하고 영역 오른쪽 끝 단자 2개만 만드는 설계는 아직 merge된 현재 동작이 아니므로 active/default 계약으로 표시하지 않습니다.
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
       <div class="wrap flow-panel">
         <div class="section-head">
           <h2>Type2 형상 흐름</h2>
-          <p>SSOT에서 build123d 형상, STEP, ledger, HFSS setup-ready까지</p>
+          <p>SSOT에서 sampled owners, quarter-turn realization, STEP, ledger, HFSS setup-ready까지</p>
         </div>
         <div class="diagram-body">
           <pre class="mermaid">
 flowchart LR
     Spec["TOML Spec&lt;br/&gt;non_model_objects / modeled_objects"]
     Resolve["Parse + sampled range resolution&lt;br/&gt;seeded canonical owners"]
-    Guides["Non-model guides&lt;br/&gt;tv / tx_region / rx_region_max"]
+    Owners["Quarter-turn owners&lt;br/&gt;x/y ratio / turn_qcount / terminal_start / void_factor"]
+    Guides["Non-model guides&lt;br/&gt;tv / tx_region z-gap / rx_region_max"]
     Derived["Derived guides&lt;br/&gt;tx_inner_region / tx_inner_actual_region"]
-    Core["Rect-void core&lt;br/&gt;centerline / polygons / boxes"]
+    Core["Quarter-turn rect-void core&lt;br/&gt;cw centerline / polygons / boxes"]
     Modeled["Modeled scene data&lt;br/&gt;TX inner / RX / plate / columns"]
-    Metadata["Terminal + sheet metadata&lt;br/&gt;ports / tv aluminum"]
+    Metadata["Terminal + sheet metadata&lt;br/&gt;derived end corner / port sheets / tv aluminum"]
     Step["STEP + type2_step_ledger.json&lt;br/&gt;hash-bound handoff"]
     Import["HFSS import&lt;br/&gt;partition / style / sheet reconstruction"]
-    Setup["Setup-ready EM&lt;br/&gt;mesh / ports / reports"]
+    Setup["Setup-ready EM&lt;br/&gt;mesh / ports / Setup1 : Sweep report"]
 
     Spec --> Resolve
+    Resolve --> Owners
     Resolve --> Guides
     Guides --> Derived
     Derived --> Modeled
-    Resolve --> Core
+    Owners --> Core
     Core --> Modeled
     Modeled --> Metadata
     Modeled --> Step
@@ -499,7 +589,7 @@ flowchart LR
     classDef spec fill:#dff1e7,stroke:#247a56,color:#17382a,stroke-width:1.5px;
     classDef geom fill:#e1eff5,stroke:#236b8e,color:#17364a,stroke-width:1.5px;
     classDef handoff fill:#f6edd7,stroke:#9a6a12,color:#4a3309,stroke-width:1.5px;
-    class Spec,Resolve spec;
+    class Spec,Resolve,Owners spec;
     class Guides,Derived,Core,Modeled geom;
     class Metadata,Step,Import,Setup handoff;
           </pre>
@@ -558,7 +648,8 @@ flowchart LR
         summary: "floor, shelf, wall, tv, tx_region, rx_region_max를 visible guide/context box로 만든다.",
         rules: [
           "`[[non_model_objects]]`의 box spec을 fail-fast로 파싱하고 origin/size/plane/present/material을 검증한다.",
-          "`tv`는 `tv_aluminum_plate`의 source owner이고, `tx_region`은 TX guide reference line owner다.",
+          "`tv`는 `tv_aluminum_plate`의 source owner이고, `tx_region`은 TX guide reference line과 Z-gap owner를 함께 가진다.",
+          "`tx_region.z_gap_from_rx_plane_mm`는 `tv`와 `rx_region_max`의 common lower-Z reference plane에서 TX guide top-Z gap을 소유한다.",
           "`rx_region_max`는 RX single-coil과 RX plate-stack placement owner다.",
           "이 guide/context body들은 conductor mesh target이 아니며, modeled geometry의 placement와 ledger provenance를 제공한다."
         ],
@@ -577,6 +668,36 @@ flowchart LR
         tests: [
           "tests/type2/test_build_type2_entry.py",
           "tests/type2/test_generate_type2_step.py"
+        ]
+      },
+      {
+        id: "tx-region-z-gap-owner",
+        group: "active",
+        title: "tx_region z-gap owner",
+        badge: "active",
+        summary: "merge 후 추가된 TX guide Z placement의 canonical sampled owner.",
+        rules: [
+          "`non_model_objects.tx_region.z_gap_from_rx_plane_mm`가 RX/TV lower-Z reference plane에서 TX guide top-Z gap을 소유한다.",
+          "`tv` lower Z와 `rx_region_max` lower Z가 다르면 reference plane ambiguity로 fail-fast한다.",
+          "`tx_region.origin_z = reference_lower_z - z_gap_from_rx_plane_mm - tx_region.size_z`로 계산한다.",
+          "`origin_x`, `origin_y`, `size_xyz`는 기존 parser-owned source values로 남고 Z-gap만 sampled owner가 된다.",
+          "fixed example은 80.0mm, sweep example은 45.0mm부터 130.0mm까지 37 candidates를 가진다."
+        ],
+        path: ["type2 TOML", "tx_region z_gap_from_rx_plane_mm", "sampled range resolution", "reference lower-Z validation", "tx_region origin_z derivation", "non-model scene ledger"],
+        handoff: [
+          "`tx_inner_region`과 TX inner modeled placement는 resolved `tx_region` provenance를 읽는다.",
+          "Import/setup 단계는 post-import body 위치에서 TX guide Z를 역산하지 않는다."
+        ],
+        sources: [
+          ["examples/type2_sweep.toml", "../examples/type2_sweep.toml"],
+          ["type2_step_spec_non_model.py", "../src/peetsfea/type2_step_spec_non_model.py"],
+          ["type2_non_model_scene.py", "../src/peetsfea/type2_non_model_scene.py"],
+          ["0.2.25-type2-tx-region-z-gap-owner.md", "../sdd/plans/0.2.25-type2-tx-region-z-gap-owner.md"]
+        ],
+        tests: [
+          "tests/type2/test_type2_spec_tools.py",
+          "tests/type2/test_setup_type2_step_entry.py",
+          "tests/type2/test_build_type2_entry.py"
         ]
       },
       {
@@ -643,11 +764,12 @@ flowchart LR
         rules: [
           "`object_id = tx_inner_rect_void_coil`, `role = tx_inner_single_coil`, placement owner는 `tx_inner_region`이다.",
           "XY plane에서 owner lower-X wall side에 붙고, Y는 centered, top Z는 owner top에 맞춘다.",
-          "`outer_x/y_usage_ratio`, `turn_count`, `void_usage_ratio`, `margin_ratio`, `metal_fill_factor`, `terminal_path`가 rect-void core realization을 결정한다.",
+          "`x_ratio`, `y_ratio`, `turn_qcount`, `void_factor`, `metal_fill_factor`, `terminal_start`, `void_stack_present`가 active sampled owner contract다.",
+          "`terminal_start`는 A/B/C/D index이고 end corner는 `(terminal_start + turn_qcount) % 4`로 파생되며 winding direction은 fixed `cw`다.",
           "`underlay_repeat_count > 0`이면 PET/PSA -> ferrite 순서로 -Z 방향 underlay를 만들고, `void_stack_present`가 true이면 YZ void-stack을 `tx_region.max_z`까지 채운다.",
           "port sheet는 STEP body가 아니라 `single_coil_port_v1` terminal metadata로 ledger에 기록된다."
         ],
-        path: ["ModeledTxInnerSingleCoilSpec", "resolve sampled ranges", "rect-void core", "single coil scene", "underlay/void-stack helpers", "STEP bodies + terminal metadata"],
+        path: ["ModeledTxInnerSingleCoilSpec", "resolve quarter-turn owners", "quarter-turn rect-void core", "single coil scene", "underlay/void-stack helpers", "STEP bodies + terminal metadata"],
         handoff: [
           "`canonical_coordinates`는 semantic modeled-body bbox와 trace width를 보존한다.",
           "`exported_body_canonical_coordinates`는 passive underlay/void-stack까지 포함한 declared STEP body bounds validation에 쓰인다.",
@@ -673,12 +795,14 @@ flowchart LR
         summary: "RxOnly setup-ready 경로의 active RX rect-void coil.",
         rules: [
           "`object_id = rx_rect_void_coil`, `role = rx_single_coil`, placement owner는 `rx_region_max`다.",
-          "YZ plane에서 owner bounds와 sampled usage ratios로 size를 정하고, current RX path는 `layer_count = 1`만 지원한다.",
-          "rect-void core가 PCB/copper body와 terminal metadata를 만들며, RX port sheet는 runtime에서 reconstructed sheet로 생성된다.",
+          "YZ plane에서 owner bounds와 sampled `x_ratio`/`y_ratio`로 size를 정하고, current RX path는 `layer_count = 1`만 지원한다.",
+          "`turn_qcount`, `terminal_start`, `void_factor`, `metal_fill_factor`, `void_stack_present`가 TX inner와 같은 quarter-turn owner semantics를 따른다.",
+          "quarter-turn rect-void core가 PCB/copper body와 terminal metadata를 만들며, RX port sheet는 runtime에서 reconstructed sheet로 생성된다.",
           "`underlay_repeat_count`가 있으면 RX full backing underlay leaf bodies가 만들어지고 ferrite-family group contract는 ledger에 기록된다.",
+          "merge 후 RX `void_stack_present`가 sampled/exported contract로 복구되어 `rx_void_*` passive stack body를 독립적으로 제어한다.",
           "Setup-ready mesh ownership은 RX conductor-only이고 reconstructed sheet/context bodies는 mesh target이 아니다."
         ],
-        path: ["ModeledRxSingleCoilSpec", "range resolution", "rect-void core", "single coil scene", "STEP + ledger", "import reconstructed port sheet", "RxOnly mesh/port/report"],
+        path: ["ModeledRxSingleCoilSpec", "quarter-turn range resolution", "rect-void core", "single coil scene", "STEP + ledger", "import reconstructed port sheet", "RxOnly mesh/port/report"],
         handoff: [
           "RX terminal metadata는 setup-ready port assignment의 canonical input이다.",
           "Report variables는 active RxOnly/TxRx output contract에서 validated names only로 생성된다."
@@ -728,26 +852,29 @@ flowchart LR
       {
         id: "rect-void-core",
         group: "active",
-        title: "rect-void core",
+        title: "quarter-turn rect-void core",
         badge: "active",
-        summary: "single-coil의 reusable centered rectangular void geometry core.",
+        summary: "single-coil의 reusable quarter-turn centered rectangular void geometry core.",
         rules: [
-          "`RealizedSingleCoilRectVoid`에서 same-corner terminal path, ring traversal, blunt-corner centerline을 만든다.",
+          "`RealizedSingleCoilRectVoid`에서 `terminal_start`, derived end corner, fixed `cw` direction, `turn_qcount`를 읽어 centerline을 만든다.",
+          "`turn_qcount / 4.0`이 effective turn count이고, q=1/2/3 partial turn과 q=4n full-turn이 같은 pipeline을 탄다.",
+          "routing depth가 partial lap보다 깊어지는 경우 copper가 centered void keepout에 들어가지 않도록 pitch sizing에 반영한다.",
           "centerline segment별 joined polygon이 canonical copper primitive owner다.",
-          "`void_usage_ratio`, `margin_ratio`, `metal_fill_factor`, `turn_count`, terminal stub geometry가 trace width, gap, terminal body를 결정한다.",
+          "`void_factor`, `margin_ratio`, `metal_fill_factor`, `turn_qcount`, terminal stub geometry가 trace width, gap, terminal body를 결정한다.",
           "central void corridor는 copper primitive polygon overlap proof로만 계산하며, 추측이나 spacing-only fallback은 없다.",
           "port sheet는 metadata-only이며 STEP body로 export하지 않는다."
         ],
-        path: ["render rect-void TOML", "load_tx_rect_void_spec", "realize_tx_rect_void_spec", "build centerline", "build box specs", "build123d solids", "terminal metadata"],
+        path: ["single-coil sampled owners", "realize quarter-turn spec", "build centerline", "build box specs", "build123d solids", "terminal metadata"],
         handoff: [
           "TX inner와 RX single-coil scene builders가 이 reusable core를 사용한다.",
           "`trace_width_mm`는 mesh length derivation과 ledger metadata에 이어진다."
         ],
         sources: [
           ["tx_rect_void.py", "../src/peetsfea/tx_rect_void.py"],
+          ["tx_rect_void_centerline.py", "../src/peetsfea/tx_rect_void_centerline.py"],
           ["tx_rect_void_export.py", "../src/peetsfea/tx_rect_void_export.py"],
-          ["tx_rect_void_geometry.py", "../src/peetsfea/tx_rect_void_geometry.py"],
-          ["type2-rect-void-boundary.md", "../sdd/architecture/type2-rect-void-boundary.md"]
+          ["type2-rect-void-boundary.md", "../sdd/architecture/type2-rect-void-boundary.md"],
+          ["0.2.25-type2-quarter-turn-single-coil.md", "../sdd/plans/0.2.25-type2-quarter-turn-single-coil.md"]
         ],
         tests: [
           "tests/tx_rect_void/test_tx_rect_void.py",
@@ -755,19 +882,51 @@ flowchart LR
         ]
       },
       {
+        id: "rx-void-stack-exports",
+        group: "active",
+        title: "RX void-stack exports",
+        badge: "geometry",
+        summary: "merge 후 복구된 RX centered void-stack passive body export contract.",
+        rules: [
+          "`rx_rect_void_coil.void_stack_present`가 RX central void-stack 생성 여부를 소유한다.",
+          "`rx_void_ferrite_u*` / `rx_void_pet_psa_u*` bodies는 passive void-stack exports이며 normal RX backing underlay와 독립적이다.",
+          "비활성화해도 `under_rx_*` full backing bodies를 suppress하지 않는다.",
+          "RX scene data는 resolved `void_stack_present` boolean을 canonical coordinates와 owned scene-data payload에 기록한다.",
+          "final top-level ledger propagation은 scene-data payload copier가 소유한다."
+        ],
+        path: ["rx_single_coil sampled owners", "void_stack_present resolution", "single coil scene", "rx_void_* body export", "canonical coordinates", "STEP ledger"],
+        handoff: [
+          "RX void-stack bodies are passive setup inputs; mesh ownership remains RX conductor-only.",
+          "Ledger/import validation uses deterministic labels and exported body bounds."
+        ],
+        sources: [
+          ["type2_single_coil_scene.py", "../src/peetsfea/type2_single_coil_scene.py"],
+          ["type2_single_coil_underlay.py", "../src/peetsfea/type2_single_coil_underlay.py"],
+          ["type2_step_export.py", "../src/peetsfea/type2_step_export.py"],
+          ["type2_single_coil_scene.py.md", "../sdd/code/src/peetsfea/type2_single_coil_scene.py.md"]
+        ],
+        tests: [
+          "tests/type2/test_generate_type2_step.py",
+          "tests/type2/test_setup_type2_step_entry.py",
+          "tests/backend_em/test_type2_step_setup_ready.py"
+        ]
+      },
+      {
         id: "ports-terminal-metadata",
         group: "active",
-        title: "ports / terminal metadata",
+        title: "single-coil terminal metadata",
         badge: "ledger",
         summary: "single-coil terminal boxes에서 runtime port sheet 계약을 생성한다.",
         rules: [
           "`terminal_metadata.kind = single_coil_port_v1`가 `sheet_name`, `vertices_xyz`, `integration_line_start_xyz`, `integration_line_end_xyz`를 가진다.",
-          "coordinates는 STEP generation time terminal stub boxes에서 계산하며 AEDT imported bbox에서 역산하지 않는다.",
+          "coordinates는 STEP generation time terminal stub boxes와 realized quarter-turn metadata에서 계산하며 AEDT imported bbox에서 역산하지 않는다.",
+          "`terminal_start`는 `0..3`에서 A/B/C/D로 mapping되고, inner corner는 `(terminal_start + turn_qcount) % 4`로 파생된다.",
+          "compatibility path string은 realized `&lt;outer&gt;_cw_to_&lt;inner&gt;`로 계산되며 active TOML owner로 직접 받지 않는다.",
           "vertices `[3] -> [0]`은 signal edge, `[1] -> [2]`는 reference edge다.",
           "self-intersecting sheet loop, degenerate edge, missing terminal stub, ambiguous terminal geometry는 즉시 실패한다.",
           "Import style layer가 ledger vertices로 port sheet polyline을 만들고 setup-ready port assignment가 이를 사용한다."
         ],
-        path: ["single coil terminal boxes", "resolve terminal path", "build port sheet vertices", "ledger terminal_metadata", "import CreatePolyline", "AssignLumpedPort"],
+        path: ["single coil terminal boxes", "terminal_start + turn_qcount", "derive cw path", "build port sheet vertices", "ledger terminal_metadata", "import CreatePolyline", "AssignLumpedPort"],
         handoff: [
           "RX setup creates one explicit RX lumped port in RxOnly.",
           "TX inner terminal metadata may exist for geometry contract, but default RxOnly setup does not promote generic TX ports."
@@ -794,9 +953,10 @@ flowchart LR
           "`canonical_coordinates`는 semantic placement/mesh/terminal contract이고, `exported_body_canonical_coordinates`는 exact body import drift validation contract다.",
           "Import는 hash mismatch, generic `SOLID*` drift, expected body bounds mismatch를 fail-fast로 거부한다.",
           "Import-only는 mesh/boundary/ports/reports를 만들지 않고, setup-ready runtime이 RX mesh, radiation boundary, lumped port, source, analysis/report, validation/save를 수행한다.",
+          "merge 후 setup-ready analysis는 enabled interpolating `Sweep`을 만들고 `Output Variables Table1`을 `Setup1 : Sweep` / `Domain := Sweep` 기준으로 export한다.",
           "Runtime summaries는 ledger owner가 아니며 setup state는 HFSS project에 생성된다."
         ],
-        path: ["export_type2_step_artifacts", "build scene data", "export STEP", "build_type2_step_ledger", "import partition/style", "setup-ready EM chain"],
+        path: ["export_type2_step_artifacts", "build scene data", "export STEP", "build_type2_step_ledger", "import partition/style", "setup-ready EM chain", "Setup1 : Sweep report"],
         handoff: [
           "`type2_step_ledger.json` is the source of truth for import/setup handoff.",
           "`type2_imported_ledger.json` preserves imported ownership/object names, not mesh/solve summaries."
@@ -805,12 +965,71 @@ flowchart LR
           ["type2_step_export.py", "../src/peetsfea/type2_step_export.py"],
           ["type2_step_ledger.py", "../src/peetsfea/type2_step_ledger.py"],
           ["type2_step_import_core.py", "../src/peetsfea/backend/pyaedt/type2_step_import_core.py"],
-          ["type2-step-to-em-validate-pipeline.md", "../sdd/architecture/type2-step-to-em-validate-pipeline.md"]
+          ["type2-step-to-em-validate-pipeline.md", "../sdd/architecture/type2-step-to-em-validate-pipeline.md"],
+          ["0.2.25-type2-sweep-report-contract.md", "../sdd/plans/0.2.25-type2-sweep-report-contract.md"]
         ],
         tests: [
           "tests/type2/test_generate_type2_step.py",
           "tests/backend_em/test_type2_step_import_pipeline.py",
           "tests/backend_em/test_type2_step_setup_ready.py"
+        ]
+      },
+      {
+        id: "sweep-report-contract",
+        group: "active",
+        title: "sweep / report contract",
+        badge: "ledger",
+        summary: "merge 후 active Type2 setup-ready path에 복구된 AEDT sweep/report output 계약.",
+        rules: [
+          "Type2 setup-ready creates an enabled interpolating sweep named `Sweep`.",
+          "Sweep range는 staged AEDT contract에 맞춰 `LogScale`, `0.1MHz` to `100MHz`, `RangeCount=401`, `RangeSamples=100`, recorded DC subrange를 사용한다.",
+          "`Output Variables Table1` is the active CSV export report.",
+          "Report solution은 `Setup1 : Sweep`, context는 `Domain := Sweep`이다.",
+          "이 계약은 setup-ready/optional solve output surface이며 STEP ledger body ownership을 바꾸지 않는다."
+        ],
+        path: ["type2 setup-ready import", "analysis setup", "enabled Sweep", "Output Variables Table1", "optional solve/report CSV"],
+        handoff: [
+          "Generated CSV output is optional solve/report output, not a geometry artifact.",
+          "Report variable names are validated through backend EM tests before export."
+        ],
+        sources: [
+          ["analysis.py", "../src/peetsfea/backend/pyaedt/em_pipeline/steps/analysis.py"],
+          ["examples/type2_sweep.toml", "../examples/type2_sweep.toml"],
+          ["docs/current-pipeline.md", "current-pipeline.md"],
+          ["0.2.25-type2-sweep-report-contract.md", "../sdd/plans/0.2.25-type2-sweep-report-contract.md"]
+        ],
+        tests: [
+          "tests/backend_em/test_type2_step_setup_ready.py",
+          "tests/type2/test_build_type2_entry.py",
+          "tests/type2/test_setup_type2_step_entry.py"
+        ]
+      },
+      {
+        id: "debug-step-viewer",
+        group: "active",
+        title: "STEP viewer debug entry",
+        badge: "ledger",
+        summary: "merge 후 notebook viewer를 대체한 tracked STEP 확인 entrypoint.",
+        rules: [
+          "`entry/debug_view_step_files.py`는 generated STEP artifacts를 local inspection 대상으로 여는 debug entry다.",
+          "VS Code launch config는 이 entrypoint를 workspace 기준으로 실행하도록 추가되었다.",
+          "형상 생성 규칙이나 TOML schema를 바꾸지 않으며, generated STEP files를 확인하는 developer surface다.",
+          "AEDT GUI validation path가 아니며 AGENTS의 headless/default execution rule을 약화하지 않는다.",
+          "Notebook `notebooks/view_step_files.ipynb`는 merge에서 제거되었다."
+        ],
+        path: ["generated STEP artifacts", "entry/debug_view_step_files.py", "VS Code debug launch", "local visual inspection"],
+        handoff: [
+          "Viewer entrypoint is documentation/debug surface only.",
+          "Runtime truth remains TOML -> generated STEP -> ledger/import tests."
+        ],
+        sources: [
+          ["debug_view_step_files.py", "../entry/debug_view_step_files.py"],
+          ["debug_view_step_files.py.md", "../sdd/code/entry/debug_view_step_files.py.md"],
+          [".vscode/launch.json", "../.vscode/launch.json"]
+        ],
+        tests: [
+          "Manual debug launch inspection only",
+          "Geometry correctness remains covered by Type2 STEP/export/import tests"
         ]
       },
       {
