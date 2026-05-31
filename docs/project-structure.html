@@ -1,0 +1,1116 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>peetsfea Type2 Geometry Atlas</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8f6;
+      --surface: #ffffff;
+      --surface-alt: #eef4f2;
+      --ink: #1d2420;
+      --muted: #5e6b64;
+      --line: #d9e0dc;
+      --green: #247a56;
+      --green-soft: #dff1e7;
+      --blue: #236b8e;
+      --blue-soft: #e1eff5;
+      --amber: #9a6a12;
+      --amber-soft: #f6edd7;
+      --red: #9d3f32;
+      --red-soft: #f4e2de;
+      --violet: #6250a4;
+      --violet-soft: #ebe7f7;
+      --shadow: 0 18px 40px rgba(28, 42, 36, 0.08);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.55;
+    }
+
+    header {
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    main {
+      padding-bottom: 48px;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    p,
+    ul {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 4vw, 3.1rem);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      font-size: 1.18rem;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      font-size: 1rem;
+      line-height: 1.3;
+      letter-spacing: 0;
+    }
+
+    h4 {
+      font-size: 0.9rem;
+      line-height: 1.3;
+      letter-spacing: 0;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.94em;
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    .wrap {
+      width: min(1220px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(260px, 0.8fr);
+      gap: 28px;
+      align-items: end;
+      padding: 38px 0 28px;
+    }
+
+    .subtitle {
+      max-width: 780px;
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .meta {
+      display: grid;
+      gap: 10px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-alt);
+    }
+
+    .meta-row {
+      display: grid;
+      grid-template-columns: 96px minmax(0, 1fr);
+      gap: 12px;
+      font-size: 0.92rem;
+    }
+
+    .meta-key {
+      color: var(--muted);
+    }
+
+    .meta-value {
+      font-weight: 650;
+    }
+
+    .band {
+      padding: 26px 0 0;
+    }
+
+    .flow-panel,
+    .atlas-shell,
+    .detail-panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .flow-panel {
+      overflow: hidden;
+    }
+
+    .section-head {
+      display: flex;
+      gap: 14px;
+      align-items: baseline;
+      justify-content: space-between;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section-head p {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .diagram-body {
+      overflow-x: auto;
+      padding: 20px;
+      background: #fbfcfb;
+    }
+
+    .mermaid {
+      min-width: 920px;
+      text-align: center;
+    }
+
+    .atlas-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 390px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .atlas-shell {
+      overflow: hidden;
+    }
+
+    .atlas-group {
+      padding: 18px 20px 20px;
+      border-top: 1px solid var(--line);
+    }
+
+    .atlas-group:first-of-type {
+      border-top: 0;
+    }
+
+    .atlas-group h3 {
+      margin-bottom: 12px;
+    }
+
+    .shape-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .shape-card {
+      display: grid;
+      gap: 10px;
+      width: 100%;
+      min-height: 132px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfb;
+      color: var(--ink);
+      cursor: pointer;
+      font: inherit;
+      text-align: left;
+      transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+    }
+
+    .shape-card:hover,
+    .shape-card:focus-visible {
+      border-color: var(--green);
+      background: var(--green-soft);
+      outline: 0;
+    }
+
+    .shape-card[aria-pressed="true"] {
+      border-color: var(--green);
+      background: var(--green-soft);
+      transform: translateY(-1px);
+    }
+
+    .shape-title {
+      display: flex;
+      gap: 8px;
+      align-items: start;
+      justify-content: space-between;
+    }
+
+    .shape-card p {
+      color: var(--muted);
+      font-size: 0.89rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      max-width: 100%;
+      padding: 3px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .badge.active {
+      border-color: var(--green);
+      background: var(--green-soft);
+      color: var(--green);
+    }
+
+    .badge.geometry {
+      border-color: var(--blue);
+      background: var(--blue-soft);
+      color: var(--blue);
+    }
+
+    .badge.ledger {
+      border-color: var(--violet);
+      background: var(--violet-soft);
+      color: var(--violet);
+    }
+
+    .badge.future {
+      border-color: var(--amber);
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .badge.excluded {
+      border-color: var(--red);
+      background: var(--red-soft);
+      color: var(--red);
+    }
+
+    .detail-panel {
+      position: sticky;
+      top: 16px;
+      overflow: hidden;
+    }
+
+    .detail-main {
+      display: grid;
+      gap: 18px;
+      padding: 18px 20px 20px;
+    }
+
+    .detail-title {
+      display: grid;
+      gap: 8px;
+    }
+
+    .detail-title p {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .detail-section {
+      display: grid;
+      gap: 8px;
+    }
+
+    .detail-section ul {
+      display: grid;
+      gap: 7px;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 0.91rem;
+    }
+
+    .path-chain {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .path-step {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 5px 9px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfb;
+      color: var(--ink);
+      font-size: 0.82rem;
+      font-weight: 650;
+    }
+
+    .path-arrow {
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    .link-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .link-list a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 4px 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfb;
+      font-size: 0.82rem;
+      font-weight: 650;
+      text-decoration: none;
+    }
+
+    .legacy-note {
+      margin-top: 12px;
+      padding: 13px 14px;
+      border: 1px solid var(--red);
+      border-radius: 8px;
+      background: var(--red-soft);
+      color: #512019;
+      font-size: 0.9rem;
+    }
+
+    .render-error {
+      margin: 20px;
+      padding: 14px 16px;
+      border: 1px solid var(--red);
+      border-radius: 8px;
+      background: var(--red-soft);
+      color: var(--red);
+      font-weight: 650;
+    }
+
+    @media (max-width: 1040px) {
+      .hero,
+      .atlas-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .detail-panel {
+        position: static;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .shape-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .wrap {
+        width: min(100% - 20px, 1220px);
+      }
+
+      .hero {
+        padding-top: 28px;
+      }
+
+      .section-head {
+        display: grid;
+      }
+
+      .diagram-body {
+        padding: 14px;
+      }
+
+      .mermaid {
+        min-width: 780px;
+      }
+
+      .meta-row {
+        grid-template-columns: 82px minmax(0, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap hero">
+      <div>
+        <h1>Type2 형상 생성 규칙 atlas</h1>
+        <p class="subtitle">
+          Type2에서 형상이 생기는 지점, 입력 owner, 생성 규칙, STEP/ledger/import/setup-ready 경로를 한 화면에서 추적합니다.
+          type1 legacy internals는 legacy excluded로 분리합니다.
+        </p>
+      </div>
+      <section class="meta" aria-label="문서 메타데이터">
+        <div class="meta-row">
+          <span class="meta-key">기준</span>
+          <span class="meta-value">Type2 geometry paths</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-key">형식</span>
+          <span class="meta-value">static HTML + Mermaid</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-key">제외</span>
+          <span class="meta-value">type1 legacy excluded</span>
+        </div>
+      </section>
+    </div>
+  </header>
+
+  <main>
+    <section class="band">
+      <div class="wrap flow-panel">
+        <div class="section-head">
+          <h2>Type2 형상 흐름</h2>
+          <p>SSOT에서 build123d 형상, STEP, ledger, HFSS setup-ready까지</p>
+        </div>
+        <div class="diagram-body">
+          <pre class="mermaid">
+flowchart LR
+    Spec["TOML Spec&lt;br/&gt;non_model_objects / modeled_objects"]
+    Resolve["Parse + sampled range resolution&lt;br/&gt;seeded canonical owners"]
+    Guides["Non-model guides&lt;br/&gt;tv / tx_region / rx_region_max"]
+    Derived["Derived guides&lt;br/&gt;tx_inner_region / tx_inner_actual_region"]
+    Core["Rect-void core&lt;br/&gt;centerline / polygons / boxes"]
+    Modeled["Modeled scene data&lt;br/&gt;TX inner / RX / plate / columns"]
+    Metadata["Terminal + sheet metadata&lt;br/&gt;ports / tv aluminum"]
+    Step["STEP + type2_step_ledger.json&lt;br/&gt;hash-bound handoff"]
+    Import["HFSS import&lt;br/&gt;partition / style / sheet reconstruction"]
+    Setup["Setup-ready EM&lt;br/&gt;mesh / ports / reports"]
+
+    Spec --> Resolve
+    Resolve --> Guides
+    Guides --> Derived
+    Derived --> Modeled
+    Resolve --> Core
+    Core --> Modeled
+    Modeled --> Metadata
+    Modeled --> Step
+    Metadata --> Step
+    Step --> Import
+    Import --> Setup
+
+    classDef spec fill:#dff1e7,stroke:#247a56,color:#17382a,stroke-width:1.5px;
+    classDef geom fill:#e1eff5,stroke:#236b8e,color:#17364a,stroke-width:1.5px;
+    classDef handoff fill:#f6edd7,stroke:#9a6a12,color:#4a3309,stroke-width:1.5px;
+    class Spec,Resolve spec;
+    class Guides,Derived,Core,Modeled geom;
+    class Metadata,Step,Import,Setup handoff;
+          </pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="wrap atlas-layout">
+        <article class="atlas-shell" aria-labelledby="atlas-title">
+          <div class="section-head">
+            <h2 id="atlas-title">Type2 형상 지도</h2>
+            <p>상태와 ownership 기준으로 묶은 형상 생성 표면</p>
+          </div>
+          <div class="atlas-group">
+            <h3>Active/current Type2</h3>
+            <div class="shape-grid" id="active-shape-grid"></div>
+          </div>
+          <div class="atlas-group">
+            <h3>Implemented or documented Type2 boundaries</h3>
+            <div class="shape-grid" id="future-shape-grid"></div>
+          </div>
+          <div class="atlas-group">
+            <h3>Excluded boundary</h3>
+            <div class="shape-grid" id="excluded-shape-grid"></div>
+          </div>
+        </article>
+
+        <aside class="detail-panel" aria-live="polite" aria-labelledby="detail-heading">
+          <div class="section-head">
+            <h2 id="detail-heading">상세 규칙</h2>
+            <p id="detail-status-label">selected Type2 element</p>
+          </div>
+          <div class="detail-main" id="detail-main"></div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <script defer src="assets/mermaid-11.15.0.min.js"></script>
+  <script defer>
+    const STATUS_LABELS = {
+      active: "active default",
+      geometry: "geometry-only",
+      ledger: "ledger/import",
+      future: "inactive/future Type2",
+      excluded: "excluded legacy"
+    };
+
+    const GEOMETRY_DETAILS = [
+      {
+        id: "non-model-guides",
+        group: "active",
+        title: "non-model guides",
+        badge: "active",
+        summary: "floor, shelf, wall, tv, tx_region, rx_region_max를 visible guide/context box로 만든다.",
+        rules: [
+          "`[[non_model_objects]]`의 box spec을 fail-fast로 파싱하고 origin/size/plane/present/material을 검증한다.",
+          "`tv`는 `tv_aluminum_plate`의 source owner이고, `tx_region`은 TX guide reference line owner다.",
+          "`rx_region_max`는 RX single-coil과 RX plate-stack placement owner다.",
+          "이 guide/context body들은 conductor mesh target이 아니며, modeled geometry의 placement와 ledger provenance를 제공한다."
+        ],
+        path: ["type2 TOML", "load_type2_step_spec", "parse non_model_objects", "resolve_non_model_scene_specs", "build_non_model_scene_shapes", "non-model ledger"],
+        handoff: [
+          "`tx_region`에서 `tx_inner_region`이 파생된다.",
+          "`tv`의 +X face에서 `tv_aluminum_plate` sheet metadata가 파생된다.",
+          "Import 단계는 non-modeled context를 partition/style 대상으로만 취급한다."
+        ],
+        sources: [
+          ["examples/type2_sweep.toml", "../examples/type2_sweep.toml"],
+          ["type2_step_spec_non_model.py", "../src/peetsfea/type2_step_spec_non_model.py"],
+          ["type2_non_model_scene.py", "../src/peetsfea/type2_non_model_scene.py"],
+          ["type2_non_model_scene.py.md", "../sdd/code/src/peetsfea/type2_non_model_scene.py.md"]
+        ],
+        tests: [
+          "tests/type2/test_build_type2_entry.py",
+          "tests/type2/test_generate_type2_step.py"
+        ]
+      },
+      {
+        id: "tx-inner-region",
+        group: "active",
+        title: "tx_inner_region",
+        badge: "active",
+        summary: "tx_region.tx_reference_line에서 만들어지는 TX inner placement guide.",
+        rules: [
+          "`x_ratio`는 `tx_region` 내부의 strict `(0, 1)` 위치여야 하고, `y_usage_ratio`와 `z_ratio`는 `(0, 1]` 범위여야 한다.",
+          "resolved reference line endpoint와 centered Y usage가 creation-time provenance로 registry와 ledger에 남는다.",
+          "base non-model object로 직접 선언된 `tx_inner_region`은 허용하지 않고, `tx_region`에서 파생되어야 한다.",
+          "실제 conductor가 아니라 `tx_inner_single_coil` 배치용 visible guide body다."
+        ],
+        path: ["tx_region table", "tx_reference_line ranges", "seeded ratio selection", "resolve tx_inner_region", "ledger provenance", "TX inner placement owner"],
+        handoff: [
+          "`tx_inner_single_coil` scene builder가 이 owner의 bounds를 읽는다.",
+          "다운스트림은 import body에서 reference line을 역산하지 않고 ledger provenance를 사용한다."
+        ],
+        sources: [
+          ["type2_non_model_scene.py", "../src/peetsfea/type2_non_model_scene.py"],
+          ["type2_step_ledger.py", "../src/peetsfea/type2_step_ledger.py"],
+          ["type2_step_export.py.md", "../sdd/code/src/peetsfea/type2_step_export.py.md"]
+        ],
+        tests: [
+          "tests/type2/test_build_type2_entry.py",
+          "tests/type2/test_generate_type2_step.py"
+        ]
+      },
+      {
+        id: "tx-inner-actual-region",
+        group: "active",
+        title: "tx_inner_actual_region",
+        badge: "active",
+        summary: "tx_inner_single_coil의 concrete fit envelope에서 파생되는 actual-region guide.",
+        rules: [
+          "`tx_inner_single_coil`의 selected outer usage ratios와 fit envelope를 기준으로 만든다.",
+          "lower-X wall-side anchoring과 centered Y placement가 한 번만 반영되어야 한다.",
+          "actual-region bounds는 design outer box이고, diagnostic physical modeled-body bounds는 별도로 기록한다.",
+          "import된 body bbox에서 post-hoc으로 역산하지 않는다."
+        ],
+        path: ["modeled TX inner spec", "fit envelope placement", "design outer bounds", "tx_inner_actual_region body", "ledger actual-region provenance", "passive stack alignment"],
+        handoff: [
+          "TX inner underlay/void-stack 정렬은 이 actual-region/fit-envelope provenance를 따른다.",
+          "모델링 body보다 작은 copper/PCB decomposed bbox를 actual-region canonical source로 쓰지 않는다."
+        ],
+        sources: [
+          ["type2_non_model_scene.py", "../src/peetsfea/type2_non_model_scene.py"],
+          ["type2_single_coil_scene.py", "../src/peetsfea/type2_single_coil_scene.py"],
+          ["type2_non_model_scene.py.md", "../sdd/code/src/peetsfea/type2_non_model_scene.py.md"],
+          ["type2_single_coil_scene.py.md", "../sdd/code/src/peetsfea/type2_single_coil_scene.py.md"]
+        ],
+        tests: [
+          "tests/type2/test_generate_type2_step.py",
+          "tests/type2/test_type2_tx_outer_centering.py"
+        ]
+      },
+      {
+        id: "tx-inner-single-coil",
+        group: "active",
+        title: "tx_inner_single_coil",
+        badge: "geometry",
+        summary: "active Type2 STEP에 포함될 수 있는 geometry-only TX inner rect-void coil.",
+        rules: [
+          "`object_id = tx_inner_rect_void_coil`, `role = tx_inner_single_coil`, placement owner는 `tx_inner_region`이다.",
+          "XY plane에서 owner lower-X wall side에 붙고, Y는 centered, top Z는 owner top에 맞춘다.",
+          "`outer_x/y_usage_ratio`, `turn_count`, `void_usage_ratio`, `margin_ratio`, `metal_fill_factor`, `terminal_path`가 rect-void core realization을 결정한다.",
+          "`underlay_repeat_count > 0`이면 PET/PSA -> ferrite 순서로 -Z 방향 underlay를 만들고, `void_stack_present`가 true이면 YZ void-stack을 `tx_region.max_z`까지 채운다.",
+          "port sheet는 STEP body가 아니라 `single_coil_port_v1` terminal metadata로 ledger에 기록된다."
+        ],
+        path: ["ModeledTxInnerSingleCoilSpec", "resolve sampled ranges", "rect-void core", "single coil scene", "underlay/void-stack helpers", "STEP bodies + terminal metadata"],
+        handoff: [
+          "`canonical_coordinates`는 semantic modeled-body bbox와 trace width를 보존한다.",
+          "`exported_body_canonical_coordinates`는 passive underlay/void-stack까지 포함한 declared STEP body bounds validation에 쓰인다.",
+          "현재 기본 EM setup에서는 TX geometry를 active mesh/source/report owner로 취급하지 않는다."
+        ],
+        sources: [
+          ["type2_single_coil_scene.py", "../src/peetsfea/type2_single_coil_scene.py"],
+          ["type2_single_coil_underlay.py", "../src/peetsfea/type2_single_coil_underlay.py"],
+          ["type2_single_coil_ports.py", "../src/peetsfea/type2_single_coil_ports.py"],
+          ["type2_single_coil_scene.py.md", "../sdd/code/src/peetsfea/type2_single_coil_scene.py.md"]
+        ],
+        tests: [
+          "tests/type2/test_generate_type2_step.py",
+          "tests/type2/test_type2_single_coil_underlay_boolean_clearance.py",
+          "tests/backend_em/test_type2_port_sheet_runtime_contract.py"
+        ]
+      },
+      {
+        id: "rx-single-coil",
+        group: "active",
+        title: "rx_single_coil",
+        badge: "active",
+        summary: "RxOnly setup-ready 경로의 active RX rect-void coil.",
+        rules: [
+          "`object_id = rx_rect_void_coil`, `role = rx_single_coil`, placement owner는 `rx_region_max`다.",
+          "YZ plane에서 owner bounds와 sampled usage ratios로 size를 정하고, current RX path는 `layer_count = 1`만 지원한다.",
+          "rect-void core가 PCB/copper body와 terminal metadata를 만들며, RX port sheet는 runtime에서 reconstructed sheet로 생성된다.",
+          "`underlay_repeat_count`가 있으면 RX full backing underlay leaf bodies가 만들어지고 ferrite-family group contract는 ledger에 기록된다.",
+          "Setup-ready mesh ownership은 RX conductor-only이고 reconstructed sheet/context bodies는 mesh target이 아니다."
+        ],
+        path: ["ModeledRxSingleCoilSpec", "range resolution", "rect-void core", "single coil scene", "STEP + ledger", "import reconstructed port sheet", "RxOnly mesh/port/report"],
+        handoff: [
+          "RX terminal metadata는 setup-ready port assignment의 canonical input이다.",
+          "Report variables는 active RxOnly/TxRx output contract에서 validated names only로 생성된다."
+        ],
+        sources: [
+          ["type2_single_coil_scene.py", "../src/peetsfea/type2_single_coil_scene.py"],
+          ["tx_rect_void.py", "../src/peetsfea/tx_rect_void.py"],
+          ["type2_step_setup_ready.py", "../src/peetsfea/backend/pyaedt/type2_step_setup_ready.py"],
+          ["type2-em-setup-boundary.md", "../sdd/architecture/type2-em-setup-boundary.md"]
+        ],
+        tests: [
+          "tests/type2/test_generate_type2_step.py",
+          "tests/tx_rect_void/test_tx_rect_void.py",
+          "tests/backend_em/test_type2_step_setup_ready.py"
+        ]
+      },
+      {
+        id: "tv-aluminum-plate",
+        group: "active",
+        title: "tv_aluminum_plate",
+        badge: "ledger",
+        summary: "tv +X face에 붙는 optional aluminum sheet metadata; STEP solid가 아니다.",
+        rules: [
+          "`source_non_model_object_id = tv`, `face = +x`, `thickness_mm = 0.04` 계약을 가진다.",
+          "`sheet_present`는 canonical boolean integer range `(0, 1)`에서 seed로 resolve된다.",
+          "canonical coordinates는 `tv` +X face의 zero-thickness 4 vertices와 sheet thickness metadata다.",
+          "expected exported body count는 0이고 body names, groups, terminal metadata를 선언하면 실패한다.",
+          "Import/setup-ready는 ledger metadata에서 HFSS sheet를 만들고 present일 때 finite conductivity setup을 적용한다."
+        ],
+        path: ["tv non-model owner", "ModeledTvAluminumPlateSpec", "resolve sheet_present", "zero-body modeled ledger entry", "import sheet reconstruction", "setup finite-conductivity boundary"],
+        handoff: [
+          "STEP scene에는 body가 없고 ledger/import/setup chain에만 존재한다.",
+          "source tv bounds가 invalid이면 sheet metadata 생성 전에 fail-fast한다."
+        ],
+        sources: [
+          ["type2_step_scene.py", "../src/peetsfea/type2_step_scene.py"],
+          ["type2_step_ledger.py", "../src/peetsfea/type2_step_ledger.py"],
+          ["type2_step_import_style.py", "../src/peetsfea/backend/pyaedt/type2_step_import_style.py"],
+          ["type2_step_scene.py.md", "../sdd/code/src/peetsfea/type2_step_scene.py.md"]
+        ],
+        tests: [
+          "tests/type2/test_setup_type2_step_entry.py",
+          "tests/type2/test_build_type2_entry.py",
+          "tests/backend_em/test_type2_step_setup_ready.py"
+        ]
+      },
+      {
+        id: "rect-void-core",
+        group: "active",
+        title: "rect-void core",
+        badge: "active",
+        summary: "single-coil의 reusable centered rectangular void geometry core.",
+        rules: [
+          "`RealizedSingleCoilRectVoid`에서 same-corner terminal path, ring traversal, blunt-corner centerline을 만든다.",
+          "centerline segment별 joined polygon이 canonical copper primitive owner다.",
+          "`void_usage_ratio`, `margin_ratio`, `metal_fill_factor`, `turn_count`, terminal stub geometry가 trace width, gap, terminal body를 결정한다.",
+          "central void corridor는 copper primitive polygon overlap proof로만 계산하며, 추측이나 spacing-only fallback은 없다.",
+          "port sheet는 metadata-only이며 STEP body로 export하지 않는다."
+        ],
+        path: ["render rect-void TOML", "load_tx_rect_void_spec", "realize_tx_rect_void_spec", "build centerline", "build box specs", "build123d solids", "terminal metadata"],
+        handoff: [
+          "TX inner와 RX single-coil scene builders가 이 reusable core를 사용한다.",
+          "`trace_width_mm`는 mesh length derivation과 ledger metadata에 이어진다."
+        ],
+        sources: [
+          ["tx_rect_void.py", "../src/peetsfea/tx_rect_void.py"],
+          ["tx_rect_void_export.py", "../src/peetsfea/tx_rect_void_export.py"],
+          ["tx_rect_void_geometry.py", "../src/peetsfea/tx_rect_void_geometry.py"],
+          ["type2-rect-void-boundary.md", "../sdd/architecture/type2-rect-void-boundary.md"]
+        ],
+        tests: [
+          "tests/tx_rect_void/test_tx_rect_void.py",
+          "tests/type2/test_generate_type2_step.py"
+        ]
+      },
+      {
+        id: "ports-terminal-metadata",
+        group: "active",
+        title: "ports / terminal metadata",
+        badge: "ledger",
+        summary: "single-coil terminal boxes에서 runtime port sheet 계약을 생성한다.",
+        rules: [
+          "`terminal_metadata.kind = single_coil_port_v1`가 `sheet_name`, `vertices_xyz`, `integration_line_start_xyz`, `integration_line_end_xyz`를 가진다.",
+          "coordinates는 STEP generation time terminal stub boxes에서 계산하며 AEDT imported bbox에서 역산하지 않는다.",
+          "vertices `[3] -> [0]`은 signal edge, `[1] -> [2]`는 reference edge다.",
+          "self-intersecting sheet loop, degenerate edge, missing terminal stub, ambiguous terminal geometry는 즉시 실패한다.",
+          "Import style layer가 ledger vertices로 port sheet polyline을 만들고 setup-ready port assignment가 이를 사용한다."
+        ],
+        path: ["single coil terminal boxes", "resolve terminal path", "build port sheet vertices", "ledger terminal_metadata", "import CreatePolyline", "AssignLumpedPort"],
+        handoff: [
+          "RX setup creates one explicit RX lumped port in RxOnly.",
+          "TX inner terminal metadata may exist for geometry contract, but default RxOnly setup does not promote generic TX ports."
+        ],
+        sources: [
+          ["type2_single_coil_ports.py", "../src/peetsfea/type2_single_coil_ports.py"],
+          ["type2_step_port_assignment.py", "../src/peetsfea/backend/pyaedt/type2_step_port_assignment.py"],
+          ["type2_step_import_style.py", "../src/peetsfea/backend/pyaedt/type2_step_import_style.py"],
+          ["type2_single_coil_ports.py.md", "../sdd/code/src/peetsfea/type2_single_coil_ports.py.md"]
+        ],
+        tests: [
+          "tests/backend_em/test_type2_port_sheet_runtime_contract.py",
+          "tests/type2/test_generate_type2_step.py"
+        ]
+      },
+      {
+        id: "step-ledger-import",
+        group: "active",
+        title: "STEP ledger / import / setup",
+        badge: "ledger",
+        summary: "build123d STEP scene과 hash-bound ledger를 HFSS setup-ready 상태로 넘기는 handoff.",
+        rules: [
+          "Ledger는 schema/version, source TOML SHA-256, scene STEP SHA-256, modeled/non-modeled canonical coordinates를 가진다.",
+          "`canonical_coordinates`는 semantic placement/mesh/terminal contract이고, `exported_body_canonical_coordinates`는 exact body import drift validation contract다.",
+          "Import는 hash mismatch, generic `SOLID*` drift, expected body bounds mismatch를 fail-fast로 거부한다.",
+          "Import-only는 mesh/boundary/ports/reports를 만들지 않고, setup-ready runtime이 RX mesh, radiation boundary, lumped port, source, analysis/report, validation/save를 수행한다.",
+          "Runtime summaries는 ledger owner가 아니며 setup state는 HFSS project에 생성된다."
+        ],
+        path: ["export_type2_step_artifacts", "build scene data", "export STEP", "build_type2_step_ledger", "import partition/style", "setup-ready EM chain"],
+        handoff: [
+          "`type2_step_ledger.json` is the source of truth for import/setup handoff.",
+          "`type2_imported_ledger.json` preserves imported ownership/object names, not mesh/solve summaries."
+        ],
+        sources: [
+          ["type2_step_export.py", "../src/peetsfea/type2_step_export.py"],
+          ["type2_step_ledger.py", "../src/peetsfea/type2_step_ledger.py"],
+          ["type2_step_import_core.py", "../src/peetsfea/backend/pyaedt/type2_step_import_core.py"],
+          ["type2-step-to-em-validate-pipeline.md", "../sdd/architecture/type2-step-to-em-validate-pipeline.md"]
+        ],
+        tests: [
+          "tests/type2/test_generate_type2_step.py",
+          "tests/backend_em/test_type2_step_import_pipeline.py",
+          "tests/backend_em/test_type2_step_setup_ready.py"
+        ]
+      },
+      {
+        id: "rx-plate-stack",
+        group: "future",
+        title: "rx_plate_stack",
+        badge: "future",
+        summary: "RX role-local plate-stack option; active default는 single-coil RxOnly다.",
+        rules: [
+          "`object_id = rx_plate_stack`, `role = rx_plate_stack`, placement owner는 `rx_region_max`다.",
+          "`turn_count >= 2`, `metal_fill_factor <= 0.6`, `z_usage_ratio/y_usage_ratio`가 active YZ window와 stripe layout을 정한다.",
+          "RX active Y window는 global `Y=0` 중심이고 Z window는 `rx_region_max` bottom에서 시작한다.",
+          "Final RX conductor handoff는 united conductor body이고 ferrite-family bodies는 material slabs다.",
+          "RX terminal metadata may feed RxOnly setup when this RX path is explicitly selected."
+        ],
+        path: ["ModeledRxPlateStackSpec", "build_plate_stack_scene_data", "striped copper/ferrite bodies", "STEP + ledger", "RX mesh/port setup if selected"],
+        handoff: [
+          "`trace_width_mm` is persisted for post-import mesh length derivation.",
+          "TX plate-stack contracts are not implied by this RX-local reference."
+        ],
+        sources: [
+          ["type2_plate_stack.py", "../src/peetsfea/type2_plate_stack.py"],
+          ["type2_rx_plate_stack.py", "../src/peetsfea/type2_rx_plate_stack.py"],
+          ["docs/type2-rx-plate-stack.md", "type2-rx-plate-stack.md"],
+          ["type2_plate_stack.py.md", "../sdd/code/src/peetsfea/type2_plate_stack.py.md"]
+        ],
+        tests: [
+          "tests/type2/test_generate_type2_step.py",
+          "tests/backend_em/test_type2_modeled_import_adapter.py"
+        ]
+      },
+      {
+        id: "tx-plate-stack-array",
+        group: "future",
+        title: "tx_plate_stack_array / tx_plate_stack",
+        badge: "future",
+        summary: "generic TX plate-stack array implementation boundary; active default Type2 export policy is limited.",
+        rules: [
+          "Input owners are modeled TX plate-stack spec, `tx_region` context, `rx_region_max` context, and deterministic seed.",
+          "`tx_coil_count`, sampled X/Y/Z usage ratios, branch hinge edges, copied-branch rotation angles are resolved inside the array builder.",
+          "`g_ferrite_tx` and `g_copper_tx` are grouping contracts; exact leaf body labels remain deterministic.",
+          "Ferrite/PET_PSA priority clearance cuts only branch PCB/FR4 blanks and must preserve ferrite-family member labels/order.",
+          "Current active/default docs do not present this as the default EM setup path."
+        ],
+        path: ["ModeledTxPlateStackSpec", "tx_region/rx_region context", "type2_tx_plate_stack_array", "boolean clearance", "ModeledObjectSceneData", "future export/import consumer"],
+        handoff: [
+          "Generic TX roles may be rejected by active RxOnly parser/export paths unless a later plan explicitly activates the two-terminal route.",
+          "Existing tests cover deterministic body/group contracts for the implementation boundary."
+        ],
+        sources: [
+          ["type2_tx_plate_stack_array.py", "../src/peetsfea/type2_tx_plate_stack_array.py"],
+          ["type2_plate_stack.py", "../src/peetsfea/type2_plate_stack.py"],
+          ["type2_tx_plate_stack_array.py.md", "../sdd/code/src/peetsfea/type2_tx_plate_stack_array.py.md"],
+          ["docs/type2-plate-stack.md", "type2-plate-stack.md"]
+        ],
+        tests: [
+          "tests/type2/test_type2_tx_plate_stack_array_export.py",
+          "tests/backend_em/test_type2_tx_plate_stack_array_import.py"
+        ]
+      },
+      {
+        id: "tx-rect-void-columns",
+        group: "future",
+        title: "tx_rect_void_columns",
+        badge: "future",
+        summary: "TX stack-space tile별 rect-void columns, turn allocation, collector generation boundary.",
+        rules: [
+          "Placement owner is `tx_region_actual_stack_space`; tile IDs must parse as contiguous zero-based stack-space indices.",
+          "`layer_count` resolves in `[1, 4]`, layer gap and stack height must fit the stack-space owner.",
+          "Each tile reuses the rect-void core, scales/translates local boxes to its stack-space, and emits deterministic body/stub labels.",
+          "`connection_mode = 0` uses parallel turn allocation/collectors; `connection_mode = 1` uses series allocation/collectors.",
+          "Collector builders validate balanced pickups, no positive-volume shortcut intersections, shared copper thickness, and deterministic source labels."
+        ],
+        path: ["ModeledTxRectVoidColumnsSpec", "stack-space tile parsing", "resolve_tx_turns", "rect-void core per tile", "tile terminal anchors", "parallel/series collectors", "ModeledObjectSceneData"],
+        handoff: [
+          "This is a Type2 implemented/documented boundary, not the current active default geometry path.",
+          "Trace-width metadata can be recovered from terminal anchor boxes for ledger canonical coordinates."
+        ],
+        sources: [
+          ["type2_tx_rect_void_columns.py", "../src/peetsfea/type2_tx_rect_void_columns.py"],
+          ["type2_tx_turns.py", "../src/peetsfea/type2_tx_turns.py"],
+          ["type2_tx_rect_void_collectors.py", "../src/peetsfea/type2_tx_rect_void_collectors.py"],
+          ["type2_step_spec_types.py", "../src/peetsfea/type2_step_spec_types.py"]
+        ],
+        tests: [
+          "tests/type2/test_type2_tx_rect_void_collectors.py",
+          "tests/type2/test_type2_tx_turns.py",
+          "tests/type2/test_generate_type2_step.py"
+        ]
+      },
+      {
+        id: "legacy-excluded",
+        group: "excluded",
+        title: "type1 legacy excluded",
+        badge: "excluded",
+        summary: "frozen type1 internals are intentionally outside this Type2 geometry atlas.",
+        rules: [
+          "Legacy type1 paths live under explicit legacy boundaries and are opt-in only.",
+          "This atlas does not document type1 geometry builders, type1 placement rules, or legacy AEDT builder internals.",
+          "When a Type2 rule appears similar to a legacy rule, the Type2 source/SDD path listed here remains the authority.",
+          "Legacy references may explain historical context but must not be treated as active/default Type2 behavior."
+        ],
+        path: ["legacy/type1 source", "excluded from atlas", "Type2 docs remain authority"],
+        handoff: [
+          "No Type2 shape card links to legacy implementation internals.",
+          "The exclusion prevents mixing frozen type1 geometry rules into active Type2 decisions."
+        ],
+        sources: [
+          ["AGENTS.md", "../AGENTS.md"],
+          ["docs/legacy/type1.md", "legacy/type1.md"],
+          ["docs/current-pipeline.md", "current-pipeline.md"]
+        ],
+        tests: [
+          "tests/legacy/type1 is excluded from default pytest collection",
+          "Type2 tests under tests/type2 and tests/backend_em are the relevant verification surface"
+        ]
+      }
+    ];
+
+    const GROUP_TARGETS = {
+      active: document.getElementById("active-shape-grid"),
+      future: document.getElementById("future-shape-grid"),
+      excluded: document.getElementById("excluded-shape-grid")
+    };
+
+    function detailById(id) {
+      const detail = GEOMETRY_DETAILS.find((entry) => entry.id === id);
+      if (!detail) {
+        throw new Error(`missing Type2 geometry detail record: ${id}`);
+      }
+      return detail;
+    }
+
+    function appendList(parent, items) {
+      const list = document.createElement("ul");
+      for (const item of items) {
+        const listItem = document.createElement("li");
+        listItem.innerHTML = item;
+        list.appendChild(listItem);
+      }
+      parent.appendChild(list);
+    }
+
+    function appendLinks(parent, links) {
+      const container = document.createElement("div");
+      container.className = "link-list";
+      for (const [label, href] of links) {
+        const link = document.createElement("a");
+        link.href = href;
+        link.textContent = label;
+        container.appendChild(link);
+      }
+      parent.appendChild(container);
+    }
+
+    function appendPath(parent, steps) {
+      const chain = document.createElement("div");
+      chain.className = "path-chain";
+      steps.forEach((step, index) => {
+        const stepNode = document.createElement("span");
+        stepNode.className = "path-step";
+        stepNode.textContent = step;
+        chain.appendChild(stepNode);
+        if (index < steps.length - 1) {
+          const arrow = document.createElement("span");
+          arrow.className = "path-arrow";
+          arrow.textContent = "->";
+          chain.appendChild(arrow);
+        }
+      });
+      parent.appendChild(chain);
+    }
+
+    function appendDetailSection(parent, title, build) {
+      const section = document.createElement("section");
+      section.className = "detail-section";
+      const heading = document.createElement("h4");
+      heading.textContent = title;
+      section.appendChild(heading);
+      build(section);
+      parent.appendChild(section);
+    }
+
+    function renderDetail(id) {
+      const detail = detailById(id);
+      document.getElementById("detail-status-label").textContent = STATUS_LABELS[detail.badge];
+
+      for (const button of document.querySelectorAll(".shape-card")) {
+        button.setAttribute("aria-pressed", String(button.dataset.detailId === id));
+      }
+
+      const main = document.getElementById("detail-main");
+      main.replaceChildren();
+
+      const titleBlock = document.createElement("div");
+      titleBlock.className = "detail-title";
+      const badge = document.createElement("span");
+      badge.className = `badge ${detail.badge}`;
+      badge.textContent = STATUS_LABELS[detail.badge];
+      const title = document.createElement("h3");
+      title.textContent = detail.title;
+      const summary = document.createElement("p");
+      summary.textContent = detail.summary;
+      titleBlock.append(badge, title, summary);
+      main.appendChild(titleBlock);
+
+      appendDetailSection(main, "Shape generation rules", (section) => appendList(section, detail.rules));
+      appendDetailSection(main, "Path / method chain", (section) => appendPath(section, detail.path));
+      appendDetailSection(main, "Ledger / import / setup handoff", (section) => appendList(section, detail.handoff));
+      appendDetailSection(main, "Source links", (section) => appendLinks(section, detail.sources));
+      appendDetailSection(main, "Verification surface", (section) => appendList(section, detail.tests));
+
+      if (detail.id === "legacy-excluded") {
+        const note = document.createElement("div");
+        note.className = "legacy-note";
+        note.textContent = "legacy excluded: this page is intentionally Type2-only.";
+        main.appendChild(note);
+      }
+    }
+
+    function renderCards() {
+      for (const target of Object.values(GROUP_TARGETS)) {
+        target.replaceChildren();
+      }
+
+      for (const detail of GEOMETRY_DETAILS) {
+        const target = GROUP_TARGETS[detail.group];
+        if (!target) {
+          throw new Error(`missing atlas group target: ${detail.group}`);
+        }
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "shape-card";
+        button.dataset.detailId = detail.id;
+        button.setAttribute("aria-pressed", "false");
+
+        const titleRow = document.createElement("div");
+        titleRow.className = "shape-title";
+        const title = document.createElement("h4");
+        title.textContent = detail.title;
+        const badge = document.createElement("span");
+        badge.className = `badge ${detail.badge}`;
+        badge.textContent = STATUS_LABELS[detail.badge];
+        titleRow.append(title, badge);
+
+        const summary = document.createElement("p");
+        summary.textContent = detail.summary;
+        button.append(titleRow, summary);
+        button.addEventListener("click", () => renderDetail(detail.id));
+        target.appendChild(button);
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      renderCards();
+      renderDetail("tx-inner-single-coil");
+
+      if (!window.mermaid) {
+        document.body.insertAdjacentHTML(
+          "beforeend",
+          '<div class="wrap"><div class="render-error">Mermaid runtime을 찾을 수 없습니다.</div></div>',
+        );
+        return;
+      }
+
+      window.mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "strict",
+        theme: "base",
+        deterministicIds: true,
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        flowchart: {
+          htmlLabels: true,
+          curve: "basis",
+          useMaxWidth: true
+        },
+        themeVariables: {
+          primaryColor: "#dff1e7",
+          primaryTextColor: "#17382a",
+          primaryBorderColor: "#247a56",
+          lineColor: "#5e6b64",
+          secondaryColor: "#e1eff5",
+          tertiaryColor: "#f6edd7",
+          fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+        }
+      });
+
+      try {
+        await window.mermaid.run({ querySelector: ".mermaid" });
+      } catch (error) {
+        console.error(error);
+        document.querySelectorAll(".diagram-body").forEach((node) => {
+          node.insertAdjacentHTML(
+            "afterbegin",
+            '<div class="render-error">Mermaid 다이어그램 렌더링에 실패했습니다. 브라우저 콘솔을 확인하세요.</div>',
+          );
+        });
+      }
+    });
+  </script>
+</body>
+</html>
