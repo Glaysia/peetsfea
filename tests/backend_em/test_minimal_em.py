@@ -7,7 +7,7 @@ from typing import cast
 import pytest
 
 from peetsfea.aedt.protocols import HfssSession
-from peetsfea.backend.pyaedt.minimal_em import setup_minimal_step_ledger_into_hfss
+from peetsfea.backend.pyaedt.minimal_em import setup_minimal_step_ledger, setup_minimal_step_ledger_into_hfss
 from peetsfea.minimal_step import MinimalStepLedger, export_minimal_step_artifacts, load_minimal_step_ledger
 from peetsfea.minimal_spec import SCHEMA_ID, SPEC_VERSION
 
@@ -164,10 +164,28 @@ class _FakeDesktop:
         return True
 
 
+class _FakeMaterials:
+    def __init__(self) -> None:
+        self.exists_material_calls: list[str] = []
+
+    def exists_material(self, name: str) -> object:
+        self.exists_material_calls.append(name)
+        return name in {"copper", "vacuum"}
+
+
+class _FakeModelObject:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.material_name = ""
+        self.color: tuple[int, int, int] = (0, 0, 0)
+        self.transparency = 0.0
+
+
 class _FakeModeler:
     def __init__(self, ledger: MinimalStepLedger) -> None:
         self._ledger = ledger
         self._object_names: list[str] = []
+        self._objects: dict[str, _FakeModelObject] = {}
         self.import_calls: list[Path] = []
         self.import_kwargs: list[dict[str, object]] = []
         self.set_model_state_calls: list[tuple[str, bool]] = []
@@ -186,9 +204,16 @@ class _FakeModeler:
         self.import_calls.append(input_file)
         self.import_kwargs.append(dict(kwargs))
         self._object_names.extend(self._ledger["body_names"])
+        for object_name in self._ledger["body_names"]:
+            self._objects[object_name] = _FakeModelObject(object_name)
         for cell in self._ledger["port_cells"]:
             self._seed_sheet_edges(cell["port_sheet_name"], cell["port_sheet_vertices_xyz"])
         return True
+
+    def get_object_from_name(self, assignment: str) -> object:
+        if assignment not in self._objects:
+            return False
+        return self._objects[assignment]
 
     def _seed_sheet_edges(self, sheet_name: str, vertices: list[list[float]]) -> None:
         vertex_ids: list[int] = []
@@ -225,6 +250,7 @@ class _FakeModeler:
     def create_region(self, pad_value: int, pad_type: str, name: str) -> object:
         self.create_region_calls.append({"pad_value": pad_value, "pad_type": pad_type, "name": name})
         self._object_names.append(name)
+        self._objects[name] = _FakeModelObject(name)
         return _FakeObject(name)
 
     def get_object_faces(self, assignment: str) -> list[int]:
@@ -242,6 +268,7 @@ class _FakeHfss:
         self.modeler = _FakeModeler(ledger)
         self.odesign = _FakeDesign(self)
         self.desktop_class = _FakeDesktop()
+        self.materials = _FakeMaterials()
         self.oboundary = _FakeBoundaryModule(self)
         self.excitation_names: list[str] = []
         self.setup_names: list[str] = []
@@ -252,7 +279,10 @@ class _FakeHfss:
         self.create_report_calls: list[dict[str, object]] = []
         self.export_report_calls: list[tuple[str, str]] = []
         self.radiation_calls: list[tuple[object, str]] = []
+        self.validation_settings_calls: list[tuple[str, bool, bool]] = []
+        self.delete_setup_calls: list[str] = []
         self.saved_paths: list[str] = []
+        self.get_traces_for_plot_calls: list[dict[str, object]] = []
 
     def assign_radiation_boundary_to_faces(self, assignment: object, name: str) -> object:
         self.radiation_calls.append((assignment, name))
@@ -269,6 +299,40 @@ class _FakeHfss:
     def analyze_setup(self, name: str, blocking: bool = True) -> object:
         del name, blocking
         return True
+
+    def change_validation_settings(
+        self,
+        entity_check_level: str = "Strict",
+        ignore_unclassified: bool = False,
+        skip_intersections: bool = False,
+    ) -> object:
+        self.validation_settings_calls.append((entity_check_level, ignore_unclassified, skip_intersections))
+        return True
+
+    def delete_setup(self, name: str) -> object:
+        self.delete_setup_calls.append(name)
+        return True
+
+    def get_traces_for_plot(
+        self,
+        get_self_terms: bool,
+        get_mutual_terms: bool,
+        first_element_filter: str,
+        second_element_filter: str,
+        category: str,
+        differential_pairs: list[object],
+    ) -> list[str]:
+        self.get_traces_for_plot_calls.append(
+            {
+                "get_self_terms": get_self_terms,
+                "get_mutual_terms": get_mutual_terms,
+                "first_element_filter": first_element_filter,
+                "second_element_filter": second_element_filter,
+                "category": category,
+                "differential_pairs": list(differential_pairs),
+            }
+        )
+        return ["St(1_T1,1_T1)", "St(1_T1,2_T1)", "St(2_T1,2_T1)"]
 
 
 def _ledger_path(tmp_path: Path) -> Path:
@@ -292,22 +356,102 @@ def test_setup_minimal_step_ledger_into_hfss_creates_two_port_setup(tmp_path: Pa
     assert hfss.modeler.import_calls == [Path(ledger["scene_step_path"])]
     assert hfss.modeler.import_kwargs == [{"create_group": False, "import_free_surfaces": True, "import_materials": False}]
     assert hfss.modeler.set_model_state_calls == [("air_context", False)]
+    assert hfss.materials.exists_material_calls == ["copper", "copper", "copper", "copper"]
+    for copper_body_name in ledger["copper_body_names"]:
+        raw_object = hfss.modeler.get_object_from_name(copper_body_name)
+        assert isinstance(raw_object, _FakeModelObject)
+        assert raw_object.material_name == "copper"
+        assert raw_object.color == (184, 115, 51)
+        assert raw_object.transparency == 0.0
+    air_context = hfss.modeler.get_object_from_name("air_context")
+    assert isinstance(air_context, _FakeModelObject)
+    assert air_context.color == (128, 128, 128)
+    assert air_context.transparency == 0.85
+    for port_sheet_name in ledger["port_sheet_names"]:
+        port_sheet = hfss.modeler.get_object_from_name(port_sheet_name)
+        assert isinstance(port_sheet, _FakeModelObject)
+        assert port_sheet.color == (180, 215, 255)
+        assert port_sheet.transparency == 0.88
     mesh_payload = hfss.odesign.mesh_module.assign_length_calls[0]
     assert mesh_payload[mesh_payload.index("Objects:=") + 1] == ledger["copper_body_names"]
     assert [call[0] for call in hfss.oboundary.assign_lumped_port_calls] == ["NAME:1", "NAME:2"]
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
+    setup_payload = hfss.insert_setup_calls[0][1]
+    assert setup_payload[setup_payload.index("MaxDeltaS:=") + 1] == 0.0017
+    assert setup_payload[setup_payload.index("MaximumPasses:=") + 1] == 22
+    assert setup_payload[setup_payload.index("MinimumPasses:=") + 1] == 20
+    assert setup_payload[setup_payload.index("MinimumConvergedPasses:=") + 1] == 21
+    assert setup_payload[setup_payload.index("PercentRefinement:=") + 1] == 25
+    assert setup_payload[setup_payload.index("BasisOrder:=") + 1] == 0
+    assert setup_payload[setup_payload.index("DoLambdaRefine:=") + 1] is False
+    assert setup_payload[setup_payload.index("DoMaterialLambda:=") + 1] is True
+    assert setup_payload[setup_payload.index("Target:=") + 1] == 0.1
+    assert setup_payload[setup_payload.index("DrivenSolverType:=") + 1] == "Direct Solver"
+    assert setup_payload[setup_payload.index("SaveAnyFields:=") + 1] is True
+    assert any(isinstance(item, list) and item == ["NAME:MeshLink", "ImportMesh:=", False] for item in setup_payload)
+    assert hfss.insert_sweep_calls[0][0] == "Setup1"
+    sweep_payload = hfss.insert_sweep_calls[0][1]
+    assert sweep_payload[sweep_payload.index("RangeSamples:=") + 1] == 100
+    assert sweep_payload[sweep_payload.index("SMatrixOnlySolveMode:=") + 1] == "Auto"
+    assert any(isinstance(item, list) and item[0] == "NAME:SweepRanges" for item in sweep_payload)
     assert hfss.edit_sources_calls
     assert [name for name, _expression, _solution in hfss.create_output_variables] == [
+        "Ltx_uH",
+        "Lrx_uH",
+        "M_uH",
+        "k_ratio",
+        "Qtx_ratio",
+        "Qrx_ratio",
+        "FOM_ratio",
+        "Rtx_ac_ohm",
+        "Rrx_ac_ohm",
+        "Xtx_ohm",
+        "Xrx_ohm",
+        "M_over_Ltx_ratio",
+        "M_over_Lrx_ratio",
+        "Gtx_S",
+        "Btx_S",
+        "Grx_S",
+        "Brx_S",
         "S11_mag_ratio",
         "S21_mag_ratio",
         "S21_phase_deg",
         "S22_mag_ratio",
+        "eta_s21_power_ratio",
+        "eta_tx_accept_ratio",
+        "eta_rx_accept_ratio",
+        "eta_match_product_ratio",
+        "eta_s21_from_tx_accept_ratio",
+        "eta_s21_from_rx_accept_ratio",
+        "eta_s21_two_sided_norm_ratio",
+        "eta_fom_max_ratio",
     ]
-    assert [call["plot_name"] for call in hfss.create_report_calls] == ["Output Variables Table1"]
+    assert ("S21_mag_ratio", "mag(St(1_T1,2_T1))", "Setup1 : Sweep") in hfss.create_output_variables
+    assert [call["plot_name"] for call in hfss.create_report_calls] == ["Output Variables Table1", "Table1", "Table2"]
+    output_report_components = cast(list[object], hfss.create_report_calls[0]["components"])
+    assert output_report_components[output_report_components.index("Y Component:=") + 1] == [
+        name for name, _expression, _solution in hfss.create_output_variables
+    ]
+    diagnostic_components = cast(list[object], hfss.create_report_calls[1]["components"])
+    diagnostic_traces = cast(list[object], diagnostic_components[diagnostic_components.index("Y Component:=") + 1])
+    assert "Volume(tx_signal_pad)" in diagnostic_traces
+    assert "Area(rx_port_sheet)" in diagnostic_traces
+    assert "Volume(Region_Abs_3500mm)" in diagnostic_traces
+    adaptive_pass_components = cast(list[object], hfss.create_report_calls[2]["components"])
+    assert adaptive_pass_components[adaptive_pass_components.index("X Component:=") + 1] == "Pass"
+    adaptive_pass_traces = cast(list[object], adaptive_pass_components[adaptive_pass_components.index("Y Component:=") + 1])
+    assert adaptive_pass_traces[-2:] == ["SolvedElements", "MaxMagDeltaS"]
+    assert hfss.create_report_calls[2]["variations"] == ["Pass:=", ["All"], "Freq:=", ["All"]]
+    assert result["reports"] == ["Output Variables Table1", "Table1", "Table2"]
+    assert hfss.validation_settings_calls == [("None", False, False)]
     assert hfss.odesign.validate_design_calls == 1
     assert hfss.saved_paths == [str(tmp_path / "minimal.aedt")]
     imported = json.loads((tmp_path / "minimal_imported_ledger.json").read_text(encoding="utf-8"))
     assert imported["copper_body_names"] == ledger["copper_body_names"]
+    assert imported["material_assignments"] == {name: "copper" for name in ledger["copper_body_names"]}
+    assert imported["visual_assignments"]["air_context"] == {"color": [128, 128, 128], "transparency": 0.85}
+    assert imported["visual_assignments"]["tx_signal_pad"] == {"color": [184, 115, 51], "transparency": 0.0}
+    assert imported["visual_assignments"]["tx_port_sheet"] == {"color": [180, 215, 255], "transparency": 0.88}
 
 
 def test_setup_minimal_step_ledger_into_hfss_raises_on_port_assignment_false(tmp_path: Path) -> None:
@@ -322,3 +466,42 @@ def test_setup_minimal_step_ledger_into_hfss_raises_on_port_assignment_false(tmp
             output_aedt_path=tmp_path / "minimal.aedt",
             imported_ledger_path=tmp_path / "minimal_imported_ledger.json",
         )
+
+
+def test_setup_minimal_step_ledger_releases_desktop_by_default(tmp_path: Path) -> None:
+    ledger_path = _ledger_path(tmp_path)
+    hfss = _FakeHfss(load_minimal_step_ledger(ledger_path))
+
+    def _factory(design_name: str) -> HfssSession:
+        assert design_name == "minimal_gui_test"
+        return cast(HfssSession, hfss)
+
+    setup_minimal_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=tmp_path / "minimal.aedt",
+        imported_ledger_path=tmp_path / "minimal_imported_ledger.json",
+        design_name="minimal_gui_test",
+        hfss_factory=_factory,
+    )
+
+    assert hfss.desktop_class.release_calls == [(True, True)]
+
+
+def test_setup_minimal_step_ledger_can_leave_graphical_desktop_open(tmp_path: Path) -> None:
+    ledger_path = _ledger_path(tmp_path)
+    hfss = _FakeHfss(load_minimal_step_ledger(ledger_path))
+
+    def _factory(design_name: str) -> HfssSession:
+        assert design_name == "minimal_gui_test"
+        return cast(HfssSession, hfss)
+
+    setup_minimal_step_ledger(
+        step_ledger_path=ledger_path,
+        output_aedt_path=tmp_path / "minimal.aedt",
+        imported_ledger_path=tmp_path / "minimal_imported_ledger.json",
+        design_name="minimal_gui_test",
+        hfss_factory=_factory,
+        release_desktop_on_exit=False,
+    )
+
+    assert hfss.desktop_class.release_calls == []

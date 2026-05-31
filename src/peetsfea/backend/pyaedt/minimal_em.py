@@ -5,11 +5,12 @@ from typing import Callable, TypedDict, cast
 
 from peetsfea.aedt import Hfss
 from peetsfea.aedt.failfast import raise_on_false
-from peetsfea.aedt.proxies import assign_lumped_port
+from peetsfea.aedt.proxies import assign_lumped_port, set_object_color, set_object_transparency
 from peetsfea.aedt.protocols import (
     AnalysisSetupModuleSession,
     DesignSession,
     HfssSession,
+    MaterialsSession,
     MeshModuleSession,
     ModelerSession,
     ReportSetupModuleSession,
@@ -22,11 +23,54 @@ DEFAULT_OUTPUT_AEDT_PATH = Path(__file__).resolve().parents[4] / "run" / "minima
 DEFAULT_IMPORTED_LEDGER_PATH = Path(__file__).resolve().parents[4] / "run" / "minimal" / "minimal_imported_ledger.json"
 DEFAULT_DESIGN_NAME = "minimal_step_two_port"
 REPORT_NAME = "Output Variables Table1"
+DIAGNOSTIC_TABLE_1_NAME = "Table1"
+DIAGNOSTIC_TABLE_2_NAME = "Table2"
 SETUP_NAME = "Setup1"
 SWEEP_NAME = "Sweep"
 MESH_OPERATION_NAME = "Length1"
 MESH_MAX_LENGTH = "1mm"
 MESH_MAX_ELEMENTS = "24000"
+NON_MODEL_COLOR = (128, 128, 128)
+NON_MODEL_TRANSPARENCY = 0.85
+COPPER_COLOR = (184, 115, 51)
+COPPER_TRANSPARENCY = 0.0
+PORT_SHEET_COLOR = (180, 215, 255)
+PORT_SHEET_TRANSPARENCY = 0.88
+
+_TXRX_OUTPUT_VARIABLE_EXPRESSIONS: tuple[tuple[str, str], ...] = (
+    ("Ltx_uH", "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"),
+    ("Lrx_uH", "im(Zt(RX_TML,RX_TML))/2/pi/freq*1e6"),
+    ("M_uH", "abs(im(Zt(TX_TML,RX_TML))/2/pi/freq*1e6)"),
+    ("k_ratio", "M_uH/sqrt(Ltx_uH*Lrx_uH)"),
+    ("Qtx_ratio", "im(Zt(TX_TML,TX_TML))/re(Zt(TX_TML,TX_TML))"),
+    ("Qrx_ratio", "im(Zt(RX_TML,RX_TML))/re(Zt(RX_TML,RX_TML))"),
+    ("FOM_ratio", "k_ratio*sqrt(Qtx_ratio*Qrx_ratio)"),
+    ("Rtx_ac_ohm", "re(Zt(TX_TML,TX_TML))"),
+    ("Rrx_ac_ohm", "re(Zt(RX_TML,RX_TML))"),
+    ("Xtx_ohm", "im(Zt(TX_TML,TX_TML))"),
+    ("Xrx_ohm", "im(Zt(RX_TML,RX_TML))"),
+    ("M_over_Ltx_ratio", "M_uH/Ltx_uH"),
+    ("M_over_Lrx_ratio", "M_uH/Lrx_uH"),
+    ("Gtx_S", "re(Yt(TX_TML,TX_TML))"),
+    ("Btx_S", "im(Yt(TX_TML,TX_TML))"),
+    ("Grx_S", "re(Yt(RX_TML,RX_TML))"),
+    ("Brx_S", "im(Yt(RX_TML,RX_TML))"),
+    ("S11_mag_ratio", "mag(S(TX_TML,TX_TML))"),
+    ("S21_mag_ratio", "mag(S(TX_TML,RX_TML))"),
+    ("S21_phase_deg", "ang_deg_val(S(TX_TML,RX_TML))"),
+    ("S22_mag_ratio", "mag(S(RX_TML,RX_TML))"),
+    ("eta_s21_power_ratio", "S21_mag_ratio*S21_mag_ratio"),
+    ("eta_tx_accept_ratio", "1-S11_mag_ratio*S11_mag_ratio"),
+    ("eta_rx_accept_ratio", "1-S22_mag_ratio*S22_mag_ratio"),
+    ("eta_match_product_ratio", "eta_tx_accept_ratio*eta_rx_accept_ratio"),
+    ("eta_s21_from_tx_accept_ratio", "eta_s21_power_ratio/eta_tx_accept_ratio"),
+    ("eta_s21_from_rx_accept_ratio", "eta_s21_power_ratio/eta_rx_accept_ratio"),
+    ("eta_s21_two_sided_norm_ratio", "eta_s21_power_ratio/(eta_tx_accept_ratio*eta_rx_accept_ratio)"),
+    (
+        "eta_fom_max_ratio",
+        "(FOM_ratio*FOM_ratio)/((1+sqrt(1+FOM_ratio*FOM_ratio))*(1+sqrt(1+FOM_ratio*FOM_ratio)))",
+    ),
+)
 
 HfssFactory = Callable[[str], HfssSession]
 
@@ -37,12 +81,19 @@ class MinimalMeshSummary(TypedDict):
     max_length: str
 
 
+class VisualAssignment(TypedDict):
+    color: list[int]
+    transparency: float
+
+
 class MinimalImportedLedger(TypedDict):
     source_step_ledger_path: str
     scene_step_path: str
     aedt_path: str
     imported_object_names: list[str]
     copper_body_names: list[str]
+    material_assignments: dict[str, str]
+    visual_assignments: dict[str, VisualAssignment]
     port_sheet_names: list[str]
     non_model_body_names: list[str]
 
@@ -90,6 +141,10 @@ def create_headless_hfss(design_name: str) -> HfssSession:
     return cast(HfssSession, Hfss(design=design_name, non_graphical=True, new_desktop=True, close_on_exit=False))
 
 
+def create_graphical_hfss(design_name: str) -> HfssSession:
+    return cast(HfssSession, Hfss(design=design_name, non_graphical=False, new_desktop=True, close_on_exit=False))
+
+
 def _design(hfss: HfssSession) -> DesignSession:
     assert (_ := hfss.odesign)
     assert isinstance(_, DesignSession)
@@ -105,17 +160,17 @@ def _region_object_name(region: object) -> str:
 
 def _default_em_policy() -> EmPolicy:
     return {
-        "radiation_margin_mm": 100.0,
+        "radiation_margin_mm": 3500.0,
         "setup_frequency_hz": 6.78e6,
         "sweep_start_hz": 0.1e6,
         "sweep_stop_hz": 100.0e6,
         "validation_gate": "hard_fail",
-        "max_delta_s": 0.007,
-        "maximum_passes": 10,
-        "minimum_passes": 8,
-        "minimum_converged_passes": 10,
-        "percent_refinement": 22,
-        "basis_order": 1,
+        "max_delta_s": 0.0017,
+        "maximum_passes": 22,
+        "minimum_passes": 20,
+        "minimum_converged_passes": 21,
+        "percent_refinement": 25,
+        "basis_order": 0,
         "port_accuracy": 2,
     }
 
@@ -182,6 +237,140 @@ def _required_str_list(ledger: MinimalStepLedger, *, key: str) -> list[str]:
     return names
 
 
+def _body_materials_by_object_id(ledger: MinimalStepLedger) -> dict[str, str]:
+    raw_bodies = ledger["bodies"]
+    if isinstance(raw_bodies, (str, bytes)) or not isinstance(raw_bodies, list):
+        raise TypeError("minimal ledger bodies must be a list")
+    body_materials: dict[str, str] = {}
+    for index, raw_body in enumerate(raw_bodies):
+        if not isinstance(raw_body, dict):
+            raise TypeError(f"minimal ledger bodies[{index}] must be object")
+        if "object_id" not in raw_body:
+            raise ValueError(f"minimal ledger bodies[{index}] is missing object_id")
+        if "material" not in raw_body:
+            raise ValueError(f"minimal ledger bodies[{index}] is missing material")
+        raw_object_id = raw_body["object_id"]
+        raw_material = raw_body["material"]
+        if not isinstance(raw_object_id, str) or raw_object_id == "":
+            raise TypeError(f"minimal ledger bodies[{index}].object_id must be non-empty str")
+        if not isinstance(raw_material, str) or raw_material == "":
+            raise TypeError(f"minimal ledger bodies[{index}].material must be non-empty str")
+        if raw_object_id in body_materials:
+            raise ValueError(f"minimal ledger contains duplicate body object_id {raw_object_id!r}")
+        body_materials[raw_object_id] = raw_material
+    return body_materials
+
+
+def _assign_object_material(*, hfss: HfssSession, modeler: ModelerSession, object_name: str, material: str) -> str:
+    raw_materials = hfss.materials
+    assert hasattr(raw_materials, "exists_material"), "Hfss.materials must expose exists_material"
+    materials = cast(MaterialsSession, raw_materials)
+    raise_on_false(
+        materials.exists_material(material),
+        operation="Materials.exists_material",
+        context={"object_name": object_name, "material": material},
+    )
+    imported_object = raise_on_false(
+        modeler.get_object_from_name(object_name),
+        operation="get_object_from_name",
+        context={"object_name": object_name},
+    )
+    assert hasattr(imported_object, "material_name"), (
+        f"Imported AEDT object must expose material_name before material assignment (object_name={object_name})"
+    )
+    setattr(imported_object, "material_name", material)
+    assigned_material = getattr(imported_object, "material_name")
+    assert isinstance(assigned_material, str), (
+        f"Imported AEDT object material_name must read back as str (object_name={object_name})"
+    )
+    if assigned_material.lower() != material.lower():
+        raise RuntimeError(
+            "AEDT object material assignment did not stick "
+            f"(object_name={object_name}, expected={material!r}, actual={assigned_material!r})"
+        )
+    return assigned_material
+
+
+def _imported_object_ref(*, modeler: ModelerSession, object_name: str) -> object:
+    return raise_on_false(
+        modeler.get_object_from_name(object_name),
+        operation="get_object_from_name",
+        context={"object_name": object_name},
+    )
+
+
+def _apply_visual_state(
+    *,
+    modeler: ModelerSession,
+    object_name: str,
+    color: tuple[int, int, int],
+    transparency: float,
+) -> VisualAssignment:
+    object_ref = _imported_object_ref(modeler=modeler, object_name=object_name)
+    set_object_color(object_ref, color=color)
+    set_object_transparency(object_ref, transparency=transparency)
+    return {"color": [color[0], color[1], color[2]], "transparency": transparency}
+
+
+def _apply_minimal_visual_state(
+    *,
+    modeler: ModelerSession,
+    copper_body_names: list[str],
+    port_sheet_names: list[str],
+    non_model_body_names: list[str],
+) -> dict[str, VisualAssignment]:
+    visual_assignments: dict[str, VisualAssignment] = {}
+    for object_name in non_model_body_names:
+        visual_assignments[object_name] = _apply_visual_state(
+            modeler=modeler,
+            object_name=object_name,
+            color=NON_MODEL_COLOR,
+            transparency=NON_MODEL_TRANSPARENCY,
+        )
+    for object_name in copper_body_names:
+        visual_assignments[object_name] = _apply_visual_state(
+            modeler=modeler,
+            object_name=object_name,
+            color=COPPER_COLOR,
+            transparency=COPPER_TRANSPARENCY,
+        )
+    for object_name in port_sheet_names:
+        visual_assignments[object_name] = _apply_visual_state(
+            modeler=modeler,
+            object_name=object_name,
+            color=PORT_SHEET_COLOR,
+            transparency=PORT_SHEET_TRANSPARENCY,
+        )
+    return visual_assignments
+
+
+def _assign_copper_materials(
+    *,
+    hfss: HfssSession,
+    modeler: ModelerSession,
+    ledger: MinimalStepLedger,
+    copper_body_names: list[str],
+) -> dict[str, str]:
+    body_materials = _body_materials_by_object_id(ledger)
+    material_assignments: dict[str, str] = {}
+    for object_name in copper_body_names:
+        if object_name not in body_materials:
+            raise ValueError(f"minimal ledger copper body has no material entry (object_name={object_name})")
+        material = body_materials[object_name]
+        if material.lower() != "copper":
+            raise ValueError(
+                "minimal EM copper body must use copper material "
+                f"(object_name={object_name}, material={material!r})"
+            )
+        material_assignments[object_name] = _assign_object_material(
+            hfss=hfss,
+            modeler=modeler,
+            object_name=object_name,
+            material=material,
+        )
+    return material_assignments
+
+
 def _import_minimal_step(
     *,
     hfss: HfssSession,
@@ -207,20 +396,36 @@ def _import_minimal_step(
     if missing_names:
         raise ValueError(f"minimal STEP import did not create required bodies (missing={missing_names})")
     imported_names = sorted(name for name in after_names if name in expected_names or name not in before_names)
+    copper_body_names = _required_str_list(ledger, key="copper_body_names")
+    material_assignments = _assign_copper_materials(
+        hfss=hfss,
+        modeler=hfss.modeler,
+        ledger=ledger,
+        copper_body_names=copper_body_names,
+    )
     non_model_names = _required_str_list(ledger, key="non_model_body_names")
+    port_sheet_names = _required_str_list(ledger, key="port_sheet_names")
     for non_model_name in non_model_names:
         raise_on_false(
             hfss.modeler.set_object_model_state(non_model_name, False),
             operation="set_object_model_state",
             context={"name": non_model_name, "model": False},
         )
+    visual_assignments = _apply_minimal_visual_state(
+        modeler=hfss.modeler,
+        copper_body_names=copper_body_names,
+        port_sheet_names=port_sheet_names,
+        non_model_body_names=non_model_names,
+    )
     return {
         "source_step_ledger_path": str(ledger_path),
         "scene_step_path": str(scene_step_path),
         "aedt_path": str(output_aedt_path),
         "imported_object_names": imported_names,
-        "copper_body_names": _required_str_list(ledger, key="copper_body_names"),
-        "port_sheet_names": _required_str_list(ledger, key="port_sheet_names"),
+        "copper_body_names": copper_body_names,
+        "material_assignments": material_assignments,
+        "visual_assignments": visual_assignments,
+        "port_sheet_names": port_sheet_names,
         "non_model_body_names": non_model_names,
     }
 
@@ -428,6 +633,76 @@ def _format_frequency_mhz(frequency_hz: float) -> str:
     return f"{frequency_hz / 1.0e6:g}MHz"
 
 
+def _build_frequency_sweep_payload() -> list[object]:
+    return [
+        f"NAME:{SWEEP_NAME}",
+        "IsEnabled:=",
+        True,
+        "RangeType:=",
+        "LogScale",
+        "RangeStart:=",
+        "0.1MHz",
+        "RangeEnd:=",
+        "100MHz",
+        "RangeCount:=",
+        401,
+        "RangeSamples:=",
+        100,
+        [
+            "NAME:SweepRanges",
+            [
+                "NAME:Subrange",
+                "RangeType:=",
+                "LinearCount",
+                "RangeStart:=",
+                "0MHz",
+                "RangeEnd:=",
+                "0MHz",
+                "RangeCount:=",
+                1,
+            ],
+        ],
+        "Type:=",
+        "Interpolating",
+        "SaveFields:=",
+        False,
+        "SaveRadFields:=",
+        False,
+        "InterpTolerance:=",
+        0.5,
+        "InterpMaxSolns:=",
+        250,
+        "InterpMinSolns:=",
+        0,
+        "InterpMinSubranges:=",
+        1,
+        "MinSolvedFreq:=",
+        "0.01GHz",
+        "InterpUseS:=",
+        True,
+        "InterpUsePortImped:=",
+        True,
+        "InterpUsePropConst:=",
+        True,
+        "UseDerivativeConvergence:=",
+        False,
+        "InterpDerivTolerance:=",
+        0.2,
+        "UseFullBasis:=",
+        True,
+        "EnforcePassivity:=",
+        True,
+        "PassivityErrorTolerance:=",
+        0.0001,
+        "EnforceCausality:=",
+        False,
+        "UseQ3DForDCSolve:=",
+        True,
+        "SMatrixOnlySolveMode:=",
+        "Auto",
+    ]
+
+
 def _analysis_module(hfss: HfssSession) -> AnalysisSetupModuleSession:
     raw_module = _design(hfss).GetModule("AnalysisSetup")
     assert hasattr(raw_module, "InsertSetup"), "AnalysisSetup module must expose InsertSetup"
@@ -437,6 +712,12 @@ def _analysis_module(hfss: HfssSession) -> AnalysisSetupModuleSession:
 
 def _build_analysis(*, hfss: HfssSession, policy: EmPolicy) -> dict[str, float | str]:
     module = _analysis_module(hfss)
+    if SETUP_NAME in hfss.setup_names:
+        raise_on_false(
+            hfss.delete_setup(SETUP_NAME),
+            operation="delete_setup",
+            context={"setup_name": SETUP_NAME},
+        )
     raise_on_false(
         module.InsertSetup(
             "HfssDriven",
@@ -448,6 +729,8 @@ def _build_analysis(*, hfss: HfssSession, policy: EmPolicy) -> dict[str, float |
                 _format_frequency_mhz(policy["setup_frequency_hz"]),
                 "MaxDeltaS:=",
                 policy["max_delta_s"],
+                "UseMatrixConv:=",
+                False,
                 "MaximumPasses:=",
                 policy["maximum_passes"],
                 "MinimumPasses:=",
@@ -458,10 +741,61 @@ def _build_analysis(*, hfss: HfssSession, policy: EmPolicy) -> dict[str, float |
                 policy["percent_refinement"],
                 "IsEnabled:=",
                 True,
+                [
+                    "NAME:MeshLink",
+                    "ImportMesh:=",
+                    False,
+                ],
                 "BasisOrder:=",
                 policy["basis_order"],
+                "DoLambdaRefine:=",
+                False,
+                "DoMaterialLambda:=",
+                True,
+                "SetLambdaTarget:=",
+                False,
+                "Target:=",
+                0.1,
+                "UseMaxTetIncrease:=",
+                True,
+                "MaxTetIncrease:=",
+                700_000,
                 "PortAccuracy:=",
                 policy["port_accuracy"],
+                "UseABCOnPort:=",
+                False,
+                "SetPortMinMaxTri:=",
+                False,
+                "DrivenSolverType:=",
+                "Direct Solver",
+                "EnhancedLowFreqAccuracy:=",
+                False,
+                "EnhancedFEBIPreconditioner:=",
+                False,
+                "SaveRadFieldsOnly:=",
+                False,
+                "SaveAnyFields:=",
+                True,
+                "IESolverType:=",
+                "Auto",
+                "LambdaTargetForIESolver:=",
+                0.15,
+                "UseDefaultLambdaTgtForIESolver:=",
+                True,
+                "IE Solver Accuracy:=",
+                "Balanced",
+                "InfiniteSphereSetup:=",
+                "",
+                "MaxPass:=",
+                10,
+                "MinPass:=",
+                1,
+                "MinConvPass:=",
+                1,
+                "PerError:=",
+                1,
+                "PerRefine:=",
+                30,
             ],
         ),
         operation="InsertSetup",
@@ -470,25 +804,7 @@ def _build_analysis(*, hfss: HfssSession, policy: EmPolicy) -> dict[str, float |
     raise_on_false(
         module.InsertFrequencySweep(
             SETUP_NAME,
-            [
-                f"NAME:{SWEEP_NAME}",
-                "IsEnabled:=",
-                True,
-                "RangeType:=",
-                "LogScale",
-                "RangeStart:=",
-                "0.1MHz",
-                "RangeEnd:=",
-                "100MHz",
-                "RangeCount:=",
-                401,
-                "Type:=",
-                "Interpolating",
-                "SaveFields:=",
-                False,
-                "SaveRadFields:=",
-                False,
-            ],
+            _build_frequency_sweep_payload(),
         ),
         operation="InsertFrequencySweep",
         context={"setup_name": SETUP_NAME, "sweep_name": SWEEP_NAME},
@@ -509,49 +825,131 @@ def _report_setup_module(hfss: HfssSession) -> ReportSetupModuleSession:
     return cast(ReportSetupModuleSession, raw_module)
 
 
-def _create_reports(*, hfss: HfssSession, ports: EmPorts) -> list[str]:
+def _s_function_for_reports(*, hfss: HfssSession) -> str:
+    traces = hfss.get_traces_for_plot(True, True, "", "", "S(", ())
+    if len(traces) == 0:
+        raise ValueError("HFSS did not return terminal S-parameter traces for report generation")
+    if any(trace.startswith("St(") for trace in traces):
+        return "St"
+    if any(trace.startswith("S(") for trace in traces):
+        return "S"
+    raise ValueError(f"HFSS traces did not expose S or St terminal function names (traces={traces})")
+
+
+def _txrx_output_variables(*, tx_port: str, rx_port: str, s_function: str) -> list[tuple[str, str]]:
+    variables: list[tuple[str, str]] = []
+    for name, raw_expression in _TXRX_OUTPUT_VARIABLE_EXPRESSIONS:
+        expression = raw_expression.replace("TX_TML", tx_port).replace("RX_TML", rx_port)
+        expression = expression.replace("S(", f"{s_function}(")
+        variables.append((name, expression))
+    return variables
+
+
+def _minimal_geometry_diagnostic_traces(*, imported_ledger: MinimalImportedLedger, boundary: dict[str, str]) -> list[str]:
+    traces: list[str] = []
+    for name in imported_ledger["non_model_body_names"]:
+        traces.append(f"Volume({name})")
+    for name in imported_ledger["copper_body_names"]:
+        traces.append(f"Volume({name})")
+    for name in imported_ledger["port_sheet_names"]:
+        traces.append(f"Area({name})")
+    traces.append(f"Volume({boundary['region_name']})")
+    return traces
+
+
+def _create_one_report(
+    *,
+    report_setup: ReportSetupModuleSession,
+    report_name: str,
+    solution_name: str,
+    context: list[object],
+    variations: list[object],
+    traces: list[str],
+    primary_sweep: str,
+) -> None:
+    raise_on_false(
+        report_setup.CreateReport(
+            report_name,
+            "Terminal Solution Data",
+            "Data Table",
+            solution_name,
+            context,
+            variations,
+            ["X Component:=", primary_sweep, "Y Component:=", traces],
+            [],
+        ),
+        operation="CreateReport",
+        context={"report_name": report_name, "solution_name": solution_name},
+    )
+
+
+def _create_reports(
+    *,
+    hfss: HfssSession,
+    ports: EmPorts,
+    imported_ledger: MinimalImportedLedger,
+    boundary: dict[str, str],
+) -> list[str]:
     tx_port = ports["tx"][0]
     rx_port = ports["rx"][0]
-    variables = {
-        "S11_mag_ratio": f"mag(S({tx_port},{tx_port}))",
-        "S21_mag_ratio": f"mag(S({tx_port},{rx_port}))",
-        "S21_phase_deg": f"ang_deg_val(S({tx_port},{rx_port}))",
-        "S22_mag_ratio": f"mag(S({rx_port},{rx_port}))",
-    }
+    s_function = _s_function_for_reports(hfss=hfss)
+    variables = _txrx_output_variables(tx_port=tx_port, rx_port=rx_port, s_function=s_function)
     solution_name = f"{SETUP_NAME} : {SWEEP_NAME}"
-    for name, expression in variables.items():
+    for name, expression in variables:
         raise_on_false(
             hfss.create_output_variable(variable=name, expression=expression, solution=solution_name),
             operation="create_output_variable",
             context={"name": name, "expression": expression, "solution": solution_name},
         )
     report_setup = _report_setup_module(hfss)
-    traces = list(variables.keys())
-    raise_on_false(
-        report_setup.CreateReport(
-            REPORT_NAME,
-            "Terminal Solution Data",
-            "Data Table",
-            solution_name,
-            ["Domain:=", "Sweep"],
-            ["Freq:=", ["All"]],
-            ["X Component:=", "Freq", "Y Component:=", traces],
-            [],
-        ),
-        operation="CreateReport",
-        context={"report_name": REPORT_NAME, "solution_name": solution_name},
+    output_variable_names = [name for name, _expression in variables]
+    _create_one_report(
+        report_setup=report_setup,
+        report_name=REPORT_NAME,
+        solution_name=solution_name,
+        context=["Domain:=", "Sweep"],
+        variations=["Freq:=", ["All"]],
+        traces=output_variable_names,
+        primary_sweep="Freq",
     )
-    report_names = list(report_setup.GetAllReportNames())
-    if REPORT_NAME not in report_names:
-        raise ValueError(f"minimal report creation did not register required report (available={report_names})")
-    return [REPORT_NAME]
+    table_1_traces = [*output_variable_names, *_minimal_geometry_diagnostic_traces(imported_ledger=imported_ledger, boundary=boundary)]
+    _create_one_report(
+        report_setup=report_setup,
+        report_name=DIAGNOSTIC_TABLE_1_NAME,
+        solution_name=f"{SETUP_NAME} : LastAdaptive",
+        context=[],
+        variations=["Freq:=", ["All"]],
+        traces=table_1_traces,
+        primary_sweep="Freq",
+    )
+    _create_one_report(
+        report_setup=report_setup,
+        report_name=DIAGNOSTIC_TABLE_2_NAME,
+        solution_name=f"{SETUP_NAME} : AdaptivePass",
+        context=[],
+        variations=["Pass:=", ["All"], "Freq:=", ["All"]],
+        traces=[*output_variable_names, "SolvedElements", "MaxMagDeltaS"],
+        primary_sweep="Pass",
+    )
+    report_names = set(report_setup.GetAllReportNames())
+    expected_report_names = {REPORT_NAME, DIAGNOSTIC_TABLE_1_NAME, DIAGNOSTIC_TABLE_2_NAME}
+    if not expected_report_names.issubset(report_names):
+        raise ValueError(
+            "minimal report creation did not register required reports "
+            f"(missing={sorted(expected_report_names.difference(report_names))}, available={sorted(report_names)})"
+        )
+    return [REPORT_NAME, DIAGNOSTIC_TABLE_1_NAME, DIAGNOSTIC_TABLE_2_NAME]
 
 
 def _validate_design(hfss: HfssSession) -> None:
     design = _design(hfss)
     desktop = hfss.desktop_class
     messages = list(desktop.GetMessages("", "", 0))
-    validation_result = design.ValidateDesign()
+    try:
+        validation_result = design.ValidateDesign()
+    except RuntimeError as exc:
+        post_validate_messages = list(desktop.GetMessages("", "", 0))
+        raise RuntimeError(f"{exc} (desktop_messages={post_validate_messages!r})") from exc
     raise_on_false(validation_result, operation="ValidateDesign", context={"desktop_messages": messages})
 
 
@@ -588,8 +986,21 @@ def setup_minimal_step_ledger_into_hfss(
     ports = _assign_ports(hfss=hfss, ledger=ledger)
     sources = _apply_sources(hfss=hfss, ports=ports)
     analysis = _build_analysis(hfss=hfss, policy=policy)
-    reports = _create_reports(hfss=hfss, ports=ports)
+    reports = _create_reports(hfss=hfss, ports=ports, imported_ledger=imported_ledger, boundary=boundary)
     validation_report = _validate_minimal_setup(ports=ports)
+    raise_on_false(
+        hfss.change_validation_settings(
+            entity_check_level="None",
+            ignore_unclassified=False,
+            skip_intersections=False,
+        ),
+        operation="change_validation_settings",
+        context={
+            "entity_check_level": "None",
+            "ignore_unclassified": False,
+            "skip_intersections": False,
+        },
+    )
     if run_aedt_design_validation:
         _validate_design(hfss)
     raise_on_false(hfss.save_project(str(output_aedt_path)), operation="save_project", context={"path": str(output_aedt_path)})
@@ -616,6 +1027,8 @@ def setup_minimal_step_ledger(
     imported_ledger_path: Path = DEFAULT_IMPORTED_LEDGER_PATH,
     design_name: str = DEFAULT_DESIGN_NAME,
     hfss_factory: HfssFactory = create_headless_hfss,
+    release_desktop_on_exit: bool = True,
+    close_projects_on_release: bool = True,
 ) -> MinimalSetupResult:
     hfss = hfss_factory(design_name)
     try:
@@ -626,11 +1039,12 @@ def setup_minimal_step_ledger(
             imported_ledger_path=imported_ledger_path,
         )
     finally:
-        raise_on_false(
-            hfss.desktop_class.release_desktop(close_projects=True, close_on_exit=True),
-            operation="release_desktop",
-            context={"close_projects": True, "close_on_exit": True},
-        )
+        if release_desktop_on_exit:
+            raise_on_false(
+                hfss.desktop_class.release_desktop(close_projects=close_projects_on_release, close_on_exit=True),
+                operation="release_desktop",
+                context={"close_projects": close_projects_on_release, "close_on_exit": True},
+            )
 
 
 def solve_minimal_step_ledger(
@@ -678,6 +1092,8 @@ __all__ = [
     "DEFAULT_LEDGER_PATH",
     "DEFAULT_OUTPUT_AEDT_PATH",
     "HfssFactory",
+    "create_graphical_hfss",
+    "create_headless_hfss",
     "EmPolicy",
     "EmPorts",
     "MinimalImportedLedger",

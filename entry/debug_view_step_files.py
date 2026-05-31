@@ -12,10 +12,11 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from entry.sample import MinimalManifestEntry, sample_minimal
+from peetsfea.backend.pyaedt.minimal_em import create_graphical_hfss, setup_minimal_step_ledger
 from peetsfea.minimal_step import load_minimal_step_ledger
 
 VIEW_INDEX = -1
-BUILD_W_GUI = False
+BUILD_W_GUI = True
 
 
 class DebugStepFilesSummary(TypedDict):
@@ -25,6 +26,8 @@ class DebugStepFilesSummary(TypedDict):
     design_id: str
     step_path: str
     step_ledger_path: str
+    aedt_path: str
+    imported_ledger_path: str
     body_names: list[str]
     copper_body_names: list[str]
     port_sheet_names: list[str]
@@ -65,6 +68,8 @@ def generate_minimal_step_summary(*, view_index: int = VIEW_INDEX) -> DebugStepF
         "design_id": entry["design_id"],
         "step_path": str(step_path),
         "step_ledger_path": str(step_ledger_path),
+        "aedt_path": entry["aedt_path"],
+        "imported_ledger_path": entry["imported_ledger_path"],
         "body_names": ledger["body_names"],
         "copper_body_names": ledger["copper_body_names"],
         "port_sheet_names": ledger["port_sheet_names"],
@@ -83,6 +88,15 @@ def show_minimal_step_in_ocp(*, view_index: int = VIEW_INDEX) -> DebugStepFilesS
         collapse=Collapse.ROOT,
         reset_camera=Camera.RESET,
     )
+    if BUILD_W_GUI:
+        setup_minimal_step_ledger(
+            step_ledger_path=Path(summary["step_ledger_path"]),
+            output_aedt_path=Path(summary["aedt_path"]),
+            imported_ledger_path=Path(summary["imported_ledger_path"]),
+            design_name=summary["design_id"],
+            hfss_factory=create_graphical_hfss,
+            release_desktop_on_exit=False,
+        )
     return summary
 
 

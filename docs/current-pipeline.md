@@ -32,11 +32,16 @@ tags:
 
 ## EM Contract
 - [minimal_em.py](../src/peetsfea/backend/pyaedt/minimal_em.py) owns the active HFSS setup/solve path.
+- STEP import assigns `copper` back onto the four generated pad bodies before mesh, ports, setup, reports, and validation.
+- STEP import applies restored AEDT visual state: non-model gray/transparent, copper pads copper/opaque, and port sheets light-blue/transparent.
 - Mesh target is exactly the four copper pads.
 - Terminal ports are fixed to Tx `1_T1` and Rx `2_T1`.
 - Tx source is `1V @ 0deg`; Rx source is `0V @ 0deg`.
-- Analysis creates `Setup1` and `Sweep`.
-- Report generation creates `Output Variables Table1` with S-parameter magnitude/phase variables.
+- Radiation boundary uses the restored `3500mm` absolute region margin.
+- Analysis creates `Setup1` with the restored type2 sweep contract: `6.78MHz`, `MaxDeltaS=0.0017`, pass budget `22/20/21`, `PercentRefinement=25`, `BasisOrder=0`, `DoLambdaRefine=false`, and direct solver.
+- Sweep creates the restored interpolating `Sweep` from `0.1MHz` to `100MHz` with `401` log points and the DC subrange.
+- Report generation creates the restored Tx/Rx output-variable set: self inductance, mutual inductance, coupling, Q, FOM, impedance, admittance, S-parameter, acceptance, and efficiency variables.
+- Required AEDT report surfaces are `Output Variables Table1`, `Table1`, and `Table2`; `Table2` uses `Pass` as its X component.
 
 ## Execution Defaults
 - Commands run from `run/`.

@@ -10,6 +10,7 @@
       "python": "${workspaceFolder}/.venv/bin/python",
       "console": "integratedTerminal",
       "justMyCode": false,
+      "preLaunchTask": "prepare-minimal-step-debug",
       "env": {}
     }
   ]
