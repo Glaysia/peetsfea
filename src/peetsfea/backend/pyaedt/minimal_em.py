@@ -160,7 +160,7 @@ def _region_object_name(region: object) -> str:
 
 def _default_em_policy() -> EmPolicy:
     return {
-        "radiation_margin_mm": 3500.0,
+        "radiation_margin_mm": 2000.0,
         "setup_frequency_hz": 6.78e6,
         "sweep_start_hz": 0.1e6,
         "sweep_stop_hz": 100.0e6,

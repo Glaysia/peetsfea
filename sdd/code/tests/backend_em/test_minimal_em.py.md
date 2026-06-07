@@ -14,7 +14,7 @@ tags:
 - Inputs: generated minimal ledgers and fake HFSS sessions.
 - Outputs: assertions for import, copper material assignment, visual state assignment, mesh, port, restored setup policy, AEDT-compatible sweep payload, analysis, report, save, solve, and release calls.
 - Canonical state: fake session call records.
-- Invariants: Tx/Rx port names, copper body material readback, restored object colors/transparency, restored `3500mm` radiation region, setup policy `0.0017`/`22/20/21`/`BasisOrder=0`/lambda-refine off, mesh targets, restored TxRx report variables, and diagnostic report surfaces stay fixed with `Table2` X component `Pass`; setup closes AEDT by default but can leave a GUI session open when explicitly requested.
+- Invariants: Tx/Rx port names, copper body material readback, restored object colors/transparency, restored `2000mm` radiation region, setup policy `0.0017`/`22/20/21`/`BasisOrder=0`/lambda-refine off, mesh targets, restored TxRx report variables, and diagnostic report surfaces stay fixed with `Table2` X component `Pass`; setup closes AEDT by default but can leave a GUI session open when explicitly requested.
 - Fail-fast points: PyAEDT-style false returns, missing required bodies, and missing AEDT materials.
 - Collaborators: [minimal_em.py](../../src/peetsfea/backend/pyaedt/minimal_em.py.md).
 - Tests: this file.

@@ -436,7 +436,7 @@ def test_setup_minimal_step_ledger_into_hfss_creates_two_port_setup(tmp_path: Pa
     diagnostic_traces = cast(list[object], diagnostic_components[diagnostic_components.index("Y Component:=") + 1])
     assert "Volume(tx_signal_pad)" in diagnostic_traces
     assert "Area(rx_port_sheet)" in diagnostic_traces
-    assert "Volume(Region_Abs_3500mm)" in diagnostic_traces
+    assert "Volume(Region_Abs_2000mm)" in diagnostic_traces
     adaptive_pass_components = cast(list[object], hfss.create_report_calls[2]["components"])
     assert adaptive_pass_components[adaptive_pass_components.index("X Component:=") + 1] == "Pass"
     adaptive_pass_traces = cast(list[object], adaptive_pass_components[adaptive_pass_components.index("Y Component:=") + 1])

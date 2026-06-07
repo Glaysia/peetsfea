@@ -39,7 +39,7 @@ tags:
 - Mesh target is exactly the four copper pads.
 - Terminal ports are fixed to Tx `1_T1` and Rx `2_T1`.
 - Tx source is `1V @ 0deg`; Rx source is `0V @ 0deg`.
-- Radiation boundary uses the restored `3500mm` absolute region margin.
+- Radiation boundary uses the restored `2000mm` absolute region margin.
 - Analysis creates `Setup1` with the restored type2 sweep contract: `6.78MHz`, `MaxDeltaS=0.0017`, pass budget `22/20/21`, `PercentRefinement=25`, `BasisOrder=0`, `DoLambdaRefine=false`, and direct solver.
 - Sweep creates the restored interpolating `Sweep` from `0.1MHz` to `100MHz` with `401` log points and the DC subrange.
 - Report generation creates the restored Tx/Rx output-variable set: self inductance, mutual inductance, coupling, Q, FOM, impedance, admittance, S-parameter, acceptance, and efficiency variables.
