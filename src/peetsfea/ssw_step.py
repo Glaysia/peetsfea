@@ -659,7 +659,7 @@ def _mull_ferrite_sheet_boxes(
     tx_boxes: tuple[_BodyBox, ...],
     rx_boxes: tuple[_BodyBox, ...],
 ) -> tuple[_BodyBox, _BodyBox]:
-    tx_region_bounds = _body_bounds(_body_by_name(_non_model_boxes(spec), "tx_region"))
+    tx_region_max_bounds = _body_bounds(_body_by_name(_non_model_boxes(spec), "tx_region_max"))
     rx_region_max_bounds = _body_bounds(_body_by_name(_non_model_boxes(spec), "rx_region_max"))
     tx_bounds = _combined_bounds(tx_boxes, "TX SSW bodies")
     rx_bounds = _combined_bounds(rx_boxes, "RX SSW bodies")
@@ -667,7 +667,7 @@ def _mull_ferrite_sheet_boxes(
     ratio = spec.ferrite.mull_position_ratio
 
     tx_zmin, tx_zmax = _mull_sheet_axis_bounds(
-        outer_min_mm=tx_region_bounds.zmin,
+        outer_min_mm=tx_region_max_bounds.zmin,
         coil_min_mm=tx_bounds.zmin,
         thickness_mm=thickness,
         ratio=ratio,
@@ -853,8 +853,7 @@ def _tx_xy_bottom_port_orientation() -> cq.Location:
 def _rx_yz_back_port_orientation() -> cq.Location:
     rotate_y = cq.Location(cq.Vector(0.0, 0.0, 0.0), cq.Vector(0.0, 1.0, 0.0), 90.0)
     rotate_x = cq.Location(cq.Vector(0.0, 0.0, 0.0), cq.Vector(1.0, 0.0, 0.0), 90.0)
-    flip_top_port_to_back = cq.Location(cq.Vector(0.0, 0.0, 0.0), cq.Vector(0.0, 1.0, 0.0), 180.0)
-    return flip_top_port_to_back * rotate_x * rotate_y
+    return rotate_x * rotate_y
 
 
 def _coilmaker_assembly(params: SswCoilParameters, fixed: FixedDimensions) -> cq.Assembly:
@@ -1137,6 +1136,7 @@ def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -
     tolerance = 1e-6
     tv_bounds = _body_bounds(_body_by_name(bodies, "tv"))
     tx_region_bounds = _body_bounds(_body_by_name(bodies, "tx_region"))
+    tx_region_max_bounds = _body_bounds(_body_by_name(bodies, "tx_region_max"))
     rx_region_max_bounds = _body_bounds(_body_by_name(bodies, "rx_region_max"))
     tx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "tx_ssw_coil_"), "TX SSW bodies")
     rx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "rx_ssw_coil_"), "RX SSW bodies")
@@ -1247,8 +1247,8 @@ def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -
         or abs(rx_ferrite_bounds.center_z - rx_bounds.center_z) > tolerance
     ):
         raise ValueError("RX MULL ferrite sheet must match RX coil YZ footprint")
-    if tx_ferrite_bounds.zmin < tx_region_bounds.zmin - tolerance or tx_ferrite_bounds.zmax > tx_bounds.zmin + tolerance:
-        raise ValueError("TX MULL ferrite sheet must stay between tx_region Z min and TX coil Z min")
+    if tx_ferrite_bounds.zmin < tx_region_max_bounds.zmin - tolerance or tx_ferrite_bounds.zmax > tx_bounds.zmin + tolerance:
+        raise ValueError("TX MULL ferrite sheet must stay between tx_region_max Z min and TX coil Z min")
     if rx_ferrite_bounds.xmin < rx_region_max_bounds.xmin - tolerance or rx_ferrite_bounds.xmax > rx_bounds.xmin + tolerance:
         raise ValueError("RX MULL ferrite sheet must stay between rx_region_max X min and RX coil X min")
 

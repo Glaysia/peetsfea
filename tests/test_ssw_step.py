@@ -8,6 +8,7 @@ import tomllib
 import pytest
 
 from entry.debug_view_0_3_0_ssw import AEDT_PORT_LEDGER_NAME, AEDT_SCENE_STEP_NAME, export_ssw_aedt_port_artifacts
+import peetsfea.coilmaker as coilmaker
 import peetsfea.ssw_step as module_under_test
 from peetsfea.ssw_step import (
     SswStepLedger,
@@ -140,6 +141,50 @@ def _combined_ledger_bounds(ledger: SswStepLedger, object_id_prefix: str) -> tup
     )
 
 
+def _combined_bbox_bounds(
+    bboxes: tuple[module_under_test._Bounds, ...],
+) -> tuple[float, float, float, float, float, float]:
+    assert bboxes
+    return (
+        min(bbox.xmin for bbox in bboxes),
+        max(bbox.xmax for bbox in bboxes),
+        min(bbox.ymin for bbox in bboxes),
+        max(bbox.ymax for bbox in bboxes),
+        min(bbox.zmin for bbox in bboxes),
+        max(bbox.zmax for bbox in bboxes),
+    )
+
+
+def _rx_normal_port_landing_bounds(
+    spec: module_under_test.SswFixedSpec,
+) -> tuple[float, float, float, float, float, float]:
+    config = module_under_test._coilmaker_config(spec.rx, spec.fixed)
+    frames = tuple(coilmaker.coil_slot_frames(config))
+    assert len(frames) == 1
+    frame = frames[0]
+    trace_width_mm = coilmaker._normal_coil_trace_width_mm(config, frame)
+    centerline_points = coilmaker._normal_coil_centerline_points(config, frame)
+    landing = coilmaker._normal_port_landing_geometry(config, frame, centerline_points, trace_width_mm)
+    placement = module_under_test._placement_for_role(
+        spec,
+        spec.rx,
+        module_under_test._coilmaker_assembly(spec.rx, spec.fixed),
+    )
+    bboxes: list[module_under_test._Bounds] = []
+    for token in landing.pieces:
+        if isinstance(token, coilmaker.BoxToken):
+            workplane = coilmaker._render_box_token(token)
+        elif isinstance(token, coilmaker.PolygonExtrudeToken):
+            rendered = coilmaker._render_polygon_extrude_token(token)
+            if rendered is None:
+                continue
+            workplane = rendered
+        else:
+            raise TypeError(f"unsupported RX normal port body token {type(token).__name__}")
+        bboxes.append(module_under_test._located_bbox(workplane, placement))
+    return _combined_bbox_bounds(tuple(bboxes))
+
+
 def _body_by_name_from_boxes(
     bodies: tuple[module_under_test._BodyBox, ...],
     name: str,
@@ -178,6 +223,7 @@ def test_build_ssw_body_boxes_uses_tv_below_distance(tmp_path: Path) -> None:
 def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> None:
     artifacts = export_ssw_step_artifacts(source_toml_path=FIXED_TOML, output_dir=tmp_path, seed=0)
 
+    spec = load_ssw_fixed_spec(FIXED_TOML)
     step_path = Path(artifacts["scene_step_path"])
     ledger = load_ssw_step_ledger(Path(artifacts["ledger_path"]))
     token_path = Path(artifacts["token_toml_path"])
@@ -288,7 +334,7 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert tx_ferrite_bounds[1] == pytest.approx(tx_assembly_bounds[1])
     assert tx_ferrite_bounds[2] == pytest.approx(tx_assembly_bounds[2])
     assert tx_ferrite_bounds[3] == pytest.approx(tx_assembly_bounds[3])
-    assert tx_ferrite_bounds[4] == pytest.approx(tx_region_bounds[4])
+    assert tx_ferrite_bounds[4] == pytest.approx(tx_region_max_bounds[4])
     assert tx_ferrite_bounds[5] - tx_ferrite_bounds[4] == pytest.approx(0.12)
     assert rx_ferrite_bounds[0] == pytest.approx(rx_region_max_bounds[0])
     assert rx_ferrite_bounds[1] - rx_ferrite_bounds[0] == pytest.approx(0.12)
@@ -319,6 +365,9 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert tx_bounds[5] - tx_bounds[4] < 10.0
     assert rx_bounds[1] - rx_bounds[0] < 10.0
     assert rx_bounds[3] - rx_bounds[2] > rx_bounds[5] - rx_bounds[4]
+    rx_port_landing_bounds = _rx_normal_port_landing_bounds(spec)
+    assert rx_port_landing_bounds[0] == pytest.approx(rx_bounds[0])
+    assert rx_port_landing_bounds[1] < rx_bounds[1] - tolerance
     tx_port_anchor = tx_placement_params["port_anchor_world_xyz_mm"]
     rx_port_anchor = rx_placement_params["port_anchor_world_xyz_mm"]
     assert isinstance(tx_port_anchor, list)
@@ -375,7 +424,7 @@ def test_build_ssw_body_boxes_rejects_mull_ferrite_sheet_when_interval_is_too_sm
         build_ssw_body_boxes(spec)
 
 
-def test_export_ssw_aedt_port_artifacts_writes_port_sheet_ledger(tmp_path: Path) -> None:
+def test_export_ssw_aedt_port_artifacts_writes_direct_edge_port_ledger(tmp_path: Path) -> None:
     ledger = export_ssw_aedt_port_artifacts(source_toml_path=FIXED_TOML, output_dir=tmp_path, seed=0)
 
     aedt_step_path = Path(ledger["scene_step_path"])
@@ -386,16 +435,23 @@ def test_export_ssw_aedt_port_artifacts_writes_port_sheet_ledger(tmp_path: Path)
     assert port_ledger_path.is_file()
     stored_ledger = json.loads(port_ledger_path.read_text(encoding="utf-8"))
     assert stored_ledger == ledger
-    assert ledger["port_sheet_names"] == ["tx_aedt_port_sheet", "rx_aedt_port_sheet"]
-    assert ledger["port_sheet_names"][0] in ledger["body_names"]
-    assert ledger["port_sheet_names"][1] in ledger["body_names"]
+    assert "port_sheet_names" not in ledger
+    assert "tx_aedt_port_sheet" not in ledger["body_names"]
+    assert "rx_aedt_port_sheet" not in ledger["body_names"]
     assert "tx_mull_ferrite_sheet" in ledger["non_model_body_names"]
     assert "rx_mull_ferrite_sheet" in ledger["non_model_body_names"]
-    assert [cell["role"] for cell in ledger["port_cells"]] == ["tx", "rx"]
-    tx_cell = ledger["port_cells"][0]
-    rx_cell = ledger["port_cells"][1]
-    assert tx_cell["signal_edge_vertices_xyz"][0][2] == pytest.approx(tx_cell["signal_edge_vertices_xyz"][1][2])
-    assert rx_cell["signal_edge_vertices_xyz"][0][0] == pytest.approx(rx_cell["signal_edge_vertices_xyz"][1][0])
+    assert [entry["role"] for entry in ledger["port_edges"]] == ["tx", "rx"]
+    tx_entry = ledger["port_edges"][0]
+    rx_entry = ledger["port_edges"][1]
+    assert tx_entry["copper_body_name"] == "tx_ssw_coil_ssw_copper"
+    assert tx_entry["selection"] == "nearest_long_face_edges"
+    assert tx_entry["face_axis"] == "z"
+    assert tx_entry["face_side"] == "min"
+    assert rx_entry["copper_body_name"] == "rx_ssw_coil_coil_copper"
+    assert rx_entry["selection"] == "axis_spaced_face_edges"
+    assert rx_entry["face_axis"] == "x"
+    assert rx_entry["face_side"] == "min"
+    assert rx_entry["edge_axis"] == "z"
 
 
 def test_export_ssw_step_artifacts_supports_explicit_rx_spiral_mode(tmp_path: Path) -> None:

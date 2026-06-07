@@ -96,8 +96,7 @@ class _FakeModeler:
         self._object_names.extend(self._ledger["body_names"])
         for object_name in self._ledger["body_names"]:
             self._objects[object_name] = _FakeModelObject(object_name)
-        for cell in self._ledger["port_cells"]:
-            self._seed_sheet_edges(cell["port_sheet_name"], cell["port_sheet_vertices_xyz"])
+        self._seed_copper_port_edges()
         return True
 
     def get_object_from_name(self, assignment: str) -> object:
@@ -105,20 +104,68 @@ class _FakeModeler:
             return False
         return self._objects[assignment]
 
-    def _seed_sheet_edges(self, sheet_name: str, vertices: list[list[float]]) -> None:
-        vertex_ids: list[int] = []
-        for raw_vertex in vertices:
-            vertex_id = self._next_vertex_id
-            self._next_vertex_id += 1
-            self._vertex_positions[vertex_id] = (float(raw_vertex[0]), float(raw_vertex[1]), float(raw_vertex[2]))
-            vertex_ids.append(vertex_id)
-        edge_ids: list[int] = []
-        for first_id, second_id in zip(vertex_ids, [*vertex_ids[1:], vertex_ids[0]], strict=True):
-            edge_id = self._next_edge_id
-            self._next_edge_id += 1
-            self._edge_vertices[edge_id] = (first_id, second_id)
-            edge_ids.append(edge_id)
-        self._object_edges[sheet_name] = edge_ids
+    def _seed_edge(
+        self,
+        *,
+        object_name: str,
+        edge_id: int,
+        first_xyz: tuple[float, float, float],
+        second_xyz: tuple[float, float, float],
+    ) -> None:
+        first_vertex_id = self._next_vertex_id
+        self._next_vertex_id += 1
+        second_vertex_id = self._next_vertex_id
+        self._next_vertex_id += 1
+        self._vertex_positions[first_vertex_id] = first_xyz
+        self._vertex_positions[second_vertex_id] = second_xyz
+        self._edge_vertices[edge_id] = (first_vertex_id, second_vertex_id)
+        if object_name not in self._object_edges:
+            self._object_edges[object_name] = []
+        self._object_edges[object_name].append(edge_id)
+
+    def _seed_copper_port_edges(self) -> None:
+        self._seed_edge(
+            object_name="tx_ssw_coil_ssw_copper",
+            edge_id=101,
+            first_xyz=(0.0, -1.0, 0.0),
+            second_xyz=(10.0, -1.0, 0.0),
+        )
+        self._seed_edge(
+            object_name="tx_ssw_coil_ssw_copper",
+            edge_id=102,
+            first_xyz=(0.0, 1.0, 0.0),
+            second_xyz=(10.0, 1.0, 0.0),
+        )
+        self._seed_edge(
+            object_name="tx_ssw_coil_ssw_copper",
+            edge_id=103,
+            first_xyz=(0.0, 20.0, 0.0),
+            second_xyz=(10.0, 20.0, 0.0),
+        )
+        self._seed_edge(
+            object_name="rx_ssw_coil_coil_copper",
+            edge_id=201,
+            first_xyz=(9.0, 5.0, 0.0),
+            second_xyz=(9.0, 5.0, 5.5),
+        )
+        self._seed_edge(
+            object_name="rx_ssw_coil_coil_copper",
+            edge_id=202,
+            first_xyz=(9.0, 7.0, 0.0),
+            second_xyz=(9.0, 7.0, 5.5),
+        )
+        self._seed_edge(
+            object_name="rx_ssw_coil_coil_copper",
+            edge_id=203,
+            first_xyz=(10.0, 5.0, 0.0),
+            second_xyz=(10.0, 5.0, 5.5),
+        )
+        self._seed_edge(
+            object_name="rx_ssw_coil_coil_copper",
+            edge_id=204,
+            first_xyz=(10.0, 7.0, 0.0),
+            second_xyz=(10.0, 7.0, 5.5),
+        )
 
     def set_object_model_state(self, name: str, model: bool) -> object:
         self.set_model_state_calls.append((name, model))
@@ -167,47 +214,46 @@ def _body_entry(object_id: str, role: str, material: str, model_state: bool) -> 
 
 
 def _ledger(tmp_path: Path) -> SswAedtPortStepLedger:
-    tx_vertices = [[-1.0, -0.5, 0.0], [1.0, -0.5, 0.0], [1.0, 0.5, 0.0], [-1.0, 0.5, 0.0]]
-    rx_vertices = [[10.0, -1.0, -0.5], [10.0, 1.0, -0.5], [10.0, 1.0, 0.5], [10.0, -1.0, 0.5]]
     body_names = [
         "tv",
         "tx_ssw_coil_ssw_copper",
         "rx_ssw_coil_coil_copper",
         "tx_mull_ferrite_sheet",
-        "tx_aedt_port_sheet",
-        "rx_aedt_port_sheet",
     ]
     return {
         "source_step_ledger_path": str(tmp_path / "ssw_step_ledger.json"),
-        "scene_step_path": str(tmp_path / "ssw_scene_with_ports.step"),
+        "scene_step_path": str(tmp_path / "ssw_scene.step"),
         "seed": 0,
         "units": "mm",
         "body_names": body_names,
         "copper_body_names": ["tx_ssw_coil_ssw_copper", "rx_ssw_coil_coil_copper"],
-        "port_sheet_names": ["tx_aedt_port_sheet", "rx_aedt_port_sheet"],
         "non_model_body_names": ["tv", "tx_mull_ferrite_sheet"],
         "bodies": [
             _body_entry("tv", "non_model", "vacuum", False),
             _body_entry("tx_ssw_coil_ssw_copper", "copper", "copper", True),
             _body_entry("rx_ssw_coil_coil_copper", "copper", "copper", True),
             _body_entry("tx_mull_ferrite_sheet", "ferrite", "mull_ferrite", False),
-            _body_entry("tx_aedt_port_sheet", "tx_port_sheet", "vacuum", True),
-            _body_entry("rx_aedt_port_sheet", "rx_port_sheet", "vacuum", True),
         ],
-        "port_cells": [
+        "port_edges": [
             {
                 "role": "tx",
-                "port_sheet_name": "tx_aedt_port_sheet",
-                "port_sheet_vertices_xyz": tx_vertices,
-                "signal_edge_vertices_xyz": [tx_vertices[0], tx_vertices[1]],
-                "reference_edge_vertices_xyz": [tx_vertices[3], tx_vertices[2]],
+                "copper_body_name": "tx_ssw_coil_ssw_copper",
+                "selection": "nearest_long_face_edges",
+                "face_axis": "z",
+                "face_side": "min",
+                "anchor_xyz": [5.0, 0.0, 0.0],
+                "minimum_edge_length_mm": 5.5,
             },
             {
                 "role": "rx",
-                "port_sheet_name": "rx_aedt_port_sheet",
-                "port_sheet_vertices_xyz": rx_vertices,
-                "signal_edge_vertices_xyz": [rx_vertices[0], rx_vertices[1]],
-                "reference_edge_vertices_xyz": [rx_vertices[3], rx_vertices[2]],
+                "copper_body_name": "rx_ssw_coil_coil_copper",
+                "selection": "axis_spaced_face_edges",
+                "face_axis": "x",
+                "face_side": "min",
+                "edge_axis": "z",
+                "spacing_axis": "y",
+                "edge_length_mm": 5.5,
+                "pair_spacing_mm": 2.0,
             },
         ],
     }
@@ -234,17 +280,48 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     )
 
     assert hfss.modeler.import_calls == [Path(ledger["scene_step_path"])]
-    assert hfss.modeler.import_kwargs == [{"create_group": False, "import_free_surfaces": True, "import_materials": False}]
+    assert hfss.modeler.import_kwargs == [{"create_group": False, "import_free_surfaces": False, "import_materials": False}]
     assert hfss.modeler.set_model_state_calls == [("tv", False), ("tx_mull_ferrite_sheet", False)]
     assert hfss.materials.exists_material_calls == ["copper", "copper"]
-    assert [call[0] for call in hfss.oboundary.assign_lumped_port_calls] == ["NAME:1", "NAME:2"]
+    assert hfss.oboundary.assign_lumped_port_calls == [
+        [
+            "NAME:1",
+            "Edges:=",
+            [101, 102],
+            "LumpedPortType:=",
+            "Terminal",
+            "DoDeembed:=",
+            False,
+            "RenormalizeAllTerminals:=",
+            True,
+            "ShowReporterFilter:=",
+            False,
+            "Impedance:=",
+            "50ohm",
+        ],
+        [
+            "NAME:2",
+            "Edges:=",
+            [201, 202],
+            "LumpedPortType:=",
+            "Terminal",
+            "DoDeembed:=",
+            False,
+            "RenormalizeAllTerminals:=",
+            True,
+            "ShowReporterFilter:=",
+            False,
+            "Impedance:=",
+            "50ohm",
+        ],
+    ]
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
     assert hfss.saved_paths == [str(tmp_path / "ssw_ports.aedt")]
     imported = json.loads((tmp_path / "ssw_imported.json").read_text(encoding="utf-8"))
     assert imported["source_port_ledger_path"] == str(ledger_path)
     assert imported["copper_body_names"] == ledger["copper_body_names"]
-    assert imported["port_sheet_names"] == ledger["port_sheet_names"]
-    assert imported["visual_assignments"]["tx_aedt_port_sheet"] == {"color": [180, 215, 255], "transparency": 0.88}
+    assert "port_sheet_names" not in imported
+    assert "tx_aedt_port_sheet" not in imported["visual_assignments"]
 
 
 def test_setup_ssw_aedt_ports_into_hfss_raises_on_port_assignment_false(tmp_path: Path) -> None:
@@ -299,6 +376,6 @@ def test_setup_ssw_aedt_ports_runs_real_headless_ansys() -> None:
     assert Path(result["aedt_path"]).is_file()
     assert Path(result["imported_ledger_path"]).is_file()
     imported = json.loads(Path(result["imported_ledger_path"]).read_text(encoding="utf-8"))
-    assert imported["port_sheet_names"] == ["tx_aedt_port_sheet", "rx_aedt_port_sheet"]
+    assert "port_sheet_names" not in imported
     assert "tx_ssw_coil_ssw_copper" in imported["copper_body_names"]
     assert "rx_ssw_coil_coil_copper" in imported["copper_body_names"]

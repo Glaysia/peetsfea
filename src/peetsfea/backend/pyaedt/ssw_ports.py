@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Callable, Literal, TypedDict, cast
+from typing import Callable, Literal, TypeAlias, TypedDict, cast
 
 from peetsfea.aedt import Hfss
 from peetsfea.aedt.failfast import raise_on_false
@@ -19,12 +19,15 @@ COPPER_COLOR = (184, 115, 51)
 COPPER_TRANSPARENCY = 0.0
 NON_MODEL_COLOR = (128, 128, 128)
 NON_MODEL_TRANSPARENCY = 0.85
-PORT_SHEET_COLOR = (180, 215, 255)
-PORT_SHEET_TRANSPARENCY = 0.88
 
 Point3 = tuple[float, float, float]
 HfssFactory = Callable[[str], HfssSession]
 PortRole = Literal["tx", "rx"]
+Axis = Literal["x", "y", "z"]
+FaceSide = Literal["min", "max"]
+PortEdgeSelection = Literal["nearest_long_face_edges", "axis_spaced_face_edges"]
+BoundaryPayloadName = Literal["NAME:1", "NAME:2"]
+ExpectedTerminalName = Literal["1_T1", "2_T1"]
 
 
 class CanonicalCoordinates(TypedDict):
@@ -41,12 +44,29 @@ class SswAedtBodyLedgerEntry(TypedDict):
     canonical_coordinates: CanonicalCoordinates
 
 
-class SswAedtPortCellLedgerEntry(TypedDict):
+class SswNearestPortEdgeLedgerEntry(TypedDict):
     role: PortRole
-    port_sheet_name: str
-    port_sheet_vertices_xyz: list[list[float]]
-    signal_edge_vertices_xyz: list[list[float]]
-    reference_edge_vertices_xyz: list[list[float]]
+    copper_body_name: str
+    selection: Literal["nearest_long_face_edges"]
+    face_axis: Axis
+    face_side: FaceSide
+    anchor_xyz: list[float]
+    minimum_edge_length_mm: float
+
+
+class SswAxisSpacedPortEdgeLedgerEntry(TypedDict):
+    role: PortRole
+    copper_body_name: str
+    selection: Literal["axis_spaced_face_edges"]
+    face_axis: Axis
+    face_side: FaceSide
+    edge_axis: Axis
+    spacing_axis: Axis
+    edge_length_mm: float
+    pair_spacing_mm: float
+
+
+SswAedtPortEdgeLedgerEntry: TypeAlias = SswNearestPortEdgeLedgerEntry | SswAxisSpacedPortEdgeLedgerEntry
 
 
 class SswAedtPortStepLedger(TypedDict):
@@ -56,10 +76,9 @@ class SswAedtPortStepLedger(TypedDict):
     units: Literal["mm"]
     body_names: list[str]
     copper_body_names: list[str]
-    port_sheet_names: list[str]
     non_model_body_names: list[str]
     bodies: list[SswAedtBodyLedgerEntry]
-    port_cells: list[SswAedtPortCellLedgerEntry]
+    port_edges: list[SswAedtPortEdgeLedgerEntry]
 
 
 class VisualAssignment(TypedDict):
@@ -76,7 +95,6 @@ class SswAedtImportedLedger(TypedDict):
     copper_body_names: list[str]
     material_assignments: dict[str, str]
     visual_assignments: dict[str, VisualAssignment]
-    port_sheet_names: list[str]
     non_model_body_names: list[str]
 
 
@@ -119,10 +137,9 @@ def load_ssw_aedt_port_ledger(ledger_path: Path) -> SswAedtPortStepLedger:
         "units",
         "body_names",
         "copper_body_names",
-        "port_sheet_names",
         "non_model_body_names",
         "bodies",
-        "port_cells",
+        "port_edges",
     ):
         if key not in raw_ledger:
             raise ValueError(f"SSW AEDT port ledger is missing required key {key!r}: {ledger_path}")
@@ -258,7 +275,7 @@ def _import_ssw_aedt_port_step(
         hfss.modeler.import_3d_cad(
             scene_step_path,
             create_group=False,
-            import_free_surfaces=True,
+            import_free_surfaces=False,
             import_materials=False,
         ),
         operation="import_3d_cad",
@@ -278,7 +295,6 @@ def _import_ssw_aedt_port_step(
         copper_body_names=copper_body_names,
     )
     non_model_names = _required_str_list(ledger, key="non_model_body_names")
-    port_sheet_names = _required_str_list(ledger, key="port_sheet_names")
     for non_model_name in non_model_names:
         raise_on_false(
             hfss.modeler.set_object_model_state(non_model_name, False),
@@ -300,13 +316,6 @@ def _import_ssw_aedt_port_step(
             color=COPPER_COLOR,
             transparency=COPPER_TRANSPARENCY,
         )
-    for object_name in port_sheet_names:
-        visual_assignments[object_name] = _apply_visual_state(
-            modeler=hfss.modeler,
-            object_name=object_name,
-            color=PORT_SHEET_COLOR,
-            transparency=PORT_SHEET_TRANSPARENCY,
-        )
     return {
         "source_port_ledger_path": str(ledger_path),
         "source_step_ledger_path": ledger["source_step_ledger_path"],
@@ -316,7 +325,6 @@ def _import_ssw_aedt_port_step(
         "copper_body_names": copper_body_names,
         "material_assignments": material_assignments,
         "visual_assignments": visual_assignments,
-        "port_sheet_names": port_sheet_names,
         "non_model_body_names": non_model_names,
     }
 
@@ -335,42 +343,170 @@ def _edge_vertices_xyz(modeler: ModelerSession, *, edge_id: int) -> tuple[Point3
     )
 
 
-def _same_point(first: Point3, second: Point3) -> bool:
-    return abs(first[0] - second[0]) <= 1e-6 and abs(first[1] - second[1]) <= 1e-6 and abs(first[2] - second[2]) <= 1e-6
+class EdgeSnapshot(TypedDict):
+    edge_id: int
+    vertices_xyz: tuple[Point3, Point3]
+    midpoint_xyz: Point3
+    length_mm: float
 
 
-def _same_edge(actual: tuple[Point3, Point3], expected: tuple[Point3, Point3]) -> bool:
-    return (_same_point(actual[0], expected[0]) and _same_point(actual[1], expected[1])) or (
-        _same_point(actual[0], expected[1]) and _same_point(actual[1], expected[0])
+EDGE_TOLERANCE_MM = 1e-5
+
+
+def _axis_index(axis: Axis) -> int:
+    if axis == "x":
+        return 0
+    if axis == "y":
+        return 1
+    if axis == "z":
+        return 2
+    raise ValueError(f"unsupported axis {axis!r}")
+
+
+def _edge_length(vertices: tuple[Point3, Point3]) -> float:
+    return (
+        (vertices[0][0] - vertices[1][0]) ** 2
+        + (vertices[0][1] - vertices[1][1]) ** 2
+        + (vertices[0][2] - vertices[1][2]) ** 2
+    ) ** 0.5
+
+
+def _edge_midpoint(vertices: tuple[Point3, Point3]) -> Point3:
+    return (
+        (vertices[0][0] + vertices[1][0]) / 2.0,
+        (vertices[0][1] + vertices[1][1]) / 2.0,
+        (vertices[0][2] + vertices[1][2]) / 2.0,
     )
 
 
-def _edge_from_vertex_rows(raw_rows: list[list[float]], *, context: str) -> tuple[Point3, Point3]:
-    if len(raw_rows) != 2:
-        raise ValueError(f"{context} must contain exactly two vertices")
-    vertices: list[Point3] = []
-    for index, raw_vertex in enumerate(raw_rows):
-        if len(raw_vertex) != 3:
-            raise ValueError(f"{context}[{index}] must contain exactly three coordinates")
-        vertices.append((float(raw_vertex[0]), float(raw_vertex[1]), float(raw_vertex[2])))
-    return (vertices[0], vertices[1])
+def _point_distance(first: Point3, second: Point3) -> float:
+    return (
+        (first[0] - second[0]) ** 2
+        + (first[1] - second[1]) ** 2
+        + (first[2] - second[2]) ** 2
+    ) ** 0.5
 
 
-def _resolve_sheet_edge_id(
+def _object_edge_snapshots(*, modeler: ModelerSession, object_name: str) -> list[EdgeSnapshot]:
+    snapshots: list[EdgeSnapshot] = []
+    for raw_edge_id in modeler.get_object_edges(object_name):
+        edge_id = int(raw_edge_id)
+        vertices = _edge_vertices_xyz(modeler, edge_id=edge_id)
+        snapshots.append(
+            {
+                "edge_id": edge_id,
+                "vertices_xyz": vertices,
+                "midpoint_xyz": _edge_midpoint(vertices),
+                "length_mm": _edge_length(vertices),
+            }
+        )
+    if len(snapshots) == 0:
+        raise ValueError(f"imported copper object has no edges (object_name={object_name})")
+    return snapshots
+
+
+def _face_coordinate(edges: list[EdgeSnapshot], *, axis: Axis, side: FaceSide) -> float:
+    axis_i = _axis_index(axis)
+    coordinates = [point[axis_i] for edge in edges for point in edge["vertices_xyz"]]
+    if side == "min":
+        return min(coordinates)
+    if side == "max":
+        return max(coordinates)
+    raise ValueError(f"unsupported face side {side!r}")
+
+
+def _edge_on_face(edge: EdgeSnapshot, *, axis: Axis, coordinate: float) -> bool:
+    axis_i = _axis_index(axis)
+    return all(abs(point[axis_i] - coordinate) <= EDGE_TOLERANCE_MM for point in edge["vertices_xyz"])
+
+
+def _edge_aligned_to_axis(edge: EdgeSnapshot, *, axis: Axis) -> bool:
+    axis_i = _axis_index(axis)
+    first, second = edge["vertices_xyz"]
+    deltas = (abs(first[0] - second[0]), abs(first[1] - second[1]), abs(first[2] - second[2]))
+    if deltas[axis_i] <= EDGE_TOLERANCE_MM:
+        return False
+    return all(delta <= EDGE_TOLERANCE_MM for index, delta in enumerate(deltas) if index != axis_i)
+
+
+def _point_from_rows(raw_point: list[float], *, context: str) -> Point3:
+    if len(raw_point) != 3:
+        raise ValueError(f"{context} must contain exactly three coordinates")
+    return (float(raw_point[0]), float(raw_point[1]), float(raw_point[2]))
+
+
+def _remaining_axis(*, face_axis: Axis, spacing_axis: Axis) -> Axis:
+    if face_axis == spacing_axis:
+        raise ValueError(f"face_axis and spacing_axis must differ (axis={face_axis})")
+    if face_axis != "x" and spacing_axis != "x":
+        return "x"
+    if face_axis != "y" and spacing_axis != "y":
+        return "y"
+    if face_axis != "z" and spacing_axis != "z":
+        return "z"
+    raise ValueError(f"face_axis and spacing_axis must leave one remaining axis (face={face_axis}, spacing={spacing_axis})")
+
+
+def _resolve_nearest_long_face_edge_ids(
     *,
     modeler: ModelerSession,
-    sheet_name: str,
-    expected_edge: tuple[Point3, Point3],
+    spec: SswNearestPortEdgeLedgerEntry,
     context: str,
-) -> int:
-    matches: list[int] = []
-    for raw_edge_id in modeler.get_object_edges(sheet_name):
-        edge_id = int(raw_edge_id)
-        if _same_edge(_edge_vertices_xyz(modeler, edge_id=edge_id), expected_edge):
-            matches.append(edge_id)
-    if len(matches) != 1:
-        raise ValueError(f"{context} must resolve exactly one sheet edge (sheet={sheet_name}, matches={matches})")
-    return matches[0]
+) -> list[int]:
+    edges = _object_edge_snapshots(modeler=modeler, object_name=spec["copper_body_name"])
+    face_coordinate = _face_coordinate(edges, axis=spec["face_axis"], side=spec["face_side"])
+    anchor = _point_from_rows(spec["anchor_xyz"], context=f"{context}.anchor_xyz")
+    minimum_length = float(spec["minimum_edge_length_mm"])
+    candidates = [
+        edge
+        for edge in edges
+        if _edge_on_face(edge, axis=spec["face_axis"], coordinate=face_coordinate)
+        and edge["length_mm"] + EDGE_TOLERANCE_MM >= minimum_length
+    ]
+    if len(candidates) < 2:
+        raise ValueError(
+            f"{context} requires at least two long face edges "
+            f"(object_name={spec['copper_body_name']}, face_axis={spec['face_axis']}, candidates={len(candidates)})"
+        )
+    candidates.sort(key=lambda edge: (_point_distance(edge["midpoint_xyz"], anchor), edge["edge_id"]))
+    return sorted(edge["edge_id"] for edge in candidates[:2])
+
+
+def _resolve_axis_spaced_face_edge_ids(
+    *,
+    modeler: ModelerSession,
+    spec: SswAxisSpacedPortEdgeLedgerEntry,
+    context: str,
+) -> list[int]:
+    edges = _object_edge_snapshots(modeler=modeler, object_name=spec["copper_body_name"])
+    face_coordinate = _face_coordinate(edges, axis=spec["face_axis"], side=spec["face_side"])
+    expected_length = float(spec["edge_length_mm"])
+    candidate_edges = [
+        edge
+        for edge in edges
+        if _edge_on_face(edge, axis=spec["face_axis"], coordinate=face_coordinate)
+        and _edge_aligned_to_axis(edge, axis=spec["edge_axis"])
+        and abs(edge["length_mm"] - expected_length) <= EDGE_TOLERANCE_MM
+    ]
+    spacing_axis = spec["spacing_axis"]
+    spacing_i = _axis_index(spacing_axis)
+    remaining_i = _axis_index(_remaining_axis(face_axis=spec["face_axis"], spacing_axis=spacing_axis))
+    expected_spacing = float(spec["pair_spacing_mm"])
+    matching_pairs: list[tuple[int, int]] = []
+    for first_index, first_edge in enumerate(candidate_edges):
+        for second_edge in candidate_edges[first_index + 1 :]:
+            first_midpoint = first_edge["midpoint_xyz"]
+            second_midpoint = second_edge["midpoint_xyz"]
+            same_remaining = abs(first_midpoint[remaining_i] - second_midpoint[remaining_i]) <= EDGE_TOLERANCE_MM
+            spacing = abs(first_midpoint[spacing_i] - second_midpoint[spacing_i])
+            if same_remaining and abs(spacing - expected_spacing) <= EDGE_TOLERANCE_MM:
+                matching_pairs.append((first_edge["edge_id"], second_edge["edge_id"]))
+    if len(matching_pairs) != 1:
+        raise ValueError(
+            f"{context} requires exactly one axis-spaced edge pair "
+            f"(object_name={spec['copper_body_name']}, matches={matching_pairs})"
+        )
+    return sorted([matching_pairs[0][0], matching_pairs[0][1]])
 
 
 def _capture_expected_excitation(*, hfss: HfssSession, expected_name: str, context: str) -> str:
@@ -380,53 +516,152 @@ def _capture_expected_excitation(*, hfss: HfssSession, expected_name: str, conte
     return expected_name
 
 
-def _port_cells_by_role(ledger: SswAedtPortStepLedger) -> dict[PortRole, SswAedtPortCellLedgerEntry]:
-    raw_cells = ledger["port_cells"]
-    if isinstance(raw_cells, (str, bytes)) or not isinstance(raw_cells, list):
-        raise TypeError("SSW AEDT port ledger port_cells must be a list")
-    cells_by_role: dict[PortRole, SswAedtPortCellLedgerEntry] = {}
-    for index, raw_cell in enumerate(raw_cells):
-        if not isinstance(raw_cell, dict):
-            raise TypeError(f"SSW AEDT port ledger port_cells[{index}] must be object")
-        cell = cast(SswAedtPortCellLedgerEntry, raw_cell)
-        role = cell["role"]
-        if role not in {"tx", "rx"}:
-            raise ValueError(f"SSW AEDT port cell role must be tx or rx (actual={role!r})")
-        if role in cells_by_role:
-            raise ValueError(f"SSW AEDT port ledger contains duplicate port cell role {role!r}")
-        cells_by_role[role] = cell
-    if set(cells_by_role) != {"tx", "rx"}:
-        raise ValueError(f"SSW AEDT port ledger requires tx and rx port cells (actual={sorted(cells_by_role)})")
-    return cells_by_role
+def _required_raw_key(raw_entry: dict[str, object], *, key: str, context: str) -> object:
+    if key not in raw_entry:
+        raise ValueError(f"{context} is missing required key {key!r}")
+    return raw_entry[key]
+
+
+def _required_raw_str(raw_entry: dict[str, object], *, key: str, context: str) -> str:
+    raw_value = _required_raw_key(raw_entry, key=key, context=context)
+    if not isinstance(raw_value, str) or raw_value == "":
+        raise TypeError(f"{context}.{key} must be a non-empty str")
+    return raw_value
+
+
+def _required_raw_float(raw_entry: dict[str, object], *, key: str, context: str) -> float:
+    raw_value = _required_raw_key(raw_entry, key=key, context=context)
+    if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+        raise TypeError(f"{context}.{key} must be numeric")
+    return float(raw_value)
+
+
+def _required_raw_point(raw_entry: dict[str, object], *, key: str, context: str) -> list[float]:
+    raw_value = _required_raw_key(raw_entry, key=key, context=context)
+    if isinstance(raw_value, (str, bytes)) or not isinstance(raw_value, list):
+        raise TypeError(f"{context}.{key} must be a list of three numbers")
+    if len(raw_value) != 3:
+        raise ValueError(f"{context}.{key} must contain exactly three entries")
+    point: list[float] = []
+    for index, component in enumerate(raw_value):
+        if isinstance(component, bool) or not isinstance(component, (int, float)):
+            raise TypeError(f"{context}.{key}[{index}] must be numeric")
+        point.append(float(component))
+    return point
+
+
+def _required_port_role(raw_entry: dict[str, object], *, context: str) -> PortRole:
+    role = _required_raw_str(raw_entry, key="role", context=context)
+    if role == "tx" or role == "rx":
+        return role
+    raise ValueError(f"{context}.role must be tx or rx (actual={role!r})")
+
+
+def _required_axis(raw_entry: dict[str, object], *, key: str, context: str) -> Axis:
+    axis = _required_raw_str(raw_entry, key=key, context=context)
+    if axis == "x" or axis == "y" or axis == "z":
+        return axis
+    raise ValueError(f"{context}.{key} must be x, y, or z (actual={axis!r})")
+
+
+def _required_face_side(raw_entry: dict[str, object], *, context: str) -> FaceSide:
+    face_side = _required_raw_str(raw_entry, key="face_side", context=context)
+    if face_side == "min" or face_side == "max":
+        return face_side
+    raise ValueError(f"{context}.face_side must be min or max (actual={face_side!r})")
+
+
+def _nearest_port_edge_entry(raw_entry: dict[str, object], *, context: str) -> SswNearestPortEdgeLedgerEntry:
+    minimum_edge_length_mm = _required_raw_float(raw_entry, key="minimum_edge_length_mm", context=context)
+    if minimum_edge_length_mm <= 0.0:
+        raise ValueError(f"{context}.minimum_edge_length_mm must be positive")
+    return {
+        "role": _required_port_role(raw_entry, context=context),
+        "copper_body_name": _required_raw_str(raw_entry, key="copper_body_name", context=context),
+        "selection": "nearest_long_face_edges",
+        "face_axis": _required_axis(raw_entry, key="face_axis", context=context),
+        "face_side": _required_face_side(raw_entry, context=context),
+        "anchor_xyz": _required_raw_point(raw_entry, key="anchor_xyz", context=context),
+        "minimum_edge_length_mm": minimum_edge_length_mm,
+    }
+
+
+def _axis_spaced_port_edge_entry(raw_entry: dict[str, object], *, context: str) -> SswAxisSpacedPortEdgeLedgerEntry:
+    edge_length_mm = _required_raw_float(raw_entry, key="edge_length_mm", context=context)
+    pair_spacing_mm = _required_raw_float(raw_entry, key="pair_spacing_mm", context=context)
+    if edge_length_mm <= 0.0:
+        raise ValueError(f"{context}.edge_length_mm must be positive")
+    if pair_spacing_mm <= 0.0:
+        raise ValueError(f"{context}.pair_spacing_mm must be positive")
+    return {
+        "role": _required_port_role(raw_entry, context=context),
+        "copper_body_name": _required_raw_str(raw_entry, key="copper_body_name", context=context),
+        "selection": "axis_spaced_face_edges",
+        "face_axis": _required_axis(raw_entry, key="face_axis", context=context),
+        "face_side": _required_face_side(raw_entry, context=context),
+        "edge_axis": _required_axis(raw_entry, key="edge_axis", context=context),
+        "spacing_axis": _required_axis(raw_entry, key="spacing_axis", context=context),
+        "edge_length_mm": edge_length_mm,
+        "pair_spacing_mm": pair_spacing_mm,
+    }
+
+
+def _port_edges_by_role(ledger: SswAedtPortStepLedger) -> dict[PortRole, SswAedtPortEdgeLedgerEntry]:
+    raw_edges = ledger["port_edges"]
+    if isinstance(raw_edges, (str, bytes)) or not isinstance(raw_edges, list):
+        raise TypeError("SSW AEDT port ledger port_edges must be a list")
+    edges_by_role: dict[PortRole, SswAedtPortEdgeLedgerEntry] = {}
+    for index, raw_edge in enumerate(raw_edges):
+        context = f"SSW AEDT port ledger port_edges[{index}]"
+        if not isinstance(raw_edge, dict):
+            raise TypeError(f"{context} must be object")
+        raw_entry = cast(dict[str, object], raw_edge)
+        selection = _required_raw_str(raw_entry, key="selection", context=context)
+        if selection == "nearest_long_face_edges":
+            entry: SswAedtPortEdgeLedgerEntry = _nearest_port_edge_entry(raw_entry, context=context)
+        elif selection == "axis_spaced_face_edges":
+            entry = _axis_spaced_port_edge_entry(raw_entry, context=context)
+        else:
+            raise ValueError(f"{context}.selection is unsupported (actual={selection!r})")
+        role = entry["role"]
+        if role in edges_by_role:
+            raise ValueError(f"SSW AEDT port ledger contains duplicate port edge role {role!r}")
+        edges_by_role[role] = entry
+    if set(edges_by_role) != {"tx", "rx"}:
+        raise ValueError(f"SSW AEDT port ledger requires tx and rx port edges (actual={sorted(edges_by_role)})")
+    return edges_by_role
 
 
 def _assign_one_port(
     *,
     hfss: HfssSession,
     modeler: ModelerSession,
-    cell: SswAedtPortCellLedgerEntry,
-    slot: str,
+    edge_spec: SswAedtPortEdgeLedgerEntry,
+    boundary_name: BoundaryPayloadName,
+    expected_terminal_name: ExpectedTerminalName,
     context: str,
 ) -> str:
-    sheet_name = cell["port_sheet_name"]
-    signal_edge_id = _resolve_sheet_edge_id(
-        modeler=modeler,
-        sheet_name=sheet_name,
-        expected_edge=_edge_from_vertex_rows(cell["signal_edge_vertices_xyz"], context=f"{context}.signal_edge_vertices_xyz"),
-        context=f"{context}.signal",
-    )
-    reference_edge_id = _resolve_sheet_edge_id(
-        modeler=modeler,
-        sheet_name=sheet_name,
-        expected_edge=_edge_from_vertex_rows(cell["reference_edge_vertices_xyz"], context=f"{context}.reference_edge_vertices_xyz"),
-        context=f"{context}.reference",
-    )
+    selection = edge_spec["selection"]
+    if selection == "nearest_long_face_edges":
+        edge_ids = _resolve_nearest_long_face_edge_ids(
+            modeler=modeler,
+            spec=cast(SswNearestPortEdgeLedgerEntry, edge_spec),
+            context=context,
+        )
+    elif selection == "axis_spaced_face_edges":
+        edge_ids = _resolve_axis_spaced_face_edge_ids(
+            modeler=modeler,
+            spec=cast(SswAxisSpacedPortEdgeLedgerEntry, edge_spec),
+            context=context,
+        )
+    else:
+        raise ValueError(f"{context} has unsupported port edge selection {selection!r}")
     assign_lumped_port(
         hfss.oboundary,
         [
-            f"NAME:{slot}",
+            boundary_name,
             "Edges:=",
-            [signal_edge_id, reference_edge_id],
+            edge_ids,
             "LumpedPortType:=",
             "Terminal",
             "DoDeembed:=",
@@ -440,14 +675,32 @@ def _assign_one_port(
         ],
         context=context,
     )
-    return _capture_expected_excitation(hfss=hfss, expected_name=f"{slot}_T1", context=context)
+    return _capture_expected_excitation(hfss=hfss, expected_name=expected_terminal_name, context=context)
 
 
 def _assign_ports(*, hfss: HfssSession, ledger: SswAedtPortStepLedger) -> SswAedtPorts:
-    cells_by_role = _port_cells_by_role(ledger)
+    edges_by_role = _port_edges_by_role(ledger)
     return {
-        "tx": [_assign_one_port(hfss=hfss, modeler=hfss.modeler, cell=cells_by_role["tx"], slot="1", context="ssw.tx_port")],
-        "rx": [_assign_one_port(hfss=hfss, modeler=hfss.modeler, cell=cells_by_role["rx"], slot="2", context="ssw.rx_port")],
+        "tx": [
+            _assign_one_port(
+                hfss=hfss,
+                modeler=hfss.modeler,
+                edge_spec=edges_by_role["tx"],
+                boundary_name="NAME:1",
+                expected_terminal_name="1_T1",
+                context="ssw.tx_port",
+            )
+        ],
+        "rx": [
+            _assign_one_port(
+                hfss=hfss,
+                modeler=hfss.modeler,
+                edge_spec=edges_by_role["rx"],
+                boundary_name="NAME:2",
+                expected_terminal_name="2_T1",
+                context="ssw.rx_port",
+            )
+        ],
     }
 
 
@@ -521,7 +774,7 @@ __all__ = [
     "CanonicalCoordinates",
     "SswAedtBodyLedgerEntry",
     "SswAedtImportedLedger",
-    "SswAedtPortCellLedgerEntry",
+    "SswAedtPortEdgeLedgerEntry",
     "SswAedtPorts",
     "SswAedtPortSetupResult",
     "SswAedtPortStepLedger",

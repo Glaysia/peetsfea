@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Literal, Mapping, TypedDict
+from typing import Mapping, TypedDict
 import tomllib
 
 import cadquery as cq
@@ -15,7 +15,6 @@ if __package__ in {None, ""}:
 from peetsfea.ssw_step import (
     DEFAULT_OUTPUT_DIR,
     DEFAULT_SOURCE_TOML_PATH,
-    FixedDimensions,
     SswStepLedger,
     build_ssw_assembly,
     export_ssw_step_artifacts,
@@ -26,7 +25,7 @@ from peetsfea.backend.pyaedt.ssw_ports import (
     CanonicalCoordinates,
     SswAedtBodyLedgerEntry,
     SswAedtPorts,
-    SswAedtPortCellLedgerEntry,
+    SswAedtPortEdgeLedgerEntry,
     SswAedtPortSetupResult,
     SswAedtPortStepLedger,
     create_graphical_hfss,
@@ -39,13 +38,11 @@ OUTPUT_DIR = DEFAULT_OUTPUT_DIR
 SEED = 0
 OCP_PORT = 3939
 ANSYS = True
-AEDT_SCENE_STEP_NAME = "ssw_scene_with_ports.step"
+AEDT_SCENE_STEP_NAME = "ssw_scene.step"
 AEDT_PORT_LEDGER_NAME = "ssw_aedt_port_ledger.json"
 AEDT_IMPORTED_LEDGER_NAME = "ssw_aedt_imported_ledger.json"
 AEDT_PROJECT_NAME = "ssw_0_3_0_ports.aedt"
 AEDT_DESIGN_NAME = "ssw_0_3_0_ports"
-TX_PORT_SHEET_NAME = "tx_aedt_port_sheet"
-RX_PORT_SHEET_NAME = "rx_aedt_port_sheet"
 
 
 class DebugSswSummary(TypedDict):
@@ -66,15 +63,6 @@ class DebugSswSummary(TypedDict):
     aedt_imported_ledger_path: str
     aedt_path: str
     aedt_ports: SswAedtPorts
-
-
-class _PortSheetGeometry(TypedDict):
-    name: str
-    role: Literal["tx", "rx"]
-    face: cq.Face
-    vertices_xyz: list[list[float]]
-    signal_edge_vertices_xyz: list[list[float]]
-    reference_edge_vertices_xyz: list[list[float]]
 
 
 def _require_file(*, path: Path, label: str) -> None:
@@ -100,7 +88,7 @@ def _json_action_params_by_key(action: Mapping[str, object]) -> dict[str, object
     return mapped
 
 
-def _port_anchor_from_token(*, token_toml_path: Path, target: str) -> tuple[float, float, float]:
+def _placement_params_from_token(*, token_toml_path: Path, target: str) -> dict[str, object]:
     token_doc = tomllib.loads(token_toml_path.read_text(encoding="utf-8"))
     actions = token_doc["actions"]
     if isinstance(actions, (str, bytes)) or not isinstance(actions, list):
@@ -108,63 +96,32 @@ def _port_anchor_from_token(*, token_toml_path: Path, target: str) -> tuple[floa
     matches = tuple(action for action in actions if isinstance(action, dict) and action["target"] == target)
     if len(matches) != 1:
         raise ValueError(f"expected exactly one scene placement action for {target!r} (count={len(matches)})")
-    params = _json_action_params_by_key(matches[0])
-    anchor = params["port_anchor_world_xyz_mm"]
-    if isinstance(anchor, (str, bytes)) or not isinstance(anchor, list):
-        raise TypeError(f"{target}.port_anchor_world_xyz_mm must be a list")
-    if len(anchor) != 3:
-        raise ValueError(f"{target}.port_anchor_world_xyz_mm must contain exactly three values")
-    return (float(anchor[0]), float(anchor[1]), float(anchor[2]))
+    return _json_action_params_by_key(matches[0])
 
 
-def _tx_port_sheet_geometry(*, fixed: FixedDimensions, anchor_xyz: tuple[float, float, float]) -> _PortSheetGeometry:
-    center_x, center_y, center_z = anchor_xyz
-    half_width = fixed.port_landing_pad_mm / 2.0
-    half_gap = fixed.port_length_mm / 2.0
-    vertices = [
-        [center_x - half_width, center_y - half_gap, center_z],
-        [center_x + half_width, center_y - half_gap, center_z],
-        [center_x + half_width, center_y + half_gap, center_z],
-        [center_x - half_width, center_y + half_gap, center_z],
-    ]
-    return {
-        "name": TX_PORT_SHEET_NAME,
-        "role": "tx",
-        "face": cq.Face.makePlane(
-            length=fixed.port_length_mm,
-            width=fixed.port_landing_pad_mm,
-            basePnt=anchor_xyz,
-            dir=(0.0, 0.0, 1.0),
-        ),
-        "vertices_xyz": vertices,
-        "signal_edge_vertices_xyz": [vertices[0], vertices[1]],
-        "reference_edge_vertices_xyz": [vertices[3], vertices[2]],
-    }
+def _required_str(params: Mapping[str, object], *, key: str, context: str) -> str:
+    if key not in params:
+        raise ValueError(f"{context} is missing required key {key!r}")
+    value = params[key]
+    if not isinstance(value, str) or value == "":
+        raise TypeError(f"{context}.{key} must be a non-empty str")
+    return value
 
 
-def _rx_port_sheet_geometry(*, fixed: FixedDimensions, anchor_xyz: tuple[float, float, float]) -> _PortSheetGeometry:
-    center_x, center_y, center_z = anchor_xyz
-    half_width = fixed.port_landing_pad_mm / 2.0
-    half_gap = fixed.port_length_mm / 2.0
-    vertices = [
-        [center_x, center_y - half_width, center_z - half_gap],
-        [center_x, center_y + half_width, center_z - half_gap],
-        [center_x, center_y + half_width, center_z + half_gap],
-        [center_x, center_y - half_width, center_z + half_gap],
-    ]
-    return {
-        "name": RX_PORT_SHEET_NAME,
-        "role": "rx",
-        "face": cq.Face.makePlane(
-            length=fixed.port_landing_pad_mm,
-            width=fixed.port_length_mm,
-            basePnt=anchor_xyz,
-            dir=(1.0, 0.0, 0.0),
-        ),
-        "vertices_xyz": vertices,
-        "signal_edge_vertices_xyz": [vertices[0], vertices[1]],
-        "reference_edge_vertices_xyz": [vertices[3], vertices[2]],
-    }
+def _required_point(params: Mapping[str, object], *, key: str, context: str) -> list[float]:
+    if key not in params:
+        raise ValueError(f"{context} is missing required key {key!r}")
+    value = params[key]
+    if isinstance(value, (str, bytes)) or not isinstance(value, list):
+        raise TypeError(f"{context}.{key} must be a list of three numbers")
+    if len(value) != 3:
+        raise ValueError(f"{context}.{key} must contain exactly three values")
+    point: list[float] = []
+    for index, component in enumerate(value):
+        if isinstance(component, bool) or not isinstance(component, (int, float)):
+            raise TypeError(f"{context}.{key}[{index}] must be numeric")
+        point.append(float(component))
+    return point
 
 
 def _canonical_from_bounds(*, min_xyz: tuple[float, float, float], max_xyz: tuple[float, float, float]) -> CanonicalCoordinates:
@@ -212,35 +169,105 @@ def _body_entry_from_ssw(body: Mapping[str, object]) -> SswAedtBodyLedgerEntry:
     }
 
 
-def _body_entry_from_port_sheet(sheet: _PortSheetGeometry) -> SswAedtBodyLedgerEntry:
-    vertices = sheet["vertices_xyz"]
-    min_xyz = (
-        min(vertex[0] for vertex in vertices),
-        min(vertex[1] for vertex in vertices),
-        min(vertex[2] for vertex in vertices),
-    )
-    max_xyz = (
-        max(vertex[0] for vertex in vertices),
-        max(vertex[1] for vertex in vertices),
-        max(vertex[2] for vertex in vertices),
-    )
+def _copper_body_for_role(*, ssw_ledger: SswStepLedger, role: str) -> str:
+    prefix = f"{role}_"
+    matches = tuple(name for name in ssw_ledger["copper_body_names"] if name.startswith(prefix))
+    if len(matches) != 1:
+        raise ValueError(f"expected exactly one copper body for {role!r} (matches={matches!r})")
+    return matches[0]
+
+
+def _tx_port_edge_entry(
+    *,
+    ssw_ledger: SswStepLedger,
+    placement_params: Mapping[str, object],
+    minimum_edge_length_mm: float,
+) -> SswAedtPortEdgeLedgerEntry:
+    context = "scene.tx_ssw_coil.placement"
+    port_face = _required_str(placement_params, key="port_face", context=context)
+    if port_face != "lower_z":
+        raise ValueError(f"{context}.port_face must be 'lower_z' for TX SSW edge ports (actual={port_face!r})")
     return {
-        "object_id": sheet["name"],
-        "role": f"{sheet['role']}_port_sheet",
-        "material": "vacuum",
-        "model_state": True,
-        "canonical_coordinates": _canonical_from_bounds(min_xyz=min_xyz, max_xyz=max_xyz),
+        "role": "tx",
+        "copper_body_name": _copper_body_for_role(ssw_ledger=ssw_ledger, role="tx_ssw_coil"),
+        "selection": "nearest_long_face_edges",
+        "face_axis": "z",
+        "face_side": "min",
+        "anchor_xyz": _required_point(placement_params, key="port_anchor_world_xyz_mm", context=context),
+        "minimum_edge_length_mm": minimum_edge_length_mm,
     }
 
 
-def _port_cell_from_sheet(sheet: _PortSheetGeometry) -> SswAedtPortCellLedgerEntry:
-    return {
-        "role": sheet["role"],
-        "port_sheet_name": sheet["name"],
-        "port_sheet_vertices_xyz": sheet["vertices_xyz"],
-        "signal_edge_vertices_xyz": sheet["signal_edge_vertices_xyz"],
-        "reference_edge_vertices_xyz": sheet["reference_edge_vertices_xyz"],
-    }
+def _rx_port_edge_entry(
+    *,
+    ssw_ledger: SswStepLedger,
+    placement_params: Mapping[str, object],
+    minimum_edge_length_mm: float,
+    pair_edge_length_mm: float,
+    pair_spacing_mm: float,
+) -> SswAedtPortEdgeLedgerEntry:
+    context = "scene.rx_ssw_coil.placement"
+    coil_mode = _required_str(placement_params, key="coil_mode", context=context)
+    port_face = _required_str(placement_params, key="port_face", context=context)
+    if coil_mode == "normal_spiral":
+        if port_face != "normal_spiral_landing":
+            raise ValueError(f"{context}.port_face must be normal_spiral_landing (actual={port_face!r})")
+        return {
+            "role": "rx",
+            "copper_body_name": _copper_body_for_role(ssw_ledger=ssw_ledger, role="rx_ssw_coil"),
+            "selection": "axis_spaced_face_edges",
+            "face_axis": "x",
+            "face_side": "min",
+            "edge_axis": "z",
+            "spacing_axis": "y",
+            "edge_length_mm": pair_edge_length_mm,
+            "pair_spacing_mm": pair_spacing_mm,
+        }
+    if coil_mode == "ssw":
+        if port_face != "rx_x_min":
+            raise ValueError(f"{context}.port_face must be rx_x_min for RX SSW edge ports (actual={port_face!r})")
+        return {
+            "role": "rx",
+            "copper_body_name": _copper_body_for_role(ssw_ledger=ssw_ledger, role="rx_ssw_coil"),
+            "selection": "nearest_long_face_edges",
+            "face_axis": "x",
+            "face_side": "min",
+            "anchor_xyz": _required_point(placement_params, key="port_anchor_world_xyz_mm", context=context),
+            "minimum_edge_length_mm": minimum_edge_length_mm,
+        }
+    raise ValueError(f"{context}.coil_mode is unsupported for edge ports (actual={coil_mode!r})")
+
+
+def _port_edge_entries(
+    *,
+    ssw_ledger: SswStepLedger,
+    token_toml_path: Path,
+    minimum_edge_length_mm: float,
+    pair_edge_length_mm: float,
+    pair_spacing_mm: float,
+) -> list[SswAedtPortEdgeLedgerEntry]:
+    tx_placement = _placement_params_from_token(
+        token_toml_path=token_toml_path,
+        target="scene.tx_ssw_coil.placement",
+    )
+    rx_placement = _placement_params_from_token(
+        token_toml_path=token_toml_path,
+        target="scene.rx_ssw_coil.placement",
+    )
+    return [
+        _tx_port_edge_entry(
+            ssw_ledger=ssw_ledger,
+            placement_params=tx_placement,
+            minimum_edge_length_mm=minimum_edge_length_mm,
+        ),
+        _rx_port_edge_entry(
+            ssw_ledger=ssw_ledger,
+            placement_params=rx_placement,
+            minimum_edge_length_mm=minimum_edge_length_mm,
+            pair_edge_length_mm=pair_edge_length_mm,
+            pair_spacing_mm=pair_spacing_mm,
+        ),
+    ]
 
 
 def export_ssw_aedt_port_artifacts(
@@ -253,27 +280,18 @@ def export_ssw_aedt_port_artifacts(
     spec = load_ssw_fixed_spec(source_toml_path)
     ssw_ledger = load_ssw_step_ledger(Path(summary["step_ledger_path"]))
     token_toml_path = Path(summary["token_toml_path"])
-    tx_sheet = _tx_port_sheet_geometry(
-        fixed=spec.fixed,
-        anchor_xyz=_port_anchor_from_token(token_toml_path=token_toml_path, target="scene.tx_ssw_coil.placement"),
-    )
-    rx_sheet = _rx_port_sheet_geometry(
-        fixed=spec.fixed,
-        anchor_xyz=_port_anchor_from_token(token_toml_path=token_toml_path, target="scene.rx_ssw_coil.placement"),
-    )
-    port_sheets = (tx_sheet, rx_sheet)
-    assembly = build_ssw_assembly(spec)
-    for sheet in port_sheets:
-        assembly.add(cq.Workplane(obj=sheet["face"]), name=sheet["name"], color=cq.Color(0.7, 0.84, 1.0, 0.88))
-    aedt_step_path = output_dir / AEDT_SCENE_STEP_NAME
-    assembly.save(str(aedt_step_path), exportType="STEP")
-    if not aedt_step_path.is_file() or aedt_step_path.stat().st_size == 0:
-        raise RuntimeError(f"CadQuery STEP export failed for SSW AEDT port scene: {aedt_step_path}")
+    aedt_step_path = Path(summary["step_path"])
     ledger = _build_ssw_aedt_port_ledger(
         ssw_ledger=ssw_ledger,
         ssw_ledger_path=Path(summary["step_ledger_path"]),
         aedt_step_path=aedt_step_path,
-        port_sheets=port_sheets,
+        port_edges=_port_edge_entries(
+            ssw_ledger=ssw_ledger,
+            token_toml_path=token_toml_path,
+            minimum_edge_length_mm=spec.fixed.port_landing_pad_mm,
+            pair_edge_length_mm=spec.fixed.port_landing_pad_mm,
+            pair_spacing_mm=spec.fixed.port_length_mm,
+        ),
     )
     write_ssw_aedt_port_ledger(ledger_path=output_dir / AEDT_PORT_LEDGER_NAME, ledger=ledger)
     return ledger
@@ -284,21 +302,19 @@ def _build_ssw_aedt_port_ledger(
     ssw_ledger: SswStepLedger,
     ssw_ledger_path: Path,
     aedt_step_path: Path,
-    port_sheets: tuple[_PortSheetGeometry, _PortSheetGeometry],
+    port_edges: list[SswAedtPortEdgeLedgerEntry],
 ) -> SswAedtPortStepLedger:
     body_entries = [_body_entry_from_ssw(body) for body in ssw_ledger["bodies"]]
-    body_entries.extend(_body_entry_from_port_sheet(sheet) for sheet in port_sheets)
     return {
         "source_step_ledger_path": str(ssw_ledger_path),
         "scene_step_path": str(aedt_step_path),
         "seed": ssw_ledger["seed"],
         "units": ssw_ledger["units"],
-        "body_names": [*ssw_ledger["body_names"], *(sheet["name"] for sheet in port_sheets)],
+        "body_names": list(ssw_ledger["body_names"]),
         "copper_body_names": list(ssw_ledger["copper_body_names"]),
-        "port_sheet_names": [sheet["name"] for sheet in port_sheets],
         "non_model_body_names": [*ssw_ledger["non_model_body_names"], *ssw_ledger["ferrite_body_names"]],
         "bodies": body_entries,
-        "port_cells": [_port_cell_from_sheet(sheet) for sheet in port_sheets],
+        "port_edges": port_edges,
     }
 
 
