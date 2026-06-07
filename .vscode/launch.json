@@ -2,16 +2,18 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug Minimal STEP OCP Viewer",
+      "name": "Debug 0.3.0 SSW OCP Viewer",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/entry/debug_view_step_files.py",
+      "program": "${workspaceFolder}/entry/debug_view_0_3_0_ssw.py",
       "cwd": "${workspaceFolder}/run",
       "python": "${workspaceFolder}/.venv/bin/python",
       "console": "integratedTerminal",
       "justMyCode": false,
-      "preLaunchTask": "prepare-minimal-step-debug",
-      "env": {}
+      "preLaunchTask": "prepare-0.3.0-ssw-debug",
+      "env": {
+        "OCP_PORT": "3939"
+      }
     }
   ]
 }

@@ -1,7 +1,7 @@
 # 0.3.0 SSW fixed authoring input.
 # ----------------------------------------------------------------------------
 # 이 파일은 examples/0.3.0_sweep.toml의 frozen realization이다.
-# sweep과 같은 public field surface를 유지하되, 모든 sampled coil 변수는 count=1로 고정한다.
+# sweep과 같은 public field surface를 유지하되, 모든 sampled coil/layout 변수는 count=1로 고정한다.
 #
 # Range 형식:
 # - [true, start, end, count]는 integer 후보 range다.
@@ -55,6 +55,10 @@ description = "Maximum coil width(mm)"
 [fixed_dimensions.height_max_mm]
 range = [false, 240.0, 240.0, 1]
 description = "Maximum coil height(mm)"
+
+[fixed_dimensions.tx_rx_min_distance_mm]
+range = [false, 100.0, 100.0, 1]
+description = "Minimum edge-to-edge distance between TX and RX coils(mm)"
 
 # ----------------------------------------------------------------------------
 # Non-model object registry

@@ -1,7 +1,8 @@
 # 0.3.0 SSW sampled authoring input.
 # ----------------------------------------------------------------------------
 # 이 파일은 0.3.0 SSW coil sweep의 SSOT다.
-# TX/RX 각각 8개의 sampled coil 변수를 가지며, 자유변수 기준 총 16차원이다.
+# TX/RX 각각 8개의 sampled coil 변수와 1개의 shared layout 변수를 가지며,
+# 자유변수 기준 총 17차원이다.
 #
 # Range 형식:
 # - [true, start, end, count]는 integer 후보 range다.
@@ -55,6 +56,10 @@ description = "Maximum coil width(mm)"
 [fixed_dimensions.height_max_mm]
 range = [false, 240.0, 240.0, 1]
 description = "Maximum coil height(mm)"
+
+[fixed_dimensions.tx_rx_min_distance_mm]
+range = [false, 50.0, 200.0, 100]
+description = "Minimum edge-to-edge distance between TX and RX coils(mm)"
 
 # ----------------------------------------------------------------------------
 # Non-model object registry

@@ -16,14 +16,18 @@ This hub indexes code notes created for forward SDD coverage. Parent hub: [sdd-i
 
 ## Current Active Notes
 - [entry/debug_view_step_files.py](entry/debug_view_step_files.py.md)
+- [entry/debug_view_0_3_0_ssw.py](entry/debug_view_0_3_0_ssw.py.md)
 - [entry/sample.py](entry/sample.py.md)
 - [entry/build.py](entry/build.py.md)
 - [examples/minimal_step_two_port.toml](examples/minimal_step_two_port.toml.md)
 - [src/peetsfea/minimal_spec.py](src/peetsfea/minimal_spec.py.md)
 - [src/peetsfea/minimal_step.py](src/peetsfea/minimal_step.py.md)
+- [src/peetsfea/coilmaker.py](src/peetsfea/coilmaker.py.md)
+- [src/peetsfea/ssw_step.py](src/peetsfea/ssw_step.py.md)
 - [src/peetsfea/backend/pyaedt/minimal_em.py](src/peetsfea/backend/pyaedt/minimal_em.py.md)
 - [tests/test_minimal_spec.py](tests/test_minimal_spec.py.md)
 - [tests/test_minimal_step.py](tests/test_minimal_step.py.md)
+- [tests/test_ssw_step.py](tests/test_ssw_step.py.md)
 - [tests/backend_em/test_minimal_em.py](tests/backend_em/test_minimal_em.py.md)
 
 ## Shared Boundary Notes
