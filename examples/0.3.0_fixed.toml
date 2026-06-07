@@ -65,17 +65,6 @@ description = "Minimum edge-to-edge distance between TX and RX coils(mm)"
 # ----------------------------------------------------------------------------
 
 [[non_model_objects]]
-id = "air_context"
-kind = "air_context"
-primitive = "box"
-present = true
-non_model = true
-material = "vacuum"
-plane = "XY"
-origin_xyz = [-100.0, -75.0, -25.0]
-size_xyz = [200.0, 150.0, 50.0]
-
-[[non_model_objects]]
 id = "tv"
 kind = "tv"
 primitive = "box"
@@ -83,8 +72,21 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "YZ"
-origin_xyz = [0.0, -921.0, 170.0]
+origin_xyz = [0.0, -921.0, 340.0]
 size_xyz = [9.0, 1842.0, 1055.0]
+transparency = 0.6
+
+[[non_model_objects]]
+id = "tx_region"
+kind = "tx_region"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "XY"
+origin_xyz = [0.0, -921.0, 0.0]
+size_xyz = [480.0, 1842.0, 240.0]
+transparency = 0.2
 
 # ----------------------------------------------------------------------------
 # Modeled object registry

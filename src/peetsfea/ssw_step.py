@@ -83,6 +83,7 @@ class NonModelBox:
     material: str
     origin_xyz: Point3
     size_xyz: Point3
+    transparency: float
 
 
 @dataclass(frozen=True)
@@ -102,6 +103,7 @@ class _BodyBox:
     material: str
     center_xyz: Point3
     size_xyz: Point3
+    transparency: float
 
 
 @dataclass(frozen=True)
@@ -138,6 +140,7 @@ class BodyLedgerEntry(TypedDict):
     object_id: str
     role: BodyRole
     material: str
+    transparency: float
     center_xyz: list[float]
     size_xyz: list[float]
 
@@ -251,6 +254,10 @@ def _frozen_int(table: dict[str, object], key: str, context: str, *, minimum: in
     return value
 
 
+def _required_float(table: dict[str, object], key: str, context: str) -> float:
+    return _require_numeric(_require_key(table, key, context), f"{context}.{key}")
+
+
 def _load_fixed_dimensions(root: dict[str, object]) -> FixedDimensions:
     table = _require_table(_require_key(root, "fixed_dimensions", "0.3.0 fixed spec"), "fixed_dimensions")
     return FixedDimensions(
@@ -282,6 +289,9 @@ def _load_non_model_objects(root: dict[str, object]) -> tuple[NonModelBox, ...]:
         primitive = _require_non_empty_str(table, "primitive", context)
         if primitive != "box":
             raise ValueError(f"{context}.primitive must be 'box' (actual={primitive!r})")
+        transparency = _required_float(table, "transparency", context)
+        if transparency < 0.0 or transparency > 1.0:
+            raise ValueError(f"{context}.transparency must be between 0 and 1")
         boxes.append(
             NonModelBox(
                 object_id=object_id,
@@ -289,6 +299,7 @@ def _load_non_model_objects(root: dict[str, object]) -> tuple[NonModelBox, ...]:
                 material=_require_non_empty_str(table, "material", context),
                 origin_xyz=_require_point3(table, "origin_xyz", context, positive=False),
                 size_xyz=_require_point3(table, "size_xyz", context, positive=True),
+                transparency=transparency,
             )
         )
     return tuple(boxes)
@@ -351,10 +362,27 @@ def load_ssw_fixed_spec(toml_path: Path) -> SswFixedSpec:
     )
 
 
-def _box(name: str, role: BodyRole, material: str, center_xyz: Point3, size_xyz: Point3) -> _BodyBox:
+def _box(
+    name: str,
+    role: BodyRole,
+    material: str,
+    center_xyz: Point3,
+    size_xyz: Point3,
+    *,
+    transparency: float,
+) -> _BodyBox:
     if size_xyz[0] <= 0.0 or size_xyz[1] <= 0.0 or size_xyz[2] <= 0.0:
         raise ValueError(f"{name} dimensions must be positive (size_xyz={size_xyz!r})")
-    return _BodyBox(name=name, role=role, material=material, center_xyz=center_xyz, size_xyz=size_xyz)
+    if transparency < 0.0 or transparency > 1.0:
+        raise ValueError(f"{name} transparency must be between 0 and 1")
+    return _BodyBox(
+        name=name,
+        role=role,
+        material=material,
+        center_xyz=center_xyz,
+        size_xyz=size_xyz,
+        transparency=transparency,
+    )
 
 
 def _void_scale(params: SswCoilParameters) -> float:
@@ -405,6 +433,7 @@ def _loop_strip_boxes(
             "copper",
             (center_x, center_y + outer_height_mm / 2.0 - trace_width_mm / 2.0, z_center_mm),
             (outer_width_mm, trace_width_mm, copper_thickness_mm),
+            transparency=0.0,
         ),
         _box(
             f"{prefix}_bottom",
@@ -412,6 +441,7 @@ def _loop_strip_boxes(
             "copper",
             (center_x, center_y - outer_height_mm / 2.0 + trace_width_mm / 2.0, z_center_mm),
             (outer_width_mm, trace_width_mm, copper_thickness_mm),
+            transparency=0.0,
         ),
         _box(
             f"{prefix}_left",
@@ -419,6 +449,7 @@ def _loop_strip_boxes(
             "copper",
             (center_x - outer_width_mm / 2.0 + trace_width_mm / 2.0, center_y, z_center_mm),
             (trace_width_mm, outer_height_mm, copper_thickness_mm),
+            transparency=0.0,
         ),
         _box(
             f"{prefix}_right",
@@ -426,6 +457,7 @@ def _loop_strip_boxes(
             "copper",
             (center_x + outer_width_mm / 2.0 - trace_width_mm / 2.0, center_y, z_center_mm),
             (trace_width_mm, outer_height_mm, copper_thickness_mm),
+            transparency=0.0,
         ),
     )
 
@@ -467,6 +499,7 @@ def _coil_boxes(
             "fr4",
             (center_xy[0], center_xy[1], lower_fr4_z),
             (width_mm, height_mm, fr4),
+            transparency=0.65,
         ),
         _box(
             f"{params.role}_upper_fr4",
@@ -474,6 +507,7 @@ def _coil_boxes(
             "fr4",
             (center_xy[0], center_xy[1], upper_fr4_z),
             (width_mm, height_mm, fr4),
+            transparency=0.65,
         ),
     ]
     for index in range(params.turn_n_int):
@@ -518,25 +552,31 @@ def _coil_boxes(
                 "copper",
                 (connector_x, connector_y, connector_z_center),
                 (trace_width_mm, trace_width_mm, connector_z_size),
+                transparency=0.0,
             )
         )
     return tuple(boxes)
 
 
 def _non_model_boxes(spec: SswFixedSpec) -> tuple[_BodyBox, ...]:
+    resolved_non_model_objects = tuple(
+        _resolved_tx_region_box(spec, non_model) if non_model.object_id == "tx_region" else non_model
+        for non_model in spec.non_model_objects
+    )
     return tuple(
         _box(
-            non_model.object_id,
+            resolved.object_id,
             "non_model",
-            non_model.material,
+            resolved.material,
             (
-                non_model.origin_xyz[0] + non_model.size_xyz[0] / 2.0,
-                non_model.origin_xyz[1] + non_model.size_xyz[1] / 2.0,
-                non_model.origin_xyz[2] + non_model.size_xyz[2] / 2.0,
+                resolved.origin_xyz[0] + resolved.size_xyz[0] / 2.0,
+                resolved.origin_xyz[1] + resolved.size_xyz[1] / 2.0,
+                resolved.origin_xyz[2] + resolved.size_xyz[2] / 2.0,
             ),
-            non_model.size_xyz,
+            resolved.size_xyz,
+            transparency=resolved.transparency,
         )
-        for non_model in spec.non_model_objects
+        for resolved in resolved_non_model_objects
     )
 
 
@@ -545,6 +585,32 @@ def _tv_box(spec: SswFixedSpec) -> NonModelBox:
     if len(matches) != 1:
         raise ValueError(f"expected exactly one non-model tv box (count={len(matches)})")
     return matches[0]
+
+
+def _resolved_tx_region_box(spec: SswFixedSpec, tx_region: NonModelBox) -> NonModelBox:
+    tv = _tv_box(spec)
+    tx_region_zmax = tv.origin_xyz[2] - spec.fixed.tx_rx_min_distance_mm
+    tx_region_size_z = tx_region_zmax - tx_region.origin_xyz[2]
+    if tx_region_size_z <= 0.0:
+        raise ValueError(
+            f"tx_region derived Z size must be positive "
+            f"(origin_z={tx_region.origin_xyz[2]}, zmax={tx_region_zmax})"
+        )
+    return NonModelBox(
+        object_id=tx_region.object_id,
+        kind=tx_region.kind,
+        material=tx_region.material,
+        origin_xyz=tx_region.origin_xyz,
+        size_xyz=(tx_region.size_xyz[0], tx_region.size_xyz[1], tx_region_size_z),
+        transparency=tx_region.transparency,
+    )
+
+
+def _tx_region_box(spec: SswFixedSpec) -> NonModelBox:
+    matches = tuple(box for box in spec.non_model_objects if box.object_id == "tx_region")
+    if len(matches) != 1:
+        raise ValueError(f"expected exactly one non-model tx_region box (count={len(matches)})")
+    return _resolved_tx_region_box(spec, matches[0])
 
 
 def _coilmaker_config(params: SswCoilParameters, fixed: FixedDimensions) -> coilmaker.RuntimeConfig:
@@ -583,8 +649,14 @@ def _identity_location() -> cq.Location:
     return cq.Location(cq.Vector(0.0, 0.0, 0.0))
 
 
+def _tx_xy_orientation() -> cq.Location:
+    return cq.Location(cq.Vector(0.0, 0.0, 0.0), cq.Vector(0.0, 0.0, 1.0), 90.0)
+
+
 def _rx_yz_orientation() -> cq.Location:
-    return cq.Location(cq.Vector(0.0, 0.0, 0.0), cq.Vector(0.0, 1.0, 0.0), 90.0)
+    rotate_y = cq.Location(cq.Vector(0.0, 0.0, 0.0), cq.Vector(0.0, 1.0, 0.0), 90.0)
+    rotate_x = cq.Location(cq.Vector(0.0, 0.0, 0.0), cq.Vector(1.0, 0.0, 0.0), 90.0)
+    return rotate_x * rotate_y
 
 
 def _coilmaker_assembly(params: SswCoilParameters, fixed: FixedDimensions) -> cq.Assembly:
@@ -619,6 +691,13 @@ def _combined_bounds(bodies: tuple[_BodyBox, ...], context: str) -> _Bounds:
     )
 
 
+def _bodies_with_role(bodies: tuple[_BodyBox, ...], role: BodyRole, context: str) -> tuple[_BodyBox, ...]:
+    matches = tuple(body for body in bodies if body.role == role)
+    if len(matches) == 0:
+        raise ValueError(f"{context} must contain at least one {role} body")
+    return matches
+
+
 def _coilmaker_child_bodies_from_assembly(
     *,
     params: SswCoilParameters,
@@ -632,7 +711,15 @@ def _coilmaker_child_bodies_from_assembly(
         role = _coilmaker_child_role(child_name)
         material = _coilmaker_child_material(child_name)
         loc = placement * _child_location(child)
-        bodies.append(_body_from_bbox(name, role, material, _located_bbox(_child_workplane(child), loc)))
+        bodies.append(
+            _body_from_bbox(
+                name,
+                role,
+                material,
+                _located_bbox(_child_workplane(child), loc),
+                transparency=_transparency_for_coilmaker_child(child_name),
+            )
+        )
     return tuple(bodies)
 
 
@@ -641,9 +728,11 @@ def _placement_for_role(spec: SswFixedSpec, params: SswCoilParameters, assembly:
     tv_center_y = tv.origin_xyz[1] + tv.size_xyz[1] / 2.0
     if params.role == "rx_ssw_coil":
         orientation = _rx_yz_orientation()
-        oriented_bounds = _combined_bounds(
-            _coilmaker_child_bodies_from_assembly(params=params, assembly=assembly, placement=orientation),
-            f"{params.role} oriented bodies",
+        oriented_bodies = _coilmaker_child_bodies_from_assembly(params=params, assembly=assembly, placement=orientation)
+        oriented_bounds = _combined_bounds(oriented_bodies, f"{params.role} oriented bodies")
+        oriented_fr4_bounds = _combined_bounds(
+            _bodies_with_role(oriented_bodies, "fr4", f"{params.role} oriented bodies"),
+            f"{params.role} oriented FR4 bodies",
         )
         if oriented_bounds.size_x > tv.size_xyz[0]:
             raise ValueError(
@@ -660,22 +749,19 @@ def _placement_for_role(spec: SswFixedSpec, params: SswCoilParameters, assembly:
                 f"RX SSW Z span does not fit inside TV "
                 f"(span={oriented_bounds.size_z}, tv_z_size={tv.size_xyz[2]})"
             )
-        target_xmin = tv.origin_xyz[0] + (tv.size_xyz[0] - oriented_bounds.size_x) / 2.0
-        translate_x = target_xmin - oriented_bounds.xmin
+        translate_x = tv.origin_xyz[0] - oriented_fr4_bounds.xmin
         translate_y = tv_center_y - oriented_bounds.center_y
-        translate_z = tv.origin_xyz[2] - oriented_bounds.zmin
+        translate_z = tv.origin_xyz[2] - oriented_fr4_bounds.zmin
         return cq.Location(cq.Vector(translate_x, translate_y, translate_z)) * orientation
 
-    orientation = _identity_location()
-    oriented_bounds = _combined_bounds(
-        _coilmaker_child_bodies_from_assembly(params=params, assembly=assembly, placement=orientation),
-        f"{params.role} oriented bodies",
-    )
-    tv_center_x = tv.origin_xyz[0] + tv.size_xyz[0] / 2.0
-    target_zmax = tv.origin_xyz[2] - spec.fixed.tx_rx_min_distance_mm
-    translate_x = tv_center_x - oriented_bounds.center_x
+    tx_region = _tx_region_box(spec)
+    orientation = _tx_xy_orientation()
+    oriented_bodies = _coilmaker_child_bodies_from_assembly(params=params, assembly=assembly, placement=orientation)
+    oriented_bounds = _combined_bounds(oriented_bodies, f"{params.role} oriented bodies")
+    tx_region_zmax = tx_region.origin_xyz[2] + tx_region.size_xyz[2]
+    translate_x = tx_region.origin_xyz[0] - oriented_bounds.xmin
     translate_y = tv_center_y - oriented_bounds.center_y
-    translate_z = target_zmax - oriented_bounds.zmax
+    translate_z = tx_region_zmax - oriented_bounds.zmax
     return cq.Location(cq.Vector(translate_x, translate_y, translate_z)) * orientation
 
 
@@ -712,12 +798,23 @@ def _coilmaker_child_material(name: str) -> str:
     return "copper"
 
 
-def _color_for_material(material: str) -> cq.Color:
-    if material == "copper":
-        return cq.Color(0.8, 0.45, 0.15)
-    if material == "fr4":
-        return cq.Color(0.1, 0.45, 0.1, 0.35)
-    return cq.Color(0.6, 0.8, 1.0, 0.12)
+def _transparency_for_coilmaker_child(name: str) -> float:
+    if name.endswith("_fr4"):
+        return 0.65
+    return 0.0
+
+
+def _color_for_body(body: _BodyBox) -> cq.Color:
+    alpha = 1.0 - body.transparency
+    if body.material == "copper":
+        return cq.Color(0.8, 0.45, 0.15, alpha)
+    if body.material == "fr4":
+        return cq.Color(0.1, 0.45, 0.1, alpha)
+    if body.name == "tv":
+        return cq.Color(0.6, 0.8, 1.0, alpha)
+    if body.name == "tx_region":
+        return cq.Color(0.5, 0.5, 0.5, alpha)
+    raise ValueError(f"unsupported material/body color assignment for {body.name!r} ({body.material!r})")
 
 
 def _located_bbox(obj: cq.Workplane, loc: cq.Location) -> cq.BoundBox:
@@ -727,7 +824,14 @@ def _located_bbox(obj: cq.Workplane, loc: cq.Location) -> cq.BoundBox:
     return shape.located(loc).BoundingBox()
 
 
-def _body_from_bbox(name: str, role: BodyRole, material: str, bbox: cq.BoundBox) -> _BodyBox:
+def _body_from_bbox(
+    name: str,
+    role: BodyRole,
+    material: str,
+    bbox: cq.BoundBox,
+    *,
+    transparency: float,
+) -> _BodyBox:
     return _BodyBox(
         name=name,
         role=role,
@@ -742,6 +846,7 @@ def _body_from_bbox(name: str, role: BodyRole, material: str, bbox: cq.BoundBox)
             bbox.ymax - bbox.ymin,
             bbox.zmax - bbox.zmin,
         ),
+        transparency=transparency,
     )
 
 
@@ -770,7 +875,10 @@ def _body_by_name(bodies: tuple[_BodyBox, ...], name: str) -> _BodyBox:
 
 
 def _assert_inside_bounds(*, inner: _Bounds, outer: _Bounds, context: str) -> None:
-    tolerance = 1e-6
+    _assert_inside_bounds_with_tolerance(inner=inner, outer=outer, context=context, tolerance=1e-6)
+
+
+def _assert_inside_bounds_with_tolerance(*, inner: _Bounds, outer: _Bounds, context: str, tolerance: float) -> None:
     if inner.xmin < outer.xmin - tolerance or inner.xmax > outer.xmax + tolerance:
         raise ValueError(f"{context} X bounds must be inside TV")
     if inner.ymin < outer.ymin - tolerance or inner.ymax > outer.ymax + tolerance:
@@ -782,31 +890,62 @@ def _assert_inside_bounds(*, inner: _Bounds, outer: _Bounds, context: str) -> No
 def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -> None:
     tolerance = 1e-6
     tv_bounds = _body_bounds(_body_by_name(bodies, "tv"))
+    tx_region_bounds = _body_bounds(_body_by_name(bodies, "tx_region"))
     tx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "tx_ssw_coil_"), "TX SSW bodies")
     rx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "rx_ssw_coil_"), "RX SSW bodies")
+    rx_fr4_bounds = _combined_bounds(
+        _bodies_with_role(_bodies_with_prefix(bodies, "rx_ssw_coil_"), "fr4", "RX SSW bodies"),
+        "RX SSW FR4 bodies",
+    )
 
-    _assert_inside_bounds(inner=rx_bounds, outer=tv_bounds, context="RX SSW")
-    if abs(rx_bounds.zmin - tv_bounds.zmin) > tolerance:
+    if abs(tx_region_bounds.zmax - (tv_bounds.zmin - spec.fixed.tx_rx_min_distance_mm)) > tolerance:
+        raise ValueError("tx_region top must equal TV bottom minus fixed_dimensions.tx_rx_min_distance_mm")
+    _assert_inside_bounds(inner=tx_bounds, outer=tx_region_bounds, context="TX SSW")
+    if (
+        tx_region_bounds.size_x <= tx_bounds.size_x
+        or tx_region_bounds.size_y <= tx_bounds.size_y
+        or tx_region_bounds.size_z <= tx_bounds.size_z
+    ):
+        raise ValueError("tx_region must be a maximum TX placement envelope, not a coil-tight box")
+
+    copper_tolerance = spec.fixed.copper_thickness_mm + tolerance
+    _assert_inside_bounds(inner=rx_fr4_bounds, outer=tv_bounds, context="RX SSW FR4")
+    _assert_inside_bounds_with_tolerance(
+        inner=rx_bounds,
+        outer=tv_bounds,
+        context="RX SSW copper",
+        tolerance=copper_tolerance,
+    )
+    if abs(rx_fr4_bounds.zmin - tv_bounds.zmin) > tolerance:
         raise ValueError(
-            f"RX SSW bottom must align to TV bottom "
-            f"(rx_zmin={rx_bounds.zmin}, tv_zmin={tv_bounds.zmin})"
+            f"RX SSW FR4 bottom must align to TV bottom "
+            f"(rx_fr4_zmin={rx_fr4_bounds.zmin}, tv_zmin={tv_bounds.zmin})"
         )
 
-    expected_tx_zmax = tv_bounds.zmin - spec.fixed.tx_rx_min_distance_mm
-    if abs(tx_bounds.zmax - expected_tx_zmax) > tolerance:
+    if abs(tx_bounds.zmax - tx_region_bounds.zmax) > tolerance:
         raise ValueError(
-            f"TX SSW top must stay below TV by fixed_dimensions.tx_rx_min_distance_mm "
-            f"(tx_zmax={tx_bounds.zmax}, expected={expected_tx_zmax})"
+            f"TX SSW top must align to tx_region top "
+            f"(tx_zmax={tx_bounds.zmax}, tx_region_zmax={tx_region_bounds.zmax})"
         )
     if tx_bounds.size_z >= tx_bounds.size_x or tx_bounds.size_z >= tx_bounds.size_y:
         raise ValueError(
             f"TX SSW must remain an XY-plane object with thin Z stack "
             f"(size_x={tx_bounds.size_x}, size_y={tx_bounds.size_y}, size_z={tx_bounds.size_z})"
         )
+    if tx_bounds.size_y <= tx_bounds.size_x:
+        raise ValueError(
+            f"TX SSW long dimension must follow Y axis "
+            f"(size_x={tx_bounds.size_x}, size_y={tx_bounds.size_y})"
+        )
     if rx_bounds.size_x >= rx_bounds.size_y or rx_bounds.size_x >= rx_bounds.size_z:
         raise ValueError(
             f"RX SSW must remain a YZ-plane object with thin X stack "
             f"(size_x={rx_bounds.size_x}, size_y={rx_bounds.size_y}, size_z={rx_bounds.size_z})"
+        )
+    if rx_bounds.size_y <= rx_bounds.size_z:
+        raise ValueError(
+            f"RX SSW long dimension must follow Y axis "
+            f"(size_y={rx_bounds.size_y}, size_z={rx_bounds.size_z})"
         )
 
 
@@ -878,10 +1017,29 @@ def _placement_action_token(
         index=index,
         op="PLACE_COIL_IN_SCENE",
         target=f"scene.{role}.placement",
-        inputs=(_namespace_ref(role, "assembly.pcb_stack"), "non_model.tv"),
+        inputs=(
+            _namespace_ref(role, "assembly.pcb_stack"),
+            "non_model.tv" if role == "rx_ssw_coil" else "non_model.tx_region",
+        ),
         params=(
             ("coil_role", role),
             ("plane", plane),
+            ("bounds_min_xyz_mm", (bounds.xmin, bounds.ymin, bounds.zmin)),
+            ("bounds_max_xyz_mm", (bounds.xmax, bounds.ymax, bounds.zmax)),
+        ),
+    )
+
+
+def _non_model_action_token(*, index: int, body: _BodyBox) -> coilmaker.ActionToken:
+    bounds = _body_bounds(body)
+    return _action_token(
+        index=index,
+        op="CREATE_NON_MODEL_BOX",
+        target=f"non_model.{body.name}",
+        inputs=(),
+        params=(
+            ("material", body.material),
+            ("transparency", body.transparency),
             ("bounds_min_xyz_mm", (bounds.xmin, bounds.ymin, bounds.zmin)),
             ("bounds_max_xyz_mm", (bounds.xmax, bounds.ymax, bounds.zmax)),
         ),
@@ -911,6 +1069,8 @@ def _scene_action_trace(
             ),
         )
     ]
+    for body in _non_model_boxes(spec):
+        actions.append(_non_model_action_token(index=len(actions), body=body))
     role_params: tuple[tuple[Role, SswCoilParameters], ...] = (("tx_ssw_coil", spec.tx), ("rx_ssw_coil", spec.rx))
     for role, params in role_params:
         trace = coilmaker.assert_transformer_ready_action_trace(
@@ -928,10 +1088,15 @@ def _scene_action_trace(
             index=len(actions),
             op="EXPORT_STEP",
             target="output.ssw_scene.step",
-            inputs=("scene.tx_ssw_coil.placement", "scene.rx_ssw_coil.placement"),
+            inputs=(
+                "non_model.tv",
+                "non_model.tx_region",
+                "scene.tx_ssw_coil.placement",
+                "scene.rx_ssw_coil.placement",
+            ),
             params=(
-                ("scene_step_path", str(scene_step_path)),
-                ("token_toml_path", str(token_toml_path)),
+                ("scene_step_name", scene_step_path.name),
+                ("token_toml_name", token_toml_path.name),
                 ("output_token_toml", token_toml_path.name),
             ),
         )
@@ -1027,18 +1192,26 @@ def _workplane_from_box(body: _BodyBox) -> cq.Workplane:
 def build_ssw_assembly(spec: SswFixedSpec) -> cq.Assembly:
     assembly = cq.Assembly(name="ssw_0_3_0_fixed")
     for body in _non_model_boxes(spec):
-        assembly.add(_workplane_from_box(body), name=body.name, color=_color_for_material(body.material))
+        assembly.add(_workplane_from_box(body), name=body.name, color=_color_for_body(body))
     for params in (spec.tx, spec.rx):
         child_assembly = _coilmaker_assembly(params, spec.fixed)
         placement = _placement_for_role(spec, params, child_assembly)
         for child in child_assembly.children:
             child_name = _child_name(child)
             material = _coilmaker_child_material(child_name)
+            body_for_color = _BodyBox(
+                name=f"{params.role}_{child_name}",
+                role=_coilmaker_child_role(child_name),
+                material=material,
+                center_xyz=(0.0, 0.0, 0.0),
+                size_xyz=(1.0, 1.0, 1.0),
+                transparency=_transparency_for_coilmaker_child(child_name),
+            )
             assembly.add(
                 _child_workplane(child),
                 name=f"{params.role}_{child_name}",
                 loc=placement * _child_location(child),
-                color=_color_for_material(material),
+                color=_color_for_body(body_for_color),
             )
     return assembly
 
@@ -1048,6 +1221,7 @@ def _body_entry(body: _BodyBox) -> BodyLedgerEntry:
         "object_id": body.name,
         "role": body.role,
         "material": body.material,
+        "transparency": body.transparency,
         "center_xyz": [body.center_xyz[0], body.center_xyz[1], body.center_xyz[2]],
         "size_xyz": [body.size_xyz[0], body.size_xyz[1], body.size_xyz[2]],
     }

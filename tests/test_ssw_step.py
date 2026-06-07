@@ -26,7 +26,8 @@ def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
     assert spec.units == "mm"
     assert spec.fixed.width_max_mm == 480.0
     assert spec.fixed.height_max_mm == 240.0
-    assert spec.fixed.tx_rx_min_distance_mm == 50.0
+    assert spec.fixed.tx_rx_min_distance_mm == 100.0
+    assert tuple(box.object_id for box in spec.non_model_objects) == ("tv", "tx_region")
     assert spec.tx.role == "tx_ssw_coil"
     assert spec.rx.role == "rx_ssw_coil"
     assert spec.tx.width_ratio == 0.6
@@ -61,6 +62,12 @@ def _bounds(body: Mapping[str, object]) -> tuple[float, float, float, float, flo
         center_z - size_z / 2.0,
         center_z + size_z / 2.0,
     )
+
+
+def _numeric_field(body: Mapping[str, object], key: str) -> float:
+    value = body[key]
+    assert isinstance(value, (int, float))
+    return float(value)
 
 
 def _box_bounds(body: module_under_test._BodyBox) -> tuple[float, float, float, float, float, float]:
@@ -107,7 +114,7 @@ def _body_by_name_from_ledger(ledger: SswStepLedger, name: str) -> Mapping[str, 
 def test_build_ssw_body_boxes_uses_tv_below_distance(tmp_path: Path) -> None:
     source_text = FIXED_TOML.read_text(encoding="utf-8")
     custom_text = source_text.replace(
-        "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 50.0, 50.0, 1]",
+        "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 100.0, 100.0, 1]",
         "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 125.0, 125.0, 1]",
     )
     assert custom_text != source_text
@@ -117,9 +124,11 @@ def test_build_ssw_body_boxes_uses_tv_below_distance(tmp_path: Path) -> None:
     spec = load_ssw_fixed_spec(custom_toml)
     bodies = build_ssw_body_boxes(spec)
     tv_bounds = _box_bounds(_body_by_name_from_boxes(bodies, "tv"))
+    tx_region_bounds = _box_bounds(_body_by_name_from_boxes(bodies, "tx_region"))
     tx_bounds = _combined_box_bounds(tuple(body for body in bodies if body.name.startswith("tx_ssw_coil_")))
 
-    assert tv_bounds[4] - tx_bounds[5] == pytest.approx(125.0)
+    assert tv_bounds[4] - tx_region_bounds[5] == pytest.approx(125.0)
+    assert tx_bounds[5] == pytest.approx(tx_region_bounds[5])
 
 
 def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> None:
@@ -142,37 +151,57 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert "BEGIN_SSW_SCENE" in action_ops
     assert "PLACE_COIL_IN_SCENE" in action_ops
     assert "EXPORT_STEP" in action_ops
+    export_actions = tuple(
+        action for action in actions if action["op"] == "EXPORT_STEP" and action["target"] == "output.ssw_scene.step"
+    )
+    assert len(export_actions) == 1
+    export_params = export_actions[0]["params"]
+    assert isinstance(export_params, list)
+    export_param_keys = tuple(str(param["key"]) for param in export_params)
+    assert "scene_step_name" in export_param_keys
+    assert "token_toml_name" in export_param_keys
+    assert "scene_step_path" not in export_param_keys
+    assert "token_toml_path" not in export_param_keys
     action_targets = tuple(str(action["target"]) for action in actions)
     assert any(target.startswith("tx_ssw_coil.") for target in action_targets)
     assert any(target.startswith("rx_ssw_coil.") for target in action_targets)
     assert "tx_ssw_coil_pcb_1_fr4" in ledger["fr4_body_names"]
     assert "rx_ssw_coil_pcb_2_fr4" in ledger["fr4_body_names"]
     assert ledger["token_toml_path"] == str(token_path)
+    assert ledger["non_model_body_names"] == ["tv", "tx_region"]
     assert "tx_ssw_coil_ssw_copper" in ledger["copper_body_names"]
     assert "rx_ssw_coil_ssw_copper" in ledger["copper_body_names"]
     assert len(ledger["body_names"]) == len(set(ledger["body_names"]))
     tv = _body_by_name_from_ledger(ledger, "tv")
+    tx_region = _body_by_name_from_ledger(ledger, "tx_region")
     tx_copper = _body_by_name_from_ledger(ledger, "tx_ssw_coil_ssw_copper")
     rx_copper = _body_by_name_from_ledger(ledger, "rx_ssw_coil_ssw_copper")
     tv_bounds = _bounds(tv)
+    tx_region_bounds = _bounds(tx_region)
     tx_bounds = _bounds(tx_copper)
     rx_bounds = _bounds(rx_copper)
     tolerance = 1e-6
-    assert rx_bounds[0] >= tv_bounds[0] - tolerance
+    assert _numeric_field(tv, "transparency") == pytest.approx(0.6)
+    assert _numeric_field(tx_region, "transparency") == pytest.approx(0.2)
+    assert rx_bounds[0] >= tv_bounds[0] - 0.07 - tolerance
     assert rx_bounds[1] <= tv_bounds[1] + tolerance
     assert rx_bounds[2] >= tv_bounds[2] - tolerance
     assert rx_bounds[3] <= tv_bounds[3] + tolerance
-    assert rx_bounds[4] >= tv_bounds[4] - tolerance
-    assert rx_bounds[5] <= tv_bounds[5] + tolerance
-    assert rx_bounds[4] == pytest.approx(tv_bounds[4])
-    assert tv_bounds[4] - tx_bounds[5] == pytest.approx(50.0)
-    assert tx_bounds[5] < tv_bounds[4]
-    assert tx_bounds[1] - tx_bounds[0] > 100.0
-    assert tx_bounds[3] - tx_bounds[2] > 100.0
+    assert rx_bounds[4] >= tv_bounds[4] - 0.07 - tolerance
+    assert rx_bounds[5] <= tv_bounds[5] + 0.07 + tolerance
+    assert rx_bounds[4] == pytest.approx(tv_bounds[4] - 0.07)
+    assert tv_bounds[4] - tx_region_bounds[5] == pytest.approx(100.0)
+    assert tx_bounds[5] == pytest.approx(tx_region_bounds[5])
+    assert tx_region_bounds[0] <= tx_bounds[0] <= tx_bounds[1] <= tx_region_bounds[1]
+    assert tx_region_bounds[2] <= tx_bounds[2] <= tx_bounds[3] <= tx_region_bounds[3]
+    assert tx_region_bounds[4] <= tx_bounds[4] <= tx_bounds[5] <= tx_region_bounds[5]
+    assert tx_region_bounds[1] - tx_region_bounds[0] > tx_bounds[1] - tx_bounds[0]
+    assert tx_region_bounds[3] - tx_region_bounds[2] > tx_bounds[3] - tx_bounds[2]
+    assert tx_region_bounds[5] - tx_region_bounds[4] > tx_bounds[5] - tx_bounds[4]
+    assert tx_bounds[3] - tx_bounds[2] > tx_bounds[1] - tx_bounds[0]
     assert tx_bounds[5] - tx_bounds[4] < 10.0
     assert rx_bounds[1] - rx_bounds[0] < 10.0
-    assert rx_bounds[3] - rx_bounds[2] > 100.0
-    assert rx_bounds[5] - rx_bounds[4] > 100.0
+    assert rx_bounds[3] - rx_bounds[2] > rx_bounds[5] - rx_bounds[4]
 
 
 def test_export_ssw_step_artifacts_raises_when_step_export_missing(
