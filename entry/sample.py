@@ -14,8 +14,8 @@ if __package__ in {None, ""}:
 from peetsfea.minimal_step import export_minimal_step_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SOURCE_TOML_PATH = REPO_ROOT / "examples" / "minimal_step_two_port.toml"
-OUTPUT_DIR = REPO_ROOT / "run" / "sampled" / "minimal"
+SOURCE_TOML_PATH = REPO_ROOT / "examples" / "0.3.0_fixed.toml"
+OUTPUT_DIR = REPO_ROOT / "run" / "sampled" / "0.3.0"
 MANIFEST_PATH = OUTPUT_DIR / "manifest.json"
 SEED = 0
 

@@ -1,0 +1,163 @@
+# 0.3.0 SSW fixed authoring input.
+# ----------------------------------------------------------------------------
+# 이 파일은 examples/0.3.0_sweep.toml의 frozen realization이다.
+# sweep과 같은 public field surface를 유지하되, 모든 sampled coil 변수는 count=1로 고정한다.
+#
+# Range 형식:
+# - [true, start, end, count]는 integer 후보 range다.
+# - [false, start, end, count]는 float 후보 range다.
+# - fixed TOML은 같은 public field를 [*, value, value, 1]로 freeze한다.
+
+spec_version = "0.3.0"
+schema_id = "peetsfea.ssw_coil.step.v1"
+runtime_compatible = false
+
+[design]
+units = "mm"
+
+[backend]
+authoring_tool = "cadquery"
+solver_tool = "hfss"
+interchange_format = "step"
+
+# ----------------------------------------------------------------------------
+# Fixed geometry dimensions
+# ----------------------------------------------------------------------------
+
+[fixed_dimensions.fr4_thickness_mm]
+range = [false, 0.24, 0.24, 1]
+description = "FR4 thickness(mm)"
+
+[fixed_dimensions.copper_thickness_mm]
+range = [false, 0.07, 0.07, 1]
+description = "Copper thickness(mm)"
+
+[fixed_dimensions.port_length_mm]
+range = [false, 2.0, 2.0, 1]
+description = "Port landing gap length(mm)"
+
+[fixed_dimensions.port_landing_pad_mm]
+range = [false, 5.5, 5.5, 1]
+description = "Port landing pad width(mm)"
+
+[fixed_dimensions.port_landing_drop_mm]
+range = [false, 0.24, 0.24, 1]
+description = "Port landing drop distance(mm)"
+
+[fixed_dimensions.port_landing_overlap_mm]
+range = [false, 0.01, 0.01, 1]
+description = "Port landing overlap(mm)"
+
+[fixed_dimensions.width_max_mm]
+range = [false, 480.0, 480.0, 1]
+description = "Maximum coil width(mm)"
+
+[fixed_dimensions.height_max_mm]
+range = [false, 240.0, 240.0, 1]
+description = "Maximum coil height(mm)"
+
+# ----------------------------------------------------------------------------
+# Non-model object registry
+# ----------------------------------------------------------------------------
+
+[[non_model_objects]]
+id = "air_context"
+kind = "air_context"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "XY"
+origin_xyz = [-100.0, -75.0, -25.0]
+size_xyz = [200.0, 150.0, 50.0]
+
+[[non_model_objects]]
+id = "tv"
+kind = "tv"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [0.0, -921.0, 170.0]
+size_xyz = [9.0, 1842.0, 1055.0]
+
+# ----------------------------------------------------------------------------
+# Modeled object registry
+# ----------------------------------------------------------------------------
+
+[[modeled_objects]]
+object_id = "tx_ssw_coil"
+role = "tx_ssw_coil"
+material = "composite"
+model_state = true
+
+[modeled_objects.width_ratio]
+range = [false, 0.6, 0.6, 1]
+description = "TX SSW coil width ratio against fixed_dimensions.width_max_mm"
+
+[modeled_objects.height_ratio]
+range = [false, 0.6, 0.6, 1]
+description = "TX SSW coil height ratio against fixed_dimensions.height_max_mm"
+
+[modeled_objects.turn_n_int]
+range = [true, 3, 3, 1]
+description = "TX SSW band count"
+
+[modeled_objects.gap_ratio]
+range = [false, 0.24, 0.24, 1]
+description = "TX SSW pitch 중 gap 비율"
+
+[modeled_objects.void_area_ratio]
+range = [false, 0.5, 0.5, 1]
+description = "TX 중앙 void area ratio"
+
+[modeled_objects.void_profile]
+range = [true, 1, 1, 1]
+description = "TX void profile: 0 rectangular void, 1 scaled void"
+
+[modeled_objects.pcb_gap_mm]
+range = [false, 3.0, 3.0, 1]
+description = "TX SSW two-PCB gap(mm)"
+
+[modeled_objects.twist_factor]
+range = [true, 2, 2, 1]
+description = "TX SSW band pitch shift per loop"
+
+[[modeled_objects]]
+object_id = "rx_ssw_coil"
+role = "rx_ssw_coil"
+material = "composite"
+model_state = true
+
+[modeled_objects.width_ratio]
+range = [false, 0.6, 0.6, 1]
+description = "RX SSW coil width ratio against fixed_dimensions.width_max_mm"
+
+[modeled_objects.height_ratio]
+range = [false, 0.6, 0.6, 1]
+description = "RX SSW coil height ratio against fixed_dimensions.height_max_mm"
+
+[modeled_objects.turn_n_int]
+range = [true, 3, 3, 1]
+description = "RX SSW band count"
+
+[modeled_objects.gap_ratio]
+range = [false, 0.24, 0.24, 1]
+description = "RX SSW pitch 중 gap 비율"
+
+[modeled_objects.void_area_ratio]
+range = [false, 0.5, 0.5, 1]
+description = "RX 중앙 void area ratio"
+
+[modeled_objects.void_profile]
+range = [true, 1, 1, 1]
+description = "RX void profile: 0 rectangular void, 1 scaled void"
+
+[modeled_objects.pcb_gap_mm]
+range = [false, 3.0, 3.0, 1]
+description = "RX SSW two-PCB gap(mm)"
+
+[modeled_objects.twist_factor]
+range = [true, 2, 2, 1]
+description = "RX SSW band pitch shift per loop"
