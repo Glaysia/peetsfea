@@ -14,7 +14,7 @@ tags:
 - Inputs: `MinimalSpec`, output directory, seed.
 - Outputs: `minimal_scene.step`, `minimal_step_ledger.json`, and artifact metadata.
 - Canonical state: generated body names, body roles, canonical coordinates, and port sheet vertices in the ledger.
-- Invariants: body names are unique, all dimensions are positive, Tx/Rx body names remain fixed, and `bd.export_step` must return `True`.
+- Invariants: body names are unique, all dimensions are positive, authored non-model names are preserved, Tx/Rx body names remain fixed, and `bd.export_step` must return `True`.
 - Fail-fast points: duplicate names, invalid body dimensions, failed STEP export, failed ledger serialization.
 - Collaborators: [minimal_spec.py](minimal_spec.py.md), [minimal_em.py](backend/pyaedt/minimal_em.py.md).
 - Tests: `tests/test_minimal_step.py`.

@@ -14,7 +14,7 @@ tags:
 - Inputs: temporary TOML files.
 - Outputs: parser assertions and fail-fast expectations.
 - Canonical state: none.
-- Invariants: non-model-only input passes; old geometry sections fail.
+- Invariants: non-model-only input passes, including restored `tv` context; old geometry sections fail.
 - Fail-fast points: parser exceptions are expected for invalid inputs.
 - Collaborators: [minimal_spec.py](../src/peetsfea/minimal_spec.py.md).
 - Tests: this file.

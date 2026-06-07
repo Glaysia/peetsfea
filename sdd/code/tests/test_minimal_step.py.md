@@ -14,7 +14,7 @@ tags:
 - Inputs: temporary minimal TOML files and monkeypatched STEP export functions.
 - Outputs: ledger/body-name assertions and failure expectations.
 - Canonical state: none.
-- Invariants: body names are fixed and `bd.export_step` failure raises.
+- Invariants: canonical authored non-model body names include `air_context` and `tv`, generated Tx/Rx body names are fixed, and `bd.export_step` failure raises.
 - Fail-fast points: failed export and invalid ledger state.
 - Collaborators: [minimal_step.py](../src/peetsfea/minimal_step.py.md).
 - Tests: this file.

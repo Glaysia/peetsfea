@@ -31,6 +31,17 @@ material = "vacuum"
 plane = "XY"
 origin_xyz = [-100.0, -75.0, -25.0]
 size_xyz = [200.0, 150.0, 50.0]
+
+[[non_model_objects]]
+id = "tv"
+kind = "tv"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [0.0, -921.0, 170.0]
+size_xyz = [9.0, 1842.0, 1055.0]
 """
 
 
@@ -38,11 +49,17 @@ def test_load_minimal_spec_accepts_non_model_only_contract(tmp_path: Path) -> No
     spec = load_minimal_spec(_write_spec(tmp_path, _valid_text()))
 
     assert spec.units == "mm"
-    assert len(spec.non_model_objects) == 1
-    non_model = spec.non_model_objects[0]
-    assert non_model.object_id == "air_context"
-    assert non_model.origin_xyz == (-100.0, -75.0, -25.0)
-    assert non_model.size_xyz == (200.0, 150.0, 50.0)
+    assert len(spec.non_model_objects) == 2
+    air_context = spec.non_model_objects[0]
+    assert air_context.object_id == "air_context"
+    assert air_context.origin_xyz == (-100.0, -75.0, -25.0)
+    assert air_context.size_xyz == (200.0, 150.0, 50.0)
+    tv = spec.non_model_objects[1]
+    assert tv.object_id == "tv"
+    assert tv.kind == "tv"
+    assert tv.plane == "YZ"
+    assert tv.origin_xyz == (0.0, -921.0, 170.0)
+    assert tv.size_xyz == (9.0, 1842.0, 1055.0)
 
 
 @pytest.mark.parametrize("section", ["backend", "simulation", "outputs", "modeled_objects", "constraints"])

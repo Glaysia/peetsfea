@@ -14,3 +14,14 @@ material = "vacuum"
 plane = "XY"
 origin_xyz = [-100.0, -75.0, -25.0]
 size_xyz = [200.0, 150.0, 50.0]
+
+[[non_model_objects]]
+id = "tv"
+kind = "tv"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [0.0, -921.0, 170.0]
+size_xyz = [9.0, 1842.0, 1055.0]

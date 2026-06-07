@@ -29,6 +29,17 @@ material = "vacuum"
 plane = "XY"
 origin_xyz = [-100.0, -75.0, -25.0]
 size_xyz = [200.0, 150.0, 50.0]
+
+[[non_model_objects]]
+id = "tv"
+kind = "tv"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+origin_xyz = [0.0, -921.0, 170.0]
+size_xyz = [9.0, 1842.0, 1055.0]
 """,
         encoding="utf-8",
     )
@@ -42,6 +53,7 @@ def test_export_minimal_step_artifacts_writes_fixed_body_contract(tmp_path: Path
     assert Path(artifacts["scene_step_path"]).is_file()
     assert ledger["body_names"] == [
         "air_context",
+        "tv",
         "tx_signal_pad",
         "tx_reference_pad",
         "tx_port_sheet",
@@ -49,6 +61,11 @@ def test_export_minimal_step_artifacts_writes_fixed_body_contract(tmp_path: Path
         "rx_reference_pad",
         "rx_port_sheet",
     ]
+    assert ledger["non_model_body_names"] == ["air_context", "tv"]
+    assert ledger["bodies"][1]["object_id"] == "tv"
+    assert ledger["bodies"][1]["role"] == "non_model"
+    assert ledger["bodies"][1]["canonical_coordinates"]["outer_bounds_min_xyz"] == [0.0, -921.0, 170.0]
+    assert ledger["bodies"][1]["canonical_coordinates"]["outer_bounds_size_xyz"] == [9.0, 1842.0, 1055.0]
     assert ledger["copper_body_names"] == [
         "tx_signal_pad",
         "tx_reference_pad",
