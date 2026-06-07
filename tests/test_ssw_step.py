@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Mapping
 import tomllib
 
+import cadquery as cq
 import pytest
 
 from entry.debug_view_0_3_0_ssw import AEDT_PORT_LEDGER_NAME, AEDT_SCENE_STEP_NAME, export_ssw_aedt_port_artifacts
@@ -142,7 +143,7 @@ def _combined_ledger_bounds(ledger: SswStepLedger, object_id_prefix: str) -> tup
 
 
 def _combined_bbox_bounds(
-    bboxes: tuple[module_under_test._Bounds, ...],
+    bboxes: tuple[cq.BoundBox, ...],
 ) -> tuple[float, float, float, float, float, float]:
     assert bboxes
     return (
@@ -170,7 +171,7 @@ def _rx_normal_port_landing_bounds(
         spec.rx,
         module_under_test._coilmaker_assembly(spec.rx, spec.fixed),
     )
-    bboxes: list[module_under_test._Bounds] = []
+    bboxes: list[cq.BoundBox] = []
     for token in landing.pieces:
         if isinstance(token, coilmaker.BoxToken):
             workplane = coilmaker._render_box_token(token)
