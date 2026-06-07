@@ -47,6 +47,6 @@ tags:
 
 ## Execution Defaults
 - Commands run from `run/`.
-- AEDT runs are headless by default.
-- GUI validation is not part of the active pipeline unless explicitly requested.
+- AEDT validation is headless by default and is required for code changes that affect AEDT/PyAEDT import, ports, setup, solve, reports, materials, validation, or runtime entrypoints.
+- GUI-visible AEDT checks are optional diagnosis only and do not replace a passing headless AEDT validation.
 - Failures raise immediately; best-effort continuation is not part of the default path.

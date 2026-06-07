@@ -13,7 +13,7 @@ tags:
 > Commandment 4 is active now for `src/`: bind values only after asserted validation.
 > Commandment 5 is active now for `src/`: attribute and mapping fallbacks are forbidden.
 > Fallbacks are forbidden: do not add fallback code paths, degraded substitutes, silent retries, or "try alternative behavior and continue" logic unless the user explicitly requests that behavior for the current task.
-> Never launch AEDT in GUI mode unless the user explicitly asks for GUI validation.
+> After any AEDT/PyAEDT-affecting code change, run a real headless AEDT validation from `run/` before calling the work complete. If the local AEDT/license/runtime cannot run, report the blocker and leave the work explicitly incomplete; do not hand unvalidated AEDT code to the user as done.
 > SDD policy lives in [SDD.md](SDD.md).
 > From `0.2.22` onward, any newly created or substantively edited tracked Python file under `src/`, `entry/`, or `tests/` must ship with a matching note under `sdd/code/`.
 # AGENTS
@@ -41,7 +41,7 @@ This document defines the project rules for coding agents working in this reposi
 - Random/sampling logic must always accept an explicit `seed`.
 - Document defaults; do not hide implicit values.
 - Keep Pyaedt-dependent code isolated and replaceable.
-- Do not add features that assume a UI/GUI (headless AEDT, GUI off).
+- Headless AEDT is the required validation target for AEDT/PyAEDT behavior. GUI-visible AEDT may be used only as an additional inspection aid; it never replaces a successful headless validation.
 - Keep execution configuration (machines, runners) in Python code, not in TOML.
 - When later logic needs the position/coordinates of an already created object, do not reverse-calculate them from downstream geometry; store the canonical coordinates in an accessible location at creation time and read from that source thereafter.
 - If existing code currently depends on post-hoc coordinate reverse-calculation for created objects, refactor it to persist and reuse the creation-time coordinates instead of preserving the reverse-calculation path.
@@ -103,19 +103,17 @@ This document defines the project rules for coding agents working in this reposi
 
 ## Tests/execution
 - Prefer pure-Python tests for the spec parser/validator.
-- Separate integration tests that require Pyaedt.
+- Separate integration tests that require Pyaedt, but run them for every code change that affects AEDT/PyAEDT import, ports, setup, solve, reports, materials, validation, or runtime entrypoints.
 - Do not include large dataset generation in default test runs.
-- Determinism tests are required; Pyaedt integration tests are optional.
+- Determinism tests are required. Pyaedt integration tests are mandatory for AEDT/PyAEDT-affecting changes.
 - Run commands from the `run/` directory when executing scripts/tests to avoid polluting the repo root with generated artifacts.
 - Prefer output paths under `run/` for manifests, AEDT files, logs, and temporary execution artifacts.
 - Active default execution should use type2 entrypoints. Frozen `type1` batch/runtime flows are legacy-only and live under `entry/legacy/type1/`.
 - Do not run those entry scripts directly from arbitrary cwd without the matching cleanup step.
-- Default execution must stay headless. Do not launch GUI-visible AEDT or legacy `entry/legacy/type1/sample_build.py` during routine implementation, refactoring, or automated validation.
-- GUI-mode AEDT verification is opt-in only and must not be run unless the user explicitly requests it for the current task.
-- Even when GUI verification is requested, treat it as a validation step only; the implementation itself must remain headless-compatible.
-- GUI validation is considered valid only when started through `.vscode/launch.json` using `legacy-type1 Run entry/sample_build.py from run/`.
-- Ad-hoc GUI launches such as direct `python ../entry/legacy/type1/sample_build.py`, direct manifest-entry execution, or direct `build_aedt_from_manifest_entry_with_options()` calls are not valid GUI validation evidence.
-- Agents must not infer product/runtime bugs from GUI behavior observed through non-regular launch paths.
+- Default execution and agent validation must stay headless. Do not treat GUI-visible AEDT behavior as completion evidence for implementation work.
+- After editing AEDT/PyAEDT code or an entrypoint that can launch AEDT, run the relevant real headless AEDT test or build command from `run/` using `.venv`. If it fails, fix the code and rerun. If the local machine cannot start AEDT or lacks a usable license, stop and report the exact blocker.
+- GUI-visible AEDT checks are allowed as extra diagnosis, but they are never a substitute for headless AEDT validation.
+- Ad-hoc GUI observations must not be used to claim product/runtime correctness unless a matching headless validation has already passed.
 - Required sequence:
   - For active type2 import/debug work, run the `run-type2-import-debug` task or launch `Run entry/import_type2_step.py from run/`.
   - Frozen type1 TOML generation uses the `legacy-type1-run-sample-debug` task and `../entry/legacy/type1/sample.py`.

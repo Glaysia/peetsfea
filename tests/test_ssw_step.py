@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Mapping
 import tomllib
 
 import pytest
 
+from entry.debug_view_0_3_0_ssw import AEDT_PORT_LEDGER_NAME, AEDT_SCENE_STEP_NAME, export_ssw_aedt_port_artifacts
 import peetsfea.ssw_step as module_under_test
 from peetsfea.ssw_step import (
     SswStepLedger,
@@ -371,6 +373,29 @@ def test_build_ssw_body_boxes_rejects_mull_ferrite_sheet_when_interval_is_too_sm
     spec = load_ssw_fixed_spec(custom_toml)
     with pytest.raises(ValueError, match="TX MULL ferrite remaining interval"):
         build_ssw_body_boxes(spec)
+
+
+def test_export_ssw_aedt_port_artifacts_writes_port_sheet_ledger(tmp_path: Path) -> None:
+    ledger = export_ssw_aedt_port_artifacts(source_toml_path=FIXED_TOML, output_dir=tmp_path, seed=0)
+
+    aedt_step_path = Path(ledger["scene_step_path"])
+    port_ledger_path = tmp_path / AEDT_PORT_LEDGER_NAME
+    assert aedt_step_path.name == AEDT_SCENE_STEP_NAME
+    assert aedt_step_path.is_file()
+    assert aedt_step_path.stat().st_size > 0
+    assert port_ledger_path.is_file()
+    stored_ledger = json.loads(port_ledger_path.read_text(encoding="utf-8"))
+    assert stored_ledger == ledger
+    assert ledger["port_sheet_names"] == ["tx_aedt_port_sheet", "rx_aedt_port_sheet"]
+    assert ledger["port_sheet_names"][0] in ledger["body_names"]
+    assert ledger["port_sheet_names"][1] in ledger["body_names"]
+    assert "tx_mull_ferrite_sheet" in ledger["non_model_body_names"]
+    assert "rx_mull_ferrite_sheet" in ledger["non_model_body_names"]
+    assert [cell["role"] for cell in ledger["port_cells"]] == ["tx", "rx"]
+    tx_cell = ledger["port_cells"][0]
+    rx_cell = ledger["port_cells"][1]
+    assert tx_cell["signal_edge_vertices_xyz"][0][2] == pytest.approx(tx_cell["signal_edge_vertices_xyz"][1][2])
+    assert rx_cell["signal_edge_vertices_xyz"][0][0] == pytest.approx(rx_cell["signal_edge_vertices_xyz"][1][0])
 
 
 def test_export_ssw_step_artifacts_supports_explicit_rx_spiral_mode(tmp_path: Path) -> None:

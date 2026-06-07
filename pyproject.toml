@@ -47,5 +47,5 @@ reportMissingModuleSource = "none"
 [tool.pytest.ini_options]
 markers = [
   "contract: pure-Python acceptance/contract tests for default CI",
-  "pyaedt_integration: optional integration tests that require AEDT/Pyaedt runtime",
+  "pyaedt_integration: real headless AEDT/PyAEDT integration tests required for AEDT-affecting changes",
 ]

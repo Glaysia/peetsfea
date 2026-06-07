@@ -20,7 +20,8 @@ peetsfea는 TOML 명세에서 HFSS(AEDT) 설계를 결정적으로 생성하는 
 - TOML surface: `[design]`과 `[[non_model_objects]]`만 허용
 - STEP surface: authored non-model box들과 고정 Tx/Rx port cell
 - EM surface: Tx 포트 1개, Rx 포트 1개, copper pad mesh, radiation boundary, `Setup1`, `Sweep`, `Output Variables Table1`
-- 기본 실행은 headless이며 PyAEDT `False` return은 즉시 raise합니다.
+- 기본 실행과 AEDT/PyAEDT 변경 검증은 headless이며 PyAEDT `False` return은 즉시 raise합니다.
+- AEDT/PyAEDT 관련 코드를 수정한 agent는 실제 headless AEDT 검증을 직접 실행해야 하며, 실행 불가 시 완료로 보고하지 않습니다.
 
 ## 실행
 테스트는 `run/`에서 실행합니다.
@@ -68,7 +69,7 @@ cd run
 ## 규칙
 - `python -O`는 지원하지 않습니다. assertion은 runtime contract의 일부입니다.
 - `src/` runtime state는 nullable/fallback 기반으로 다루지 않습니다.
-- GUI AEDT 검증은 명시 요청이 있을 때만 수행합니다.
+- GUI AEDT 확인은 보조 진단일 뿐이며, headless AEDT 검증을 대체하지 않습니다.
 - 기존 type2, rect-void, legacy geometry path는 0.3.0 활성/legacy 구현으로 유지하지 않습니다.
 
 ## 문서
