@@ -62,10 +62,13 @@ class SswCoilParameters:
     role: Role
     width_ratio: float
     height_ratio: float
+    is_ssw_enabled: bool
     turn_n_int: int
     gap_ratio: float
     void_area_ratio: float
     void_profile: int
+    no_ssw_qturn_start_int: int
+    no_ssw_qturn_n_int: int
     pcb_gap_mm: float
     twist_factor: int
 
@@ -258,6 +261,13 @@ def _frozen_int(table: dict[str, object], key: str, context: str, *, minimum: in
     return value
 
 
+def _frozen_bool_as_int(table: dict[str, object], key: str, context: str) -> bool:
+    value = _frozen_int(table, key, context, minimum=0)
+    if value not in {0, 1}:
+        raise ValueError(f"{context}.{key} must be 0 or 1")
+    return value == 1
+
+
 def _required_float(table: dict[str, object], key: str, context: str) -> float:
     return _require_numeric(_require_key(table, key, context), f"{context}.{key}")
 
@@ -330,14 +340,26 @@ def _modeled_object_by_role(raw_objects: object, role: Role) -> dict[str, object
 
 def _load_coil_parameters(root: dict[str, object], role: Role) -> SswCoilParameters:
     table = _modeled_object_by_role(_require_key(root, "modeled_objects", "0.3.0 fixed spec"), role)
+    is_ssw_enabled = _frozen_bool_as_int(table, "is_ssw_enabled", role)
+    no_ssw_qturn_start_int = _frozen_int(table, "no_ssw_qturn_start_int", role, minimum=0)
+    no_ssw_qturn_n_int = _frozen_int(table, "no_ssw_qturn_n_int", role, minimum=0)
+    if role == "tx_ssw_coil" and not is_ssw_enabled:
+        raise ValueError("tx_ssw_coil.is_ssw_enabled must stay enabled in 0.3.0")
+    if no_ssw_qturn_start_int > 7:
+        raise ValueError(f"{role}.no_ssw_qturn_start_int must be <= 7")
+    if no_ssw_qturn_n_int > 3:
+        raise ValueError(f"{role}.no_ssw_qturn_n_int must be <= 3")
     return SswCoilParameters(
         role=role,
         width_ratio=_frozen_float(table, "width_ratio", role, positive=True),
         height_ratio=_frozen_float(table, "height_ratio", role, positive=True),
+        is_ssw_enabled=is_ssw_enabled,
         turn_n_int=_frozen_int(table, "turn_n_int", role, minimum=1),
         gap_ratio=_frozen_float(table, "gap_ratio", role, positive=True),
         void_area_ratio=_frozen_float(table, "void_area_ratio", role, positive=True),
         void_profile=_frozen_int(table, "void_profile", role, minimum=0),
+        no_ssw_qturn_start_int=no_ssw_qturn_start_int,
+        no_ssw_qturn_n_int=no_ssw_qturn_n_int,
         pcb_gap_mm=_frozen_float(table, "pcb_gap_mm", role, positive=True),
         twist_factor=_frozen_int(table, "twist_factor", role, minimum=1),
     )
@@ -632,7 +654,7 @@ def _coilmaker_config(params: SswCoilParameters, fixed: FixedDimensions) -> coil
         common=coilmaker.CommonCoilParameters(
             WIDTH_RATIO=params.width_ratio,
             HEIGHT_RATIO=params.height_ratio,
-            IS_SSW_ENABLED=True,
+            IS_SSW_ENABLED=params.is_ssw_enabled,
             TURN_N_INT=params.turn_n_int,
             GAP_RATIO=params.gap_ratio,
             VOID_AREA_RATIO=params.void_area_ratio,
@@ -641,7 +663,10 @@ def _coilmaker_config(params: SswCoilParameters, fixed: FixedDimensions) -> coil
             SERIAL_COIL_GAP_RATIO=0.0,
             SERIAL_COIL_AXIS=0,
         ),
-        spiral=coilmaker.SpiralCoilParameters(),
+        spiral=coilmaker.SpiralCoilParameters(
+            NO_SSW_QTURN_START_INT=params.no_ssw_qturn_start_int,
+            NO_SSW_QTURN_N_INT=params.no_ssw_qturn_n_int,
+        ),
         ssw=coilmaker.SSWCoilParameters(
             PCB_GAP_MM=params.pcb_gap_mm,
             TWIST_FACTOR=params.twist_factor,
@@ -675,6 +700,8 @@ def _ssw_port_anchor_world_xyz(
     spec: SswFixedSpec,
     params: SswCoilParameters,
 ) -> Point3:
+    if not params.is_ssw_enabled:
+        raise ValueError(f"{params.role} does not have an SSW port anchor when is_ssw_enabled=false")
     config = _coilmaker_config(params, spec.fixed)
     frames = tuple(coilmaker.coil_slot_frames(config))
     if len(frames) != 1:

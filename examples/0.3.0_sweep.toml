@@ -1,7 +1,8 @@
 # 0.3.0 SSW sampled authoring input.
 # ----------------------------------------------------------------------------
 # 이 파일은 0.3.0 SSW coil sweep의 SSOT다.
-# TX/RX 각각 8개의 sampled coil 변수와 1개의 shared layout 변수를 가지며,
+# TX/RX 각각 8개의 sampled coil 변수, 3개의 fixed compatibility 변수,
+# 1개의 shared layout 변수를 가지며,
 # 자유변수 기준 총 17차원이다.
 #
 # Range 형식:
@@ -107,8 +108,12 @@ description = "TX SSW coil width ratio against fixed_dimensions.width_max_mm"
 range = [false, 0.025, 1.0, 500]
 description = "TX SSW coil height ratio against fixed_dimensions.height_max_mm"
 
+[modeled_objects.is_ssw_enabled]
+range = [true, 1, 1, 1]
+description = "TX SSW enable flag"
+
 [modeled_objects.turn_n_int]
-range = [true, 1, 10, 10]
+range = [true, 2, 10, 10]
 description = "TX SSW band count"
 
 [modeled_objects.gap_ratio]
@@ -122,6 +127,14 @@ description = "TX 중앙 void area ratio"
 [modeled_objects.void_profile]
 range = [true, 0, 1, 2]
 description = "TX void profile: 0 rectangular void, 1 scaled void"
+
+[modeled_objects.no_ssw_qturn_start_int]
+range = [true, 0, 0, 1]
+description = "TX non-SSW quarter-turn start index; fixed disabled for 0.3.0 SSW"
+
+[modeled_objects.no_ssw_qturn_n_int]
+range = [true, 0, 0, 1]
+description = "TX non-SSW quarter-turn count; fixed disabled for 0.3.0 SSW"
 
 [modeled_objects.pcb_gap_mm]
 range = [false, 1.0, 10.0, 50]
@@ -145,8 +158,12 @@ description = "RX SSW coil width ratio against fixed_dimensions.width_max_mm"
 range = [false, 0.025, 1.0, 500]
 description = "RX SSW coil height ratio against fixed_dimensions.height_max_mm"
 
+[modeled_objects.is_ssw_enabled]
+range = [true, 0, 1, 1]
+description = "RX SSW enable flag"
+
 [modeled_objects.turn_n_int]
-range = [true, 1, 10, 10]
+range = [true, 2, 10, 10]
 description = "RX SSW band count"
 
 [modeled_objects.gap_ratio]
@@ -160,6 +177,14 @@ description = "RX 중앙 void area ratio"
 [modeled_objects.void_profile]
 range = [true, 0, 1, 2]
 description = "RX void profile: 0 rectangular void, 1 scaled void"
+
+[modeled_objects.no_ssw_qturn_start_int]
+range = [true, 0, 7, 8]
+description = "RX non-SSW quarter-turn start index; fixed disabled for 0.3.0 SSW"
+
+[modeled_objects.no_ssw_qturn_n_int]
+range = [true, 0, 3, 4]
+description = "RX non-SSW quarter-turn count; fixed disabled for 0.3.0 SSW"
 
 [modeled_objects.pcb_gap_mm]
 range = [false, 1.0, 10.0, 50]
