@@ -49,11 +49,11 @@ range = [false, 0.01, 0.01, 1]
 description = "Port landing overlap(mm)"
 
 [fixed_dimensions.width_max_mm]
-range = [false, 480.0, 480.0, 1]
+range = [false, 360.0, 360.0, 1]
 description = "Maximum coil width(mm)"
 
 [fixed_dimensions.height_max_mm]
-range = [false, 240.0, 240.0, 1]
+range = [false, 180.0, 180.0, 1]
 description = "Maximum coil height(mm)"
 
 [fixed_dimensions.tx_rx_min_distance_mm]
@@ -87,6 +87,35 @@ plane = "XY"
 origin_xyz = [0.0, -921.0, 0.0]
 size_xyz = [480.0, 1842.0, 240.0]
 transparency = 0.2
+
+[[non_model_objects]]
+id = "tx_region_max"
+kind = "tx_region_max"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "XY"
+# Largest TX coil XY bounds from examples/0.3.0_sweep.toml.
+# The region thickness is capped at 15 mm, and export resolves
+# this box to the current TX placement.
+origin_xyz = [0.0, -240.07, 0.0]
+size_xyz = [240.14, 480.14, 15.0]
+transparency = 0.35
+
+[[non_model_objects]]
+id = "rx_region_max"
+kind = "rx_region_max"
+primitive = "box"
+present = true
+non_model = true
+material = "vacuum"
+plane = "YZ"
+# Largest RX coil YZ bounds from examples/0.3.0_sweep.toml.
+# The region thickness is capped at 5 mm.
+origin_xyz = [-0.07, -240.07, 339.93]
+size_xyz = [5.0, 480.14, 240.14]
+transparency = 0.35
 
 # ----------------------------------------------------------------------------
 # Modeled object registry
@@ -157,11 +186,11 @@ range = [false, 0.6, 0.6, 1]
 description = "RX SSW coil height ratio against fixed_dimensions.height_max_mm"
 
 [modeled_objects.is_ssw_enabled]
-range = [true,  0, 0, 1]
+range = [true, 0, 0, 1]
 description = "RX SSW enable flag"
 
 [modeled_objects.turn_n_int]
-range = [true, 2, 2, 1]
+range = [true, 1, 1, 1]
 description = "RX SSW band count"
 
 [modeled_objects.gap_ratio]
@@ -169,7 +198,7 @@ range = [false, 0.24, 0.24, 1]
 description = "RX SSW pitch 중 gap 비율"
 
 [modeled_objects.void_area_ratio]
-range = [false, 0.5, 0.5, 1]
+range = [false, 0.25, 0.25, 1]
 description = "RX 중앙 void area ratio"
 
 [modeled_objects.void_profile]

@@ -586,7 +586,7 @@ def _coil_boxes(
 
 def _non_model_boxes(spec: SswFixedSpec) -> tuple[_BodyBox, ...]:
     resolved_non_model_objects = tuple(
-        _resolved_tx_region_box(spec, non_model) if non_model.object_id == "tx_region" else non_model
+        _resolved_non_model_box(spec, non_model)
         for non_model in spec.non_model_objects
     )
     return tuple(
@@ -604,6 +604,16 @@ def _non_model_boxes(spec: SswFixedSpec) -> tuple[_BodyBox, ...]:
         )
         for resolved in resolved_non_model_objects
     )
+
+
+def _resolved_non_model_box(spec: SswFixedSpec, non_model: NonModelBox) -> NonModelBox:
+    if non_model.object_id == "tx_region":
+        return _resolved_tx_region_box(spec, non_model)
+    if non_model.object_id == "tx_region_max":
+        return _resolved_tx_region_max_box(spec, non_model)
+    if non_model.object_id == "rx_region_max":
+        return _resolved_rx_region_max_box(spec, non_model)
+    return non_model
 
 
 def _tv_box(spec: SswFixedSpec) -> NonModelBox:
@@ -632,11 +642,73 @@ def _resolved_tx_region_box(spec: SswFixedSpec, tx_region: NonModelBox) -> NonMo
     )
 
 
+def _resolved_tx_region_max_box(spec: SswFixedSpec, tx_region_max: NonModelBox) -> NonModelBox:
+    tv = _tv_box(spec)
+    tx_region = _tx_region_box(spec)
+    if tx_region_max.size_xyz[0] > tx_region.size_xyz[0]:
+        raise ValueError(
+            f"tx_region_max X size must fit inside tx_region "
+            f"(max_x={tx_region_max.size_xyz[0]}, tx_region_x={tx_region.size_xyz[0]})"
+        )
+    if tx_region_max.size_xyz[1] > tx_region.size_xyz[1]:
+        raise ValueError(
+            f"tx_region_max Y size must fit inside tx_region "
+            f"(max_y={tx_region_max.size_xyz[1]}, tx_region_y={tx_region.size_xyz[1]})"
+        )
+    if tx_region_max.size_xyz[2] > tx_region.size_xyz[2]:
+        raise ValueError(
+            f"tx_region_max Z size must fit inside tx_region "
+            f"(max_z={tx_region_max.size_xyz[2]}, tx_region_z={tx_region.size_xyz[2]})"
+        )
+    tv_center_y = tv.origin_xyz[1] + tv.size_xyz[1] / 2.0
+    tx_region_zmax = tx_region.origin_xyz[2] + tx_region.size_xyz[2]
+    return NonModelBox(
+        object_id=tx_region_max.object_id,
+        kind=tx_region_max.kind,
+        material=tx_region_max.material,
+        origin_xyz=(
+            tx_region.origin_xyz[0],
+            tv_center_y - tx_region_max.size_xyz[1] / 2.0,
+            tx_region_zmax - tx_region_max.size_xyz[2],
+        ),
+        size_xyz=tx_region_max.size_xyz,
+        transparency=tx_region_max.transparency,
+    )
+
+
+def _resolved_rx_region_max_box(spec: SswFixedSpec, rx_region_max: NonModelBox) -> NonModelBox:
+    tv = _tv_box(spec)
+    if rx_region_max.size_xyz[0] > tv.size_xyz[0]:
+        raise ValueError(
+            f"rx_region_max X thickness must fit inside TV X thickness "
+            f"(rx_region_max_x={rx_region_max.size_xyz[0]}, tv_x={tv.size_xyz[0]})"
+        )
+    return NonModelBox(
+        object_id=rx_region_max.object_id,
+        kind=rx_region_max.kind,
+        material=rx_region_max.material,
+        origin_xyz=(
+            tv.origin_xyz[0] + tv.size_xyz[0] - rx_region_max.size_xyz[0],
+            tv.origin_xyz[1],
+            tv.origin_xyz[2],
+        ),
+        size_xyz=(rx_region_max.size_xyz[0], tv.size_xyz[1], tv.size_xyz[2]),
+        transparency=rx_region_max.transparency,
+    )
+
+
 def _tx_region_box(spec: SswFixedSpec) -> NonModelBox:
     matches = tuple(box for box in spec.non_model_objects if box.object_id == "tx_region")
     if len(matches) != 1:
         raise ValueError(f"expected exactly one non-model tx_region box (count={len(matches)})")
     return _resolved_tx_region_box(spec, matches[0])
+
+
+def _rx_region_max_box(spec: SswFixedSpec) -> NonModelBox:
+    matches = tuple(box for box in spec.non_model_objects if box.object_id == "rx_region_max")
+    if len(matches) != 1:
+        raise ValueError(f"expected exactly one non-model rx_region_max box (count={len(matches)})")
+    return _resolved_rx_region_max_box(spec, matches[0])
 
 
 def _coilmaker_config(params: SswCoilParameters, fixed: FixedDimensions) -> coilmaker.RuntimeConfig:
@@ -801,6 +873,8 @@ def _placement_for_role(spec: SswFixedSpec, params: SswCoilParameters, assembly:
     tv = _tv_box(spec)
     tv_center_y = tv.origin_xyz[1] + tv.size_xyz[1] / 2.0
     if params.role == "rx_ssw_coil":
+        rx_region_max = _rx_region_max_box(spec)
+        rx_region_center_y = rx_region_max.origin_xyz[1] + rx_region_max.size_xyz[1] / 2.0
         orientation = _rx_yz_back_port_orientation()
         oriented_bodies = _coilmaker_child_bodies_from_assembly(params=params, assembly=assembly, placement=orientation)
         oriented_bounds = _combined_bounds(oriented_bodies, f"{params.role} oriented bodies")
@@ -808,24 +882,24 @@ def _placement_for_role(spec: SswFixedSpec, params: SswCoilParameters, assembly:
             _bodies_with_role(oriented_bodies, "fr4", f"{params.role} oriented bodies"),
             f"{params.role} oriented FR4 bodies",
         )
-        if oriented_bounds.size_x > tv.size_xyz[0]:
+        if oriented_bounds.size_x > rx_region_max.size_xyz[0]:
             raise ValueError(
-                f"RX SSW stack does not fit inside TV X thickness "
-                f"(stack={oriented_bounds.size_x}, tv_x_size={tv.size_xyz[0]})"
+                f"RX SSW stack does not fit inside rx_region_max X thickness "
+                f"(stack={oriented_bounds.size_x}, rx_region_max_x_size={rx_region_max.size_xyz[0]})"
             )
-        if oriented_bounds.size_y > tv.size_xyz[1]:
+        if oriented_bounds.size_y > rx_region_max.size_xyz[1]:
             raise ValueError(
-                f"RX SSW Y span does not fit inside TV "
-                f"(span={oriented_bounds.size_y}, tv_y_size={tv.size_xyz[1]})"
+                f"RX SSW Y span does not fit inside rx_region_max "
+                f"(span={oriented_bounds.size_y}, rx_region_max_y_size={rx_region_max.size_xyz[1]})"
             )
-        if oriented_bounds.size_z > tv.size_xyz[2]:
+        if oriented_bounds.size_z > rx_region_max.size_xyz[2]:
             raise ValueError(
-                f"RX SSW Z span does not fit inside TV "
-                f"(span={oriented_bounds.size_z}, tv_z_size={tv.size_xyz[2]})"
+                f"RX SSW Z span does not fit inside rx_region_max "
+                f"(span={oriented_bounds.size_z}, rx_region_max_z_size={rx_region_max.size_xyz[2]})"
             )
-        translate_x = tv.origin_xyz[0] - oriented_fr4_bounds.xmin
-        translate_y = tv_center_y - oriented_bounds.center_y
-        translate_z = tv.origin_xyz[2] - oriented_fr4_bounds.zmin
+        translate_x = rx_region_max.origin_xyz[0] + rx_region_max.size_xyz[0] - oriented_bounds.xmax
+        translate_y = rx_region_center_y - oriented_bounds.center_y
+        translate_z = rx_region_max.origin_xyz[2] - oriented_fr4_bounds.zmin
         return cq.Location(cq.Vector(translate_x, translate_y, translate_z)) * orientation
 
     tx_region = _tx_region_box(spec)
@@ -888,6 +962,8 @@ def _color_for_body(body: _BodyBox) -> cq.Color:
         return cq.Color(0.6, 0.8, 1.0, alpha)
     if body.name == "tx_region":
         return cq.Color(0.5, 0.5, 0.5, alpha)
+    if body.role == "non_model" and body.material == "vacuum":
+        return cq.Color(0.35, 0.55, 0.75, alpha)
     raise ValueError(f"unsupported material/body color assignment for {body.name!r} ({body.material!r})")
 
 
@@ -965,6 +1041,7 @@ def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -
     tolerance = 1e-6
     tv_bounds = _body_bounds(_body_by_name(bodies, "tv"))
     tx_region_bounds = _body_bounds(_body_by_name(bodies, "tx_region"))
+    rx_region_max_bounds = _body_bounds(_body_by_name(bodies, "rx_region_max"))
     tx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "tx_ssw_coil_"), "TX SSW bodies")
     rx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "rx_ssw_coil_"), "RX SSW bodies")
     rx_fr4_bounds = _combined_bounds(
@@ -983,6 +1060,24 @@ def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -
         raise ValueError("tx_region must be a maximum TX placement envelope, not a coil-tight box")
 
     copper_tolerance = spec.fixed.copper_thickness_mm + tolerance
+    if abs(rx_region_max_bounds.xmax - tv_bounds.xmax) > tolerance:
+        raise ValueError(
+            f"rx_region_max X max must align to TV X max "
+            f"(rx_region_max_xmax={rx_region_max_bounds.xmax}, tv_xmax={tv_bounds.xmax})"
+        )
+    if (
+        abs(rx_region_max_bounds.ymin - tv_bounds.ymin) > tolerance
+        or abs(rx_region_max_bounds.ymax - tv_bounds.ymax) > tolerance
+        or abs(rx_region_max_bounds.zmin - tv_bounds.zmin) > tolerance
+        or abs(rx_region_max_bounds.zmax - tv_bounds.zmax) > tolerance
+    ):
+        raise ValueError("rx_region_max YZ bounds must be derived from TV bounds")
+    _assert_inside_bounds(inner=rx_bounds, outer=rx_region_max_bounds, context="RX SSW")
+    if abs(rx_bounds.xmax - rx_region_max_bounds.xmax) > tolerance:
+        raise ValueError(
+            f"RX SSW X max must align to rx_region_max X max "
+            f"(rx_xmax={rx_bounds.xmax}, rx_region_max_xmax={rx_region_max_bounds.xmax})"
+        )
     _assert_inside_bounds(inner=rx_fr4_bounds, outer=tv_bounds, context="RX SSW FR4")
     _assert_inside_bounds_with_tolerance(
         inner=rx_bounds,
@@ -1011,13 +1106,8 @@ def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -
         rx_port_anchor = _ssw_port_anchor_world_xyz(spec=spec, params=spec.rx)
         if abs(rx_port_anchor[0] - rx_bounds.xmin) > tolerance:
             raise ValueError(
-                f"RX SSW port anchor must be on the TV back-facing copper face "
+                f"RX SSW port anchor must be on the RX X-min copper face "
                 f"(port_x={rx_port_anchor[0]}, rx_xmin={rx_bounds.xmin})"
-            )
-        if abs(rx_port_anchor[0] - (tv_bounds.xmin - spec.fixed.copper_thickness_mm)) > tolerance:
-            raise ValueError(
-                f"RX SSW port anchor must sit at TV back face with copper-thickness overhang "
-                f"(port_x={rx_port_anchor[0]}, expected={tv_bounds.xmin - spec.fixed.copper_thickness_mm})"
             )
     if tx_bounds.size_z >= tx_bounds.size_x or tx_bounds.size_z >= tx_bounds.size_y:
         raise ValueError(
@@ -1171,7 +1261,8 @@ def _scene_action_trace(
             ),
         )
     ]
-    for body in _non_model_boxes(spec):
+    non_model_bodies = _non_model_boxes(spec)
+    for body in non_model_bodies:
         actions.append(_non_model_action_token(index=len(actions), body=body))
     role_params: tuple[tuple[Role, SswCoilParameters], ...] = (("tx_ssw_coil", spec.tx), ("rx_ssw_coil", spec.rx))
     for role, params in role_params:
@@ -1183,7 +1274,7 @@ def _scene_action_trace(
 
     tx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "tx_ssw_coil_"), "TX SSW bodies")
     rx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "rx_ssw_coil_"), "RX SSW bodies")
-    rx_port_face = "tv_back_x_min" if spec.rx.is_ssw_enabled else "normal_spiral_landing"
+    rx_port_face = "rx_x_min" if spec.rx.is_ssw_enabled else "normal_spiral_landing"
     rx_port_anchor = (
         _ssw_port_anchor_world_xyz(spec=spec, params=spec.rx)
         if spec.rx.is_ssw_enabled
@@ -1221,8 +1312,7 @@ def _scene_action_trace(
             op="EXPORT_STEP",
             target="output.ssw_scene.step",
             inputs=(
-                "non_model.tv",
-                "non_model.tx_region",
+                *(f"non_model.{body.name}" for body in non_model_bodies),
                 "scene.tx_ssw_coil.placement",
                 "scene.rx_ssw_coil.placement",
             ),

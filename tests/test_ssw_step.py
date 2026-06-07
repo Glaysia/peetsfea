@@ -24,10 +24,15 @@ def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
     spec = load_ssw_fixed_spec(FIXED_TOML)
 
     assert spec.units == "mm"
-    assert spec.fixed.width_max_mm == 480.0
-    assert spec.fixed.height_max_mm == 240.0
+    assert spec.fixed.width_max_mm == 360.0
+    assert spec.fixed.height_max_mm == 180.0
     assert spec.fixed.tx_rx_min_distance_mm == 100.0
-    assert tuple(box.object_id for box in spec.non_model_objects) == ("tv", "tx_region")
+    assert tuple(box.object_id for box in spec.non_model_objects) == (
+        "tv",
+        "tx_region",
+        "tx_region_max",
+        "rx_region_max",
+    )
     assert spec.tx.role == "tx_ssw_coil"
     assert spec.rx.role == "rx_ssw_coil"
     assert spec.tx.width_ratio == 0.6
@@ -35,9 +40,9 @@ def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
     assert spec.tx.is_ssw_enabled is True
     assert spec.rx.is_ssw_enabled is False
     assert spec.tx.turn_n_int == 3
-    assert spec.rx.turn_n_int == 2
+    assert spec.rx.turn_n_int == 1
     assert spec.tx.gap_ratio == 0.24
-    assert spec.rx.void_area_ratio == 0.5
+    assert spec.rx.void_area_ratio == 0.25
     assert spec.tx.no_ssw_qturn_start_int == 0
     assert spec.rx.no_ssw_qturn_n_int == 0
     assert spec.tx.pcb_gap_mm == 8.0
@@ -175,6 +180,16 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert len(export_actions) == 1
     export_params = export_actions[0]["params"]
     assert isinstance(export_params, list)
+    export_inputs = export_actions[0]["inputs"]
+    assert isinstance(export_inputs, list)
+    assert tuple(str(input_ref) for input_ref in export_inputs) == (
+        "non_model.tv",
+        "non_model.tx_region",
+        "non_model.tx_region_max",
+        "non_model.rx_region_max",
+        "scene.tx_ssw_coil.placement",
+        "scene.rx_ssw_coil.placement",
+    )
     export_param_keys = tuple(str(param["key"]) for param in export_params)
     assert "scene_step_name" in export_param_keys
     assert "token_toml_name" in export_param_keys
@@ -198,22 +213,46 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert "tx_ssw_coil_pcb_1_fr4" in ledger["fr4_body_names"]
     assert "rx_ssw_coil_pcb_1_fr4" in ledger["fr4_body_names"]
     assert ledger["token_toml_path"] == str(token_path)
-    assert ledger["non_model_body_names"] == ["tv", "tx_region"]
+    assert ledger["non_model_body_names"] == ["tv", "tx_region", "tx_region_max", "rx_region_max"]
     assert "tx_ssw_coil_ssw_copper" in ledger["copper_body_names"]
     assert "rx_ssw_coil_coil_copper" in ledger["copper_body_names"]
     assert "rx_ssw_coil_ssw_copper" not in ledger["copper_body_names"]
     assert len(ledger["body_names"]) == len(set(ledger["body_names"]))
     tv = _body_by_name_from_ledger(ledger, "tv")
     tx_region = _body_by_name_from_ledger(ledger, "tx_region")
+    tx_region_max = _body_by_name_from_ledger(ledger, "tx_region_max")
+    rx_region_max = _body_by_name_from_ledger(ledger, "rx_region_max")
     tx_copper = _body_by_name_from_ledger(ledger, "tx_ssw_coil_ssw_copper")
     rx_copper = _body_by_name_from_ledger(ledger, "rx_ssw_coil_coil_copper")
     tv_bounds = _bounds(tv)
     tx_region_bounds = _bounds(tx_region)
+    tx_region_max_bounds = _bounds(tx_region_max)
+    rx_region_max_bounds = _bounds(rx_region_max)
     tx_bounds = _bounds(tx_copper)
     rx_bounds = _bounds(rx_copper)
     tolerance = 1e-6
     assert _numeric_field(tv, "transparency") == pytest.approx(0.6)
     assert _numeric_field(tx_region, "transparency") == pytest.approx(0.2)
+    assert _numeric_field(tx_region_max, "transparency") == pytest.approx(0.35)
+    assert _numeric_field(rx_region_max, "transparency") == pytest.approx(0.35)
+    assert tx_region_max_bounds[0] == pytest.approx(tx_bounds[0])
+    assert tx_region_max_bounds[1] - tx_region_max_bounds[0] == pytest.approx(240.14)
+    assert (tx_region_max_bounds[2] + tx_region_max_bounds[3]) / 2.0 == pytest.approx(
+        (tx_bounds[2] + tx_bounds[3]) / 2.0
+    )
+    assert tx_region_max_bounds[3] - tx_region_max_bounds[2] == pytest.approx(480.14)
+    assert tx_region_max_bounds[4] == pytest.approx(tx_bounds[5] - 15.0)
+    assert tx_region_max_bounds[5] == pytest.approx(tx_bounds[5])
+    assert rx_region_max_bounds[0] == pytest.approx(tv_bounds[1] - 5.0)
+    assert rx_region_max_bounds[1] == pytest.approx(tv_bounds[1])
+    assert rx_region_max_bounds[2] == pytest.approx(tv_bounds[2])
+    assert rx_region_max_bounds[3] == pytest.approx(tv_bounds[3])
+    assert rx_region_max_bounds[4] == pytest.approx(tv_bounds[4])
+    assert rx_region_max_bounds[5] == pytest.approx(tv_bounds[5])
+    assert rx_bounds[1] == pytest.approx(rx_region_max_bounds[1])
+    assert rx_region_max_bounds[0] <= rx_bounds[0] <= rx_bounds[1] <= rx_region_max_bounds[1]
+    assert rx_region_max_bounds[2] <= rx_bounds[2] <= rx_bounds[3] <= rx_region_max_bounds[3]
+    assert rx_region_max_bounds[4] <= rx_bounds[4] <= rx_bounds[5] <= rx_region_max_bounds[5]
     assert rx_bounds[0] >= tv_bounds[0] - 0.07 - tolerance
     assert rx_bounds[1] <= tv_bounds[1] + tolerance
     assert rx_bounds[2] >= tv_bounds[2] - tolerance
