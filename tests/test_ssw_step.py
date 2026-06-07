@@ -70,6 +70,20 @@ def _numeric_field(body: Mapping[str, object], key: str) -> float:
     return float(value)
 
 
+def _action_params_by_key(action: Mapping[str, object]) -> dict[str, object]:
+    params = action["params"]
+    assert isinstance(params, list)
+    mapped: dict[str, object] = {}
+    for param in params:
+        assert isinstance(param, dict)
+        key = param["key"]
+        value_json = param["value_json"]
+        assert isinstance(key, str)
+        assert isinstance(value_json, str)
+        mapped[key] = tomllib.loads(f"value = {value_json}\n")["value"]
+    return mapped
+
+
 def _box_bounds(body: module_under_test._BodyBox) -> tuple[float, float, float, float, float, float]:
     return (
         body.center_xyz[0] - body.size_xyz[0] / 2.0,
@@ -165,6 +179,14 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     action_targets = tuple(str(action["target"]) for action in actions)
     assert any(target.startswith("tx_ssw_coil.") for target in action_targets)
     assert any(target.startswith("rx_ssw_coil.") for target in action_targets)
+    tx_placement = tuple(action for action in actions if action["target"] == "scene.tx_ssw_coil.placement")
+    rx_placement = tuple(action for action in actions if action["target"] == "scene.rx_ssw_coil.placement")
+    assert len(tx_placement) == 1
+    assert len(rx_placement) == 1
+    tx_placement_params = _action_params_by_key(tx_placement[0])
+    rx_placement_params = _action_params_by_key(rx_placement[0])
+    assert tx_placement_params["port_face"] == "lower_z"
+    assert rx_placement_params["port_face"] == "tv_back_x_min"
     assert "tx_ssw_coil_pcb_1_fr4" in ledger["fr4_body_names"]
     assert "rx_ssw_coil_pcb_2_fr4" in ledger["fr4_body_names"]
     assert ledger["token_toml_path"] == str(token_path)
@@ -194,7 +216,8 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert tx_bounds[5] == pytest.approx(tx_region_bounds[5])
     assert tx_region_bounds[0] <= tx_bounds[0] <= tx_bounds[1] <= tx_region_bounds[1]
     assert tx_region_bounds[2] <= tx_bounds[2] <= tx_bounds[3] <= tx_region_bounds[3]
-    assert tx_region_bounds[4] <= tx_bounds[4] <= tx_bounds[5] <= tx_region_bounds[5]
+    assert tx_bounds[4] >= tx_region_bounds[4] - tolerance
+    assert tx_bounds[5] <= tx_region_bounds[5] + tolerance
     assert tx_region_bounds[1] - tx_region_bounds[0] > tx_bounds[1] - tx_bounds[0]
     assert tx_region_bounds[3] - tx_region_bounds[2] > tx_bounds[3] - tx_bounds[2]
     assert tx_region_bounds[5] - tx_region_bounds[4] > tx_bounds[5] - tx_bounds[4]
@@ -202,6 +225,15 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert tx_bounds[5] - tx_bounds[4] < 10.0
     assert rx_bounds[1] - rx_bounds[0] < 10.0
     assert rx_bounds[3] - rx_bounds[2] > rx_bounds[5] - rx_bounds[4]
+    tx_port_anchor = tx_placement_params["port_anchor_world_xyz_mm"]
+    rx_port_anchor = rx_placement_params["port_anchor_world_xyz_mm"]
+    assert isinstance(tx_port_anchor, list)
+    assert isinstance(rx_port_anchor, list)
+    assert len(tx_port_anchor) == 3
+    assert len(rx_port_anchor) == 3
+    assert float(tx_port_anchor[2]) == pytest.approx(tx_bounds[4])
+    assert float(rx_port_anchor[0]) == pytest.approx(rx_bounds[0])
+    assert float(rx_port_anchor[0]) == pytest.approx(tv_bounds[0] - 0.07)
 
 
 def test_export_ssw_step_artifacts_raises_when_step_export_missing(

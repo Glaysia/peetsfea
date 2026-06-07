@@ -124,6 +124,10 @@ class _Bounds:
         return (self.ymin + self.ymax) / 2.0
 
     @property
+    def center_z(self) -> float:
+        return (self.zmin + self.zmax) / 2.0
+
+    @property
     def size_x(self) -> float:
         return self.xmax - self.xmin
 
@@ -649,18 +653,61 @@ def _identity_location() -> cq.Location:
     return cq.Location(cq.Vector(0.0, 0.0, 0.0))
 
 
-def _tx_xy_orientation() -> cq.Location:
-    return cq.Location(cq.Vector(0.0, 0.0, 0.0), cq.Vector(0.0, 0.0, 1.0), 90.0)
+def _tx_xy_bottom_port_orientation() -> cq.Location:
+    rotate_z = cq.Location(cq.Vector(0.0, 0.0, 0.0), cq.Vector(0.0, 0.0, 1.0), 90.0)
+    flip_top_port_to_bottom = cq.Location(cq.Vector(0.0, 0.0, 0.0), cq.Vector(0.0, 1.0, 0.0), 180.0)
+    return flip_top_port_to_bottom * rotate_z
 
 
-def _rx_yz_orientation() -> cq.Location:
+def _rx_yz_back_port_orientation() -> cq.Location:
     rotate_y = cq.Location(cq.Vector(0.0, 0.0, 0.0), cq.Vector(0.0, 1.0, 0.0), 90.0)
     rotate_x = cq.Location(cq.Vector(0.0, 0.0, 0.0), cq.Vector(1.0, 0.0, 0.0), 90.0)
-    return rotate_x * rotate_y
+    flip_top_port_to_back = cq.Location(cq.Vector(0.0, 0.0, 0.0), cq.Vector(0.0, 1.0, 0.0), 180.0)
+    return flip_top_port_to_back * rotate_x * rotate_y
 
 
 def _coilmaker_assembly(params: SswCoilParameters, fixed: FixedDimensions) -> cq.Assembly:
     return coilmaker.build_assembly(_coilmaker_config(params, fixed))
+
+
+def _ssw_port_anchor_world_xyz(
+    *,
+    spec: SswFixedSpec,
+    params: SswCoilParameters,
+) -> Point3:
+    config = _coilmaker_config(params, spec.fixed)
+    frames = tuple(coilmaker.coil_slot_frames(config))
+    if len(frames) != 1:
+        raise ValueError(f"0.3.0 SSW scene expects exactly one coil frame per role (role={params.role}, count={len(frames)})")
+    frame = frames[0]
+    context = coilmaker._ssw_trace_context(config, frame)
+    matching_sides = tuple(side for side in coilmaker.loop_side_specs(config, frame) if side.name == context.port_gap.side_name)
+    if len(matching_sides) != 1:
+        raise ValueError(f"SSW port gap side must resolve once (role={params.role}, side={context.port_gap.side_name})")
+    matching_faces = tuple(face for face in coilmaker.ssw_active_faces(config, frame) if face.name == context.port_gap.face_name)
+    if len(matching_faces) != 1:
+        raise ValueError(f"SSW port gap face must resolve once (role={params.role}, face={context.port_gap.face_name})")
+    side = matching_sides[0]
+    face = matching_faces[0]
+    board_trace_width_mm = coilmaker._board_trace_width_mm(config, frame)
+    u_mid_mm = (context.port_gap.u_start_mm + context.port_gap.u_end_mm) / 2.0
+    face_mid_mm = (face.start_mm + face.end_mm) / 2.0
+    radial_mm = board_trace_width_mm / 2.0 - (face_mid_mm - face.start_mm)
+    local_x_mm, local_y_mm = coilmaker._surface_point_on_side(config, frame, side, u_mid_mm, radial_mm)
+    _, local_z_mm = coilmaker._top_copper_z_bounds(config)
+    placement = _placement_for_role(spec, params, _coilmaker_assembly(params, spec.fixed))
+    probe_half_mm = 0.0005
+    bbox = _located_bbox(
+        cq.Workplane("XY").box(probe_half_mm * 2.0, probe_half_mm * 2.0, probe_half_mm * 2.0).translate(
+            (local_x_mm, local_y_mm, local_z_mm)
+        ),
+        placement,
+    )
+    return (
+        (bbox.xmin + bbox.xmax) / 2.0,
+        (bbox.ymin + bbox.ymax) / 2.0,
+        (bbox.zmin + bbox.zmax) / 2.0,
+    )
 
 
 def _body_bounds(body: _BodyBox) -> _Bounds:
@@ -727,7 +774,7 @@ def _placement_for_role(spec: SswFixedSpec, params: SswCoilParameters, assembly:
     tv = _tv_box(spec)
     tv_center_y = tv.origin_xyz[1] + tv.size_xyz[1] / 2.0
     if params.role == "rx_ssw_coil":
-        orientation = _rx_yz_orientation()
+        orientation = _rx_yz_back_port_orientation()
         oriented_bodies = _coilmaker_child_bodies_from_assembly(params=params, assembly=assembly, placement=orientation)
         oriented_bounds = _combined_bounds(oriented_bodies, f"{params.role} oriented bodies")
         oriented_fr4_bounds = _combined_bounds(
@@ -755,7 +802,7 @@ def _placement_for_role(spec: SswFixedSpec, params: SswCoilParameters, assembly:
         return cq.Location(cq.Vector(translate_x, translate_y, translate_z)) * orientation
 
     tx_region = _tx_region_box(spec)
-    orientation = _tx_xy_orientation()
+    orientation = _tx_xy_bottom_port_orientation()
     oriented_bodies = _coilmaker_child_bodies_from_assembly(params=params, assembly=assembly, placement=orientation)
     oriented_bounds = _combined_bounds(oriented_bodies, f"{params.role} oriented bodies")
     tx_region_zmax = tx_region.origin_xyz[2] + tx_region.size_xyz[2]
@@ -927,6 +974,23 @@ def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -
             f"TX SSW top must align to tx_region top "
             f"(tx_zmax={tx_bounds.zmax}, tx_region_zmax={tx_region_bounds.zmax})"
         )
+    tx_port_anchor = _ssw_port_anchor_world_xyz(spec=spec, params=spec.tx)
+    if abs(tx_port_anchor[2] - tx_bounds.zmin) > tolerance:
+        raise ValueError(
+            f"TX SSW port anchor must be on the lower face "
+            f"(port_z={tx_port_anchor[2]}, tx_zmin={tx_bounds.zmin})"
+        )
+    rx_port_anchor = _ssw_port_anchor_world_xyz(spec=spec, params=spec.rx)
+    if abs(rx_port_anchor[0] - rx_bounds.xmin) > tolerance:
+        raise ValueError(
+            f"RX SSW port anchor must be on the TV back-facing copper face "
+            f"(port_x={rx_port_anchor[0]}, rx_xmin={rx_bounds.xmin})"
+        )
+    if abs(rx_port_anchor[0] - (tv_bounds.xmin - spec.fixed.copper_thickness_mm)) > tolerance:
+        raise ValueError(
+            f"RX SSW port anchor must sit at TV back face with copper-thickness overhang "
+            f"(port_x={rx_port_anchor[0]}, expected={tv_bounds.xmin - spec.fixed.copper_thickness_mm})"
+        )
     if tx_bounds.size_z >= tx_bounds.size_x or tx_bounds.size_z >= tx_bounds.size_y:
         raise ValueError(
             f"TX SSW must remain an XY-plane object with thin Z stack "
@@ -1012,6 +1076,8 @@ def _placement_action_token(
     role: Role,
     plane: str,
     bounds: _Bounds,
+    port_face: str,
+    port_anchor_world_xyz: Point3,
 ) -> coilmaker.ActionToken:
     return _action_token(
         index=index,
@@ -1026,6 +1092,8 @@ def _placement_action_token(
             ("plane", plane),
             ("bounds_min_xyz_mm", (bounds.xmin, bounds.ymin, bounds.zmin)),
             ("bounds_max_xyz_mm", (bounds.xmax, bounds.ymax, bounds.zmax)),
+            ("port_face", port_face),
+            ("port_anchor_world_xyz_mm", port_anchor_world_xyz),
         ),
     )
 
@@ -1081,8 +1149,26 @@ def _scene_action_trace(
 
     tx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "tx_ssw_coil_"), "TX SSW bodies")
     rx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "rx_ssw_coil_"), "RX SSW bodies")
-    actions.append(_placement_action_token(index=len(actions), role="tx_ssw_coil", plane="XY", bounds=tx_bounds))
-    actions.append(_placement_action_token(index=len(actions), role="rx_ssw_coil", plane="YZ", bounds=rx_bounds))
+    actions.append(
+        _placement_action_token(
+            index=len(actions),
+            role="tx_ssw_coil",
+            plane="XY",
+            bounds=tx_bounds,
+            port_face="lower_z",
+            port_anchor_world_xyz=_ssw_port_anchor_world_xyz(spec=spec, params=spec.tx),
+        )
+    )
+    actions.append(
+        _placement_action_token(
+            index=len(actions),
+            role="rx_ssw_coil",
+            plane="YZ",
+            bounds=rx_bounds,
+            port_face="tv_back_x_min",
+            port_anchor_world_xyz=_ssw_port_anchor_world_xyz(spec=spec, params=spec.rx),
+        )
+    )
     actions.append(
         _action_token(
             index=len(actions),
