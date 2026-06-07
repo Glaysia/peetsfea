@@ -157,7 +157,7 @@ range = [false, 0.6, 0.6, 1]
 description = "RX SSW coil height ratio against fixed_dimensions.height_max_mm"
 
 [modeled_objects.is_ssw_enabled]
-range = [true, 1, 1, 1]
+range = [true,  0, 0, 1]
 description = "RX SSW enable flag"
 
 [modeled_objects.turn_n_int]

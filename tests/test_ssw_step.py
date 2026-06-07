@@ -32,12 +32,16 @@ def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
     assert spec.rx.role == "rx_ssw_coil"
     assert spec.tx.width_ratio == 0.6
     assert spec.rx.height_ratio == 0.6
+    assert spec.tx.is_ssw_enabled is True
+    assert spec.rx.is_ssw_enabled is False
     assert spec.tx.turn_n_int == 3
-    assert spec.rx.turn_n_int == 3
+    assert spec.rx.turn_n_int == 2
     assert spec.tx.gap_ratio == 0.24
     assert spec.rx.void_area_ratio == 0.5
-    assert spec.tx.pcb_gap_mm == 3.0
-    assert spec.rx.twist_factor == 2
+    assert spec.tx.no_ssw_qturn_start_int == 0
+    assert spec.rx.no_ssw_qturn_n_int == 0
+    assert spec.tx.pcb_gap_mm == 8.0
+    assert spec.rx.twist_factor == 1
 
 
 def test_load_ssw_fixed_spec_rejects_unfrozen_sweep_ranges() -> None:
@@ -185,19 +189,24 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert len(rx_placement) == 1
     tx_placement_params = _action_params_by_key(tx_placement[0])
     rx_placement_params = _action_params_by_key(rx_placement[0])
+    assert tx_placement_params["coil_mode"] == "ssw"
+    assert rx_placement_params["coil_mode"] == "normal_spiral"
     assert tx_placement_params["port_face"] == "lower_z"
-    assert rx_placement_params["port_face"] == "tv_back_x_min"
+    assert rx_placement_params["port_face"] == "normal_spiral_landing"
+    assert tx_placement_params["no_ssw_qturn_start_int"] == 0
+    assert rx_placement_params["no_ssw_qturn_n_int"] == 0
     assert "tx_ssw_coil_pcb_1_fr4" in ledger["fr4_body_names"]
-    assert "rx_ssw_coil_pcb_2_fr4" in ledger["fr4_body_names"]
+    assert "rx_ssw_coil_pcb_1_fr4" in ledger["fr4_body_names"]
     assert ledger["token_toml_path"] == str(token_path)
     assert ledger["non_model_body_names"] == ["tv", "tx_region"]
     assert "tx_ssw_coil_ssw_copper" in ledger["copper_body_names"]
-    assert "rx_ssw_coil_ssw_copper" in ledger["copper_body_names"]
+    assert "rx_ssw_coil_coil_copper" in ledger["copper_body_names"]
+    assert "rx_ssw_coil_ssw_copper" not in ledger["copper_body_names"]
     assert len(ledger["body_names"]) == len(set(ledger["body_names"]))
     tv = _body_by_name_from_ledger(ledger, "tv")
     tx_region = _body_by_name_from_ledger(ledger, "tx_region")
     tx_copper = _body_by_name_from_ledger(ledger, "tx_ssw_coil_ssw_copper")
-    rx_copper = _body_by_name_from_ledger(ledger, "rx_ssw_coil_ssw_copper")
+    rx_copper = _body_by_name_from_ledger(ledger, "rx_ssw_coil_coil_copper")
     tv_bounds = _bounds(tv)
     tx_region_bounds = _bounds(tx_region)
     tx_bounds = _bounds(tx_copper)
@@ -211,7 +220,6 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert rx_bounds[3] <= tv_bounds[3] + tolerance
     assert rx_bounds[4] >= tv_bounds[4] - 0.07 - tolerance
     assert rx_bounds[5] <= tv_bounds[5] + 0.07 + tolerance
-    assert rx_bounds[4] == pytest.approx(tv_bounds[4] - 0.07)
     assert tv_bounds[4] - tx_region_bounds[5] == pytest.approx(100.0)
     assert tx_bounds[5] == pytest.approx(tx_region_bounds[5])
     assert tx_region_bounds[0] <= tx_bounds[0] <= tx_bounds[1] <= tx_region_bounds[1]
@@ -233,7 +241,64 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert len(rx_port_anchor) == 3
     assert float(tx_port_anchor[2]) == pytest.approx(tx_bounds[4])
     assert float(rx_port_anchor[0]) == pytest.approx(rx_bounds[0])
-    assert float(rx_port_anchor[0]) == pytest.approx(tv_bounds[0] - 0.07)
+
+
+def test_export_ssw_step_artifacts_supports_explicit_rx_spiral_mode(tmp_path: Path) -> None:
+    source_text = FIXED_TOML.read_text(encoding="utf-8")
+    custom_text = source_text
+    custom_text = custom_text.replace(
+        '[modeled_objects.no_ssw_qturn_start_int]\nrange = [true, 0, 0, 1]\ndescription = "RX non-SSW quarter-turn start index; fixed disabled for 0.3.0 SSW"',
+        '[modeled_objects.no_ssw_qturn_start_int]\nrange = [true, 2, 2, 1]\ndescription = "RX non-SSW quarter-turn start index; fixed disabled for 0.3.0 SSW"',
+    )
+    custom_text = custom_text.replace(
+        '[modeled_objects.no_ssw_qturn_n_int]\nrange = [true, 0, 0, 1]\ndescription = "RX non-SSW quarter-turn count; fixed disabled for 0.3.0 SSW"',
+        '[modeled_objects.no_ssw_qturn_n_int]\nrange = [true, 1, 1, 1]\ndescription = "RX non-SSW quarter-turn count; fixed disabled for 0.3.0 SSW"',
+    )
+    assert custom_text != source_text
+    custom_toml = tmp_path / "rx_spiral.toml"
+    custom_toml.write_text(custom_text, encoding="utf-8")
+
+    spec = load_ssw_fixed_spec(custom_toml)
+    assert spec.tx.is_ssw_enabled is True
+    assert spec.rx.is_ssw_enabled is False
+    assert spec.rx.no_ssw_qturn_start_int == 2
+    assert spec.rx.no_ssw_qturn_n_int == 1
+
+    artifacts = export_ssw_step_artifacts(source_toml_path=custom_toml, output_dir=tmp_path / "out", seed=0)
+    ledger = load_ssw_step_ledger(Path(artifacts["ledger_path"]))
+    token_doc = tomllib.loads(Path(artifacts["token_toml_path"]).read_text(encoding="utf-8"))
+    actions = token_doc["actions"]
+    assert isinstance(actions, list)
+    action_ops = tuple(str(action["op"]) for action in actions)
+    assert "NORMAL_CENTERLINE" in action_ops
+    assert "SSW_CONTEXT" in action_ops
+    assert "rx_ssw_coil_coil_copper" in ledger["copper_body_names"]
+    assert "rx_ssw_coil_ssw_copper" not in ledger["copper_body_names"]
+    rx_placement = tuple(action for action in actions if action["target"] == "scene.rx_ssw_coil.placement")
+    assert len(rx_placement) == 1
+    rx_placement_params = _action_params_by_key(rx_placement[0])
+    assert rx_placement_params["coil_mode"] == "normal_spiral"
+    assert rx_placement_params["port_face"] == "normal_spiral_landing"
+    assert rx_placement_params["no_ssw_qturn_start_int"] == 2
+    assert rx_placement_params["no_ssw_qturn_n_int"] == 1
+
+
+def test_export_ssw_step_artifacts_supports_zero_zero_rx_spiral_selection(tmp_path: Path) -> None:
+    spec = load_ssw_fixed_spec(FIXED_TOML)
+    assert spec.rx.is_ssw_enabled is False
+    assert spec.rx.no_ssw_qturn_start_int == 0
+    assert spec.rx.no_ssw_qturn_n_int == 0
+
+    artifacts = export_ssw_step_artifacts(source_toml_path=FIXED_TOML, output_dir=tmp_path / "out", seed=0)
+    token_doc = tomllib.loads(Path(artifacts["token_toml_path"]).read_text(encoding="utf-8"))
+    actions = token_doc["actions"]
+    assert isinstance(actions, list)
+    rx_placement = tuple(action for action in actions if action["target"] == "scene.rx_ssw_coil.placement")
+    assert len(rx_placement) == 1
+    rx_placement_params = _action_params_by_key(rx_placement[0])
+    assert rx_placement_params["coil_mode"] == "normal_spiral"
+    assert rx_placement_params["no_ssw_qturn_start_int"] == 0
+    assert rx_placement_params["no_ssw_qturn_n_int"] == 0
 
 
 def test_export_ssw_step_artifacts_raises_when_step_export_missing(

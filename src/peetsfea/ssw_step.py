@@ -1007,17 +1007,18 @@ def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -
             f"TX SSW port anchor must be on the lower face "
             f"(port_z={tx_port_anchor[2]}, tx_zmin={tx_bounds.zmin})"
         )
-    rx_port_anchor = _ssw_port_anchor_world_xyz(spec=spec, params=spec.rx)
-    if abs(rx_port_anchor[0] - rx_bounds.xmin) > tolerance:
-        raise ValueError(
-            f"RX SSW port anchor must be on the TV back-facing copper face "
-            f"(port_x={rx_port_anchor[0]}, rx_xmin={rx_bounds.xmin})"
-        )
-    if abs(rx_port_anchor[0] - (tv_bounds.xmin - spec.fixed.copper_thickness_mm)) > tolerance:
-        raise ValueError(
-            f"RX SSW port anchor must sit at TV back face with copper-thickness overhang "
-            f"(port_x={rx_port_anchor[0]}, expected={tv_bounds.xmin - spec.fixed.copper_thickness_mm})"
-        )
+    if spec.rx.is_ssw_enabled:
+        rx_port_anchor = _ssw_port_anchor_world_xyz(spec=spec, params=spec.rx)
+        if abs(rx_port_anchor[0] - rx_bounds.xmin) > tolerance:
+            raise ValueError(
+                f"RX SSW port anchor must be on the TV back-facing copper face "
+                f"(port_x={rx_port_anchor[0]}, rx_xmin={rx_bounds.xmin})"
+            )
+        if abs(rx_port_anchor[0] - (tv_bounds.xmin - spec.fixed.copper_thickness_mm)) > tolerance:
+            raise ValueError(
+                f"RX SSW port anchor must sit at TV back face with copper-thickness overhang "
+                f"(port_x={rx_port_anchor[0]}, expected={tv_bounds.xmin - spec.fixed.copper_thickness_mm})"
+            )
     if tx_bounds.size_z >= tx_bounds.size_x or tx_bounds.size_z >= tx_bounds.size_y:
         raise ValueError(
             f"TX SSW must remain an XY-plane object with thin Z stack "
@@ -1101,10 +1102,13 @@ def _placement_action_token(
     *,
     index: int,
     role: Role,
+    coil_mode: str,
     plane: str,
     bounds: _Bounds,
     port_face: str,
     port_anchor_world_xyz: Point3,
+    no_ssw_qturn_start_int: int,
+    no_ssw_qturn_n_int: int,
 ) -> coilmaker.ActionToken:
     return _action_token(
         index=index,
@@ -1116,11 +1120,14 @@ def _placement_action_token(
         ),
         params=(
             ("coil_role", role),
+            ("coil_mode", coil_mode),
             ("plane", plane),
             ("bounds_min_xyz_mm", (bounds.xmin, bounds.ymin, bounds.zmin)),
             ("bounds_max_xyz_mm", (bounds.xmax, bounds.ymax, bounds.zmax)),
             ("port_face", port_face),
             ("port_anchor_world_xyz_mm", port_anchor_world_xyz),
+            ("no_ssw_qturn_start_int", no_ssw_qturn_start_int),
+            ("no_ssw_qturn_n_int", no_ssw_qturn_n_int),
         ),
     )
 
@@ -1176,24 +1183,36 @@ def _scene_action_trace(
 
     tx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "tx_ssw_coil_"), "TX SSW bodies")
     rx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "rx_ssw_coil_"), "RX SSW bodies")
+    rx_port_face = "tv_back_x_min" if spec.rx.is_ssw_enabled else "normal_spiral_landing"
+    rx_port_anchor = (
+        _ssw_port_anchor_world_xyz(spec=spec, params=spec.rx)
+        if spec.rx.is_ssw_enabled
+        else (rx_bounds.xmin, rx_bounds.center_y, rx_bounds.center_z)
+    )
     actions.append(
         _placement_action_token(
             index=len(actions),
             role="tx_ssw_coil",
+            coil_mode="ssw",
             plane="XY",
             bounds=tx_bounds,
             port_face="lower_z",
             port_anchor_world_xyz=_ssw_port_anchor_world_xyz(spec=spec, params=spec.tx),
+            no_ssw_qturn_start_int=spec.tx.no_ssw_qturn_start_int,
+            no_ssw_qturn_n_int=spec.tx.no_ssw_qturn_n_int,
         )
     )
     actions.append(
         _placement_action_token(
             index=len(actions),
             role="rx_ssw_coil",
+            coil_mode="ssw" if spec.rx.is_ssw_enabled else "normal_spiral",
             plane="YZ",
             bounds=rx_bounds,
-            port_face="tv_back_x_min",
-            port_anchor_world_xyz=_ssw_port_anchor_world_xyz(spec=spec, params=spec.rx),
+            port_face=rx_port_face,
+            port_anchor_world_xyz=rx_port_anchor,
+            no_ssw_qturn_start_int=spec.rx.no_ssw_qturn_start_int,
+            no_ssw_qturn_n_int=spec.rx.no_ssw_qturn_n_int,
         )
     )
     actions.append(
