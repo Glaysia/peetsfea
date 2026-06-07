@@ -60,6 +60,18 @@ description = "Maximum coil height(mm)"
 range = [false, 100.0, 100.0, 1]
 description = "Minimum edge-to-edge distance between TX and RX coils(mm)"
 
+[fixed_dimensions.mull_ferrite_thickness_mm]
+range = [false, 0.12, 0.12, 1]
+description = "MULL ferrite sheet thickness(mm)"
+
+# ----------------------------------------------------------------------------
+# MULL ferrite sheet placement
+# ----------------------------------------------------------------------------
+
+[ferrite.mull_position_ratio]
+range = [false, 0.0, 0.0, 1]
+description = "Shared TX/RX MULL ferrite position ratio: 0 outer region boundary, 1 coil-adjacent"
+
 # ----------------------------------------------------------------------------
 # Non-model object registry
 # ----------------------------------------------------------------------------

@@ -19,11 +19,13 @@ DEFAULT_TOKEN_TOML_NAME = "coil_making_token.toml"
 SPEC_VERSION = "0.3.0"
 SCHEMA_ID = "peetsfea.ssw_coil.step.v1"
 SUPPORTED_UNITS = "mm"
+MULL_FERRITE_MATERIAL = "mull_ferrite"
+MULL_FERRITE_TRANSPARENCY = 0.0
 _NONE_TYPE = type(None)
 
 Point3 = tuple[float, float, float]
 Role = Literal["tx_ssw_coil", "rx_ssw_coil"]
-BodyRole = Literal["fr4", "copper", "non_model"]
+BodyRole = Literal["fr4", "copper", "non_model", "ferrite"]
 
 
 class _ChildNameCarrier(Protocol):
@@ -55,6 +57,7 @@ class FixedDimensions:
     width_max_mm: float
     height_max_mm: float
     tx_rx_min_distance_mm: float
+    mull_ferrite_thickness_mm: float
 
 
 @dataclass(frozen=True)
@@ -90,10 +93,16 @@ class NonModelBox:
 
 
 @dataclass(frozen=True)
+class FerriteParameters:
+    mull_position_ratio: float
+
+
+@dataclass(frozen=True)
 class SswFixedSpec:
     source_toml_path: str
     units: Literal["mm"]
     fixed: FixedDimensions
+    ferrite: FerriteParameters
     non_model_objects: tuple[NonModelBox, ...]
     tx: SswCoilParameters
     rx: SswCoilParameters
@@ -162,6 +171,7 @@ class SswStepLedger(TypedDict):
     copper_body_names: list[str]
     fr4_body_names: list[str]
     non_model_body_names: list[str]
+    ferrite_body_names: list[str]
     bodies: list[BodyLedgerEntry]
 
 
@@ -284,7 +294,21 @@ def _load_fixed_dimensions(root: dict[str, object]) -> FixedDimensions:
         width_max_mm=_frozen_float(table, "width_max_mm", "fixed_dimensions", positive=True),
         height_max_mm=_frozen_float(table, "height_max_mm", "fixed_dimensions", positive=True),
         tx_rx_min_distance_mm=_frozen_float(table, "tx_rx_min_distance_mm", "fixed_dimensions", positive=True),
+        mull_ferrite_thickness_mm=_frozen_float(
+            table,
+            "mull_ferrite_thickness_mm",
+            "fixed_dimensions",
+            positive=True,
+        ),
     )
+
+
+def _load_ferrite_parameters(root: dict[str, object]) -> FerriteParameters:
+    table = _require_table(_require_key(root, "ferrite", "0.3.0 fixed spec"), "ferrite")
+    mull_position_ratio = _frozen_float(table, "mull_position_ratio", "ferrite", positive=False)
+    if mull_position_ratio < 0.0 or mull_position_ratio > 1.0:
+        raise ValueError("ferrite.mull_position_ratio must be between 0 and 1")
+    return FerriteParameters(mull_position_ratio=mull_position_ratio)
 
 
 def _load_non_model_objects(root: dict[str, object]) -> tuple[NonModelBox, ...]:
@@ -382,6 +406,7 @@ def load_ssw_fixed_spec(toml_path: Path) -> SswFixedSpec:
         source_toml_path=str(toml_path),
         units="mm",
         fixed=_load_fixed_dimensions(root),
+        ferrite=_load_ferrite_parameters(root),
         non_model_objects=_load_non_model_objects(root),
         tx=_load_coil_parameters(root, "tx_ssw_coil"),
         rx=_load_coil_parameters(root, "rx_ssw_coil"),
@@ -603,6 +628,75 @@ def _non_model_boxes(spec: SswFixedSpec) -> tuple[_BodyBox, ...]:
             transparency=resolved.transparency,
         )
         for resolved in resolved_non_model_objects
+    )
+
+
+def _mull_sheet_axis_bounds(
+    *,
+    outer_min_mm: float,
+    coil_min_mm: float,
+    thickness_mm: float,
+    ratio: float,
+    context: str,
+) -> tuple[float, float]:
+    available_mm = coil_min_mm - outer_min_mm
+    travel_mm = available_mm - thickness_mm
+    tolerance = 1e-9
+    if travel_mm < -tolerance:
+        raise ValueError(
+            f"{context} MULL ferrite remaining interval must be >= sheet thickness "
+            f"(remaining={available_mm}, thickness={thickness_mm})"
+        )
+    if travel_mm < 0.0:
+        travel_mm = 0.0
+    sheet_min_mm = outer_min_mm + travel_mm * ratio
+    return sheet_min_mm, sheet_min_mm + thickness_mm
+
+
+def _mull_ferrite_sheet_boxes(
+    *,
+    spec: SswFixedSpec,
+    tx_boxes: tuple[_BodyBox, ...],
+    rx_boxes: tuple[_BodyBox, ...],
+) -> tuple[_BodyBox, _BodyBox]:
+    tx_region_bounds = _body_bounds(_body_by_name(_non_model_boxes(spec), "tx_region"))
+    rx_region_max_bounds = _body_bounds(_body_by_name(_non_model_boxes(spec), "rx_region_max"))
+    tx_bounds = _combined_bounds(tx_boxes, "TX SSW bodies")
+    rx_bounds = _combined_bounds(rx_boxes, "RX SSW bodies")
+    thickness = spec.fixed.mull_ferrite_thickness_mm
+    ratio = spec.ferrite.mull_position_ratio
+
+    tx_zmin, tx_zmax = _mull_sheet_axis_bounds(
+        outer_min_mm=tx_region_bounds.zmin,
+        coil_min_mm=tx_bounds.zmin,
+        thickness_mm=thickness,
+        ratio=ratio,
+        context="TX",
+    )
+    rx_xmin, rx_xmax = _mull_sheet_axis_bounds(
+        outer_min_mm=rx_region_max_bounds.xmin,
+        coil_min_mm=rx_bounds.xmin,
+        thickness_mm=thickness,
+        ratio=ratio,
+        context="RX",
+    )
+    return (
+        _box(
+            "tx_mull_ferrite_sheet",
+            "ferrite",
+            MULL_FERRITE_MATERIAL,
+            (tx_bounds.center_x, tx_bounds.center_y, (tx_zmin + tx_zmax) / 2.0),
+            (tx_bounds.size_x, tx_bounds.size_y, thickness),
+            transparency=MULL_FERRITE_TRANSPARENCY,
+        ),
+        _box(
+            "rx_mull_ferrite_sheet",
+            "ferrite",
+            MULL_FERRITE_MATERIAL,
+            ((rx_xmin + rx_xmax) / 2.0, rx_bounds.center_y, rx_bounds.center_z),
+            (thickness, rx_bounds.size_y, rx_bounds.size_z),
+            transparency=MULL_FERRITE_TRANSPARENCY,
+        ),
     )
 
 
@@ -958,6 +1052,8 @@ def _color_for_body(body: _BodyBox) -> cq.Color:
         return cq.Color(0.8, 0.45, 0.15, alpha)
     if body.material == "fr4":
         return cq.Color(0.1, 0.45, 0.1, alpha)
+    if body.role == "ferrite" and body.material == MULL_FERRITE_MATERIAL:
+        return cq.Color(0.12, 0.12, 0.12, alpha)
     if body.name == "tv":
         return cq.Color(0.6, 0.8, 1.0, alpha)
     if body.name == "tx_region":
@@ -1044,6 +1140,8 @@ def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -
     rx_region_max_bounds = _body_bounds(_body_by_name(bodies, "rx_region_max"))
     tx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "tx_ssw_coil_"), "TX SSW bodies")
     rx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "rx_ssw_coil_"), "RX SSW bodies")
+    tx_ferrite_bounds = _body_bounds(_body_by_name(bodies, "tx_mull_ferrite_sheet"))
+    rx_ferrite_bounds = _body_bounds(_body_by_name(bodies, "rx_mull_ferrite_sheet"))
     rx_fr4_bounds = _combined_bounds(
         _bodies_with_role(_bodies_with_prefix(bodies, "rx_ssw_coil_"), "fr4", "RX SSW bodies"),
         "RX SSW FR4 bodies",
@@ -1129,6 +1227,30 @@ def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -
             f"RX SSW long dimension must follow Y axis "
             f"(size_y={rx_bounds.size_y}, size_z={rx_bounds.size_z})"
         )
+
+    thickness = spec.fixed.mull_ferrite_thickness_mm
+    if abs(tx_ferrite_bounds.size_z - thickness) > tolerance:
+        raise ValueError("TX MULL ferrite sheet thickness must match fixed_dimensions.mull_ferrite_thickness_mm")
+    if abs(rx_ferrite_bounds.size_x - thickness) > tolerance:
+        raise ValueError("RX MULL ferrite sheet thickness must match fixed_dimensions.mull_ferrite_thickness_mm")
+    if (
+        abs(tx_ferrite_bounds.size_x - tx_bounds.size_x) > tolerance
+        or abs(tx_ferrite_bounds.size_y - tx_bounds.size_y) > tolerance
+        or abs(tx_ferrite_bounds.center_x - tx_bounds.center_x) > tolerance
+        or abs(tx_ferrite_bounds.center_y - tx_bounds.center_y) > tolerance
+    ):
+        raise ValueError("TX MULL ferrite sheet must match TX coil XY footprint")
+    if (
+        abs(rx_ferrite_bounds.size_y - rx_bounds.size_y) > tolerance
+        or abs(rx_ferrite_bounds.size_z - rx_bounds.size_z) > tolerance
+        or abs(rx_ferrite_bounds.center_y - rx_bounds.center_y) > tolerance
+        or abs(rx_ferrite_bounds.center_z - rx_bounds.center_z) > tolerance
+    ):
+        raise ValueError("RX MULL ferrite sheet must match RX coil YZ footprint")
+    if tx_ferrite_bounds.zmin < tx_region_bounds.zmin - tolerance or tx_ferrite_bounds.zmax > tx_bounds.zmin + tolerance:
+        raise ValueError("TX MULL ferrite sheet must stay between tx_region Z min and TX coil Z min")
+    if rx_ferrite_bounds.xmin < rx_region_max_bounds.xmin - tolerance or rx_ferrite_bounds.xmax > rx_bounds.xmin + tolerance:
+        raise ValueError("RX MULL ferrite sheet must stay between rx_region_max X min and RX coil X min")
 
 
 def _action_value_to_jsonable(value: coilmaker.ActionValue) -> object:
@@ -1238,6 +1360,41 @@ def _non_model_action_token(*, index: int, body: _BodyBox) -> coilmaker.ActionTo
     )
 
 
+def _mull_ferrite_action_token(
+    *,
+    index: int,
+    body: _BodyBox,
+    spec: SswFixedSpec,
+) -> coilmaker.ActionToken:
+    bounds = _body_bounds(body)
+    if body.name == "tx_mull_ferrite_sheet":
+        coil_role = "tx_ssw_coil"
+        plane = "XY"
+        inputs = ("scene.tx_ssw_coil.placement", "non_model.tx_region")
+    elif body.name == "rx_mull_ferrite_sheet":
+        coil_role = "rx_ssw_coil"
+        plane = "YZ"
+        inputs = ("scene.rx_ssw_coil.placement", "non_model.rx_region_max")
+    else:
+        raise ValueError(f"unsupported MULL ferrite sheet body {body.name!r}")
+    return _action_token(
+        index=index,
+        op="CREATE_MULL_FERRITE_SHEET",
+        target=f"ferrite.{body.name}",
+        inputs=inputs,
+        params=(
+            ("coil_role", coil_role),
+            ("material", body.material),
+            ("transparency", body.transparency),
+            ("plane", plane),
+            ("thickness_mm", spec.fixed.mull_ferrite_thickness_mm),
+            ("mull_position_ratio", spec.ferrite.mull_position_ratio),
+            ("bounds_min_xyz_mm", (bounds.xmin, bounds.ymin, bounds.zmin)),
+            ("bounds_max_xyz_mm", (bounds.xmax, bounds.ymax, bounds.zmax)),
+        ),
+    )
+
+
 def _scene_action_trace(
     *,
     spec: SswFixedSpec,
@@ -1274,6 +1431,7 @@ def _scene_action_trace(
 
     tx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "tx_ssw_coil_"), "TX SSW bodies")
     rx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "rx_ssw_coil_"), "RX SSW bodies")
+    ferrite_bodies = tuple(body for body in bodies if body.role == "ferrite")
     rx_port_face = "rx_x_min" if spec.rx.is_ssw_enabled else "normal_spiral_landing"
     rx_port_anchor = (
         _ssw_port_anchor_world_xyz(spec=spec, params=spec.rx)
@@ -1306,6 +1464,8 @@ def _scene_action_trace(
             no_ssw_qturn_n_int=spec.rx.no_ssw_qturn_n_int,
         )
     )
+    for body in ferrite_bodies:
+        actions.append(_mull_ferrite_action_token(index=len(actions), body=body, spec=spec))
     actions.append(
         _action_token(
             index=len(actions),
@@ -1315,6 +1475,7 @@ def _scene_action_trace(
                 *(f"non_model.{body.name}" for body in non_model_bodies),
                 "scene.tx_ssw_coil.placement",
                 "scene.rx_ssw_coil.placement",
+                *(f"ferrite.{body.name}" for body in ferrite_bodies),
             ),
             params=(
                 ("scene_step_name", scene_step_path.name),
@@ -1399,7 +1560,8 @@ def write_coil_making_token_toml(
 def build_ssw_body_boxes(spec: SswFixedSpec) -> tuple[_BodyBox, ...]:
     tx_boxes = _coilmaker_child_bodies(spec=spec, params=spec.tx)
     rx_boxes = _coilmaker_child_bodies(spec=spec, params=spec.rx)
-    bodies = (*_non_model_boxes(spec), *tx_boxes, *rx_boxes)
+    ferrite_boxes = _mull_ferrite_sheet_boxes(spec=spec, tx_boxes=tx_boxes, rx_boxes=rx_boxes)
+    bodies = (*_non_model_boxes(spec), *tx_boxes, *rx_boxes, *ferrite_boxes)
     names = tuple(body.name for body in bodies)
     if len(names) != len(set(names)):
         raise ValueError(f"SSW body names must be unique (body_names={names!r})")
@@ -1413,7 +1575,8 @@ def _workplane_from_box(body: _BodyBox) -> cq.Workplane:
 
 def build_ssw_assembly(spec: SswFixedSpec) -> cq.Assembly:
     assembly = cq.Assembly(name="ssw_0_3_0_fixed")
-    for body in _non_model_boxes(spec):
+    body_boxes = build_ssw_body_boxes(spec)
+    for body in tuple(body for body in body_boxes if body.role in ("non_model", "ferrite")):
         assembly.add(_workplane_from_box(body), name=body.name, color=_color_for_body(body))
     for params in (spec.tx, spec.rx):
         child_assembly = _coilmaker_assembly(params, spec.fixed)
@@ -1467,6 +1630,7 @@ def _build_ledger(
         "copper_body_names": [body.name for body in bodies if body.role == "copper"],
         "fr4_body_names": [body.name for body in bodies if body.role == "fr4"],
         "non_model_body_names": [body.name for body in bodies if body.role == "non_model"],
+        "ferrite_body_names": [body.name for body in bodies if body.role == "ferrite"],
         "bodies": [_body_entry(body) for body in bodies],
     }
 
@@ -1490,6 +1654,7 @@ def load_ssw_step_ledger(ledger_path: Path) -> SswStepLedger:
         "copper_body_names",
         "fr4_body_names",
         "non_model_body_names",
+        "ferrite_body_names",
         "bodies",
     ):
         if key not in raw_ledger:
