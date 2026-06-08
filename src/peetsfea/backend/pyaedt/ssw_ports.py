@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Callable, Literal, TypeAlias, TypedDict, cast
 
 from peetsfea.aedt import Hfss
@@ -14,6 +14,7 @@ from peetsfea.aedt.protocols import (
     MaterialsSession,
     MeshModuleSession,
     ModelerSession,
+    ReportSetupModuleSession,
 )
 from peetsfea.aedt.proxies import assign_lumped_port, set_object_color, set_object_transparency
 
@@ -97,13 +98,48 @@ SETUP_FREQUENCY = "6.78MHz"
 SWEEP_RANGE_START = "0.1MHz"
 SWEEP_RANGE_END = "100MHz"
 SWEEP_RANGE_COUNT = 81
+REPORT_NAME = "Output Variables Table1"
+DIAGNOSTIC_TABLE_1_NAME = "Table1"
+DIAGNOSTIC_TABLE_2_NAME = "Table2"
+
+_TXRX_OUTPUT_VARIABLE_EXPRESSIONS: tuple[tuple[str, str], ...] = (
+    ("Ltx_uH", "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"),
+    ("Lrx_uH", "im(Zt(RX_TML,RX_TML))/2/pi/freq*1e6"),
+    ("M_uH", "abs(im(Zt(TX_TML,RX_TML))/2/pi/freq*1e6)"),
+    ("k_ratio", "M_uH/sqrt(Ltx_uH*Lrx_uH)"),
+    ("Qtx_ratio", "im(Zt(TX_TML,TX_TML))/re(Zt(TX_TML,TX_TML))"),
+    ("Qrx_ratio", "im(Zt(RX_TML,RX_TML))/re(Zt(RX_TML,RX_TML))"),
+    ("FOM_ratio", "k_ratio*sqrt(Qtx_ratio*Qrx_ratio)"),
+    ("Rtx_ac_ohm", "re(Zt(TX_TML,TX_TML))"),
+    ("Rrx_ac_ohm", "re(Zt(RX_TML,RX_TML))"),
+    ("Xtx_ohm", "im(Zt(TX_TML,TX_TML))"),
+    ("Xrx_ohm", "im(Zt(RX_TML,RX_TML))"),
+    ("M_over_Ltx_ratio", "M_uH/Ltx_uH"),
+    ("M_over_Lrx_ratio", "M_uH/Lrx_uH"),
+    ("Gtx_S", "re(Yt(TX_TML,TX_TML))"),
+    ("Btx_S", "im(Yt(TX_TML,TX_TML))"),
+    ("Grx_S", "re(Yt(RX_TML,RX_TML))"),
+    ("Brx_S", "im(Yt(RX_TML,RX_TML))"),
+    ("S11_mag_ratio", "mag(S(TX_TML,TX_TML))"),
+    ("S21_mag_ratio", "mag(S(TX_TML,RX_TML))"),
+    ("S21_phase_deg", "ang_deg_val(S(TX_TML,RX_TML))"),
+    ("S22_mag_ratio", "mag(S(RX_TML,RX_TML))"),
+    ("eta_s21_power_ratio", "S21_mag_ratio*S21_mag_ratio"),
+    ("eta_tx_accept_ratio", "1-S11_mag_ratio*S11_mag_ratio"),
+    ("eta_rx_accept_ratio", "1-S22_mag_ratio*S22_mag_ratio"),
+    ("eta_match_product_ratio", "eta_tx_accept_ratio*eta_rx_accept_ratio"),
+    ("eta_s21_from_tx_accept_ratio", "eta_s21_power_ratio/eta_tx_accept_ratio"),
+    ("eta_s21_from_rx_accept_ratio", "eta_s21_power_ratio/eta_rx_accept_ratio"),
+    ("eta_s21_two_sided_norm_ratio", "eta_s21_power_ratio/(eta_tx_accept_ratio*eta_rx_accept_ratio)"),
+    (
+        "eta_fom_max_ratio",
+        "(FOM_ratio*FOM_ratio)/((1+sqrt(1+FOM_ratio*FOM_ratio))*(1+sqrt(1+FOM_ratio*FOM_ratio)))",
+    ),
+)
 
 Point3 = tuple[float, float, float]
 HfssFactory = Callable[[str], HfssSession]
 PortRole = Literal["tx", "rx"]
-Axis = Literal["x", "y", "z"]
-FaceSide = Literal["min", "max"]
-PortEdgeSelection = Literal["nearest_long_face_edges", "axis_spaced_face_edges"]
 BoundaryPayloadName = Literal["NAME:1", "NAME:2"]
 ExpectedTerminalName = Literal["1_T1", "2_T1"]
 
@@ -122,29 +158,14 @@ class SswAedtBodyLedgerEntry(TypedDict):
     canonical_coordinates: CanonicalCoordinates
 
 
-class SswNearestPortEdgeLedgerEntry(TypedDict):
+class SswSemanticPortEdgeLedgerEntry(TypedDict):
     role: PortRole
     copper_body_name: str
-    selection: Literal["nearest_long_face_edges"]
-    face_axis: Axis
-    face_side: FaceSide
-    anchor_xyz: list[float]
-    minimum_edge_length_mm: float
+    selection: Literal["semantic_edge_vertices"]
+    edge_vertices_xyz: list[list[list[float]]]
 
 
-class SswAxisSpacedPortEdgeLedgerEntry(TypedDict):
-    role: PortRole
-    copper_body_name: str
-    selection: Literal["axis_spaced_face_edges"]
-    face_axis: Axis
-    face_side: FaceSide
-    edge_axis: Axis
-    spacing_axis: Axis
-    edge_length_mm: float
-    pair_spacing_mm: float
-
-
-SswAedtPortEdgeLedgerEntry: TypeAlias = SswNearestPortEdgeLedgerEntry | SswAxisSpacedPortEdgeLedgerEntry
+SswAedtPortEdgeLedgerEntry: TypeAlias = SswSemanticPortEdgeLedgerEntry
 
 
 class SswAedtPortStepLedger(TypedDict):
@@ -206,6 +227,13 @@ class SswAedtFrequencySweepSummary(TypedDict):
     sweep_type: str
 
 
+class SswAedtReportsSummary(TypedDict):
+    report_names: list[str]
+    output_variable_names: list[str]
+    output_solution_name: str
+    diagnostic_report_names: list[str]
+
+
 class SswAedtImportedLedgerBase(TypedDict):
     source_port_ledger_path: str
     source_step_ledger_path: str
@@ -223,6 +251,7 @@ class SswAedtImportedLedgerBase(TypedDict):
 class SswAedtImportedLedger(SswAedtImportedLedgerBase):
     analysis_setup: SswAedtAnalysisSetupSummary
     frequency_sweep: SswAedtFrequencySweepSummary
+    reports: SswAedtReportsSummary
 
 
 class SswAedtPorts(TypedDict):
@@ -241,6 +270,7 @@ class SswAedtPortSetupResult(TypedDict):
     mesh: SswAedtMeshSummary
     analysis_setup: SswAedtAnalysisSetupSummary
     frequency_sweep: SswAedtFrequencySweepSummary
+    reports: SswAedtReportsSummary
 
 
 def create_headless_hfss(design_name: str) -> HfssSession:
@@ -928,6 +958,135 @@ def _insert_recorded_setup_and_sweep(
     )
 
 
+def _report_setup_module(hfss: HfssSession) -> ReportSetupModuleSession:
+    raw_module = _design(hfss).GetModule("ReportSetup")
+    assert hasattr(raw_module, "CreateReport"), "ReportSetup module must expose CreateReport"
+    assert hasattr(raw_module, "GetAllReportNames"), "ReportSetup module must expose GetAllReportNames"
+    return cast(ReportSetupModuleSession, raw_module)
+
+
+def _s_function_for_reports(*, hfss: HfssSession) -> str:
+    traces = hfss.get_traces_for_plot(True, True, "", "", "S(", ())
+    if len(traces) == 0:
+        raise ValueError("HFSS did not return terminal S-parameter traces for SSW report generation")
+    if any(trace.startswith("St(") for trace in traces):
+        return "St"
+    if any(trace.startswith("S(") for trace in traces):
+        return "S"
+    raise ValueError(f"HFSS traces did not expose S or St terminal function names (traces={traces})")
+
+
+def _txrx_output_variables(*, tx_port: str, rx_port: str, s_function: str) -> list[tuple[str, str]]:
+    variables: list[tuple[str, str]] = []
+    for name, raw_expression in _TXRX_OUTPUT_VARIABLE_EXPRESSIONS:
+        expression = raw_expression.replace("TX_TML", tx_port).replace("RX_TML", rx_port)
+        expression = expression.replace("S(", f"{s_function}(")
+        variables.append((name, expression))
+    return variables
+
+
+def _ssw_geometry_diagnostic_traces(*, imported_ledger: SswAedtImportedLedgerBase) -> list[str]:
+    traces: list[str] = []
+    for name in imported_ledger["non_model_body_names"]:
+        traces.append(f"Volume({name})")
+    for name in imported_ledger["ferrite_body_names"]:
+        traces.append(f"Volume({name})")
+    for name in imported_ledger["copper_body_names"]:
+        traces.append(f"Volume({name})")
+    return traces
+
+
+def _create_one_report(
+    *,
+    report_setup: ReportSetupModuleSession,
+    report_name: str,
+    solution_name: str,
+    context: list[object],
+    variations: list[object],
+    traces: list[str],
+    primary_sweep: str,
+) -> None:
+    raise_on_false(
+        report_setup.CreateReport(
+            report_name,
+            "Terminal Solution Data",
+            "Data Table",
+            solution_name,
+            context,
+            variations,
+            ["X Component:=", primary_sweep, "Y Component:=", traces],
+            [],
+        ),
+        operation="CreateReport",
+        context={"report_name": report_name, "solution_name": solution_name},
+    )
+
+
+def _create_reports(
+    *,
+    hfss: HfssSession,
+    ports: SswAedtPorts,
+    imported_ledger: SswAedtImportedLedgerBase,
+) -> SswAedtReportsSummary:
+    tx_ports = ports["tx"]
+    rx_ports = ports["rx"]
+    if len(tx_ports) != 1 or len(rx_ports) != 1:
+        raise ValueError(f"SSW reports require exactly one TX and one RX port (ports={ports})")
+    tx_port = tx_ports[0]
+    rx_port = rx_ports[0]
+    s_function = _s_function_for_reports(hfss=hfss)
+    variables = _txrx_output_variables(tx_port=tx_port, rx_port=rx_port, s_function=s_function)
+    output_variable_names = [name for name, _expression in variables]
+    solution_name = f"{SETUP_NAME} : {SWEEP_NAME}"
+    for name, expression in variables:
+        raise_on_false(
+            hfss.create_output_variable(variable=name, expression=expression, solution=solution_name),
+            operation="create_output_variable",
+            context={"name": name, "expression": expression, "solution": solution_name},
+        )
+    report_setup = _report_setup_module(hfss)
+    _create_one_report(
+        report_setup=report_setup,
+        report_name=REPORT_NAME,
+        solution_name=solution_name,
+        context=["Domain:=", "Sweep"],
+        variations=["Freq:=", ["All"]],
+        traces=output_variable_names,
+        primary_sweep="Freq",
+    )
+    _create_one_report(
+        report_setup=report_setup,
+        report_name=DIAGNOSTIC_TABLE_1_NAME,
+        solution_name=f"{SETUP_NAME} : LastAdaptive",
+        context=[],
+        variations=["Freq:=", ["All"]],
+        traces=[*output_variable_names, *_ssw_geometry_diagnostic_traces(imported_ledger=imported_ledger)],
+        primary_sweep="Freq",
+    )
+    _create_one_report(
+        report_setup=report_setup,
+        report_name=DIAGNOSTIC_TABLE_2_NAME,
+        solution_name=f"{SETUP_NAME} : AdaptivePass",
+        context=[],
+        variations=["Pass:=", ["All"], "Freq:=", ["All"]],
+        traces=[*output_variable_names, "SolvedElements", "MaxMagDeltaS"],
+        primary_sweep="Pass",
+    )
+    report_names = set(report_setup.GetAllReportNames())
+    expected_report_names = {REPORT_NAME, DIAGNOSTIC_TABLE_1_NAME, DIAGNOSTIC_TABLE_2_NAME}
+    if not expected_report_names.issubset(report_names):
+        raise ValueError(
+            "SSW report creation did not register required reports "
+            f"(missing={sorted(expected_report_names.difference(report_names))}, available={sorted(report_names)})"
+        )
+    return {
+        "report_names": [REPORT_NAME, DIAGNOSTIC_TABLE_1_NAME, DIAGNOSTIC_TABLE_2_NAME],
+        "output_variable_names": output_variable_names,
+        "output_solution_name": solution_name,
+        "diagnostic_report_names": [DIAGNOSTIC_TABLE_1_NAME, DIAGNOSTIC_TABLE_2_NAME],
+    }
+
+
 def _import_ssw_aedt_port_step(
     *,
     hfss: HfssSession,
@@ -1022,45 +1181,9 @@ def _edge_vertices_xyz(modeler: ModelerSession, *, edge_id: int) -> tuple[Point3
 class EdgeSnapshot(TypedDict):
     edge_id: int
     vertices_xyz: tuple[Point3, Point3]
-    midpoint_xyz: Point3
-    length_mm: float
 
 
 EDGE_TOLERANCE_MM = 1e-5
-
-
-def _axis_index(axis: Axis) -> int:
-    if axis == "x":
-        return 0
-    if axis == "y":
-        return 1
-    if axis == "z":
-        return 2
-    raise ValueError(f"unsupported axis {axis!r}")
-
-
-def _edge_length(vertices: tuple[Point3, Point3]) -> float:
-    return (
-        (vertices[0][0] - vertices[1][0]) ** 2
-        + (vertices[0][1] - vertices[1][1]) ** 2
-        + (vertices[0][2] - vertices[1][2]) ** 2
-    ) ** 0.5
-
-
-def _edge_midpoint(vertices: tuple[Point3, Point3]) -> Point3:
-    return (
-        (vertices[0][0] + vertices[1][0]) / 2.0,
-        (vertices[0][1] + vertices[1][1]) / 2.0,
-        (vertices[0][2] + vertices[1][2]) / 2.0,
-    )
-
-
-def _point_distance(first: Point3, second: Point3) -> float:
-    return (
-        (first[0] - second[0]) ** 2
-        + (first[1] - second[1]) ** 2
-        + (first[2] - second[2]) ** 2
-    ) ** 0.5
 
 
 def _object_edge_snapshots(*, modeler: ModelerSession, object_name: str) -> list[EdgeSnapshot]:
@@ -1072,37 +1195,11 @@ def _object_edge_snapshots(*, modeler: ModelerSession, object_name: str) -> list
             {
                 "edge_id": edge_id,
                 "vertices_xyz": vertices,
-                "midpoint_xyz": _edge_midpoint(vertices),
-                "length_mm": _edge_length(vertices),
             }
         )
     if len(snapshots) == 0:
         raise ValueError(f"imported copper object has no edges (object_name={object_name})")
     return snapshots
-
-
-def _face_coordinate(edges: list[EdgeSnapshot], *, axis: Axis, side: FaceSide) -> float:
-    axis_i = _axis_index(axis)
-    coordinates = [point[axis_i] for edge in edges for point in edge["vertices_xyz"]]
-    if side == "min":
-        return min(coordinates)
-    if side == "max":
-        return max(coordinates)
-    raise ValueError(f"unsupported face side {side!r}")
-
-
-def _edge_on_face(edge: EdgeSnapshot, *, axis: Axis, coordinate: float) -> bool:
-    axis_i = _axis_index(axis)
-    return all(abs(point[axis_i] - coordinate) <= EDGE_TOLERANCE_MM for point in edge["vertices_xyz"])
-
-
-def _edge_aligned_to_axis(edge: EdgeSnapshot, *, axis: Axis) -> bool:
-    axis_i = _axis_index(axis)
-    first, second = edge["vertices_xyz"]
-    deltas = (abs(first[0] - second[0]), abs(first[1] - second[1]), abs(first[2] - second[2]))
-    if deltas[axis_i] <= EDGE_TOLERANCE_MM:
-        return False
-    return all(delta <= EDGE_TOLERANCE_MM for index, delta in enumerate(deltas) if index != axis_i)
 
 
 def _point_from_rows(raw_point: list[float], *, context: str) -> Point3:
@@ -1111,78 +1208,45 @@ def _point_from_rows(raw_point: list[float], *, context: str) -> Point3:
     return (float(raw_point[0]), float(raw_point[1]), float(raw_point[2]))
 
 
-def _remaining_axis(*, face_axis: Axis, spacing_axis: Axis) -> Axis:
-    if face_axis == spacing_axis:
-        raise ValueError(f"face_axis and spacing_axis must differ (axis={face_axis})")
-    if face_axis != "x" and spacing_axis != "x":
-        return "x"
-    if face_axis != "y" and spacing_axis != "y":
-        return "y"
-    if face_axis != "z" and spacing_axis != "z":
-        return "z"
-    raise ValueError(f"face_axis and spacing_axis must leave one remaining axis (face={face_axis}, spacing={spacing_axis})")
+def _same_point(first: Point3, second: Point3) -> bool:
+    return (
+        abs(first[0] - second[0]) <= EDGE_TOLERANCE_MM
+        and abs(first[1] - second[1]) <= EDGE_TOLERANCE_MM
+        and abs(first[2] - second[2]) <= EDGE_TOLERANCE_MM
+    )
 
 
-def _resolve_nearest_long_face_edge_ids(
+def _same_edge(first: tuple[Point3, Point3], second: tuple[Point3, Point3]) -> bool:
+    return (_same_point(first[0], second[0]) and _same_point(first[1], second[1])) or (
+        _same_point(first[0], second[1]) and _same_point(first[1], second[0])
+    )
+
+
+def _resolve_semantic_edge_ids(
     *,
     modeler: ModelerSession,
-    spec: SswNearestPortEdgeLedgerEntry,
+    spec: SswSemanticPortEdgeLedgerEntry,
     context: str,
 ) -> list[int]:
     edges = _object_edge_snapshots(modeler=modeler, object_name=spec["copper_body_name"])
-    face_coordinate = _face_coordinate(edges, axis=spec["face_axis"], side=spec["face_side"])
-    anchor = _point_from_rows(spec["anchor_xyz"], context=f"{context}.anchor_xyz")
-    minimum_length = float(spec["minimum_edge_length_mm"])
-    candidates = [
-        edge
-        for edge in edges
-        if _edge_on_face(edge, axis=spec["face_axis"], coordinate=face_coordinate)
-        and edge["length_mm"] + EDGE_TOLERANCE_MM >= minimum_length
-    ]
-    if len(candidates) < 2:
-        raise ValueError(
-            f"{context} requires at least two long face edges "
-            f"(object_name={spec['copper_body_name']}, face_axis={spec['face_axis']}, candidates={len(candidates)})"
-        )
-    candidates.sort(key=lambda edge: (_point_distance(edge["midpoint_xyz"], anchor), edge["edge_id"]))
-    return sorted(edge["edge_id"] for edge in candidates[:2])
-
-
-def _resolve_axis_spaced_face_edge_ids(
-    *,
-    modeler: ModelerSession,
-    spec: SswAxisSpacedPortEdgeLedgerEntry,
-    context: str,
-) -> list[int]:
-    edges = _object_edge_snapshots(modeler=modeler, object_name=spec["copper_body_name"])
-    face_coordinate = _face_coordinate(edges, axis=spec["face_axis"], side=spec["face_side"])
-    expected_length = float(spec["edge_length_mm"])
-    candidate_edges = [
-        edge
-        for edge in edges
-        if _edge_on_face(edge, axis=spec["face_axis"], coordinate=face_coordinate)
-        and _edge_aligned_to_axis(edge, axis=spec["edge_axis"])
-        and abs(edge["length_mm"] - expected_length) <= EDGE_TOLERANCE_MM
-    ]
-    spacing_axis = spec["spacing_axis"]
-    spacing_i = _axis_index(spacing_axis)
-    remaining_i = _axis_index(_remaining_axis(face_axis=spec["face_axis"], spacing_axis=spacing_axis))
-    expected_spacing = float(spec["pair_spacing_mm"])
-    matching_pairs: list[tuple[int, int]] = []
-    for first_index, first_edge in enumerate(candidate_edges):
-        for second_edge in candidate_edges[first_index + 1 :]:
-            first_midpoint = first_edge["midpoint_xyz"]
-            second_midpoint = second_edge["midpoint_xyz"]
-            same_remaining = abs(first_midpoint[remaining_i] - second_midpoint[remaining_i]) <= EDGE_TOLERANCE_MM
-            spacing = abs(first_midpoint[spacing_i] - second_midpoint[spacing_i])
-            if same_remaining and abs(spacing - expected_spacing) <= EDGE_TOLERANCE_MM:
-                matching_pairs.append((first_edge["edge_id"], second_edge["edge_id"]))
-    if len(matching_pairs) != 1:
-        raise ValueError(
-            f"{context} requires exactly one axis-spaced edge pair "
-            f"(object_name={spec['copper_body_name']}, matches={matching_pairs})"
-        )
-    return sorted([matching_pairs[0][0], matching_pairs[0][1]])
+    edge_ids: list[int] = []
+    for expected_index, expected_edge_rows in enumerate(spec["edge_vertices_xyz"]):
+        expected_context = f"{context}.edge_vertices_xyz[{expected_index}]"
+        expected_edge = _edge_from_rows(expected_edge_rows, context=expected_context)
+        matches = [
+            edge["edge_id"]
+            for edge in edges
+            if _same_edge(edge["vertices_xyz"], expected_edge)
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                f"{expected_context} must match exactly one imported edge "
+                f"(object_name={spec['copper_body_name']}, matches={matches})"
+            )
+        edge_ids.append(matches[0])
+    if len(set(edge_ids)) != len(edge_ids):
+        raise ValueError(f"{context}.edge_vertices_xyz resolves duplicate edge ids (edge_ids={edge_ids})")
+    return sorted(edge_ids)
 
 
 def _capture_expected_excitation(*, hfss: HfssSession, expected_name: str, context: str) -> str:
@@ -1205,27 +1269,6 @@ def _required_raw_str(raw_entry: dict[str, object], *, key: str, context: str) -
     return raw_value
 
 
-def _required_raw_float(raw_entry: dict[str, object], *, key: str, context: str) -> float:
-    raw_value = _required_raw_key(raw_entry, key=key, context=context)
-    if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
-        raise TypeError(f"{context}.{key} must be numeric")
-    return float(raw_value)
-
-
-def _required_raw_point(raw_entry: dict[str, object], *, key: str, context: str) -> list[float]:
-    raw_value = _required_raw_key(raw_entry, key=key, context=context)
-    if isinstance(raw_value, (str, bytes)) or not isinstance(raw_value, list):
-        raise TypeError(f"{context}.{key} must be a list of three numbers")
-    if len(raw_value) != 3:
-        raise ValueError(f"{context}.{key} must contain exactly three entries")
-    point: list[float] = []
-    for index, component in enumerate(raw_value):
-        if isinstance(component, bool) or not isinstance(component, (int, float)):
-            raise TypeError(f"{context}.{key}[{index}] must be numeric")
-        point.append(float(component))
-    return point
-
-
 def _required_port_role(raw_entry: dict[str, object], *, context: str) -> PortRole:
     role = _required_raw_str(raw_entry, key="role", context=context)
     if role == "tx" or role == "rx":
@@ -1233,52 +1276,56 @@ def _required_port_role(raw_entry: dict[str, object], *, context: str) -> PortRo
     raise ValueError(f"{context}.role must be tx or rx (actual={role!r})")
 
 
-def _required_axis(raw_entry: dict[str, object], *, key: str, context: str) -> Axis:
-    axis = _required_raw_str(raw_entry, key=key, context=context)
-    if axis == "x" or axis == "y" or axis == "z":
-        return axis
-    raise ValueError(f"{context}.{key} must be x, y, or z (actual={axis!r})")
+def _raw_point_from_object(raw_point: object, *, context: str) -> list[float]:
+    if isinstance(raw_point, (str, bytes)) or not isinstance(raw_point, list):
+        raise TypeError(f"{context} must be a list of three numbers")
+    if len(raw_point) != 3:
+        raise ValueError(f"{context} must contain exactly three entries")
+    point: list[float] = []
+    for index, component in enumerate(raw_point):
+        if isinstance(component, bool) or not isinstance(component, (int, float)):
+            raise TypeError(f"{context}[{index}] must be numeric")
+        point.append(float(component))
+    return point
 
 
-def _required_face_side(raw_entry: dict[str, object], *, context: str) -> FaceSide:
-    face_side = _required_raw_str(raw_entry, key="face_side", context=context)
-    if face_side == "min" or face_side == "max":
-        return face_side
-    raise ValueError(f"{context}.face_side must be min or max (actual={face_side!r})")
+def _edge_from_rows(raw_edge: list[list[float]], *, context: str) -> tuple[Point3, Point3]:
+    if len(raw_edge) != 2:
+        raise ValueError(f"{context} must contain exactly two endpoint rows")
+    return (
+        _point_from_rows(raw_edge[0], context=f"{context}[0]"),
+        _point_from_rows(raw_edge[1], context=f"{context}[1]"),
+    )
 
 
-def _nearest_port_edge_entry(raw_entry: dict[str, object], *, context: str) -> SswNearestPortEdgeLedgerEntry:
-    minimum_edge_length_mm = _required_raw_float(raw_entry, key="minimum_edge_length_mm", context=context)
-    if minimum_edge_length_mm <= 0.0:
-        raise ValueError(f"{context}.minimum_edge_length_mm must be positive")
+def _raw_edge_vertices(raw_entry: dict[str, object], *, context: str) -> list[list[list[float]]]:
+    raw_edges = _required_raw_key(raw_entry, key="edge_vertices_xyz", context=context)
+    if isinstance(raw_edges, (str, bytes)) or not isinstance(raw_edges, list):
+        raise TypeError(f"{context}.edge_vertices_xyz must be a list of two edge endpoint pairs")
+    if len(raw_edges) != 2:
+        raise ValueError(f"{context}.edge_vertices_xyz must contain exactly two edges")
+    edges: list[list[list[float]]] = []
+    for edge_index, raw_edge in enumerate(raw_edges):
+        edge_context = f"{context}.edge_vertices_xyz[{edge_index}]"
+        if isinstance(raw_edge, (str, bytes)) or not isinstance(raw_edge, list):
+            raise TypeError(f"{edge_context} must be a list of two endpoint rows")
+        if len(raw_edge) != 2:
+            raise ValueError(f"{edge_context} must contain exactly two endpoint rows")
+        edges.append(
+            [
+                _raw_point_from_object(raw_edge[0], context=f"{edge_context}[0]"),
+                _raw_point_from_object(raw_edge[1], context=f"{edge_context}[1]"),
+            ]
+        )
+    return edges
+
+
+def _semantic_port_edge_entry(raw_entry: dict[str, object], *, context: str) -> SswSemanticPortEdgeLedgerEntry:
     return {
         "role": _required_port_role(raw_entry, context=context),
         "copper_body_name": _required_raw_str(raw_entry, key="copper_body_name", context=context),
-        "selection": "nearest_long_face_edges",
-        "face_axis": _required_axis(raw_entry, key="face_axis", context=context),
-        "face_side": _required_face_side(raw_entry, context=context),
-        "anchor_xyz": _required_raw_point(raw_entry, key="anchor_xyz", context=context),
-        "minimum_edge_length_mm": minimum_edge_length_mm,
-    }
-
-
-def _axis_spaced_port_edge_entry(raw_entry: dict[str, object], *, context: str) -> SswAxisSpacedPortEdgeLedgerEntry:
-    edge_length_mm = _required_raw_float(raw_entry, key="edge_length_mm", context=context)
-    pair_spacing_mm = _required_raw_float(raw_entry, key="pair_spacing_mm", context=context)
-    if edge_length_mm <= 0.0:
-        raise ValueError(f"{context}.edge_length_mm must be positive")
-    if pair_spacing_mm <= 0.0:
-        raise ValueError(f"{context}.pair_spacing_mm must be positive")
-    return {
-        "role": _required_port_role(raw_entry, context=context),
-        "copper_body_name": _required_raw_str(raw_entry, key="copper_body_name", context=context),
-        "selection": "axis_spaced_face_edges",
-        "face_axis": _required_axis(raw_entry, key="face_axis", context=context),
-        "face_side": _required_face_side(raw_entry, context=context),
-        "edge_axis": _required_axis(raw_entry, key="edge_axis", context=context),
-        "spacing_axis": _required_axis(raw_entry, key="spacing_axis", context=context),
-        "edge_length_mm": edge_length_mm,
-        "pair_spacing_mm": pair_spacing_mm,
+        "selection": "semantic_edge_vertices",
+        "edge_vertices_xyz": _raw_edge_vertices(raw_entry, context=context),
     }
 
 
@@ -1293,12 +1340,9 @@ def _port_edges_by_role(ledger: SswAedtPortStepLedger) -> dict[PortRole, SswAedt
             raise TypeError(f"{context} must be object")
         raw_entry = cast(dict[str, object], raw_edge)
         selection = _required_raw_str(raw_entry, key="selection", context=context)
-        if selection == "nearest_long_face_edges":
-            entry: SswAedtPortEdgeLedgerEntry = _nearest_port_edge_entry(raw_entry, context=context)
-        elif selection == "axis_spaced_face_edges":
-            entry = _axis_spaced_port_edge_entry(raw_entry, context=context)
-        else:
+        if selection != "semantic_edge_vertices":
             raise ValueError(f"{context}.selection is unsupported (actual={selection!r})")
+        entry = _semantic_port_edge_entry(raw_entry, context=context)
         role = entry["role"]
         if role in edges_by_role:
             raise ValueError(f"SSW AEDT port ledger contains duplicate port edge role {role!r}")
@@ -1318,20 +1362,13 @@ def _assign_one_port(
     context: str,
 ) -> str:
     selection = edge_spec["selection"]
-    if selection == "nearest_long_face_edges":
-        edge_ids = _resolve_nearest_long_face_edge_ids(
-            modeler=modeler,
-            spec=cast(SswNearestPortEdgeLedgerEntry, edge_spec),
-            context=context,
-        )
-    elif selection == "axis_spaced_face_edges":
-        edge_ids = _resolve_axis_spaced_face_edge_ids(
-            modeler=modeler,
-            spec=cast(SswAxisSpacedPortEdgeLedgerEntry, edge_spec),
-            context=context,
-        )
-    else:
+    if selection != "semantic_edge_vertices":
         raise ValueError(f"{context} has unsupported port edge selection {selection!r}")
+    edge_ids = _resolve_semantic_edge_ids(
+        modeler=modeler,
+        spec=edge_spec,
+        context=context,
+    )
     assign_lumped_port(
         hfss.oboundary,
         [
@@ -1402,6 +1439,7 @@ def setup_ssw_aedt_ports_into_hfss(
     )
     ports = _assign_ports(hfss=hfss, ledger=ledger)
     analysis_setup, frequency_sweep = _insert_recorded_setup_and_sweep(hfss=hfss)
+    reports = _create_reports(hfss=hfss, ports=ports, imported_ledger=imported_base_ledger)
     imported_ledger: SswAedtImportedLedger = {
         "source_port_ledger_path": imported_base_ledger["source_port_ledger_path"],
         "source_step_ledger_path": imported_base_ledger["source_step_ledger_path"],
@@ -1416,6 +1454,7 @@ def setup_ssw_aedt_ports_into_hfss(
         "mesh": imported_base_ledger["mesh"],
         "analysis_setup": analysis_setup,
         "frequency_sweep": frequency_sweep,
+        "reports": reports,
     }
     raise_on_false(hfss.save_project(str(output_aedt_path)), operation="save_project", context={"path": str(output_aedt_path)})
     _write_imported_ledger(imported_ledger_path=imported_ledger_path, imported_ledger=imported_ledger)
@@ -1430,6 +1469,7 @@ def setup_ssw_aedt_ports_into_hfss(
         "mesh": imported_ledger["mesh"],
         "analysis_setup": imported_ledger["analysis_setup"],
         "frequency_sweep": imported_ledger["frequency_sweep"],
+        "reports": imported_ledger["reports"],
     }
 
 
@@ -1476,6 +1516,7 @@ __all__ = [
     "SswAedtPorts",
     "SswAedtPortSetupResult",
     "SswAedtPortStepLedger",
+    "SswAedtReportsSummary",
     "create_graphical_hfss",
     "create_headless_hfss",
     "load_ssw_aedt_port_ledger",

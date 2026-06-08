@@ -12,15 +12,17 @@ from ocp_vscode import Camera, Collapse, show
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from peetsfea import ssw_step as ssw_step_module
 from peetsfea.ssw_step import (
     DEFAULT_OUTPUT_DIR,
     DEFAULT_SOURCE_TOML_PATH,
+    SswCoilParameters,
+    SswFixedSpec,
     SswStepLedger,
     build_ssw_assembly,
     export_ssw_step_artifacts,
     load_ssw_fixed_spec,
     load_ssw_step_ledger,
-    normal_spiral_trace_width_mm,
 )
 from peetsfea.backend.pyaedt.ssw_ports import (
     CanonicalCoordinates,
@@ -44,6 +46,10 @@ AEDT_PORT_LEDGER_NAME = "ssw_aedt_port_ledger.json"
 AEDT_IMPORTED_LEDGER_NAME = "ssw_aedt_imported_ledger.json"
 AEDT_PROJECT_NAME = "ssw_0_3_0_ports.aedt"
 AEDT_DESIGN_NAME = "ssw_0_3_0_ports"
+TOKEN_EDGE_TOLERANCE_MM = 1e-8
+Point2 = tuple[float, float]
+Point3 = tuple[float, float, float]
+PortEdgeVertices = list[list[float]]
 
 
 class DebugSswSummary(TypedDict):
@@ -89,15 +95,40 @@ def _json_action_params_by_key(action: Mapping[str, object]) -> dict[str, object
     return mapped
 
 
-def _placement_params_from_token(*, token_toml_path: Path, target: str) -> dict[str, object]:
+def _token_actions(token_toml_path: Path) -> tuple[Mapping[str, object], ...]:
     token_doc = tomllib.loads(token_toml_path.read_text(encoding="utf-8"))
     actions = token_doc["actions"]
     if isinstance(actions, (str, bytes)) or not isinstance(actions, list):
         raise TypeError("coil making token actions must be a list")
-    matches = tuple(action for action in actions if isinstance(action, dict) and action["target"] == target)
+    checked_actions: list[Mapping[str, object]] = []
+    for index, action in enumerate(actions):
+        if not isinstance(action, dict):
+            raise TypeError(f"coil making token actions[{index}] must be an object")
+        checked_actions.append(action)
+    return tuple(checked_actions)
+
+
+def _action_params_from_actions(
+    *,
+    actions: tuple[Mapping[str, object], ...],
+    target: str,
+    expected_op: str,
+) -> dict[str, object]:
+    matches = tuple(action for action in actions if action["target"] == target)
     if len(matches) != 1:
-        raise ValueError(f"expected exactly one scene placement action for {target!r} (count={len(matches)})")
+        raise ValueError(f"expected exactly one token action for {target!r} (count={len(matches)})")
+    op = matches[0]["op"]
+    if op != expected_op:
+        raise ValueError(f"token action {target!r} must have op {expected_op!r} (actual={op!r})")
     return _json_action_params_by_key(matches[0])
+
+
+def _placement_params_from_token(*, token_toml_path: Path, target: str) -> dict[str, object]:
+    return _action_params_from_actions(
+        actions=_token_actions(token_toml_path),
+        target=target,
+        expected_op="PLACE_COIL_IN_SCENE",
+    )
 
 
 def _required_str(params: Mapping[str, object], *, key: str, context: str) -> str:
@@ -109,20 +140,195 @@ def _required_str(params: Mapping[str, object], *, key: str, context: str) -> st
     return value
 
 
-def _required_point(params: Mapping[str, object], *, key: str, context: str) -> list[float]:
+def _point2_from_object(value: object, *, context: str) -> Point2:
+    if isinstance(value, (str, bytes)) or not isinstance(value, list):
+        raise TypeError(f"{context} must be a list of two numbers")
+    if len(value) != 2:
+        raise ValueError(f"{context} must contain exactly two values")
+    if isinstance(value[0], bool) or not isinstance(value[0], (int, float)):
+        raise TypeError(f"{context}[0] must be numeric")
+    if isinstance(value[1], bool) or not isinstance(value[1], (int, float)):
+        raise TypeError(f"{context}[1] must be numeric")
+    return (float(value[0]), float(value[1]))
+
+
+def _point3_from_object(value: object, *, context: str) -> Point3:
+    if isinstance(value, (str, bytes)) or not isinstance(value, list):
+        raise TypeError(f"{context} must be a list of three numbers")
+    if len(value) != 3:
+        raise ValueError(f"{context} must contain exactly three values")
+    if isinstance(value[0], bool) or not isinstance(value[0], (int, float)):
+        raise TypeError(f"{context}[0] must be numeric")
+    if isinstance(value[1], bool) or not isinstance(value[1], (int, float)):
+        raise TypeError(f"{context}[1] must be numeric")
+    if isinstance(value[2], bool) or not isinstance(value[2], (int, float)):
+        raise TypeError(f"{context}[2] must be numeric")
+    return (float(value[0]), float(value[1]), float(value[2]))
+
+
+def _required_points2(params: Mapping[str, object], *, key: str, context: str) -> tuple[Point2, ...]:
     if key not in params:
         raise ValueError(f"{context} is missing required key {key!r}")
     value = params[key]
     if isinstance(value, (str, bytes)) or not isinstance(value, list):
-        raise TypeError(f"{context}.{key} must be a list of three numbers")
-    if len(value) != 3:
-        raise ValueError(f"{context}.{key} must contain exactly three values")
-    point: list[float] = []
-    for index, component in enumerate(value):
-        if isinstance(component, bool) or not isinstance(component, (int, float)):
-            raise TypeError(f"{context}.{key}[{index}] must be numeric")
-        point.append(float(component))
-    return point
+        raise TypeError(f"{context}.{key} must be a list of two-dimensional points")
+    return tuple(_point2_from_object(point, context=f"{context}.{key}[{index}]") for index, point in enumerate(value))
+
+
+def _required_points3(params: Mapping[str, object], *, key: str, context: str) -> tuple[Point3, ...]:
+    if key not in params:
+        raise ValueError(f"{context} is missing required key {key!r}")
+    value = params[key]
+    if isinstance(value, (str, bytes)) or not isinstance(value, list):
+        raise TypeError(f"{context}.{key} must be a list of three-dimensional points")
+    return tuple(_point3_from_object(point, context=f"{context}.{key}[{index}]") for index, point in enumerate(value))
+
+
+def _required_float_pair(params: Mapping[str, object], *, key: str, context: str) -> tuple[float, float]:
+    if key not in params:
+        raise ValueError(f"{context} is missing required key {key!r}")
+    value = params[key]
+    if isinstance(value, (str, bytes)) or not isinstance(value, list):
+        raise TypeError(f"{context}.{key} must be a list of two numbers")
+    if len(value) != 2:
+        raise ValueError(f"{context}.{key} must contain exactly two values")
+    if isinstance(value[0], bool) or not isinstance(value[0], (int, float)):
+        raise TypeError(f"{context}.{key}[0] must be numeric")
+    if isinstance(value[1], bool) or not isinstance(value[1], (int, float)):
+        raise TypeError(f"{context}.{key}[1] must be numeric")
+    return (float(value[0]), float(value[1]))
+
+
+def _placement_for_coil(*, spec: SswFixedSpec, params: SswCoilParameters) -> cq.Location:
+    assembly = ssw_step_module._coilmaker_assembly(params, spec.fixed)
+    return ssw_step_module._placement_for_role(spec, params, assembly)
+
+
+def _world_point_row_from_local(*, local_xyz: Point3, placement: cq.Location) -> list[float]:
+    probe_half_mm = 0.0005
+    bbox = ssw_step_module._located_bbox(
+        cq.Workplane("XY").box(probe_half_mm * 2.0, probe_half_mm * 2.0, probe_half_mm * 2.0).translate(local_xyz),
+        placement,
+    )
+    return [
+        (bbox.xmin + bbox.xmax) / 2.0,
+        (bbox.ymin + bbox.ymax) / 2.0,
+        (bbox.zmin + bbox.zmax) / 2.0,
+    ]
+
+
+def _world_edge_vertices(*, local_edge: tuple[Point3, Point3], placement: cq.Location) -> PortEdgeVertices:
+    return [
+        _world_point_row_from_local(local_xyz=local_edge[0], placement=placement),
+        _world_point_row_from_local(local_xyz=local_edge[1], placement=placement),
+    ]
+
+
+def _piece_target_from_uv_target(target: str, *, context: str) -> str:
+    suffix = ".uv"
+    if not target.endswith(suffix):
+        raise ValueError(f"{context}.target must end with {suffix!r}")
+    return target[: -len(suffix)]
+
+
+def _raw_action_str(action: Mapping[str, object], *, key: str, context: str) -> str:
+    value = action[key]
+    if not isinstance(value, str) or value == "":
+        raise TypeError(f"{context}.{key} must be a non-empty str")
+    return value
+
+
+def _semantic_ssw_gap_edge_vertices(
+    *,
+    actions: tuple[Mapping[str, object], ...],
+    role: str,
+    placement: cq.Location,
+) -> list[PortEdgeVertices]:
+    gap_context = f"{role}.frame_0.ssw_port_gap"
+    gap_params = _action_params_from_actions(
+        actions=actions,
+        target=gap_context,
+        expected_op="PORT_LANDING",
+    )
+    side = _required_str(gap_params, key="side", context=gap_context)
+    face = _required_str(gap_params, key="face", context=gap_context)
+    u_start_mm, u_end_mm = _required_float_pair(gap_params, key="u_bounds_mm", context=gap_context)
+
+    mapped_points_by_piece: dict[str, tuple[Point3, ...]] = {}
+    piece_prefix = f"{role}.frame_0.ssw_piece_"
+    for index, action in enumerate(actions):
+        action_context = f"coil making token actions[{index}]"
+        op = _raw_action_str(action, key="op", context=action_context)
+        target = _raw_action_str(action, key="target", context=action_context)
+        if op == "EXTRUDE_POLYGON" and target.startswith(piece_prefix):
+            params = _json_action_params_by_key(action)
+            mapped_points_by_piece[target] = _required_points3(params, key="points_mm", context=target)
+
+    start_edges: list[tuple[Point3, Point3]] = []
+    end_edges: list[tuple[Point3, Point3]] = []
+    for index, action in enumerate(actions):
+        action_context = f"coil making token actions[{index}]"
+        op = _raw_action_str(action, key="op", context=action_context)
+        target = _raw_action_str(action, key="target", context=action_context)
+        if op != "MAKE_UV_POLYGON" or not target.startswith(piece_prefix):
+            continue
+        params = _json_action_params_by_key(action)
+        if _required_str(params, key="side", context=target) != side:
+            continue
+        if _required_str(params, key="face", context=target) != face:
+            continue
+        piece_target = _piece_target_from_uv_target(target, context=target)
+        if piece_target not in mapped_points_by_piece:
+            raise ValueError(f"{target} is missing paired EXTRUDE_POLYGON token {piece_target!r}")
+        uv_points = _required_points2(params, key="polygon_uv_mm", context=target)
+        mapped_points = mapped_points_by_piece[piece_target]
+        if len(uv_points) != len(mapped_points):
+            raise ValueError(f"{target} UV/mapped point counts differ")
+        for point_index, first_uv in enumerate(uv_points):
+            next_index = (point_index + 1) % len(uv_points)
+            second_uv = uv_points[next_index]
+            local_edge = (mapped_points[point_index], mapped_points[next_index])
+            if (
+                abs(first_uv[0] - u_start_mm) <= TOKEN_EDGE_TOLERANCE_MM
+                and abs(second_uv[0] - u_start_mm) <= TOKEN_EDGE_TOLERANCE_MM
+            ):
+                start_edges.append(local_edge)
+            if (
+                abs(first_uv[0] - u_end_mm) <= TOKEN_EDGE_TOLERANCE_MM
+                and abs(second_uv[0] - u_end_mm) <= TOKEN_EDGE_TOLERANCE_MM
+            ):
+                end_edges.append(local_edge)
+    if len(start_edges) != 1:
+        raise ValueError(f"{gap_context} must resolve exactly one start boundary edge (count={len(start_edges)})")
+    if len(end_edges) != 1:
+        raise ValueError(f"{gap_context} must resolve exactly one end boundary edge (count={len(end_edges)})")
+    return [
+        _world_edge_vertices(local_edge=end_edges[0], placement=placement),
+        _world_edge_vertices(local_edge=start_edges[0], placement=placement),
+    ]
+
+
+def _rx_normal_spiral_edge_vertices(
+    *,
+    actions: tuple[Mapping[str, object], ...],
+    placement: cq.Location,
+) -> list[PortEdgeVertices]:
+    clearance_context = "rx_ssw_coil.frame_0.port.clearance"
+    clearance_params = _action_params_from_actions(
+        actions=actions,
+        target=clearance_context,
+        expected_op="EXTRUDE_POLYGON",
+    )
+    role = _required_str(clearance_params, key="role", context=clearance_context)
+    if role != "clearance":
+        raise ValueError(f"{clearance_context}.role must be 'clearance' (actual={role!r})")
+    points = _required_points3(clearance_params, key="points_mm", context=clearance_context)
+    if len(points) != 4:
+        raise ValueError(f"{clearance_context}.points_mm must contain exactly four rectangle vertices")
+    return [
+        _world_edge_vertices(local_edge=(points[0], points[3]), placement=placement),
+        _world_edge_vertices(local_edge=(points[1], points[2]), placement=placement),
+    ]
 
 
 def _canonical_from_bounds(*, min_xyz: tuple[float, float, float], max_xyz: tuple[float, float, float]) -> CanonicalCoordinates:
@@ -181,48 +387,46 @@ def _copper_body_for_role(*, ssw_ledger: SswStepLedger, role: str) -> str:
 def _tx_port_edge_entry(
     *,
     ssw_ledger: SswStepLedger,
+    spec: SswFixedSpec,
+    actions: tuple[Mapping[str, object], ...],
     placement_params: Mapping[str, object],
-    minimum_edge_length_mm: float,
 ) -> SswAedtPortEdgeLedgerEntry:
     context = "scene.tx_ssw_coil.placement"
     port_face = _required_str(placement_params, key="port_face", context=context)
     if port_face != "lower_z":
         raise ValueError(f"{context}.port_face must be 'lower_z' for TX SSW edge ports (actual={port_face!r})")
+    placement = _placement_for_coil(spec=spec, params=spec.tx)
     return {
         "role": "tx",
         "copper_body_name": _copper_body_for_role(ssw_ledger=ssw_ledger, role="tx_ssw_coil"),
-        "selection": "nearest_long_face_edges",
-        "face_axis": "z",
-        "face_side": "min",
-        "anchor_xyz": _required_point(placement_params, key="port_anchor_world_xyz_mm", context=context),
-        "minimum_edge_length_mm": minimum_edge_length_mm,
+        "selection": "semantic_edge_vertices",
+        "edge_vertices_xyz": _semantic_ssw_gap_edge_vertices(
+            actions=actions,
+            role="tx_ssw_coil",
+            placement=placement,
+        ),
     }
 
 
 def _rx_port_edge_entry(
     *,
     ssw_ledger: SswStepLedger,
+    spec: SswFixedSpec,
+    actions: tuple[Mapping[str, object], ...],
     placement_params: Mapping[str, object],
-    minimum_edge_length_mm: float,
-    pair_edge_length_mm: float,
-    pair_spacing_mm: float,
 ) -> SswAedtPortEdgeLedgerEntry:
     context = "scene.rx_ssw_coil.placement"
     coil_mode = _required_str(placement_params, key="coil_mode", context=context)
     port_face = _required_str(placement_params, key="port_face", context=context)
+    placement = _placement_for_coil(spec=spec, params=spec.rx)
     if coil_mode == "normal_spiral":
         if port_face != "normal_spiral_landing":
             raise ValueError(f"{context}.port_face must be normal_spiral_landing (actual={port_face!r})")
         return {
             "role": "rx",
             "copper_body_name": _copper_body_for_role(ssw_ledger=ssw_ledger, role="rx_ssw_coil"),
-            "selection": "axis_spaced_face_edges",
-            "face_axis": "x",
-            "face_side": "min",
-            "edge_axis": "z",
-            "spacing_axis": "y",
-            "edge_length_mm": pair_edge_length_mm,
-            "pair_spacing_mm": pair_spacing_mm,
+            "selection": "semantic_edge_vertices",
+            "edge_vertices_xyz": _rx_normal_spiral_edge_vertices(actions=actions, placement=placement),
         }
     if coil_mode == "ssw":
         if port_face != "rx_x_min":
@@ -230,11 +434,12 @@ def _rx_port_edge_entry(
         return {
             "role": "rx",
             "copper_body_name": _copper_body_for_role(ssw_ledger=ssw_ledger, role="rx_ssw_coil"),
-            "selection": "nearest_long_face_edges",
-            "face_axis": "x",
-            "face_side": "min",
-            "anchor_xyz": _required_point(placement_params, key="port_anchor_world_xyz_mm", context=context),
-            "minimum_edge_length_mm": minimum_edge_length_mm,
+            "selection": "semantic_edge_vertices",
+            "edge_vertices_xyz": _semantic_ssw_gap_edge_vertices(
+                actions=actions,
+                role="rx_ssw_coil",
+                placement=placement,
+            ),
         }
     raise ValueError(f"{context}.coil_mode is unsupported for edge ports (actual={coil_mode!r})")
 
@@ -242,11 +447,10 @@ def _rx_port_edge_entry(
 def _port_edge_entries(
     *,
     ssw_ledger: SswStepLedger,
+    spec: SswFixedSpec,
     token_toml_path: Path,
-    minimum_edge_length_mm: float,
-    pair_edge_length_mm: float,
-    pair_spacing_mm: float,
 ) -> list[SswAedtPortEdgeLedgerEntry]:
+    actions = _token_actions(token_toml_path)
     tx_placement = _placement_params_from_token(
         token_toml_path=token_toml_path,
         target="scene.tx_ssw_coil.placement",
@@ -258,15 +462,15 @@ def _port_edge_entries(
     return [
         _tx_port_edge_entry(
             ssw_ledger=ssw_ledger,
+            spec=spec,
+            actions=actions,
             placement_params=tx_placement,
-            minimum_edge_length_mm=minimum_edge_length_mm,
         ),
         _rx_port_edge_entry(
             ssw_ledger=ssw_ledger,
+            spec=spec,
+            actions=actions,
             placement_params=rx_placement,
-            minimum_edge_length_mm=minimum_edge_length_mm,
-            pair_edge_length_mm=pair_edge_length_mm,
-            pair_spacing_mm=pair_spacing_mm,
         ),
     ]
 
@@ -282,21 +486,14 @@ def export_ssw_aedt_port_artifacts(
     ssw_ledger = load_ssw_step_ledger(Path(summary["step_ledger_path"]))
     token_toml_path = Path(summary["token_toml_path"])
     aedt_step_path = Path(summary["step_path"])
-    rx_normal_spiral_edge_length_mm = (
-        normal_spiral_trace_width_mm(params=spec.rx, fixed=spec.fixed)
-        if not spec.rx.is_ssw_enabled
-        else spec.fixed.port_landing_pad_mm
-    )
     ledger = _build_ssw_aedt_port_ledger(
         ssw_ledger=ssw_ledger,
         ssw_ledger_path=Path(summary["step_ledger_path"]),
         aedt_step_path=aedt_step_path,
         port_edges=_port_edge_entries(
             ssw_ledger=ssw_ledger,
+            spec=spec,
             token_toml_path=token_toml_path,
-            minimum_edge_length_mm=spec.fixed.port_landing_pad_mm,
-            pair_edge_length_mm=rx_normal_spiral_edge_length_mm,
-            pair_spacing_mm=spec.fixed.port_length_mm,
         ),
     )
     write_ssw_aedt_port_ledger(ledger_path=output_dir / AEDT_PORT_LEDGER_NAME, ledger=ledger)

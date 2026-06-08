@@ -405,10 +405,10 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert tx_region_max_bounds[5] == pytest.approx(tx_bounds[5])
     assert rx_region_max_bounds[0] == pytest.approx(tv_bounds[1] - 5.0)
     assert rx_region_max_bounds[1] == pytest.approx(tv_bounds[1])
-    assert rx_region_max_bounds[2] == pytest.approx(tv_bounds[2])
-    assert rx_region_max_bounds[3] == pytest.approx(tv_bounds[3])
+    assert rx_region_max_bounds[3] - rx_region_max_bounds[2] == pytest.approx(480.14)
+    assert (rx_region_max_bounds[2] + rx_region_max_bounds[3]) / 2.0 == pytest.approx(0.0)
+    assert rx_region_max_bounds[5] - rx_region_max_bounds[4] == pytest.approx(240.14)
     assert rx_region_max_bounds[4] == pytest.approx(tv_bounds[4])
-    assert rx_region_max_bounds[5] == pytest.approx(tv_bounds[5])
     assert tx_ferrite_bounds[0] == pytest.approx(tx_assembly_bounds[0])
     assert tx_ferrite_bounds[1] == pytest.approx(tx_assembly_bounds[1])
     assert tx_ferrite_bounds[2] == pytest.approx(tx_assembly_bounds[2])
@@ -538,17 +538,19 @@ def test_export_ssw_aedt_port_artifacts_writes_direct_edge_port_ledger(tmp_path:
     tx_entry = ledger["port_edges"][0]
     rx_entry = ledger["port_edges"][1]
     assert tx_entry["copper_body_name"] == "tx_ssw_coil_ssw_copper"
-    assert tx_entry["selection"] == "nearest_long_face_edges"
-    assert tx_entry["face_axis"] == "z"
-    assert tx_entry["face_side"] == "min"
+    assert tx_entry["selection"] == "semantic_edge_vertices"
+    assert len(tx_entry["edge_vertices_xyz"]) == 2
     assert rx_entry["copper_body_name"] == "rx_ssw_coil_coil_copper"
-    assert rx_entry["selection"] == "axis_spaced_face_edges"
-    assert rx_entry["face_axis"] == "x"
-    assert rx_entry["face_side"] == "min"
-    assert rx_entry["edge_axis"] == "z"
-    assert rx_entry["edge_length_mm"] == pytest.approx(
-        _rx_normal_trace_width_mm(load_ssw_fixed_spec(FIXED_TOML))
-    )
+    assert rx_entry["selection"] == "semantic_edge_vertices"
+    assert len(rx_entry["edge_vertices_xyz"]) == 2
+    expected_rx_edge_length_mm = _rx_normal_trace_width_mm(load_ssw_fixed_spec(FIXED_TOML))
+    for edge in rx_entry["edge_vertices_xyz"]:
+        assert len(edge) == 2
+        assert len(edge[0]) == 3
+        assert len(edge[1]) == 3
+        assert sqrt(sum((edge[0][axis] - edge[1][axis]) ** 2 for axis in range(3))) == pytest.approx(
+            expected_rx_edge_length_mm
+        )
 
 
 def test_export_ssw_step_artifacts_supports_explicit_rx_spiral_mode(tmp_path: Path) -> None:

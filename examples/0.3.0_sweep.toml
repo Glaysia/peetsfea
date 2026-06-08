@@ -200,7 +200,7 @@ range = [false, 0.025, 1.0, 500]
 description = "RX SSW coil height ratio against fixed_dimensions.height_max_mm"
 
 [modeled_objects.is_ssw_enabled]
-range = [true, 0, 1, 1]
+range = [true, 0, 1, 2]
 description = "RX SSW enable flag"
 
 [modeled_objects.turn_n_int]
@@ -228,7 +228,7 @@ range = [true, 0, 3, 4]
 description = "RX non-SSW quarter-turn count; fixed disabled for 0.3.0 SSW"
 
 [modeled_objects.pcb_gap_mm]
-range = [false, 1.0, 10.0, 50]
+range = [false, 1.0, 4.5, 25]
 description = "RX SSW two-PCB gap(mm)"
 
 [modeled_objects.twist_factor]

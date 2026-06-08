@@ -125,6 +125,7 @@ class _FakeDesign:
         self.import_dataset_calls: list[str] = []
         self.mesh_module = _FakeMeshModule()
         self.analysis_setup_module = _FakeAnalysisSetupModule()
+        self.report_setup_module = _FakeReportSetupModule()
 
     def ImportDataset(self, path: str) -> object:
         self.import_dataset_calls.append(path)
@@ -135,6 +136,8 @@ class _FakeDesign:
             return self.mesh_module
         if name == "AnalysisSetup":
             return self.analysis_setup_module
+        if name == "ReportSetup":
+            return self.report_setup_module
         raise ValueError(f"unsupported fake module {name!r}")
 
     def ValidateDesign(self) -> object:
@@ -165,6 +168,43 @@ class _FakeAnalysisSetupModule:
     def InsertFrequencySweep(self, setup_name: str, props: list[object]) -> object:
         self.insert_sweep_calls.append((setup_name, list(props)))
         return self.insert_sweep_result
+
+
+class _FakeReportSetupModule:
+    def __init__(self) -> None:
+        self.create_report_calls: list[dict[str, object]] = []
+        self.create_report_result: object = True
+        self.report_names_result: object = True
+
+    def CreateReport(
+        self,
+        plot_name: str,
+        report_category: str,
+        plot_type: str,
+        setup_sweep_name: str,
+        context: list[object],
+        variations: list[object],
+        components: list[object],
+        options: list[object],
+    ) -> object:
+        self.create_report_calls.append(
+            {
+                "plot_name": plot_name,
+                "report_category": report_category,
+                "plot_type": plot_type,
+                "setup_sweep_name": setup_sweep_name,
+                "context": list(context),
+                "variations": list(variations),
+                "components": list(components),
+                "options": list(options),
+            }
+        )
+        return self.create_report_result
+
+    def GetAllReportNames(self) -> object:
+        if self.report_names_result is False:
+            return ["Output Variables Table1"]
+        return [cast(str, call["plot_name"]) for call in self.create_report_calls]
 
 
 class _FakeModelObject:
@@ -299,6 +339,8 @@ class _FakeHfss:
         self.excitation_names: list[str] = []
         self.saved_paths: list[str] = []
         self.assign_material_calls: list[tuple[str, str]] = []
+        self.create_output_variables: list[tuple[str, str, str]] = []
+        self.create_output_variable_result: object = True
 
     def assign_material(self, assignment: str | list[str], material: str) -> object:
         if not isinstance(assignment, str):
@@ -308,6 +350,22 @@ class _FakeHfss:
         assert isinstance(raw_object, _FakeModelObject)
         raw_object.material_name = material
         return True
+
+    def create_output_variable(self, variable: str, expression: str, solution: str) -> object:
+        self.create_output_variables.append((variable, expression, solution))
+        return self.create_output_variable_result
+
+    def get_traces_for_plot(
+        self,
+        get_self_terms: bool,
+        get_mutual_terms: bool,
+        first_element_filter: str,
+        second_element_filter: str,
+        category: str,
+        setup_name: object,
+    ) -> list[str]:
+        del get_self_terms, get_mutual_terms, first_element_filter, second_element_filter, category, setup_name
+        return ["St(1_T1,1_T1)", "St(1_T1,2_T1)", "St(2_T1,2_T1)"]
 
     def save_project(self, path: str) -> object:
         self.saved_paths.append(path)
@@ -356,22 +414,20 @@ def _ledger(tmp_path: Path) -> SswAedtPortStepLedger:
             {
                 "role": "tx",
                 "copper_body_name": "tx_ssw_coil_ssw_copper",
-                "selection": "nearest_long_face_edges",
-                "face_axis": "z",
-                "face_side": "min",
-                "anchor_xyz": [5.0, 0.0, 0.0],
-                "minimum_edge_length_mm": 5.5,
+                "selection": "semantic_edge_vertices",
+                "edge_vertices_xyz": [
+                    [[0.0, -1.0, 0.0], [10.0, -1.0, 0.0]],
+                    [[0.0, 1.0, 0.0], [10.0, 1.0, 0.0]],
+                ],
             },
             {
                 "role": "rx",
                 "copper_body_name": "rx_ssw_coil_coil_copper",
-                "selection": "axis_spaced_face_edges",
-                "face_axis": "x",
-                "face_side": "min",
-                "edge_axis": "z",
-                "spacing_axis": "y",
-                "edge_length_mm": 5.5,
-                "pair_spacing_mm": 2.0,
+                "selection": "semantic_edge_vertices",
+                "edge_vertices_xyz": [
+                    [[9.0, 5.0, 0.0], [9.0, 5.0, 5.5]],
+                    [[9.0, 7.0, 0.0], [9.0, 7.0, 5.5]],
+                ],
             },
         ],
     }
@@ -483,6 +539,70 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert result["analysis_setup"]["frequency"] == "6.78MHz"
     assert result["frequency_sweep"]["sweep_name"] == "Sweep"
     assert result["frequency_sweep"]["range_count"] == 81
+    assert [name for name, _expression, _solution in hfss.create_output_variables] == [
+        "Ltx_uH",
+        "Lrx_uH",
+        "M_uH",
+        "k_ratio",
+        "Qtx_ratio",
+        "Qrx_ratio",
+        "FOM_ratio",
+        "Rtx_ac_ohm",
+        "Rrx_ac_ohm",
+        "Xtx_ohm",
+        "Xrx_ohm",
+        "M_over_Ltx_ratio",
+        "M_over_Lrx_ratio",
+        "Gtx_S",
+        "Btx_S",
+        "Grx_S",
+        "Brx_S",
+        "S11_mag_ratio",
+        "S21_mag_ratio",
+        "S21_phase_deg",
+        "S22_mag_ratio",
+        "eta_s21_power_ratio",
+        "eta_tx_accept_ratio",
+        "eta_rx_accept_ratio",
+        "eta_match_product_ratio",
+        "eta_s21_from_tx_accept_ratio",
+        "eta_s21_from_rx_accept_ratio",
+        "eta_s21_two_sided_norm_ratio",
+        "eta_fom_max_ratio",
+    ]
+    assert hfss.create_output_variables[0] == (
+        "Ltx_uH",
+        "im(Zt(1_T1,1_T1))/2/pi/freq*1e6",
+        "Setup1 : Sweep",
+    )
+    assert hfss.create_output_variables[18] == (
+        "S21_mag_ratio",
+        "mag(St(1_T1,2_T1))",
+        "Setup1 : Sweep",
+    )
+    assert [call["plot_name"] for call in hfss.odesign.report_setup_module.create_report_calls] == [
+        "Output Variables Table1",
+        "Table1",
+        "Table2",
+    ]
+    output_report_components = cast(list[object], hfss.odesign.report_setup_module.create_report_calls[0]["components"])
+    assert output_report_components[output_report_components.index("Y Component:=") + 1] == [
+        name for name, _expression, _solution in hfss.create_output_variables
+    ]
+    diagnostic_components = cast(list[object], hfss.odesign.report_setup_module.create_report_calls[1]["components"])
+    diagnostic_traces = cast(list[str], diagnostic_components[diagnostic_components.index("Y Component:=") + 1])
+    assert "Volume(tv)" in diagnostic_traces
+    assert "Volume(tx_mull_ferrite_sheet)" in diagnostic_traces
+    assert "Volume(tx_ssw_coil_ssw_copper)" in diagnostic_traces
+    adaptive_components = cast(list[object], hfss.odesign.report_setup_module.create_report_calls[2]["components"])
+    assert adaptive_components[adaptive_components.index("X Component:=") + 1] == "Pass"
+    adaptive_traces = cast(list[str], adaptive_components[adaptive_components.index("Y Component:=") + 1])
+    assert adaptive_traces[-2:] == ["SolvedElements", "MaxMagDeltaS"]
+    assert result["reports"]["report_names"] == ["Output Variables Table1", "Table1", "Table2"]
+    assert result["reports"]["output_solution_name"] == "Setup1 : Sweep"
+    assert result["reports"]["output_variable_names"] == [
+        name for name, _expression, _solution in hfss.create_output_variables
+    ]
     assert hfss.saved_paths == [str(tmp_path / "ssw_ports.aedt")]
     imported = json.loads((tmp_path / "ssw_imported.json").read_text(encoding="utf-8"))
     assert imported["source_port_ledger_path"] == str(ledger_path)
@@ -492,6 +612,7 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert imported["mesh"] == result["mesh"]
     assert imported["analysis_setup"] == result["analysis_setup"]
     assert imported["frequency_sweep"] == result["frequency_sweep"]
+    assert imported["reports"] == result["reports"]
     assert "port_sheet_names" not in imported
     assert "tx_aedt_port_sheet" not in imported["visual_assignments"]
 
@@ -543,6 +664,45 @@ def test_setup_ssw_aedt_ports_into_hfss_raises_on_setup_or_sweep_false(tmp_path:
     hfss.odesign.analysis_setup_module.insert_sweep_result = False
 
     with pytest.raises(RuntimeError, match="InsertFrequencySweep"):
+        setup_ssw_aedt_ports_into_hfss(
+            hfss=cast(HfssSession, hfss),
+            port_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "ssw_ports.aedt",
+            imported_ledger_path=tmp_path / "ssw_imported.json",
+        )
+
+
+def test_setup_ssw_aedt_ports_into_hfss_raises_on_report_generation_false(tmp_path: Path) -> None:
+    ledger_path = _ledger_path(tmp_path)
+    hfss = _FakeHfss(_ledger(tmp_path))
+    hfss.create_output_variable_result = False
+
+    with pytest.raises(RuntimeError, match="create_output_variable"):
+        setup_ssw_aedt_ports_into_hfss(
+            hfss=cast(HfssSession, hfss),
+            port_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "ssw_ports.aedt",
+            imported_ledger_path=tmp_path / "ssw_imported.json",
+        )
+
+    hfss = _FakeHfss(_ledger(tmp_path))
+    hfss.odesign.report_setup_module.create_report_result = False
+
+    with pytest.raises(RuntimeError, match="CreateReport"):
+        setup_ssw_aedt_ports_into_hfss(
+            hfss=cast(HfssSession, hfss),
+            port_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "ssw_ports.aedt",
+            imported_ledger_path=tmp_path / "ssw_imported.json",
+        )
+
+
+def test_setup_ssw_aedt_ports_into_hfss_raises_when_report_is_not_registered(tmp_path: Path) -> None:
+    ledger_path = _ledger_path(tmp_path)
+    hfss = _FakeHfss(_ledger(tmp_path))
+    hfss.odesign.report_setup_module.report_names_result = False
+
+    with pytest.raises(ValueError, match="SSW report creation did not register required reports"):
         setup_ssw_aedt_ports_into_hfss(
             hfss=cast(HfssSession, hfss),
             port_ledger_path=ledger_path,
@@ -610,3 +770,4 @@ def test_setup_ssw_aedt_ports_runs_real_headless_ansys() -> None:
     assert imported["mesh"]["max_length"] == "1mm"
     assert imported["analysis_setup"]["setup_name"] == "Setup1"
     assert imported["frequency_sweep"]["sweep_name"] == "Sweep"
+    assert imported["reports"]["report_names"] == ["Output Variables Table1", "Table1", "Table2"]

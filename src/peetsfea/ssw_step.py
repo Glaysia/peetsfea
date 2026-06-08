@@ -783,10 +783,10 @@ def _resolved_rx_region_max_box(spec: SswFixedSpec, rx_region_max: NonModelBox) 
         material=rx_region_max.material,
         origin_xyz=(
             tv.origin_xyz[0] + tv.size_xyz[0] - rx_region_max.size_xyz[0],
-            tv.origin_xyz[1],
+            rx_region_max.origin_xyz[1],
             tv.origin_xyz[2],
         ),
-        size_xyz=(rx_region_max.size_xyz[0], tv.size_xyz[1], tv.size_xyz[2]),
+        size_xyz=rx_region_max.size_xyz,
         transparency=rx_region_max.transparency,
     )
 
@@ -1177,12 +1177,15 @@ def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -
             f"(rx_region_max_xmax={rx_region_max_bounds.xmax}, tv_xmax={tv_bounds.xmax})"
         )
     if (
-        abs(rx_region_max_bounds.ymin - tv_bounds.ymin) > tolerance
-        or abs(rx_region_max_bounds.ymax - tv_bounds.ymax) > tolerance
-        or abs(rx_region_max_bounds.zmin - tv_bounds.zmin) > tolerance
-        or abs(rx_region_max_bounds.zmax - tv_bounds.zmax) > tolerance
+        rx_region_max_bounds.ymin < tv_bounds.ymin - tolerance
+        or rx_region_max_bounds.ymax > tv_bounds.ymax + tolerance
     ):
-        raise ValueError("rx_region_max YZ bounds must be derived from TV bounds")
+        raise ValueError("rx_region_max Y bounds must stay inside TV bounds")
+    if (
+        rx_region_max_bounds.zmin < tv_bounds.zmin - copper_tolerance
+        or rx_region_max_bounds.zmax > tv_bounds.zmax + tolerance
+    ):
+        raise ValueError("rx_region_max Z bounds must stay inside TV bounds with copper-thickness bottom tolerance")
     _assert_inside_bounds(inner=rx_bounds, outer=rx_region_max_bounds, context="RX SSW")
     if abs(rx_bounds.xmax - rx_region_max_bounds.xmax) > tolerance:
         raise ValueError(
