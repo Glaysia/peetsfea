@@ -123,10 +123,48 @@ class _FakeProject:
 class _FakeDesign:
     def __init__(self) -> None:
         self.import_dataset_calls: list[str] = []
+        self.mesh_module = _FakeMeshModule()
+        self.analysis_setup_module = _FakeAnalysisSetupModule()
 
     def ImportDataset(self, path: str) -> object:
         self.import_dataset_calls.append(path)
         return True
+
+    def GetModule(self, name: str) -> object:
+        if name == "MeshSetup":
+            return self.mesh_module
+        if name == "AnalysisSetup":
+            return self.analysis_setup_module
+        raise ValueError(f"unsupported fake module {name!r}")
+
+    def ValidateDesign(self) -> object:
+        return True
+
+
+class _FakeMeshModule:
+    def __init__(self) -> None:
+        self.assign_length_calls: list[list[object]] = []
+        self.assign_result: object = True
+
+    def AssignLengthOp(self, props: list[object]) -> object:
+        self.assign_length_calls.append(list(props))
+        return self.assign_result
+
+
+class _FakeAnalysisSetupModule:
+    def __init__(self) -> None:
+        self.insert_setup_calls: list[tuple[str, list[object]]] = []
+        self.insert_sweep_calls: list[tuple[str, list[object]]] = []
+        self.insert_setup_result: object = True
+        self.insert_sweep_result: object = True
+
+    def InsertSetup(self, setup_type: str, props: list[object]) -> object:
+        self.insert_setup_calls.append((setup_type, list(props)))
+        return self.insert_setup_result
+
+    def InsertFrequencySweep(self, setup_name: str, props: list[object]) -> object:
+        self.insert_sweep_calls.append((setup_name, list(props)))
+        return self.insert_sweep_result
 
 
 class _FakeModelObject:
@@ -381,6 +419,30 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert hfss.assign_material_calls == [
         (body_name, expected_material_assignments[body_name]) for body_name in ledger["body_names"]
     ]
+    mesh_payload = hfss.odesign.mesh_module.assign_length_calls[0]
+    assert mesh_payload[mesh_payload.index("Objects:=") + 1] == [
+        "rx_ssw_coil_coil_copper",
+        "tx_ssw_coil_ssw_copper",
+    ]
+    assert mesh_payload[mesh_payload.index("MaxLength:=") + 1] == "1mm"
+    assert mesh_payload[mesh_payload.index("NumMaxElem:=") + 1] == "50000"
+    assert hfss.odesign.analysis_setup_module.insert_setup_calls[0][0] == "HfssDriven"
+    setup_payload = hfss.odesign.analysis_setup_module.insert_setup_calls[0][1]
+    assert setup_payload[0] == "NAME:Setup1"
+    assert setup_payload[setup_payload.index("Frequency:=") + 1] == "6.78MHz"
+    assert setup_payload[setup_payload.index("MaxDeltaS:=") + 1] == 0.0005
+    assert setup_payload[setup_payload.index("MaximumPasses:=") + 1] == 35
+    assert setup_payload[setup_payload.index("MinimumPasses:=") + 1] == 17
+    assert setup_payload[setup_payload.index("MinimumConvergedPasses:=") + 1] == 7
+    assert setup_payload[setup_payload.index("BasisOrder:=") + 1] == 0
+    assert setup_payload[setup_payload.index("DrivenSolverType:=") + 1] == "Direct Solver"
+    assert hfss.odesign.analysis_setup_module.insert_sweep_calls[0][0] == "Setup1"
+    sweep_payload = hfss.odesign.analysis_setup_module.insert_sweep_calls[0][1]
+    assert sweep_payload[0] == "NAME:Sweep"
+    assert sweep_payload[sweep_payload.index("RangeStart:=") + 1] == "0.1MHz"
+    assert sweep_payload[sweep_payload.index("RangeEnd:=") + 1] == "100MHz"
+    assert sweep_payload[sweep_payload.index("RangeCount:=") + 1] == 81
+    assert sweep_payload[sweep_payload.index("Type:=") + 1] == "Interpolating"
     assert hfss.oboundary.assign_lumped_port_calls == [
         [
             "NAME:1",
@@ -414,14 +476,79 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
         ],
     ]
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
+    assert result["mesh"]["objects"] == ["rx_ssw_coil_coil_copper", "tx_ssw_coil_ssw_copper"]
+    assert result["mesh"]["max_length"] == "1mm"
+    assert result["mesh"]["num_max_elem"] == "50000"
+    assert result["analysis_setup"]["setup_name"] == "Setup1"
+    assert result["analysis_setup"]["frequency"] == "6.78MHz"
+    assert result["frequency_sweep"]["sweep_name"] == "Sweep"
+    assert result["frequency_sweep"]["range_count"] == 81
     assert hfss.saved_paths == [str(tmp_path / "ssw_ports.aedt")]
     imported = json.loads((tmp_path / "ssw_imported.json").read_text(encoding="utf-8"))
     assert imported["source_port_ledger_path"] == str(ledger_path)
     assert imported["copper_body_names"] == ledger["copper_body_names"]
     assert imported["ferrite_body_names"] == ledger["ferrite_body_names"]
     assert imported["material_assignments"] == expected_material_assignments
+    assert imported["mesh"] == result["mesh"]
+    assert imported["analysis_setup"] == result["analysis_setup"]
+    assert imported["frequency_sweep"] == result["frequency_sweep"]
     assert "port_sheet_names" not in imported
     assert "tx_aedt_port_sheet" not in imported["visual_assignments"]
+
+
+def test_setup_ssw_aedt_ports_into_hfss_raises_on_missing_recorded_mesh_target(tmp_path: Path) -> None:
+    ledger = _ledger(tmp_path)
+    ledger["copper_body_names"] = ["tx_ssw_coil_ssw_copper"]
+    ledger_path = tmp_path / "ssw_aedt_port_ledger.json"
+    write_ssw_aedt_port_ledger(ledger_path=ledger_path, ledger=ledger)
+    Path(ledger["scene_step_path"]).write_text("placeholder", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="SSW mesh requires exactly one recorded copper target"):
+        setup_ssw_aedt_ports_into_hfss(
+            hfss=cast(HfssSession, _FakeHfss(ledger)),
+            port_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "ssw_ports.aedt",
+            imported_ledger_path=tmp_path / "ssw_imported.json",
+        )
+
+
+def test_setup_ssw_aedt_ports_into_hfss_raises_on_mesh_assignment_false(tmp_path: Path) -> None:
+    ledger_path = _ledger_path(tmp_path)
+    hfss = _FakeHfss(_ledger(tmp_path))
+    hfss.odesign.mesh_module.assign_result = False
+
+    with pytest.raises(RuntimeError, match="AssignLengthOp"):
+        setup_ssw_aedt_ports_into_hfss(
+            hfss=cast(HfssSession, hfss),
+            port_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "ssw_ports.aedt",
+            imported_ledger_path=tmp_path / "ssw_imported.json",
+        )
+
+
+def test_setup_ssw_aedt_ports_into_hfss_raises_on_setup_or_sweep_false(tmp_path: Path) -> None:
+    ledger_path = _ledger_path(tmp_path)
+    hfss = _FakeHfss(_ledger(tmp_path))
+    hfss.odesign.analysis_setup_module.insert_setup_result = False
+
+    with pytest.raises(RuntimeError, match="InsertSetup"):
+        setup_ssw_aedt_ports_into_hfss(
+            hfss=cast(HfssSession, hfss),
+            port_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "ssw_ports.aedt",
+            imported_ledger_path=tmp_path / "ssw_imported.json",
+        )
+
+    hfss = _FakeHfss(_ledger(tmp_path))
+    hfss.odesign.analysis_setup_module.insert_sweep_result = False
+
+    with pytest.raises(RuntimeError, match="InsertFrequencySweep"):
+        setup_ssw_aedt_ports_into_hfss(
+            hfss=cast(HfssSession, hfss),
+            port_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "ssw_ports.aedt",
+            imported_ledger_path=tmp_path / "ssw_imported.json",
+        )
 
 
 def test_setup_ssw_aedt_ports_into_hfss_raises_on_port_assignment_false(tmp_path: Path) -> None:
@@ -479,3 +606,7 @@ def test_setup_ssw_aedt_ports_runs_real_headless_ansys() -> None:
     assert "port_sheet_names" not in imported
     assert "tx_ssw_coil_ssw_copper" in imported["copper_body_names"]
     assert "rx_ssw_coil_coil_copper" in imported["copper_body_names"]
+    assert imported["mesh"]["objects"] == ["rx_ssw_coil_coil_copper", "tx_ssw_coil_ssw_copper"]
+    assert imported["mesh"]["max_length"] == "1mm"
+    assert imported["analysis_setup"]["setup_name"] == "Setup1"
+    assert imported["frequency_sweep"]["sweep_name"] == "Sweep"

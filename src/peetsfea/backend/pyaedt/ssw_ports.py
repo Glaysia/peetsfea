@@ -7,7 +7,14 @@ from typing import Callable, Literal, TypeAlias, TypedDict, cast
 
 from peetsfea.aedt import Hfss
 from peetsfea.aedt.failfast import raise_on_false
-from peetsfea.aedt.protocols import HfssSession, MaterialsSession, ModelerSession
+from peetsfea.aedt.protocols import (
+    AnalysisSetupModuleSession,
+    DesignSession,
+    HfssSession,
+    MaterialsSession,
+    MeshModuleSession,
+    ModelerSession,
+)
 from peetsfea.aedt.proxies import assign_lumped_port, set_object_color, set_object_transparency
 
 DEFAULT_LEDGER_PATH = Path(__file__).resolve().parents[4] / "run" / "ssw_0_3_0_fixed" / "ssw_aedt_port_ledger.json"
@@ -76,6 +83,20 @@ MU_TAND_M_DATASET_POINTS = (
     (0.7, 2.0),
     (1.0, 1.0),
 )
+MESH_MODULE_NAME = "MeshSetup"
+ANALYSIS_MODULE_NAME = "AnalysisSetup"
+MESH_OPERATION_NAME = "Length1"
+MESH_RX_COPPER_NAME = "rx_ssw_coil_coil_copper"
+MESH_TX_COPPER_NAME = "tx_ssw_coil_ssw_copper"
+MESH_OBJECT_NAMES = [MESH_RX_COPPER_NAME, MESH_TX_COPPER_NAME]
+MESH_MAX_LENGTH = "1mm"
+MESH_MAX_ELEMENTS = "50000"
+SETUP_NAME = "Setup1"
+SWEEP_NAME = "Sweep"
+SETUP_FREQUENCY = "6.78MHz"
+SWEEP_RANGE_START = "0.1MHz"
+SWEEP_RANGE_END = "100MHz"
+SWEEP_RANGE_COUNT = 81
 
 Point3 = tuple[float, float, float]
 HfssFactory = Callable[[str], HfssSession]
@@ -144,7 +165,48 @@ class VisualAssignment(TypedDict):
     transparency: float
 
 
-class SswAedtImportedLedger(TypedDict):
+class SswAedtMeshSummary(TypedDict):
+    module_name: str
+    operation: str
+    operation_name: str
+    objects: list[str]
+    refine_inside: bool
+    enabled: bool
+    restrict_elem: bool
+    num_max_elem: str
+    restrict_length: bool
+    max_length: str
+
+
+class SswAedtAnalysisSetupSummary(TypedDict):
+    module_name: str
+    operation: str
+    setup_type: str
+    setup_name: str
+    frequency: str
+    max_delta_s: float
+    maximum_passes: int
+    minimum_passes: int
+    minimum_converged_passes: int
+    percent_refinement: int
+    basis_order: int
+    port_accuracy: int
+    driven_solver_type: str
+
+
+class SswAedtFrequencySweepSummary(TypedDict):
+    module_name: str
+    operation: str
+    setup_name: str
+    sweep_name: str
+    range_type: str
+    range_start: str
+    range_end: str
+    range_count: int
+    sweep_type: str
+
+
+class SswAedtImportedLedgerBase(TypedDict):
     source_port_ledger_path: str
     source_step_ledger_path: str
     scene_step_path: str
@@ -155,6 +217,12 @@ class SswAedtImportedLedger(TypedDict):
     visual_assignments: dict[str, VisualAssignment]
     non_model_body_names: list[str]
     ferrite_body_names: list[str]
+    mesh: SswAedtMeshSummary
+
+
+class SswAedtImportedLedger(SswAedtImportedLedgerBase):
+    analysis_setup: SswAedtAnalysisSetupSummary
+    frequency_sweep: SswAedtFrequencySweepSummary
 
 
 class SswAedtPorts(TypedDict):
@@ -170,6 +238,9 @@ class SswAedtPortSetupResult(TypedDict):
     imported_ledger_path: str
     ports: SswAedtPorts
     imported_object_names: list[str]
+    mesh: SswAedtMeshSummary
+    analysis_setup: SswAedtAnalysisSetupSummary
+    frequency_sweep: SswAedtFrequencySweepSummary
 
 
 def create_headless_hfss(design_name: str) -> HfssSession:
@@ -597,13 +668,273 @@ def _assign_body_materials(
     return material_assignments
 
 
+def _design(hfss: HfssSession) -> DesignSession:
+    raw_design = hfss.odesign
+    assert isinstance(raw_design, DesignSession)
+    return raw_design
+
+
+def _mesh_setup_module(hfss: HfssSession) -> MeshModuleSession:
+    raw_module = raise_on_false(
+        _design(hfss).GetModule(MESH_MODULE_NAME),
+        operation="GetModule",
+        context={"module_name": MESH_MODULE_NAME},
+    )
+    assert hasattr(raw_module, "AssignLengthOp"), "MeshSetup module must expose AssignLengthOp"
+    return cast(MeshModuleSession, raw_module)
+
+
+def _analysis_setup_module(hfss: HfssSession) -> AnalysisSetupModuleSession:
+    raw_module = raise_on_false(
+        _design(hfss).GetModule(ANALYSIS_MODULE_NAME),
+        operation="GetModule",
+        context={"module_name": ANALYSIS_MODULE_NAME},
+    )
+    assert hasattr(raw_module, "InsertSetup"), "AnalysisSetup module must expose InsertSetup"
+    assert hasattr(raw_module, "InsertFrequencySweep"), "AnalysisSetup module must expose InsertFrequencySweep"
+    return cast(AnalysisSetupModuleSession, raw_module)
+
+
+def _required_mesh_object_names(copper_body_names: list[str]) -> list[str]:
+    mesh_object_names: list[str] = []
+    for required_name in MESH_OBJECT_NAMES:
+        matches = [name for name in copper_body_names if name == required_name]
+        if len(matches) != 1:
+            raise ValueError(
+                "SSW mesh requires exactly one recorded copper target "
+                f"(required={required_name!r}, actual={matches}, copper_body_names={copper_body_names})"
+            )
+        mesh_object_names.append(matches[0])
+    return mesh_object_names
+
+
+def _mesh_assignment_payload(mesh_object_names: list[str]) -> list[object]:
+    return [
+        f"NAME:{MESH_OPERATION_NAME}",
+        "RefineInside:=",
+        False,
+        "Enabled:=",
+        True,
+        "Objects:=",
+        mesh_object_names,
+        "RestrictElem:=",
+        True,
+        "NumMaxElem:=",
+        MESH_MAX_ELEMENTS,
+        "RestrictLength:=",
+        True,
+        "MaxLength:=",
+        MESH_MAX_LENGTH,
+    ]
+
+
+def _setup_payload() -> list[object]:
+    return [
+        f"NAME:{SETUP_NAME}",
+        "SolveType:=",
+        "Single",
+        "Frequency:=",
+        SETUP_FREQUENCY,
+        "MaxDeltaS:=",
+        0.0005,
+        "UseMatrixConv:=",
+        False,
+        "MaximumPasses:=",
+        35,
+        "MinimumPasses:=",
+        17,
+        "MinimumConvergedPasses:=",
+        7,
+        "PercentRefinement:=",
+        30,
+        "IsEnabled:=",
+        True,
+        [
+            "NAME:MeshLink",
+            "ImportMesh:=",
+            False,
+        ],
+        "BasisOrder:=",
+        0,
+        "DoLambdaRefine:=",
+        False,
+        "DoMaterialLambda:=",
+        True,
+        "SetLambdaTarget:=",
+        False,
+        "Target:=",
+        0.1,
+        "UseMaxTetIncrease:=",
+        False,
+        "PortAccuracy:=",
+        2,
+        "UseABCOnPort:=",
+        False,
+        "SetPortMinMaxTri:=",
+        False,
+        "DrivenSolverType:=",
+        "Direct Solver",
+        "EnhancedLowFreqAccuracy:=",
+        False,
+        "EnhancedFEBIPreconditioner:=",
+        False,
+        "SaveRadFieldsOnly:=",
+        False,
+        "SaveAnyFields:=",
+        True,
+        "IESolverType:=",
+        "Auto",
+        "LambdaTargetForIESolver:=",
+        0.15,
+        "UseDefaultLambdaTgtForIESolver:=",
+        True,
+        "IE Solver Accuracy:=",
+        "Balanced",
+        "InfiniteSphereSetup:=",
+        "",
+        "MaxPass:=",
+        10,
+        "MinPass:=",
+        1,
+        "MinConvPass:=",
+        1,
+        "PerError:=",
+        1,
+        "PerRefine:=",
+        30,
+    ]
+
+
+def _sweep_payload() -> list[object]:
+    return [
+        f"NAME:{SWEEP_NAME}",
+        "IsEnabled:=",
+        True,
+        "RangeType:=",
+        "LinearCount",
+        "RangeStart:=",
+        SWEEP_RANGE_START,
+        "RangeEnd:=",
+        SWEEP_RANGE_END,
+        "RangeCount:=",
+        SWEEP_RANGE_COUNT,
+        "Type:=",
+        "Interpolating",
+        "SaveFields:=",
+        False,
+        "SaveRadFields:=",
+        False,
+        "InterpTolerance:=",
+        0.5,
+        "InterpMaxSolns:=",
+        250,
+        "InterpMinSolns:=",
+        0,
+        "InterpMinSubranges:=",
+        1,
+        "InterpUseS:=",
+        True,
+        "InterpUsePortImped:=",
+        True,
+        "InterpUsePropConst:=",
+        True,
+        "UseDerivativeConvergence:=",
+        False,
+        "InterpDerivTolerance:=",
+        0.2,
+        "UseFullBasis:=",
+        True,
+        "EnforcePassivity:=",
+        True,
+        "PassivityErrorTolerance:=",
+        0.0001,
+        "EnforceCausality:=",
+        False,
+        "SMatrixOnlySolveMode:=",
+        "Auto",
+    ]
+
+
+def _assign_recorded_mesh(*, hfss: HfssSession, copper_body_names: list[str]) -> SswAedtMeshSummary:
+    mesh_object_names = _required_mesh_object_names(copper_body_names)
+    mesh_module = _mesh_setup_module(hfss)
+    raise_on_false(
+        mesh_module.AssignLengthOp(_mesh_assignment_payload(mesh_object_names)),
+        operation="AssignLengthOp",
+        context={
+            "module_name": MESH_MODULE_NAME,
+            "operation_name": MESH_OPERATION_NAME,
+            "objects": mesh_object_names,
+            "max_length": MESH_MAX_LENGTH,
+            "num_max_elem": MESH_MAX_ELEMENTS,
+        },
+    )
+    return {
+        "module_name": MESH_MODULE_NAME,
+        "operation": "AssignLengthOp",
+        "operation_name": MESH_OPERATION_NAME,
+        "objects": mesh_object_names,
+        "refine_inside": False,
+        "enabled": True,
+        "restrict_elem": True,
+        "num_max_elem": MESH_MAX_ELEMENTS,
+        "restrict_length": True,
+        "max_length": MESH_MAX_LENGTH,
+    }
+
+
+def _insert_recorded_setup_and_sweep(
+    *,
+    hfss: HfssSession,
+) -> tuple[SswAedtAnalysisSetupSummary, SswAedtFrequencySweepSummary]:
+    module = _analysis_setup_module(hfss)
+    raise_on_false(
+        module.InsertSetup("HfssDriven", _setup_payload()),
+        operation="InsertSetup",
+        context={"setup_type": "HfssDriven", "setup_name": SETUP_NAME},
+    )
+    raise_on_false(
+        module.InsertFrequencySweep(SETUP_NAME, _sweep_payload()),
+        operation="InsertFrequencySweep",
+        context={"setup_name": SETUP_NAME, "sweep_name": SWEEP_NAME},
+    )
+    return (
+        {
+            "module_name": ANALYSIS_MODULE_NAME,
+            "operation": "InsertSetup",
+            "setup_type": "HfssDriven",
+            "setup_name": SETUP_NAME,
+            "frequency": SETUP_FREQUENCY,
+            "max_delta_s": 0.0005,
+            "maximum_passes": 35,
+            "minimum_passes": 17,
+            "minimum_converged_passes": 7,
+            "percent_refinement": 30,
+            "basis_order": 0,
+            "port_accuracy": 2,
+            "driven_solver_type": "Direct Solver",
+        },
+        {
+            "module_name": ANALYSIS_MODULE_NAME,
+            "operation": "InsertFrequencySweep",
+            "setup_name": SETUP_NAME,
+            "sweep_name": SWEEP_NAME,
+            "range_type": "LinearCount",
+            "range_start": SWEEP_RANGE_START,
+            "range_end": SWEEP_RANGE_END,
+            "range_count": SWEEP_RANGE_COUNT,
+            "sweep_type": "Interpolating",
+        },
+    )
+
+
 def _import_ssw_aedt_port_step(
     *,
     hfss: HfssSession,
     ledger_path: Path,
     output_aedt_path: Path,
     ledger: SswAedtPortStepLedger,
-) -> SswAedtImportedLedger:
+) -> SswAedtImportedLedgerBase:
     scene_step_path = Path(ledger["scene_step_path"])
     before_names = set(hfss.modeler.object_names)
     raise_on_false(
@@ -658,6 +989,7 @@ def _import_ssw_aedt_port_step(
             color=COPPER_COLOR,
             transparency=COPPER_TRANSPARENCY,
         )
+    mesh = _assign_recorded_mesh(hfss=hfss, copper_body_names=copper_body_names)
     return {
         "source_port_ledger_path": str(ledger_path),
         "source_step_ledger_path": ledger["source_step_ledger_path"],
@@ -669,6 +1001,7 @@ def _import_ssw_aedt_port_step(
         "visual_assignments": visual_assignments,
         "non_model_body_names": non_model_names,
         "ferrite_body_names": ferrite_names,
+        "mesh": mesh,
     }
 
 
@@ -1061,13 +1394,29 @@ def setup_ssw_aedt_ports_into_hfss(
 ) -> SswAedtPortSetupResult:
     ledger = load_ssw_aedt_port_ledger(port_ledger_path)
     output_aedt_path.parent.mkdir(parents=True, exist_ok=True)
-    imported_ledger = _import_ssw_aedt_port_step(
+    imported_base_ledger = _import_ssw_aedt_port_step(
         hfss=hfss,
         ledger_path=port_ledger_path,
         output_aedt_path=output_aedt_path,
         ledger=ledger,
     )
     ports = _assign_ports(hfss=hfss, ledger=ledger)
+    analysis_setup, frequency_sweep = _insert_recorded_setup_and_sweep(hfss=hfss)
+    imported_ledger: SswAedtImportedLedger = {
+        "source_port_ledger_path": imported_base_ledger["source_port_ledger_path"],
+        "source_step_ledger_path": imported_base_ledger["source_step_ledger_path"],
+        "scene_step_path": imported_base_ledger["scene_step_path"],
+        "aedt_path": imported_base_ledger["aedt_path"],
+        "imported_object_names": imported_base_ledger["imported_object_names"],
+        "copper_body_names": imported_base_ledger["copper_body_names"],
+        "material_assignments": imported_base_ledger["material_assignments"],
+        "visual_assignments": imported_base_ledger["visual_assignments"],
+        "non_model_body_names": imported_base_ledger["non_model_body_names"],
+        "ferrite_body_names": imported_base_ledger["ferrite_body_names"],
+        "mesh": imported_base_ledger["mesh"],
+        "analysis_setup": analysis_setup,
+        "frequency_sweep": frequency_sweep,
+    }
     raise_on_false(hfss.save_project(str(output_aedt_path)), operation="save_project", context={"path": str(output_aedt_path)})
     _write_imported_ledger(imported_ledger_path=imported_ledger_path, imported_ledger=imported_ledger)
     return {
@@ -1078,6 +1427,9 @@ def setup_ssw_aedt_ports_into_hfss(
         "imported_ledger_path": str(imported_ledger_path),
         "ports": ports,
         "imported_object_names": imported_ledger["imported_object_names"],
+        "mesh": imported_ledger["mesh"],
+        "analysis_setup": imported_ledger["analysis_setup"],
+        "frequency_sweep": imported_ledger["frequency_sweep"],
     }
 
 
@@ -1115,8 +1467,11 @@ __all__ = [
     "DEFAULT_OUTPUT_AEDT_PATH",
     "HfssFactory",
     "CanonicalCoordinates",
+    "SswAedtAnalysisSetupSummary",
     "SswAedtBodyLedgerEntry",
+    "SswAedtFrequencySweepSummary",
     "SswAedtImportedLedger",
+    "SswAedtMeshSummary",
     "SswAedtPortEdgeLedgerEntry",
     "SswAedtPorts",
     "SswAedtPortSetupResult",

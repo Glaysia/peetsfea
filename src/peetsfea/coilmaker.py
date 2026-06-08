@@ -813,32 +813,78 @@ def _normal_outer_inner_terminals(
     )
 
 
-def _normal_port_axis(
-    config: RuntimeConfig,
-    frame: CoilFrame,
+def _unit_xy_vector(
+    start: Point2D,
+    end: Point2D,
+    context: str,
+) -> Point2D:
+    dx_mm = end[0] - start[0]
+    dy_mm = end[1] - start[1]
+    length_mm = sqrt(dx_mm**2 + dy_mm**2)
+    if length_mm <= 1e-8:
+        raise ValueError(f"{context} vector must be nonzero")
+    return dx_mm / length_mm, dy_mm / length_mm
+
+
+def _normal_outer_terminal_adjacent_point(
+    centerline_points: tuple[Point2D, ...],
     outer_terminal: Point2D,
-) -> int:
-    origin_x_mm, origin_y_mm = frame.origin_xy_mm
-    x_score = abs(outer_terminal[0] - origin_x_mm) / (_width_mm(config, frame) / 2)
-    y_score = abs(outer_terminal[1] - origin_y_mm) / (_height_mm(config, frame) / 2)
-    return 0 if x_score >= y_score else 1
+) -> Point2D:
+    if len(centerline_points) < 2:
+        raise ValueError("normal port landing requires at least two centerline points")
+    if outer_terminal == centerline_points[0]:
+        return centerline_points[1]
+    if outer_terminal == centerline_points[-1]:
+        return centerline_points[-2]
+    raise ValueError("normal outer terminal must be the first or last centerline point")
+
+
+def _normal_port_landing_direction(
+    centerline_points: tuple[Point2D, ...],
+    outer_terminal: Point2D,
+    inner_terminal: Point2D,
+) -> Point2D:
+    adjacent_point = _normal_outer_terminal_adjacent_point(centerline_points, outer_terminal)
+    trace_dx_mm = adjacent_point[0] - outer_terminal[0]
+    trace_dy_mm = adjacent_point[1] - outer_terminal[1]
+    if sqrt(trace_dx_mm**2 + trace_dy_mm**2) <= 1e-8:
+        raise ValueError("normal outer-terminal trace vector must be nonzero")
+    if abs(abs(trace_dx_mm) - abs(trace_dy_mm)) <= 1e-8:
+        raise ValueError("normal outer-terminal trace direction is ambiguous")
+    candidate_normal = (
+        (0.0, 1.0)
+        if abs(trace_dx_mm) > abs(trace_dy_mm)
+        else (1.0, 0.0)
+    )
+    toward_inner = (
+        inner_terminal[0] - outer_terminal[0],
+        inner_terminal[1] - outer_terminal[1],
+    )
+    score = candidate_normal[0] * toward_inner[0] + candidate_normal[1] * toward_inner[1]
+    if abs(score) <= 1e-8:
+        raise ValueError(
+            "normal port landing direction is ambiguous for the outer-terminal trace"
+        )
+    return candidate_normal if score > 0 else (-candidate_normal[0], -candidate_normal[1])
 
 
 def _normal_inner_landing_center(
     config: RuntimeConfig,
-    frame: CoilFrame,
+    centerline_points: tuple[Point2D, ...],
     outer_terminal: Point2D,
+    inner_terminal: Point2D,
     pad_mm: float,
 ) -> Point2D:
-    port_axis = _normal_port_axis(config, frame, outer_terminal)
+    direction_x, direction_y = _normal_port_landing_direction(
+        centerline_points,
+        outer_terminal,
+        inner_terminal,
+    )
     offset_mm = pad_mm + config.fixed.PORT_LENGTH_MM
-    origin_x_mm, origin_y_mm = frame.origin_xy_mm
-    if port_axis == 0:
-        direction_x = 1.0 if outer_terminal[0] >= origin_x_mm else -1.0
-        return outer_terminal[0] - direction_x * offset_mm, outer_terminal[1]
-
-    direction_y = 1.0 if outer_terminal[1] >= origin_y_mm else -1.0
-    return outer_terminal[0], outer_terminal[1] - direction_y * offset_mm
+    return (
+        outer_terminal[0] + direction_x * offset_mm,
+        outer_terminal[1] + direction_y * offset_mm,
+    )
 
 
 def _box_at_z_bounds_token(
@@ -903,34 +949,75 @@ def _normal_segment_token(
 
 def _normal_port_clearance_token(
     config: RuntimeConfig,
-    frame: CoilFrame,
     outer_terminal: Point2D,
     inner_landing: Point2D,
     pad_mm: float,
-) -> BoxToken:
-    port_axis = _normal_port_axis(config, frame, outer_terminal)
+) -> PolygonExtrudeToken:
     landing_z_min_mm, landing_z_max_mm = _normal_port_landing_z_bounds(config)
-    if port_axis == 0:
-        center_x_mm = (outer_terminal[0] + inner_landing[0]) / 2
-        return _box_at_z_bounds_token(
-            "normal_port_clearance",
-            (center_x_mm, outer_terminal[1]),
-            config.fixed.PORT_LENGTH_MM,
-            pad_mm,
-            landing_z_min_mm,
-            landing_z_max_mm,
-            "clearance",
-        )
-
-    center_y_mm = (outer_terminal[1] + inner_landing[1]) / 2
-    return _box_at_z_bounds_token(
+    direction_x, direction_y = _unit_xy_vector(
+        outer_terminal,
+        inner_landing,
         "normal_port_clearance",
-        (outer_terminal[0], center_y_mm),
+    )
+    half_pad_mm = pad_mm / 2
+    clearance_start = (
+        outer_terminal[0] + direction_x * half_pad_mm,
+        outer_terminal[1] + direction_y * half_pad_mm,
+    )
+    clearance_end = (
+        inner_landing[0] - direction_x * half_pad_mm,
+        inner_landing[1] - direction_y * half_pad_mm,
+    )
+    return _xy_path_rectangle_token(
+        "normal_port_clearance",
+        clearance_start,
+        clearance_end,
         pad_mm,
-        config.fixed.PORT_LENGTH_MM,
         landing_z_min_mm,
         landing_z_max_mm,
         "clearance",
+    )
+
+
+def _xy_path_rectangle_token(
+    name: str,
+    start: Point2D,
+    end: Point2D,
+    width_mm: float,
+    z_min_mm: float,
+    z_max_mm: float,
+    role: str,
+) -> PolygonExtrudeToken:
+    tangent_x, tangent_y = _unit_xy_vector(start, end, name)
+    normal_x = -tangent_y
+    normal_y = tangent_x
+    half_width_mm = width_mm / 2
+    return PolygonExtrudeToken(
+        name=name,
+        points_mm=(
+            (
+                start[0] + normal_x * half_width_mm,
+                start[1] + normal_y * half_width_mm,
+                z_min_mm,
+            ),
+            (
+                end[0] + normal_x * half_width_mm,
+                end[1] + normal_y * half_width_mm,
+                z_min_mm,
+            ),
+            (
+                end[0] - normal_x * half_width_mm,
+                end[1] - normal_y * half_width_mm,
+                z_min_mm,
+            ),
+            (
+                start[0] - normal_x * half_width_mm,
+                start[1] - normal_y * half_width_mm,
+                z_min_mm,
+            ),
+        ),
+        extrusion_vector_mm=(0.0, 0.0, z_max_mm - z_min_mm),
+        role=role,
     )
 
 
@@ -943,36 +1030,15 @@ def _normal_port_bridge_token(
     if start == end:
         return None
 
-    half_pad_mm = pad_mm / 2
     z_min_mm, z_max_mm = _normal_port_landing_z_bounds(config)
-    direction_x = 1.0 if end[0] >= start[0] else -1.0
-    direction_y = 1.0 if end[1] >= start[1] else -1.0
-    return PolygonExtrudeToken(
-        name="normal_port_bridge",
-        points_mm=(
-            (
-                start[0] - direction_x * half_pad_mm,
-                start[1] + direction_y * half_pad_mm,
-                z_min_mm,
-            ),
-            (
-                end[0] - direction_x * half_pad_mm,
-                end[1] + direction_y * half_pad_mm,
-                z_min_mm,
-            ),
-            (
-                end[0] + direction_x * half_pad_mm,
-                end[1] - direction_y * half_pad_mm,
-                z_min_mm,
-            ),
-            (
-                start[0] + direction_x * half_pad_mm,
-                start[1] - direction_y * half_pad_mm,
-                z_min_mm,
-            ),
-        ),
-        extrusion_vector_mm=(0.0, 0.0, z_max_mm - z_min_mm),
-        role="copper",
+    return _xy_path_rectangle_token(
+        "normal_port_bridge",
+        start,
+        end,
+        pad_mm,
+        z_min_mm,
+        z_max_mm,
+        "copper",
     )
 
 
@@ -990,8 +1056,9 @@ def _normal_port_landing_geometry(
     )
     inner_landing = _normal_inner_landing_center(
         config,
-        frame,
+        centerline_points,
         outer_terminal,
+        inner_terminal,
         pad_mm,
     )
     landing_z_min_mm, landing_z_max_mm = _normal_port_landing_z_bounds(config)
@@ -1030,7 +1097,6 @@ def _normal_port_landing_geometry(
         pieces=_prepend(bridge, iter(base_pieces)),
         clearance=_normal_port_clearance_token(
             config,
-            frame,
             outer_terminal,
             inner_landing,
             pad_mm,
@@ -1050,6 +1116,28 @@ def _normal_port_landing_tokens(
         centerline_points,
         trace_width_mm,
     ).pieces
+
+
+def _normal_port_bridge_for_frame(
+    config: RuntimeConfig,
+    frame: CoilFrame,
+    centerline_points: tuple[Point2D, ...],
+    trace_width_mm: float,
+) -> PolygonExtrudeToken | None:
+    pad_mm = _normal_port_landing_pad_mm(config, trace_width_mm)
+    outer_terminal, inner_terminal = _normal_outer_inner_terminals(
+        config,
+        frame,
+        centerline_points,
+    )
+    inner_landing = _normal_inner_landing_center(
+        config,
+        centerline_points,
+        outer_terminal,
+        inner_terminal,
+        pad_mm,
+    )
+    return _normal_port_bridge_token(config, inner_terminal, inner_landing, pad_mm)
 
 
 def _normal_port_landing_cutters(
@@ -2115,8 +2203,9 @@ def _normal_port_action_tokens(
     )
     inner_landing = _normal_inner_landing_center(
         config,
-        frame,
+        centerline_points,
         outer_terminal,
+        inner_terminal,
         pad_mm,
     )
     landing_z_bounds = _normal_port_landing_z_bounds(config)
@@ -2124,7 +2213,6 @@ def _normal_port_action_tokens(
     bridge_token = _normal_port_bridge_token(config, inner_terminal, inner_landing, pad_mm)
     clearance = _normal_port_clearance_token(
         config,
-        frame,
         outer_terminal,
         inner_landing,
         pad_mm,
@@ -2176,16 +2264,14 @@ def _normal_port_action_tokens(
             z_bounds_mm=landing_z_bounds,
             role="copper",
         ),
-        _raw_action(
-            "MAKE_BOX",
-            _port_id(frame_ref, "clearance"),
-            (f"{frame_ref}.port.landing",),
-            center_xy_mm=_point2_action(clearance.center_xy_mm),
-            width_mm=clearance.width_mm,
-            height_mm=clearance.height_mm,
-            z_bounds_mm=(clearance.z_min_mm, clearance.z_max_mm),
-            role="clearance",
-        ),
+    )
+    clearance_action = _raw_action(
+        "EXTRUDE_POLYGON",
+        _port_id(frame_ref, "clearance"),
+        (f"{frame_ref}.port.landing",),
+        points_mm=_points3_action(clearance.points_mm),
+        extrusion_vector_mm=clearance.extrusion_vector_mm,
+        role="clearance",
     )
     bridge_action = (
         _raw_action(
@@ -2202,6 +2288,7 @@ def _normal_port_action_tokens(
     return chain(
         (port_terminal_action, port_landing_action),
         box_actions,
+        (clearance_action,),
         _empty() if bridge_action is None else _singleton(bridge_action),
     )
 
@@ -2215,16 +2302,11 @@ def _normal_frame_action_tokens(
     pitch_mm = _normal_coil_pitch_mm(config, frame)
     centerline_points = _normal_coil_centerline_points(config, frame)
     z_bounds = _lower_copper_z_bounds(config)
-    bridge_token = _normal_port_bridge_token(
+    bridge_token = _normal_port_bridge_for_frame(
         config,
-        _normal_outer_inner_terminals(config, frame, centerline_points)[1],
-        _normal_inner_landing_center(
-            config,
-            frame,
-            _normal_outer_inner_terminals(config, frame, centerline_points)[0],
-            _normal_port_landing_pad_mm(config, trace_width_mm),
-        ),
-        _normal_port_landing_pad_mm(config, trace_width_mm),
+        frame,
+        centerline_points,
+        trace_width_mm,
     )
     centerline_action = _raw_action(
         "NORMAL_CENTERLINE",
@@ -2455,16 +2537,11 @@ def _pcb_frame_action_tokens(
 
     trace_width_mm = _normal_coil_trace_width_mm(config, frame)
     centerline_points = _normal_coil_centerline_points(config, frame)
-    bridge_token = _normal_port_bridge_token(
+    bridge_token = _normal_port_bridge_for_frame(
         config,
-        _normal_outer_inner_terminals(config, frame, centerline_points)[1],
-        _normal_inner_landing_center(
-            config,
-            frame,
-            _normal_outer_inner_terminals(config, frame, centerline_points)[0],
-            _normal_port_landing_pad_mm(config, trace_width_mm),
-        ),
-        _normal_port_landing_pad_mm(config, trace_width_mm),
+        frame,
+        centerline_points,
+        trace_width_mm,
     )
     cut_refs = (
         _port_id(frame_ref, "outer_terminal"),

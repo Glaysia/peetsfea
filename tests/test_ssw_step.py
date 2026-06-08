@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from math import sqrt
 from pathlib import Path
 from typing import Mapping
 import tomllib
@@ -102,6 +103,23 @@ def _action_params_by_key(action: Mapping[str, object]) -> dict[str, object]:
         assert isinstance(value_json, str)
         mapped[key] = tomllib.loads(f"value = {value_json}\n")["value"]
     return mapped
+
+
+def _point2_param(params: Mapping[str, object], key: str) -> tuple[float, float]:
+    value = params[key]
+    assert isinstance(value, list)
+    assert len(value) == 2
+    assert isinstance(value[0], (int, float))
+    assert isinstance(value[1], (int, float))
+    return float(value[0]), float(value[1])
+
+
+def _unit_vector(start: tuple[float, float], end: tuple[float, float]) -> tuple[float, float]:
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    length = sqrt(dx**2 + dy**2)
+    assert length > 1e-8
+    return dx / length, dy / length
 
 
 def _box_bounds(body: module_under_test._BodyBox) -> tuple[float, float, float, float, float, float]:
@@ -281,13 +299,61 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert len(rx_placement) == 1
     tx_placement_params = _action_params_by_key(tx_placement[0])
     rx_placement_params = _action_params_by_key(rx_placement[0])
-    rx_port_landing = tuple(action for action in actions if action["target"] == "rx_ssw_coil.frame_0.port.landing")
+    rx_port_terminals = tuple(
+        action for action in actions if action["target"] == "rx_ssw_coil.frame_0.port.terminals"
+    )
+    rx_port_landing = tuple(
+        action for action in actions if action["target"] == "rx_ssw_coil.frame_0.port.landing"
+    )
+    rx_port_clearance = tuple(
+        action for action in actions if action["target"] == "rx_ssw_coil.frame_0.port.clearance"
+    )
+    rx_port_bridge = tuple(
+        action for action in actions if action["target"] == "rx_ssw_coil.frame_0.port.bridge"
+    )
+    assert len(rx_port_terminals) == 1
     assert len(rx_port_landing) == 1
+    assert len(rx_port_clearance) == 1
+    assert len(rx_port_bridge) == 1
+    assert rx_port_clearance[0]["op"] == "EXTRUDE_POLYGON"
+    assert rx_port_bridge[0]["op"] == "EXTRUDE_POLYGON"
+    rx_port_terminal_params = _action_params_by_key(rx_port_terminals[0])
     rx_port_landing_params = _action_params_by_key(rx_port_landing[0])
     rx_trace_width_mm = _rx_normal_trace_width_mm(spec)
+    outer_terminal_xy = _point2_param(rx_port_terminal_params, "outer_terminal_xy_mm")
+    inner_terminal_xy = _point2_param(rx_port_terminal_params, "inner_terminal_xy_mm")
+    inner_landing_xy = _point2_param(rx_port_landing_params, "inner_landing_xy_mm")
+    rx_config = module_under_test._coilmaker_config(spec.rx, spec.fixed)
+    rx_frame = tuple(coilmaker.coil_slot_frames(rx_config))[0]
+    rx_centerline_points = coilmaker._normal_coil_centerline_points(rx_config, rx_frame)
+    if outer_terminal_xy == rx_centerline_points[0]:
+        adjacent_trace_xy = rx_centerline_points[1]
+    elif outer_terminal_xy == rx_centerline_points[-1]:
+        adjacent_trace_xy = rx_centerline_points[-2]
+    else:
+        raise AssertionError("RX outer terminal must be a centerline endpoint")
+    trace_tangent_xy = _unit_vector(outer_terminal_xy, adjacent_trace_xy)
+    landing_direction_xy = _unit_vector(outer_terminal_xy, inner_landing_xy)
+    trace_axis = 0 if abs(trace_tangent_xy[0]) > abs(trace_tangent_xy[1]) else 1
+    landing_distance_mm = sqrt(
+        (inner_landing_xy[0] - outer_terminal_xy[0]) ** 2
+        + (inner_landing_xy[1] - outer_terminal_xy[1]) ** 2
+    )
+    toward_inner_xy = (
+        inner_terminal_xy[0] - outer_terminal_xy[0],
+        inner_terminal_xy[1] - outer_terminal_xy[1],
+    )
     assert tx_placement_params["coil_mode"] == "ssw"
     assert rx_placement_params["coil_mode"] == "normal_spiral"
     assert rx_port_landing_params["pad_mm"] == pytest.approx(rx_trace_width_mm)
+    assert landing_distance_mm == pytest.approx(rx_trace_width_mm + spec.fixed.port_length_mm)
+    landing_dot_inner = (
+        landing_direction_xy[0] * toward_inner_xy[0]
+        + landing_direction_xy[1] * toward_inner_xy[1]
+    )
+    assert landing_direction_xy[trace_axis] == pytest.approx(0.0)
+    assert abs(landing_direction_xy[1 - trace_axis]) == pytest.approx(1.0)
+    assert landing_dot_inner > 0.0
     assert tx_placement_params["port_face"] == "lower_z"
     assert rx_placement_params["port_face"] == "normal_spiral_landing"
     assert tx_placement_params["no_ssw_qturn_start_int"] == 0
