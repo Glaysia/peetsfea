@@ -901,7 +901,7 @@ def _ssw_port_anchor_world_xyz(
     local_x_mm, local_y_mm = coilmaker._surface_point_on_side(config, frame, side, u_mid_mm, radial_mm)
     _, local_z_mm = coilmaker._top_copper_z_bounds(config)
     placement = _placement_for_role(spec, params, _coilmaker_assembly(params, spec.fixed))
-    probe_half_mm = 0.0005
+    probe_half_mm = 0.003
     bbox = _located_bbox(
         cq.Workplane("XY").box(probe_half_mm * 2.0, probe_half_mm * 2.0, probe_half_mm * 2.0).translate(
             (local_x_mm, local_y_mm, local_z_mm)

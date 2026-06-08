@@ -98,6 +98,7 @@ SETUP_FREQUENCY = "6.78MHz"
 SWEEP_RANGE_START = "0.1MHz"
 SWEEP_RANGE_END = "100MHz"
 SWEEP_RANGE_COUNT = 81
+RADIATION_MARGIN_MM = 2000.0
 REPORT_NAME = "Output Variables Table1"
 DIAGNOSTIC_TABLE_1_NAME = "Table1"
 DIAGNOSTIC_TABLE_2_NAME = "Table2"
@@ -227,6 +228,15 @@ class SswAedtFrequencySweepSummary(TypedDict):
     sweep_type: str
 
 
+class SswAedtBoundarySummary(TypedDict):
+    type: Literal["radiation"]
+    offset_type: str
+    offset_value: str
+    region_name: str
+    face_count: str
+    boundary_names: list[str]
+
+
 class SswAedtReportsSummary(TypedDict):
     report_names: list[str]
     output_variable_names: list[str]
@@ -249,6 +259,7 @@ class SswAedtImportedLedgerBase(TypedDict):
 
 
 class SswAedtImportedLedger(SswAedtImportedLedgerBase):
+    boundary: SswAedtBoundarySummary
     analysis_setup: SswAedtAnalysisSetupSummary
     frequency_sweep: SswAedtFrequencySweepSummary
     reports: SswAedtReportsSummary
@@ -268,6 +279,7 @@ class SswAedtPortSetupResult(TypedDict):
     ports: SswAedtPorts
     imported_object_names: list[str]
     mesh: SswAedtMeshSummary
+    boundary: SswAedtBoundarySummary
     analysis_setup: SswAedtAnalysisSetupSummary
     frequency_sweep: SswAedtFrequencySweepSummary
     reports: SswAedtReportsSummary
@@ -704,6 +716,54 @@ def _design(hfss: HfssSession) -> DesignSession:
     return raw_design
 
 
+def _region_object_name(region: object) -> str:
+    assert hasattr(region, "name"), "create_region did not return a region object with a name"
+    name = getattr(region, "name")
+    assert isinstance(name, str) and name, "create_region returned a region object without a valid name"
+    return name
+
+
+def _build_boundary(*, hfss: HfssSession, modeler: ModelerSession) -> SswAedtBoundarySummary:
+    pad_value_mm = int(round(RADIATION_MARGIN_MM))
+    region = raise_on_false(
+        modeler.create_region(
+            pad_value=pad_value_mm,
+            pad_type="Absolute Offset",
+            name=f"Region_Abs_{pad_value_mm}mm",
+        ),
+        operation="create_region",
+        context={"pad_value_mm": pad_value_mm},
+    )
+    region_name = _region_object_name(region)
+    region_faces = raise_on_false(
+        modeler.get_object_faces(region_name),
+        operation="get_object_faces",
+        context={"region": region_name},
+    )
+    if len(region_faces) != 6:
+        raise ValueError(
+            "Created SSW region does not expose 6 faces required for radiation assignment "
+            f"(region={region_name}, face_count={len(region_faces)})"
+        )
+    boundary_names: list[str] = []
+    for index, face_id in enumerate(region_faces):
+        radiation_name = f"Rad_RegionAbs_{index}"
+        raise_on_false(
+            hfss.assign_radiation_boundary_to_faces([face_id], name=radiation_name),
+            operation="assign_radiation_boundary_to_faces",
+            context={"region": region_name, "face_id": face_id, "boundary": radiation_name},
+        )
+        boundary_names.append(radiation_name)
+    return {
+        "type": "radiation",
+        "offset_type": "Absolute Offset",
+        "offset_value": str(RADIATION_MARGIN_MM),
+        "region_name": region_name,
+        "face_count": str(len(region_faces)),
+        "boundary_names": boundary_names,
+    }
+
+
 def _mesh_setup_module(hfss: HfssSession) -> MeshModuleSession:
     raw_module = raise_on_false(
         _design(hfss).GetModule(MESH_MODULE_NAME),
@@ -766,7 +826,7 @@ def _setup_payload() -> list[object]:
         "Frequency:=",
         SETUP_FREQUENCY,
         "MaxDeltaS:=",
-        0.0005,
+        0.003,
         "UseMatrixConv:=",
         False,
         "MaximumPasses:=",
@@ -935,7 +995,7 @@ def _insert_recorded_setup_and_sweep(
             "setup_type": "HfssDriven",
             "setup_name": SETUP_NAME,
             "frequency": SETUP_FREQUENCY,
-            "max_delta_s": 0.0005,
+            "max_delta_s": 0.003,
             "maximum_passes": 35,
             "minimum_passes": 17,
             "minimum_converged_passes": 7,
@@ -985,7 +1045,11 @@ def _txrx_output_variables(*, tx_port: str, rx_port: str, s_function: str) -> li
     return variables
 
 
-def _ssw_geometry_diagnostic_traces(*, imported_ledger: SswAedtImportedLedgerBase) -> list[str]:
+def _ssw_geometry_diagnostic_traces(
+    *,
+    imported_ledger: SswAedtImportedLedgerBase,
+    boundary: SswAedtBoundarySummary,
+) -> list[str]:
     traces: list[str] = []
     for name in imported_ledger["non_model_body_names"]:
         traces.append(f"Volume({name})")
@@ -993,6 +1057,7 @@ def _ssw_geometry_diagnostic_traces(*, imported_ledger: SswAedtImportedLedgerBas
         traces.append(f"Volume({name})")
     for name in imported_ledger["copper_body_names"]:
         traces.append(f"Volume({name})")
+    traces.append(f"Volume({boundary['region_name']})")
     return traces
 
 
@@ -1027,6 +1092,7 @@ def _create_reports(
     hfss: HfssSession,
     ports: SswAedtPorts,
     imported_ledger: SswAedtImportedLedgerBase,
+    boundary: SswAedtBoundarySummary,
 ) -> SswAedtReportsSummary:
     tx_ports = ports["tx"]
     rx_ports = ports["rx"]
@@ -1060,7 +1126,10 @@ def _create_reports(
         solution_name=f"{SETUP_NAME} : LastAdaptive",
         context=[],
         variations=["Freq:=", ["All"]],
-        traces=[*output_variable_names, *_ssw_geometry_diagnostic_traces(imported_ledger=imported_ledger)],
+        traces=[
+            *output_variable_names,
+            *_ssw_geometry_diagnostic_traces(imported_ledger=imported_ledger, boundary=boundary),
+        ],
         primary_sweep="Freq",
     )
     _create_one_report(
@@ -1437,9 +1506,10 @@ def setup_ssw_aedt_ports_into_hfss(
         output_aedt_path=output_aedt_path,
         ledger=ledger,
     )
+    boundary = _build_boundary(hfss=hfss, modeler=hfss.modeler)
     ports = _assign_ports(hfss=hfss, ledger=ledger)
     analysis_setup, frequency_sweep = _insert_recorded_setup_and_sweep(hfss=hfss)
-    reports = _create_reports(hfss=hfss, ports=ports, imported_ledger=imported_base_ledger)
+    reports = _create_reports(hfss=hfss, ports=ports, imported_ledger=imported_base_ledger, boundary=boundary)
     imported_ledger: SswAedtImportedLedger = {
         "source_port_ledger_path": imported_base_ledger["source_port_ledger_path"],
         "source_step_ledger_path": imported_base_ledger["source_step_ledger_path"],
@@ -1452,6 +1522,7 @@ def setup_ssw_aedt_ports_into_hfss(
         "non_model_body_names": imported_base_ledger["non_model_body_names"],
         "ferrite_body_names": imported_base_ledger["ferrite_body_names"],
         "mesh": imported_base_ledger["mesh"],
+        "boundary": boundary,
         "analysis_setup": analysis_setup,
         "frequency_sweep": frequency_sweep,
         "reports": reports,
@@ -1467,6 +1538,7 @@ def setup_ssw_aedt_ports_into_hfss(
         "ports": ports,
         "imported_object_names": imported_ledger["imported_object_names"],
         "mesh": imported_ledger["mesh"],
+        "boundary": imported_ledger["boundary"],
         "analysis_setup": imported_ledger["analysis_setup"],
         "frequency_sweep": imported_ledger["frequency_sweep"],
         "reports": imported_ledger["reports"],
@@ -1508,6 +1580,7 @@ __all__ = [
     "HfssFactory",
     "CanonicalCoordinates",
     "SswAedtAnalysisSetupSummary",
+    "SswAedtBoundarySummary",
     "SswAedtBodyLedgerEntry",
     "SswAedtFrequencySweepSummary",
     "SswAedtImportedLedger",

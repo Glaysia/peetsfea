@@ -205,7 +205,7 @@ def _placement_for_coil(*, spec: SswFixedSpec, params: SswCoilParameters) -> cq.
 
 
 def _world_point_row_from_local(*, local_xyz: Point3, placement: cq.Location) -> list[float]:
-    probe_half_mm = 0.0005
+    probe_half_mm = 0.003
     bbox = ssw_step_module._located_bbox(
         cq.Workplane("XY").box(probe_half_mm * 2.0, probe_half_mm * 2.0, probe_half_mm * 2.0).translate(local_xyz),
         placement,

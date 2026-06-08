@@ -222,6 +222,9 @@ class _FakeModeler:
         self._objects: dict[str, _FakeModelObject] = {}
         self.import_calls: list[Path] = []
         self.import_kwargs: list[dict[str, object]] = []
+        self.create_region_calls: list[dict[str, object]] = []
+        self.create_region_result: object = True
+        self.region_face_ids: list[int] = [301, 302, 303, 304, 305, 306]
         self.set_model_state_calls: list[tuple[str, bool]] = []
         self._object_edges: dict[str, list[int]] = {}
         self._edge_vertices: dict[int, tuple[int, int]] = {}
@@ -242,10 +245,24 @@ class _FakeModeler:
         self._seed_copper_port_edges()
         return True
 
+    def create_region(self, pad_value: int, pad_type: str, name: str) -> object:
+        self.create_region_calls.append({"pad_value": pad_value, "pad_type": pad_type, "name": name})
+        if self.create_region_result is False:
+            return False
+        self._object_names.append(name)
+        region = _FakeModelObject(name)
+        self._objects[name] = region
+        return region
+
     def get_object_from_name(self, assignment: str) -> object:
         if assignment not in self._objects:
             return False
         return self._objects[assignment]
+
+    def get_object_faces(self, assignment: str) -> list[int]:
+        if assignment not in self._objects:
+            return []
+        return list(self.region_face_ids)
 
     def _seed_edge(
         self,
@@ -339,6 +356,8 @@ class _FakeHfss:
         self.excitation_names: list[str] = []
         self.saved_paths: list[str] = []
         self.assign_material_calls: list[tuple[str, str]] = []
+        self.radiation_calls: list[tuple[object, str]] = []
+        self.assign_radiation_result: object = True
         self.create_output_variables: list[tuple[str, str, str]] = []
         self.create_output_variable_result: object = True
 
@@ -354,6 +373,10 @@ class _FakeHfss:
     def create_output_variable(self, variable: str, expression: str, solution: str) -> object:
         self.create_output_variables.append((variable, expression, solution))
         return self.create_output_variable_result
+
+    def assign_radiation_boundary_to_faces(self, assignment: object, name: str) -> object:
+        self.radiation_calls.append((assignment, name))
+        return self.assign_radiation_result
 
     def get_traces_for_plot(
         self,
@@ -486,7 +509,7 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     setup_payload = hfss.odesign.analysis_setup_module.insert_setup_calls[0][1]
     assert setup_payload[0] == "NAME:Setup1"
     assert setup_payload[setup_payload.index("Frequency:=") + 1] == "6.78MHz"
-    assert setup_payload[setup_payload.index("MaxDeltaS:=") + 1] == 0.0005
+    assert setup_payload[setup_payload.index("MaxDeltaS:=") + 1] == 0.003
     assert setup_payload[setup_payload.index("MaximumPasses:=") + 1] == 35
     assert setup_payload[setup_payload.index("MinimumPasses:=") + 1] == 17
     assert setup_payload[setup_payload.index("MinimumConvergedPasses:=") + 1] == 7
@@ -535,6 +558,32 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert result["mesh"]["objects"] == ["rx_ssw_coil_coil_copper", "tx_ssw_coil_ssw_copper"]
     assert result["mesh"]["max_length"] == "1mm"
     assert result["mesh"]["num_max_elem"] == "50000"
+    assert hfss.modeler.create_region_calls == [
+        {"pad_value": 2000, "pad_type": "Absolute Offset", "name": "Region_Abs_2000mm"}
+    ]
+    assert hfss.radiation_calls == [
+        ([301], "Rad_RegionAbs_0"),
+        ([302], "Rad_RegionAbs_1"),
+        ([303], "Rad_RegionAbs_2"),
+        ([304], "Rad_RegionAbs_3"),
+        ([305], "Rad_RegionAbs_4"),
+        ([306], "Rad_RegionAbs_5"),
+    ]
+    assert result["boundary"] == {
+        "type": "radiation",
+        "offset_type": "Absolute Offset",
+        "offset_value": "2000.0",
+        "region_name": "Region_Abs_2000mm",
+        "face_count": "6",
+        "boundary_names": [
+            "Rad_RegionAbs_0",
+            "Rad_RegionAbs_1",
+            "Rad_RegionAbs_2",
+            "Rad_RegionAbs_3",
+            "Rad_RegionAbs_4",
+            "Rad_RegionAbs_5",
+        ],
+    }
     assert result["analysis_setup"]["setup_name"] == "Setup1"
     assert result["analysis_setup"]["frequency"] == "6.78MHz"
     assert result["frequency_sweep"]["sweep_name"] == "Sweep"
@@ -594,6 +643,7 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert "Volume(tv)" in diagnostic_traces
     assert "Volume(tx_mull_ferrite_sheet)" in diagnostic_traces
     assert "Volume(tx_ssw_coil_ssw_copper)" in diagnostic_traces
+    assert "Volume(Region_Abs_2000mm)" in diagnostic_traces
     adaptive_components = cast(list[object], hfss.odesign.report_setup_module.create_report_calls[2]["components"])
     assert adaptive_components[adaptive_components.index("X Component:=") + 1] == "Pass"
     adaptive_traces = cast(list[str], adaptive_components[adaptive_components.index("Y Component:=") + 1])
@@ -610,6 +660,7 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert imported["ferrite_body_names"] == ledger["ferrite_body_names"]
     assert imported["material_assignments"] == expected_material_assignments
     assert imported["mesh"] == result["mesh"]
+    assert imported["boundary"] == result["boundary"]
     assert imported["analysis_setup"] == result["analysis_setup"]
     assert imported["frequency_sweep"] == result["frequency_sweep"]
     assert imported["reports"] == result["reports"]
@@ -664,6 +715,42 @@ def test_setup_ssw_aedt_ports_into_hfss_raises_on_setup_or_sweep_false(tmp_path:
     hfss.odesign.analysis_setup_module.insert_sweep_result = False
 
     with pytest.raises(RuntimeError, match="InsertFrequencySweep"):
+        setup_ssw_aedt_ports_into_hfss(
+            hfss=cast(HfssSession, hfss),
+            port_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "ssw_ports.aedt",
+            imported_ledger_path=tmp_path / "ssw_imported.json",
+        )
+
+
+def test_setup_ssw_aedt_ports_into_hfss_raises_on_boundary_generation_failure(tmp_path: Path) -> None:
+    ledger_path = _ledger_path(tmp_path)
+    hfss = _FakeHfss(_ledger(tmp_path))
+    hfss.modeler.create_region_result = False
+
+    with pytest.raises(RuntimeError, match="create_region"):
+        setup_ssw_aedt_ports_into_hfss(
+            hfss=cast(HfssSession, hfss),
+            port_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "ssw_ports.aedt",
+            imported_ledger_path=tmp_path / "ssw_imported.json",
+        )
+
+    hfss = _FakeHfss(_ledger(tmp_path))
+    hfss.modeler.region_face_ids = [301, 302, 303, 304, 305]
+
+    with pytest.raises(ValueError, match="does not expose 6 faces"):
+        setup_ssw_aedt_ports_into_hfss(
+            hfss=cast(HfssSession, hfss),
+            port_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "ssw_ports.aedt",
+            imported_ledger_path=tmp_path / "ssw_imported.json",
+        )
+
+    hfss = _FakeHfss(_ledger(tmp_path))
+    hfss.assign_radiation_result = False
+
+    with pytest.raises(RuntimeError, match="assign_radiation_boundary_to_faces"):
         setup_ssw_aedt_ports_into_hfss(
             hfss=cast(HfssSession, hfss),
             port_ledger_path=ledger_path,
@@ -768,6 +855,8 @@ def test_setup_ssw_aedt_ports_runs_real_headless_ansys() -> None:
     assert "rx_ssw_coil_coil_copper" in imported["copper_body_names"]
     assert imported["mesh"]["objects"] == ["rx_ssw_coil_coil_copper", "tx_ssw_coil_ssw_copper"]
     assert imported["mesh"]["max_length"] == "1mm"
+    assert imported["boundary"]["region_name"] == "Region_Abs_2000mm"
+    assert imported["boundary"]["face_count"] == "6"
     assert imported["analysis_setup"]["setup_name"] == "Setup1"
     assert imported["frequency_sweep"]["sweep_name"] == "Sweep"
     assert imported["reports"]["report_names"] == ["Output Variables Table1", "Table1", "Table2"]
