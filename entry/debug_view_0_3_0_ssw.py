@@ -20,6 +20,7 @@ from peetsfea.ssw_step import (
     export_ssw_step_artifacts,
     load_ssw_fixed_spec,
     load_ssw_step_ledger,
+    normal_spiral_trace_width_mm,
 )
 from peetsfea.backend.pyaedt.ssw_ports import (
     CanonicalCoordinates,
@@ -281,6 +282,11 @@ def export_ssw_aedt_port_artifacts(
     ssw_ledger = load_ssw_step_ledger(Path(summary["step_ledger_path"]))
     token_toml_path = Path(summary["token_toml_path"])
     aedt_step_path = Path(summary["step_path"])
+    rx_normal_spiral_edge_length_mm = (
+        normal_spiral_trace_width_mm(params=spec.rx, fixed=spec.fixed)
+        if not spec.rx.is_ssw_enabled
+        else spec.fixed.port_landing_pad_mm
+    )
     ledger = _build_ssw_aedt_port_ledger(
         ssw_ledger=ssw_ledger,
         ssw_ledger_path=Path(summary["step_ledger_path"]),
@@ -289,7 +295,7 @@ def export_ssw_aedt_port_artifacts(
             ssw_ledger=ssw_ledger,
             token_toml_path=token_toml_path,
             minimum_edge_length_mm=spec.fixed.port_landing_pad_mm,
-            pair_edge_length_mm=spec.fixed.port_landing_pad_mm,
+            pair_edge_length_mm=rx_normal_spiral_edge_length_mm,
             pair_spacing_mm=spec.fixed.port_length_mm,
         ),
     )

@@ -771,7 +771,7 @@ def _normal_port_landing_pad_mm(
     config: RuntimeConfig,
     trace_width_mm: float,
 ) -> float:
-    return min(config.fixed.PORT_LANDING_PAD_MM, trace_width_mm)
+    return trace_width_mm
 
 
 def _normal_port_landing_z_bounds(config: RuntimeConfig) -> Point2D:

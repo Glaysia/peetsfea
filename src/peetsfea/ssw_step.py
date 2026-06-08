@@ -840,6 +840,19 @@ def _coilmaker_config(params: SswCoilParameters, fixed: FixedDimensions) -> coil
     )
 
 
+def normal_spiral_trace_width_mm(*, params: SswCoilParameters, fixed: FixedDimensions) -> float:
+    if params.is_ssw_enabled:
+        raise ValueError(f"{params.role} normal/spiral trace width requires is_ssw_enabled=false")
+    config = _coilmaker_config(params, fixed)
+    frames = tuple(coilmaker.coil_slot_frames(config))
+    if len(frames) != 1:
+        raise ValueError(
+            "0.3.0 normal/spiral trace width expects exactly one coil frame "
+            f"(role={params.role}, count={len(frames)})"
+        )
+    return coilmaker._normal_coil_trace_width_mm(config, frames[0])
+
+
 def _identity_location() -> cq.Location:
     return cq.Location(cq.Vector(0.0, 0.0, 0.0))
 
@@ -1728,6 +1741,7 @@ __all__ = [
     "export_ssw_step_artifacts",
     "load_ssw_fixed_spec",
     "load_ssw_step_ledger",
+    "normal_spiral_trace_width_mm",
     "write_coil_making_token_toml",
     "write_ssw_step_ledger",
 ]

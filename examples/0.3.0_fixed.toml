@@ -38,7 +38,7 @@ description = "Port landing gap length(mm)"
 
 [fixed_dimensions.port_landing_pad_mm]
 range = [false, 5.5, 5.5, 1]
-description = "Port landing pad width(mm)"
+description = "SSW/AEDT nominal port landing pad width(mm); normal/spiral pad follows realized trace width"
 
 [fixed_dimensions.port_landing_drop_mm]
 range = [false, 0.24, 0.24, 1]

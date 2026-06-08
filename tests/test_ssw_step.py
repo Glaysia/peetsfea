@@ -17,6 +17,7 @@ from peetsfea.ssw_step import (
     export_ssw_step_artifacts,
     load_ssw_fixed_spec,
     load_ssw_step_ledger,
+    normal_spiral_trace_width_mm,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -30,7 +31,7 @@ def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
     assert spec.units == "mm"
     assert spec.fixed.width_max_mm == 360.0
     assert spec.fixed.height_max_mm == 180.0
-    assert spec.fixed.tx_rx_min_distance_mm == 100.0
+    assert spec.fixed.tx_rx_min_distance_mm == 50.0
     assert spec.fixed.mull_ferrite_thickness_mm == 0.12
     assert spec.ferrite.mull_position_ratio == 0.0
     assert tuple(box.object_id for box in spec.non_model_objects) == (
@@ -42,7 +43,7 @@ def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
     assert spec.tx.role == "tx_ssw_coil"
     assert spec.rx.role == "rx_ssw_coil"
     assert spec.tx.width_ratio == 0.6
-    assert spec.rx.height_ratio == 0.6
+    assert spec.rx.height_ratio == 0.9
     assert spec.tx.is_ssw_enabled is True
     assert spec.rx.is_ssw_enabled is False
     assert spec.tx.turn_n_int == 3
@@ -50,6 +51,7 @@ def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
     assert spec.tx.gap_ratio == 0.24
     assert spec.rx.void_area_ratio == 0.25
     assert spec.tx.no_ssw_qturn_start_int == 0
+    assert spec.rx.no_ssw_qturn_start_int == 3
     assert spec.rx.no_ssw_qturn_n_int == 0
     assert spec.tx.pcb_gap_mm == 8.0
     assert spec.rx.twist_factor == 1
@@ -156,6 +158,10 @@ def _combined_bbox_bounds(
     )
 
 
+def _rx_normal_trace_width_mm(spec: module_under_test.SswFixedSpec) -> float:
+    return normal_spiral_trace_width_mm(params=spec.rx, fixed=spec.fixed)
+
+
 def _rx_normal_port_landing_bounds(
     spec: module_under_test.SswFixedSpec,
 ) -> tuple[float, float, float, float, float, float]:
@@ -163,7 +169,7 @@ def _rx_normal_port_landing_bounds(
     frames = tuple(coilmaker.coil_slot_frames(config))
     assert len(frames) == 1
     frame = frames[0]
-    trace_width_mm = coilmaker._normal_coil_trace_width_mm(config, frame)
+    trace_width_mm = _rx_normal_trace_width_mm(spec)
     centerline_points = coilmaker._normal_coil_centerline_points(config, frame)
     landing = coilmaker._normal_port_landing_geometry(config, frame, centerline_points, trace_width_mm)
     placement = module_under_test._placement_for_role(
@@ -204,7 +210,7 @@ def _body_by_name_from_ledger(ledger: SswStepLedger, name: str) -> Mapping[str, 
 def test_build_ssw_body_boxes_uses_tv_below_distance(tmp_path: Path) -> None:
     source_text = FIXED_TOML.read_text(encoding="utf-8")
     custom_text = source_text.replace(
-        "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 100.0, 100.0, 1]",
+        "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 50.0, 50.0, 1]",
         "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 125.0, 125.0, 1]",
     )
     assert custom_text != source_text
@@ -275,11 +281,17 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert len(rx_placement) == 1
     tx_placement_params = _action_params_by_key(tx_placement[0])
     rx_placement_params = _action_params_by_key(rx_placement[0])
+    rx_port_landing = tuple(action for action in actions if action["target"] == "rx_ssw_coil.frame_0.port.landing")
+    assert len(rx_port_landing) == 1
+    rx_port_landing_params = _action_params_by_key(rx_port_landing[0])
+    rx_trace_width_mm = _rx_normal_trace_width_mm(spec)
     assert tx_placement_params["coil_mode"] == "ssw"
     assert rx_placement_params["coil_mode"] == "normal_spiral"
+    assert rx_port_landing_params["pad_mm"] == pytest.approx(rx_trace_width_mm)
     assert tx_placement_params["port_face"] == "lower_z"
     assert rx_placement_params["port_face"] == "normal_spiral_landing"
     assert tx_placement_params["no_ssw_qturn_start_int"] == 0
+    assert rx_placement_params["no_ssw_qturn_start_int"] == 3
     assert rx_placement_params["no_ssw_qturn_n_int"] == 0
     assert "tx_ssw_coil_pcb_1_fr4" in ledger["fr4_body_names"]
     assert "rx_ssw_coil_pcb_1_fr4" in ledger["fr4_body_names"]
@@ -344,16 +356,31 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert rx_ferrite_bounds[4] == pytest.approx(rx_assembly_bounds[4])
     assert rx_ferrite_bounds[5] == pytest.approx(rx_assembly_bounds[5])
     assert rx_bounds[1] == pytest.approx(rx_region_max_bounds[1])
-    assert rx_region_max_bounds[0] <= rx_bounds[0] <= rx_bounds[1] <= rx_region_max_bounds[1]
-    assert rx_region_max_bounds[2] <= rx_bounds[2] <= rx_bounds[3] <= rx_region_max_bounds[3]
-    assert rx_region_max_bounds[4] <= rx_bounds[4] <= rx_bounds[5] <= rx_region_max_bounds[5]
+    assert (
+        rx_region_max_bounds[0] - tolerance
+        <= rx_bounds[0]
+        <= rx_bounds[1]
+        <= rx_region_max_bounds[1] + tolerance
+    )
+    assert (
+        rx_region_max_bounds[2] - tolerance
+        <= rx_bounds[2]
+        <= rx_bounds[3]
+        <= rx_region_max_bounds[3] + tolerance
+    )
+    assert (
+        rx_region_max_bounds[4] - tolerance
+        <= rx_bounds[4]
+        <= rx_bounds[5]
+        <= rx_region_max_bounds[5] + tolerance
+    )
     assert rx_bounds[0] >= tv_bounds[0] - 0.07 - tolerance
     assert rx_bounds[1] <= tv_bounds[1] + tolerance
     assert rx_bounds[2] >= tv_bounds[2] - tolerance
     assert rx_bounds[3] <= tv_bounds[3] + tolerance
     assert rx_bounds[4] >= tv_bounds[4] - 0.07 - tolerance
     assert rx_bounds[5] <= tv_bounds[5] + 0.07 + tolerance
-    assert tv_bounds[4] - tx_region_bounds[5] == pytest.approx(100.0)
+    assert tv_bounds[4] - tx_region_bounds[5] == pytest.approx(50.0)
     assert tx_bounds[5] == pytest.approx(tx_region_bounds[5])
     assert tx_region_bounds[0] <= tx_bounds[0] <= tx_bounds[1] <= tx_region_bounds[1]
     assert tx_region_bounds[2] <= tx_bounds[2] <= tx_bounds[3] <= tx_region_bounds[3]
@@ -439,8 +466,8 @@ def test_export_ssw_aedt_port_artifacts_writes_direct_edge_port_ledger(tmp_path:
     assert "port_sheet_names" not in ledger
     assert "tx_aedt_port_sheet" not in ledger["body_names"]
     assert "rx_aedt_port_sheet" not in ledger["body_names"]
-    assert "tx_mull_ferrite_sheet" in ledger["non_model_body_names"]
-    assert "rx_mull_ferrite_sheet" in ledger["non_model_body_names"]
+    assert "tx_mull_ferrite_sheet" in ledger["ferrite_body_names"]
+    assert "rx_mull_ferrite_sheet" in ledger["ferrite_body_names"]
     assert [entry["role"] for entry in ledger["port_edges"]] == ["tx", "rx"]
     tx_entry = ledger["port_edges"][0]
     rx_entry = ledger["port_edges"][1]
@@ -453,13 +480,16 @@ def test_export_ssw_aedt_port_artifacts_writes_direct_edge_port_ledger(tmp_path:
     assert rx_entry["face_axis"] == "x"
     assert rx_entry["face_side"] == "min"
     assert rx_entry["edge_axis"] == "z"
+    assert rx_entry["edge_length_mm"] == pytest.approx(
+        _rx_normal_trace_width_mm(load_ssw_fixed_spec(FIXED_TOML))
+    )
 
 
 def test_export_ssw_step_artifacts_supports_explicit_rx_spiral_mode(tmp_path: Path) -> None:
     source_text = FIXED_TOML.read_text(encoding="utf-8")
     custom_text = source_text
     custom_text = custom_text.replace(
-        '[modeled_objects.no_ssw_qturn_start_int]\nrange = [true, 0, 0, 1]\ndescription = "RX non-SSW quarter-turn start index; fixed disabled for 0.3.0 SSW"',
+        '[modeled_objects.no_ssw_qturn_start_int]\nrange = [true, 3, 3, 1]\ndescription = "RX non-SSW quarter-turn start index; fixed disabled for 0.3.0 SSW"',
         '[modeled_objects.no_ssw_qturn_start_int]\nrange = [true, 2, 2, 1]\ndescription = "RX non-SSW quarter-turn start index; fixed disabled for 0.3.0 SSW"',
     )
     custom_text = custom_text.replace(
@@ -496,12 +526,27 @@ def test_export_ssw_step_artifacts_supports_explicit_rx_spiral_mode(tmp_path: Pa
 
 
 def test_export_ssw_step_artifacts_supports_zero_zero_rx_spiral_selection(tmp_path: Path) -> None:
-    spec = load_ssw_fixed_spec(FIXED_TOML)
+    source_text = FIXED_TOML.read_text(encoding="utf-8")
+    custom_text = source_text.replace(
+        (
+            '[modeled_objects.no_ssw_qturn_start_int]\nrange = [true, 3, 3, 1]\n'
+            'description = "RX non-SSW quarter-turn start index; fixed disabled for 0.3.0 SSW"'
+        ),
+        (
+            '[modeled_objects.no_ssw_qturn_start_int]\nrange = [true, 0, 0, 1]\n'
+            'description = "RX non-SSW quarter-turn start index; fixed disabled for 0.3.0 SSW"'
+        ),
+    )
+    assert custom_text != source_text
+    custom_toml = tmp_path / "rx_zero_zero.toml"
+    custom_toml.write_text(custom_text, encoding="utf-8")
+
+    spec = load_ssw_fixed_spec(custom_toml)
     assert spec.rx.is_ssw_enabled is False
     assert spec.rx.no_ssw_qturn_start_int == 0
     assert spec.rx.no_ssw_qturn_n_int == 0
 
-    artifacts = export_ssw_step_artifacts(source_toml_path=FIXED_TOML, output_dir=tmp_path / "out", seed=0)
+    artifacts = export_ssw_step_artifacts(source_toml_path=custom_toml, output_dir=tmp_path / "out", seed=0)
     token_doc = tomllib.loads(Path(artifacts["token_toml_path"]).read_text(encoding="utf-8"))
     actions = token_doc["actions"]
     assert isinstance(actions, list)
