@@ -283,6 +283,16 @@ class _FakeHfss:
         self.delete_setup_calls: list[str] = []
         self.saved_paths: list[str] = []
         self.get_traces_for_plot_calls: list[dict[str, object]] = []
+        self.assign_material_calls: list[tuple[str, str]] = []
+
+    def assign_material(self, assignment: str | list[str], material: str) -> object:
+        if not isinstance(assignment, str):
+            raise TypeError("fake assign_material expects one object name")
+        self.assign_material_calls.append((assignment, material))
+        raw_object = self.modeler.get_object_from_name(assignment)
+        assert isinstance(raw_object, _FakeModelObject)
+        raw_object.material_name = material
+        return True
 
     def assign_radiation_boundary_to_faces(self, assignment: object, name: str) -> object:
         self.radiation_calls.append((assignment, name))
@@ -356,7 +366,13 @@ def test_setup_minimal_step_ledger_into_hfss_creates_two_port_setup(tmp_path: Pa
     assert hfss.modeler.import_calls == [Path(ledger["scene_step_path"])]
     assert hfss.modeler.import_kwargs == [{"create_group": False, "import_free_surfaces": True, "import_materials": False}]
     assert hfss.modeler.set_model_state_calls == [("air_context", False)]
-    assert hfss.materials.exists_material_calls == ["copper", "copper", "copper", "copper"]
+    expected_material_assignments = {body["object_id"]: body["material"] for body in ledger["bodies"]}
+    assert hfss.materials.exists_material_calls == [
+        expected_material_assignments[body_name] for body_name in ledger["body_names"]
+    ]
+    assert hfss.assign_material_calls == [
+        (body_name, expected_material_assignments[body_name]) for body_name in ledger["body_names"]
+    ]
     for copper_body_name in ledger["copper_body_names"]:
         raw_object = hfss.modeler.get_object_from_name(copper_body_name)
         assert isinstance(raw_object, _FakeModelObject)
@@ -448,7 +464,7 @@ def test_setup_minimal_step_ledger_into_hfss_creates_two_port_setup(tmp_path: Pa
     assert hfss.saved_paths == [str(tmp_path / "minimal.aedt")]
     imported = json.loads((tmp_path / "minimal_imported_ledger.json").read_text(encoding="utf-8"))
     assert imported["copper_body_names"] == ledger["copper_body_names"]
-    assert imported["material_assignments"] == {name: "copper" for name in ledger["copper_body_names"]}
+    assert imported["material_assignments"] == expected_material_assignments
     assert imported["visual_assignments"]["air_context"] == {"color": [128, 128, 128], "transparency": 0.85}
     assert imported["visual_assignments"]["tx_signal_pad"] == {"color": [184, 115, 51], "transparency": 0.0}
     assert imported["visual_assignments"]["tx_port_sheet"] == {"color": [180, 215, 255], "transparency": 0.88}

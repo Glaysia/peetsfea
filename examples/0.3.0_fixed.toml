@@ -57,7 +57,7 @@ range = [false, 180.0, 180.0, 1]
 description = "Maximum coil height(mm)"
 
 [fixed_dimensions.tx_rx_min_distance_mm]
-range = [false, 100.0, 100.0, 1]
+range = [false, 50.0, 50.0, 1]
 description = "Minimum edge-to-edge distance between TX and RX coils(mm)"
 
 [fixed_dimensions.mull_ferrite_thickness_mm]
@@ -190,11 +190,11 @@ material = "composite"
 model_state = true
 
 [modeled_objects.width_ratio]
-range = [false, 0.6, 0.6, 1]
+range = [false, 0.9, 0.9, 1]
 description = "RX SSW coil width ratio against fixed_dimensions.width_max_mm"
 
 [modeled_objects.height_ratio]
-range = [false, 0.6, 0.6, 1]
+range = [false, 0.9, 0.9, 1]
 description = "RX SSW coil height ratio against fixed_dimensions.height_max_mm"
 
 [modeled_objects.is_ssw_enabled]
@@ -206,7 +206,7 @@ range = [true, 1, 1, 1]
 description = "RX SSW band count"
 
 [modeled_objects.gap_ratio]
-range = [false, 0.24, 0.24, 1]
+range = [false, 0.1, 0.1, 1]
 description = "RX SSW pitch 중 gap 비율"
 
 [modeled_objects.void_area_ratio]
@@ -218,7 +218,7 @@ range = [true, 1, 1, 1]
 description = "RX void profile: 0 rectangular void, 1 scaled void"
 
 [modeled_objects.no_ssw_qturn_start_int]
-range = [true, 0, 0, 1]
+range = [true, 3, 3, 1]
 description = "RX non-SSW quarter-turn start index; fixed disabled for 0.3.0 SSW"
 
 [modeled_objects.no_ssw_qturn_n_int]

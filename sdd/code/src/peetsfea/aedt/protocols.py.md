@@ -17,7 +17,7 @@ tags:
 - AEDT/PyAEDT session boundary의 structural Protocol 타입을 정의한다.
 - production wrapper와 pure-Python fake tests가 공유하는 최소 interface contract를 제공한다.
 - minimal setup-ready import work를 위해 mesh module lookup 이후 `AssignLengthOp(...)` boundary도 typed surface로 유지한다.
-- Optional finite-conductivity assignment remains typed for shared AEDT boundary coverage.
+- Optional finite-conductivity assignment and explicit HFSS material assignment remain typed for shared AEDT boundary coverage.
 
 ## 입력 / 출력
 - `HfssSession`, `ModelerSession`, module/session Protocol classes
@@ -25,6 +25,7 @@ tags:
 - `ModelerSession.import_3d_cad(...) -> bool`
 - `ModelerSession.set_object_model_state(...) -> object`
 - `MeshModuleSession.AssignLengthOp(...) -> object`
+- `HfssSession.assign_material(...) -> object`
 - `HfssSession.change_validation_settings(...) -> object`
 - `HfssSession.assign_finite_conductivity(...) -> object`
 - `HfssSession.analyze_setup(...) -> object`
@@ -39,6 +40,7 @@ tags:
 - `ModelerSession.import_3d_cad()` signature는 repo-pinned PyAEDT `0.25.1` wrapper와 일치해야 한다.
 - `MeshModuleSession`은 `MeshSetup` lookup 이후 explicit cast target이며 `False` return fail-fast enforcement는 runtime layer가 담당한다.
 - `change_validation_settings()` exposes PyAEDT's validation-design setting boundary; callers still fail fast on `False`.
+- `assign_material()` exposes HFSS material assignment without relying only on object attribute mutation.
 - `assign_finite_conductivity()` exposes finite-conductivity assignment without implementing fallback behavior.
 - EM solve/export callers own fail-fast handling for `analyze_setup()` and `ExportToFile()`.
 - runtime validation은 `sdd/code/src/peetsfea/aedt/wrappers.py.md`가 담당한다.

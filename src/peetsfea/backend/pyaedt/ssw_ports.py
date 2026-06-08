@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from collections.abc import Mapping, Sequence
 from typing import Callable, Literal, TypeAlias, TypedDict, cast
 
 from peetsfea.aedt import Hfss
@@ -19,6 +20,62 @@ COPPER_COLOR = (184, 115, 51)
 COPPER_TRANSPARENCY = 0.0
 NON_MODEL_COLOR = (128, 128, 128)
 NON_MODEL_TRANSPARENCY = 0.85
+FR4_MATERIAL = "fr4"
+FR4_PERMITTIVITY = "4.4"
+FR4_CONDUCTIVITY = "0"
+FR4_DIELECTRIC_LOSS_TANGENT = "0.02"
+MULL_FERRITE_ALIAS = "mull_ferrite"
+MULL_FERRITE_MATERIAL = "MULL12060ferrite"
+MULL_FERRITE_APPEARANCE_RGB = (89, 94, 107)
+NOTEBOOK_DATASET_IMPORT_PATH = Path(__file__).resolve().parents[4] / "notebooks" / "mu_p.tab"
+MU_R_REAL_DATASET_NAME = "$mu_r_real"
+MU_TAND_M_DATASET_NAME = "$mu_tand_m"
+MU_R_REAL_DATASET_POINTS = (
+    (0.001, 133.0),
+    (0.003, 134.0),
+    (0.005, 135.0),
+    (0.008, 136.0),
+    (0.01, 137.0),
+    (0.012, 142.0),
+    (0.015, 152.0),
+    (0.018, 160.0),
+    (0.02, 166.0),
+    (0.025, 150.0),
+    (0.03, 130.0),
+    (0.04, 100.0),
+    (0.05, 82.0),
+    (0.07, 65.0),
+    (0.1, 50.0),
+    (0.15, 35.0),
+    (0.2, 25.0),
+    (0.3, 15.0),
+    (0.5, 10.0),
+    (0.7, 11.0),
+    (1.0, 18.0),
+)
+MU_TAND_M_DATASET_POINTS = (
+    (0.001, 0.0),
+    (0.003, 0.0),
+    (0.005, 0.0),
+    (0.008, 0.00367647),
+    (0.01, 0.00729927),
+    (0.012, 0.0140845),
+    (0.015, 0.0328947),
+    (0.018, 0.075),
+    (0.02, 0.150602),
+    (0.025, 0.4),
+    (0.03, 0.553846),
+    (0.04, 0.76),
+    (0.05, 0.890244),
+    (0.07, 1.01538),
+    (0.1, 1.16),
+    (0.15, 1.42857),
+    (0.2, 1.8),
+    (0.3, 2.46667),
+    (0.5, 2.8),
+    (0.7, 2.0),
+    (1.0, 1.0),
+)
 
 Point3 = tuple[float, float, float]
 HfssFactory = Callable[[str], HfssSession]
@@ -77,6 +134,7 @@ class SswAedtPortStepLedger(TypedDict):
     body_names: list[str]
     copper_body_names: list[str]
     non_model_body_names: list[str]
+    ferrite_body_names: list[str]
     bodies: list[SswAedtBodyLedgerEntry]
     port_edges: list[SswAedtPortEdgeLedgerEntry]
 
@@ -96,6 +154,7 @@ class SswAedtImportedLedger(TypedDict):
     material_assignments: dict[str, str]
     visual_assignments: dict[str, VisualAssignment]
     non_model_body_names: list[str]
+    ferrite_body_names: list[str]
 
 
 class SswAedtPorts(TypedDict):
@@ -138,6 +197,7 @@ def load_ssw_aedt_port_ledger(ledger_path: Path) -> SswAedtPortStepLedger:
         "body_names",
         "copper_body_names",
         "non_model_body_names",
+        "ferrite_body_names",
         "bodies",
         "port_edges",
     ):
@@ -193,6 +253,11 @@ def _assign_object_material(*, hfss: HfssSession, modeler: ModelerSession, objec
         operation="Materials.exists_material",
         context={"object_name": object_name, "material": material},
     )
+    raise_on_false(
+        hfss.assign_material(object_name, material),
+        operation="assign_material",
+        context={"object_name": object_name, "material": material},
+    )
     imported_object = raise_on_false(
         modeler.get_object_from_name(object_name),
         operation="get_object_from_name",
@@ -201,7 +266,6 @@ def _assign_object_material(*, hfss: HfssSession, modeler: ModelerSession, objec
     assert hasattr(imported_object, "material_name"), (
         f"Imported AEDT object must expose material_name before material assignment (object_name={object_name})"
     )
-    setattr(imported_object, "material_name", material)
     assigned_material = getattr(imported_object, "material_name")
     assert isinstance(assigned_material, str), (
         f"Imported AEDT object material_name must read back as str (object_name={object_name})"
@@ -212,6 +276,281 @@ def _assign_object_material(*, hfss: HfssSession, modeler: ModelerSession, objec
             f"(object_name={object_name}, expected={material!r}, actual={assigned_material!r})"
         )
     return assigned_material
+
+
+def _set_material_property(material: object, *, material_name: str, attr_name: str, attr_value: str) -> None:
+    try:
+        setattr(material, attr_name, attr_value)
+    except Exception as exc:
+        raise RuntimeError(
+            "Failed to configure AEDT material property "
+            f"(material={material_name}, property={attr_name}, value={attr_value!r})"
+        ) from exc
+
+
+def _unwrap_raw(value: object, *, context: str) -> object:
+    if hasattr(value, "_raw"):
+        raw_value = object.__getattribute__(value, "_raw")
+        assert raw_value is not None, f"{context}._raw must not be null"
+        return raw_value
+    return value
+
+
+def _dataset_payload(dataset_name: str, *, points: tuple[tuple[float, float], ...]) -> list[object]:
+    payload: list[object] = [
+        f"NAME:{dataset_name}",
+        [
+            "NAME:Coordinates",
+            ["NAME:DimUnits", "GHz", "fraction"],
+        ],
+    ]
+    coordinates = payload[1]
+    assert isinstance(coordinates, list), "dataset payload coordinates container must be a list"
+    for frequency_ghz, value in points:
+        coordinates.append(["NAME:Point", frequency_ghz, value])
+    return payload
+
+
+def _raw_project(hfss: HfssSession) -> object:
+    raw_hfss = _unwrap_raw(hfss, context="hfss")
+    assert hasattr(raw_hfss, "oproject"), "HFSS session must expose raw oproject for dataset-backed ferrite setup"
+    raw_project = getattr(raw_hfss, "oproject")
+    assert raw_project is not None, "HFSS raw oproject must not be null"
+    return raw_project
+
+
+def _raw_design(hfss: HfssSession) -> object:
+    return _unwrap_raw(hfss.odesign, context="hfss.odesign")
+
+
+def _raw_materials(hfss: HfssSession) -> object:
+    return _unwrap_raw(hfss.materials, context="hfss.materials")
+
+
+def _materials_session(hfss: HfssSession) -> MaterialsSession:
+    return cast(MaterialsSession, _unwrap_raw(hfss.materials, context="hfss.materials"))
+
+
+def _material_ref_from_material_keys(hfss: HfssSession, *, material_name: str) -> object | None:
+    material_keys = _materials_session(hfss).material_keys
+    normalized_name = material_name.casefold()
+    if normalized_name not in material_keys:
+        return None
+    return material_keys[normalized_name]
+
+
+def _definition_manager(raw_project: object) -> object:
+    assert hasattr(raw_project, "GetDefinitionManager"), (
+        f"Raw project must expose GetDefinitionManager (project_type={type(raw_project).__name__})"
+    )
+    get_definition_manager = getattr(raw_project, "GetDefinitionManager")
+    assert callable(get_definition_manager), "Raw project GetDefinitionManager must be callable"
+    definition_manager = get_definition_manager()
+    assert definition_manager is not None, "Raw project definition manager must not be null"
+    return definition_manager
+
+
+def _project_material_names(definition_manager: object) -> list[str]:
+    assert hasattr(definition_manager, "GetProjectMaterialNames"), (
+        "Definition manager must expose GetProjectMaterialNames "
+        f"(definition_manager_type={type(definition_manager).__name__})"
+    )
+    get_project_material_names = getattr(definition_manager, "GetProjectMaterialNames")
+    assert callable(get_project_material_names), "Definition manager GetProjectMaterialNames must be callable"
+    raw_names = get_project_material_names()
+    assert isinstance(raw_names, Sequence), (
+        "Definition manager GetProjectMaterialNames result must be a sequence "
+        f"(actual={type(raw_names).__name__})"
+    )
+    assert not isinstance(raw_names, (str, bytes)), "Definition manager GetProjectMaterialNames must not be str/bytes"
+    names: list[str] = []
+    for index, raw_name in enumerate(raw_names):
+        assert isinstance(raw_name, str), (
+            "Definition manager GetProjectMaterialNames items must be str "
+            f"(index={index}, actual={type(raw_name).__name__})"
+        )
+        if raw_name == "":
+            raise ValueError(f"Definition manager GetProjectMaterialNames returned empty name at index {index}")
+        names.append(raw_name)
+    return names
+
+
+def _dataset_ferrite_material_payload() -> list[object]:
+    red, green, blue = MULL_FERRITE_APPEARANCE_RGB
+    return [
+        f"NAME:{MULL_FERRITE_MATERIAL}",
+        "CoordinateSystemType:=",
+        "Cartesian",
+        "BulkOrSurfaceType:=",
+        1,
+        [
+            "NAME:PhysicsTypes",
+            "set:=",
+            ["Electromagnetic", "Thermal", "Structural"],
+        ],
+        [
+            "NAME:AttachedData",
+            [
+                "NAME:MatAppearanceData",
+                "property_data:=",
+                "appearance_data",
+                "Red:=",
+                red,
+                "Green:=",
+                green,
+                "Blue:=",
+                blue,
+            ],
+        ],
+        "permittivity:=",
+        "6",
+        "permeability:=",
+        f"pwlx({MU_R_REAL_DATASET_NAME}, Freq)",
+        "conductivity:=",
+        "0.01",
+        "magnetic_loss_tangent:=",
+        f"pwlx({MU_TAND_M_DATASET_NAME}, Freq)",
+        "thermal_conductivity:=",
+        "4",
+        "mass_density:=",
+        "4600",
+        "specific_heat:=",
+        "750",
+        "youngs_modulus:=",
+        "119000000000",
+        "thermal_expansion_coefficient:=",
+        "1e-05",
+    ]
+
+
+def _ensure_project_dataset_ferrite_material_definition(hfss: HfssSession) -> None:
+    definition_manager = _definition_manager(_raw_project(hfss))
+    payload = _dataset_ferrite_material_payload()
+    material_names = _project_material_names(definition_manager)
+    existing_case_name = next(
+        (name for name in material_names if name.casefold() == MULL_FERRITE_MATERIAL.casefold()),
+        None,
+    )
+    if existing_case_name is None:
+        assert hasattr(definition_manager, "AddMaterial"), (
+            "Definition manager must expose AddMaterial "
+            f"(definition_manager_type={type(definition_manager).__name__})"
+        )
+        add_material = getattr(definition_manager, "AddMaterial")
+        assert callable(add_material), "Definition manager AddMaterial must be callable"
+        add_material(payload)
+    else:
+        assert hasattr(definition_manager, "EditMaterial"), (
+            "Definition manager must expose EditMaterial "
+            f"(definition_manager_type={type(definition_manager).__name__})"
+        )
+        edit_material = getattr(definition_manager, "EditMaterial")
+        assert callable(edit_material), "Definition manager EditMaterial must be callable"
+        edit_material(existing_case_name, payload)
+    persisted_names = _project_material_names(definition_manager)
+    if not any(name.casefold() == MULL_FERRITE_MATERIAL.casefold() for name in persisted_names):
+        raise RuntimeError(
+            "Project ferrite material definition was not persisted after AddMaterial/EditMaterial "
+            f"(material_name={MULL_FERRITE_MATERIAL})"
+        )
+
+
+def _sync_pyaedt_material_lookup(hfss: HfssSession, *, material_name: str) -> None:
+    if _material_ref_from_material_keys(hfss, material_name=material_name) is not None:
+        return
+    raw_materials = _raw_materials(hfss)
+    assert hasattr(raw_materials, "_aedmattolibrary"), (
+        "Raw materials must expose _aedmattolibrary for post-definition material sync "
+        f"(materials_type={type(raw_materials).__name__})"
+    )
+    sync_material = getattr(raw_materials, "_aedmattolibrary")
+    assert callable(sync_material), "Raw materials _aedmattolibrary must be callable"
+    sync_material(material_name)
+    if _material_ref_from_material_keys(hfss, material_name=material_name) is None:
+        raise RuntimeError(
+            "PyAEDT materials lookup did not resolve ferrite material after project definition sync "
+            f"(material_name={material_name})"
+        )
+
+
+def _ensure_notebook_dataset_ferrite_material(hfss: HfssSession) -> str:
+    if not NOTEBOOK_DATASET_IMPORT_PATH.is_file():
+        raise FileNotFoundError(f"Notebook ferrite dataset tab file is missing: {NOTEBOOK_DATASET_IMPORT_PATH}")
+
+    raw_design = _raw_design(hfss)
+    assert hasattr(raw_design, "ImportDataset"), (
+        f"Raw design must expose ImportDataset for ferrite dataset import (design_type={type(raw_design).__name__})"
+    )
+    import_dataset = getattr(raw_design, "ImportDataset")
+    assert callable(import_dataset), "Raw design ImportDataset must be callable"
+    raise_on_false(
+        import_dataset(str(NOTEBOOK_DATASET_IMPORT_PATH)),
+        operation="ImportDataset",
+        context={"path": str(NOTEBOOK_DATASET_IMPORT_PATH)},
+    )
+
+    raw_project = _raw_project(hfss)
+    assert hasattr(raw_project, "AddDataset"), (
+        f"Raw project must expose AddDataset for ferrite material datasets (project_type={type(raw_project).__name__})"
+    )
+    add_dataset = getattr(raw_project, "AddDataset")
+    assert callable(add_dataset), "Raw project AddDataset must be callable"
+    raise_on_false(
+        add_dataset(_dataset_payload(MU_R_REAL_DATASET_NAME, points=MU_R_REAL_DATASET_POINTS)),
+        operation="AddDataset",
+        context={"dataset_name": MU_R_REAL_DATASET_NAME},
+    )
+    raise_on_false(
+        add_dataset(_dataset_payload(MU_TAND_M_DATASET_NAME, points=MU_TAND_M_DATASET_POINTS)),
+        operation="AddDataset",
+        context={"dataset_name": MU_TAND_M_DATASET_NAME},
+    )
+    _ensure_project_dataset_ferrite_material_definition(hfss)
+    _sync_pyaedt_material_lookup(hfss, material_name=MULL_FERRITE_MATERIAL)
+    return MULL_FERRITE_MATERIAL
+
+
+def _ensure_fr4_material(hfss: HfssSession) -> str:
+    raw_materials = hfss.materials
+    assert hasattr(raw_materials, "exists_material"), "Hfss.materials must expose exists_material"
+    assert hasattr(raw_materials, "add_material"), "Hfss.materials must expose add_material"
+    assert hasattr(raw_materials, "material_keys"), "Hfss.materials must expose material_keys"
+    materials = cast(MaterialsSession, raw_materials)
+    exists = bool(materials.exists_material(FR4_MATERIAL))
+    if exists:
+        material_keys = materials.material_keys
+        assert FR4_MATERIAL in material_keys, (
+            f"AEDT material_keys must contain {FR4_MATERIAL} after exists_material(name)=True"
+        )
+        material = material_keys[FR4_MATERIAL]
+    else:
+        material = raise_on_false(
+            materials.add_material(FR4_MATERIAL),
+            operation="add_material",
+            context={"name": FR4_MATERIAL},
+        )
+    for attr_name, attr_value in (
+        ("permeability", "1.0"),
+        ("permittivity", FR4_PERMITTIVITY),
+        ("conductivity", FR4_CONDUCTIVITY),
+        ("dielectric_loss_tangent", FR4_DIELECTRIC_LOSS_TANGENT),
+        ("magnetic_loss_tangent", "0"),
+    ):
+        _set_material_property(
+            material,
+            material_name=FR4_MATERIAL,
+            attr_name=attr_name,
+            attr_value=attr_value,
+        )
+    return FR4_MATERIAL
+
+
+def _ensure_repo_owned_material(*, hfss: HfssSession, material: str) -> str:
+    if material == FR4_MATERIAL:
+        return _ensure_fr4_material(hfss)
+    if material in (MULL_FERRITE_ALIAS, MULL_FERRITE_MATERIAL):
+        return _ensure_notebook_dataset_ferrite_material(hfss)
+    return material
 
 
 def _imported_object_ref(*, modeler: ModelerSession, object_name: str) -> object:
@@ -235,29 +574,25 @@ def _apply_visual_state(
     return {"color": [color[0], color[1], color[2]], "transparency": transparency}
 
 
-def _assign_copper_materials(
+def _assign_body_materials(
     *,
     hfss: HfssSession,
     modeler: ModelerSession,
     ledger: SswAedtPortStepLedger,
-    copper_body_names: list[str],
+    body_names: list[str],
 ) -> dict[str, str]:
     body_materials = _body_materials_by_object_id(ledger)
     material_assignments: dict[str, str] = {}
-    for object_name in copper_body_names:
+    for object_name in body_names:
         if object_name not in body_materials:
-            raise ValueError(f"SSW copper body has no material entry (object_name={object_name})")
+            raise ValueError(f"SSW body has no material entry (object_name={object_name})")
         material = body_materials[object_name]
-        if material.lower() != "copper":
-            raise ValueError(
-                "SSW AEDT copper body must use copper material "
-                f"(object_name={object_name}, material={material!r})"
-            )
+        assignment_material = _ensure_repo_owned_material(hfss=hfss, material=material)
         material_assignments[object_name] = _assign_object_material(
             hfss=hfss,
             modeler=modeler,
             object_name=object_name,
-            material=material,
+            material=assignment_material,
         )
     return material_assignments
 
@@ -287,14 +622,16 @@ def _import_ssw_aedt_port_step(
     if missing_names:
         raise ValueError(f"SSW AEDT port STEP import did not create required bodies (missing={missing_names})")
     imported_names = sorted(name for name in after_names if name in expected_names or name not in before_names)
+    body_names = _required_str_list(ledger, key="body_names")
     copper_body_names = _required_str_list(ledger, key="copper_body_names")
-    material_assignments = _assign_copper_materials(
+    material_assignments = _assign_body_materials(
         hfss=hfss,
         modeler=hfss.modeler,
         ledger=ledger,
-        copper_body_names=copper_body_names,
+        body_names=body_names,
     )
     non_model_names = _required_str_list(ledger, key="non_model_body_names")
+    ferrite_names = _required_str_list(ledger, key="ferrite_body_names")
     for non_model_name in non_model_names:
         raise_on_false(
             hfss.modeler.set_object_model_state(non_model_name, False),
@@ -302,6 +639,11 @@ def _import_ssw_aedt_port_step(
             context={"name": non_model_name, "model": False},
         )
     visual_assignments: dict[str, VisualAssignment] = {}
+    ferrite_set = set(ferrite_names)
+    non_model_set = set(non_model_names)
+    overlap = sorted(ferrite_set.intersection(non_model_set))
+    if overlap:
+        raise ValueError(f"SSW ferrite bodies must remain model objects, not non-model objects (overlap={overlap})")
     for object_name in non_model_names:
         visual_assignments[object_name] = _apply_visual_state(
             modeler=hfss.modeler,
@@ -326,6 +668,7 @@ def _import_ssw_aedt_port_step(
         "material_assignments": material_assignments,
         "visual_assignments": visual_assignments,
         "non_model_body_names": non_model_names,
+        "ferrite_body_names": ferrite_names,
     }
 
 

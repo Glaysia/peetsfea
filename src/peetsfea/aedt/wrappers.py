@@ -741,6 +741,7 @@ class Hfss(RawHfss, _WrappedAccess):
         {
             "__setitem__",
             "assign_finite_conductivity",
+            "assign_material",
             "assign_radiation_boundary_to_faces",
             "change_validation_settings",
             "create_output_variable",
@@ -819,6 +820,24 @@ class Hfss(RawHfss, _WrappedAccess):
 
     def __setitem__(self, key: str, value: str) -> None:
         _require_callable_attr(object.__getattribute__(self, "_raw"), "__setitem__", owner="Hfss")(key, value)
+
+    def assign_material(self, assignment: str | list[str], material: str) -> object:
+        validate_aedt_name(material, field="material")
+        if isinstance(assignment, str):
+            validate_aedt_name(assignment, field="assignment")
+        else:
+            if len(assignment) == 0:
+                raise ValueError("assignment must not be empty")
+            for index, object_name in enumerate(assignment):
+                validate_aedt_name(object_name, field=f"assignment[{index}]")
+        return raise_on_false(
+            _require_callable_attr(object.__getattribute__(self, "_raw"), "assign_material", owner="Hfss")(
+                assignment=assignment,
+                material=material,
+            ),
+            operation="assign_material",
+            context={"assignment": assignment, "material": material},
+        )
 
     def assign_finite_conductivity(
         self,

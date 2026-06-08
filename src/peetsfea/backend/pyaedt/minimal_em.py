@@ -270,6 +270,11 @@ def _assign_object_material(*, hfss: HfssSession, modeler: ModelerSession, objec
         operation="Materials.exists_material",
         context={"object_name": object_name, "material": material},
     )
+    raise_on_false(
+        hfss.assign_material(object_name, material),
+        operation="assign_material",
+        context={"object_name": object_name, "material": material},
+    )
     imported_object = raise_on_false(
         modeler.get_object_from_name(object_name),
         operation="get_object_from_name",
@@ -278,7 +283,6 @@ def _assign_object_material(*, hfss: HfssSession, modeler: ModelerSession, objec
     assert hasattr(imported_object, "material_name"), (
         f"Imported AEDT object must expose material_name before material assignment (object_name={object_name})"
     )
-    setattr(imported_object, "material_name", material)
     assigned_material = getattr(imported_object, "material_name")
     assert isinstance(assigned_material, str), (
         f"Imported AEDT object material_name must read back as str (object_name={object_name})"
@@ -344,24 +348,19 @@ def _apply_minimal_visual_state(
     return visual_assignments
 
 
-def _assign_copper_materials(
+def _assign_body_materials(
     *,
     hfss: HfssSession,
     modeler: ModelerSession,
     ledger: MinimalStepLedger,
-    copper_body_names: list[str],
+    body_names: list[str],
 ) -> dict[str, str]:
     body_materials = _body_materials_by_object_id(ledger)
     material_assignments: dict[str, str] = {}
-    for object_name in copper_body_names:
+    for object_name in body_names:
         if object_name not in body_materials:
-            raise ValueError(f"minimal ledger copper body has no material entry (object_name={object_name})")
+            raise ValueError(f"minimal ledger body has no material entry (object_name={object_name})")
         material = body_materials[object_name]
-        if material.lower() != "copper":
-            raise ValueError(
-                "minimal EM copper body must use copper material "
-                f"(object_name={object_name}, material={material!r})"
-            )
         material_assignments[object_name] = _assign_object_material(
             hfss=hfss,
             modeler=modeler,
@@ -396,12 +395,13 @@ def _import_minimal_step(
     if missing_names:
         raise ValueError(f"minimal STEP import did not create required bodies (missing={missing_names})")
     imported_names = sorted(name for name in after_names if name in expected_names or name not in before_names)
+    body_names = _required_str_list(ledger, key="body_names")
     copper_body_names = _required_str_list(ledger, key="copper_body_names")
-    material_assignments = _assign_copper_materials(
+    material_assignments = _assign_body_materials(
         hfss=hfss,
         modeler=hfss.modeler,
         ledger=ledger,
-        copper_body_names=copper_body_names,
+        body_names=body_names,
     )
     non_model_names = _required_str_list(ledger, key="non_model_body_names")
     port_sheet_names = _required_str_list(ledger, key="port_sheet_names")

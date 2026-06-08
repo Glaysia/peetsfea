@@ -28,7 +28,7 @@ tags:
 - imported object discovery는 raw `Modeler3D.object_names`를 validated list로 노출한다.
 - HFSS validation settings are exposed through an allowlisted `change_validation_settings()` wrapper with explicit
   entity-check-level validation and false-return fail-fast behavior.
-- HFSS finite-conductivity assignment is exposed through an allowlisted `assign_finite_conductivity()` wrapper for setup-ready sheet boundaries.
+- HFSS material and finite-conductivity assignment are exposed through allowlisted `assign_material()` and `assign_finite_conductivity()` wrappers.
 
 ## Invariants / fail-fast
 - raw attribute/method가 없거나 callable shape가 아니면 `assert`로 즉시 멈춘다.
@@ -37,7 +37,7 @@ tags:
 - `import_3d_cad()`는 PyAEDT `0.25.1` 지원 인자만 전달하고 newer stable-doc 인자 fallback을 추가하지 않는다.
 - `change_validation_settings()` accepts only PyAEDT-supported entity check levels and propagates `ignore_unclassified`
   / `skip_intersections` exactly.
-- `assign_finite_conductivity()` validates the boundary/material/object names it owns and converts PyAEDT `False` to a contextual `RuntimeError`.
+- `assign_material()` and `assign_finite_conductivity()` validate the material/object names they own and convert PyAEDT `False` to contextual `RuntimeError`.
 
 ## 직접 의존
 - `ansys.aedt.core`

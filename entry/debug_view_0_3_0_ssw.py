@@ -164,7 +164,7 @@ def _body_entry_from_ssw(body: Mapping[str, object]) -> SswAedtBodyLedgerEntry:
         "object_id": object_id,
         "role": role,
         "material": material,
-        "model_state": role not in {"non_model", "ferrite"},
+        "model_state": role != "non_model",
         "canonical_coordinates": _canonical_from_bounds(min_xyz=min_xyz, max_xyz=max_xyz),
     }
 
@@ -312,7 +312,8 @@ def _build_ssw_aedt_port_ledger(
         "units": ssw_ledger["units"],
         "body_names": list(ssw_ledger["body_names"]),
         "copper_body_names": list(ssw_ledger["copper_body_names"]),
-        "non_model_body_names": [*ssw_ledger["non_model_body_names"], *ssw_ledger["ferrite_body_names"]],
+        "non_model_body_names": list(ssw_ledger["non_model_body_names"]),
+        "ferrite_body_names": list(ssw_ledger["ferrite_body_names"]),
         "bodies": body_entries,
         "port_edges": port_edges,
     }

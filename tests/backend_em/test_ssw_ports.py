@@ -58,10 +58,75 @@ class _FakeDesktop:
 class _FakeMaterials:
     def __init__(self) -> None:
         self.exists_material_calls: list[str] = []
+        self.add_material_calls: list[str] = []
+        self.aedmattolibrary_calls: list[str] = []
+        self.material_keys: dict[str, _FakeMaterial] = {
+            "copper": _FakeMaterial(),
+            "vacuum": _FakeMaterial(),
+        }
 
     def exists_material(self, name: str) -> object:
         self.exists_material_calls.append(name)
-        return name == "copper"
+        return name.casefold() in self.material_keys
+
+    def add_material(self, name: str) -> object:
+        self.add_material_calls.append(name)
+        material = _FakeMaterial(name=name)
+        self.material_keys[name.casefold()] = material
+        return material
+
+    def _aedmattolibrary(self, name: str) -> object:
+        self.aedmattolibrary_calls.append(name)
+        self.material_keys[name.casefold()] = _FakeMaterial(name=name)
+        return self.material_keys[name.casefold()]
+
+
+class _FakeMaterial:
+    def __init__(self, *, name: str = "") -> None:
+        self.name = name
+
+
+class _FakeDefinitionManager:
+    def __init__(self) -> None:
+        self.material_names: list[str] = []
+        self.add_material_calls: list[list[object]] = []
+        self.edit_material_calls: list[tuple[str, list[object]]] = []
+
+    def GetProjectMaterialNames(self) -> list[str]:
+        return list(self.material_names)
+
+    def AddMaterial(self, payload: list[object]) -> object:
+        self.add_material_calls.append(payload)
+        raw_name = payload[0]
+        assert isinstance(raw_name, str)
+        self.material_names.append(raw_name.removeprefix("NAME:"))
+        return True
+
+    def EditMaterial(self, name: str, payload: list[object]) -> object:
+        self.edit_material_calls.append((name, payload))
+        return True
+
+
+class _FakeProject:
+    def __init__(self) -> None:
+        self.definition_manager = _FakeDefinitionManager()
+        self.add_dataset_calls: list[list[object]] = []
+
+    def GetDefinitionManager(self) -> _FakeDefinitionManager:
+        return self.definition_manager
+
+    def AddDataset(self, payload: list[object]) -> object:
+        self.add_dataset_calls.append(payload)
+        return True
+
+
+class _FakeDesign:
+    def __init__(self) -> None:
+        self.import_dataset_calls: list[str] = []
+
+    def ImportDataset(self, path: str) -> object:
+        self.import_dataset_calls.append(path)
+        return True
 
 
 class _FakeModelObject:
@@ -189,10 +254,22 @@ class _FakeHfss:
     def __init__(self, ledger: SswAedtPortStepLedger) -> None:
         self.modeler = _FakeModeler(ledger)
         self.desktop_class = _FakeDesktop()
+        self.odesign = _FakeDesign()
+        self.oproject = _FakeProject()
         self.materials = _FakeMaterials()
         self.oboundary = _FakeBoundaryModule(self)
         self.excitation_names: list[str] = []
         self.saved_paths: list[str] = []
+        self.assign_material_calls: list[tuple[str, str]] = []
+
+    def assign_material(self, assignment: str | list[str], material: str) -> object:
+        if not isinstance(assignment, str):
+            raise TypeError("fake assign_material expects one object name")
+        self.assign_material_calls.append((assignment, material))
+        raw_object = self.modeler.get_object_from_name(assignment)
+        assert isinstance(raw_object, _FakeModelObject)
+        raw_object.material_name = material
+        return True
 
     def save_project(self, path: str) -> object:
         self.saved_paths.append(path)
@@ -219,6 +296,7 @@ def _ledger(tmp_path: Path) -> SswAedtPortStepLedger:
         "tx_ssw_coil_ssw_copper",
         "rx_ssw_coil_coil_copper",
         "tx_mull_ferrite_sheet",
+        "tx_ssw_coil_pcb_1_fr4",
     ]
     return {
         "source_step_ledger_path": str(tmp_path / "ssw_step_ledger.json"),
@@ -227,12 +305,14 @@ def _ledger(tmp_path: Path) -> SswAedtPortStepLedger:
         "units": "mm",
         "body_names": body_names,
         "copper_body_names": ["tx_ssw_coil_ssw_copper", "rx_ssw_coil_coil_copper"],
-        "non_model_body_names": ["tv", "tx_mull_ferrite_sheet"],
+        "non_model_body_names": ["tv"],
+        "ferrite_body_names": ["tx_mull_ferrite_sheet"],
         "bodies": [
             _body_entry("tv", "non_model", "vacuum", False),
             _body_entry("tx_ssw_coil_ssw_copper", "copper", "copper", True),
             _body_entry("rx_ssw_coil_coil_copper", "copper", "copper", True),
-            _body_entry("tx_mull_ferrite_sheet", "ferrite", "mull_ferrite", False),
+            _body_entry("tx_mull_ferrite_sheet", "ferrite", "mull_ferrite", True),
+            _body_entry("tx_ssw_coil_pcb_1_fr4", "fr4", "fr4", True),
         ],
         "port_edges": [
             {
@@ -281,8 +361,26 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
 
     assert hfss.modeler.import_calls == [Path(ledger["scene_step_path"])]
     assert hfss.modeler.import_kwargs == [{"create_group": False, "import_free_surfaces": False, "import_materials": False}]
-    assert hfss.modeler.set_model_state_calls == [("tv", False), ("tx_mull_ferrite_sheet", False)]
-    assert hfss.materials.exists_material_calls == ["copper", "copper"]
+    assert hfss.modeler.set_model_state_calls == [("tv", False)]
+    expected_material_assignments = {body["object_id"]: body["material"] for body in ledger["bodies"]}
+    expected_material_assignments["tx_mull_ferrite_sheet"] = "MULL12060ferrite"
+    assert hfss.materials.exists_material_calls == [
+        "vacuum",
+        "copper",
+        "copper",
+        "MULL12060ferrite",
+        "fr4",
+        "fr4",
+    ]
+    assert hfss.materials.add_material_calls == ["fr4"]
+    assert hfss.materials.aedmattolibrary_calls == ["MULL12060ferrite"]
+    assert hfss.odesign.import_dataset_calls
+    assert [payload[0] for payload in hfss.oproject.add_dataset_calls] == ["NAME:$mu_r_real", "NAME:$mu_tand_m"]
+    assert len(hfss.oproject.definition_manager.add_material_calls) == 1
+    assert hfss.oproject.definition_manager.add_material_calls[0][0] == "NAME:MULL12060ferrite"
+    assert hfss.assign_material_calls == [
+        (body_name, expected_material_assignments[body_name]) for body_name in ledger["body_names"]
+    ]
     assert hfss.oboundary.assign_lumped_port_calls == [
         [
             "NAME:1",
@@ -320,6 +418,8 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     imported = json.loads((tmp_path / "ssw_imported.json").read_text(encoding="utf-8"))
     assert imported["source_port_ledger_path"] == str(ledger_path)
     assert imported["copper_body_names"] == ledger["copper_body_names"]
+    assert imported["ferrite_body_names"] == ledger["ferrite_body_names"]
+    assert imported["material_assignments"] == expected_material_assignments
     assert "port_sheet_names" not in imported
     assert "tx_aedt_port_sheet" not in imported["visual_assignments"]
 
