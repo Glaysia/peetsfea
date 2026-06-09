@@ -19,11 +19,6 @@ from peetsfea.aedt.protocols import (
 from peetsfea.aedt.proxies import assign_lumped_port, set_object_color, set_object_transparency
 
 DEFAULT_LEDGER_PATH = Path(__file__).resolve().parents[4] / "run" / "ssw_0_3_0_fixed" / "ssw_aedt_port_ledger.json"
-DEFAULT_OUTPUT_AEDT_PATH = Path(__file__).resolve().parents[4] / "run" / "ssw_0_3_0_fixed" / "ssw_0_3_0_ports.aedt"
-DEFAULT_IMPORTED_LEDGER_PATH = (
-    Path(__file__).resolve().parents[4] / "run" / "ssw_0_3_0_fixed" / "ssw_aedt_imported_ledger.json"
-)
-DEFAULT_DESIGN_NAME = "ssw_0_3_0_ports"
 COPPER_COLOR = (184, 115, 51)
 COPPER_TRANSPARENCY = 0.0
 NON_MODEL_COLOR = (128, 128, 128)
@@ -170,6 +165,10 @@ SswAedtPortEdgeLedgerEntry: TypeAlias = SswSemanticPortEdgeLedgerEntry
 
 
 class SswAedtPortStepLedger(TypedDict):
+    design_id: str
+    aedt_filename: str
+    dimension_count: int
+    design_space_hash: str
     source_step_ledger_path: str
     scene_step_path: str
     seed: int
@@ -245,6 +244,10 @@ class SswAedtReportsSummary(TypedDict):
 
 
 class SswAedtImportedLedgerBase(TypedDict):
+    design_id: str
+    aedt_filename: str
+    dimension_count: int
+    design_space_hash: str
     source_port_ledger_path: str
     source_step_ledger_path: str
     scene_step_path: str
@@ -271,6 +274,10 @@ class SswAedtPorts(TypedDict):
 
 
 class SswAedtPortSetupResult(TypedDict):
+    design_id: str
+    aedt_filename: str
+    dimension_count: int
+    design_space_hash: str
     source_port_ledger_path: str
     source_step_ledger_path: str
     scene_step_path: str
@@ -303,6 +310,10 @@ def load_ssw_aedt_port_ledger(ledger_path: Path) -> SswAedtPortStepLedger:
     if not isinstance(raw_ledger, dict):
         raise TypeError(f"SSW AEDT port ledger must be a JSON object: {ledger_path}")
     for key in (
+        "design_id",
+        "aedt_filename",
+        "dimension_count",
+        "design_space_hash",
         "source_step_ledger_path",
         "scene_step_path",
         "seed",
@@ -1219,6 +1230,10 @@ def _import_ssw_aedt_port_step(
         )
     mesh = _assign_recorded_mesh(hfss=hfss, copper_body_names=copper_body_names)
     return {
+        "design_id": ledger["design_id"],
+        "aedt_filename": ledger["aedt_filename"],
+        "dimension_count": ledger["dimension_count"],
+        "design_space_hash": ledger["design_space_hash"],
         "source_port_ledger_path": str(ledger_path),
         "source_step_ledger_path": ledger["source_step_ledger_path"],
         "scene_step_path": str(scene_step_path),
@@ -1494,9 +1509,9 @@ def _write_imported_ledger(*, imported_ledger_path: Path, imported_ledger: SswAe
 def setup_ssw_aedt_ports_into_hfss(
     *,
     hfss: HfssSession,
+    output_aedt_path: Path,
+    imported_ledger_path: Path,
     port_ledger_path: Path = DEFAULT_LEDGER_PATH,
-    output_aedt_path: Path = DEFAULT_OUTPUT_AEDT_PATH,
-    imported_ledger_path: Path = DEFAULT_IMPORTED_LEDGER_PATH,
 ) -> SswAedtPortSetupResult:
     ledger = load_ssw_aedt_port_ledger(port_ledger_path)
     output_aedt_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1511,6 +1526,10 @@ def setup_ssw_aedt_ports_into_hfss(
     analysis_setup, frequency_sweep = _insert_recorded_setup_and_sweep(hfss=hfss)
     reports = _create_reports(hfss=hfss, ports=ports, imported_ledger=imported_base_ledger, boundary=boundary)
     imported_ledger: SswAedtImportedLedger = {
+        "design_id": imported_base_ledger["design_id"],
+        "aedt_filename": imported_base_ledger["aedt_filename"],
+        "dimension_count": imported_base_ledger["dimension_count"],
+        "design_space_hash": imported_base_ledger["design_space_hash"],
         "source_port_ledger_path": imported_base_ledger["source_port_ledger_path"],
         "source_step_ledger_path": imported_base_ledger["source_step_ledger_path"],
         "scene_step_path": imported_base_ledger["scene_step_path"],
@@ -1530,6 +1549,10 @@ def setup_ssw_aedt_ports_into_hfss(
     raise_on_false(hfss.save_project(str(output_aedt_path)), operation="save_project", context={"path": str(output_aedt_path)})
     _write_imported_ledger(imported_ledger_path=imported_ledger_path, imported_ledger=imported_ledger)
     return {
+        "design_id": imported_ledger["design_id"],
+        "aedt_filename": imported_ledger["aedt_filename"],
+        "dimension_count": imported_ledger["dimension_count"],
+        "design_space_hash": imported_ledger["design_space_hash"],
         "source_port_ledger_path": str(port_ledger_path),
         "source_step_ledger_path": imported_ledger["source_step_ledger_path"],
         "scene_step_path": imported_ledger["scene_step_path"],
@@ -1547,10 +1570,10 @@ def setup_ssw_aedt_ports_into_hfss(
 
 def setup_ssw_aedt_ports(
     *,
+    output_aedt_path: Path,
+    imported_ledger_path: Path,
+    design_name: str,
     port_ledger_path: Path = DEFAULT_LEDGER_PATH,
-    output_aedt_path: Path = DEFAULT_OUTPUT_AEDT_PATH,
-    imported_ledger_path: Path = DEFAULT_IMPORTED_LEDGER_PATH,
-    design_name: str = DEFAULT_DESIGN_NAME,
     hfss_factory: HfssFactory = create_headless_hfss,
     release_desktop_on_exit: bool = True,
     close_projects_on_release: bool = True,
@@ -1573,10 +1596,7 @@ def setup_ssw_aedt_ports(
 
 
 __all__ = [
-    "DEFAULT_DESIGN_NAME",
-    "DEFAULT_IMPORTED_LEDGER_PATH",
     "DEFAULT_LEDGER_PATH",
-    "DEFAULT_OUTPUT_AEDT_PATH",
     "HfssFactory",
     "CanonicalCoordinates",
     "SswAedtAnalysisSetupSummary",
