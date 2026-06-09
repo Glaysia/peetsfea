@@ -54,7 +54,7 @@ def test_aedt_identity_is_deterministic_short_point_name() -> None:
     assert first == second
     assert first.dimension_count == 21
     assert len(first.point_hash) == 16
-    assert first.design_id == f"0_3_0_d00021_p{first.point_hash}"
+    assert first.design_id == f"0_3_0_p{first.point_hash}"
     assert first.aedt_filename == f"{first.design_id}.aedt"
     assert "ssw" not in first.design_id
 
@@ -63,8 +63,8 @@ def test_point_hash_tracks_realized_continuous_values(tmp_path: Path) -> None:
     base_identity = build_ssw_aedt_identity(FIXED_TOML, SWEEP_TOML)
     text = _replace_once(
         FIXED_TOML.read_text(encoding="utf-8"),
-        "[modeled_objects.width_ratio]\nrange = [false, 0.6, 0.6, 1]",
-        "[modeled_objects.width_ratio]\nrange = [false, 0.6001, 0.6001, 1]",
+        "[modeled_objects.width_ratio]\nrange = [false, 0.45, 0.45, 1]",
+        "[modeled_objects.width_ratio]\nrange = [false, 0.4501, 0.4501, 1]",
     )
     changed_path = _candidate(tmp_path, text)
     changed_identity = build_ssw_aedt_identity(changed_path, SWEEP_TOML)
@@ -121,8 +121,8 @@ def test_missing_path_integer_flag_mismatch_and_non_positive_count_are_violation
     )
     text = _replace_once(
         text,
-        "[modeled_objects.twist_factor]\nrange = [true, 2, 2, 1]",
-        "[modeled_objects.twist_factor]\nrange = [true, 2, 2, 0]",
+        "[modeled_objects.turn_n_int]\nrange = [true, 6, 6, 1]",
+        "[modeled_objects.turn_n_int]\nrange = [true, 6, 6, 0]",
     )
     candidate_path = _candidate(tmp_path, text)
 
@@ -130,4 +130,4 @@ def test_missing_path_integer_flag_mismatch_and_non_positive_count_are_violation
 
     assert codes_by_path["ferrite.mull_position_ratio"] == {"missing_free_path"}
     assert codes_by_path["modeled_objects[role=rx_ssw_coil].is_ssw_enabled"] == {"integer_flag_mismatch"}
-    assert codes_by_path["modeled_objects[role=tx_ssw_coil].twist_factor"] == {"non_positive_count"}
+    assert codes_by_path["modeled_objects[role=tx_ssw_coil].turn_n_int"] == {"non_positive_count"}

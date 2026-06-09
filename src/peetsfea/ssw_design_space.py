@@ -311,7 +311,7 @@ def build_ssw_aedt_identity(
     _raise_for_non_point(candidate_ranges, result.free_owner_paths)
     payload = _identity_payload(candidate_ranges=candidate_ranges, free_owner_paths=result.free_owner_paths)
     point_hash = _point_hash(payload)
-    design_id = f"0_3_0_d{result.dimension_count:05d}_p{point_hash}"
+    design_id = f"0_3_0_p{point_hash}"
     return SswAedtIdentity(
         design_id=design_id,
         aedt_filename=f"{design_id}.aedt",
