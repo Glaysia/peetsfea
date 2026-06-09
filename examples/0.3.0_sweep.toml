@@ -234,3 +234,23 @@ description = "RX SSW two-PCB gap(mm)"
 [modeled_objects.twist_factor]
 range = [true, 1, 10, 10]
 description = "RX SSW band pitch shift per loop"
+
+[constraints]
+
+[[constraints.rules]]
+id = "tx_ssw_single_conductor"
+kind = "comparison"
+message = "TX SSW turn_n_int and twist_factor must form exactly one conductor."
+enabled = true
+lhs = { func = "ssw_conductor_component_count(tx_ssw_coil)" }
+op = "=="
+rhs = { value = 1 }
+
+[[constraints.rules]]
+id = "rx_ssw_single_conductor"
+kind = "comparison"
+message = "RX SSW turn_n_int and twist_factor must form exactly one conductor when RX SSW is enabled."
+enabled = true
+lhs = { func = "ssw_conductor_component_count(rx_ssw_coil)" }
+op = "=="
+rhs = { value = 1 }

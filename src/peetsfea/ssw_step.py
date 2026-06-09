@@ -10,6 +10,12 @@ import tomllib
 import cadquery as cq
 
 from peetsfea import coilmaker
+from peetsfea.ssw_step_constraints import (
+    SswConstraintCoil,
+    SswConstraintRule,
+    parse_ssw_constraint_rules,
+    require_ssw_constraints_satisfied,
+)
 
 DEFAULT_SOURCE_TOML_PATH = Path(__file__).resolve().parents[2] / "examples" / "0.3.0_fixed.toml"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[2] / "run" / "ssw_0_3_0_fixed"
@@ -104,6 +110,7 @@ class SswFixedSpec:
     fixed: FixedDimensions
     ferrite: FerriteParameters
     non_model_objects: tuple[NonModelBox, ...]
+    constraints: tuple[SswConstraintRule, ...]
     tx: SswCoilParameters
     rx: SswCoilParameters
 
@@ -389,6 +396,23 @@ def _load_coil_parameters(root: dict[str, object], role: Role) -> SswCoilParamet
     )
 
 
+def _constraint_coils_from_spec(spec: SswFixedSpec) -> tuple[SswConstraintCoil, ...]:
+    return (
+        SswConstraintCoil(
+            object_id=spec.tx.role,
+            is_ssw_enabled=spec.tx.is_ssw_enabled,
+            turn_n_int=spec.tx.turn_n_int,
+            twist_factor=spec.tx.twist_factor,
+        ),
+        SswConstraintCoil(
+            object_id=spec.rx.role,
+            is_ssw_enabled=spec.rx.is_ssw_enabled,
+            turn_n_int=spec.rx.turn_n_int,
+            twist_factor=spec.rx.twist_factor,
+        ),
+    )
+
+
 def load_ssw_fixed_spec(toml_path: Path) -> SswFixedSpec:
     raw_spec = tomllib.loads(toml_path.read_text(encoding="utf-8"))
     root = _require_table(raw_spec, toml_path.name)
@@ -402,15 +426,18 @@ def load_ssw_fixed_spec(toml_path: Path) -> SswFixedSpec:
     units = _require_non_empty_str(design, "units", "design")
     if units != SUPPORTED_UNITS:
         raise ValueError(f"design.units must be {SUPPORTED_UNITS!r} (actual={units!r})")
-    return SswFixedSpec(
+    spec = SswFixedSpec(
         source_toml_path=str(toml_path),
         units="mm",
         fixed=_load_fixed_dimensions(root),
         ferrite=_load_ferrite_parameters(root),
         non_model_objects=_load_non_model_objects(root),
+        constraints=parse_ssw_constraint_rules(root, context=toml_path.name),
         tx=_load_coil_parameters(root, "tx_ssw_coil"),
         rx=_load_coil_parameters(root, "rx_ssw_coil"),
     )
+    require_ssw_constraints_satisfied(rules=spec.constraints, coils=_constraint_coils_from_spec(spec))
+    return spec
 
 
 def _box(

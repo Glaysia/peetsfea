@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from functools import reduce
 from itertools import chain, pairwise, starmap
-from math import ceil, floor, sqrt
+from math import ceil, floor, gcd, sqrt
 from pathlib import Path
 from typing import Iterable, Iterator, Never, TypeAlias, TypeVar, cast
 
@@ -340,6 +340,14 @@ def validate_config(config: RuntimeConfig) -> RuntimeConfig:
         raise ValueError("SERIAL_COIL_AXIS must be 0 (WIDTH) or 1 (HEIGHT)")
     if ssw.active_twist_factor(common) < 0:
         raise ValueError("SSW_TWIST_FACTOR must be greater than or equal to 0")
+    if common.IS_SSW_ENABLED:
+        component_count = gcd(common.TURN_N_INT, ssw.active_twist_factor(common))
+        if component_count != 1:
+            raise ValueError(
+                "SSW TURN_N_INT and TWIST_FACTOR must be coprime for one conductor "
+                f"(TURN_N_INT={common.TURN_N_INT}, TWIST_FACTOR={ssw.TWIST_FACTOR}, "
+                f"component_count={component_count})"
+            )
     if not common.IS_SSW_ENABLED:
         if spiral.NO_SSW_QTURN_START_INT not in range(8):
             raise ValueError("NO_SSW_QTURN_START_INT must be between 0 and 7")

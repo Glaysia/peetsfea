@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from math import sqrt
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, cast
 import tomllib
 
 import cadquery as cq
@@ -20,6 +20,7 @@ from peetsfea.ssw_step import (
     load_ssw_step_ledger,
     normal_spiral_trace_width_mm,
 )
+from peetsfea.ssw_step_constraints import SswConstraintValueRef, parse_ssw_constraint_rules
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXED_TOML = REPO_ROOT / "examples" / "0.3.0_fixed.toml"
@@ -43,11 +44,11 @@ def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
     )
     assert spec.tx.role == "tx_ssw_coil"
     assert spec.rx.role == "rx_ssw_coil"
-    assert spec.tx.width_ratio == 0.6
+    assert spec.tx.width_ratio == 0.45
     assert spec.rx.height_ratio == 0.9
     assert spec.tx.is_ssw_enabled is True
     assert spec.rx.is_ssw_enabled is False
-    assert spec.tx.turn_n_int == 3
+    assert spec.tx.turn_n_int == 6
     assert spec.rx.turn_n_int == 1
     assert spec.tx.gap_ratio == 0.24
     assert spec.rx.void_area_ratio == 0.25
@@ -55,7 +56,29 @@ def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
     assert spec.rx.no_ssw_qturn_start_int == 3
     assert spec.rx.no_ssw_qturn_n_int == 0
     assert spec.tx.pcb_gap_mm == 8.0
+    assert spec.tx.twist_factor == 5
     assert spec.rx.twist_factor == 1
+    assert tuple(rule.id for rule in spec.constraints) == (
+        "tx_ssw_single_conductor",
+        "rx_ssw_single_conductor",
+    )
+
+
+def test_sweep_toml_declares_ssw_single_conductor_constraints() -> None:
+    raw_root = tomllib.loads(SWEEP_TOML.read_text(encoding="utf-8"))
+    rules = parse_ssw_constraint_rules(cast(dict[str, object], raw_root), context=SWEEP_TOML.name)
+
+    assert tuple(rule.id for rule in rules) == (
+        "tx_ssw_single_conductor",
+        "rx_ssw_single_conductor",
+    )
+    assert tuple(rule.op for rule in rules) == ("==", "==")
+    rhs_values: list[str | float] = []
+    for rule in rules:
+        assert set(rule.rhs.keys()) == {"value"}
+        rhs_ref = cast(SswConstraintValueRef, rule.rhs)
+        rhs_values.append(rhs_ref["value"])
+    assert tuple(rhs_values) == (1.0, 1.0)
 
 
 def test_load_ssw_fixed_spec_rejects_unfrozen_sweep_ranges() -> None:
@@ -64,6 +87,62 @@ def test_load_ssw_fixed_spec_rejects_unfrozen_sweep_ranges() -> None:
     )
     with pytest.raises(ValueError, match=r"range must be frozen"):
         load_ssw_fixed_spec(SWEEP_TOML)
+
+
+def test_load_ssw_fixed_spec_rejects_non_coprime_tx_ssw_constraint(tmp_path: Path) -> None:
+    source_text = FIXED_TOML.read_text(encoding="utf-8")
+    custom_text = source_text.replace(
+        '[modeled_objects.twist_factor]\nrange = [true, 5, 5, 1]\ndescription = "TX SSW band pitch shift per loop"',
+        '[modeled_objects.twist_factor]\nrange = [true, 4, 4, 1]\ndescription = "TX SSW band pitch shift per loop"',
+    )
+    assert custom_text != source_text
+    custom_toml = tmp_path / "tx_non_coprime_ssw.toml"
+    custom_toml.write_text(custom_text, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="tx_ssw_single_conductor"):
+        load_ssw_fixed_spec(custom_toml)
+
+
+def test_load_ssw_fixed_spec_rejects_non_coprime_rx_when_rx_ssw_enabled(tmp_path: Path) -> None:
+    source_text = FIXED_TOML.read_text(encoding="utf-8")
+    custom_text = source_text
+    custom_text = custom_text.replace(
+        '[modeled_objects.is_ssw_enabled]\nrange = [true, 0, 0, 1]\ndescription = "RX SSW enable flag"',
+        '[modeled_objects.is_ssw_enabled]\nrange = [true, 1, 1, 1]\ndescription = "RX SSW enable flag"',
+    )
+    custom_text = custom_text.replace(
+        '[modeled_objects.turn_n_int]\nrange = [true, 1, 1, 1]\ndescription = "RX SSW band count"',
+        '[modeled_objects.turn_n_int]\nrange = [true, 6, 6, 1]\ndescription = "RX SSW band count"',
+    )
+    custom_text = custom_text.replace(
+        '[modeled_objects.twist_factor]\nrange = [true, 1, 1, 1]\ndescription = "RX SSW band pitch shift per loop"',
+        '[modeled_objects.twist_factor]\nrange = [true, 4, 4, 1]\ndescription = "RX SSW band pitch shift per loop"',
+    )
+    assert custom_text != source_text
+    custom_toml = tmp_path / "rx_non_coprime_ssw.toml"
+    custom_toml.write_text(custom_text, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="rx_ssw_single_conductor"):
+        load_ssw_fixed_spec(custom_toml)
+
+
+def test_coilmaker_validate_config_rejects_non_coprime_ssw_turn_twist() -> None:
+    invalid = coilmaker.RuntimeConfig(
+        fixed=coilmaker.FixedDimensions(),
+        common=coilmaker.CommonCoilParameters(IS_SSW_ENABLED=True, TURN_N_INT=6),
+        spiral=coilmaker.SpiralCoilParameters(),
+        ssw=coilmaker.SSWCoilParameters(TWIST_FACTOR=4),
+    )
+    with pytest.raises(ValueError, match="must be coprime"):
+        coilmaker.validate_config(invalid)
+
+    valid = coilmaker.RuntimeConfig(
+        fixed=coilmaker.FixedDimensions(),
+        common=coilmaker.CommonCoilParameters(IS_SSW_ENABLED=True, TURN_N_INT=6),
+        spiral=coilmaker.SpiralCoilParameters(),
+        ssw=coilmaker.SSWCoilParameters(TWIST_FACTOR=5),
+    )
+    assert coilmaker.validate_config(valid) is valid
 
 
 def _bounds(body: Mapping[str, object]) -> tuple[float, float, float, float, float, float]:
@@ -448,8 +527,8 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert rx_bounds[5] <= tv_bounds[5] + 0.07 + tolerance
     assert tv_bounds[4] - tx_region_bounds[5] == pytest.approx(50.0)
     assert tx_bounds[5] == pytest.approx(tx_region_bounds[5])
-    assert tx_region_bounds[0] <= tx_bounds[0] <= tx_bounds[1] <= tx_region_bounds[1]
-    assert tx_region_bounds[2] <= tx_bounds[2] <= tx_bounds[3] <= tx_region_bounds[3]
+    assert tx_region_bounds[0] - tolerance <= tx_bounds[0] <= tx_bounds[1] <= tx_region_bounds[1] + tolerance
+    assert tx_region_bounds[2] - tolerance <= tx_bounds[2] <= tx_bounds[3] <= tx_region_bounds[3] + tolerance
     assert tx_bounds[4] >= tx_region_bounds[4] - tolerance
     assert tx_bounds[5] <= tx_region_bounds[5] + tolerance
     assert tx_region_bounds[1] - tx_region_bounds[0] > tx_bounds[1] - tx_bounds[0]

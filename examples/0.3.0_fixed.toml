@@ -140,11 +140,11 @@ material = "composite"
 model_state = true
 
 [modeled_objects.width_ratio]
-range = [false, 0.6, 0.6, 1]
+range = [false, 0.45, 0.45, 1]
 description = "TX SSW coil width ratio against fixed_dimensions.width_max_mm"
 
 [modeled_objects.height_ratio]
-range = [false, 0.6, 0.6, 1]
+range = [false, 0.45, 0.45, 1]
 description = "TX SSW coil height ratio against fixed_dimensions.height_max_mm"
 
 [modeled_objects.is_ssw_enabled]
@@ -152,7 +152,7 @@ range = [true, 1, 1, 1]
 description = "TX SSW enable flag"
 
 [modeled_objects.turn_n_int]
-range = [true, 3, 3, 1]
+range = [true, 6, 6, 1]
 description = "TX SSW band count"
 
 [modeled_objects.gap_ratio]
@@ -180,7 +180,7 @@ range = [false, 8.0, 8.0, 1]
 description = "TX SSW two-PCB gap(mm)"
 
 [modeled_objects.twist_factor]
-range = [true, 2, 2, 1]
+range = [true, 5, 5, 1]
 description = "TX SSW band pitch shift per loop"
 
 [[modeled_objects]]
@@ -232,3 +232,23 @@ description = "RX SSW two-PCB gap(mm)"
 [modeled_objects.twist_factor]
 range = [true, 1, 1, 1]
 description = "RX SSW band pitch shift per loop"
+
+[constraints]
+
+[[constraints.rules]]
+id = "tx_ssw_single_conductor"
+kind = "comparison"
+message = "TX SSW turn_n_int and twist_factor must form exactly one conductor."
+enabled = true
+lhs = { func = "ssw_conductor_component_count(tx_ssw_coil)" }
+op = "=="
+rhs = { value = 1 }
+
+[[constraints.rules]]
+id = "rx_ssw_single_conductor"
+kind = "comparison"
+message = "RX SSW turn_n_int and twist_factor must form exactly one conductor when RX SSW is enabled."
+enabled = true
+lhs = { func = "ssw_conductor_component_count(rx_ssw_coil)" }
+op = "=="
+rhs = { value = 1 }

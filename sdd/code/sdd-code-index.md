@@ -24,6 +24,7 @@ This hub indexes code notes created for forward SDD coverage. Parent hub: [sdd-i
 - [src/peetsfea/minimal_step.py](src/peetsfea/minimal_step.py.md)
 - [src/peetsfea/coilmaker.py](src/peetsfea/coilmaker.py.md)
 - [src/peetsfea/ssw_step.py](src/peetsfea/ssw_step.py.md)
+- [src/peetsfea/ssw_step_constraints.py](src/peetsfea/ssw_step_constraints.py.md)
 - [src/peetsfea/backend/pyaedt/minimal_em.py](src/peetsfea/backend/pyaedt/minimal_em.py.md)
 - [tests/test_minimal_spec.py](tests/test_minimal_spec.py.md)
 - [tests/test_minimal_step.py](tests/test_minimal_step.py.md)

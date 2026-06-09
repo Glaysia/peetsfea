@@ -20,6 +20,7 @@ peetsfea는 TOML 명세에서 HFSS(AEDT) 설계를 결정적으로 생성하는 
 - TOML surface: `[design]`과 `[[non_model_objects]]`만 허용
 - STEP surface: authored non-model box들과 고정 Tx/Rx port cell
 - EM surface: Tx 포트 1개, Rx 포트 1개, copper pad mesh, radiation boundary, `Setup1`, `Sweep`, `Output Variables Table1`
+- SSW debug 입력 [examples/0.3.0_fixed.toml](examples/0.3.0_fixed.toml)과 [examples/0.3.0_sweep.toml](examples/0.3.0_sweep.toml)은 0.2.25 type2와 같은 `[constraints]` / `[[constraints.rules]]` 표면을 쓰며, enabled SSW coil은 `gcd(turn_n_int, twist_factor) == 1`이어야 합니다.
 - 기본 실행과 AEDT/PyAEDT 변경 검증은 headless이며 PyAEDT `False` return은 즉시 raise합니다.
 - AEDT/PyAEDT 관련 코드를 수정한 agent는 실제 headless AEDT 검증을 직접 실행해야 하며, 실행 불가 시 완료로 보고하지 않습니다.
 
