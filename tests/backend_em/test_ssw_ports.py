@@ -410,6 +410,7 @@ def _body_entry(object_id: str, role: str, material: str, model_state: bool) -> 
 
 
 def _ledger(tmp_path: Path) -> SswAedtPortStepLedger:
+    design_space_hash = "1234567890abcdef"
     body_names = [
         "tv",
         "tx_ssw_coil_ssw_copper",
@@ -418,6 +419,10 @@ def _ledger(tmp_path: Path) -> SswAedtPortStepLedger:
         "tx_ssw_coil_pcb_1_fr4",
     ]
     return {
+        "design_id": f"0_3_0_d00021_p{design_space_hash}",
+        "aedt_filename": f"0_3_0_d00021_p{design_space_hash}.aedt",
+        "dimension_count": 21,
+        "design_space_hash": design_space_hash,
         "source_step_ledger_path": str(tmp_path / "ssw_step_ledger.json"),
         "scene_step_path": str(tmp_path / "ssw_scene.step"),
         "seed": 0,
@@ -555,6 +560,10 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
         ],
     ]
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
+    assert result["design_id"] == ledger["design_id"]
+    assert result["aedt_filename"] == ledger["aedt_filename"]
+    assert result["dimension_count"] == 21
+    assert result["design_space_hash"] == ledger["design_space_hash"]
     assert result["mesh"]["objects"] == ["rx_ssw_coil_coil_copper", "tx_ssw_coil_ssw_copper"]
     assert result["mesh"]["max_length"] == "1mm"
     assert result["mesh"]["num_max_elem"] == "50000"
@@ -655,6 +664,10 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     ]
     assert hfss.saved_paths == [str(tmp_path / "ssw_ports.aedt")]
     imported = json.loads((tmp_path / "ssw_imported.json").read_text(encoding="utf-8"))
+    assert imported["design_id"] == ledger["design_id"]
+    assert imported["aedt_filename"] == ledger["aedt_filename"]
+    assert imported["dimension_count"] == ledger["dimension_count"]
+    assert imported["design_space_hash"] == ledger["design_space_hash"]
     assert imported["source_port_ledger_path"] == str(ledger_path)
     assert imported["copper_body_names"] == ledger["copper_body_names"]
     assert imported["ferrite_body_names"] == ledger["ferrite_body_names"]
@@ -666,6 +679,7 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert imported["reports"] == result["reports"]
     assert "port_sheet_names" not in imported
     assert "tx_aedt_port_sheet" not in imported["visual_assignments"]
+    assert all(ledger["design_id"] not in object_name for object_name in imported["imported_object_names"])
 
 
 def test_setup_ssw_aedt_ports_into_hfss_raises_on_missing_recorded_mesh_target(tmp_path: Path) -> None:
@@ -837,19 +851,26 @@ def test_setup_ssw_aedt_ports_runs_real_headless_ansys() -> None:
     output_dir = RUN_DIR / "ssw_headless_ansys_test"
     if output_dir.exists():
         shutil.rmtree(output_dir)
-    export_ssw_aedt_port_artifacts(source_toml_path=SOURCE_TOML_PATH, output_dir=output_dir, seed=0)
+    ledger = export_ssw_aedt_port_artifacts(source_toml_path=SOURCE_TOML_PATH, output_dir=output_dir, seed=0)
 
     result = setup_ssw_aedt_ports(
         port_ledger_path=output_dir / AEDT_PORT_LEDGER_NAME,
-        output_aedt_path=output_dir / "ssw_headless_ports.aedt",
+        output_aedt_path=output_dir / ledger["aedt_filename"],
         imported_ledger_path=output_dir / AEDT_IMPORTED_LEDGER_NAME,
-        design_name="ssw_headless_ports_test",
+        design_name=ledger["design_id"],
     )
 
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
+    assert result["design_id"] == ledger["design_id"]
+    assert result["aedt_filename"] == ledger["aedt_filename"]
+    assert result["dimension_count"] == 21
+    assert result["design_space_hash"] == ledger["design_space_hash"]
     assert Path(result["aedt_path"]).is_file()
     assert Path(result["imported_ledger_path"]).is_file()
     imported = json.loads(Path(result["imported_ledger_path"]).read_text(encoding="utf-8"))
+    assert imported["design_id"] == ledger["design_id"]
+    assert imported["aedt_filename"] == ledger["aedt_filename"]
+    assert imported["design_space_hash"] == ledger["design_space_hash"]
     assert "port_sheet_names" not in imported
     assert "tx_ssw_coil_ssw_copper" in imported["copper_body_names"]
     assert "rx_ssw_coil_coil_copper" in imported["copper_body_names"]

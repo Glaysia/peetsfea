@@ -529,9 +529,14 @@ def test_export_ssw_aedt_port_artifacts_writes_direct_edge_port_ledger(tmp_path:
     assert port_ledger_path.is_file()
     stored_ledger = json.loads(port_ledger_path.read_text(encoding="utf-8"))
     assert stored_ledger == ledger
+    assert ledger["dimension_count"] == 21
+    assert len(ledger["design_space_hash"]) == 16
+    assert ledger["design_id"] == f"0_3_0_d00021_p{ledger['design_space_hash']}"
+    assert ledger["aedt_filename"] == f"{ledger['design_id']}.aedt"
     assert "port_sheet_names" not in ledger
     assert "tx_aedt_port_sheet" not in ledger["body_names"]
     assert "rx_aedt_port_sheet" not in ledger["body_names"]
+    assert all(ledger["design_id"] not in body_name for body_name in ledger["body_names"])
     assert "tx_mull_ferrite_sheet" in ledger["ferrite_body_names"]
     assert "rx_mull_ferrite_sheet" in ledger["ferrite_body_names"]
     assert [entry["role"] for entry in ledger["port_edges"]] == ["tx", "rx"]

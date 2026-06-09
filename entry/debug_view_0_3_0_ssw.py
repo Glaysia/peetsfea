@@ -24,6 +24,7 @@ from peetsfea.ssw_step import (
     load_ssw_fixed_spec,
     load_ssw_step_ledger,
 )
+from peetsfea.ssw_design_space import SswAedtIdentity, build_ssw_aedt_identity
 from peetsfea.backend.pyaedt.ssw_ports import (
     CanonicalCoordinates,
     SswAedtBodyLedgerEntry,
@@ -44,8 +45,6 @@ ANSYS = True
 AEDT_SCENE_STEP_NAME = "ssw_scene.step"
 AEDT_PORT_LEDGER_NAME = "ssw_aedt_port_ledger.json"
 AEDT_IMPORTED_LEDGER_NAME = "ssw_aedt_imported_ledger.json"
-AEDT_PROJECT_NAME = "ssw_0_3_0_ports.aedt"
-AEDT_DESIGN_NAME = "ssw_0_3_0_ports"
 TOKEN_EDGE_TOLERANCE_MM = 1e-8
 Point2 = tuple[float, float]
 Point3 = tuple[float, float, float]
@@ -64,6 +63,10 @@ class DebugSswSummary(TypedDict):
     fr4_body_names: list[str]
     non_model_body_names: list[str]
     ferrite_body_names: list[str]
+    design_id: str
+    aedt_filename: str
+    design_space_hash: str
+    dimension_count: int
     ansys_enabled: bool
     aedt_step_path: str
     aedt_port_ledger_path: str
@@ -481,6 +484,7 @@ def export_ssw_aedt_port_artifacts(
     output_dir: Path = OUTPUT_DIR,
     seed: int = SEED,
 ) -> SswAedtPortStepLedger:
+    identity = build_ssw_aedt_identity(source_toml_path)
     summary = generate_ssw_debug_summary(source_toml_path=source_toml_path, output_dir=output_dir, seed=seed)
     spec = load_ssw_fixed_spec(source_toml_path)
     ssw_ledger = load_ssw_step_ledger(Path(summary["step_ledger_path"]))
@@ -490,6 +494,7 @@ def export_ssw_aedt_port_artifacts(
         ssw_ledger=ssw_ledger,
         ssw_ledger_path=Path(summary["step_ledger_path"]),
         aedt_step_path=aedt_step_path,
+        identity=identity,
         port_edges=_port_edge_entries(
             ssw_ledger=ssw_ledger,
             spec=spec,
@@ -505,10 +510,15 @@ def _build_ssw_aedt_port_ledger(
     ssw_ledger: SswStepLedger,
     ssw_ledger_path: Path,
     aedt_step_path: Path,
+    identity: SswAedtIdentity,
     port_edges: list[SswAedtPortEdgeLedgerEntry],
 ) -> SswAedtPortStepLedger:
     body_entries = [_body_entry_from_ssw(body) for body in ssw_ledger["bodies"]]
     return {
+        "design_id": identity.design_id,
+        "aedt_filename": identity.aedt_filename,
+        "dimension_count": identity.dimension_count,
+        "design_space_hash": identity.point_hash,
         "source_step_ledger_path": str(ssw_ledger_path),
         "scene_step_path": str(aedt_step_path),
         "seed": ssw_ledger["seed"],
@@ -528,12 +538,13 @@ def setup_ansys_ports_for_ssw_debug(
     output_dir: Path = OUTPUT_DIR,
     seed: int = SEED,
 ) -> SswAedtPortSetupResult:
+    identity = build_ssw_aedt_identity(source_toml_path)
     export_ssw_aedt_port_artifacts(source_toml_path=source_toml_path, output_dir=output_dir, seed=seed)
     return setup_ssw_aedt_ports(
         port_ledger_path=output_dir / AEDT_PORT_LEDGER_NAME,
-        output_aedt_path=output_dir / AEDT_PROJECT_NAME,
+        output_aedt_path=output_dir / identity.aedt_filename,
         imported_ledger_path=output_dir / AEDT_IMPORTED_LEDGER_NAME,
-        design_name=AEDT_DESIGN_NAME,
+        design_name=identity.design_id,
         hfss_factory=create_graphical_hfss,
         release_desktop_on_exit=False,
     )
@@ -545,6 +556,7 @@ def generate_ssw_debug_summary(
     output_dir: Path = OUTPUT_DIR,
     seed: int = SEED,
 ) -> DebugSswSummary:
+    identity = build_ssw_aedt_identity(source_toml_path)
     artifacts = export_ssw_step_artifacts(source_toml_path=source_toml_path, output_dir=output_dir, seed=seed)
     step_path = Path(artifacts["scene_step_path"])
     ledger_path = Path(artifacts["ledger_path"])
@@ -565,6 +577,10 @@ def generate_ssw_debug_summary(
         "fr4_body_names": ledger["fr4_body_names"],
         "non_model_body_names": ledger["non_model_body_names"],
         "ferrite_body_names": ledger["ferrite_body_names"],
+        "design_id": identity.design_id,
+        "aedt_filename": identity.aedt_filename,
+        "design_space_hash": identity.point_hash,
+        "dimension_count": identity.dimension_count,
         "ansys_enabled": False,
         "aedt_step_path": "",
         "aedt_port_ledger_path": "",

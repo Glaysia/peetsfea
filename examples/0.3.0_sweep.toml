@@ -204,7 +204,7 @@ range = [true, 0, 1, 2]
 description = "RX SSW enable flag"
 
 [modeled_objects.turn_n_int]
-range = [true, 2, 10, 10]
+range = [true, 1, 10, 10]
 description = "RX SSW band count"
 
 [modeled_objects.gap_ratio]
