@@ -20,7 +20,7 @@ from peetsfea.ssw_step import (
     load_ssw_step_ledger,
     normal_spiral_trace_width_mm,
 )
-from peetsfea.ssw_step_constraints import SswConstraintValueRef, parse_ssw_constraint_rules
+from peetsfea.ssw_step_constraints import SswConstraintPathRef, SswConstraintValueRef, parse_ssw_constraint_rules
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXED_TOML = REPO_ROOT / "examples" / "0.3.0_fixed.toml"
@@ -61,24 +61,33 @@ def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
     assert tuple(rule.id for rule in spec.constraints) == (
         "tx_ssw_single_conductor",
         "rx_ssw_single_conductor",
+        "rx_ssw_turn_count_gt_one_when_enabled",
     )
 
 
-def test_sweep_toml_declares_ssw_single_conductor_constraints() -> None:
+def test_sweep_toml_declares_ssw_constraints() -> None:
     raw_root = tomllib.loads(SWEEP_TOML.read_text(encoding="utf-8"))
     rules = parse_ssw_constraint_rules(cast(dict[str, object], raw_root), context=SWEEP_TOML.name)
 
     assert tuple(rule.id for rule in rules) == (
         "tx_ssw_single_conductor",
         "rx_ssw_single_conductor",
+        "rx_ssw_turn_count_gt_one_when_enabled",
     )
-    assert tuple(rule.op for rule in rules) == ("==", "==")
+    assert tuple(rule.op for rule in rules) == ("==", "==", ">")
     rhs_values: list[str | float] = []
-    for rule in rules:
+    for rule in rules[:2]:
         assert set(rule.rhs.keys()) == {"value"}
         rhs_ref = cast(SswConstraintValueRef, rule.rhs)
         rhs_values.append(rhs_ref["value"])
     assert tuple(rhs_values) == (1.0, 1.0)
+    rx_turn_rule = rules[2]
+    assert set(rx_turn_rule.lhs.keys()) == {"path"}
+    assert set(rx_turn_rule.rhs.keys()) == {"path"}
+    lhs_ref = cast(SswConstraintPathRef, rx_turn_rule.lhs)
+    rhs_ref = cast(SswConstraintPathRef, rx_turn_rule.rhs)
+    assert lhs_ref["path"] == "modeled_objects.rx_ssw_coil.turn_n_int"
+    assert rhs_ref["path"] == "modeled_objects.rx_ssw_coil.is_ssw_enabled"
 
 
 def test_load_ssw_fixed_spec_rejects_unfrozen_sweep_ranges() -> None:
@@ -123,6 +132,20 @@ def test_load_ssw_fixed_spec_rejects_non_coprime_rx_when_rx_ssw_enabled(tmp_path
     custom_toml.write_text(custom_text, encoding="utf-8")
 
     with pytest.raises(ValueError, match="rx_ssw_single_conductor"):
+        load_ssw_fixed_spec(custom_toml)
+
+
+def test_load_ssw_fixed_spec_rejects_single_turn_rx_when_rx_ssw_enabled(tmp_path: Path) -> None:
+    source_text = FIXED_TOML.read_text(encoding="utf-8")
+    custom_text = source_text.replace(
+        '[modeled_objects.is_ssw_enabled]\nrange = [true, 0, 0, 1]\ndescription = "RX SSW enable flag"',
+        '[modeled_objects.is_ssw_enabled]\nrange = [true, 1, 1, 1]\ndescription = "RX SSW enable flag"',
+    )
+    assert custom_text != source_text
+    custom_toml = tmp_path / "rx_single_turn_ssw.toml"
+    custom_toml.write_text(custom_text, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="rx_ssw_turn_count_gt_one_when_enabled"):
         load_ssw_fixed_spec(custom_toml)
 
 

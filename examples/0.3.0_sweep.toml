@@ -254,3 +254,12 @@ enabled = true
 lhs = { func = "ssw_conductor_component_count(rx_ssw_coil)" }
 op = "=="
 rhs = { value = 1 }
+
+[[constraints.rules]]
+id = "rx_ssw_turn_count_gt_one_when_enabled"
+kind = "comparison"
+message = "RX SSW turn_n_int must be greater than 1 when RX SSW is enabled."
+enabled = true
+lhs = { path = "modeled_objects.rx_ssw_coil.turn_n_int" }
+op = ">"
+rhs = { path = "modeled_objects.rx_ssw_coil.is_ssw_enabled" }

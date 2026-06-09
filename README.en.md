@@ -20,7 +20,7 @@ For Korean documentation, see [README.md](README.md).
 - TOML surface: only `[design]` and `[[non_model_objects]]`
 - STEP surface: authored non-model boxes and fixed Tx/Rx port cells
 - EM surface: one Tx port, one Rx port, copper pad mesh, radiation boundary, `Setup1`, `Sweep`, and `Output Variables Table1`
-- SSW debug inputs [examples/0.3.0_fixed.toml](examples/0.3.0_fixed.toml) and [examples/0.3.0_sweep.toml](examples/0.3.0_sweep.toml) use the same `[constraints]` / `[[constraints.rules]]` surface as 0.2.25 type2, and each enabled SSW coil must satisfy `gcd(turn_n_int, twist_factor) == 1`.
+- SSW debug inputs [examples/0.3.0_fixed.toml](examples/0.3.0_fixed.toml) and [examples/0.3.0_sweep.toml](examples/0.3.0_sweep.toml) use the same `[constraints]` / `[[constraints.rules]]` surface as 0.2.25 type2; each enabled SSW coil must satisfy `gcd(turn_n_int, twist_factor) == 1`, and RX `turn_n_int` must be greater than 1 when RX SSW is enabled.
 - Default execution is headless, and PyAEDT `False` returns raise immediately.
 
 ## Execution
