@@ -480,7 +480,7 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
         (tx_bounds[2] + tx_bounds[3]) / 2.0
     )
     assert tx_region_max_bounds[3] - tx_region_max_bounds[2] == pytest.approx(480.14)
-    assert tx_region_max_bounds[4] == pytest.approx(tx_bounds[5] - 15.0)
+    assert tx_region_max_bounds[4] == pytest.approx(tx_bounds[5] - 55.0)
     assert tx_region_max_bounds[5] == pytest.approx(tx_bounds[5])
     assert rx_region_max_bounds[0] == pytest.approx(tv_bounds[1] - 5.0)
     assert rx_region_max_bounds[1] == pytest.approx(tv_bounds[1])

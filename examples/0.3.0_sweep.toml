@@ -111,10 +111,10 @@ non_model = true
 material = "vacuum"
 plane = "XY"
 # Largest TX coil XY bounds in this sweep. The region thickness
-# is capped at 15 mm, and export resolves this box to the current
+# is capped at 55 mm, and export resolves this box to the current
 # TX placement.
 origin_xyz = [0.0, -240.07, 0.0]
-size_xyz = [240.14, 480.14, 15.0]
+size_xyz = [240.14, 480.14, 55.0]
 transparency = 0.35
 
 [[non_model_objects]]
