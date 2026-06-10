@@ -2,7 +2,6 @@
 title: test_ssw_design_space.py
 created: 2026-06-08
 updated: 2026-06-10
-updated: 2026-06-10
 tags:
   - sdd
   - code
@@ -16,7 +15,7 @@ tags:
 - Inputs: `examples/0.3.0_fixed.toml`, `examples/0.3.0_sweep.toml`, and temporary mutated candidate TOML files.
 - Outputs: pytest assertions for subset checks, point checks, dimension count, deterministic hash/design/file identity, fixed TOML sampling, allowed larger candidate counts, violation reporting, and fail-fast identity rejection for range candidates.
 - Canonical state: none.
-- Invariants: the live reference sweep derives 22 free dimensions, the fixed example is a single point inside that space, split TX/RX ferrite ratios are independent owner paths, continuous realized values drive the hash payload, and seed/count/grid do not enter the identity.
+- Invariants: the live reference sweep derives 29 free dimensions, including the seven TX under-coil owners and excluding its fixed `no_ssw_qturn_*` fields; the fixed example is a single point inside that space, split TX/RX ferrite ratios are independent owner paths, continuous realized values drive the hash payload, and seed/count/grid do not enter the identity.
 - Fail-fast points: invalid candidate TOML scenarios are expected to produce violations or raise during identity creation.
 - Collaborators: [ssw_design_space.py](../src/peetsfea/ssw_design_space.py.md).
 - Tests: this file.

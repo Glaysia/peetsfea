@@ -562,7 +562,7 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
     assert result["design_id"] == ledger["design_id"]
     assert result["aedt_filename"] == ledger["aedt_filename"]
-    assert result["dimension_count"] == 21
+    assert result["dimension_count"] == ledger["dimension_count"]
     assert result["design_space_hash"] == ledger["design_space_hash"]
     assert result["mesh"]["objects"] == ["rx_ssw_coil_coil_copper", "tx_ssw_coil_ssw_copper"]
     assert result["mesh"]["max_length"] == "1mm"
@@ -863,7 +863,7 @@ def test_setup_ssw_aedt_ports_runs_real_headless_ansys() -> None:
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
     assert result["design_id"] == ledger["design_id"]
     assert result["aedt_filename"] == ledger["aedt_filename"]
-    assert result["dimension_count"] == 21
+    assert result["dimension_count"] == 29
     assert result["design_space_hash"] == ledger["design_space_hash"]
     assert Path(result["aedt_path"]).is_file()
     assert Path(result["imported_ledger_path"]).is_file()
@@ -873,6 +873,7 @@ def test_setup_ssw_aedt_ports_runs_real_headless_ansys() -> None:
     assert imported["design_space_hash"] == ledger["design_space_hash"]
     assert "port_sheet_names" not in imported
     assert "tx_ssw_coil_ssw_copper" in imported["copper_body_names"]
+    assert "tx_under_coil_coil_copper" in imported["copper_body_names"]
     assert "rx_ssw_coil_coil_copper" in imported["copper_body_names"]
     assert imported["mesh"]["objects"] == ["rx_ssw_coil_coil_copper", "tx_ssw_coil_ssw_copper"]
     assert imported["mesh"]["max_length"] == "1mm"

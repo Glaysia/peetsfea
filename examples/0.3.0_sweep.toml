@@ -3,7 +3,7 @@
 # 이 파일은 0.3.0 SSW coil sweep의 SSOT다.
 # TX/RX 각각의 sampled coil 변수, fixed compatibility 변수,
 # shared layout 변수와 shared ferrite 변수를 포함하며,
-# 자유변수 기준 총 21차원이다.
+# 자유변수 기준 총 29차원이다.
 #
 # Range 형식:
 # - [true, start, end, count]는 integer 후보 range다.
@@ -188,6 +188,48 @@ description = "TX SSW two-PCB gap(mm)"
 [modeled_objects.twist_factor]
 range = [true, 1, 10, 10]
 description = "TX SSW band pitch shift per loop"
+
+[[modeled_objects]]
+object_id = "tx_under_coil"
+role = "tx_under_coil"
+material = "composite"
+model_state = true
+
+[modeled_objects.is_under_coil_enabled]
+range = [true, 0, 1, 2]
+description = "TX under-coil enable flag"
+
+[modeled_objects.width_ratio]
+range = [false, 0.25, 0.6, 36]
+description = "TX under-coil width ratio against fixed_dimensions.width_max_mm"
+
+[modeled_objects.height_ratio]
+range = [false, 0.25, 0.6, 36]
+description = "TX under-coil height ratio against fixed_dimensions.height_max_mm"
+
+[modeled_objects.turn_n_int]
+range = [true, 2, 6, 5]
+description = "TX under-coil spiral turn count"
+
+[modeled_objects.gap_ratio]
+range = [false, 0.1, 0.9, 50]
+description = "TX under-coil pitch 중 gap 비율"
+
+[modeled_objects.void_area_ratio]
+range = [false, 0.1, 0.9, 50]
+description = "TX under-coil 중앙 void area ratio"
+
+[modeled_objects.void_profile]
+range = [true, 0, 1, 2]
+description = "TX under-coil void profile: 0 rectangular void, 1 scaled void"
+
+[modeled_objects.no_ssw_qturn_start_int]
+range = [true, 0, 0, 1]
+description = "TX under-coil non-SSW quarter-turn start index; fixed at 0 for 0.3.0"
+
+[modeled_objects.no_ssw_qturn_n_int]
+range = [true, 0, 0, 1]
+description = "TX under-coil non-SSW quarter-turn count; fixed at 0 for 0.3.0"
 
 [[modeled_objects]]
 object_id = "rx_ssw_coil"

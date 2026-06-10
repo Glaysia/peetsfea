@@ -30,7 +30,7 @@ MULL_FERRITE_TRANSPARENCY = 0.0
 _NONE_TYPE = type(None)
 
 Point3 = tuple[float, float, float]
-Role = Literal["tx_ssw_coil", "rx_ssw_coil"]
+Role = Literal["tx_ssw_coil", "tx_under_coil", "rx_ssw_coil"]
 BodyRole = Literal["fr4", "copper", "non_model", "ferrite"]
 
 
@@ -69,6 +69,7 @@ class FixedDimensions:
 @dataclass(frozen=True)
 class SswCoilParameters:
     role: Role
+    is_under_coil_enabled: bool
     width_ratio: float
     height_ratio: float
     is_ssw_enabled: bool
@@ -113,6 +114,7 @@ class SswFixedSpec:
     non_model_objects: tuple[NonModelBox, ...]
     constraints: tuple[SswConstraintRule, ...]
     tx: SswCoilParameters
+    tx_under: SswCoilParameters
     rx: SswCoilParameters
 
 
@@ -378,17 +380,27 @@ def _modeled_object_by_role(raw_objects: object, role: Role) -> dict[str, object
 
 def _load_coil_parameters(root: dict[str, object], role: Role) -> SswCoilParameters:
     table = _modeled_object_by_role(_require_key(root, "modeled_objects", "0.3.0 fixed spec"), role)
-    is_ssw_enabled = _frozen_bool_as_int(table, "is_ssw_enabled", role)
+    is_under_coil_enabled = True
+    if role == "tx_under_coil":
+        is_under_coil_enabled = _frozen_bool_as_int(table, "is_under_coil_enabled", role)
+        is_ssw_enabled = False
+    else:
+        is_ssw_enabled = _frozen_bool_as_int(table, "is_ssw_enabled", role)
     no_ssw_qturn_start_int = _frozen_int(table, "no_ssw_qturn_start_int", role, minimum=0)
     no_ssw_qturn_n_int = _frozen_int(table, "no_ssw_qturn_n_int", role, minimum=0)
     if role == "tx_ssw_coil" and not is_ssw_enabled:
         raise ValueError("tx_ssw_coil.is_ssw_enabled must stay enabled in 0.3.0")
+    if role == "tx_under_coil" and no_ssw_qturn_start_int != 0:
+        raise ValueError("tx_under_coil.no_ssw_qturn_start_int must be fixed to 0")
+    if role == "tx_under_coil" and no_ssw_qturn_n_int != 0:
+        raise ValueError("tx_under_coil.no_ssw_qturn_n_int must be fixed to 0")
     if no_ssw_qturn_start_int > 7:
         raise ValueError(f"{role}.no_ssw_qturn_start_int must be <= 7")
     if no_ssw_qturn_n_int > 3:
         raise ValueError(f"{role}.no_ssw_qturn_n_int must be <= 3")
     return SswCoilParameters(
         role=role,
+        is_under_coil_enabled=is_under_coil_enabled,
         width_ratio=_frozen_float(table, "width_ratio", role, positive=True),
         height_ratio=_frozen_float(table, "height_ratio", role, positive=True),
         is_ssw_enabled=is_ssw_enabled,
@@ -398,8 +410,8 @@ def _load_coil_parameters(root: dict[str, object], role: Role) -> SswCoilParamet
         void_profile=_frozen_int(table, "void_profile", role, minimum=0),
         no_ssw_qturn_start_int=no_ssw_qturn_start_int,
         no_ssw_qturn_n_int=no_ssw_qturn_n_int,
-        pcb_gap_mm=_frozen_float(table, "pcb_gap_mm", role, positive=True),
-        twist_factor=_frozen_int(table, "twist_factor", role, minimum=1),
+        pcb_gap_mm=1.0 if role == "tx_under_coil" else _frozen_float(table, "pcb_gap_mm", role, positive=True),
+        twist_factor=1 if role == "tx_under_coil" else _frozen_int(table, "twist_factor", role, minimum=1),
     )
 
 
@@ -441,6 +453,7 @@ def load_ssw_fixed_spec(toml_path: Path) -> SswFixedSpec:
         non_model_objects=_load_non_model_objects(root),
         constraints=parse_ssw_constraint_rules(root, context=toml_path.name),
         tx=_load_coil_parameters(root, "tx_ssw_coil"),
+        tx_under=_load_coil_parameters(root, "tx_under_coil"),
         rx=_load_coil_parameters(root, "rx_ssw_coil"),
     )
     require_ssw_constraints_satisfied(rules=spec.constraints, coils=_constraint_coils_from_spec(spec))
@@ -692,20 +705,32 @@ def _mull_ferrite_sheet_boxes(
     spec: SswFixedSpec,
     tx_boxes: tuple[_BodyBox, ...],
     rx_boxes: tuple[_BodyBox, ...],
-) -> tuple[_BodyBox, _BodyBox]:
+) -> tuple[_BodyBox, ...]:
     tx_region_max_bounds = _body_bounds(_body_by_name(_non_model_boxes(spec), "tx_region_max"))
     rx_region_max_bounds = _body_bounds(_body_by_name(_non_model_boxes(spec), "rx_region_max"))
     tx_bounds = _combined_bounds(tx_boxes, "TX SSW bodies")
     rx_bounds = _combined_bounds(rx_boxes, "RX SSW bodies")
     thickness = spec.fixed.mull_ferrite_thickness_mm
 
-    tx_zmin, tx_zmax = _mull_sheet_axis_bounds(
-        outer_min_mm=tx_region_max_bounds.zmin,
-        coil_min_mm=tx_bounds.zmin,
-        thickness_mm=thickness,
-        ratio=spec.ferrite.tx_mull_position_ratio,
-        context="TX",
-    )
+    ferrite_boxes: list[_BodyBox] = []
+    if not spec.tx_under.is_under_coil_enabled:
+        tx_zmin, tx_zmax = _mull_sheet_axis_bounds(
+            outer_min_mm=tx_region_max_bounds.zmin,
+            coil_min_mm=tx_bounds.zmin,
+            thickness_mm=thickness,
+            ratio=spec.ferrite.tx_mull_position_ratio,
+            context="TX",
+        )
+        ferrite_boxes.append(
+            _box(
+                "tx_mull_ferrite_sheet",
+                "ferrite",
+                MULL_FERRITE_MATERIAL,
+                (tx_bounds.center_x, tx_bounds.center_y, (tx_zmin + tx_zmax) / 2.0),
+                (tx_bounds.size_x, tx_bounds.size_y, thickness),
+                transparency=MULL_FERRITE_TRANSPARENCY,
+            )
+        )
     rx_xmin, rx_xmax = _mull_sheet_axis_bounds(
         outer_min_mm=rx_region_max_bounds.xmin,
         coil_min_mm=rx_bounds.xmin,
@@ -713,15 +738,7 @@ def _mull_ferrite_sheet_boxes(
         ratio=spec.ferrite.rx_mull_position_ratio,
         context="RX",
     )
-    return (
-        _box(
-            "tx_mull_ferrite_sheet",
-            "ferrite",
-            MULL_FERRITE_MATERIAL,
-            (tx_bounds.center_x, tx_bounds.center_y, (tx_zmin + tx_zmax) / 2.0),
-            (tx_bounds.size_x, tx_bounds.size_y, thickness),
-            transparency=MULL_FERRITE_TRANSPARENCY,
-        ),
+    ferrite_boxes.append(
         _box(
             "rx_mull_ferrite_sheet",
             "ferrite",
@@ -731,6 +748,7 @@ def _mull_ferrite_sheet_boxes(
             transparency=MULL_FERRITE_TRANSPARENCY,
         ),
     )
+    return tuple(ferrite_boxes)
 
 
 def _resolved_non_model_box(spec: SswFixedSpec, non_model: NonModelBox) -> NonModelBox:
@@ -836,6 +854,13 @@ def _rx_region_max_box(spec: SswFixedSpec) -> NonModelBox:
     if len(matches) != 1:
         raise ValueError(f"expected exactly one non-model rx_region_max box (count={len(matches)})")
     return _resolved_rx_region_max_box(spec, matches[0])
+
+
+def _tx_region_max_box(spec: SswFixedSpec) -> NonModelBox:
+    matches = tuple(box for box in spec.non_model_objects if box.object_id == "tx_region_max")
+    if len(matches) != 1:
+        raise ValueError(f"expected exactly one non-model tx_region_max box (count={len(matches)})")
+    return _resolved_tx_region_max_box(spec, matches[0])
 
 
 def _coilmaker_config(params: SswCoilParameters, fixed: FixedDimensions) -> coilmaker.RuntimeConfig:
@@ -1011,6 +1036,31 @@ def _coilmaker_child_bodies_from_assembly(
 def _placement_for_role(spec: SswFixedSpec, params: SswCoilParameters, assembly: cq.Assembly) -> cq.Location:
     tv = _tv_box(spec)
     tv_center_y = tv.origin_xyz[1] + tv.size_xyz[1] / 2.0
+    if params.role == "tx_under_coil":
+        tx_region_max = _tx_region_max_box(spec)
+        orientation = _tx_xy_bottom_port_orientation()
+        oriented_bodies = _coilmaker_child_bodies_from_assembly(params=params, assembly=assembly, placement=orientation)
+        oriented_bounds = _combined_bounds(oriented_bodies, f"{params.role} oriented bodies")
+        if oriented_bounds.size_x > tx_region_max.size_xyz[0]:
+            raise ValueError(
+                f"TX under-coil X span does not fit inside tx_region_max "
+                f"(span={oriented_bounds.size_x}, tx_region_max_x_size={tx_region_max.size_xyz[0]})"
+            )
+        if oriented_bounds.size_y > tx_region_max.size_xyz[1]:
+            raise ValueError(
+                f"TX under-coil Y span does not fit inside tx_region_max "
+                f"(span={oriented_bounds.size_y}, tx_region_max_y_size={tx_region_max.size_xyz[1]})"
+            )
+        if oriented_bounds.size_z > tx_region_max.size_xyz[2]:
+            raise ValueError(
+                f"TX under-coil Z span does not fit inside tx_region_max "
+                f"(span={oriented_bounds.size_z}, tx_region_max_z_size={tx_region_max.size_xyz[2]})"
+            )
+        translate_x = tx_region_max.origin_xyz[0] - oriented_bounds.xmin
+        translate_y = tv_center_y - oriented_bounds.center_y
+        translate_z = tx_region_max.origin_xyz[2] - oriented_bounds.zmin
+        return cq.Location(cq.Vector(translate_x, translate_y, translate_z)) * orientation
+
     if params.role == "rx_ssw_coil":
         rx_region_max = _rx_region_max_box(spec)
         rx_region_center_y = rx_region_max.origin_xyz[1] + rx_region_max.size_xyz[1] / 2.0
@@ -1186,12 +1236,20 @@ def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -
     rx_region_max_bounds = _body_bounds(_body_by_name(bodies, "rx_region_max"))
     tx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "tx_ssw_coil_"), "TX SSW bodies")
     rx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "rx_ssw_coil_"), "RX SSW bodies")
-    tx_ferrite_bounds = _body_bounds(_body_by_name(bodies, "tx_mull_ferrite_sheet"))
     rx_ferrite_bounds = _body_bounds(_body_by_name(bodies, "rx_mull_ferrite_sheet"))
+    tx_ferrite_bodies = tuple(body for body in bodies if body.name == "tx_mull_ferrite_sheet")
     rx_fr4_bounds = _combined_bounds(
         _bodies_with_role(_bodies_with_prefix(bodies, "rx_ssw_coil_"), "fr4", "RX SSW bodies"),
         "RX SSW FR4 bodies",
     )
+    tx_under_bodies = tuple(body for body in bodies if body.name.startswith("tx_under_coil_"))
+    if spec.tx_under.is_under_coil_enabled:
+        if len(tx_under_bodies) == 0:
+            raise ValueError("tx_under_coil enabled but no under-coil bodies were generated")
+        if len(tx_ferrite_bodies) != 0:
+            raise ValueError("TX MULL ferrite sheet must not exist when tx_under_coil is enabled")
+    elif len(tx_under_bodies) != 0:
+        raise ValueError("tx_under_coil disabled but under-coil bodies were generated")
 
     if abs(tx_region_bounds.zmax - (tv_bounds.zmin - spec.fixed.tx_rx_min_distance_mm)) > tolerance:
         raise ValueError("tx_region top must equal TV bottom minus fixed_dimensions.tx_rx_min_distance_mm")
@@ -1278,17 +1336,8 @@ def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -
         )
 
     thickness = spec.fixed.mull_ferrite_thickness_mm
-    if abs(tx_ferrite_bounds.size_z - thickness) > tolerance:
-        raise ValueError("TX MULL ferrite sheet thickness must match fixed_dimensions.mull_ferrite_thickness_mm")
     if abs(rx_ferrite_bounds.size_x - thickness) > tolerance:
         raise ValueError("RX MULL ferrite sheet thickness must match fixed_dimensions.mull_ferrite_thickness_mm")
-    if (
-        abs(tx_ferrite_bounds.size_x - tx_bounds.size_x) > tolerance
-        or abs(tx_ferrite_bounds.size_y - tx_bounds.size_y) > tolerance
-        or abs(tx_ferrite_bounds.center_x - tx_bounds.center_x) > tolerance
-        or abs(tx_ferrite_bounds.center_y - tx_bounds.center_y) > tolerance
-    ):
-        raise ValueError("TX MULL ferrite sheet must match TX coil XY footprint")
     if (
         abs(rx_ferrite_bounds.size_y - rx_bounds.size_y) > tolerance
         or abs(rx_ferrite_bounds.size_z - rx_bounds.size_z) > tolerance
@@ -1296,10 +1345,44 @@ def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -
         or abs(rx_ferrite_bounds.center_z - rx_bounds.center_z) > tolerance
     ):
         raise ValueError("RX MULL ferrite sheet must match RX coil YZ footprint")
-    if tx_ferrite_bounds.zmin < tx_region_max_bounds.zmin - tolerance or tx_ferrite_bounds.zmax > tx_bounds.zmin + tolerance:
-        raise ValueError("TX MULL ferrite sheet must stay between tx_region_max Z min and TX coil Z min")
     if rx_ferrite_bounds.xmin < rx_region_max_bounds.xmin - tolerance or rx_ferrite_bounds.xmax > rx_bounds.xmin + tolerance:
         raise ValueError("RX MULL ferrite sheet must stay between rx_region_max X min and RX coil X min")
+
+    if spec.tx_under.is_under_coil_enabled:
+        tx_under_bounds = _combined_bounds(tx_under_bodies, "TX under-coil bodies")
+        _assert_inside_bounds(inner=tx_under_bounds, outer=tx_region_max_bounds, context="TX under-coil")
+        if abs(tx_under_bounds.zmin - tx_region_max_bounds.zmin) > tolerance:
+            raise ValueError(
+                f"TX under-coil bottom must align to tx_region_max bottom "
+                f"(under_zmin={tx_under_bounds.zmin}, tx_region_max_zmin={tx_region_max_bounds.zmin})"
+            )
+        if tx_under_bounds.size_z >= tx_under_bounds.size_x or tx_under_bounds.size_z >= tx_under_bounds.size_y:
+            raise ValueError(
+                f"TX under-coil must remain an XY-plane normal spiral object "
+                f"(size_x={tx_under_bounds.size_x}, size_y={tx_under_bounds.size_y}, size_z={tx_under_bounds.size_z})"
+            )
+        if tx_under_bounds.size_y <= tx_under_bounds.size_x:
+            raise ValueError(
+                f"TX under-coil long dimension must follow Y axis "
+                f"(size_x={tx_under_bounds.size_x}, size_y={tx_under_bounds.size_y})"
+            )
+
+    if not spec.tx_under.is_under_coil_enabled:
+        tx_ferrite_bounds = _body_bounds(_body_by_name(bodies, "tx_mull_ferrite_sheet"))
+        if abs(tx_ferrite_bounds.size_z - thickness) > tolerance:
+            raise ValueError("TX MULL ferrite sheet thickness must match fixed_dimensions.mull_ferrite_thickness_mm")
+        if (
+            abs(tx_ferrite_bounds.size_x - tx_bounds.size_x) > tolerance
+            or abs(tx_ferrite_bounds.size_y - tx_bounds.size_y) > tolerance
+            or abs(tx_ferrite_bounds.center_x - tx_bounds.center_x) > tolerance
+            or abs(tx_ferrite_bounds.center_y - tx_bounds.center_y) > tolerance
+        ):
+            raise ValueError("TX MULL ferrite sheet must match TX coil XY footprint")
+        if (
+            tx_ferrite_bounds.zmin < tx_region_max_bounds.zmin - tolerance
+            or tx_ferrite_bounds.zmax > tx_bounds.zmin + tolerance
+        ):
+            raise ValueError("TX MULL ferrite sheet must stay between tx_region_max Z min and TX coil Z min")
 
 
 def _action_value_to_jsonable(value: coilmaker.ActionValue) -> object:
@@ -1371,13 +1454,21 @@ def _placement_action_token(
     no_ssw_qturn_start_int: int,
     no_ssw_qturn_n_int: int,
 ) -> coilmaker.ActionToken:
+    if role == "tx_ssw_coil":
+        placement_input = "non_model.tx_region"
+    elif role == "tx_under_coil":
+        placement_input = "non_model.tx_region_max"
+    elif role == "rx_ssw_coil":
+        placement_input = "non_model.tv"
+    else:
+        raise ValueError(f"unsupported placement role {role!r}")
     return _action_token(
         index=index,
         op="PLACE_COIL_IN_SCENE",
         target=f"scene.{role}.placement",
         inputs=(
             _namespace_ref(role, "assembly.pcb_stack"),
-            "non_model.tv" if role == "rx_ssw_coil" else "non_model.tx_region",
+            placement_input,
         ),
         params=(
             ("coil_role", role),
@@ -1474,7 +1565,9 @@ def _scene_action_trace(
     non_model_bodies = _non_model_boxes(spec)
     for body in non_model_bodies:
         actions.append(_non_model_action_token(index=len(actions), body=body))
-    role_params: tuple[tuple[Role, SswCoilParameters], ...] = (("tx_ssw_coil", spec.tx), ("rx_ssw_coil", spec.rx))
+    role_params: list[tuple[Role, SswCoilParameters]] = [("tx_ssw_coil", spec.tx), ("rx_ssw_coil", spec.rx)]
+    if spec.tx_under.is_under_coil_enabled:
+        role_params.insert(1, ("tx_under_coil", spec.tx_under))
     for role, params in role_params:
         trace = coilmaker.assert_transformer_ready_action_trace(
             coilmaker.materialize_action_trace(_coilmaker_config(params, spec.fixed))
@@ -1484,6 +1577,8 @@ def _scene_action_trace(
 
     tx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "tx_ssw_coil_"), "TX SSW bodies")
     rx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "rx_ssw_coil_"), "RX SSW bodies")
+    if spec.tx_under.is_under_coil_enabled:
+        tx_under_bounds = _combined_bounds(_bodies_with_prefix(bodies, "tx_under_coil_"), "TX under-coil bodies")
     ferrite_bodies = tuple(body for body in bodies if body.role == "ferrite")
     rx_port_face = "rx_x_min" if spec.rx.is_ssw_enabled else "normal_spiral_landing"
     rx_port_anchor = (
@@ -1504,6 +1599,20 @@ def _scene_action_trace(
             no_ssw_qturn_n_int=spec.tx.no_ssw_qturn_n_int,
         )
     )
+    if spec.tx_under.is_under_coil_enabled:
+        actions.append(
+            _placement_action_token(
+                index=len(actions),
+                role="tx_under_coil",
+                coil_mode="normal_spiral",
+                plane="XY",
+                bounds=tx_under_bounds,
+                port_face="none",
+                port_anchor_world_xyz=(tx_under_bounds.xmin, tx_under_bounds.center_y, tx_under_bounds.center_z),
+                no_ssw_qturn_start_int=spec.tx_under.no_ssw_qturn_start_int,
+                no_ssw_qturn_n_int=spec.tx_under.no_ssw_qturn_n_int,
+            )
+        )
     actions.append(
         _placement_action_token(
             index=len(actions),
@@ -1527,6 +1636,7 @@ def _scene_action_trace(
             inputs=(
                 *(f"non_model.{body.name}" for body in non_model_bodies),
                 "scene.tx_ssw_coil.placement",
+                *(("scene.tx_under_coil.placement",) if spec.tx_under.is_under_coil_enabled else ()),
                 "scene.rx_ssw_coil.placement",
                 *(f"ferrite.{body.name}" for body in ferrite_bodies),
             ),
@@ -1612,9 +1722,12 @@ def write_coil_making_token_toml(
 
 def build_ssw_body_boxes(spec: SswFixedSpec) -> tuple[_BodyBox, ...]:
     tx_boxes = _coilmaker_child_bodies(spec=spec, params=spec.tx)
+    tx_under_boxes = (
+        _coilmaker_child_bodies(spec=spec, params=spec.tx_under) if spec.tx_under.is_under_coil_enabled else ()
+    )
     rx_boxes = _coilmaker_child_bodies(spec=spec, params=spec.rx)
     ferrite_boxes = _mull_ferrite_sheet_boxes(spec=spec, tx_boxes=tx_boxes, rx_boxes=rx_boxes)
-    bodies = (*_non_model_boxes(spec), *tx_boxes, *rx_boxes, *ferrite_boxes)
+    bodies = (*_non_model_boxes(spec), *tx_boxes, *tx_under_boxes, *rx_boxes, *ferrite_boxes)
     names = tuple(body.name for body in bodies)
     if len(names) != len(set(names)):
         raise ValueError(f"SSW body names must be unique (body_names={names!r})")
@@ -1631,7 +1744,10 @@ def build_ssw_assembly(spec: SswFixedSpec) -> cq.Assembly:
     body_boxes = build_ssw_body_boxes(spec)
     for body in tuple(body for body in body_boxes if body.role in ("non_model", "ferrite")):
         assembly.add(_workplane_from_box(body), name=body.name, color=_color_for_body(body))
-    for params in (spec.tx, spec.rx):
+    coil_params: tuple[SswCoilParameters, ...] = (
+        (spec.tx, spec.tx_under, spec.rx) if spec.tx_under.is_under_coil_enabled else (spec.tx, spec.rx)
+    )
+    for params in coil_params:
         child_assembly = _coilmaker_assembly(params, spec.fixed)
         placement = _placement_for_role(spec, params, child_assembly)
         for child in child_assembly.children:

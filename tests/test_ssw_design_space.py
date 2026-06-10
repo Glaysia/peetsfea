@@ -61,11 +61,20 @@ def test_fixed_toml_is_reference_design_space_point() -> None:
 
     assert result.is_subset is True
     assert result.is_point is True
-    assert result.dimension_count == 22
-    assert len(result.free_owner_paths) == 22
+    assert result.dimension_count == 29
+    assert len(result.free_owner_paths) == 29
     assert result.violations == ()
     assert "ferrite.tx_mull_position_ratio" in result.free_owner_paths
     assert "ferrite.rx_mull_position_ratio" in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].is_under_coil_enabled" in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].width_ratio" in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].height_ratio" in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].turn_n_int" in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].gap_ratio" in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].void_area_ratio" in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].void_profile" in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].no_ssw_qturn_start_int" not in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].no_ssw_qturn_n_int" not in result.free_owner_paths
     assert "modeled_objects[role=rx_ssw_coil].is_ssw_enabled" in result.free_owner_paths
 
 
@@ -74,7 +83,7 @@ def test_aedt_identity_is_deterministic_short_point_name() -> None:
     second = build_ssw_aedt_identity(FIXED_TOML, SWEEP_TOML)
 
     assert first == second
-    assert first.dimension_count == 22
+    assert first.dimension_count == 29
     assert len(first.point_hash) == 16
     assert first.design_id == f"0_3_0_p{first.point_hash}"
     assert first.aedt_filename == f"{first.design_id}.aedt"
@@ -165,7 +174,7 @@ def test_sample_ssw_fixed_tomls_generates_valid_unique_points(tmp_path: Path) ->
     assert batch.source_toml_path == SWEEP_TOML
     assert batch.reference_toml_path == SWEEP_TOML
     assert batch.output_dir == output_dir
-    assert batch.dimension_count == 21
+    assert batch.dimension_count == 29
     assert len(batch.samples) == 3
     assert len({sample.design_id for sample in batch.samples}) == 3
     for expected_index, sample in enumerate(batch.samples):
