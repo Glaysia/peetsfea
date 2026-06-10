@@ -1,9 +1,9 @@
 # 0.3.0 SSW sampled authoring input.
 # ----------------------------------------------------------------------------
 # 이 파일은 0.3.0 SSW coil sweep의 SSOT다.
-# TX/RX 각각 8개의 sampled coil 변수, 3개의 fixed compatibility 변수,
-# 1개의 shared layout 변수와 1개의 shared ferrite 변수를 가지며,
-# 자유변수 기준 총 18차원이다.
+# TX/RX 각각의 sampled coil 변수, fixed compatibility 변수,
+# shared layout 변수와 shared ferrite 변수를 포함하며,
+# 자유변수 기준 총 21차원이다.
 #
 # Range 형식:
 # - [true, start, end, count]는 integer 후보 range다.

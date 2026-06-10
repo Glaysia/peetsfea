@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 import tomllib
+
+from peetsfea.ssw_step import load_ssw_fixed_spec
 
 SPEC_VERSION = "0.3.0"
 SCHEMA_ID = "peetsfea.ssw_coil.step.v1"
@@ -38,6 +42,27 @@ class SswAedtIdentity:
     point_hash: str
     dimension_count: int
     free_owner_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SswSampledToml:
+    index: int
+    toml_path: Path
+    design_id: str
+    aedt_filename: str
+    point_hash: str
+
+
+@dataclass(frozen=True)
+class SswSampledTomlBatch:
+    sample_count: int
+    seed: int
+    source_toml_path: Path
+    reference_toml_path: Path
+    output_dir: Path
+    dimension_count: int
+    free_owner_paths: tuple[str, ...]
+    samples: tuple[SswSampledToml, ...]
 
 
 @dataclass(frozen=True)
@@ -301,6 +326,158 @@ def _raise_for_non_point(candidate_ranges: dict[str, _RangeDefinition], free_own
         )
 
 
+def _require_int_argument(value: int, context: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{context} must be an int")
+
+
+def _require_positive_int_argument(value: int, context: str) -> None:
+    _require_int_argument(value, context)
+    if value <= 0:
+        raise ValueError(f"{context} must be positive")
+
+
+def _raise_for_non_reference_varying_ranges(
+    candidate_ranges: dict[str, _RangeDefinition],
+    free_owner_paths: tuple[str, ...],
+) -> None:
+    free_path_set = set(free_owner_paths)
+    varying_paths: list[str] = []
+    for path, range_def in candidate_ranges.items():
+        if path in free_path_set:
+            continue
+        if range_def.lower != range_def.upper or range_def.count != 1:
+            varying_paths.append(path)
+    if len(varying_paths) != 0:
+        raise ValueError(
+            "SSW sampling only varies reference free paths; non-reference varying ranges: "
+            + ", ".join(sorted(varying_paths))
+        )
+
+
+def _sample_range_value(rng: random.Random, range_def: _RangeDefinition) -> RangeValue:
+    if range_def.is_integer:
+        return rng.randint(int(range_def.lower), int(range_def.upper))
+    return float(rng.uniform(range_def.lower, range_def.upper))
+
+
+def _sample_point_values(
+    *,
+    rng: random.Random,
+    candidate_ranges: dict[str, _RangeDefinition],
+    free_owner_paths: tuple[str, ...],
+) -> dict[str, RangeValue]:
+    point_values: dict[str, RangeValue] = {}
+    for path in free_owner_paths:
+        point_values[path] = _sample_range_value(rng, candidate_ranges[path])
+    return point_values
+
+
+def _assignment_key(stripped_line: str) -> str:
+    if "=" not in stripped_line:
+        return ""
+    key, _separator, _value = stripped_line.partition("=")
+    return key.strip()
+
+
+def _line_ending(line: str) -> str:
+    if line.endswith("\r\n"):
+        return "\r\n"
+    if line.endswith("\n"):
+        return "\n"
+    return ""
+
+
+def _line_indent(line: str) -> str:
+    return line[: len(line) - len(line.lstrip(" \t"))]
+
+
+def _format_range_value(value: RangeValue) -> str:
+    if isinstance(value, int):
+        return str(value)
+    return repr(float(value))
+
+
+def _format_frozen_range(range_def: _RangeDefinition, point_value: RangeValue) -> str:
+    integer_flag = "true" if range_def.is_integer else "false"
+    formatted_value = _format_range_value(point_value)
+    return f"[{integer_flag}, {formatted_value}, {formatted_value}, 1]"
+
+
+def _section_path_from_header(
+    *,
+    header: str,
+    modeled_role: str,
+    modeled_role_is_bound: bool,
+) -> tuple[bool, str]:
+    if header.startswith("fixed_dimensions."):
+        return (True, header)
+    if header.startswith("ferrite."):
+        return (True, header)
+    if header.startswith("modeled_objects."):
+        if not modeled_role_is_bound:
+            raise ValueError(f"modeled_objects range table {header!r} appears before its role")
+        field = header.removeprefix("modeled_objects.")
+        return (True, f"modeled_objects[role={modeled_role}].{field}")
+    return (False, "")
+
+
+def _role_from_assignment(stripped_line: str) -> str:
+    raw_table = tomllib.loads(stripped_line)
+    table = _require_table(raw_table, "modeled_objects.role")
+    return _require_non_empty_str(table, "role", "modeled_objects")
+
+
+def _sampled_toml_text(
+    *,
+    source_text: str,
+    point_values: dict[str, RangeValue],
+    candidate_ranges: dict[str, _RangeDefinition],
+) -> str:
+    rendered_lines: list[str] = []
+    replaced_paths: set[str] = set()
+    modeled_role = ""
+    modeled_role_is_bound = False
+    inside_modeled_object = False
+    current_path = ""
+    current_path_is_bound = False
+    for line in source_text.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped.startswith("[[") and stripped.endswith("]]"):
+            array_header = stripped[2:-2].strip()
+            inside_modeled_object = array_header == "modeled_objects"
+            modeled_role = ""
+            modeled_role_is_bound = False
+            current_path = ""
+            current_path_is_bound = False
+        elif stripped.startswith("[") and stripped.endswith("]"):
+            section_header = stripped[1:-1].strip()
+            current_path_is_bound, current_path = _section_path_from_header(
+                header=section_header,
+                modeled_role=modeled_role,
+                modeled_role_is_bound=modeled_role_is_bound,
+            )
+        elif inside_modeled_object and _assignment_key(stripped) == "role":
+            modeled_role = _role_from_assignment(stripped)
+            modeled_role_is_bound = True
+
+        if current_path_is_bound and _assignment_key(stripped) == "range" and current_path in point_values:
+            if current_path in replaced_paths:
+                raise ValueError(f"duplicate range line for sampled path {current_path!r}")
+            range_def = candidate_ranges[current_path]
+            rendered_lines.append(
+                f"{_line_indent(line)}range = {_format_frozen_range(range_def, point_values[current_path])}"
+                f"{_line_ending(line)}"
+            )
+            replaced_paths.add(current_path)
+            continue
+        rendered_lines.append(line)
+    missing_paths = tuple(sorted(set(point_values) - replaced_paths))
+    if len(missing_paths) != 0:
+        raise ValueError("sampled TOML source is missing range lines for paths: " + ", ".join(missing_paths))
+    return "".join(rendered_lines)
+
+
 def build_ssw_aedt_identity(
     candidate_toml_path: Path,
     reference_toml_path: Path = DEFAULT_REFERENCE_TOML_PATH,
@@ -321,11 +498,96 @@ def build_ssw_aedt_identity(
     )
 
 
+def sample_ssw_fixed_tomls(
+    sample_count: int,
+    seed: int,
+    sweep_toml_path: Path,
+    output_dir: Path,
+    reference_toml_path: Path = DEFAULT_REFERENCE_TOML_PATH,
+    max_attempts_per_sample: int = 1000,
+) -> SswSampledTomlBatch:
+    _require_positive_int_argument(sample_count, "sample_count")
+    _require_int_argument(seed, "seed")
+    _require_positive_int_argument(max_attempts_per_sample, "max_attempts_per_sample")
+    result = check_ssw_toml_in_design_space(sweep_toml_path, reference_toml_path)
+    _raise_for_check_failure(result)
+    candidate_ranges = _range_definitions(_load_toml_root(sweep_toml_path))
+    _raise_for_non_reference_varying_ranges(candidate_ranges, result.free_owner_paths)
+    source_text = sweep_toml_path.read_text(encoding="utf-8")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    rng = random.Random(seed)
+    samples: list[SswSampledToml] = []
+    seen_design_ids: set[str] = set()
+    with tempfile.TemporaryDirectory(prefix="ssw_sample_attempt_", dir=output_dir) as temp_dir_text:
+        temp_dir = Path(temp_dir_text)
+        for index in range(sample_count):
+            accepted = False
+            last_rejection = "no attempts were made"
+            for attempt in range(max_attempts_per_sample):
+                point_values = _sample_point_values(
+                    rng=rng,
+                    candidate_ranges=candidate_ranges,
+                    free_owner_paths=result.free_owner_paths,
+                )
+                sampled_text = _sampled_toml_text(
+                    source_text=source_text,
+                    point_values=point_values,
+                    candidate_ranges=candidate_ranges,
+                )
+                attempt_path = temp_dir / f"sample_{index:05d}_{attempt:05d}.toml"
+                attempt_path.write_text(sampled_text, encoding="utf-8")
+                try:
+                    load_ssw_fixed_spec(attempt_path)
+                except ValueError as exc:
+                    last_rejection = f"fixed spec validation failed: {exc}"
+                    attempt_path.unlink()
+                    continue
+                identity = build_ssw_aedt_identity(attempt_path, reference_toml_path)
+                if identity.design_id in seen_design_ids:
+                    last_rejection = f"duplicate sampled design_id {identity.design_id!r}"
+                    attempt_path.unlink()
+                    continue
+                final_path = output_dir / f"{identity.design_id}.toml"
+                if final_path.exists():
+                    raise FileExistsError(f"sample output already exists: {final_path}")
+                attempt_path.replace(final_path)
+                seen_design_ids.add(identity.design_id)
+                samples.append(
+                    SswSampledToml(
+                        index=index,
+                        toml_path=final_path,
+                        design_id=identity.design_id,
+                        aedt_filename=identity.aedt_filename,
+                        point_hash=identity.point_hash,
+                    )
+                )
+                accepted = True
+                break
+            if not accepted:
+                raise RuntimeError(
+                    f"failed to generate SSW sample {index} after {max_attempts_per_sample} attempts: "
+                    f"{last_rejection}"
+                )
+    return SswSampledTomlBatch(
+        sample_count=sample_count,
+        seed=seed,
+        source_toml_path=sweep_toml_path,
+        reference_toml_path=reference_toml_path,
+        output_dir=output_dir,
+        dimension_count=result.dimension_count,
+        free_owner_paths=result.free_owner_paths,
+        samples=tuple(samples),
+    )
+
+
 __all__ = [
     "DEFAULT_REFERENCE_TOML_PATH",
     "SswAedtIdentity",
     "SswDesignSpaceCheckResult",
     "SswDesignSpaceViolation",
+    "SswSampledToml",
+    "SswSampledTomlBatch",
     "build_ssw_aedt_identity",
     "check_ssw_toml_in_design_space",
+    "sample_ssw_fixed_tomls",
 ]
