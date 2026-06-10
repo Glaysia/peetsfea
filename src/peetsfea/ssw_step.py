@@ -100,7 +100,8 @@ class NonModelBox:
 
 @dataclass(frozen=True)
 class FerriteParameters:
-    mull_position_ratio: float
+    tx_mull_position_ratio: float
+    rx_mull_position_ratio: float
 
 
 @dataclass(frozen=True)
@@ -312,10 +313,16 @@ def _load_fixed_dimensions(root: dict[str, object]) -> FixedDimensions:
 
 def _load_ferrite_parameters(root: dict[str, object]) -> FerriteParameters:
     table = _require_table(_require_key(root, "ferrite", "0.3.0 fixed spec"), "ferrite")
-    mull_position_ratio = _frozen_float(table, "mull_position_ratio", "ferrite", positive=False)
-    if mull_position_ratio < 0.0 or mull_position_ratio > 1.0:
-        raise ValueError("ferrite.mull_position_ratio must be between 0 and 1")
-    return FerriteParameters(mull_position_ratio=mull_position_ratio)
+    tx_mull_position_ratio = _frozen_float(table, "tx_mull_position_ratio", "ferrite", positive=False)
+    rx_mull_position_ratio = _frozen_float(table, "rx_mull_position_ratio", "ferrite", positive=False)
+    if tx_mull_position_ratio < 0.0 or tx_mull_position_ratio > 1.0:
+        raise ValueError("ferrite.tx_mull_position_ratio must be between 0 and 1")
+    if rx_mull_position_ratio < 0.0 or rx_mull_position_ratio > 1.0:
+        raise ValueError("ferrite.rx_mull_position_ratio must be between 0 and 1")
+    return FerriteParameters(
+        tx_mull_position_ratio=tx_mull_position_ratio,
+        rx_mull_position_ratio=rx_mull_position_ratio,
+    )
 
 
 def _load_non_model_objects(root: dict[str, object]) -> tuple[NonModelBox, ...]:
@@ -691,20 +698,19 @@ def _mull_ferrite_sheet_boxes(
     tx_bounds = _combined_bounds(tx_boxes, "TX SSW bodies")
     rx_bounds = _combined_bounds(rx_boxes, "RX SSW bodies")
     thickness = spec.fixed.mull_ferrite_thickness_mm
-    ratio = spec.ferrite.mull_position_ratio
 
     tx_zmin, tx_zmax = _mull_sheet_axis_bounds(
         outer_min_mm=tx_region_max_bounds.zmin,
         coil_min_mm=tx_bounds.zmin,
         thickness_mm=thickness,
-        ratio=ratio,
+        ratio=spec.ferrite.tx_mull_position_ratio,
         context="TX",
     )
     rx_xmin, rx_xmax = _mull_sheet_axis_bounds(
         outer_min_mm=rx_region_max_bounds.xmin,
         coil_min_mm=rx_bounds.xmin,
         thickness_mm=thickness,
-        ratio=ratio,
+        ratio=spec.ferrite.rx_mull_position_ratio,
         context="RX",
     )
     return (
@@ -1414,10 +1420,14 @@ def _mull_ferrite_action_token(
         coil_role = "tx_ssw_coil"
         plane = "XY"
         inputs = ("scene.tx_ssw_coil.placement", "non_model.tx_region")
+        ratio_param = "tx_mull_position_ratio"
+        ratio_value = spec.ferrite.tx_mull_position_ratio
     elif body.name == "rx_mull_ferrite_sheet":
         coil_role = "rx_ssw_coil"
         plane = "YZ"
         inputs = ("scene.rx_ssw_coil.placement", "non_model.rx_region_max")
+        ratio_param = "rx_mull_position_ratio"
+        ratio_value = spec.ferrite.rx_mull_position_ratio
     else:
         raise ValueError(f"unsupported MULL ferrite sheet body {body.name!r}")
     return _action_token(
@@ -1431,7 +1441,7 @@ def _mull_ferrite_action_token(
             ("transparency", body.transparency),
             ("plane", plane),
             ("thickness_mm", spec.fixed.mull_ferrite_thickness_mm),
-            ("mull_position_ratio", spec.ferrite.mull_position_ratio),
+            (ratio_param, ratio_value),
             ("bounds_min_xyz_mm", (bounds.xmin, bounds.ymin, bounds.zmin)),
             ("bounds_max_xyz_mm", (bounds.xmax, bounds.ymax, bounds.zmax)),
         ),

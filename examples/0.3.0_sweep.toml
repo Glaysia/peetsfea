@@ -70,9 +70,13 @@ description = "MULL ferrite sheet thickness(mm)"
 # MULL ferrite sheet placement
 # ----------------------------------------------------------------------------
 
-[ferrite.mull_position_ratio]
+[ferrite.tx_mull_position_ratio]
+range = [false, 0.0, 0.9, 24]
+description = "TX MULL ferrite Z position ratio: 0 tx_region_max bottom, 1 TX coil-adjacent"
+
+[ferrite.rx_mull_position_ratio]
 range = [false, 0.0, 1.0, 11]
-description = "Shared TX/RX MULL ferrite position ratio: 0 outer region boundary, 1 coil-adjacent"
+description = "RX MULL ferrite X position ratio: 0 rx_region_max X-min, 1 RX coil-adjacent"
 
 # ----------------------------------------------------------------------------
 # Non-model object registry

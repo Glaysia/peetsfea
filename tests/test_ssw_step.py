@@ -35,7 +35,8 @@ def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
     assert spec.fixed.height_max_mm == 180.0
     assert spec.fixed.tx_rx_min_distance_mm == 50.0
     assert spec.fixed.mull_ferrite_thickness_mm == 0.12
-    assert spec.ferrite.mull_position_ratio == 0.0
+    assert spec.ferrite.tx_mull_position_ratio == 0.0
+    assert spec.ferrite.rx_mull_position_ratio == 0.0
     assert tuple(box.object_id for box in spec.non_model_objects) == (
         "tv",
         "tx_region",
@@ -91,9 +92,9 @@ def test_sweep_toml_declares_ssw_constraints() -> None:
 
 
 def test_load_ssw_fixed_spec_rejects_unfrozen_sweep_ranges() -> None:
-    assert "[ferrite.mull_position_ratio]\nrange = [false, 0.0, 1.0, 11]" in SWEEP_TOML.read_text(
-        encoding="utf-8"
-    )
+    sweep_text = SWEEP_TOML.read_text(encoding="utf-8")
+    assert "[ferrite.tx_mull_position_ratio]\nrange = [false, 0.0, 0.9, 24]" in sweep_text
+    assert "[ferrite.rx_mull_position_ratio]\nrange = [false, 0.0, 1.0, 11]" in sweep_text
     with pytest.raises(ValueError, match=r"range must be frozen"):
         load_ssw_fixed_spec(SWEEP_TOML)
 
@@ -578,31 +579,47 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert len(rx_ferrite_actions) == 1
     tx_ferrite_params = _action_params_by_key(tx_ferrite_actions[0])
     rx_ferrite_params = _action_params_by_key(rx_ferrite_actions[0])
-    assert tx_ferrite_params["mull_position_ratio"] == 0.0
-    assert rx_ferrite_params["mull_position_ratio"] == 0.0
+    assert tx_ferrite_params["tx_mull_position_ratio"] == 0.0
+    assert rx_ferrite_params["rx_mull_position_ratio"] == 0.0
+    assert "mull_position_ratio" not in tx_ferrite_params
+    assert "mull_position_ratio" not in rx_ferrite_params
     assert tx_ferrite_params["thickness_mm"] == 0.12
     assert rx_ferrite_params["thickness_mm"] == 0.12
 
 
-def test_build_ssw_body_boxes_places_mull_ferrite_ratio_one_next_to_coils(tmp_path: Path) -> None:
+def test_build_ssw_body_boxes_places_split_mull_ferrite_ratios_independently(tmp_path: Path) -> None:
     source_text = FIXED_TOML.read_text(encoding="utf-8")
-    custom_text = source_text.replace(
-        "[ferrite.mull_position_ratio]\nrange = [false, 0.0, 0.0, 1]",
-        "[ferrite.mull_position_ratio]\nrange = [false, 1.0, 1.0, 1]",
+    tx_only_text = source_text.replace(
+        "[ferrite.tx_mull_position_ratio]\nrange = [false, 0.0, 0.0, 1]",
+        "[ferrite.tx_mull_position_ratio]\nrange = [false, 1.0, 1.0, 1]",
     )
-    assert custom_text != source_text
-    custom_toml = tmp_path / "mull_ratio_one.toml"
-    custom_toml.write_text(custom_text, encoding="utf-8")
+    rx_only_text = source_text.replace(
+        "[ferrite.rx_mull_position_ratio]\nrange = [false, 0.0, 0.0, 1]",
+        "[ferrite.rx_mull_position_ratio]\nrange = [false, 1.0, 1.0, 1]",
+    )
+    assert tx_only_text != source_text
+    assert rx_only_text != source_text
+    tx_only_toml = tmp_path / "tx_mull_ratio_one.toml"
+    rx_only_toml = tmp_path / "rx_mull_ratio_one.toml"
+    tx_only_toml.write_text(tx_only_text, encoding="utf-8")
+    rx_only_toml.write_text(rx_only_text, encoding="utf-8")
 
-    spec = load_ssw_fixed_spec(custom_toml)
-    bodies = build_ssw_body_boxes(spec)
-    tx_bounds = _combined_box_bounds(tuple(body for body in bodies if body.name.startswith("tx_ssw_coil_")))
-    rx_bounds = _combined_box_bounds(tuple(body for body in bodies if body.name.startswith("rx_ssw_coil_")))
-    tx_ferrite_bounds = _box_bounds(_body_by_name_from_boxes(bodies, "tx_mull_ferrite_sheet"))
-    rx_ferrite_bounds = _box_bounds(_body_by_name_from_boxes(bodies, "rx_mull_ferrite_sheet"))
+    default_bodies = build_ssw_body_boxes(load_ssw_fixed_spec(FIXED_TOML))
+    tx_only_bodies = build_ssw_body_boxes(load_ssw_fixed_spec(tx_only_toml))
+    rx_only_bodies = build_ssw_body_boxes(load_ssw_fixed_spec(rx_only_toml))
+    tx_bounds = _combined_box_bounds(tuple(body for body in tx_only_bodies if body.name.startswith("tx_ssw_coil_")))
+    rx_bounds = _combined_box_bounds(tuple(body for body in rx_only_bodies if body.name.startswith("rx_ssw_coil_")))
+    default_tx_ferrite_bounds = _box_bounds(_body_by_name_from_boxes(default_bodies, "tx_mull_ferrite_sheet"))
+    default_rx_ferrite_bounds = _box_bounds(_body_by_name_from_boxes(default_bodies, "rx_mull_ferrite_sheet"))
+    tx_only_tx_ferrite_bounds = _box_bounds(_body_by_name_from_boxes(tx_only_bodies, "tx_mull_ferrite_sheet"))
+    tx_only_rx_ferrite_bounds = _box_bounds(_body_by_name_from_boxes(tx_only_bodies, "rx_mull_ferrite_sheet"))
+    rx_only_tx_ferrite_bounds = _box_bounds(_body_by_name_from_boxes(rx_only_bodies, "tx_mull_ferrite_sheet"))
+    rx_only_rx_ferrite_bounds = _box_bounds(_body_by_name_from_boxes(rx_only_bodies, "rx_mull_ferrite_sheet"))
 
-    assert tx_ferrite_bounds[5] == pytest.approx(tx_bounds[4])
-    assert rx_ferrite_bounds[1] == pytest.approx(rx_bounds[0])
+    assert tx_only_tx_ferrite_bounds[5] == pytest.approx(tx_bounds[4])
+    assert tx_only_rx_ferrite_bounds == pytest.approx(default_rx_ferrite_bounds)
+    assert rx_only_rx_ferrite_bounds[1] == pytest.approx(rx_bounds[0])
+    assert rx_only_tx_ferrite_bounds == pytest.approx(default_tx_ferrite_bounds)
 
 
 def test_build_ssw_body_boxes_rejects_mull_ferrite_sheet_when_interval_is_too_small(tmp_path: Path) -> None:
@@ -631,7 +648,7 @@ def test_export_ssw_aedt_port_artifacts_writes_direct_edge_port_ledger(tmp_path:
     assert port_ledger_path.is_file()
     stored_ledger = json.loads(port_ledger_path.read_text(encoding="utf-8"))
     assert stored_ledger == ledger
-    assert ledger["dimension_count"] == 21
+    assert ledger["dimension_count"] == 22
     assert len(ledger["design_space_hash"]) == 16
     assert ledger["design_id"] == f"0_3_0_p{ledger['design_space_hash']}"
     assert ledger["aedt_filename"] == f"{ledger['design_id']}.aedt"

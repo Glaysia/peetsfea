@@ -41,9 +41,11 @@ def test_fixed_toml_is_reference_design_space_point() -> None:
 
     assert result.is_subset is True
     assert result.is_point is True
-    assert result.dimension_count == 21
-    assert len(result.free_owner_paths) == 21
+    assert result.dimension_count == 22
+    assert len(result.free_owner_paths) == 22
     assert result.violations == ()
+    assert "ferrite.tx_mull_position_ratio" in result.free_owner_paths
+    assert "ferrite.rx_mull_position_ratio" in result.free_owner_paths
     assert "modeled_objects[role=rx_ssw_coil].is_ssw_enabled" in result.free_owner_paths
 
 
@@ -52,7 +54,7 @@ def test_aedt_identity_is_deterministic_short_point_name() -> None:
     second = build_ssw_aedt_identity(FIXED_TOML, SWEEP_TOML)
 
     assert first == second
-    assert first.dimension_count == 21
+    assert first.dimension_count == 22
     assert len(first.point_hash) == 16
     assert first.design_id == f"0_3_0_p{first.point_hash}"
     assert first.aedt_filename == f"{first.design_id}.aedt"
@@ -111,8 +113,8 @@ def test_missing_path_integer_flag_mismatch_and_non_positive_count_are_violation
     text = FIXED_TOML.read_text(encoding="utf-8")
     text = _replace_once(
         text,
-        "[ferrite.mull_position_ratio]\nrange = [false, 0.0, 0.0, 1]",
-        "[ferrite.mull_position_ratio_removed]\nrange = [false, 0.0, 0.0, 1]",
+        "[ferrite.tx_mull_position_ratio]\nrange = [false, 0.0, 0.0, 1]",
+        "[ferrite.tx_mull_position_ratio_removed]\nrange = [false, 0.0, 0.0, 1]",
     )
     text = _replace_once(
         text,
@@ -128,6 +130,6 @@ def test_missing_path_integer_flag_mismatch_and_non_positive_count_are_violation
 
     codes_by_path = _violation_codes_by_path(candidate_path)
 
-    assert codes_by_path["ferrite.mull_position_ratio"] == {"missing_free_path"}
+    assert codes_by_path["ferrite.tx_mull_position_ratio"] == {"missing_free_path"}
     assert codes_by_path["modeled_objects[role=rx_ssw_coil].is_ssw_enabled"] == {"integer_flag_mismatch"}
     assert codes_by_path["modeled_objects[role=tx_ssw_coil].turn_n_int"] == {"non_positive_count"}
