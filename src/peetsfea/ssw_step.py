@@ -407,8 +407,8 @@ def _load_coil_parameters(root: dict[str, object], role: Role) -> SswCoilParamet
     no_ssw_qturn_n_int = _frozen_int(table, "no_ssw_qturn_n_int", role, minimum=0)
     if role == "tx_ssw_coil" and not is_ssw_enabled:
         raise ValueError("tx_ssw_coil.is_ssw_enabled must stay enabled in 0.3.0")
-    if role == "tx_under_coil" and no_ssw_qturn_start_int != 0:
-        raise ValueError("tx_under_coil.no_ssw_qturn_start_int must be fixed to 0")
+    if role == "tx_under_coil" and no_ssw_qturn_start_int != 1:
+        raise ValueError("tx_under_coil.no_ssw_qturn_start_int must be fixed to 1")
     if role == "tx_under_coil" and no_ssw_qturn_n_int != 0:
         raise ValueError("tx_under_coil.no_ssw_qturn_n_int must be fixed to 0")
     if no_ssw_qturn_start_int > 7:
@@ -1067,7 +1067,7 @@ def _placement_for_role(spec: SswFixedSpec, params: SswCoilParameters, assembly:
     tv_center_y = tv.origin_xyz[1] + tv.size_xyz[1] / 2.0
     if params.role == "tx_under_coil":
         tx_region_max = _tx_region_max_box(spec)
-        orientation = _tx_xy_bottom_port_orientation()
+        orientation = _rx_yz_back_port_orientation()
         oriented_bodies = _coilmaker_child_bodies_from_assembly(params=params, assembly=assembly, placement=orientation)
         oriented_bounds = _combined_bounds(oriented_bodies, f"{params.role} oriented bodies")
         if oriented_bounds.size_x > tx_region_max.size_xyz[0]:
@@ -1085,7 +1085,7 @@ def _placement_for_role(spec: SswFixedSpec, params: SswCoilParameters, assembly:
                 f"TX under-coil Z span does not fit inside tx_region_max "
                 f"(span={oriented_bounds.size_z}, tx_region_max_z_size={tx_region_max.size_xyz[2]})"
             )
-        translate_x = tx_region_max.origin_xyz[0] - oriented_bounds.xmin
+        translate_x = tx_region_max.origin_xyz[0] - oriented_bounds.xmax
         translate_y = tv_center_y - oriented_bounds.center_y
         translate_z = tx_region_max.origin_xyz[2] - oriented_bounds.zmin
         return cq.Location(cq.Vector(translate_x, translate_y, translate_z)) * orientation
@@ -1415,21 +1415,27 @@ def _validate_scene_contract(
 
     if spec.tx_under.is_under_coil_enabled:
         tx_under_bounds = _combined_bounds(tx_under_bodies, "TX under-coil bodies")
-        _assert_inside_bounds(inner=tx_under_bounds, outer=tx_region_max_bounds, context="TX under-coil")
-        if abs(tx_under_bounds.zmin - tx_region_max_bounds.zmin) > tolerance:
+        if (
+            tx_under_bounds.ymin < tx_region_max_bounds.ymin - tolerance
+            or tx_under_bounds.ymax > tx_region_max_bounds.ymax + tolerance
+            or tx_under_bounds.zmin < tx_region_max_bounds.zmin - tolerance
+            or tx_under_bounds.zmax > tx_region_max_bounds.zmax + tolerance
+        ):
+            raise ValueError("TX under-coil YZ footprint must stay inside tx_region_max")
+        if abs(tx_under_bounds.xmax - tx_region_max_bounds.xmin) > tolerance:
             raise ValueError(
-                f"TX under-coil bottom must align to tx_region_max bottom "
-                f"(under_zmin={tx_under_bounds.zmin}, tx_region_max_zmin={tx_region_max_bounds.zmin})"
+                f"TX under-coil X max must align to tx_region_max X min "
+                f"(under_xmax={tx_under_bounds.xmax}, tx_region_max_xmin={tx_region_max_bounds.xmin})"
             )
-        if tx_under_bounds.size_z >= tx_under_bounds.size_x or tx_under_bounds.size_z >= tx_under_bounds.size_y:
+        if tx_under_bounds.size_x >= tx_under_bounds.size_y or tx_under_bounds.size_x >= tx_under_bounds.size_z:
             raise ValueError(
-                f"TX under-coil must remain an XY-plane normal spiral object "
+                f"TX under-coil must remain a YZ-plane normal spiral object "
                 f"(size_x={tx_under_bounds.size_x}, size_y={tx_under_bounds.size_y}, size_z={tx_under_bounds.size_z})"
             )
-        if tx_under_bounds.size_y <= tx_under_bounds.size_x:
+        if tx_under_bounds.size_y <= tx_under_bounds.size_z:
             raise ValueError(
-                f"TX under-coil long dimension must follow Y axis "
-                f"(size_x={tx_under_bounds.size_x}, size_y={tx_under_bounds.size_y})"
+                f"TX under-coil Y footprint must exceed Z footprint "
+                f"(size_y={tx_under_bounds.size_y}, size_z={tx_under_bounds.size_z})"
             )
 
     if not spec.tx_under.is_under_coil_enabled:
@@ -1678,7 +1684,7 @@ def _scene_action_trace(
                 index=len(actions),
                 role="tx_under_coil",
                 coil_mode="normal_spiral",
-                plane="XY",
+                plane="YZ",
                 bounds=tx_under_bounds,
                 port_face="none",
                 port_anchor_world_xyz=(tx_under_bounds.xmin, tx_under_bounds.center_y, tx_under_bounds.center_z),

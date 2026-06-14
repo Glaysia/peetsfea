@@ -202,7 +202,7 @@ range = [false, 0.45, 0.45, 1]
 description = "TX under-coil width ratio against fixed_dimensions.width_max_mm"
 
 [modeled_objects.height_ratio]
-range = [false, 0.45, 0.45, 1]
+range = [false, 0.25, 0.25, 1]
 description = "TX under-coil height ratio against fixed_dimensions.height_max_mm"
 
 [modeled_objects.turn_n_int]
@@ -210,11 +210,11 @@ range = [true, 2, 2, 1]
 description = "TX under-coil spiral turn count"
 
 [modeled_objects.gap_ratio]
-range = [false, 0.24, 0.24, 1]
+range = [false, 0.44, 0.44, 1]
 description = "TX under-coil pitch 중 gap 비율"
 
 [modeled_objects.void_area_ratio]
-range = [false, 0.5, 0.5, 1]
+range = [false, 0.35, 0.35, 1]
 description = "TX under-coil 중앙 void area ratio"
 
 [modeled_objects.void_profile]
@@ -222,8 +222,8 @@ range = [true, 1, 1, 1]
 description = "TX under-coil void profile: 0 rectangular void, 1 scaled void"
 
 [modeled_objects.no_ssw_qturn_start_int]
-range = [true, 0, 0, 1]
-description = "TX under-coil non-SSW quarter-turn start index; fixed at 0 for 0.3.0"
+range = [true, 1, 1, 1]
+description = "TX under-coil non-SSW quarter-turn start index; fixed at 1 for 0.3.0"
 
 [modeled_objects.no_ssw_qturn_n_int]
 range = [true, 0, 0, 1]

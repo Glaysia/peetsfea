@@ -224,8 +224,8 @@ range = [true, 0, 1, 2]
 description = "TX under-coil void profile: 0 rectangular void, 1 scaled void"
 
 [modeled_objects.no_ssw_qturn_start_int]
-range = [true, 0, 0, 1]
-description = "TX under-coil non-SSW quarter-turn start index; fixed at 0 for 0.3.0"
+range = [true, 1, 1, 1]
+description = "TX under-coil non-SSW quarter-turn start index; fixed at 1 for 0.3.0"
 
 [modeled_objects.no_ssw_qturn_n_int]
 range = [true, 0, 0, 1]

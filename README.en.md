@@ -21,6 +21,7 @@ For Korean documentation, see [README.md](README.md).
 - STEP surface: authored non-model boxes and fixed Tx/Rx port cells
 - EM surface: one Tx port, one Rx port, copper pad mesh, radiation boundary, `Setup1`, `Sweep`, and `Output Variables Table1`
 - SSW debug inputs [examples/0.3.0_fixed.toml](examples/0.3.0_fixed.toml) and [examples/0.3.0_sweep.toml](examples/0.3.0_sweep.toml) use the same `[constraints]` / `[[constraints.rules]]` surface as 0.2.25 type2; each enabled SSW coil must satisfy `gcd(turn_n_int, twist_factor) == 1`, and RX `turn_n_int` must be greater than 1 when RX SSW is enabled.
+- SSW debug `tx_under_coil` is the second TX coil, separate from the TX main coil, and is a YZ-plane normal spiral attached outside the global X-min face of `tx_region_max`.
 - SSW debug MULL ferrite placement is controlled separately by TX Z-axis `ferrite.tx_mull_position_ratio` and RX X-axis `ferrite.rx_mull_position_ratio`.
 - Default execution is headless, and PyAEDT `False` returns raise immediately.
 

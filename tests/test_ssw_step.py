@@ -48,19 +48,21 @@ def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
     assert spec.rx.role == "rx_ssw_coil"
     assert spec.tx.width_ratio == 0.45
     assert spec.tx_under.width_ratio == 0.45
+    assert spec.tx_under.height_ratio == 0.25
     assert spec.rx.height_ratio == 0.9
     assert spec.tx.is_ssw_enabled is True
     assert spec.tx_under.is_under_coil_enabled is True
     assert spec.tx_under.is_ssw_enabled is False
     assert spec.rx.is_ssw_enabled is False
     assert spec.tx.turn_n_int == 6
-    assert spec.tx_under.turn_n_int == 4
+    assert spec.tx_under.turn_n_int == 2
     assert spec.rx.turn_n_int == 1
     assert spec.tx.gap_ratio == 0.24
-    assert spec.tx_under.gap_ratio == 0.24
+    assert spec.tx_under.gap_ratio == 0.44
+    assert spec.tx_under.void_area_ratio == 0.35
     assert spec.rx.void_area_ratio == 0.25
     assert spec.tx.no_ssw_qturn_start_int == 0
-    assert spec.tx_under.no_ssw_qturn_start_int == 0
+    assert spec.tx_under.no_ssw_qturn_start_int == 1
     assert spec.tx_under.no_ssw_qturn_n_int == 0
     assert spec.rx.no_ssw_qturn_start_int == 3
     assert spec.rx.no_ssw_qturn_n_int == 0
@@ -472,9 +474,10 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert abs(landing_direction_xy[1 - trace_axis]) == pytest.approx(1.0)
     assert landing_dot_inner > 0.0
     assert tx_placement_params["port_face"] == "lower_z"
+    assert tx_under_placement_params["plane"] == "YZ"
     assert rx_placement_params["port_face"] == "normal_spiral_landing"
     assert tx_placement_params["no_ssw_qturn_start_int"] == 0
-    assert tx_under_placement_params["no_ssw_qturn_start_int"] == 0
+    assert tx_under_placement_params["no_ssw_qturn_start_int"] == 1
     assert tx_under_placement_params["no_ssw_qturn_n_int"] == 0
     assert rx_placement_params["no_ssw_qturn_start_int"] == 3
     assert rx_placement_params["no_ssw_qturn_n_int"] == 0
@@ -529,12 +532,17 @@ def test_export_ssw_step_artifacts_writes_tx_rx_coil_scene(tmp_path: Path) -> No
     assert (rx_region_max_bounds[2] + rx_region_max_bounds[3]) / 2.0 == pytest.approx(0.0)
     assert rx_region_max_bounds[5] - rx_region_max_bounds[4] == pytest.approx(240.14)
     assert rx_region_max_bounds[4] == pytest.approx(tv_bounds[4])
-    assert tx_under_assembly_bounds[0] == pytest.approx(tx_region_max_bounds[0])
+    assert tx_under_assembly_bounds[0] < tx_region_max_bounds[0]
+    assert tx_under_assembly_bounds[1] == pytest.approx(tx_region_max_bounds[0])
     assert tx_under_assembly_bounds[2] == pytest.approx(-81.0)
     assert tx_under_assembly_bounds[3] == pytest.approx(81.0)
     assert tx_under_assembly_bounds[4] == pytest.approx(tx_region_max_bounds[4])
-    assert tx_under_assembly_bounds[5] - tx_under_assembly_bounds[4] == pytest.approx(0.62)
-    assert tx_under_bounds[4] == pytest.approx(tx_region_max_bounds[4])
+    assert tx_under_assembly_bounds[5] - tx_under_assembly_bounds[4] == pytest.approx(45.0)
+    assert tx_under_assembly_bounds[1] - tx_under_assembly_bounds[0] == pytest.approx(0.62)
+    assert tx_under_bounds[0] < tx_region_max_bounds[0]
+    assert tx_under_bounds[1] == pytest.approx(tx_region_max_bounds[0])
+    assert tx_under_bounds[4] >= tx_under_assembly_bounds[4] - tolerance
+    assert tx_under_bounds[5] <= tx_under_assembly_bounds[5] + tolerance
     assert rx_ferrite_bounds[0] == pytest.approx(rx_region_max_bounds[0])
     assert rx_ferrite_bounds[1] - rx_ferrite_bounds[0] == pytest.approx(0.12)
     assert rx_ferrite_bounds[2] == pytest.approx(rx_assembly_bounds[2])
