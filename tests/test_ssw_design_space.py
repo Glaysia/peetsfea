@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import tomllib
 
 import pytest
 
+from peetsfea.backend.pyaedt.ssw_ports import SSW_REPORT_NAMES
+import peetsfea.ssw_random_sample_reports as ssw_random_sample_reports
 from peetsfea.ssw_step import load_ssw_fixed_spec
 from peetsfea.ssw_design_space import (
     build_ssw_aedt_identity,
     check_ssw_toml_in_design_space,
+    point_values_for_ssw_fixed_toml,
     sample_ssw_fixed_tomls,
 )
 
@@ -191,6 +195,8 @@ def test_sample_ssw_fixed_tomls_generates_valid_unique_points(tmp_path: Path) ->
         assert sample.design_id == identity.design_id
         assert sample.aedt_filename == identity.aedt_filename
         assert sample.point_hash == identity.point_hash
+        assert set(sample.point_values) == set(result.free_owner_paths)
+        assert sample.point_values == point_values_for_ssw_fixed_toml(sample.toml_path, SWEEP_TOML)
 
 
 def test_sample_ssw_fixed_tomls_is_reproducible_for_same_seed(tmp_path: Path) -> None:
@@ -263,3 +269,105 @@ def test_sample_ssw_fixed_tomls_fails_when_unique_points_are_exhausted(tmp_path:
         sample_ssw_fixed_tomls(2, 987, FIXED_TOML, output_dir, SWEEP_TOML, max_attempts_per_sample=2)
 
     assert len(tuple(output_dir.glob("*.toml"))) == 1
+
+
+def test_run_ssw_random_sample_reports_preserves_full_point_ledger(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "api"
+
+    def _fake_export_ssw_aedt_port_artifacts(*, source_toml_path: Path, output_dir: Path, seed: int) -> dict[str, object]:
+        identity = build_ssw_aedt_identity(source_toml_path, SWEEP_TOML)
+        return {
+            "design_id": identity.design_id,
+            "aedt_filename": identity.aedt_filename,
+            "dimension_count": identity.dimension_count,
+            "design_space_hash": identity.point_hash,
+            "seed": seed,
+            "output_dir": str(output_dir),
+        }
+
+    def _fake_solve_ssw_aedt_ports(**kwargs: object) -> dict[str, object]:
+        assert kwargs["setup_maximum_passes"] == 5
+        assert kwargs["setup_minimum_passes"] == 1
+        assert kwargs["setup_minimum_converged_passes"] == 1
+        raw_csv_output_dir = kwargs["csv_output_dir"]
+        if not isinstance(raw_csv_output_dir, Path):
+            raise AssertionError("csv_output_dir must be a Path")
+        csv_paths: dict[str, str] = {}
+        for report_name in SSW_REPORT_NAMES:
+            csv_path = raw_csv_output_dir / f"{report_name}.csv"
+            csv_path.write_text(f"Freq,{report_name}\n6.78MHz,0\n", encoding="utf-8")
+            csv_paths[report_name] = str(csv_path)
+        return {
+            "setup": {},
+            "csv_paths": csv_paths,
+            "solve_telemetry": {
+                "started_at": "2026-06-14T00:00:00.000+09:00",
+                "finished_at": "2026-06-14T00:00:02.000+09:00",
+                "elapsed_ms": 2000.0,
+                "aedt_process_id": 1234,
+                "reported_aedt_process_id": 171,
+                "sample_interval_seconds": 2.0,
+                "samples_jsonl_path": str(tmp_path / "telemetry.jsonl"),
+                "sample_count": 1,
+                "peak_cpu_percent_total": 100.0,
+                "peak_rss_bytes_total": 2048,
+                "peak_vms_bytes_total": 4096,
+                "samples": [
+                    {
+                        "timestamp": "2026-06-14T00:00:00.000+09:00",
+                        "elapsed_ms": 0.0,
+                        "aedt_process_id": 1234,
+                        "reported_aedt_process_id": 171,
+                        "process_count": 1,
+                        "pids": [1234],
+                        "cpu_percent_total": 100.0,
+                        "rss_bytes_total": 2048,
+                        "vms_bytes_total": 4096,
+                        "processes": [
+                            {
+                                "pid": 1234,
+                                "name": "ansysedt.exe",
+                                "cpu_percent": 100.0,
+                                "rss_bytes": 2048,
+                                "vms_bytes": 4096,
+                            }
+                        ],
+                    }
+                ],
+            },
+        }
+
+    monkeypatch.setattr(
+        ssw_random_sample_reports,
+        "_export_ssw_aedt_port_artifacts",
+        _fake_export_ssw_aedt_port_artifacts,
+    )
+    monkeypatch.setattr(ssw_random_sample_reports, "solve_ssw_aedt_ports", _fake_solve_ssw_aedt_ports)
+
+    result = ssw_random_sample_reports.run_ssw_random_sample_reports(
+        SWEEP_TOML,
+        output_dir=output_dir,
+        seed=2468,
+        mode="semi_dry",
+        reference_toml_path=SWEEP_TOML,
+    )
+
+    assert result["mode"] == "semi_dry"
+    assert result["seed"] == 2468
+    assert result["dimension_count"] == 22
+    assert len(result["free_owner_paths"]) == 22
+    assert set(result["point_values"]) == set(result["free_owner_paths"])
+    assert set(result["csv_paths"]) == set(SSW_REPORT_NAMES)
+    assert set(result["csv_text_by_report"]) == set(SSW_REPORT_NAMES)
+    assert result["setup_pass_counts"] == {"maximum_passes": 5, "minimum_passes": 1, "minimum_converged_passes": 1}
+    assert result["solve_telemetry"]["elapsed_ms"] == 2000.0
+    raw_ledger = Path(result["sample_point_ledger_path"]).read_text(encoding="utf-8")
+    ledger_obj = json.loads(raw_ledger)
+    assert ledger_obj["point_values"] == result["point_values"]
+    assert ledger_obj["free_owner_paths"] == result["free_owner_paths"]
+    assert ledger_obj["point_hash"] == result["point_hash"]
+    assert ledger_obj["setup_pass_counts"] == result["setup_pass_counts"]
+    assert ledger_obj["solve_telemetry"] == result["solve_telemetry"]

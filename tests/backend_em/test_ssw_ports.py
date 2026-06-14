@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import cast
@@ -14,11 +15,14 @@ from entry.debug_view_0_3_0_ssw import (
     export_ssw_aedt_port_artifacts,
 )
 from peetsfea.aedt.protocols import HfssSession
+import peetsfea.backend.pyaedt.ssw_ports as ssw_ports
 from peetsfea.backend.pyaedt.ssw_ports import (
+    SSW_REPORT_NAMES,
     SswAedtBodyLedgerEntry,
     SswAedtPortStepLedger,
     setup_ssw_aedt_ports,
     setup_ssw_aedt_ports_into_hfss,
+    solve_ssw_aedt_ports,
     write_ssw_aedt_port_ledger,
 )
 
@@ -48,6 +52,7 @@ class _FakeBoundaryModule:
 
 class _FakeDesktop:
     def __init__(self) -> None:
+        self.aedt_process_id = os.getpid()
         self.release_calls: list[tuple[bool, bool]] = []
 
     def release_desktop(self, close_projects: bool, close_on_exit: bool) -> object:
@@ -189,7 +194,10 @@ class _FakeSolutionsModule:
 class _FakeReportSetupModule:
     def __init__(self) -> None:
         self.create_report_calls: list[dict[str, object]] = []
+        self.export_to_file_calls: list[tuple[str, str]] = []
         self.create_report_result: object = True
+        self.export_to_file_result: object = True
+        self.write_exported_file = True
         self.report_names_result: object = True
 
     def CreateReport(
@@ -221,6 +229,14 @@ class _FakeReportSetupModule:
         if self.report_names_result is False:
             return ["Results1_Pass"]
         return [cast(str, call["plot_name"]) for call in self.create_report_calls]
+
+    def ExportToFile(self, report_name: str, export_path: str) -> object:
+        self.export_to_file_calls.append((report_name, export_path))
+        if self.export_to_file_result is False:
+            return False
+        if self.write_exported_file:
+            Path(export_path).write_text(f"Freq,{report_name}\n6.78MHz,0\n", encoding="utf-8")
+        return True
 
 
 class _FakeFieldsReporterModule:
@@ -405,6 +421,8 @@ class _FakeHfss:
         self.assign_radiation_result: object = True
         self.create_output_variables: list[tuple[str, str, str]] = []
         self.create_output_variable_result: object = True
+        self.analyze_setup_calls: list[tuple[str, bool]] = []
+        self.analyze_setup_result: object = True
 
     def assign_material(self, assignment: str | list[str], material: str) -> object:
         if not isinstance(assignment, str):
@@ -438,6 +456,10 @@ class _FakeHfss:
     def save_project(self, path: str) -> object:
         self.saved_paths.append(path)
         return True
+
+    def analyze_setup(self, name: str, blocking: bool = True) -> object:
+        self.analyze_setup_calls.append((name, blocking))
+        return self.analyze_setup_result
 
 
 def _body_entry(object_id: str, role: str, material: str, model_state: bool) -> SswAedtBodyLedgerEntry:
@@ -513,6 +535,10 @@ def _ledger_path(tmp_path: Path) -> Path:
     write_ssw_aedt_port_ledger(ledger_path=ledger_path, ledger=ledger)
     Path(ledger["scene_step_path"]).write_text("placeholder", encoding="utf-8")
     return ledger_path
+
+
+def _patch_fake_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ssw_ports, "_resolve_host_aedt_process_id", lambda reported_pid: int(reported_pid))
 
 
 def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: Path) -> None:
@@ -987,6 +1013,138 @@ def test_setup_ssw_aedt_ports_can_leave_graphical_desktop_open(tmp_path: Path) -
     )
 
     assert hfss.desktop_class.release_calls == []
+
+
+def test_solve_ssw_aedt_ports_exports_all_reports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_fake_telemetry(monkeypatch)
+    ledger_path = _ledger_path(tmp_path)
+    hfss = _FakeHfss(_ledger(tmp_path))
+
+    def _factory(design_name: str) -> HfssSession:
+        assert design_name == "ssw_solve_test"
+        return cast(HfssSession, hfss)
+
+    result = solve_ssw_aedt_ports(
+        port_ledger_path=ledger_path,
+        output_aedt_path=tmp_path / "ssw_ports.aedt",
+        imported_ledger_path=tmp_path / "ssw_imported.json",
+        design_name="ssw_solve_test",
+        csv_output_dir=tmp_path / "csv",
+        hfss_factory=_factory,
+    )
+
+    assert result["setup"]["design_id"] == _ledger(tmp_path)["design_id"]
+    assert hfss.analyze_setup_calls == [("Setup1", True)]
+    assert hfss.odesign.report_setup_module.export_to_file_calls == [
+        (report_name, str(tmp_path / "csv" / f"{report_name}.csv")) for report_name in SSW_REPORT_NAMES
+    ]
+    assert set(result["csv_paths"]) == set(SSW_REPORT_NAMES)
+    assert result["solve_telemetry"]["aedt_process_id"] == os.getpid()
+    assert result["solve_telemetry"]["reported_aedt_process_id"] == os.getpid()
+    assert result["solve_telemetry"]["sample_interval_seconds"] == 2.0
+    assert result["solve_telemetry"]["sample_count"] >= 1
+    assert Path(result["solve_telemetry"]["samples_jsonl_path"]).is_file()
+    assert result["solve_telemetry"]["elapsed_ms"] >= 0.0
+    assert result["solve_telemetry"]["samples"][0]["aedt_process_id"] == os.getpid()
+    assert result["solve_telemetry"]["samples"][0]["reported_aedt_process_id"] == os.getpid()
+    for report_name in SSW_REPORT_NAMES:
+        assert Path(result["csv_paths"][report_name]).is_file()
+    assert hfss.desktop_class.release_calls == [(True, True)]
+
+
+def test_solve_ssw_aedt_ports_supports_pass_count_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_fake_telemetry(monkeypatch)
+    ledger_path = _ledger_path(tmp_path)
+    hfss = _FakeHfss(_ledger(tmp_path))
+
+    def _factory(design_name: str) -> HfssSession:
+        assert design_name == "ssw_semi_dry_test"
+        return cast(HfssSession, hfss)
+
+    solve_ssw_aedt_ports(
+        port_ledger_path=ledger_path,
+        output_aedt_path=tmp_path / "ssw_ports.aedt",
+        imported_ledger_path=tmp_path / "ssw_imported.json",
+        design_name="ssw_semi_dry_test",
+        csv_output_dir=tmp_path / "csv",
+        hfss_factory=_factory,
+        setup_maximum_passes=5,
+        setup_minimum_passes=1,
+        setup_minimum_converged_passes=1,
+    )
+
+    setup_payload = hfss.odesign.analysis_setup_module.insert_setup_calls[0][1]
+    assert setup_payload[setup_payload.index("MaximumPasses:=") + 1] == 5
+    assert setup_payload[setup_payload.index("MinimumPasses:=") + 1] == 1
+    assert setup_payload[setup_payload.index("MinimumConvergedPasses:=") + 1] == 1
+
+
+def test_solve_ssw_aedt_ports_raises_on_analyze_false(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_fake_telemetry(monkeypatch)
+    ledger_path = _ledger_path(tmp_path)
+    hfss = _FakeHfss(_ledger(tmp_path))
+    hfss.analyze_setup_result = False
+
+    def _factory(design_name: str) -> HfssSession:
+        assert design_name == "ssw_analyze_false_test"
+        return cast(HfssSession, hfss)
+
+    with pytest.raises(RuntimeError, match="analyze_setup"):
+        solve_ssw_aedt_ports(
+            port_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "ssw_ports.aedt",
+            imported_ledger_path=tmp_path / "ssw_imported.json",
+            design_name="ssw_analyze_false_test",
+            csv_output_dir=tmp_path / "csv",
+            hfss_factory=_factory,
+        )
+
+    assert hfss.desktop_class.release_calls == [(True, True)]
+
+
+def test_solve_ssw_aedt_ports_raises_on_export_false(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_fake_telemetry(monkeypatch)
+    ledger_path = _ledger_path(tmp_path)
+    hfss = _FakeHfss(_ledger(tmp_path))
+    hfss.odesign.report_setup_module.export_to_file_result = False
+
+    def _factory(design_name: str) -> HfssSession:
+        assert design_name == "ssw_export_false_test"
+        return cast(HfssSession, hfss)
+
+    with pytest.raises(RuntimeError, match="ReportSetup.ExportToFile"):
+        solve_ssw_aedt_ports(
+            port_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "ssw_ports.aedt",
+            imported_ledger_path=tmp_path / "ssw_imported.json",
+            design_name="ssw_export_false_test",
+            csv_output_dir=tmp_path / "csv",
+            hfss_factory=_factory,
+        )
+
+
+def test_solve_ssw_aedt_ports_raises_when_exported_csv_is_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_fake_telemetry(monkeypatch)
+    ledger_path = _ledger_path(tmp_path)
+    hfss = _FakeHfss(_ledger(tmp_path))
+    hfss.odesign.report_setup_module.write_exported_file = False
+
+    def _factory(design_name: str) -> HfssSession:
+        assert design_name == "ssw_missing_csv_test"
+        return cast(HfssSession, hfss)
+
+    with pytest.raises(FileNotFoundError, match="SSW report export did not create CSV"):
+        solve_ssw_aedt_ports(
+            port_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "ssw_ports.aedt",
+            imported_ledger_path=tmp_path / "ssw_imported.json",
+            design_name="ssw_missing_csv_test",
+            csv_output_dir=tmp_path / "csv",
+            hfss_factory=_factory,
+        )
 
 
 @pytest.mark.pyaedt_integration

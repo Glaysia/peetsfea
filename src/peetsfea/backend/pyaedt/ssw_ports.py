@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime
 import json
+import multiprocessing
 from pathlib import Path
 from collections.abc import Sequence
+import time
 from typing import Callable, Literal, Protocol, TypeAlias, TypedDict, cast
+
+import psutil
 
 from peetsfea.aedt import Hfss
 from peetsfea.aedt.failfast import raise_on_false
@@ -98,10 +103,17 @@ RADIATION_MARGIN_MM = 2000.0
 RESULTS1_PASS_REPORT_NAME = "Results1_Pass"
 RESULTS2_LAST_REPORT_NAME = "Results2_Last"
 RESULTS3_FREQ_REPORT_NAME = "Results3_Freq"
+SSW_REPORT_NAMES = (RESULTS1_PASS_REPORT_NAME, RESULTS2_LAST_REPORT_NAME, RESULTS3_FREQ_REPORT_NAME)
 TX_SOURCE_MAGNITUDE = "100V"
 TX_SOURCE_PHASE = "0deg"
 RX_SOURCE_MAGNITUDE = "100V"
 RX_SOURCE_PHASE = "90deg"
+SETUP_MAXIMUM_PASSES = 35
+SETUP_MINIMUM_PASSES = 17
+SETUP_MINIMUM_CONVERGED_PASSES = 7
+SOLVE_TELEMETRY_SAMPLE_INTERVAL_SECONDS = 2.0
+SOLVE_TELEMETRY_SAMPLES_JSONL_NAME = "ssw_solve_telemetry_samples.jsonl"
+SOLVE_TELEMETRY_STOP_NAME = "ssw_solve_telemetry.stop"
 
 _TXRX_OUTPUT_VARIABLE_EXPRESSIONS: tuple[tuple[str, str], ...] = (
     ("Ltx_uH", "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"),
@@ -309,6 +321,48 @@ class SswAedtPortSetupResult(TypedDict):
     frequency_sweep: SswAedtFrequencySweepSummary
     sources: SswAedtSourcesSummary
     reports: SswAedtReportsSummary
+
+
+class SswProcessResourceSample(TypedDict):
+    pid: int
+    name: str
+    cpu_percent: float
+    rss_bytes: int
+    vms_bytes: int
+
+
+class SswSolveTelemetrySample(TypedDict):
+    timestamp: str
+    elapsed_ms: float
+    aedt_process_id: int
+    reported_aedt_process_id: int
+    process_count: int
+    pids: list[int]
+    cpu_percent_total: float
+    rss_bytes_total: int
+    vms_bytes_total: int
+    processes: list[SswProcessResourceSample]
+
+
+class SswSolveTelemetry(TypedDict):
+    started_at: str
+    finished_at: str
+    elapsed_ms: float
+    aedt_process_id: int
+    reported_aedt_process_id: int
+    sample_interval_seconds: float
+    samples_jsonl_path: str
+    sample_count: int
+    peak_cpu_percent_total: float
+    peak_rss_bytes_total: int
+    peak_vms_bytes_total: int
+    samples: list[SswSolveTelemetrySample]
+
+
+class SswAedtReportCsvResult(TypedDict):
+    setup: SswAedtPortSetupResult
+    csv_paths: dict[str, str]
+    solve_telemetry: SswSolveTelemetry
 
 
 def create_headless_hfss(design_name: str) -> HfssSession:
@@ -877,7 +931,245 @@ def _mesh_assignment_payload(mesh_object_names: list[str]) -> list[object]:
     ]
 
 
-def _setup_payload() -> list[object]:
+def _require_positive_int(value: int, *, context: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{context} must be an int")
+    if value <= 0:
+        raise ValueError(f"{context} must be positive")
+
+
+def _timestamp() -> str:
+    return datetime.now().astimezone().isoformat(timespec="milliseconds")
+
+
+def _process_tree(*, root_pid: int) -> list[psutil.Process]:
+    try:
+        root = psutil.Process(root_pid)
+    except psutil.Error as exc:
+        raise RuntimeError(f"AEDT process is not available for telemetry (pid={root_pid})") from exc
+    processes = [root]
+    try:
+        processes.extend(root.children(recursive=True))
+    except psutil.Error:
+        pass
+    return processes
+
+
+def _process_name_and_cmdline(process: psutil.Process) -> str:
+    name = ""
+    cmdline = ""
+    try:
+        name = process.name()
+    except psutil.Error:
+        name = ""
+    try:
+        cmdline = " ".join(process.cmdline())
+    except psutil.Error:
+        cmdline = ""
+    return f"{name} {cmdline}"
+
+
+def _resolve_host_aedt_process_id(*, reported_pid: int) -> int:
+    if psutil.pid_exists(reported_pid):
+        try:
+            reported_process = psutil.Process(reported_pid)
+            reported_label = _process_name_and_cmdline(reported_process).lower()
+        except psutil.Error:
+            reported_label = ""
+        if "ansysedt" in reported_label and "-grpcsrv" in reported_label:
+            return reported_pid
+    candidates: list[tuple[float, int]] = []
+    for process in psutil.process_iter():
+        label = _process_name_and_cmdline(process).lower()
+        if "ansysedt" not in label:
+            continue
+        if "-grpcsrv" not in label:
+            continue
+        try:
+            create_time = float(process.create_time())
+        except psutil.Error:
+            continue
+        candidates.append((create_time, int(process.pid)))
+    if len(candidates) == 0:
+        raise RuntimeError(f"AEDT host process is not available for telemetry (reported_pid={reported_pid})")
+    candidates.sort()
+    return candidates[-1][1]
+
+
+def _sample_process_resources(
+    *,
+    root_pid: int,
+    reported_pid: int,
+    started_at_monotonic: float,
+    previous_cpu_seconds_by_pid: dict[int, float],
+    previous_sample_monotonic: float,
+) -> tuple[SswSolveTelemetrySample, dict[int, float], float]:
+    process_samples: list[SswProcessResourceSample] = []
+    current_cpu_seconds_by_pid: dict[int, float] = {}
+    current_sample_monotonic = time.monotonic()
+    cpu_elapsed_seconds = current_sample_monotonic - previous_sample_monotonic
+    if cpu_elapsed_seconds <= 0.0:
+        cpu_elapsed_seconds = 1e-9
+    for process in _process_tree(root_pid=root_pid):
+        try:
+            memory = process.memory_info()
+            name = process.name()
+            cpu_times = process.cpu_times()
+        except psutil.Error:
+            continue
+        cpu_seconds = float(cpu_times.user) + float(cpu_times.system)
+        current_cpu_seconds_by_pid[int(process.pid)] = cpu_seconds
+        if int(process.pid) in previous_cpu_seconds_by_pid:
+            cpu_delta_seconds = cpu_seconds - previous_cpu_seconds_by_pid[int(process.pid)]
+            cpu_percent = max(cpu_delta_seconds / cpu_elapsed_seconds * 100.0, 0.0)
+        else:
+            cpu_percent = 0.0
+        process_samples.append(
+            {
+                "pid": int(process.pid),
+                "name": name,
+                "cpu_percent": cpu_percent,
+                "rss_bytes": int(memory.rss),
+                "vms_bytes": int(memory.vms),
+            }
+        )
+    if len(process_samples) == 0:
+        raise RuntimeError(f"AEDT telemetry could not sample any live process (pid={root_pid})")
+    return (
+        {
+            "timestamp": _timestamp(),
+            "elapsed_ms": (current_sample_monotonic - started_at_monotonic) * 1000.0,
+            "aedt_process_id": root_pid,
+            "reported_aedt_process_id": reported_pid,
+            "process_count": len(process_samples),
+            "pids": [sample["pid"] for sample in process_samples],
+            "cpu_percent_total": sum(sample["cpu_percent"] for sample in process_samples),
+            "rss_bytes_total": sum(sample["rss_bytes"] for sample in process_samples),
+            "vms_bytes_total": sum(sample["vms_bytes"] for sample in process_samples),
+            "processes": process_samples,
+        },
+        current_cpu_seconds_by_pid,
+        current_sample_monotonic,
+    )
+
+
+def _append_sample_jsonl(*, samples_path: Path, sample: SswSolveTelemetrySample) -> None:
+    with samples_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(sample, sort_keys=True) + "\n")
+
+
+def _telemetry_worker(
+    *,
+    root_pid: int,
+    reported_pid: int,
+    sample_interval_seconds: float,
+    started_at_monotonic: float,
+    samples_path: Path,
+    stop_path: Path,
+) -> None:
+    previous_cpu_seconds_by_pid: dict[int, float] = {}
+    previous_sample_monotonic = time.monotonic()
+    while True:
+        sample, previous_cpu_seconds_by_pid, previous_sample_monotonic = _sample_process_resources(
+            root_pid=root_pid,
+            reported_pid=reported_pid,
+            started_at_monotonic=started_at_monotonic,
+            previous_cpu_seconds_by_pid=previous_cpu_seconds_by_pid,
+            previous_sample_monotonic=previous_sample_monotonic,
+        )
+        _append_sample_jsonl(samples_path=samples_path, sample=sample)
+        if stop_path.exists():
+            return
+        next_sample_at = time.monotonic() + sample_interval_seconds
+        while time.monotonic() < next_sample_at:
+            if stop_path.exists():
+                break
+            time.sleep(0.1)
+
+
+def _load_telemetry_samples(*, samples_path: Path) -> list[SswSolveTelemetrySample]:
+    if not samples_path.is_file():
+        raise FileNotFoundError(f"SSW solve telemetry sample file was not created: {samples_path}")
+    samples: list[SswSolveTelemetrySample] = []
+    for line_number, line in enumerate(samples_path.read_text(encoding="utf-8").splitlines(), start=1):
+        if line == "":
+            continue
+        raw_sample = json.loads(line)
+        if not isinstance(raw_sample, dict):
+            raise TypeError(f"SSW solve telemetry sample line must be an object (line={line_number})")
+        samples.append(cast(SswSolveTelemetrySample, raw_sample))
+    if len(samples) == 0:
+        raise ValueError(f"SSW solve telemetry did not record any samples: {samples_path}")
+    return samples
+
+
+class _SolveTelemetryMonitor:
+    def __init__(self, *, reported_pid: int, sample_interval_seconds: float, output_dir: Path) -> None:
+        if sample_interval_seconds <= 0.0:
+            raise ValueError(f"sample_interval_seconds must be positive (actual={sample_interval_seconds})")
+        self._reported_pid = reported_pid
+        self._root_pid = _resolve_host_aedt_process_id(reported_pid=reported_pid)
+        self._sample_interval_seconds = sample_interval_seconds
+        self._started_at = _timestamp()
+        self._started_at_monotonic = time.monotonic()
+        self._samples_path = output_dir / SOLVE_TELEMETRY_SAMPLES_JSONL_NAME
+        self._stop_path = output_dir / SOLVE_TELEMETRY_STOP_NAME
+        context = multiprocessing.get_context("fork")
+        self._process = context.Process(
+            target=_telemetry_worker,
+            kwargs={
+                "root_pid": self._root_pid,
+                "reported_pid": self._reported_pid,
+                "sample_interval_seconds": self._sample_interval_seconds,
+                "started_at_monotonic": self._started_at_monotonic,
+                "samples_path": self._samples_path,
+                "stop_path": self._stop_path,
+            },
+            name="ssw-solve-telemetry",
+            daemon=True,
+        )
+
+    def start(self) -> None:
+        self._samples_path.parent.mkdir(parents=True, exist_ok=True)
+        self._samples_path.unlink(missing_ok=True)
+        self._stop_path.unlink(missing_ok=True)
+        self._process.start()
+
+    def stop(self) -> SswSolveTelemetry:
+        self._stop_path.write_text("stop\n", encoding="utf-8")
+        self._process.join(timeout=self._sample_interval_seconds + 5.0)
+        if self._process.is_alive():
+            self._process.terminate()
+            self._process.join(timeout=5.0)
+            raise RuntimeError("SSW solve telemetry process did not stop")
+        finished_at = _timestamp()
+        elapsed_ms = (time.monotonic() - self._started_at_monotonic) * 1000.0
+        samples = _load_telemetry_samples(samples_path=self._samples_path)
+        return {
+            "started_at": self._started_at,
+            "finished_at": finished_at,
+            "elapsed_ms": elapsed_ms,
+            "aedt_process_id": self._root_pid,
+            "reported_aedt_process_id": self._reported_pid,
+            "sample_interval_seconds": self._sample_interval_seconds,
+            "samples_jsonl_path": str(self._samples_path),
+            "sample_count": len(samples),
+            "peak_cpu_percent_total": max(sample["cpu_percent_total"] for sample in samples),
+            "peak_rss_bytes_total": max(sample["rss_bytes_total"] for sample in samples),
+            "peak_vms_bytes_total": max(sample["vms_bytes_total"] for sample in samples),
+            "samples": samples,
+        }
+
+
+def _setup_payload(
+    *,
+    maximum_passes: int = SETUP_MAXIMUM_PASSES,
+    minimum_passes: int = SETUP_MINIMUM_PASSES,
+    minimum_converged_passes: int = SETUP_MINIMUM_CONVERGED_PASSES,
+) -> list[object]:
+    _require_positive_int(maximum_passes, context="maximum_passes")
+    _require_positive_int(minimum_passes, context="minimum_passes")
+    _require_positive_int(minimum_converged_passes, context="minimum_converged_passes")
     return [
         f"NAME:{SETUP_NAME}",
         "SolveType:=",
@@ -889,11 +1181,11 @@ def _setup_payload() -> list[object]:
         "UseMatrixConv:=",
         False,
         "MaximumPasses:=",
-        35,
+        maximum_passes,
         "MinimumPasses:=",
-        17,
+        minimum_passes,
         "MinimumConvergedPasses:=",
-        7,
+        minimum_converged_passes,
         "PercentRefinement:=",
         30,
         "IsEnabled:=",
@@ -1040,10 +1332,20 @@ def _assign_recorded_mesh(
 def _insert_recorded_setup_and_sweep(
     *,
     hfss: HfssSession,
+    maximum_passes: int = SETUP_MAXIMUM_PASSES,
+    minimum_passes: int = SETUP_MINIMUM_PASSES,
+    minimum_converged_passes: int = SETUP_MINIMUM_CONVERGED_PASSES,
 ) -> tuple[SswAedtAnalysisSetupSummary, SswAedtFrequencySweepSummary]:
     module = _analysis_setup_module(hfss)
     raise_on_false(
-        module.InsertSetup("HfssDriven", _setup_payload()),
+        module.InsertSetup(
+            "HfssDriven",
+            _setup_payload(
+                maximum_passes=maximum_passes,
+                minimum_passes=minimum_passes,
+                minimum_converged_passes=minimum_converged_passes,
+            ),
+        ),
         operation="InsertSetup",
         context={"setup_type": "HfssDriven", "setup_name": SETUP_NAME},
     )
@@ -1060,9 +1362,9 @@ def _insert_recorded_setup_and_sweep(
             "setup_name": SETUP_NAME,
             "frequency": SETUP_FREQUENCY,
             "max_delta_s": SETUP_MAX_DELTA_S,
-            "maximum_passes": 35,
-            "minimum_passes": 17,
-            "minimum_converged_passes": 7,
+            "maximum_passes": maximum_passes,
+            "minimum_passes": minimum_passes,
+            "minimum_converged_passes": minimum_converged_passes,
             "percent_refinement": 30,
             "basis_order": 0,
             "port_accuracy": 2,
@@ -1272,19 +1574,19 @@ def _create_reports(
         primary_sweep="Freq",
     )
     report_names = set(report_setup.GetAllReportNames())
-    expected_report_names = {RESULTS1_PASS_REPORT_NAME, RESULTS2_LAST_REPORT_NAME, RESULTS3_FREQ_REPORT_NAME}
+    expected_report_names = set(SSW_REPORT_NAMES)
     if not expected_report_names.issubset(report_names):
         raise ValueError(
             "SSW report creation did not register required reports "
             f"(missing={sorted(expected_report_names.difference(report_names))}, available={sorted(report_names)})"
         )
     return {
-        "report_names": [RESULTS1_PASS_REPORT_NAME, RESULTS2_LAST_REPORT_NAME, RESULTS3_FREQ_REPORT_NAME],
+        "report_names": list(SSW_REPORT_NAMES),
         "output_variable_names": output_variable_names,
         "solid_loss_expression_names": solid_loss_expression_names,
         "output_solution_name": solution_name,
         "solid_loss_solution_name": solid_loss_solution_name,
-        "diagnostic_report_names": [RESULTS1_PASS_REPORT_NAME, RESULTS2_LAST_REPORT_NAME, RESULTS3_FREQ_REPORT_NAME],
+        "diagnostic_report_names": list(SSW_REPORT_NAMES),
     }
 
 
@@ -1668,6 +1970,9 @@ def setup_ssw_aedt_ports_into_hfss(
     output_aedt_path: Path,
     imported_ledger_path: Path,
     port_ledger_path: Path = DEFAULT_LEDGER_PATH,
+    setup_maximum_passes: int = SETUP_MAXIMUM_PASSES,
+    setup_minimum_passes: int = SETUP_MINIMUM_PASSES,
+    setup_minimum_converged_passes: int = SETUP_MINIMUM_CONVERGED_PASSES,
 ) -> SswAedtPortSetupResult:
     ledger = load_ssw_aedt_port_ledger(port_ledger_path)
     output_aedt_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1680,7 +1985,12 @@ def setup_ssw_aedt_ports_into_hfss(
     boundary = _build_boundary(hfss=hfss, modeler=hfss.modeler)
     ports = _assign_ports(hfss=hfss, ledger=ledger)
     sources = _apply_sources(hfss=hfss, ports=ports)
-    analysis_setup, frequency_sweep = _insert_recorded_setup_and_sweep(hfss=hfss)
+    analysis_setup, frequency_sweep = _insert_recorded_setup_and_sweep(
+        hfss=hfss,
+        maximum_passes=setup_maximum_passes,
+        minimum_passes=setup_minimum_passes,
+        minimum_converged_passes=setup_minimum_converged_passes,
+    )
     reports = _create_reports(hfss=hfss, ports=ports, imported_ledger=imported_base_ledger, boundary=boundary)
     imported_ledger: SswAedtImportedLedger = {
         "design_id": imported_base_ledger["design_id"],
@@ -1737,6 +2047,9 @@ def setup_ssw_aedt_ports(
     hfss_factory: HfssFactory = create_headless_hfss,
     release_desktop_on_exit: bool = True,
     close_projects_on_release: bool = True,
+    setup_maximum_passes: int = SETUP_MAXIMUM_PASSES,
+    setup_minimum_passes: int = SETUP_MINIMUM_PASSES,
+    setup_minimum_converged_passes: int = SETUP_MINIMUM_CONVERGED_PASSES,
 ) -> SswAedtPortSetupResult:
     hfss = hfss_factory(design_name)
     try:
@@ -1745,6 +2058,9 @@ def setup_ssw_aedt_ports(
             port_ledger_path=port_ledger_path,
             output_aedt_path=output_aedt_path,
             imported_ledger_path=imported_ledger_path,
+            setup_maximum_passes=setup_maximum_passes,
+            setup_minimum_passes=setup_minimum_passes,
+            setup_minimum_converged_passes=setup_minimum_converged_passes,
         )
     finally:
         if release_desktop_on_exit:
@@ -1753,6 +2069,76 @@ def setup_ssw_aedt_ports(
                 operation="release_desktop",
                 context={"close_projects": close_projects_on_release, "close_on_exit": True},
             )
+
+
+def _report_csv_path(*, output_dir: Path, report_name: str) -> Path:
+    return output_dir / f"{report_name}.csv"
+
+
+def _export_ssw_report_csvs(*, hfss: HfssSession, output_dir: Path) -> dict[str, str]:
+    report_setup = _report_setup_module(hfss)
+    report_names = list(report_setup.GetAllReportNames())
+    missing_report_names = sorted(set(SSW_REPORT_NAMES).difference(report_names))
+    if len(missing_report_names) != 0:
+        raise ValueError(f"SSW solve cannot export missing reports (missing={missing_report_names}, available={report_names})")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    csv_paths: dict[str, str] = {}
+    for report_name in SSW_REPORT_NAMES:
+        csv_path = _report_csv_path(output_dir=output_dir, report_name=report_name)
+        raise_on_false(
+            report_setup.ExportToFile(report_name, str(csv_path)),
+            operation="ReportSetup.ExportToFile",
+            context={"report_name": report_name, "path": str(csv_path)},
+        )
+        if not csv_path.is_file():
+            raise FileNotFoundError(f"SSW report export did not create CSV: {csv_path}")
+        csv_paths[report_name] = str(csv_path)
+    return csv_paths
+
+
+def solve_ssw_aedt_ports(
+    *,
+    output_aedt_path: Path,
+    imported_ledger_path: Path,
+    design_name: str,
+    port_ledger_path: Path = DEFAULT_LEDGER_PATH,
+    csv_output_dir: Path,
+    hfss_factory: HfssFactory = create_headless_hfss,
+    setup_maximum_passes: int = SETUP_MAXIMUM_PASSES,
+    setup_minimum_passes: int = SETUP_MINIMUM_PASSES,
+    setup_minimum_converged_passes: int = SETUP_MINIMUM_CONVERGED_PASSES,
+    telemetry_sample_interval_seconds: float = SOLVE_TELEMETRY_SAMPLE_INTERVAL_SECONDS,
+) -> SswAedtReportCsvResult:
+    hfss = hfss_factory(design_name)
+    try:
+        setup = setup_ssw_aedt_ports_into_hfss(
+            hfss=hfss,
+            port_ledger_path=port_ledger_path,
+            output_aedt_path=output_aedt_path,
+            imported_ledger_path=imported_ledger_path,
+            setup_maximum_passes=setup_maximum_passes,
+            setup_minimum_passes=setup_minimum_passes,
+            setup_minimum_converged_passes=setup_minimum_converged_passes,
+        )
+        monitor = _SolveTelemetryMonitor(
+            reported_pid=hfss.desktop_class.aedt_process_id,
+            sample_interval_seconds=telemetry_sample_interval_seconds,
+            output_dir=csv_output_dir,
+        )
+        monitor.start()
+        try:
+            raise_on_false(hfss.analyze_setup(SETUP_NAME, blocking=True), operation="analyze_setup", context={"setup_name": SETUP_NAME})
+        finally:
+            solve_telemetry = monitor.stop()
+        csv_paths = _export_ssw_report_csvs(hfss=hfss, output_dir=csv_output_dir)
+        raise_on_false(hfss.save_project(str(output_aedt_path)), operation="save_project", context={"path": str(output_aedt_path)})
+        return {"setup": setup, "csv_paths": csv_paths, "solve_telemetry": solve_telemetry}
+    finally:
+        raise_on_false(
+            hfss.desktop_class.release_desktop(close_projects=True, close_on_exit=True),
+            operation="release_desktop",
+            context={"close_projects": True, "close_on_exit": True},
+        )
 
 
 __all__ = [
@@ -1768,12 +2154,24 @@ __all__ = [
     "SswAedtPortEdgeLedgerEntry",
     "SswAedtPorts",
     "SswAedtPortSetupResult",
+    "SswAedtReportCsvResult",
+    "SETUP_MAXIMUM_PASSES",
+    "SETUP_MINIMUM_CONVERGED_PASSES",
+    "SETUP_MINIMUM_PASSES",
+    "SOLVE_TELEMETRY_SAMPLE_INTERVAL_SECONDS",
+    "SOLVE_TELEMETRY_SAMPLES_JSONL_NAME",
+    "SOLVE_TELEMETRY_STOP_NAME",
+    "SSW_REPORT_NAMES",
+    "SswProcessResourceSample",
     "SswAedtPortStepLedger",
     "SswAedtReportsSummary",
+    "SswSolveTelemetry",
+    "SswSolveTelemetrySample",
     "create_graphical_hfss",
     "create_headless_hfss",
     "load_ssw_aedt_port_ledger",
     "setup_ssw_aedt_ports",
     "setup_ssw_aedt_ports_into_hfss",
+    "solve_ssw_aedt_ports",
     "write_ssw_aedt_port_ledger",
 ]

@@ -51,6 +51,7 @@ class SswSampledToml:
     design_id: str
     aedt_filename: str
     point_hash: str
+    point_values: dict[str, RangeValue]
 
 
 @dataclass(frozen=True)
@@ -301,6 +302,25 @@ def _identity_payload(
     }
 
 
+def _point_values_from_ranges(
+    *,
+    candidate_ranges: dict[str, _RangeDefinition],
+    free_owner_paths: tuple[str, ...],
+) -> dict[str, RangeValue]:
+    payload = _identity_payload(candidate_ranges=candidate_ranges, free_owner_paths=free_owner_paths)
+    point_values = payload["point_values"]
+    assert isinstance(point_values, dict), "identity payload point_values must be a dict"
+    typed_values: dict[str, RangeValue] = {}
+    for path in free_owner_paths:
+        if path not in point_values:
+            raise ValueError(f"identity payload is missing point value for {path!r}")
+        value = point_values[path]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(f"identity payload point value must be numeric (path={path}, value={value!r})")
+        typed_values[path] = value
+    return typed_values
+
+
 def _point_hash(payload: dict[str, object]) -> str:
     payload_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
     return hashlib.blake2b(payload_bytes, digest_size=8).hexdigest()
@@ -498,6 +518,17 @@ def build_ssw_aedt_identity(
     )
 
 
+def point_values_for_ssw_fixed_toml(
+    candidate_toml_path: Path,
+    reference_toml_path: Path = DEFAULT_REFERENCE_TOML_PATH,
+) -> dict[str, RangeValue]:
+    result = check_ssw_toml_in_design_space(candidate_toml_path, reference_toml_path)
+    _raise_for_check_failure(result)
+    candidate_ranges = _range_definitions(_load_toml_root(candidate_toml_path))
+    _raise_for_non_point(candidate_ranges, result.free_owner_paths)
+    return _point_values_from_ranges(candidate_ranges=candidate_ranges, free_owner_paths=result.free_owner_paths)
+
+
 def sample_ssw_fixed_tomls(
     sample_count: int,
     seed: int,
@@ -543,6 +574,11 @@ def sample_ssw_fixed_tomls(
                     attempt_path.unlink()
                     continue
                 identity = build_ssw_aedt_identity(attempt_path, reference_toml_path)
+                accepted_ranges = _range_definitions(_load_toml_root(attempt_path))
+                accepted_point_values = _point_values_from_ranges(
+                    candidate_ranges=accepted_ranges,
+                    free_owner_paths=result.free_owner_paths,
+                )
                 if identity.design_id in seen_design_ids:
                     last_rejection = f"duplicate sampled design_id {identity.design_id!r}"
                     attempt_path.unlink()
@@ -559,6 +595,7 @@ def sample_ssw_fixed_tomls(
                         design_id=identity.design_id,
                         aedt_filename=identity.aedt_filename,
                         point_hash=identity.point_hash,
+                        point_values=accepted_point_values,
                     )
                 )
                 accepted = True
@@ -589,5 +626,6 @@ __all__ = [
     "SswSampledTomlBatch",
     "build_ssw_aedt_identity",
     "check_ssw_toml_in_design_space",
+    "point_values_for_ssw_fixed_toml",
     "sample_ssw_fixed_tomls",
 ]

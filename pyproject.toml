@@ -13,6 +13,7 @@ all = [
   "build123d>=0.10.0",
   "ocp-vscode>=3.1.2",
   "pyaedt[graphics]==0.25.1",
+  "psutil",
   "pytest",
   "pytest-cov",
   "ruff",
