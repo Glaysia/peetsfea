@@ -527,6 +527,7 @@ def _build_ssw_aedt_port_ledger(
         "units": ssw_ledger["units"],
         "body_names": list(ssw_ledger["body_names"]),
         "copper_body_names": list(ssw_ledger["copper_body_names"]),
+        "fr4_body_names": list(ssw_ledger["fr4_body_names"]),
         "non_model_body_names": list(ssw_ledger["non_model_body_names"]),
         "ferrite_body_names": list(ssw_ledger["ferrite_body_names"]),
         "bodies": body_entries,

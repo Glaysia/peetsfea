@@ -474,6 +474,7 @@ def _ledger(tmp_path: Path) -> SswAedtPortStepLedger:
         "units": "mm",
         "body_names": body_names,
         "copper_body_names": ["tx_ssw_coil_ssw_copper", "rx_ssw_coil_coil_copper"],
+        "fr4_body_names": ["tx_ssw_coil_pcb_1_fr4"],
         "non_model_body_names": ["tv"],
         "ferrite_body_names": ["tx_mull_ferrite_sheet"],
         "bodies": [
@@ -558,6 +559,7 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert mesh_payload[mesh_payload.index("Objects:=") + 1] == [
         "rx_ssw_coil_coil_copper",
         "tx_ssw_coil_ssw_copper",
+        "tx_ssw_coil_pcb_1_fr4",
     ]
     assert mesh_payload[mesh_payload.index("MaxLength:=") + 1] == "1mm"
     assert mesh_payload[mesh_payload.index("NumMaxElem:=") + 1] == "50000"
@@ -639,7 +641,11 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert result["aedt_filename"] == ledger["aedt_filename"]
     assert result["dimension_count"] == ledger["dimension_count"]
     assert result["design_space_hash"] == ledger["design_space_hash"]
-    assert result["mesh"]["objects"] == ["rx_ssw_coil_coil_copper", "tx_ssw_coil_ssw_copper"]
+    assert result["mesh"]["objects"] == [
+        "rx_ssw_coil_coil_copper",
+        "tx_ssw_coil_ssw_copper",
+        "tx_ssw_coil_pcb_1_fr4",
+    ]
     assert result["mesh"]["max_length"] == "1mm"
     assert result["mesh"]["num_max_elem"] == "50000"
     assert hfss.modeler.create_region_calls == [
@@ -1010,7 +1016,12 @@ def test_setup_ssw_aedt_ports_runs_real_headless_ansys() -> None:
     assert imported["design_space_hash"] == ledger["design_space_hash"]
     assert "port_sheet_names" not in imported
     assert imported["copper_body_names"] == ledger["copper_body_names"]
-    assert imported["mesh"]["objects"] == ["rx_ssw_coil_ssw_copper", "tx_ssw_coil_ssw_copper"]
+    assert imported["fr4_body_names"] == ledger["fr4_body_names"]
+    assert imported["mesh"]["objects"] == [
+        "rx_ssw_coil_ssw_copper",
+        "tx_ssw_coil_ssw_copper",
+        *ledger["fr4_body_names"],
+    ]
     assert imported["mesh"]["max_length"] == "1mm"
     assert imported["boundary"]["region_name"] == "Region_Abs_2000mm"
     assert imported["boundary"]["face_count"] == "6"

@@ -178,6 +178,7 @@ class SswAedtPortStepLedger(TypedDict):
     units: Literal["mm"]
     body_names: list[str]
     copper_body_names: list[str]
+    fr4_body_names: list[str]
     non_model_body_names: list[str]
     ferrite_body_names: list[str]
     bodies: list[SswAedtBodyLedgerEntry]
@@ -268,6 +269,7 @@ class SswAedtImportedLedgerBase(TypedDict):
     aedt_path: str
     imported_object_names: list[str]
     copper_body_names: list[str]
+    fr4_body_names: list[str]
     material_assignments: dict[str, str]
     visual_assignments: dict[str, VisualAssignment]
     non_model_body_names: list[str]
@@ -836,7 +838,7 @@ def _analysis_setup_module(hfss: HfssSession) -> AnalysisSetupModuleSession:
     return cast(AnalysisSetupModuleSession, raw_module)
 
 
-def _required_mesh_object_names(copper_body_names: list[str]) -> list[str]:
+def _required_mesh_object_names(*, copper_body_names: list[str], fr4_body_names: list[str]) -> list[str]:
     rx_matches = [name for name in copper_body_names if name in MESH_RX_COPPER_CANDIDATES]
     tx_matches = [name for name in copper_body_names if name == MESH_TX_COPPER_NAME]
     if len(rx_matches) != 1:
@@ -849,7 +851,9 @@ def _required_mesh_object_names(copper_body_names: list[str]) -> list[str]:
             "SSW mesh requires exactly one recorded TX copper target "
             f"(required={MESH_TX_COPPER_NAME!r}, actual={tx_matches}, copper_body_names={copper_body_names})"
         )
-    return [rx_matches[0], tx_matches[0]]
+    if len(fr4_body_names) == 0:
+        raise ValueError("SSW mesh requires at least one recorded FR4 PCB target")
+    return [rx_matches[0], tx_matches[0], *fr4_body_names]
 
 
 def _mesh_assignment_payload(mesh_object_names: list[str]) -> list[object]:
@@ -999,8 +1003,13 @@ def _sweep_payload() -> list[object]:
     ]
 
 
-def _assign_recorded_mesh(*, hfss: HfssSession, copper_body_names: list[str]) -> SswAedtMeshSummary:
-    mesh_object_names = _required_mesh_object_names(copper_body_names)
+def _assign_recorded_mesh(
+    *,
+    hfss: HfssSession,
+    copper_body_names: list[str],
+    fr4_body_names: list[str],
+) -> SswAedtMeshSummary:
+    mesh_object_names = _required_mesh_object_names(copper_body_names=copper_body_names, fr4_body_names=fr4_body_names)
     mesh_module = _mesh_setup_module(hfss)
     raise_on_false(
         mesh_module.AssignLengthOp(_mesh_assignment_payload(mesh_object_names)),
@@ -1305,6 +1314,7 @@ def _import_ssw_aedt_port_step(
     imported_names = sorted(name for name in after_names if name in expected_names or name not in before_names)
     body_names = _required_str_list(ledger, key="body_names")
     copper_body_names = _required_str_list(ledger, key="copper_body_names")
+    fr4_body_names = _required_str_list(ledger, key="fr4_body_names")
     material_assignments = _assign_body_materials(
         hfss=hfss,
         modeler=hfss.modeler,
@@ -1339,7 +1349,7 @@ def _import_ssw_aedt_port_step(
             color=COPPER_COLOR,
             transparency=COPPER_TRANSPARENCY,
         )
-    mesh = _assign_recorded_mesh(hfss=hfss, copper_body_names=copper_body_names)
+    mesh = _assign_recorded_mesh(hfss=hfss, copper_body_names=copper_body_names, fr4_body_names=fr4_body_names)
     return {
         "design_id": ledger["design_id"],
         "aedt_filename": ledger["aedt_filename"],
@@ -1351,6 +1361,7 @@ def _import_ssw_aedt_port_step(
         "aedt_path": str(output_aedt_path),
         "imported_object_names": imported_names,
         "copper_body_names": copper_body_names,
+        "fr4_body_names": fr4_body_names,
         "material_assignments": material_assignments,
         "visual_assignments": visual_assignments,
         "non_model_body_names": non_model_names,
@@ -1681,6 +1692,7 @@ def setup_ssw_aedt_ports_into_hfss(
         "aedt_path": imported_base_ledger["aedt_path"],
         "imported_object_names": imported_base_ledger["imported_object_names"],
         "copper_body_names": imported_base_ledger["copper_body_names"],
+        "fr4_body_names": imported_base_ledger["fr4_body_names"],
         "material_assignments": imported_base_ledger["material_assignments"],
         "visual_assignments": imported_base_ledger["visual_assignments"],
         "non_model_body_names": imported_base_ledger["non_model_body_names"],
