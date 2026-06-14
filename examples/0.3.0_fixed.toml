@@ -206,7 +206,7 @@ range = [false, 0.45, 0.45, 1]
 description = "TX under-coil height ratio against fixed_dimensions.height_max_mm"
 
 [modeled_objects.turn_n_int]
-range = [true, 4, 4, 1]
+range = [true, 2, 2, 1]
 description = "TX under-coil spiral turn count"
 
 [modeled_objects.gap_ratio]
