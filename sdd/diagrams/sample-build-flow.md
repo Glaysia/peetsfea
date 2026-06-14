@@ -1,31 +1,33 @@
 ---
 title: Sample Build Flow
 created: 2026-04-17 @ 09:09
-updated: 2026-04-28 @ 00:00
+updated: 2026-06-01 @ 00:00
 tags:
   - diagram
-  - sampling
+  - minimal
 ---
 
 # Sample Build Flow
 
 ```mermaid
 flowchart TD
-    Source["type2 source TOML"]
-    Sample["sample entry"]
-    Sampled["sampled TOML + manifest"]
-    Export["RX STEP export"]
-    Import["import-only or setup-ready"]
-    RxOnly["RxOnly mesh + RX port + RX reports"]
+    Source["minimal source TOML"]
+    Sample["entry/sample.py"]
+    Snapshots["sampled/source/repro/dataset TOML"]
+    Step["minimal_scene.step + minimal_step_ledger.json"]
+    Build["entry/build.py"]
+    Hfss["minimal_em.py headless HFSS setup"]
+    Solve["optional --solve CSV report"]
 
     Source --> Sample
-    Sample --> Sampled
-    Sampled --> Export
-    Export --> Import
-    Import --> RxOnly
+    Sample --> Snapshots
+    Sample --> Step
+    Step --> Build
+    Build --> Hfss
+    Hfss --> Solve
 ```
 
 ## Notes
-- TX shape-specific flow details were removed for the 0.2.24 reset.
-- `tx_region` may remain as guide context only.
-- Report variables are owned by [type2-em-report-contract](../architecture/type2-em-report-contract.md).
+- The generated STEP contains authored non-model boxes plus fixed Tx/Rx port cells.
+- Mesh, ports, sources, setup, sweep, and report creation are owned by [minimal_em.py](../code/src/peetsfea/backend/pyaedt/minimal_em.py.md).
+- Old geometry generation branches are outside the 0.3.0 graph.

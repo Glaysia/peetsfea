@@ -204,6 +204,8 @@ class HfssSession(TraceProviderSession, Protocol):
 
     def __setitem__(self, key: str, value: str) -> None: ...
 
+    def assign_material(self, assignment: str | list[str], material: str) -> object: ...
+
     def assign_finite_conductivity(
         self,
         assignment: str | list[object],

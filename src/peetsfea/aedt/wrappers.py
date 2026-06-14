@@ -283,7 +283,7 @@ class AnalysisSetupModule(_WrappedAccess):
 
 class ReportSetupModule(_WrappedAccess):
     _blocked_type_name = "ReportSetupModule"
-    _allowed_names = frozenset({"CreateReport", "GetAllReportNames"})
+    _allowed_names = frozenset({"CreateReport", "ExportToFile", "GetAllReportNames"})
 
     def __init__(self, *, _raw: object) -> None:
         object.__setattr__(self, "_raw", _raw)
@@ -326,6 +326,19 @@ class ReportSetupModule(_WrappedAccess):
             operation="GetAllReportNames",
         )
         return cast(list[str] | tuple[str, ...], raw_result)
+
+    def ExportToFile(self, report_name: str, export_path: str) -> object:
+        validate_aedt_name(report_name, field="report_name")
+        if export_path == "":
+            raise ValueError("export_path must not be empty")
+        return raise_on_false(
+            _require_callable_attr(object.__getattribute__(self, "_raw"), "ExportToFile", owner="ReportSetupModule")(
+                report_name,
+                export_path,
+            ),
+            operation="ReportSetup.ExportToFile",
+            context={"report_name": report_name, "path": export_path},
+        )
 
 
 class SolutionsModule(_WrappedAccess):
@@ -741,7 +754,9 @@ class Hfss(RawHfss, _WrappedAccess):
         {
             "__setitem__",
             "assign_finite_conductivity",
+            "assign_material",
             "assign_radiation_boundary_to_faces",
+            "analyze_setup",
             "change_validation_settings",
             "create_output_variable",
             "delete_setup",
@@ -820,6 +835,24 @@ class Hfss(RawHfss, _WrappedAccess):
     def __setitem__(self, key: str, value: str) -> None:
         _require_callable_attr(object.__getattribute__(self, "_raw"), "__setitem__", owner="Hfss")(key, value)
 
+    def assign_material(self, assignment: str | list[str], material: str) -> object:
+        validate_aedt_name(material, field="material")
+        if isinstance(assignment, str):
+            validate_aedt_name(assignment, field="assignment")
+        else:
+            if len(assignment) == 0:
+                raise ValueError("assignment must not be empty")
+            for index, object_name in enumerate(assignment):
+                validate_aedt_name(object_name, field=f"assignment[{index}]")
+        return raise_on_false(
+            _require_callable_attr(object.__getattribute__(self, "_raw"), "assign_material", owner="Hfss")(
+                assignment=assignment,
+                material=material,
+            ),
+            operation="assign_material",
+            context={"assignment": assignment, "material": material},
+        )
+
     def assign_finite_conductivity(
         self,
         assignment: str | list[object],
@@ -868,6 +901,17 @@ class Hfss(RawHfss, _WrappedAccess):
             )(assignment, name=name),
             operation="assign_radiation_boundary_to_faces",
             context={"assignment": assignment, "name": name},
+        )
+
+    def analyze_setup(self, name: str, blocking: bool = True) -> object:
+        validate_aedt_name(name, field="setup_name")
+        return raise_on_false(
+            _require_callable_attr(object.__getattribute__(self, "_raw"), "analyze_setup", owner="Hfss")(
+                name,
+                blocking=blocking,
+            ),
+            operation="analyze_setup",
+            context={"setup_name": name, "blocking": blocking},
         )
 
     def create_output_variable(self, variable: str, expression: str, solution: str) -> object:

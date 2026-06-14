@@ -573,6 +573,7 @@ def test_sidecar_protocol_and_proxy_exports_are_explicit() -> None:
         "DesignSession",
         "HfssSession",
         "MaterialsSession",
+        "MeshModuleSession",
         "ModelerSession",
         "Object3dRef",
         "ReportSetupModuleSession",

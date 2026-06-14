@@ -82,10 +82,10 @@ def _require_attr(raw: object, name: str, *, owner: str) -> object:
     return getattr(raw, name)
 
 
-def _require_callable_attr(raw: object, name: str, *, owner: str) -> object:
+def _require_callable_attr(raw: object, name: str, *, owner: str) -> Callable[..., object]:
     attr = _require_attr(raw, name, owner=owner)
     assert callable(attr), f"Raw {owner}.{name} must be callable"
-    return attr
+    return cast(Callable[..., object], attr)
 
 
 def _require_str_attr(raw: object, name: str, *, owner: str) -> str:

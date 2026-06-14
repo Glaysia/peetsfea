@@ -1,7 +1,7 @@
 ---
 title: Commit Policy
 created: 2026-04-17 @ 09:09
-updated: 2026-04-18 @ 18:46
+updated: 2026-06-01 @ 00:00
 tags:
   - governance
 ---
@@ -30,11 +30,11 @@ tags:
 - 생성물, cache, `run/` 산출물, AEDT output, `.aedt.lock` 파일은 명시 요청 없이는 커밋하지 않는다.
 - `.obsidian` workspace 상태는 기본적으로 제외한다.
 - SDD vault 상태 보존을 사용자가 명시적으로 요청한 경우에만 `.obsidian` 변경을 포함한다.
-- GUI/AEDT 검증 산출물은 사용자가 명시적으로 요청하지 않았으면 커밋하지 않는다.
+- GUI/AEDT 검증 산출물은 사용자가 명시적으로 요청하지 않았으면 커밋하지 않는다. 단, AEDT/PyAEDT 관련 코드 변경은 커밋 전 실제 headless AEDT 검증 기록을 남겨야 한다.
 
 ## Commit Message
 - 기본 형식은 `<area>: <summary>`다.
-- `area`는 `sdd`, `type2`, `tx_rect_void`, `spec`, `aedt`, `tests`처럼 변경의 주 소유 영역을 쓴다.
+- `area`는 `minimal`, `sdd`, `aedt`, `tests`, `docs`처럼 변경의 주 소유 영역을 쓴다.
 - summary는 명령형 또는 명사형 중 하나로 짧게 쓰되, 같은 작업 묶음에서는 일관성을 유지한다.
 - 릴리스 커밋은 기존 release 형식을 따른다.
 
@@ -42,4 +42,4 @@ tags:
 - 커밋 직전 `git status --short --untracked-files=all`로 예상 밖 변경이 없는지 확인한다.
 - 순수 Python 테스트는 `.venv`와 `run/` cwd 규칙을 우선한다.
 - Pylance 계열 진단은 가능한 경우 `.venv/bin/pyright`로 확인한다.
-- GUI/AEDT 검증은 사용자가 명시적으로 요청한 현재 작업에서만 수행한다.
+- AEDT/PyAEDT 관련 변경은 agent가 실제 headless AEDT 검증을 직접 수행한다. GUI-visible AEDT 검증은 보조 진단일 뿐이며 headless 검증을 대체하지 않는다.
