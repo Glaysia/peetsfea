@@ -762,6 +762,7 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert "Volume(tx_ssw_coil_ssw_copper)" in diagnostic_traces
     assert "Volume(Region_Abs_2000mm)" in diagnostic_traces
     assert diagnostic_components[diagnostic_components.index("X Component:=") + 1] == "Freq"
+    assert hfss.odesign.report_setup_module.create_report_calls[2]["setup_sweep_name"] == "Setup1 : Sweep"
     assert result["reports"]["report_names"] == ["Results1_Pass", "Results2_Last", "Results3_Freq"]
     assert result["reports"]["output_solution_name"] == "Setup1 : Sweep"
     assert result["reports"]["solid_loss_solution_name"] == "Setup1 : LastAdaptive"

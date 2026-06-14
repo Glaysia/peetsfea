@@ -1250,7 +1250,7 @@ def _create_reports(
         report_setup=report_setup,
         report_name=RESULTS3_FREQ_REPORT_NAME,
         report_category="Terminal Solution Data",
-        solution_name=f"{SETUP_NAME} : LastAdaptive",
+        solution_name=solution_name,
         context=[],
         variations=["Freq:=", ["All"]],
         traces=[
