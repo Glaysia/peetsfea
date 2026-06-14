@@ -58,10 +58,10 @@ def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
     assert spec.tx_under.is_under_coil_enabled is False
     assert spec.tx_under.is_ssw_enabled is False
     assert spec.rx.is_ssw_enabled is True
-    assert spec.tx.turn_n_int == 3
+    assert spec.tx.turn_n_int == 4
     assert spec.tx_under.turn_n_int == 2
-    assert spec.rx.turn_n_int == 2
-    assert spec.tx.gap_ratio == 0.24
+    assert spec.rx.turn_n_int == 4
+    assert spec.tx.gap_ratio == 0.44
     assert spec.tx_under.gap_ratio == 0.44
     assert spec.tx_under.void_area_ratio == 0.35
     assert spec.rx.void_area_ratio == 0.25
@@ -71,8 +71,8 @@ def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
     assert spec.rx.no_ssw_qturn_start_int == 3
     assert spec.rx.no_ssw_qturn_n_int == 0
     assert spec.tx.pcb_gap_mm == 8.0
-    assert spec.tx.twist_factor == 2
-    assert spec.rx.twist_factor == 1
+    assert spec.tx.twist_factor == 3
+    assert spec.rx.twist_factor == 3
     assert tuple(rule.id for rule in spec.constraints) == (
         "tx_ssw_single_conductor",
         "rx_ssw_single_conductor",
@@ -116,8 +116,8 @@ def test_load_ssw_fixed_spec_rejects_unfrozen_sweep_ranges() -> None:
 def test_load_ssw_fixed_spec_rejects_non_coprime_tx_ssw_constraint(tmp_path: Path) -> None:
     source_text = FIXED_TOML.read_text(encoding="utf-8")
     custom_text = source_text.replace(
-        '[modeled_objects.twist_factor]\nrange = [true, 2, 2, 1]\ndescription = "TX SSW band pitch shift per loop"',
         '[modeled_objects.twist_factor]\nrange = [true, 3, 3, 1]\ndescription = "TX SSW band pitch shift per loop"',
+        '[modeled_objects.twist_factor]\nrange = [true, 2, 2, 1]\ndescription = "TX SSW band pitch shift per loop"',
     )
     assert custom_text != source_text
     custom_toml = tmp_path / "tx_non_coprime_ssw.toml"
@@ -131,12 +131,8 @@ def test_load_ssw_fixed_spec_rejects_non_coprime_rx_when_rx_ssw_enabled(tmp_path
     source_text = FIXED_TOML.read_text(encoding="utf-8")
     custom_text = source_text
     custom_text = custom_text.replace(
-        '[modeled_objects.turn_n_int]\nrange = [true, 2, 2, 1]\ndescription = "RX SSW band count"',
-        '[modeled_objects.turn_n_int]\nrange = [true, 6, 6, 1]\ndescription = "RX SSW band count"',
-    )
-    custom_text = custom_text.replace(
-        '[modeled_objects.twist_factor]\nrange = [true, 1, 1, 1]\ndescription = "RX SSW band pitch shift per loop"',
-        '[modeled_objects.twist_factor]\nrange = [true, 4, 4, 1]\ndescription = "RX SSW band pitch shift per loop"',
+        '[modeled_objects.twist_factor]\nrange = [true, 3, 3, 1]\ndescription = "RX SSW band pitch shift per loop"',
+        '[modeled_objects.twist_factor]\nrange = [true, 2, 2, 1]\ndescription = "RX SSW band pitch shift per loop"',
     )
     assert custom_text != source_text
     custom_toml = tmp_path / "rx_non_coprime_ssw.toml"
@@ -149,7 +145,7 @@ def test_load_ssw_fixed_spec_rejects_non_coprime_rx_when_rx_ssw_enabled(tmp_path
 def test_load_ssw_fixed_spec_rejects_single_turn_rx_when_rx_ssw_enabled(tmp_path: Path) -> None:
     source_text = FIXED_TOML.read_text(encoding="utf-8")
     custom_text = source_text.replace(
-        '[modeled_objects.turn_n_int]\nrange = [true, 2, 2, 1]\ndescription = "RX SSW band count"',
+        '[modeled_objects.turn_n_int]\nrange = [true, 4, 4, 1]\ndescription = "RX SSW band count"',
         '[modeled_objects.turn_n_int]\nrange = [true, 1, 1, 1]\ndescription = "RX SSW band count"',
     )
     assert custom_text != source_text
@@ -647,7 +643,7 @@ def test_export_ssw_aedt_port_artifacts_writes_direct_edge_port_ledger(tmp_path:
     assert port_ledger_path.is_file()
     stored_ledger = json.loads(port_ledger_path.read_text(encoding="utf-8"))
     assert stored_ledger == ledger
-    assert ledger["dimension_count"] == 29
+    assert ledger["dimension_count"] == 22
     assert len(ledger["design_space_hash"]) == 16
     assert ledger["design_id"] == f"0_3_0_p{ledger['design_space_hash']}"
     assert ledger["aedt_filename"] == f"{ledger['design_id']}.aedt"

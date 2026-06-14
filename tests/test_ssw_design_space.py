@@ -61,20 +61,20 @@ def test_fixed_toml_is_reference_design_space_point() -> None:
 
     assert result.is_subset is True
     assert result.is_point is True
-    assert result.dimension_count == 29
-    assert len(result.free_owner_paths) == 29
+    assert result.dimension_count == 22
+    assert len(result.free_owner_paths) == 22
     assert result.violations == ()
     assert "ferrite.tx_mull_position_ratio" in result.free_owner_paths
     assert "ferrite.rx_mull_position_ratio" in result.free_owner_paths
     assert "ferrite.tx_mull_is_enabled" not in result.free_owner_paths
     assert "ferrite.rx_mull_is_enabled" not in result.free_owner_paths
-    assert "modeled_objects[role=tx_under_coil].is_under_coil_enabled" in result.free_owner_paths
-    assert "modeled_objects[role=tx_under_coil].width_ratio" in result.free_owner_paths
-    assert "modeled_objects[role=tx_under_coil].height_ratio" in result.free_owner_paths
-    assert "modeled_objects[role=tx_under_coil].turn_n_int" in result.free_owner_paths
-    assert "modeled_objects[role=tx_under_coil].gap_ratio" in result.free_owner_paths
-    assert "modeled_objects[role=tx_under_coil].void_area_ratio" in result.free_owner_paths
-    assert "modeled_objects[role=tx_under_coil].void_profile" in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].is_under_coil_enabled" not in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].width_ratio" not in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].height_ratio" not in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].turn_n_int" not in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].gap_ratio" not in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].void_area_ratio" not in result.free_owner_paths
+    assert "modeled_objects[role=tx_under_coil].void_profile" not in result.free_owner_paths
     assert "modeled_objects[role=tx_under_coil].no_ssw_qturn_start_int" not in result.free_owner_paths
     assert "modeled_objects[role=tx_under_coil].no_ssw_qturn_n_int" not in result.free_owner_paths
     assert "modeled_objects[role=rx_ssw_coil].is_ssw_enabled" in result.free_owner_paths
@@ -85,7 +85,7 @@ def test_aedt_identity_is_deterministic_short_point_name() -> None:
     second = build_ssw_aedt_identity(FIXED_TOML, SWEEP_TOML)
 
     assert first == second
-    assert first.dimension_count == 29
+    assert first.dimension_count == 22
     assert len(first.point_hash) == 16
     assert first.design_id == f"0_3_0_p{first.point_hash}"
     assert first.aedt_filename == f"{first.design_id}.aedt"
@@ -96,8 +96,8 @@ def test_point_hash_tracks_realized_continuous_values(tmp_path: Path) -> None:
     base_identity = build_ssw_aedt_identity(FIXED_TOML, SWEEP_TOML)
     text = _replace_once(
         FIXED_TOML.read_text(encoding="utf-8"),
-        "[modeled_objects.width_ratio]\nrange = [false, 0.45, 0.45, 1]",
-        "[modeled_objects.width_ratio]\nrange = [false, 0.4501, 0.4501, 1]",
+        "[modeled_objects.width_ratio]\nrange = [false, 0.8, 0.8, 1]",
+        "[modeled_objects.width_ratio]\nrange = [false, 0.8001, 0.8001, 1]",
     )
     changed_path = _candidate(tmp_path, text)
     changed_identity = build_ssw_aedt_identity(changed_path, SWEEP_TOML)
@@ -149,20 +149,20 @@ def test_missing_path_integer_flag_mismatch_and_non_positive_count_are_violation
     )
     text = _replace_once(
         text,
-        "[modeled_objects.is_under_coil_enabled]\nrange = [true, 0, 0, 1]",
-        "[modeled_objects.is_under_coil_enabled]\nrange = [false, 0, 0, 1]",
+        '[modeled_objects.is_ssw_enabled]\nrange = [true, 1, 1, 1]\ndescription = "RX SSW enable flag"',
+        '[modeled_objects.is_ssw_enabled]\nrange = [false, 1, 1, 1]\ndescription = "RX SSW enable flag"',
     )
     text = _replace_once(
         text,
-        "[modeled_objects.turn_n_int]\nrange = [true, 3, 3, 1]",
-        "[modeled_objects.turn_n_int]\nrange = [true, 3, 3, 0]",
+        "[modeled_objects.turn_n_int]\nrange = [true, 4, 4, 1]",
+        "[modeled_objects.turn_n_int]\nrange = [true, 4, 4, 0]",
     )
     candidate_path = _candidate(tmp_path, text)
 
     codes_by_path = _violation_codes_by_path(candidate_path)
 
     assert codes_by_path["ferrite.tx_mull_position_ratio"] == {"missing_free_path"}
-    assert codes_by_path["modeled_objects[role=tx_under_coil].is_under_coil_enabled"] == {"integer_flag_mismatch"}
+    assert codes_by_path["modeled_objects[role=rx_ssw_coil].is_ssw_enabled"] == {"integer_flag_mismatch"}
     assert codes_by_path["modeled_objects[role=tx_ssw_coil].turn_n_int"] == {"non_positive_count"}
 
 
@@ -176,7 +176,7 @@ def test_sample_ssw_fixed_tomls_generates_valid_unique_points(tmp_path: Path) ->
     assert batch.source_toml_path == SWEEP_TOML
     assert batch.reference_toml_path == SWEEP_TOML
     assert batch.output_dir == output_dir
-    assert batch.dimension_count == 29
+    assert batch.dimension_count == 22
     assert len(batch.samples) == 3
     assert len({sample.design_id for sample in batch.samples}) == 3
     for expected_index, sample in enumerate(batch.samples):
@@ -244,12 +244,7 @@ def test_sample_ssw_fixed_tomls_fails_when_constraints_cannot_be_satisfied(tmp_p
     text = FIXED_TOML.read_text(encoding="utf-8")
     text = _replace_once(
         text,
-        "[modeled_objects.turn_n_int]\nrange = [true, 3, 3, 1]",
-        "[modeled_objects.turn_n_int]\nrange = [true, 4, 4, 1]",
-    )
-    text = _replace_once(
-        text,
-        "[modeled_objects.twist_factor]\nrange = [true, 2, 2, 1]",
+        "[modeled_objects.twist_factor]\nrange = [true, 3, 3, 1]",
         "[modeled_objects.twist_factor]\nrange = [true, 2, 2, 1]",
     )
     candidate_path = _candidate(tmp_path, text)

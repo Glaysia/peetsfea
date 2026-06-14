@@ -204,31 +204,31 @@ material = "composite"
 model_state = true
 
 [modeled_objects.is_under_coil_enabled]
-range = [true, 0, 1, 2]
+range = [true, 0, 0, 1]
 description = "TX under-coil enable flag"
 
 [modeled_objects.width_ratio]
-range = [false, 0.25, 0.6, 36]
+range = [false, 0.45, 0.45, 1]
 description = "TX under-coil width ratio against fixed_dimensions.width_max_mm"
 
 [modeled_objects.height_ratio]
-range = [false, 0.25, 0.6, 36]
+range = [false, 0.25, 0.25, 1]
 description = "TX under-coil height ratio against fixed_dimensions.height_max_mm"
 
 [modeled_objects.turn_n_int]
-range = [true, 2, 6, 5]
+range = [true, 2, 2, 1]
 description = "TX under-coil spiral turn count"
 
 [modeled_objects.gap_ratio]
-range = [false, 0.1, 0.9, 50]
+range = [false, 0.44, 0.44, 1]
 description = "TX under-coil pitch 중 gap 비율"
 
 [modeled_objects.void_area_ratio]
-range = [false, 0.1, 0.9, 50]
+range = [false, 0.35, 0.35, 1]
 description = "TX under-coil 중앙 void area ratio"
 
 [modeled_objects.void_profile]
-range = [true, 0, 1, 2]
+range = [true, 1, 1, 1]
 description = "TX under-coil void profile: 0 rectangular void, 1 scaled void"
 
 [modeled_objects.no_ssw_qturn_start_int]
