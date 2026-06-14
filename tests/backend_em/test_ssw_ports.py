@@ -605,27 +605,14 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
         "Qtx_ratio",
         "Qrx_ratio",
         "FOM_ratio",
-        "Rtx_ac_ohm",
-        "Rrx_ac_ohm",
-        "Xtx_ohm",
-        "Xrx_ohm",
+        "re_Z11_ohm",
+        "im_Z11_ohm",
+        "re_Z22_ohm",
+        "im_Z22_ohm",
+        "re_Z12_ohm",
+        "im_Z12_ohm",
         "M_over_Ltx_ratio",
         "M_over_Lrx_ratio",
-        "Gtx_S",
-        "Btx_S",
-        "Grx_S",
-        "Brx_S",
-        "S11_mag_ratio",
-        "S21_mag_ratio",
-        "S21_phase_deg",
-        "S22_mag_ratio",
-        "eta_s21_power_ratio",
-        "eta_tx_accept_ratio",
-        "eta_rx_accept_ratio",
-        "eta_match_product_ratio",
-        "eta_s21_from_tx_accept_ratio",
-        "eta_s21_from_rx_accept_ratio",
-        "eta_s21_two_sided_norm_ratio",
         "eta_fom_max_ratio",
     ]
     assert hfss.create_output_variables[0] == (
@@ -633,9 +620,14 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
         "im(Zt(1_T1,1_T1))/2/pi/freq*1e6",
         "Setup1 : Sweep",
     )
-    assert hfss.create_output_variables[18] == (
-        "S21_mag_ratio",
-        "mag(St(1_T1,2_T1))",
+    assert hfss.create_output_variables[11] == (
+        "re_Z12_ohm",
+        "re(Zt(1_T1,2_T1))",
+        "Setup1 : Sweep",
+    )
+    assert hfss.create_output_variables[12] == (
+        "im_Z12_ohm",
+        "im(Zt(1_T1,2_T1))",
         "Setup1 : Sweep",
     )
     assert [call["plot_name"] for call in hfss.odesign.report_setup_module.create_report_calls] == [

@@ -106,27 +106,14 @@ _TXRX_OUTPUT_VARIABLE_EXPRESSIONS: tuple[tuple[str, str], ...] = (
     ("Qtx_ratio", "im(Zt(TX_TML,TX_TML))/re(Zt(TX_TML,TX_TML))"),
     ("Qrx_ratio", "im(Zt(RX_TML,RX_TML))/re(Zt(RX_TML,RX_TML))"),
     ("FOM_ratio", "k_ratio*sqrt(Qtx_ratio*Qrx_ratio)"),
-    ("Rtx_ac_ohm", "re(Zt(TX_TML,TX_TML))"),
-    ("Rrx_ac_ohm", "re(Zt(RX_TML,RX_TML))"),
-    ("Xtx_ohm", "im(Zt(TX_TML,TX_TML))"),
-    ("Xrx_ohm", "im(Zt(RX_TML,RX_TML))"),
+    ("re_Z11_ohm", "re(Zt(TX_TML,TX_TML))"),
+    ("im_Z11_ohm", "im(Zt(TX_TML,TX_TML))"),
+    ("re_Z22_ohm", "re(Zt(RX_TML,RX_TML))"),
+    ("im_Z22_ohm", "im(Zt(RX_TML,RX_TML))"),
+    ("re_Z12_ohm", "re(Zt(TX_TML,RX_TML))"),
+    ("im_Z12_ohm", "im(Zt(TX_TML,RX_TML))"),
     ("M_over_Ltx_ratio", "M_uH/Ltx_uH"),
     ("M_over_Lrx_ratio", "M_uH/Lrx_uH"),
-    ("Gtx_S", "re(Yt(TX_TML,TX_TML))"),
-    ("Btx_S", "im(Yt(TX_TML,TX_TML))"),
-    ("Grx_S", "re(Yt(RX_TML,RX_TML))"),
-    ("Brx_S", "im(Yt(RX_TML,RX_TML))"),
-    ("S11_mag_ratio", "mag(S(TX_TML,TX_TML))"),
-    ("S21_mag_ratio", "mag(S(TX_TML,RX_TML))"),
-    ("S21_phase_deg", "ang_deg_val(S(TX_TML,RX_TML))"),
-    ("S22_mag_ratio", "mag(S(RX_TML,RX_TML))"),
-    ("eta_s21_power_ratio", "S21_mag_ratio*S21_mag_ratio"),
-    ("eta_tx_accept_ratio", "1-S11_mag_ratio*S11_mag_ratio"),
-    ("eta_rx_accept_ratio", "1-S22_mag_ratio*S22_mag_ratio"),
-    ("eta_match_product_ratio", "eta_tx_accept_ratio*eta_rx_accept_ratio"),
-    ("eta_s21_from_tx_accept_ratio", "eta_s21_power_ratio/eta_tx_accept_ratio"),
-    ("eta_s21_from_rx_accept_ratio", "eta_s21_power_ratio/eta_rx_accept_ratio"),
-    ("eta_s21_two_sided_norm_ratio", "eta_s21_power_ratio/(eta_tx_accept_ratio*eta_rx_accept_ratio)"),
     (
         "eta_fom_max_ratio",
         "(FOM_ratio*FOM_ratio)/((1+sqrt(1+FOM_ratio*FOM_ratio))*(1+sqrt(1+FOM_ratio*FOM_ratio)))",
@@ -1036,22 +1023,10 @@ def _report_setup_module(hfss: HfssSession) -> ReportSetupModuleSession:
     return cast(ReportSetupModuleSession, raw_module)
 
 
-def _s_function_for_reports(*, hfss: HfssSession) -> str:
-    traces = hfss.get_traces_for_plot(True, True, "", "", "S(", ())
-    if len(traces) == 0:
-        raise ValueError("HFSS did not return terminal S-parameter traces for SSW report generation")
-    if any(trace.startswith("St(") for trace in traces):
-        return "St"
-    if any(trace.startswith("S(") for trace in traces):
-        return "S"
-    raise ValueError(f"HFSS traces did not expose S or St terminal function names (traces={traces})")
-
-
-def _txrx_output_variables(*, tx_port: str, rx_port: str, s_function: str) -> list[tuple[str, str]]:
+def _txrx_output_variables(*, tx_port: str, rx_port: str) -> list[tuple[str, str]]:
     variables: list[tuple[str, str]] = []
     for name, raw_expression in _TXRX_OUTPUT_VARIABLE_EXPRESSIONS:
         expression = raw_expression.replace("TX_TML", tx_port).replace("RX_TML", rx_port)
-        expression = expression.replace("S(", f"{s_function}(")
         variables.append((name, expression))
     return variables
 
@@ -1111,8 +1086,7 @@ def _create_reports(
         raise ValueError(f"SSW reports require exactly one TX and one RX port (ports={ports})")
     tx_port = tx_ports[0]
     rx_port = rx_ports[0]
-    s_function = _s_function_for_reports(hfss=hfss)
-    variables = _txrx_output_variables(tx_port=tx_port, rx_port=rx_port, s_function=s_function)
+    variables = _txrx_output_variables(tx_port=tx_port, rx_port=rx_port)
     output_variable_names = [name for name, _expression in variables]
     solution_name = f"{SETUP_NAME} : {SWEEP_NAME}"
     for name, expression in variables:
