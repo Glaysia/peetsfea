@@ -10,6 +10,7 @@ import tomllib
 import cadquery as cq
 
 from peetsfea import coilmaker
+from peetsfea.console_log import log_call_duration
 from peetsfea.ssw_step_constraints import (
     SswConstraintCoil,
     SswConstraintRule,
@@ -432,6 +433,7 @@ def _constraint_coils_from_spec(spec: SswFixedSpec) -> tuple[SswConstraintCoil, 
     )
 
 
+@log_call_duration
 def load_ssw_fixed_spec(toml_path: Path) -> SswFixedSpec:
     raw_spec = tomllib.loads(toml_path.read_text(encoding="utf-8"))
     root = _require_table(raw_spec, toml_path.name)
@@ -927,6 +929,7 @@ def _rx_yz_back_port_orientation() -> cq.Location:
     return rotate_x * rotate_y
 
 
+@log_call_duration
 def _coilmaker_assembly(params: SswCoilParameters, fixed: FixedDimensions) -> cq.Assembly:
     return coilmaker.build_assembly(_coilmaker_config(params, fixed))
 
@@ -1539,6 +1542,7 @@ def _mull_ferrite_action_token(
     )
 
 
+@log_call_duration
 def _scene_action_trace(
     *,
     spec: SswFixedSpec,
@@ -1704,6 +1708,7 @@ def action_trace_to_toml(
     return "\n".join(lines)
 
 
+@log_call_duration
 def write_coil_making_token_toml(
     *,
     token_toml_path: Path,
@@ -1720,6 +1725,7 @@ def write_coil_making_token_toml(
     _require_table(parsed, str(token_toml_path))
 
 
+@log_call_duration
 def build_ssw_body_boxes(spec: SswFixedSpec) -> tuple[_BodyBox, ...]:
     tx_boxes = _coilmaker_child_bodies(spec=spec, params=spec.tx)
     tx_under_boxes = (
@@ -1739,6 +1745,7 @@ def _workplane_from_box(body: _BodyBox) -> cq.Workplane:
     return cq.Workplane("XY").box(*body.size_xyz).translate(body.center_xyz)
 
 
+@log_call_duration
 def build_ssw_assembly(spec: SswFixedSpec) -> cq.Assembly:
     assembly = cq.Assembly(name="ssw_0_3_0_fixed")
     body_boxes = build_ssw_body_boxes(spec)
@@ -1781,6 +1788,7 @@ def _body_entry(body: _BodyBox) -> BodyLedgerEntry:
     }
 
 
+@log_call_duration
 def _build_ledger(
     *,
     spec: SswFixedSpec,
@@ -1804,6 +1812,7 @@ def _build_ledger(
     }
 
 
+@log_call_duration
 def write_ssw_step_ledger(*, ledger_path: Path, ledger: SswStepLedger) -> None:
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
     ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -1831,6 +1840,12 @@ def load_ssw_step_ledger(ledger_path: Path) -> SswStepLedger:
     return cast(SswStepLedger, raw_ledger)
 
 
+@log_call_duration
+def _save_ssw_scene_step(*, assembly: cq.Assembly, scene_step_path: Path) -> None:
+    assembly.save(str(scene_step_path), exportType="STEP")
+
+
+@log_call_duration
 def export_ssw_step_artifacts(
     *,
     source_toml_path: Path = DEFAULT_SOURCE_TOML_PATH,
@@ -1857,7 +1872,7 @@ def export_ssw_step_artifacts(
         seed=seed,
     )
     assembly = build_ssw_assembly(spec)
-    assembly.save(str(scene_step_path), exportType="STEP")
+    _save_ssw_scene_step(assembly=assembly, scene_step_path=scene_step_path)
     if not scene_step_path.is_file() or scene_step_path.stat().st_size <= 0:
         raise RuntimeError(f"CadQuery STEP export failed for SSW scene: {scene_step_path}")
     ledger = _build_ledger(

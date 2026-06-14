@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextvars import ContextVar
+from datetime import datetime
 from functools import wraps
 import json
 import os
@@ -12,6 +13,7 @@ from typing import ParamSpec, TypeVar
 
 
 _PEETSFEA_INFO_RGB = (46, 111, 172)
+_PEETSFEA_TIMING_RGB = (190, 80, 255)
 _ANSI_RESET = "\033[0m"
 _CALL_DEPTH: ContextVar[int] = ContextVar("peetsfea_log_call_depth", default=0)
 
@@ -20,7 +22,7 @@ R = TypeVar("R")
 
 
 def _supports_color(stream: TextIO) -> bool:
-    if os.environ.get("NO_COLOR") is not None:
+    if os.environ.get("NO_COLOR", "") != "":
         return False
     if os.environ.get("TERM", "") == "dumb":
         return False
@@ -33,6 +35,14 @@ def _colorize(text: str, *, rgb: tuple[int, int, int], stream: TextIO) -> str:
     return f"\033[38;2;{rgb[0]};{rgb[1]};{rgb[2]}m{text}{_ANSI_RESET}"
 
 
+def _colorize_timing(text: str, *, rgb: tuple[int, int, int]) -> str:
+    if os.environ.get("NO_COLOR", "") != "":
+        return text
+    if os.environ.get("TERM", "") == "dumb":
+        return text
+    return f"\033[38;2;{rgb[0]};{rgb[1]};{rgb[2]}m{text}{_ANSI_RESET}"
+
+
 def _emit(level: str, message: str, *, stream: TextIO) -> None:
     prefix = _colorize(f"PeetsFEA {level}:", rgb=_PEETSFEA_INFO_RGB, stream=stream)
     stream.write(f"{prefix} {message}\n")
@@ -40,7 +50,7 @@ def _emit(level: str, message: str, *, stream: TextIO) -> None:
 
 
 def _emit_timing(message: str) -> None:
-    line = _colorize(f"PeetsFEA INFO: {message}", rgb=_PEETSFEA_INFO_RGB, stream=sys.stdout)
+    line = _colorize_timing(f"PeetsFEA INFO: {message}", rgb=_PEETSFEA_TIMING_RGB)
     sys.stdout.write(f"{line}\n")
     sys.stdout.flush()
 
@@ -72,7 +82,10 @@ def log_call_duration(func: Callable[P, R]) -> Callable[P, R]:
             return func(*args, **kwargs)
         finally:
             elapsed_ms = (perf_counter() - start) * 1000.0
+            ended_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
             _CALL_DEPTH.reset(token)
-            _emit_timing(f"stack={depth} func={func.__module__}.{func.__qualname__} elapsed_ms={elapsed_ms:.3f}")
+            _emit_timing(
+                f"time={ended_at} stack={depth} func={func.__module__}.{func.__qualname__} elapsed_ms={elapsed_ms:.3f}"
+            )
 
     return wrapper
