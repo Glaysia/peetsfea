@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from collections.abc import Sequence
-from typing import Callable, Literal, TypeAlias, TypedDict, cast
+from typing import Callable, Literal, Protocol, TypeAlias, TypedDict, cast
 
 from peetsfea.aedt import Hfss
 from peetsfea.aedt.failfast import raise_on_false
@@ -15,8 +15,9 @@ from peetsfea.aedt.protocols import (
     MeshModuleSession,
     ModelerSession,
     ReportSetupModuleSession,
+    SolutionsModuleSession,
 )
-from peetsfea.aedt.proxies import assign_lumped_port, set_object_color, set_object_transparency
+from peetsfea.aedt.proxies import assign_lumped_port, edit_sources, set_object_color, set_object_transparency
 
 DEFAULT_LEDGER_PATH = Path(__file__).resolve().parents[4] / "run" / "ssw_0_3_0_fixed" / "ssw_aedt_port_ledger.json"
 COPPER_COLOR = (184, 115, 51)
@@ -95,8 +96,13 @@ SWEEP_RANGE_END = "100MHz"
 SWEEP_RANGE_COUNT = 81
 RADIATION_MARGIN_MM = 2000.0
 REPORT_NAME = "Output Variables Table1"
+SOLID_LOSS_REPORT_NAME = "Solid Loss Table1"
 DIAGNOSTIC_TABLE_1_NAME = "Table1"
 DIAGNOSTIC_TABLE_2_NAME = "Table2"
+TX_SOURCE_MAGNITUDE = "100V"
+TX_SOURCE_PHASE = "0deg"
+RX_SOURCE_MAGNITUDE = "100V"
+RX_SOURCE_PHASE = "90deg"
 
 _TXRX_OUTPUT_VARIABLE_EXPRESSIONS: tuple[tuple[str, str], ...] = (
     ("Ltx_uH", "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"),
@@ -125,6 +131,18 @@ HfssFactory = Callable[[str], HfssSession]
 PortRole = Literal["tx", "rx"]
 BoundaryPayloadName = Literal["NAME:1", "NAME:2"]
 ExpectedTerminalName = Literal["1_T1", "2_T1"]
+
+
+class FieldsReporterSession(Protocol):
+    def CalcStack(self, command: str) -> object: ...
+
+    def CopyNamedExprToStack(self, expression_name: str) -> object: ...
+
+    def EnterVol(self, assignment: str) -> object: ...
+
+    def CalcOp(self, operation: str) -> object: ...
+
+    def AddNamedExpression(self, expression_name: str, field_type: str) -> object: ...
 
 
 class CanonicalCoordinates(TypedDict):
@@ -214,6 +232,15 @@ class SswAedtFrequencySweepSummary(TypedDict):
     sweep_type: str
 
 
+class SswAedtSourcesSummary(TypedDict):
+    tx_source_name: str
+    tx_magnitude: str
+    tx_phase_deg: str
+    rx_source_name: str
+    rx_magnitude: str
+    rx_phase_deg: str
+
+
 class SswAedtBoundarySummary(TypedDict):
     type: Literal["radiation"]
     offset_type: str
@@ -226,7 +253,9 @@ class SswAedtBoundarySummary(TypedDict):
 class SswAedtReportsSummary(TypedDict):
     report_names: list[str]
     output_variable_names: list[str]
+    solid_loss_expression_names: list[str]
     output_solution_name: str
+    solid_loss_solution_name: str
     diagnostic_report_names: list[str]
 
 
@@ -252,6 +281,7 @@ class SswAedtImportedLedger(SswAedtImportedLedgerBase):
     boundary: SswAedtBoundarySummary
     analysis_setup: SswAedtAnalysisSetupSummary
     frequency_sweep: SswAedtFrequencySweepSummary
+    sources: SswAedtSourcesSummary
     reports: SswAedtReportsSummary
 
 
@@ -276,6 +306,7 @@ class SswAedtPortSetupResult(TypedDict):
     boundary: SswAedtBoundarySummary
     analysis_setup: SswAedtAnalysisSetupSummary
     frequency_sweep: SswAedtFrequencySweepSummary
+    sources: SswAedtSourcesSummary
     reports: SswAedtReportsSummary
 
 
@@ -387,6 +418,28 @@ def _assign_object_material(*, hfss: HfssSession, modeler: ModelerSession, objec
             f"(object_name={object_name}, expected={material!r}, actual={assigned_material!r})"
         )
     return assigned_material
+
+
+def _set_imported_object_solve_inside(*, modeler: ModelerSession, object_name: str, solve_inside: bool) -> None:
+    imported_object = raise_on_false(
+        modeler.get_object_from_name(object_name),
+        operation="get_object_from_name",
+        context={"object_name": object_name},
+    )
+    assert hasattr(imported_object, "solve_inside"), (
+        f"Imported AEDT object must expose solve_inside before solve-inside assignment (object_name={object_name})"
+    )
+    raw_imported_object = _unwrap_raw(imported_object, context=f"modeler.get_object_from_name({object_name})")
+    setattr(raw_imported_object, "solve_inside", solve_inside)
+    assigned_solve_inside = object.__getattribute__(raw_imported_object, "solve_inside")
+    assert isinstance(assigned_solve_inside, bool), (
+        f"Imported AEDT object solve_inside must read back as bool (object_name={object_name})"
+    )
+    if assigned_solve_inside is not solve_inside:
+        raise RuntimeError(
+            "AEDT object solve_inside assignment did not stick "
+            f"(object_name={object_name}, expected={solve_inside!r}, actual={assigned_solve_inside!r})"
+        )
 
 
 def _set_material_property(material: object, *, material_name: str, attr_name: str, attr_value: str) -> None:
@@ -705,6 +758,8 @@ def _assign_body_materials(
             object_name=object_name,
             material=assignment_material,
         )
+        if material == "copper":
+            _set_imported_object_solve_inside(modeler=modeler, object_name=object_name, solve_inside=True)
     return material_assignments
 
 
@@ -1047,10 +1102,80 @@ def _ssw_geometry_diagnostic_traces(
     return traces
 
 
+def _solid_loss_expression_name(object_name: str) -> str:
+    return f"loss_W_{object_name}"
+
+
+def _solid_loss_target_names(
+    *,
+    imported_ledger: SswAedtImportedLedgerBase,
+    boundary: SswAedtBoundarySummary,
+) -> list[str]:
+    material_assigned_names = set(imported_ledger["material_assignments"])
+    non_model_names = set(imported_ledger["non_model_body_names"])
+    targets: list[str] = []
+    for object_name in imported_ledger["imported_object_names"]:
+        if object_name in material_assigned_names and object_name not in non_model_names:
+            targets.append(object_name)
+    targets.append(boundary["region_name"])
+    return targets
+
+
+def _fields_reporter(hfss: HfssSession) -> FieldsReporterSession:
+    raw_module = _design(hfss).GetModule("FieldsReporter")
+    assert hasattr(raw_module, "CalcStack"), "FieldsReporter module must expose CalcStack"
+    assert hasattr(raw_module, "CopyNamedExprToStack"), "FieldsReporter module must expose CopyNamedExprToStack"
+    assert hasattr(raw_module, "EnterVol"), "FieldsReporter module must expose EnterVol"
+    assert hasattr(raw_module, "CalcOp"), "FieldsReporter module must expose CalcOp"
+    assert hasattr(raw_module, "AddNamedExpression"), "FieldsReporter module must expose AddNamedExpression"
+    return cast(FieldsReporterSession, raw_module)
+
+
+def _create_one_solid_loss_expression(
+    *,
+    fields_reporter: FieldsReporterSession,
+    object_name: str,
+    expression_name: str,
+) -> None:
+    raise_on_false(fields_reporter.CalcStack("clear"), operation="CalcStack", context={"command": "clear"})
+    raise_on_false(
+        fields_reporter.CopyNamedExprToStack("Volume_Loss_Density"),
+        operation="CopyNamedExprToStack",
+        context={"expression_name": "Volume_Loss_Density"},
+    )
+    raise_on_false(fields_reporter.EnterVol(object_name), operation="EnterVol", context={"object_name": object_name})
+    raise_on_false(fields_reporter.CalcOp("Integrate"), operation="CalcOp", context={"operation": "Integrate"})
+    raise_on_false(
+        fields_reporter.AddNamedExpression(expression_name, "Fields"),
+        operation="AddNamedExpression",
+        context={"expression_name": expression_name, "field_type": "Fields"},
+    )
+
+
+def _create_solid_loss_expressions(
+    *,
+    hfss: HfssSession,
+    imported_ledger: SswAedtImportedLedgerBase,
+    boundary: SswAedtBoundarySummary,
+) -> list[str]:
+    fields_reporter = _fields_reporter(hfss)
+    expression_names: list[str] = []
+    for object_name in _solid_loss_target_names(imported_ledger=imported_ledger, boundary=boundary):
+        expression_name = _solid_loss_expression_name(object_name)
+        _create_one_solid_loss_expression(
+            fields_reporter=fields_reporter,
+            object_name=object_name,
+            expression_name=expression_name,
+        )
+        expression_names.append(expression_name)
+    return expression_names
+
+
 def _create_one_report(
     *,
     report_setup: ReportSetupModuleSession,
     report_name: str,
+    report_category: str,
     solution_name: str,
     context: list[object],
     variations: list[object],
@@ -1060,7 +1185,7 @@ def _create_one_report(
     raise_on_false(
         report_setup.CreateReport(
             report_name,
-            "Terminal Solution Data",
+            report_category,
             "Data Table",
             solution_name,
             context,
@@ -1069,7 +1194,7 @@ def _create_one_report(
             [],
         ),
         operation="CreateReport",
-        context={"report_name": report_name, "solution_name": solution_name},
+        context={"report_name": report_name, "report_category": report_category, "solution_name": solution_name},
     )
 
 
@@ -1089,16 +1214,23 @@ def _create_reports(
     variables = _txrx_output_variables(tx_port=tx_port, rx_port=rx_port)
     output_variable_names = [name for name, _expression in variables]
     solution_name = f"{SETUP_NAME} : {SWEEP_NAME}"
+    solid_loss_solution_name = f"{SETUP_NAME} : LastAdaptive"
     for name, expression in variables:
         raise_on_false(
             hfss.create_output_variable(variable=name, expression=expression, solution=solution_name),
             operation="create_output_variable",
             context={"name": name, "expression": expression, "solution": solution_name},
         )
+    solid_loss_expression_names = _create_solid_loss_expressions(
+        hfss=hfss,
+        imported_ledger=imported_ledger,
+        boundary=boundary,
+    )
     report_setup = _report_setup_module(hfss)
     _create_one_report(
         report_setup=report_setup,
         report_name=REPORT_NAME,
+        report_category="Terminal Solution Data",
         solution_name=solution_name,
         context=["Domain:=", "Sweep"],
         variations=["Freq:=", ["All"]],
@@ -1107,7 +1239,18 @@ def _create_reports(
     )
     _create_one_report(
         report_setup=report_setup,
+        report_name=SOLID_LOSS_REPORT_NAME,
+        report_category="Fields",
+        solution_name=solid_loss_solution_name,
+        context=[],
+        variations=["Freq:=", ["All"]],
+        traces=solid_loss_expression_names,
+        primary_sweep="Freq",
+    )
+    _create_one_report(
+        report_setup=report_setup,
         report_name=DIAGNOSTIC_TABLE_1_NAME,
+        report_category="Terminal Solution Data",
         solution_name=f"{SETUP_NAME} : LastAdaptive",
         context=[],
         variations=["Freq:=", ["All"]],
@@ -1120,6 +1263,7 @@ def _create_reports(
     _create_one_report(
         report_setup=report_setup,
         report_name=DIAGNOSTIC_TABLE_2_NAME,
+        report_category="Terminal Solution Data",
         solution_name=f"{SETUP_NAME} : AdaptivePass",
         context=[],
         variations=["Pass:=", ["All"], "Freq:=", ["All"]],
@@ -1127,16 +1271,18 @@ def _create_reports(
         primary_sweep="Pass",
     )
     report_names = set(report_setup.GetAllReportNames())
-    expected_report_names = {REPORT_NAME, DIAGNOSTIC_TABLE_1_NAME, DIAGNOSTIC_TABLE_2_NAME}
+    expected_report_names = {REPORT_NAME, SOLID_LOSS_REPORT_NAME, DIAGNOSTIC_TABLE_1_NAME, DIAGNOSTIC_TABLE_2_NAME}
     if not expected_report_names.issubset(report_names):
         raise ValueError(
             "SSW report creation did not register required reports "
             f"(missing={sorted(expected_report_names.difference(report_names))}, available={sorted(report_names)})"
         )
     return {
-        "report_names": [REPORT_NAME, DIAGNOSTIC_TABLE_1_NAME, DIAGNOSTIC_TABLE_2_NAME],
+        "report_names": [REPORT_NAME, SOLID_LOSS_REPORT_NAME, DIAGNOSTIC_TABLE_1_NAME, DIAGNOSTIC_TABLE_2_NAME],
         "output_variable_names": output_variable_names,
+        "solid_loss_expression_names": solid_loss_expression_names,
         "output_solution_name": solution_name,
+        "solid_loss_solution_name": solid_loss_solution_name,
         "diagnostic_report_names": [DIAGNOSTIC_TABLE_1_NAME, DIAGNOSTIC_TABLE_2_NAME],
     }
 
@@ -1475,6 +1621,39 @@ def _assign_ports(*, hfss: HfssSession, ledger: SswAedtPortStepLedger) -> SswAed
     }
 
 
+def _apply_sources(*, hfss: HfssSession, ports: SswAedtPorts) -> SswAedtSourcesSummary:
+    tx_source_name = ports["tx"][0]
+    rx_source_name = ports["rx"][0]
+    raw_solutions = _design(hfss).GetModule("Solutions")
+    assert hasattr(raw_solutions, "EditSources"), "Solutions module must expose EditSources"
+    solutions = cast(SolutionsModuleSession, raw_solutions)
+    edit_sources(
+        solutions,
+        payload=[
+            [
+                "UseIncidentVoltage:=",
+                True,
+                "IncludePortPostProcessing:=",
+                False,
+                "UseElementPatternMode:=",
+                False,
+                "SpecifySystemPower:=",
+                False,
+            ],
+            ["Name:=", tx_source_name, "Magnitude:=", TX_SOURCE_MAGNITUDE, "Phase:=", TX_SOURCE_PHASE],
+            ["Name:=", rx_source_name, "Magnitude:=", RX_SOURCE_MAGNITUDE, "Phase:=", RX_SOURCE_PHASE],
+        ],
+    )
+    return {
+        "tx_source_name": tx_source_name,
+        "tx_magnitude": TX_SOURCE_MAGNITUDE,
+        "tx_phase_deg": TX_SOURCE_PHASE,
+        "rx_source_name": rx_source_name,
+        "rx_magnitude": RX_SOURCE_MAGNITUDE,
+        "rx_phase_deg": RX_SOURCE_PHASE,
+    }
+
+
 def _write_imported_ledger(*, imported_ledger_path: Path, imported_ledger: SswAedtImportedLedger) -> None:
     imported_ledger_path.parent.mkdir(parents=True, exist_ok=True)
     imported_ledger_path.write_text(json.dumps(imported_ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -1497,6 +1676,7 @@ def setup_ssw_aedt_ports_into_hfss(
     )
     boundary = _build_boundary(hfss=hfss, modeler=hfss.modeler)
     ports = _assign_ports(hfss=hfss, ledger=ledger)
+    sources = _apply_sources(hfss=hfss, ports=ports)
     analysis_setup, frequency_sweep = _insert_recorded_setup_and_sweep(hfss=hfss)
     reports = _create_reports(hfss=hfss, ports=ports, imported_ledger=imported_base_ledger, boundary=boundary)
     imported_ledger: SswAedtImportedLedger = {
@@ -1518,6 +1698,7 @@ def setup_ssw_aedt_ports_into_hfss(
         "boundary": boundary,
         "analysis_setup": analysis_setup,
         "frequency_sweep": frequency_sweep,
+        "sources": sources,
         "reports": reports,
     }
     raise_on_false(hfss.save_project(str(output_aedt_path)), operation="save_project", context={"path": str(output_aedt_path)})
@@ -1538,6 +1719,7 @@ def setup_ssw_aedt_ports_into_hfss(
         "boundary": imported_ledger["boundary"],
         "analysis_setup": imported_ledger["analysis_setup"],
         "frequency_sweep": imported_ledger["frequency_sweep"],
+        "sources": imported_ledger["sources"],
         "reports": imported_ledger["reports"],
     }
 

@@ -57,7 +57,7 @@ range = [false, 180.0, 180.0, 1]
 description = "Maximum coil height(mm)"
 
 [fixed_dimensions.tx_rx_min_distance_mm]
-range = [false, 50.0, 50.0, 1]
+range = [false, 100.0, 100.0, 1]
 description = "Minimum edge-to-edge distance between TX and RX coils(mm)"
 
 [fixed_dimensions.mull_ferrite_thickness_mm]
@@ -156,7 +156,7 @@ range = [true, 1, 1, 1]
 description = "TX SSW enable flag"
 
 [modeled_objects.turn_n_int]
-range = [true, 6, 6, 1]
+range = [true, 2, 2, 1]
 description = "TX SSW band count"
 
 [modeled_objects.gap_ratio]
@@ -194,7 +194,7 @@ material = "composite"
 model_state = true
 
 [modeled_objects.is_under_coil_enabled]
-range = [true, 1, 1, 1]
+range = [true, 0, 0, 1]
 description = "TX under-coil enable flag"
 
 [modeled_objects.width_ratio]

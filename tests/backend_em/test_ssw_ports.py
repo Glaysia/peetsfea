@@ -126,6 +126,8 @@ class _FakeDesign:
         self.mesh_module = _FakeMeshModule()
         self.analysis_setup_module = _FakeAnalysisSetupModule()
         self.report_setup_module = _FakeReportSetupModule()
+        self.solutions_module = _FakeSolutionsModule()
+        self.fields_reporter_module = _FakeFieldsReporterModule()
 
     def ImportDataset(self, path: str) -> object:
         self.import_dataset_calls.append(path)
@@ -138,6 +140,10 @@ class _FakeDesign:
             return self.analysis_setup_module
         if name == "ReportSetup":
             return self.report_setup_module
+        if name == "Solutions":
+            return self.solutions_module
+        if name == "FieldsReporter":
+            return self.fields_reporter_module
         raise ValueError(f"unsupported fake module {name!r}")
 
     def ValidateDesign(self) -> object:
@@ -168,6 +174,16 @@ class _FakeAnalysisSetupModule:
     def InsertFrequencySweep(self, setup_name: str, props: list[object]) -> object:
         self.insert_sweep_calls.append((setup_name, list(props)))
         return self.insert_sweep_result
+
+
+class _FakeSolutionsModule:
+    def __init__(self) -> None:
+        self.edit_sources_calls: list[list[object]] = []
+        self.edit_sources_result: object = True
+
+    def EditSources(self, payload: list[object]) -> object:
+        self.edit_sources_calls.append(list(payload))
+        return self.edit_sources_result
 
 
 class _FakeReportSetupModule:
@@ -207,10 +223,39 @@ class _FakeReportSetupModule:
         return [cast(str, call["plot_name"]) for call in self.create_report_calls]
 
 
+class _FakeFieldsReporterModule:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, object]] = []
+        self.add_named_expression_result: object = True
+
+    def CalcStack(self, command: str) -> object:
+        self.calls.append(("CalcStack", command))
+        return True
+
+    def CopyNamedExprToStack(self, expression_name: str) -> object:
+        self.calls.append(("CopyNamedExprToStack", expression_name))
+        return True
+
+    def EnterVol(self, assignment: str) -> object:
+        self.calls.append(("EnterVol", assignment))
+        return True
+
+    def CalcOp(self, operation: str) -> object:
+        self.calls.append(("CalcOp", operation))
+        return True
+
+    def AddNamedExpression(self, expression_name: str, field_type: str) -> object:
+        self.calls.append(("AddNamedExpression", (expression_name, field_type)))
+        if self.add_named_expression_result is False:
+            return False
+        return True
+
+
 class _FakeModelObject:
     def __init__(self, name: str) -> None:
         self.name = name
         self.material_name = ""
+        self.solve_inside = False
         self.color: tuple[int, int, int] = (0, 0, 0)
         self.transparency = 0.0
 
@@ -503,6 +548,12 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert hfss.assign_material_calls == [
         (body_name, expected_material_assignments[body_name]) for body_name in ledger["body_names"]
     ]
+    tx_copper_object = cast(_FakeModelObject, hfss.modeler.get_object_from_name("tx_ssw_coil_ssw_copper"))
+    rx_copper_object = cast(_FakeModelObject, hfss.modeler.get_object_from_name("rx_ssw_coil_coil_copper"))
+    fr4_object = cast(_FakeModelObject, hfss.modeler.get_object_from_name("tx_ssw_coil_pcb_1_fr4"))
+    assert tx_copper_object.solve_inside is True
+    assert rx_copper_object.solve_inside is True
+    assert fr4_object.solve_inside is False
     mesh_payload = hfss.odesign.mesh_module.assign_length_calls[0]
     assert mesh_payload[mesh_payload.index("Objects:=") + 1] == [
         "rx_ssw_coil_coil_copper",
@@ -560,6 +611,30 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
         ],
     ]
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
+    assert hfss.odesign.solutions_module.edit_sources_calls == [
+        [
+            [
+                "UseIncidentVoltage:=",
+                True,
+                "IncludePortPostProcessing:=",
+                False,
+                "UseElementPatternMode:=",
+                False,
+                "SpecifySystemPower:=",
+                False,
+            ],
+            ["Name:=", "1_T1", "Magnitude:=", "100V", "Phase:=", "0deg"],
+            ["Name:=", "2_T1", "Magnitude:=", "100V", "Phase:=", "90deg"],
+        ]
+    ]
+    assert result["sources"] == {
+        "tx_source_name": "1_T1",
+        "tx_magnitude": "100V",
+        "tx_phase_deg": "0deg",
+        "rx_source_name": "2_T1",
+        "rx_magnitude": "100V",
+        "rx_phase_deg": "90deg",
+    }
     assert result["design_id"] == ledger["design_id"]
     assert result["aedt_filename"] == ledger["aedt_filename"]
     assert result["dimension_count"] == ledger["dimension_count"]
@@ -632,6 +707,7 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     )
     assert [call["plot_name"] for call in hfss.odesign.report_setup_module.create_report_calls] == [
         "Output Variables Table1",
+        "Solid Loss Table1",
         "Table1",
         "Table2",
     ]
@@ -639,21 +715,63 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert output_report_components[output_report_components.index("Y Component:=") + 1] == [
         name for name, _expression, _solution in hfss.create_output_variables
     ]
-    diagnostic_components = cast(list[object], hfss.odesign.report_setup_module.create_report_calls[1]["components"])
+    solid_loss_reporter_calls = hfss.odesign.fields_reporter_module.calls
+    solid_loss_names = [
+        expression_name
+        for operation, payload in solid_loss_reporter_calls
+        if operation == "AddNamedExpression"
+        for expression_name, field_type in [cast(tuple[str, str], payload)]
+        if field_type == "Fields"
+    ]
+    assert set(solid_loss_names) == {
+        "loss_W_rx_ssw_coil_coil_copper",
+        "loss_W_tx_mull_ferrite_sheet",
+        "loss_W_tx_ssw_coil_pcb_1_fr4",
+        "loss_W_tx_ssw_coil_ssw_copper",
+        "loss_W_Region_Abs_2000mm",
+    }
+    assert {cast(str, payload) for operation, payload in solid_loss_reporter_calls if operation == "EnterVol"} == {
+        "rx_ssw_coil_coil_copper",
+        "tx_mull_ferrite_sheet",
+        "tx_ssw_coil_pcb_1_fr4",
+        "tx_ssw_coil_ssw_copper",
+        "Region_Abs_2000mm",
+    }
+    assert [payload for operation, payload in solid_loss_reporter_calls if operation == "CopyNamedExprToStack"] == [
+        "Volume_Loss_Density",
+        "Volume_Loss_Density",
+        "Volume_Loss_Density",
+        "Volume_Loss_Density",
+        "Volume_Loss_Density",
+    ]
+    assert [payload for operation, payload in solid_loss_reporter_calls if operation == "CalcOp"] == [
+        "Integrate",
+        "Integrate",
+        "Integrate",
+        "Integrate",
+        "Integrate",
+    ]
+    solid_loss_components = cast(list[object], hfss.odesign.report_setup_module.create_report_calls[1]["components"])
+    assert solid_loss_components[solid_loss_components.index("Y Component:=") + 1] == solid_loss_names
+    assert hfss.odesign.report_setup_module.create_report_calls[1]["report_category"] == "Fields"
+    assert hfss.odesign.report_setup_module.create_report_calls[1]["setup_sweep_name"] == "Setup1 : LastAdaptive"
+    diagnostic_components = cast(list[object], hfss.odesign.report_setup_module.create_report_calls[2]["components"])
     diagnostic_traces = cast(list[str], diagnostic_components[diagnostic_components.index("Y Component:=") + 1])
     assert "Volume(tv)" in diagnostic_traces
     assert "Volume(tx_mull_ferrite_sheet)" in diagnostic_traces
     assert "Volume(tx_ssw_coil_ssw_copper)" in diagnostic_traces
     assert "Volume(Region_Abs_2000mm)" in diagnostic_traces
-    adaptive_components = cast(list[object], hfss.odesign.report_setup_module.create_report_calls[2]["components"])
+    adaptive_components = cast(list[object], hfss.odesign.report_setup_module.create_report_calls[3]["components"])
     assert adaptive_components[adaptive_components.index("X Component:=") + 1] == "Pass"
     adaptive_traces = cast(list[str], adaptive_components[adaptive_components.index("Y Component:=") + 1])
     assert adaptive_traces[-2:] == ["SolvedElements", "MaxMagDeltaS"]
-    assert result["reports"]["report_names"] == ["Output Variables Table1", "Table1", "Table2"]
+    assert result["reports"]["report_names"] == ["Output Variables Table1", "Solid Loss Table1", "Table1", "Table2"]
     assert result["reports"]["output_solution_name"] == "Setup1 : Sweep"
+    assert result["reports"]["solid_loss_solution_name"] == "Setup1 : LastAdaptive"
     assert result["reports"]["output_variable_names"] == [
         name for name, _expression, _solution in hfss.create_output_variables
     ]
+    assert result["reports"]["solid_loss_expression_names"] == solid_loss_names
     assert hfss.saved_paths == [str(tmp_path / "ssw_ports.aedt")]
     imported = json.loads((tmp_path / "ssw_imported.json").read_text(encoding="utf-8"))
     assert imported["design_id"] == ledger["design_id"]
@@ -668,6 +786,7 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert imported["boundary"] == result["boundary"]
     assert imported["analysis_setup"] == result["analysis_setup"]
     assert imported["frequency_sweep"] == result["frequency_sweep"]
+    assert imported["sources"] == result["sources"]
     assert imported["reports"] == result["reports"]
     assert "port_sheet_names" not in imported
     assert "tx_aedt_port_sheet" not in imported["visual_assignments"]
@@ -818,6 +937,34 @@ def test_setup_ssw_aedt_ports_into_hfss_raises_on_port_assignment_false(tmp_path
         )
 
 
+def test_setup_ssw_aedt_ports_into_hfss_raises_on_source_edit_false(tmp_path: Path) -> None:
+    ledger_path = _ledger_path(tmp_path)
+    hfss = _FakeHfss(_ledger(tmp_path))
+    hfss.odesign.solutions_module.edit_sources_result = False
+
+    with pytest.raises(RuntimeError, match="EditSources"):
+        setup_ssw_aedt_ports_into_hfss(
+            hfss=cast(HfssSession, hfss),
+            port_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "ssw_ports.aedt",
+            imported_ledger_path=tmp_path / "ssw_imported.json",
+        )
+
+
+def test_setup_ssw_aedt_ports_into_hfss_raises_on_solid_loss_expression_false(tmp_path: Path) -> None:
+    ledger_path = _ledger_path(tmp_path)
+    hfss = _FakeHfss(_ledger(tmp_path))
+    hfss.odesign.fields_reporter_module.add_named_expression_result = False
+
+    with pytest.raises(RuntimeError, match="AddNamedExpression"):
+        setup_ssw_aedt_ports_into_hfss(
+            hfss=cast(HfssSession, hfss),
+            port_ledger_path=ledger_path,
+            output_aedt_path=tmp_path / "ssw_ports.aedt",
+            imported_ledger_path=tmp_path / "ssw_imported.json",
+        )
+
+
 def test_setup_ssw_aedt_ports_can_leave_graphical_desktop_open(tmp_path: Path) -> None:
     ledger_path = _ledger_path(tmp_path)
     hfss = _FakeHfss(_ledger(tmp_path))
@@ -855,7 +1002,7 @@ def test_setup_ssw_aedt_ports_runs_real_headless_ansys() -> None:
     assert result["ports"] == {"tx": ["1_T1"], "rx": ["2_T1"]}
     assert result["design_id"] == ledger["design_id"]
     assert result["aedt_filename"] == ledger["aedt_filename"]
-    assert result["dimension_count"] == 29
+    assert result["dimension_count"] == ledger["dimension_count"]
     assert result["design_space_hash"] == ledger["design_space_hash"]
     assert Path(result["aedt_path"]).is_file()
     assert Path(result["imported_ledger_path"]).is_file()
@@ -864,13 +1011,14 @@ def test_setup_ssw_aedt_ports_runs_real_headless_ansys() -> None:
     assert imported["aedt_filename"] == ledger["aedt_filename"]
     assert imported["design_space_hash"] == ledger["design_space_hash"]
     assert "port_sheet_names" not in imported
-    assert "tx_ssw_coil_ssw_copper" in imported["copper_body_names"]
-    assert "tx_under_coil_coil_copper" in imported["copper_body_names"]
-    assert "rx_ssw_coil_coil_copper" in imported["copper_body_names"]
+    assert imported["copper_body_names"] == ledger["copper_body_names"]
     assert imported["mesh"]["objects"] == ["rx_ssw_coil_coil_copper", "tx_ssw_coil_ssw_copper"]
     assert imported["mesh"]["max_length"] == "1mm"
     assert imported["boundary"]["region_name"] == "Region_Abs_2000mm"
     assert imported["boundary"]["face_count"] == "6"
     assert imported["analysis_setup"]["setup_name"] == "Setup1"
     assert imported["frequency_sweep"]["sweep_name"] == "Sweep"
-    assert imported["reports"]["report_names"] == ["Output Variables Table1", "Table1", "Table2"]
+    assert imported["reports"]["report_names"] == ["Output Variables Table1", "Solid Loss Table1", "Table1", "Table2"]
+    for copper_body_name in ledger["copper_body_names"]:
+        assert f"loss_W_{copper_body_name}" in imported["reports"]["solid_loss_expression_names"]
+    assert "loss_W_Region_Abs_2000mm" in imported["reports"]["solid_loss_expression_names"]
