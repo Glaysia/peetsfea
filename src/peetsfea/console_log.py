@@ -1,13 +1,22 @@
 from __future__ import annotations
 
+from contextvars import ContextVar
+from functools import wraps
 import json
 import os
 import sys
+from time import perf_counter
 from typing import TextIO
+from collections.abc import Callable
+from typing import ParamSpec, TypeVar
 
 
 _PEETSFEA_INFO_RGB = (46, 111, 172)
 _ANSI_RESET = "\033[0m"
+_CALL_DEPTH: ContextVar[int] = ContextVar("peetsfea_log_call_depth", default=0)
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 def _supports_color(stream: TextIO) -> bool:
@@ -30,6 +39,12 @@ def _emit(level: str, message: str, *, stream: TextIO) -> None:
     stream.flush()
 
 
+def _emit_timing(message: str) -> None:
+    line = _colorize(f"PeetsFEA INFO: {message}", rgb=_PEETSFEA_INFO_RGB, stream=sys.stdout)
+    sys.stdout.write(f"{line}\n")
+    sys.stdout.flush()
+
+
 def info(message: str) -> None:
     _emit("INFO", message, stream=sys.stdout)
 
@@ -44,3 +59,20 @@ def error(message: str) -> None:
 
 def info_json(payload: object) -> None:
     info(json.dumps(payload, ensure_ascii=False))
+
+
+def log_call_duration(func: Callable[P, R]) -> Callable[P, R]:
+    @wraps(func)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        parent_depth = _CALL_DEPTH.get()
+        depth = parent_depth + 1
+        token = _CALL_DEPTH.set(depth)
+        start = perf_counter()
+        try:
+            return func(*args, **kwargs)
+        finally:
+            elapsed_ms = (perf_counter() - start) * 1000.0
+            _CALL_DEPTH.reset(token)
+            _emit_timing(f"stack={depth} func={func.__module__}.{func.__qualname__} elapsed_ms={elapsed_ms:.3f}")
+
+    return wrapper

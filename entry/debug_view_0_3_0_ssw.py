@@ -13,6 +13,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from peetsfea import ssw_step as ssw_step_module
+from peetsfea.console_log import log_call_duration
 from peetsfea.ssw_step import (
     DEFAULT_OUTPUT_DIR,
     DEFAULT_SOURCE_TOML_PATH,
@@ -478,6 +479,7 @@ def _port_edge_entries(
     ]
 
 
+@log_call_duration
 def export_ssw_aedt_port_artifacts(
     *,
     source_toml_path: Path = SOURCE_TOML_PATH,
@@ -532,6 +534,7 @@ def _build_ssw_aedt_port_ledger(
     }
 
 
+@log_call_duration
 def setup_ansys_ports_for_ssw_debug(
     *,
     source_toml_path: Path = SOURCE_TOML_PATH,
@@ -550,6 +553,7 @@ def setup_ansys_ports_for_ssw_debug(
     )
 
 
+@log_call_duration
 def generate_ssw_debug_summary(
     *,
     source_toml_path: Path = SOURCE_TOML_PATH,
@@ -590,6 +594,7 @@ def generate_ssw_debug_summary(
     }
 
 
+@log_call_duration
 def show_ssw_fixed_in_ocp(
     *,
     source_toml_path: Path = SOURCE_TOML_PATH,
@@ -616,6 +621,7 @@ def show_ssw_fixed_in_ocp(
     return summary
 
 
+@log_call_duration
 def main() -> DebugSswSummary:
     summary = show_ssw_fixed_in_ocp()
     if ANSYS:
