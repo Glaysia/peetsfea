@@ -1096,10 +1096,6 @@ def _placement_for_role(spec: SswFixedSpec, params: SswCoilParameters, assembly:
         orientation = _rx_yz_back_port_orientation()
         oriented_bodies = _coilmaker_child_bodies_from_assembly(params=params, assembly=assembly, placement=orientation)
         oriented_bounds = _combined_bounds(oriented_bodies, f"{params.role} oriented bodies")
-        oriented_fr4_bounds = _combined_bounds(
-            _bodies_with_role(oriented_bodies, "fr4", f"{params.role} oriented bodies"),
-            f"{params.role} oriented FR4 bodies",
-        )
         if oriented_bounds.size_x > rx_region_max.size_xyz[0]:
             raise ValueError(
                 f"RX SSW stack does not fit inside rx_region_max X thickness "
@@ -1114,10 +1110,10 @@ def _placement_for_role(spec: SswFixedSpec, params: SswCoilParameters, assembly:
             raise ValueError(
                 f"RX SSW Z span does not fit inside rx_region_max "
                 f"(span={oriented_bounds.size_z}, rx_region_max_z_size={rx_region_max.size_xyz[2]})"
-            )
+        )
         translate_x = rx_region_max.origin_xyz[0] + rx_region_max.size_xyz[0] - oriented_bounds.xmax
         translate_y = rx_region_center_y - oriented_bounds.center_y
-        translate_z = rx_region_max.origin_xyz[2] - oriented_fr4_bounds.zmin
+        translate_z = rx_region_max.origin_xyz[2] - oriented_bounds.zmin
         return cq.Location(cq.Vector(translate_x, translate_y, translate_z)) * orientation
 
     tx_region = _tx_region_box(spec)
@@ -1345,10 +1341,10 @@ def _validate_scene_contract(
         context="RX SSW copper",
         tolerance=copper_tolerance,
     )
-    if abs(rx_fr4_bounds.zmin - tv_bounds.zmin) > tolerance:
+    if abs(rx_bounds.zmin - tv_bounds.zmin) > tolerance:
         raise ValueError(
-            f"RX SSW FR4 bottom must align to TV bottom "
-            f"(rx_fr4_zmin={rx_fr4_bounds.zmin}, tv_zmin={tv_bounds.zmin})"
+            f"RX SSW bottom must align to TV bottom "
+            f"(rx_zmin={rx_bounds.zmin}, tv_zmin={tv_bounds.zmin})"
         )
 
     if abs(tx_bounds.zmax - tx_region_bounds.zmax) > tolerance:
@@ -1374,10 +1370,10 @@ def _validate_scene_contract(
             params=spec.rx,
             placement=rx_part.placement,
         )
-        if abs(rx_port_anchor[0] - rx_bounds.xmin) > tolerance:
+        if abs(rx_port_anchor[0] - rx_bounds.xmax) > tolerance:
             raise ValueError(
-                f"RX SSW port anchor must be on the RX X-min copper face "
-                f"(port_x={rx_port_anchor[0]}, rx_xmin={rx_bounds.xmin})"
+                f"RX SSW port anchor must be on the RX X-max copper face "
+                f"(port_x={rx_port_anchor[0]}, rx_xmax={rx_bounds.xmax})"
             )
     if tx_bounds.size_z >= tx_bounds.size_x or tx_bounds.size_z >= tx_bounds.size_y:
         raise ValueError(
@@ -1653,7 +1649,7 @@ def _scene_action_trace(
     if spec.tx_under.is_under_coil_enabled:
         tx_under_bounds = _combined_bounds(_bodies_with_prefix(bodies, "tx_under_coil_"), "TX under-coil bodies")
     ferrite_bodies = tuple(body for body in bodies if body.role == "ferrite")
-    rx_port_face = "rx_x_min" if spec.rx.is_ssw_enabled else "normal_spiral_landing"
+    rx_port_face = "rx_x_max" if spec.rx.is_ssw_enabled else "normal_spiral_landing"
     tx_part = _scene_part_by_role(parts=parts, role="tx_ssw_coil")
     rx_part = _scene_part_by_role(parts=parts, role="rx_ssw_coil")
     rx_port_anchor = (

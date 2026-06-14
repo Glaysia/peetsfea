@@ -798,7 +798,7 @@ def test_setup_ssw_aedt_ports_into_hfss_raises_on_missing_recorded_mesh_target(t
     write_ssw_aedt_port_ledger(ledger_path=ledger_path, ledger=ledger)
     Path(ledger["scene_step_path"]).write_text("placeholder", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="SSW mesh requires exactly one recorded copper target"):
+    with pytest.raises(ValueError, match="SSW mesh requires exactly one recorded RX copper target"):
         setup_ssw_aedt_ports_into_hfss(
             hfss=cast(HfssSession, _FakeHfss(ledger)),
             port_ledger_path=ledger_path,
@@ -1010,7 +1010,7 @@ def test_setup_ssw_aedt_ports_runs_real_headless_ansys() -> None:
     assert imported["design_space_hash"] == ledger["design_space_hash"]
     assert "port_sheet_names" not in imported
     assert imported["copper_body_names"] == ledger["copper_body_names"]
-    assert imported["mesh"]["objects"] == ["rx_ssw_coil_coil_copper", "tx_ssw_coil_ssw_copper"]
+    assert imported["mesh"]["objects"] == ["rx_ssw_coil_ssw_copper", "tx_ssw_coil_ssw_copper"]
     assert imported["mesh"]["max_length"] == "1mm"
     assert imported["boundary"]["region_name"] == "Region_Abs_2000mm"
     assert imported["boundary"]["face_count"] == "6"

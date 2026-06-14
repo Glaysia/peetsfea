@@ -83,9 +83,8 @@ MU_TAND_M_DATASET_POINTS = (
 MESH_MODULE_NAME = "MeshSetup"
 ANALYSIS_MODULE_NAME = "AnalysisSetup"
 MESH_OPERATION_NAME = "Length1"
-MESH_RX_COPPER_NAME = "rx_ssw_coil_coil_copper"
+MESH_RX_COPPER_CANDIDATES = ("rx_ssw_coil_coil_copper", "rx_ssw_coil_ssw_copper")
 MESH_TX_COPPER_NAME = "tx_ssw_coil_ssw_copper"
-MESH_OBJECT_NAMES = [MESH_RX_COPPER_NAME, MESH_TX_COPPER_NAME]
 MESH_MAX_LENGTH = "1mm"
 MESH_MAX_ELEMENTS = "50000"
 SETUP_NAME = "Setup1"
@@ -838,16 +837,19 @@ def _analysis_setup_module(hfss: HfssSession) -> AnalysisSetupModuleSession:
 
 
 def _required_mesh_object_names(copper_body_names: list[str]) -> list[str]:
-    mesh_object_names: list[str] = []
-    for required_name in MESH_OBJECT_NAMES:
-        matches = [name for name in copper_body_names if name == required_name]
-        if len(matches) != 1:
-            raise ValueError(
-                "SSW mesh requires exactly one recorded copper target "
-                f"(required={required_name!r}, actual={matches}, copper_body_names={copper_body_names})"
-            )
-        mesh_object_names.append(matches[0])
-    return mesh_object_names
+    rx_matches = [name for name in copper_body_names if name in MESH_RX_COPPER_CANDIDATES]
+    tx_matches = [name for name in copper_body_names if name == MESH_TX_COPPER_NAME]
+    if len(rx_matches) != 1:
+        raise ValueError(
+            "SSW mesh requires exactly one recorded RX copper target "
+            f"(candidates={MESH_RX_COPPER_CANDIDATES}, actual={rx_matches}, copper_body_names={copper_body_names})"
+        )
+    if len(tx_matches) != 1:
+        raise ValueError(
+            "SSW mesh requires exactly one recorded TX copper target "
+            f"(required={MESH_TX_COPPER_NAME!r}, actual={tx_matches}, copper_body_names={copper_body_names})"
+        )
+    return [rx_matches[0], tx_matches[0]]
 
 
 def _mesh_assignment_payload(mesh_object_names: list[str]) -> list[object]:

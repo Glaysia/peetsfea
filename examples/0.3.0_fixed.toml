@@ -244,11 +244,11 @@ range = [false, 0.9, 0.9, 1]
 description = "RX SSW coil height ratio against fixed_dimensions.height_max_mm"
 
 [modeled_objects.is_ssw_enabled]
-range = [true, 0, 0, 1]
+range = [true, 1, 1, 1]
 description = "RX SSW enable flag"
 
 [modeled_objects.turn_n_int]
-range = [true, 1, 1, 1]
+range = [true, 2, 2, 1]
 description = "RX SSW band count"
 
 [modeled_objects.gap_ratio]

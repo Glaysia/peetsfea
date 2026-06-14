@@ -433,8 +433,8 @@ def _rx_port_edge_entry(
             "edge_vertices_xyz": _rx_normal_spiral_edge_vertices(actions=actions, placement=placement),
         }
     if coil_mode == "ssw":
-        if port_face != "rx_x_min":
-            raise ValueError(f"{context}.port_face must be rx_x_min for RX SSW edge ports (actual={port_face!r})")
+        if port_face != "rx_x_max":
+            raise ValueError(f"{context}.port_face must be rx_x_max for RX SSW edge ports (actual={port_face!r})")
         return {
             "role": "rx",
             "copper_body_name": _copper_body_for_role(ssw_ledger=ssw_ledger, role="rx_ssw_coil"),
