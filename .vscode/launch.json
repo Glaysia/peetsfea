@@ -12,7 +12,9 @@
       "justMyCode": false,
       "preLaunchTask": "prepare-0.3.0-ssw-debug",
       "env": {
-        "OCP_PORT": "3939"
+        "OCP_PORT": "3939",
+        "TERM": "xterm-256color",
+        "NO_COLOR": ""
       }
     }
   ]
