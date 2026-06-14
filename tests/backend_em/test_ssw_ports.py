@@ -486,8 +486,8 @@ def _ledger(tmp_path: Path) -> SswAedtPortStepLedger:
         "tx_ssw_coil_pcb_1_fr4",
     ]
     return {
-        "design_id": f"0_3_0_p{design_space_hash}",
-        "aedt_filename": f"0_3_0_p{design_space_hash}.aedt",
+        "design_id": f"0_3_1_p{design_space_hash}",
+        "aedt_filename": f"0_3_1_p{design_space_hash}.aedt",
         "dimension_count": 21,
         "design_space_hash": design_space_hash,
         "source_step_ledger_path": str(tmp_path / "ssw_step_ledger.json"),

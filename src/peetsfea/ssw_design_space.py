@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Literal
 import tomllib
 
-from peetsfea.ssw_step import load_ssw_fixed_spec
+from peetsfea.ssw_step import build_ssw_body_boxes, load_ssw_fixed_spec
 
-SPEC_VERSION = "0.3.0"
+SPEC_VERSION = "0.3.1"
 SCHEMA_ID = "peetsfea.ssw_coil.step.v1"
 DEFAULT_REFERENCE_TOML_PATH = Path(__file__).resolve().parents[2] / "examples" / "0.3.0_sweep.toml"
 
@@ -508,7 +508,7 @@ def build_ssw_aedt_identity(
     _raise_for_non_point(candidate_ranges, result.free_owner_paths)
     payload = _identity_payload(candidate_ranges=candidate_ranges, free_owner_paths=result.free_owner_paths)
     point_hash = _point_hash(payload)
-    design_id = f"0_3_0_p{point_hash}"
+    design_id = f"{SPEC_VERSION.replace('.', '_')}_p{point_hash}"
     return SswAedtIdentity(
         design_id=design_id,
         aedt_filename=f"{design_id}.aedt",
@@ -568,7 +568,8 @@ def sample_ssw_fixed_tomls(
                 attempt_path = temp_dir / f"sample_{index:05d}_{attempt:05d}.toml"
                 attempt_path.write_text(sampled_text, encoding="utf-8")
                 try:
-                    load_ssw_fixed_spec(attempt_path)
+                    spec = load_ssw_fixed_spec(attempt_path)
+                    build_ssw_body_boxes(spec)
                 except ValueError as exc:
                     last_rejection = f"fixed spec validation failed: {exc}"
                     attempt_path.unlink()

@@ -15,12 +15,12 @@ peetsfea는 TOML 명세에서 HFSS(AEDT) 설계를 결정적으로 생성하는 
 영문 문서는 [README.en.md](README.en.md)를 참고하세요.
 
 ## 현재 계약
-- 버전: `0.3.0`
+- 버전: `0.3.1`
 - 활성 입력: [examples/minimal_step_two_port.toml](examples/minimal_step_two_port.toml)
 - TOML surface: `[design]`과 `[[non_model_objects]]`만 허용
 - STEP surface: authored non-model box들과 고정 Tx/Rx port cell
 - EM surface: Tx 포트 1개, Rx 포트 1개, copper pad mesh, radiation boundary, `Setup1`, `Sweep`, `Output Variables Table1`
-- SSW debug 입력 [examples/0.3.0_fixed.toml](examples/0.3.0_fixed.toml)과 [examples/0.3.0_sweep.toml](examples/0.3.0_sweep.toml)은 0.2.25 type2와 같은 `[constraints]` / `[[constraints.rules]]` 표면을 쓰며, enabled SSW coil은 `gcd(turn_n_int, twist_factor) == 1`이어야 하고 RX SSW가 enabled일 때 RX `turn_n_int`는 1보다 커야 합니다.
+- SSW debug 입력 [examples/0.3.0_fixed.toml](examples/0.3.0_fixed.toml)과 [examples/0.3.0_sweep.toml](examples/0.3.0_sweep.toml)은 0.2.25 type2와 같은 `[constraints]` / `[[constraints.rules]]` 표면을 쓰며, enabled SSW coil은 `gcd(turn_n_int, twist_factor) == 1`이어야 하고 RX SSW가 enabled일 때 RX `turn_n_int`는 1보다 커야 합니다. 0.3.1부터 TX/RX `void_profile`은 scaled void profile `1`로 고정합니다.
 - SSW debug의 `tx_under_coil`은 TX main coil과 별도인 두 번째 TX coil이며, `tx_region_max`의 global X-min 면 바깥에 붙는 YZ 평면 normal spiral입니다.
 - SSW debug MULL ferrite 위치는 TX Z축 `ferrite.tx_mull_position_ratio`와 RX X축 `ferrite.rx_mull_position_ratio`로 따로 제어합니다.
 - 기본 실행과 AEDT/PyAEDT 변경 검증은 headless이며 PyAEDT `False` return은 즉시 raise합니다.

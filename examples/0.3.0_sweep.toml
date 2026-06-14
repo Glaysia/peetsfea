@@ -1,16 +1,16 @@
-# 0.3.0 SSW sampled authoring input.
+# 0.3.1 SSW sampled authoring input.
 # ----------------------------------------------------------------------------
-# 이 파일은 0.3.0 SSW coil sweep의 SSOT다.
+# 이 파일은 0.3.1 SSW coil sweep의 SSOT다.
 # TX/RX 각각의 sampled coil 변수, fixed compatibility 변수,
 # shared layout 변수와 shared ferrite 변수를 포함하며,
-# 자유변수 기준 총 29차원이다.
+# 자유변수 기준 총 20차원이다.
 #
 # Range 형식:
 # - [true, start, end, count]는 integer 후보 range다.
 # - [false, start, end, count]는 float 후보 range다.
 # - fixed TOML에서는 같은 public field를 [*, value, value, 1]로 freeze한다.
 
-spec_version = "0.3.0"
+spec_version = "0.3.1"
 schema_id = "peetsfea.ssw_coil.step.v1"
 runtime_compatible = false
 
@@ -178,7 +178,7 @@ range = [false, 0.1, 0.9, 50]
 description = "TX 중앙 void area ratio"
 
 [modeled_objects.void_profile]
-range = [true, 0, 1, 2]
+range = [true, 1, 1, 1]
 description = "TX void profile: 0 rectangular void, 1 scaled void"
 
 [modeled_objects.no_ssw_qturn_start_int]
@@ -270,7 +270,7 @@ range = [false, 0.1, 0.9, 50]
 description = "RX 중앙 void area ratio"
 
 [modeled_objects.void_profile]
-range = [true, 0, 1, 2]
+range = [true, 1, 1, 1]
 description = "RX void profile: 0 rectangular void, 1 scaled void"
 
 [modeled_objects.no_ssw_qturn_start_int]

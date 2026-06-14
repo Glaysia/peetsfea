@@ -22,7 +22,7 @@ tags:
 - 출력: `SUPPORTED_SPEC_VERSION`, `__version__`
 
 ## Canonical state
-- Current version baseline is `0.3.0`.
+- Current version baseline is `0.3.1`.
 - `__version__` mirrors `SUPPORTED_SPEC_VERSION`.
 
 ## Invariants / fail-fast
