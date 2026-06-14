@@ -68,9 +68,17 @@ description = "MULL ferrite sheet thickness(mm)"
 # MULL ferrite sheet placement
 # ----------------------------------------------------------------------------
 
+[ferrite.tx_mull_is_enabled]
+range = [true, 1, 1, 1]
+description = "TX MULL ferrite sheet enable flag"
+
 [ferrite.tx_mull_position_ratio]
 range = [false, 0.0, 0.0, 1]
 description = "TX MULL ferrite Z position ratio: 0 tx_region_max bottom, 1 TX coil-adjacent"
+
+[ferrite.rx_mull_is_enabled]
+range = [true, 0, 0, 1]
+description = "RX MULL ferrite sheet enable flag"
 
 [ferrite.rx_mull_position_ratio]
 range = [false, 0.0, 0.0, 1]
@@ -184,7 +192,7 @@ range = [false, 8.0, 8.0, 1]
 description = "TX SSW two-PCB gap(mm)"
 
 [modeled_objects.twist_factor]
-range = [true, 5, 5, 1]
+range = [true, 2, 2, 1]
 description = "TX SSW band pitch shift per loop"
 
 [[modeled_objects]]
@@ -252,7 +260,7 @@ range = [true, 2, 2, 1]
 description = "RX SSW band count"
 
 [modeled_objects.gap_ratio]
-range = [false, 0.1, 0.1, 1]
+range = [false, 0.6, 0.6, 1]
 description = "RX SSW pitch 중 gap 비율"
 
 [modeled_objects.void_area_ratio]

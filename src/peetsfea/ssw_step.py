@@ -102,7 +102,9 @@ class NonModelBox:
 
 @dataclass(frozen=True)
 class FerriteParameters:
+    tx_mull_is_enabled: bool
     tx_mull_position_ratio: float
+    rx_mull_is_enabled: bool
     rx_mull_position_ratio: float
 
 
@@ -332,14 +334,18 @@ def _load_fixed_dimensions(root: dict[str, object]) -> FixedDimensions:
 
 def _load_ferrite_parameters(root: dict[str, object]) -> FerriteParameters:
     table = _require_table(_require_key(root, "ferrite", "0.3.0 fixed spec"), "ferrite")
+    tx_mull_is_enabled = _frozen_bool_as_int(table, "tx_mull_is_enabled", "ferrite")
     tx_mull_position_ratio = _frozen_float(table, "tx_mull_position_ratio", "ferrite", positive=False)
+    rx_mull_is_enabled = _frozen_bool_as_int(table, "rx_mull_is_enabled", "ferrite")
     rx_mull_position_ratio = _frozen_float(table, "rx_mull_position_ratio", "ferrite", positive=False)
     if tx_mull_position_ratio < 0.0 or tx_mull_position_ratio > 1.0:
         raise ValueError("ferrite.tx_mull_position_ratio must be between 0 and 1")
     if rx_mull_position_ratio < 0.0 or rx_mull_position_ratio > 1.0:
         raise ValueError("ferrite.rx_mull_position_ratio must be between 0 and 1")
     return FerriteParameters(
+        tx_mull_is_enabled=tx_mull_is_enabled,
         tx_mull_position_ratio=tx_mull_position_ratio,
+        rx_mull_is_enabled=rx_mull_is_enabled,
         rx_mull_position_ratio=rx_mull_position_ratio,
     )
 
@@ -731,7 +737,9 @@ def _mull_ferrite_sheet_boxes(
     thickness = spec.fixed.mull_ferrite_thickness_mm
 
     ferrite_boxes: list[_BodyBox] = []
-    if not spec.tx_under.is_under_coil_enabled:
+    if spec.tx_under.is_under_coil_enabled and spec.ferrite.tx_mull_is_enabled:
+        raise ValueError("ferrite.tx_mull_is_enabled must be 0 when tx_under_coil is enabled")
+    if spec.ferrite.tx_mull_is_enabled:
         tx_zmin, tx_zmax = _mull_sheet_axis_bounds(
             outer_min_mm=tx_region_max_bounds.zmin,
             coil_min_mm=tx_bounds.zmin,
@@ -749,23 +757,24 @@ def _mull_ferrite_sheet_boxes(
                 transparency=MULL_FERRITE_TRANSPARENCY,
             )
         )
-    rx_xmin, rx_xmax = _mull_sheet_axis_bounds(
-        outer_min_mm=rx_region_max_bounds.xmin,
-        coil_min_mm=rx_bounds.xmin,
-        thickness_mm=thickness,
-        ratio=spec.ferrite.rx_mull_position_ratio,
-        context="RX",
-    )
-    ferrite_boxes.append(
-        _box(
-            "rx_mull_ferrite_sheet",
-            "ferrite",
-            MULL_FERRITE_MATERIAL,
-            ((rx_xmin + rx_xmax) / 2.0, rx_bounds.center_y, rx_bounds.center_z),
-            (thickness, rx_bounds.size_y, rx_bounds.size_z),
-            transparency=MULL_FERRITE_TRANSPARENCY,
-        ),
-    )
+    if spec.ferrite.rx_mull_is_enabled:
+        rx_xmin, rx_xmax = _mull_sheet_axis_bounds(
+            outer_min_mm=rx_region_max_bounds.xmin,
+            coil_min_mm=rx_bounds.xmin,
+            thickness_mm=thickness,
+            ratio=spec.ferrite.rx_mull_position_ratio,
+            context="RX",
+        )
+        ferrite_boxes.append(
+            _box(
+                "rx_mull_ferrite_sheet",
+                "ferrite",
+                MULL_FERRITE_MATERIAL,
+                ((rx_xmin + rx_xmax) / 2.0, rx_bounds.center_y, rx_bounds.center_z),
+                (thickness, rx_bounds.size_y, rx_bounds.size_z),
+                transparency=MULL_FERRITE_TRANSPARENCY,
+            ),
+        )
     return tuple(ferrite_boxes)
 
 
@@ -1287,8 +1296,8 @@ def _validate_scene_contract(
     rx_region_max_bounds = _body_bounds(_body_by_name(bodies, "rx_region_max"))
     tx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "tx_ssw_coil_"), "TX SSW bodies")
     rx_bounds = _combined_bounds(_bodies_with_prefix(bodies, "rx_ssw_coil_"), "RX SSW bodies")
-    rx_ferrite_bounds = _body_bounds(_body_by_name(bodies, "rx_mull_ferrite_sheet"))
     tx_ferrite_bodies = tuple(body for body in bodies if body.name == "tx_mull_ferrite_sheet")
+    rx_ferrite_bodies = tuple(body for body in bodies if body.name == "rx_mull_ferrite_sheet")
     rx_fr4_bounds = _combined_bounds(
         _bodies_with_role(_bodies_with_prefix(bodies, "rx_ssw_coil_"), "fr4", "RX SSW bodies"),
         "RX SSW FR4 bodies",
@@ -1301,6 +1310,14 @@ def _validate_scene_contract(
             raise ValueError("TX MULL ferrite sheet must not exist when tx_under_coil is enabled")
     elif len(tx_under_bodies) != 0:
         raise ValueError("tx_under_coil disabled but under-coil bodies were generated")
+    if spec.ferrite.tx_mull_is_enabled and not spec.tx_under.is_under_coil_enabled and len(tx_ferrite_bodies) != 1:
+        raise ValueError("ferrite.tx_mull_is_enabled requires exactly one TX MULL ferrite sheet")
+    if not spec.ferrite.tx_mull_is_enabled and len(tx_ferrite_bodies) != 0:
+        raise ValueError("ferrite.tx_mull_is_enabled is disabled but TX MULL ferrite sheet was generated")
+    if spec.ferrite.rx_mull_is_enabled and len(rx_ferrite_bodies) != 1:
+        raise ValueError("ferrite.rx_mull_is_enabled requires exactly one RX MULL ferrite sheet")
+    if not spec.ferrite.rx_mull_is_enabled and len(rx_ferrite_bodies) != 0:
+        raise ValueError("ferrite.rx_mull_is_enabled is disabled but RX MULL ferrite sheet was generated")
 
     if abs(tx_region_bounds.zmax - (tv_bounds.zmin - spec.fixed.tx_rx_min_distance_mm)) > tolerance:
         raise ValueError("tx_region top must equal TV bottom minus fixed_dimensions.tx_rx_min_distance_mm")
@@ -1397,17 +1414,22 @@ def _validate_scene_contract(
         )
 
     thickness = spec.fixed.mull_ferrite_thickness_mm
-    if abs(rx_ferrite_bounds.size_x - thickness) > tolerance:
-        raise ValueError("RX MULL ferrite sheet thickness must match fixed_dimensions.mull_ferrite_thickness_mm")
-    if (
-        abs(rx_ferrite_bounds.size_y - rx_bounds.size_y) > tolerance
-        or abs(rx_ferrite_bounds.size_z - rx_bounds.size_z) > tolerance
-        or abs(rx_ferrite_bounds.center_y - rx_bounds.center_y) > tolerance
-        or abs(rx_ferrite_bounds.center_z - rx_bounds.center_z) > tolerance
-    ):
-        raise ValueError("RX MULL ferrite sheet must match RX coil YZ footprint")
-    if rx_ferrite_bounds.xmin < rx_region_max_bounds.xmin - tolerance or rx_ferrite_bounds.xmax > rx_bounds.xmin + tolerance:
-        raise ValueError("RX MULL ferrite sheet must stay between rx_region_max X min and RX coil X min")
+    if spec.ferrite.rx_mull_is_enabled:
+        rx_ferrite_bounds = _body_bounds(_body_by_name(bodies, "rx_mull_ferrite_sheet"))
+        if abs(rx_ferrite_bounds.size_x - thickness) > tolerance:
+            raise ValueError("RX MULL ferrite sheet thickness must match fixed_dimensions.mull_ferrite_thickness_mm")
+        if (
+            abs(rx_ferrite_bounds.size_y - rx_bounds.size_y) > tolerance
+            or abs(rx_ferrite_bounds.size_z - rx_bounds.size_z) > tolerance
+            or abs(rx_ferrite_bounds.center_y - rx_bounds.center_y) > tolerance
+            or abs(rx_ferrite_bounds.center_z - rx_bounds.center_z) > tolerance
+        ):
+            raise ValueError("RX MULL ferrite sheet must match RX coil YZ footprint")
+        if (
+            rx_ferrite_bounds.xmin < rx_region_max_bounds.xmin - tolerance
+            or rx_ferrite_bounds.xmax > rx_bounds.xmin + tolerance
+        ):
+            raise ValueError("RX MULL ferrite sheet must stay between rx_region_max X min and RX coil X min")
 
     if spec.tx_under.is_under_coil_enabled:
         tx_under_bounds = _combined_bounds(tx_under_bodies, "TX under-coil bodies")
@@ -1434,7 +1456,7 @@ def _validate_scene_contract(
                 f"(size_y={tx_under_bounds.size_y}, size_z={tx_under_bounds.size_z})"
             )
 
-    if not spec.tx_under.is_under_coil_enabled:
+    if spec.ferrite.tx_mull_is_enabled:
         tx_ferrite_bounds = _body_bounds(_body_by_name(bodies, "tx_mull_ferrite_sheet"))
         if abs(tx_ferrite_bounds.size_z - thickness) > tolerance:
             raise ValueError("TX MULL ferrite sheet thickness must match fixed_dimensions.mull_ferrite_thickness_mm")

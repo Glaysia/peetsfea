@@ -70,9 +70,17 @@ description = "MULL ferrite sheet thickness(mm)"
 # MULL ferrite sheet placement
 # ----------------------------------------------------------------------------
 
+[ferrite.tx_mull_is_enabled]
+range = [true, 1, 1, 1]
+description = "TX MULL ferrite sheet enable flag"
+
 [ferrite.tx_mull_position_ratio]
 range = [false, 0.0, 0.9, 24]
 description = "TX MULL ferrite Z position ratio: 0 tx_region_max bottom, 1 TX coil-adjacent"
+
+[ferrite.rx_mull_is_enabled]
+range = [true, 0, 0, 1]
+description = "RX MULL ferrite sheet enable flag"
 
 [ferrite.rx_mull_position_ratio]
 range = [false, 0.0, 1.0, 11]

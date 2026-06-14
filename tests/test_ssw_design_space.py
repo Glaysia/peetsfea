@@ -66,6 +66,8 @@ def test_fixed_toml_is_reference_design_space_point() -> None:
     assert result.violations == ()
     assert "ferrite.tx_mull_position_ratio" in result.free_owner_paths
     assert "ferrite.rx_mull_position_ratio" in result.free_owner_paths
+    assert "ferrite.tx_mull_is_enabled" not in result.free_owner_paths
+    assert "ferrite.rx_mull_is_enabled" not in result.free_owner_paths
     assert "modeled_objects[role=tx_under_coil].is_under_coil_enabled" in result.free_owner_paths
     assert "modeled_objects[role=tx_under_coil].width_ratio" in result.free_owner_paths
     assert "modeled_objects[role=tx_under_coil].height_ratio" in result.free_owner_paths
@@ -108,7 +110,7 @@ def test_point_hash_tracks_realized_continuous_values(tmp_path: Path) -> None:
 def test_narrow_range_with_larger_count_is_subset_but_not_point(tmp_path: Path) -> None:
     text = _replace_once(
         FIXED_TOML.read_text(encoding="utf-8"),
-        "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 50.0, 50.0, 1]",
+        "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 100.0, 100.0, 1]",
         "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 60.0, 70.0, 200]",
     )
     candidate_path = _candidate(tmp_path, text)
@@ -125,7 +127,7 @@ def test_narrow_range_with_larger_count_is_subset_but_not_point(tmp_path: Path) 
 def test_out_of_reference_range_reports_violation(tmp_path: Path) -> None:
     text = _replace_once(
         FIXED_TOML.read_text(encoding="utf-8"),
-        "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 50.0, 50.0, 1]",
+        "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 100.0, 100.0, 1]",
         "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 40.0, 50.0, 1]",
     )
     candidate_path = _candidate(tmp_path, text)
@@ -147,20 +149,20 @@ def test_missing_path_integer_flag_mismatch_and_non_positive_count_are_violation
     )
     text = _replace_once(
         text,
-        "[modeled_objects.is_ssw_enabled]\nrange = [true, 0, 0, 1]",
-        "[modeled_objects.is_ssw_enabled]\nrange = [false, 0, 0, 1]",
+        "[modeled_objects.is_under_coil_enabled]\nrange = [true, 0, 0, 1]",
+        "[modeled_objects.is_under_coil_enabled]\nrange = [false, 0, 0, 1]",
     )
     text = _replace_once(
         text,
-        "[modeled_objects.turn_n_int]\nrange = [true, 6, 6, 1]",
-        "[modeled_objects.turn_n_int]\nrange = [true, 6, 6, 0]",
+        "[modeled_objects.turn_n_int]\nrange = [true, 3, 3, 1]",
+        "[modeled_objects.turn_n_int]\nrange = [true, 3, 3, 0]",
     )
     candidate_path = _candidate(tmp_path, text)
 
     codes_by_path = _violation_codes_by_path(candidate_path)
 
     assert codes_by_path["ferrite.tx_mull_position_ratio"] == {"missing_free_path"}
-    assert codes_by_path["modeled_objects[role=rx_ssw_coil].is_ssw_enabled"] == {"integer_flag_mismatch"}
+    assert codes_by_path["modeled_objects[role=tx_under_coil].is_under_coil_enabled"] == {"integer_flag_mismatch"}
     assert codes_by_path["modeled_objects[role=tx_ssw_coil].turn_n_int"] == {"non_positive_count"}
 
 
@@ -205,7 +207,7 @@ def test_sample_ssw_fixed_tomls_is_reproducible_for_same_seed(tmp_path: Path) ->
 def test_sample_ssw_fixed_tomls_accepts_narrow_subset_with_larger_count(tmp_path: Path) -> None:
     text = _replace_once(
         FIXED_TOML.read_text(encoding="utf-8"),
-        "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 50.0, 50.0, 1]",
+        "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 100.0, 100.0, 1]",
         "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 60.0, 70.0, 200]",
     )
     candidate_path = _candidate(tmp_path, text)
@@ -226,7 +228,7 @@ def test_sample_ssw_fixed_tomls_accepts_narrow_subset_with_larger_count(tmp_path
 def test_sample_ssw_fixed_tomls_rejects_out_of_reference_input_before_output(tmp_path: Path) -> None:
     text = _replace_once(
         FIXED_TOML.read_text(encoding="utf-8"),
-        "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 50.0, 50.0, 1]",
+        "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 100.0, 100.0, 1]",
         "[fixed_dimensions.tx_rx_min_distance_mm]\nrange = [false, 40.0, 50.0, 1]",
     )
     candidate_path = _candidate(tmp_path, text)
@@ -242,12 +244,12 @@ def test_sample_ssw_fixed_tomls_fails_when_constraints_cannot_be_satisfied(tmp_p
     text = FIXED_TOML.read_text(encoding="utf-8")
     text = _replace_once(
         text,
-        "[modeled_objects.turn_n_int]\nrange = [true, 6, 6, 1]",
+        "[modeled_objects.turn_n_int]\nrange = [true, 3, 3, 1]",
         "[modeled_objects.turn_n_int]\nrange = [true, 4, 4, 1]",
     )
     text = _replace_once(
         text,
-        "[modeled_objects.twist_factor]\nrange = [true, 5, 5, 1]",
+        "[modeled_objects.twist_factor]\nrange = [true, 2, 2, 1]",
         "[modeled_objects.twist_factor]\nrange = [true, 2, 2, 1]",
     )
     candidate_path = _candidate(tmp_path, text)
