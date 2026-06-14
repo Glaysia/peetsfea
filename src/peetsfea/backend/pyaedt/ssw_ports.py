@@ -90,6 +90,7 @@ MESH_MAX_ELEMENTS = "50000"
 SETUP_NAME = "Setup1"
 SWEEP_NAME = "Sweep"
 SETUP_FREQUENCY = "6.78MHz"
+SETUP_MAX_DELTA_S = 0.005
 SWEEP_RANGE_START = "0.1MHz"
 SWEEP_RANGE_END = "100MHz"
 SWEEP_RANGE_COUNT = 81
@@ -884,7 +885,7 @@ def _setup_payload() -> list[object]:
         "Frequency:=",
         SETUP_FREQUENCY,
         "MaxDeltaS:=",
-        0.003,
+        SETUP_MAX_DELTA_S,
         "UseMatrixConv:=",
         False,
         "MaximumPasses:=",
@@ -1058,7 +1059,7 @@ def _insert_recorded_setup_and_sweep(
             "setup_type": "HfssDriven",
             "setup_name": SETUP_NAME,
             "frequency": SETUP_FREQUENCY,
-            "max_delta_s": 0.003,
+            "max_delta_s": SETUP_MAX_DELTA_S,
             "maximum_passes": 35,
             "minimum_passes": 17,
             "minimum_converged_passes": 7,

@@ -567,7 +567,7 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     setup_payload = hfss.odesign.analysis_setup_module.insert_setup_calls[0][1]
     assert setup_payload[0] == "NAME:Setup1"
     assert setup_payload[setup_payload.index("Frequency:=") + 1] == "6.78MHz"
-    assert setup_payload[setup_payload.index("MaxDeltaS:=") + 1] == 0.003
+    assert setup_payload[setup_payload.index("MaxDeltaS:=") + 1] == 0.005
     assert setup_payload[setup_payload.index("MaximumPasses:=") + 1] == 35
     assert setup_payload[setup_payload.index("MinimumPasses:=") + 1] == 17
     assert setup_payload[setup_payload.index("MinimumConvergedPasses:=") + 1] == 7
