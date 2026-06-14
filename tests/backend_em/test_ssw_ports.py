@@ -219,7 +219,7 @@ class _FakeReportSetupModule:
 
     def GetAllReportNames(self) -> object:
         if self.report_names_result is False:
-            return ["Output Variables Table1"]
+            return ["Results1_Pass"]
         return [cast(str, call["plot_name"]) for call in self.create_report_calls]
 
 
@@ -706,15 +706,14 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
         "Setup1 : Sweep",
     )
     assert [call["plot_name"] for call in hfss.odesign.report_setup_module.create_report_calls] == [
-        "Output Variables Table1",
-        "Solid Loss Table1",
-        "Table1",
-        "Table2",
+        "Results1_Pass",
+        "Results2_Last",
+        "Results3_Freq",
     ]
-    output_report_components = cast(list[object], hfss.odesign.report_setup_module.create_report_calls[0]["components"])
-    assert output_report_components[output_report_components.index("Y Component:=") + 1] == [
-        name for name, _expression, _solution in hfss.create_output_variables
-    ]
+    adaptive_components = cast(list[object], hfss.odesign.report_setup_module.create_report_calls[0]["components"])
+    assert adaptive_components[adaptive_components.index("X Component:=") + 1] == "Pass"
+    adaptive_traces = cast(list[str], adaptive_components[adaptive_components.index("Y Component:=") + 1])
+    assert adaptive_traces[-2:] == ["SolvedElements", "MaxMagDeltaS"]
     solid_loss_reporter_calls = hfss.odesign.fields_reporter_module.calls
     solid_loss_names = [
         expression_name
@@ -752,6 +751,7 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
         "Integrate",
     ]
     solid_loss_components = cast(list[object], hfss.odesign.report_setup_module.create_report_calls[1]["components"])
+    assert solid_loss_components[solid_loss_components.index("X Component:=") + 1] == "Freq"
     assert solid_loss_components[solid_loss_components.index("Y Component:=") + 1] == solid_loss_names
     assert hfss.odesign.report_setup_module.create_report_calls[1]["report_category"] == "Fields"
     assert hfss.odesign.report_setup_module.create_report_calls[1]["setup_sweep_name"] == "Setup1 : LastAdaptive"
@@ -761,11 +761,8 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert "Volume(tx_mull_ferrite_sheet)" in diagnostic_traces
     assert "Volume(tx_ssw_coil_ssw_copper)" in diagnostic_traces
     assert "Volume(Region_Abs_2000mm)" in diagnostic_traces
-    adaptive_components = cast(list[object], hfss.odesign.report_setup_module.create_report_calls[3]["components"])
-    assert adaptive_components[adaptive_components.index("X Component:=") + 1] == "Pass"
-    adaptive_traces = cast(list[str], adaptive_components[adaptive_components.index("Y Component:=") + 1])
-    assert adaptive_traces[-2:] == ["SolvedElements", "MaxMagDeltaS"]
-    assert result["reports"]["report_names"] == ["Output Variables Table1", "Solid Loss Table1", "Table1", "Table2"]
+    assert diagnostic_components[diagnostic_components.index("X Component:=") + 1] == "Freq"
+    assert result["reports"]["report_names"] == ["Results1_Pass", "Results2_Last", "Results3_Freq"]
     assert result["reports"]["output_solution_name"] == "Setup1 : Sweep"
     assert result["reports"]["solid_loss_solution_name"] == "Setup1 : LastAdaptive"
     assert result["reports"]["output_variable_names"] == [
@@ -1018,7 +1015,7 @@ def test_setup_ssw_aedt_ports_runs_real_headless_ansys() -> None:
     assert imported["boundary"]["face_count"] == "6"
     assert imported["analysis_setup"]["setup_name"] == "Setup1"
     assert imported["frequency_sweep"]["sweep_name"] == "Sweep"
-    assert imported["reports"]["report_names"] == ["Output Variables Table1", "Solid Loss Table1", "Table1", "Table2"]
+    assert imported["reports"]["report_names"] == ["Results1_Pass", "Results2_Last", "Results3_Freq"]
     for copper_body_name in ledger["copper_body_names"]:
         assert f"loss_W_{copper_body_name}" in imported["reports"]["solid_loss_expression_names"]
     assert "loss_W_Region_Abs_2000mm" in imported["reports"]["solid_loss_expression_names"]

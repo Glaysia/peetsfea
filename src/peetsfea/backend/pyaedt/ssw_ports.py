@@ -95,10 +95,9 @@ SWEEP_RANGE_START = "0.1MHz"
 SWEEP_RANGE_END = "100MHz"
 SWEEP_RANGE_COUNT = 81
 RADIATION_MARGIN_MM = 2000.0
-REPORT_NAME = "Output Variables Table1"
-SOLID_LOSS_REPORT_NAME = "Solid Loss Table1"
-DIAGNOSTIC_TABLE_1_NAME = "Table1"
-DIAGNOSTIC_TABLE_2_NAME = "Table2"
+RESULTS1_PASS_REPORT_NAME = "Results1_Pass"
+RESULTS2_LAST_REPORT_NAME = "Results2_Last"
+RESULTS3_FREQ_REPORT_NAME = "Results3_Freq"
 TX_SOURCE_MAGNITUDE = "100V"
 TX_SOURCE_PHASE = "0deg"
 RX_SOURCE_MAGNITUDE = "100V"
@@ -1229,17 +1228,17 @@ def _create_reports(
     report_setup = _report_setup_module(hfss)
     _create_one_report(
         report_setup=report_setup,
-        report_name=REPORT_NAME,
+        report_name=RESULTS1_PASS_REPORT_NAME,
         report_category="Terminal Solution Data",
-        solution_name=solution_name,
-        context=["Domain:=", "Sweep"],
-        variations=["Freq:=", ["All"]],
-        traces=output_variable_names,
-        primary_sweep="Freq",
+        solution_name=f"{SETUP_NAME} : AdaptivePass",
+        context=[],
+        variations=["Pass:=", ["All"], "Freq:=", ["All"]],
+        traces=[*output_variable_names, "SolvedElements", "MaxMagDeltaS"],
+        primary_sweep="Pass",
     )
     _create_one_report(
         report_setup=report_setup,
-        report_name=SOLID_LOSS_REPORT_NAME,
+        report_name=RESULTS2_LAST_REPORT_NAME,
         report_category="Fields",
         solution_name=solid_loss_solution_name,
         context=[],
@@ -1249,7 +1248,7 @@ def _create_reports(
     )
     _create_one_report(
         report_setup=report_setup,
-        report_name=DIAGNOSTIC_TABLE_1_NAME,
+        report_name=RESULTS3_FREQ_REPORT_NAME,
         report_category="Terminal Solution Data",
         solution_name=f"{SETUP_NAME} : LastAdaptive",
         context=[],
@@ -1260,30 +1259,20 @@ def _create_reports(
         ],
         primary_sweep="Freq",
     )
-    _create_one_report(
-        report_setup=report_setup,
-        report_name=DIAGNOSTIC_TABLE_2_NAME,
-        report_category="Terminal Solution Data",
-        solution_name=f"{SETUP_NAME} : AdaptivePass",
-        context=[],
-        variations=["Pass:=", ["All"], "Freq:=", ["All"]],
-        traces=[*output_variable_names, "SolvedElements", "MaxMagDeltaS"],
-        primary_sweep="Pass",
-    )
     report_names = set(report_setup.GetAllReportNames())
-    expected_report_names = {REPORT_NAME, SOLID_LOSS_REPORT_NAME, DIAGNOSTIC_TABLE_1_NAME, DIAGNOSTIC_TABLE_2_NAME}
+    expected_report_names = {RESULTS1_PASS_REPORT_NAME, RESULTS2_LAST_REPORT_NAME, RESULTS3_FREQ_REPORT_NAME}
     if not expected_report_names.issubset(report_names):
         raise ValueError(
             "SSW report creation did not register required reports "
             f"(missing={sorted(expected_report_names.difference(report_names))}, available={sorted(report_names)})"
         )
     return {
-        "report_names": [REPORT_NAME, SOLID_LOSS_REPORT_NAME, DIAGNOSTIC_TABLE_1_NAME, DIAGNOSTIC_TABLE_2_NAME],
+        "report_names": [RESULTS1_PASS_REPORT_NAME, RESULTS2_LAST_REPORT_NAME, RESULTS3_FREQ_REPORT_NAME],
         "output_variable_names": output_variable_names,
         "solid_loss_expression_names": solid_loss_expression_names,
         "output_solution_name": solution_name,
         "solid_loss_solution_name": solid_loss_solution_name,
-        "diagnostic_report_names": [DIAGNOSTIC_TABLE_1_NAME, DIAGNOSTIC_TABLE_2_NAME],
+        "diagnostic_report_names": [RESULTS1_PASS_REPORT_NAME, RESULTS2_LAST_REPORT_NAME, RESULTS3_FREQ_REPORT_NAME],
     }
 
 
