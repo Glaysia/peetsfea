@@ -1,0 +1,214 @@
+== nvidia-smi -L ==
+GPU 0: NVIDIA GeForce RTX 3070 (UUID: GPU-ca07c80d-4a89-0ea5-ef45-3eadd007ddd1)
+== palace one-frequency CPW run with HYPRE pool override ==
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+>> /opt/spack/opt/spack/linux-zen3/openmpi-5.0.10-dz6mcy4edceennvzyifk75dwa2amdnoq/bin/mpirun -n 1 /opt/spack/opt/spack/linux-zen3/palace-0.16.0-mxazkd5mg6ababvdar7nk36cftgez226/bin/palace-x86_64.bin cpw_lumped_onefreq_gpu.jsonc
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+
+_____________     _______
+_____   __   \____ __   /____ ____________
+____   /_/  /  __ ` /  /  __ ` /  ___/  _ \
+___   _____/  /_/  /  /  /_/  /  /__/  ___/
+  /__/     \___,__/__/\___,__/\_____\_____/
+
+Git changeset ID: 869ee5c
+Running with 1 MPI process
+Detected 1 CUDA device
+Device configuration: cuda,cpu
+Memory configuration: host-umpire,cuda-umpire
+Use GPU-aware MPI:    no
+libCEED backend: /gpu/cuda/magma
+
+Added 1718 elements in 2 iterations of local bisection for under-resolved interior boundaries
+Added 899 duplicate vertices for interior boundaries in the mesh
+Added 2574 duplicate boundary elements for interior boundaries in the mesh
+Added 466 boundary elements for material interfaces to the mesh
+Finished partitioning mesh into 1 subdomain
+
+Characteristic length and time scales:
+ Lc = 4.500e-03 m, tc = 1.501e-02 ns
+
+Mesh curvature order: 1
+Mesh bounding box:
+ (Xmin, Ymin, Zmin) = (-2.500e-04, -5.000e-04, -1.000e-03) m
+ (Xmax, Ymax, Zmax) = (+4.250e-03, +2.432e-03, +1.000e-03) m
+
+Parallel Mesh Stats:
+
+                minimum     average     maximum       total
+ vertices          4002        4002        4002        4002
+ edges            23262       23262       23262       23262
+ faces            35612       35612       35612       35612
+ elements         16346       16346       16346       16346
+ neighbors            0           0           0
+
+            minimum     maximum
+ h       0.00319648    0.168469
+ kappa      1.06443     16.7224
+
+Estimated current per-rank memory usage is: Min. 591.2M, Max. 591.2M, Avg. 591.2M, Total 591.2M
+Estimated current per-node memory usage is: Min. 591.2M, Max. 591.2M, Avg. 591.2M, Total 591.2M
+
+Configuring Robin absorbing BC (order 1) at attributes:
+ 4
+
+Configuring Robin impedance BC for lumped ports at attributes:
+ 5: Rs = 1.120e+02 Ω/sq, n = (+0.0,+0.0,+1.0)
+ 9: Rs = 1.120e+02 Ω/sq, n = (+0.0,+0.0,+1.0)
+ 6: Rs = 1.120e+02 Ω/sq, n = (+0.0,+0.0,+1.0)
+ 10: Rs = 1.120e+02 Ω/sq, n = (+0.0,+0.0,+1.0)
+ 7: Rs = 1.120e+02 Ω/sq, n = (+0.0,+0.0,+1.0)
+ 11: Rs = 1.120e+02 Ω/sq, n = (+0.0,+0.0,+1.0)
+ 8: Rs = 1.120e+02 Ω/sq, n = (+0.0,+0.0,+1.0)
+ 12: Rs = 1.120e+02 Ω/sq, n = (+0.0,+0.0,+1.0)
+
+Configuring lumped port circuit properties:
+ Index = 1: R = 5.602e+01 Ω
+ Index = 2: R = 5.602e+01 Ω
+ Index = 3: R = 5.602e+01 Ω
+ Index = 4: R = 5.602e+01 Ω
+
+Configuring lumped port excitation source term at attributes:
+ 5: Index = 1
+ 9: Index = 1
+ 6: Index = 2
+ 10: Index = 2
+
+Configuring Dirichlet PEC BC at attributes:
+ 13
+
+Computing frequency response for:
+Excitation 1/2 with index 1 has contributions from:
+ Lumped port  1
+Excitation 2/2 with index 2 has contributions from:
+ Lumped port  2
+
+Assembling system matrices, number of global unknowns:
+ H1 (p = 2): 27264, ND (p = 2): 117748, RT (p = 2): 155874
+ Operator assembly level: Partial
+ Mesh geometries:
+  Tetrahedron: P = 20, Q = 11 (quadrature order = 4)
+
+Sweeping excitation index 1 (1/2):
+
+Assembling multigrid hierarchy:
+ Level 0 (p = 1): 23262 unknowns
+ Level 1 (p = 2): 117748 unknowns
+ Level 0 (auxiliary) (p = 1): 4002 unknowns
+ Level 1 (auxiliary) (p = 2): 27264 unknowns
+
+It 1/1: ω/2π = 2.000e+00 GHz (total elapsed time = 1.87e+00 s, solve 1/2)
+
+  Residual norms for GMRES solve
+  0 (restart 0) KSP residual norm 9.259372e+01
+  1 (restart 0) KSP residual norm 6.287576e+01
+  2 (restart 0) KSP residual norm 3.809172e+00
+  3 (restart 0) KSP residual norm 2.568760e+00
+  4 (restart 0) KSP residual norm 2.174400e+00
+  5 (restart 0) KSP residual norm 6.392546e-01
+  6 (restart 0) KSP residual norm 1.713308e-01
+  7 (restart 0) KSP residual norm 6.250689e-02
+  8 (restart 0) KSP residual norm 2.351106e-02
+  9 (restart 0) KSP residual norm 7.639238e-03
+ 10 (restart 0) KSP residual norm 3.537035e-03
+ 11 (restart 0) KSP residual norm 1.620931e-03
+ 12 (restart 0) KSP residual norm 7.760174e-04
+ 13 (restart 0) KSP residual norm 4.413038e-04
+ 14 (restart 0) KSP residual norm 2.611192e-04
+ 15 (restart 0) KSP residual norm 1.309649e-04
+ 16 (restart 0) KSP residual norm 7.029557e-05
+ 17 (restart 0) KSP residual norm 3.152532e-05
+ 18 (restart 0) KSP residual norm 2.139303e-05
+ 19 (restart 0) KSP residual norm 1.262528e-05
+ 20 (restart 0) KSP residual norm 8.649585e-06
+ 21 (restart 0) KSP residual norm 4.372215e-06
+ 22 (restart 0) KSP residual norm 2.839387e-06
+ 23 (restart 0) KSP residual norm 1.694542e-06
+ 24 (restart 0) KSP residual norm 1.211963e-06
+ 25 (restart 0) KSP residual norm 7.880604e-07
+GMRES solver converged in 25 iterations (avg. reduction factor: 4.756e-01)
+ Sol. ||E|| = 3.415199e+01 (||RHS|| = 4.291000e-01)
+ Field energy E (2.208e-11 J) + H (1.190e-11 J) = 3.397e-11 J
+ S[1][1] = -5.925e-02-1.279e-01i, |S[1][1]| = -1.702e+01, arg(S[1][1]) = -1.149e+02
+ S[2][1] = +8.986e-01-4.150e-01i, |S[2][1]| = -8.861e-02, arg(S[2][1]) = -2.479e+01
+ S[3][1] = +1.032e-03+2.134e-03i, |S[3][1]| = -5.250e+01, arg(S[3][1]) = +6.420e+01
+ S[4][1] = +5.208e-04+4.949e-04i, |S[4][1]| = -6.287e+01, arg(S[4][1]) = +4.354e+01
+
+ Wrote fields to disk (Paraview) at step 1
+ Updating solution error estimates
+
+Sweeping excitation index 2 (2/2):
+
+It 1/1: ω/2π = 2.000e+00 GHz (total elapsed time = 1.73e+01 s, solve 2/2)
+
+  Residual norms for GMRES solve
+  0 (restart 0) KSP residual norm 3.064337e+00
+  1 (restart 0) KSP residual norm 2.986631e+00
+  2 (restart 0) KSP residual norm 6.079412e-01
+  3 (restart 0) KSP residual norm 3.735717e-01
+  4 (restart 0) KSP residual norm 2.988507e-01
+  5 (restart 0) KSP residual norm 5.183212e-02
+  6 (restart 0) KSP residual norm 1.749030e-02
+  7 (restart 0) KSP residual norm 7.680953e-03
+  8 (restart 0) KSP residual norm 5.736342e-03
+  9 (restart 0) KSP residual norm 1.855825e-03
+ 10 (restart 0) KSP residual norm 1.381535e-03
+ 11 (restart 0) KSP residual norm 6.507096e-04
+ 12 (restart 0) KSP residual norm 4.137051e-04
+ 13 (restart 0) KSP residual norm 2.416807e-04
+ 14 (restart 0) KSP residual norm 1.334380e-04
+ 15 (restart 0) KSP residual norm 8.067791e-05
+ 16 (restart 0) KSP residual norm 3.898108e-05
+ 17 (restart 0) KSP residual norm 2.717260e-05
+ 18 (restart 0) KSP residual norm 1.411165e-05
+ 19 (restart 0) KSP residual norm 8.625636e-06
+ 20 (restart 0) KSP residual norm 4.723438e-06
+ 21 (restart 0) KSP residual norm 2.984118e-06
+ 22 (restart 0) KSP residual norm 2.140369e-06
+ 23 (restart 0) KSP residual norm 1.573113e-06
+ 24 (restart 0) KSP residual norm 1.031817e-06
+ 25 (restart 0) KSP residual norm 6.743199e-07
+GMRES solver converged in 25 iterations (avg. reduction factor: 4.726e-01)
+ Sol. ||E|| = 3.416137e+01 (||RHS|| = 4.575615e-01)
+ Field energy E (2.208e-11 J) + H (1.190e-11 J) = 3.397e-11 J
+ S[1][2] = +8.986e-01-4.150e-01i, |S[1][2]| = -8.861e-02, arg(S[1][2]) = -2.479e+01
+ S[2][2] = -5.921e-02-1.279e-01i, |S[2][2]| = -1.702e+01, arg(S[2][2]) = -1.148e+02
+ S[3][2] = +5.242e-04+4.879e-04i, |S[3][2]| = -6.290e+01, arg(S[3][2]) = +4.295e+01
+ S[4][2] = +1.021e-03+2.137e-03i, |S[4][2]| = -5.251e+01, arg(S[4][2]) = +6.445e+01
+
+ Wrote fields to disk (Paraview) at step 1
+ Updating solution error estimates
+
+Completed 0 iterations of adaptive mesh refinement (AMR):
+ Indicator norm = 5.384e-01, global unknowns = 117748
+ Max. iterations = 0, tol. = 1.000e-02
+
+Estimated peak per-rank memory usage is: Min. 968.2M, Max. 968.2M, Avg. 968.2M, Total 968.2M
+Estimated peak per-node memory usage is: Min. 968.2M, Max. 968.2M, Avg. 968.2M, Total 968.2M
+
+Elapsed Time Report (s)           Min.        Max.        Avg.
+==============================================================
+Initialization                   0.245       0.245       0.245
+  Mesh Preprocessing             1.017       1.017       1.017
+Operator Construction            2.791       2.791       2.791
+Linear Solve                     1.026       1.026       1.026
+  Setup                          2.578       2.578       2.578
+  Preconditioner                 0.615       0.615       0.615
+  Coarse Solve                   2.400       2.400       2.400
+Estimation                       0.177       0.177       0.177
+  Construction                   1.016       1.016       1.016
+  Solve                          0.818       0.818       0.818
+Postprocessing                   2.601       2.601       2.601
+  Paraview                      20.560      20.560      20.560
+Disk IO                          0.065       0.065       0.065
+--------------------------------------------------------------
+Total                           35.936      35.936      35.936
+

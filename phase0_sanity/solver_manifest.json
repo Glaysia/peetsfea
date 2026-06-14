@@ -1,0 +1,249 @@
+{
+  "schema": "peetsfea.palace.phase0_sanity.v0",
+  "created_at": "2026-06-14T14:05:54+09:00",
+  "updated_at": "2026-06-14T14:15:39+09:00",
+  "result": "passed_with_gpu_only_hypre_pool_override",
+  "phase0_complete": true,
+  "strict_default_full_upstream_runs_complete": false,
+  "policy": {
+    "gpu_only": true,
+    "cpu_fallback_attempted": false,
+    "peetsfea_runtime_modified": false,
+    "palace_source_vendored": false,
+    "gpu_allocator_override_used_for_successful_runs": true
+  },
+  "host": {
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 3070",
+      "driver_version": "595.71.05",
+      "cuda_version_reported_by_nvidia_smi": "13.2",
+      "memory_total_mib": 8192,
+      "memory_used_mib_at_manifest": 6048,
+      "memory_free_mib_at_manifest": 1792
+    }
+  },
+  "containers": {
+    "gpu_passthrough_probe": {
+      "status": "passed",
+      "command": "docker run --rm --gpus all nvidia/cuda:13.0.2-base-ubuntu24.04 nvidia-smi",
+      "image": "nvidia/cuda:13.0.2-base-ubuntu24.04",
+      "repo_digest": "nvidia/cuda@sha256:2ab6381d970b211fb93853796dc6707eb8a72575a375c422b17cf4d8b2641701"
+    },
+    "spack_build_image": {
+      "image": "spack/ubuntu-noble:develop",
+      "repo_digest": "spack/ubuntu-noble@sha256:2a6981ff541a1040f26c89e23b8c6be089d7afc339b21bf8e4877562f31209f4"
+    }
+  },
+  "palace_build": {
+    "status": "passed",
+    "package": "palace@0.16.0",
+    "spack_spec_requested": "palace@0.16.0+cuda~slepc~sundials cuda_arch=86",
+    "spack_hash": "mxazkd5",
+    "install_prefix": "/opt/spack/opt/spack/linux-zen3/palace-0.16.0-mxazkd5mg6ababvdar7nk36cftgez226",
+    "docker_volume": "peetsfea_palace_spack_opt",
+    "palace_git_changeset": "869ee5c",
+    "palace_full_commit": "869ee5ced4850384410a7aeebc7c25f4c01be161",
+    "cuda_arch": "86",
+    "build_log": "run/palace/phase0_sanity/build_spack_install.log"
+  },
+  "hypre_pool_override": {
+    "status": "used_for_successful_gpu_only_runs",
+    "source": "run/palace/phase0_sanity/hypre_pool_override/hypre_pool_override.c",
+    "shared_library": "run/palace/phase0_sanity/hypre_pool_override/libhypre_pool_override.so",
+    "build_log": "run/palace/phase0_sanity/hypre_pool_override/build.log",
+    "source_sha256": "c199f6080df61f93f3bfd431e1cdb644d26b65f38065192f90ccd67614a63f85",
+    "shared_library_sha256": "d3cd2a58ed44e8ce97b290b5a8c8be6218daa91073b6840aaa35dbbea9a85dad",
+    "device_pool_bytes": 536870912,
+    "unified_pool_bytes": 536870912,
+    "pinned_pool_bytes": 67108864,
+    "rationale": "The default HYPRE/Umpire CUDA pool requested 4294967312 bytes and failed on the current RTX 3070 desktop session. The override keeps execution on GPU and reduces the pool reservation for sanity-scale runs."
+  },
+  "runs": [
+    {
+      "name": "cpw_lumped_uniform",
+      "official_source": "awslabs/palace v0.16.0 examples/cpw/cpw_lumped_uniform.json",
+      "problem_type": "Driven",
+      "port_type": "LumpedPort",
+      "config": "run/palace/phase0_sanity/cpw/cpw_lumped_uniform_gpu.jsonc",
+      "mesh": "run/palace/phase0_sanity/cpw/mesh/cpw_lumped_0.msh",
+      "sha256": {
+        "source_config": "fd3c14d6cbea44739d47f1b7285a9aefa7fff2d997bb4c7f610eed5bfd719215",
+        "gpu_config": "376c5797ce1d5bdaffc449b803c36ce2917d3d30105751b4a5d6d8e7feec2a9d",
+        "mesh": "d02bec1424b94ec0e6785cf00043499d541acee34f8e7aa0dc45435decc1028b"
+      },
+      "config_change": "Solver.Device changed from CPU to GPU",
+      "command": "palace -np 1 cpw_lumped_uniform_gpu.jsonc",
+      "status": "failed",
+      "gpu_path_confirmed": true,
+      "gpu_evidence": [
+        "Detected 1 CUDA device",
+        "Device configuration: cuda,cpu",
+        "Memory configuration: host-umpire,cuda-umpire",
+        "libCEED backend: /gpu/cuda/magma"
+      ],
+      "failure": {
+        "type": "cuda_oom",
+        "message": "cudaMalloc( bytes = 4294967312 ) failed with error: out of memory",
+        "requested_bytes": 4294967312
+      },
+      "expected_outputs": [
+        "port-S.csv",
+        "port-V.csv",
+        "port-I.csv",
+        "field output",
+        "Palace stdout log"
+      ],
+      "actual_outputs": [
+        "run/palace/phase0_sanity/cpw/postpro/lumped_uniform/palace.json",
+        "run/palace/phase0_sanity/palace_cpw_gpu_stdout.log"
+      ],
+      "stdout_log": "run/palace/phase0_sanity/palace_cpw_gpu_stdout.log"
+    },
+    {
+      "name": "cylinder_driven_wave",
+      "official_source": "awslabs/palace v0.16.0 examples/cylinder/driven_wave.json",
+      "problem_type": "Driven",
+      "port_type": "WavePort",
+      "config": "run/palace/phase0_sanity/cylinder_driven_wave/driven_wave_gpu.jsonc",
+      "mesh": "run/palace/phase0_sanity/cylinder_driven_wave/mesh/cylinder_hex.msh",
+      "sha256": {
+        "source_config": "fbe97f52e85599b7ba6a5e2c8a77c141693ed4f6cf2928f1bd2753fe1cbc025e",
+        "gpu_config": "a0fb0f4446001813aa85497d2b3ca149bbea0552168f139dda02b05813c0d21e",
+        "mesh": "de1ccf8e9332493900e0a445a37025f9b5fd35c2d1dde33d807a0f5c2995f3ab"
+      },
+      "config_change": "Solver.Device changed from CPU to GPU",
+      "command": "palace -np 1 driven_wave_gpu.jsonc",
+      "status": "failed",
+      "gpu_path_confirmed": true,
+      "gpu_evidence": [
+        "Detected 1 CUDA device",
+        "Device configuration: cuda,cpu",
+        "Memory configuration: host-umpire,cuda-umpire",
+        "libCEED backend: /gpu/cuda/magma"
+      ],
+      "failure": {
+        "type": "cuda_oom",
+        "message": "cudaMalloc( bytes = 4294967312 ) failed with error: out of memory",
+        "requested_bytes": 4294967312
+      },
+      "expected_outputs": [
+        "port-S.csv",
+        "port-V.csv",
+        "port-I.csv",
+        "field output",
+        "Palace stdout log"
+      ],
+      "actual_outputs": [
+        "run/palace/phase0_sanity/cylinder_driven_wave/postpro/driven_wave/palace.json",
+        "run/palace/phase0_sanity/palace_cylinder_gpu_stdout.log"
+      ],
+      "stdout_log": "run/palace/phase0_sanity/palace_cylinder_gpu_stdout.log"
+    },
+    {
+      "name": "cylinder_driven_wave_hypre_pool_override",
+      "official_source": "awslabs/palace v0.16.0 examples/cylinder/driven_wave.json",
+      "problem_type": "Driven",
+      "port_type": "WavePort",
+      "config": "run/palace/phase0_sanity/cylinder_driven_wave/driven_wave_gpu.jsonc",
+      "mesh": "run/palace/phase0_sanity/cylinder_driven_wave/mesh/cylinder_hex.msh",
+      "command": "LD_PRELOAD=/work/phase0/hypre_pool_override/libhypre_pool_override.so palace -np 1 driven_wave_gpu.jsonc",
+      "status": "passed",
+      "gpu_path_confirmed": true,
+      "gpu_evidence": [
+        "Detected 1 CUDA device",
+        "Device configuration: cuda,cpu",
+        "Memory configuration: host-umpire,cuda-umpire",
+        "libCEED backend: /gpu/cuda/magma",
+        "Wrote fields to disk (Paraview) at steps 1-6",
+        "Total 30.349 s"
+      ],
+      "outputs": [
+        "run/palace/phase0_sanity/cylinder_driven_wave/postpro/driven_wave/port-S.csv",
+        "run/palace/phase0_sanity/cylinder_driven_wave/postpro/driven_wave/domain-E.csv",
+        "run/palace/phase0_sanity/cylinder_driven_wave/postpro/driven_wave/paraview/driven/driven.pvd",
+        "run/palace/phase0_sanity/cylinder_driven_wave/postpro/driven_wave/paraview/driven_boundary/driven_boundary.pvd",
+        "run/palace/phase0_sanity/palace_cylinder_gpu_hypre_pool_override_stdout.log"
+      ],
+      "stdout_log": "run/palace/phase0_sanity/palace_cylinder_gpu_hypre_pool_override_stdout.log",
+      "stdout_sha256": "3ed6cc26c43b49a27b938bfb112e6191def32a9e0631995fa7ce42c710cfdcc3"
+    },
+    {
+      "name": "cpw_lumped_uniform_hypre_pool_override",
+      "official_source": "awslabs/palace v0.16.0 examples/cpw/cpw_lumped_uniform.json",
+      "problem_type": "Driven",
+      "port_type": "LumpedPort",
+      "config": "run/palace/phase0_sanity/cpw/cpw_lumped_uniform_gpu.jsonc",
+      "mesh": "run/palace/phase0_sanity/cpw/mesh/cpw_lumped_0.msh",
+      "command": "LD_PRELOAD=/work/phase0/hypre_pool_override/libhypre_pool_override.so palace -np 1 cpw_lumped_uniform_gpu.jsonc",
+      "status": "failed_after_partial_outputs",
+      "gpu_path_confirmed": true,
+      "failure": {
+        "type": "cuda_oom",
+        "message": "CUDA error: cudaGetLastError failed with out of memory during excitation 2 at 8 GHz"
+      },
+      "partial_outputs": [
+        "run/palace/phase0_sanity/cpw/postpro/lumped_uniform/port-S.csv",
+        "run/palace/phase0_sanity/cpw/postpro/lumped_uniform/port-V.csv",
+        "run/palace/phase0_sanity/cpw/postpro/lumped_uniform/port-I.csv",
+        "run/palace/phase0_sanity/cpw/postpro/lumped_uniform/paraview/driven/excitation_1/excitation_1.pvd",
+        "run/palace/phase0_sanity/palace_cpw_gpu_hypre_pool_override_stdout.log"
+      ],
+      "stdout_log": "run/palace/phase0_sanity/palace_cpw_gpu_hypre_pool_override_stdout.log"
+    },
+    {
+      "name": "cpw_lumped_onefreq_hypre_pool_override",
+      "official_source": "awslabs/palace v0.16.0 examples/cpw/cpw_lumped_uniform.json, reduced to one 2 GHz point for sanity output completion",
+      "problem_type": "Driven",
+      "port_type": "LumpedPort",
+      "config": "run/palace/phase0_sanity/cpw/cpw_lumped_onefreq_gpu.jsonc",
+      "mesh": "run/palace/phase0_sanity/cpw/mesh/cpw_lumped_0.msh",
+      "sha256": {
+        "gpu_config": "47c567a65091912ef26541876b45ef6ec873090989fc46a7d7b49dd691088213",
+        "stdout_log": "d484e171e7b46fea07e4c8547bc4800d143f66b31ed1f8eeb83f3968dcaddc2d",
+        "port_s": "f123116f0175bcdf72ab0ac7de2b74708241022007d17a35d109d3302996bf70",
+        "port_v": "54eafd06fa271df2cc37423396a984b3307b8c75dd3fabee9b7d2988b35c5662",
+        "port_i": "b7ba79ec54e88100eb8e6bbc9b46470bab18cf47d6aeac944dd5e085ab400129"
+      },
+      "config_changes": [
+        "Solver.Device changed from CPU to GPU",
+        "Problem.Output changed from postpro/lumped_uniform to postpro/lumped_onefreq",
+        "Driven.Samples reduced to one Point sample at 2.0 GHz",
+        "Driven.Save reduced to [2.0]"
+      ],
+      "command": "LD_PRELOAD=/work/phase0/hypre_pool_override/libhypre_pool_override.so palace -np 1 cpw_lumped_onefreq_gpu.jsonc",
+      "status": "passed",
+      "gpu_path_confirmed": true,
+      "gpu_evidence": [
+        "Detected 1 CUDA device",
+        "Device configuration: cuda,cpu",
+        "Memory configuration: host-umpire,cuda-umpire",
+        "libCEED backend: /gpu/cuda/magma",
+        "Wrote fields to disk (Paraview) at step 1 for both excitations",
+        "Estimated peak per-rank memory usage 968.2M",
+        "Total 35.936 s"
+      ],
+      "outputs": [
+        "run/palace/phase0_sanity/cpw/postpro/lumped_onefreq/port-S.csv",
+        "run/palace/phase0_sanity/cpw/postpro/lumped_onefreq/port-V.csv",
+        "run/palace/phase0_sanity/cpw/postpro/lumped_onefreq/port-I.csv",
+        "run/palace/phase0_sanity/cpw/postpro/lumped_onefreq/domain-E.csv",
+        "run/palace/phase0_sanity/cpw/postpro/lumped_onefreq/paraview/driven/excitation_1/excitation_1.pvd",
+        "run/palace/phase0_sanity/cpw/postpro/lumped_onefreq/paraview/driven/excitation_2/excitation_2.pvd",
+        "run/palace/phase0_sanity/cpw/postpro/lumped_onefreq/paraview/driven_boundary/excitation_1/excitation_1.pvd",
+        "run/palace/phase0_sanity/cpw/postpro/lumped_onefreq/paraview/driven_boundary/excitation_2/excitation_2.pvd",
+        "run/palace/phase0_sanity/palace_cpw_onefreq_gpu_hypre_pool_override_stdout.log"
+      ],
+      "stdout_log": "run/palace/phase0_sanity/palace_cpw_onefreq_gpu_hypre_pool_override_stdout.log"
+    }
+  ],
+  "default_run_blocker": {
+    "type": "gpu_memory_exhaustion",
+    "summary": "Default Palace CUDA runs initialize the GPU backend but abort because HYPRE/Umpire requests 4294967312 bytes. A GPU-only HYPRE pool-size override is required for this RTX 3070 desktop session to complete sanity-scale runs.",
+    "no_cpu_fallback": true
+  },
+  "next_actions": [
+    "Treat the HYPRE pool-size setting as part of the Palace GPU run harness for this PC unless a cleaner Palace/MFEM configuration knob is found.",
+    "Rerun the full CPW sweep after freeing VRAM or on a larger/headless GPU before using it as a benchmark case.",
+    "Use the one-frequency CPW output as the Phase 0 port-S/V/I smoke artifact, not as a physics validation benchmark."
+  ]
+}

@@ -1,0 +1,82 @@
+== nvidia-smi -L ==
+GPU 0: NVIDIA GeForce RTX 3070 (UUID: GPU-ca07c80d-4a89-0ea5-ef45-3eadd007ddd1)
+== palace run ==
+>> /opt/spack/opt/spack/linux-zen3/openmpi-5.0.10-dz6mcy4edceennvzyifk75dwa2amdnoq/bin/mpirun -n 1 /opt/spack/opt/spack/linux-zen3/palace-0.16.0-mxazkd5mg6ababvdar7nk36cftgez226/bin/palace-x86_64.bin driven_wave_gpu.jsonc
+
+_____________     _______
+_____   __   \____ __   /____ ____________
+____   /_/  /  __ ` /  /  __ ` /  ___/  _ \
+___   _____/  /_/  /  /  /_/  /  /__/  ___/
+  /__/     \___,__/__/\___,__/\_____\_____/
+
+Git changeset ID: 869ee5c
+Running with 1 MPI process
+Detected 1 CUDA device
+Device configuration: cuda,cpu
+Memory configuration: host-umpire,cuda-umpire
+Use GPU-aware MPI:    no
+libCEED backend: /gpu/cuda/magma
+
+Finished partitioning mesh into 1 subdomain
+
+Characteristic length and time scales:
+ Lc = 5.480e-02 m, tc = 1.828e-01 ns
+
+Mesh curvature order: 2
+Mesh bounding box:
+ (Xmin, Ymin, Zmin) = (-2.740e-02, -2.740e-02, +0.000e+00) m
+ (Xmax, Ymax, Zmax) = (+2.740e-02, +2.740e-02, +5.480e-02) m
+
+Parallel Mesh Stats:
+
+                minimum     average     maximum       total
+ vertices           125         125         125         125
+ edges              320         320         320         320
+ faces              276         276         276         276
+ elements            80          80          80          80
+ neighbors            0           0           0
+
+            minimum     maximum
+ h         0.192281    0.236086
+ kappa         1.25     2.13065
+
+Estimated current per-rank memory usage is: Min. 386.0M, Max. 386.0M, Avg. 386.0M, Total 386.0M
+Estimated current per-node memory usage is: Min. 386.0M, Max. 386.0M, Avg. 386.0M, Total 386.0M
+terminate called after throwing an instance of 'umpire::out_of_memory_error'
+  what():  ! Umpire runtime_error [/tmp/root/spack-stage/spack-stage-umpire-2025.12.0-e2gjdycf5jh7zynxq6nhrc5sw6qtqw6z/spack-src/src/umpire/alloc/CudaMallocAllocator.hpp:38]: cudaMalloc( bytes = 4294967312 ) failed with error: out of memory
+    Backtrace: 22 frames
+    0 0x71bd8cb579ed No dladdr: /opt/spack/opt/spack/linux-zen3/mfem-4.9.0-4mfttwjjimvu6qctjrswmvci5gride7r/lib/libmfem.so.4.9(+0x5579ed) [0x71bd8cb579ed]
+    1 0x71bd8cb62b7b No dladdr: /opt/spack/opt/spack/linux-zen3/mfem-4.9.0-4mfttwjjimvu6qctjrswmvci5gride7r/lib/libmfem.so.4.9(_ZNK6umpire13runtime_error7messageB5cxx11Ev+0x5b) [0x71bd8cb62b7b]
+    2 0x71bd78265b66 No dladdr: /opt/spack/opt/spack/linux-zen3/umpire-2025.12.0-e2gjdycf5jh7zynxq6nhrc5sw6qtqw6z/lib/libumpire.so(_ZN6umpire13runtime_errorC1ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES8_i+0xa6) [0x71bd78265b66]
+    3 0x71bd7829f69d No dladdr: /opt/spack/opt/spack/linux-zen3/umpire-2025.12.0-e2gjdycf5jh7zynxq6nhrc5sw6qtqw6z/lib/libumpire.so(_ZN6umpire8resource24CudaDeviceMemoryResource8allocateEm+0x110d) [0x71bd7829f69d]
+    4 0x71bd78245f7c No dladdr: /opt/spack/opt/spack/linux-zen3/umpire-2025.12.0-e2gjdycf5jh7zynxq6nhrc5sw6qtqw6z/lib/libumpire.so(+0x45f7c) [0x71bd78245f7c]
+    5 0x71bd8cb6208a No dladdr: /opt/spack/opt/spack/linux-zen3/mfem-4.9.0-4mfttwjjimvu6qctjrswmvci5gride7r/lib/libmfem.so.4.9(_ZN6umpire9Allocator11do_allocateEm+0x44a) [0x71bd8cb6208a]
+    6 0x71bd88ce092a No dladdr: /opt/spack/opt/spack/linux-zen3/hypre-3.1.0-5lfbi5injshyzuklkkfukapmw65ka2tj/lib/libHYPRE.so.301(hypre_umpire_device_pooled_allocate+0x8a) [0x71bd88ce092a]
+    7 0x71bd88ce0aab No dladdr: /opt/spack/opt/spack/linux-zen3/hypre-3.1.0-5lfbi5injshyzuklkkfukapmw65ka2tj/lib/libHYPRE.so.301(hypre_MAlloc+0xeb) [0x71bd88ce0aab]
+    8 0x71bd88d336cd No dladdr: /opt/spack/opt/spack/linux-zen3/hypre-3.1.0-5lfbi5injshyzuklkkfukapmw65ka2tj/lib/libHYPRE.so.301(_ZN6thrust23THRUST_300104_SM_860_NS8count_ifINS0_6detail22execute_with_allocatorIR22hypre_device_allocatorNS0_8cuda_cub22execute_on_stream_baseEEENS0_17counting_iteratorIiNS0_11use_defaultESA_SA_NS0_18compile_time_valueILi1EEEEE16is_non_empty_rowEEN4cuda3std3__415iterator_traitsIT0_vE15difference_typeERKNS2_21execution_policy_baseIT_EESJ_SJ_T1_+0x2cd) [0x71bd88d336cd]
+    9 0x71bd88d2be49 No dladdr: /opt/spack/opt/spack/linux-zen3/hypre-3.1.0-5lfbi5injshyzuklkkfukapmw65ka2tj/lib/libHYPRE.so.301(hypre_CSRMatrixSetRownnzDevice+0x69) [0x71bd88d2be49]
+    10 0x71bd88d00925 No dladdr: /opt/spack/opt/spack/linux-zen3/hypre-3.1.0-5lfbi5injshyzuklkkfukapmw65ka2tj/lib/libHYPRE.so.301(hypre_CSRMatrixSetRownnz+0x55) [0x71bd88d00925]
+    11 0x71bd8cbe3da6 No dladdr: /opt/spack/opt/spack/linux-zen3/mfem-4.9.0-4mfttwjjimvu6qctjrswmvci5gride7r/lib/libmfem.so.4.9(_ZN4mfem14HypreParMatrixC2EP19ompi_communicator_tiiPiS3_S3_S3_S3_S3_S3_i+0x4b6) [0x71bd8cbe3da6]
+    12 0x71bd8d1f5d9c No dladdr: /opt/spack/opt/spack/linux-zen3/mfem-4.9.0-4mfttwjjimvu6qctjrswmvci5gride7r/lib/libmfem.so.4.9(_ZNK4mfem21ParFiniteElementSpace24Build_Dof_TrueDof_MatrixEv+0xcac) [0x71bd8d1f5d9c]
+    13 0x71bd8d1f760d No dladdr: /opt/spack/opt/spack/linux-zen3/mfem-4.9.0-4mfttwjjimvu6qctjrswmvci5gride7r/lib/libmfem.so.4.9(_ZNK4mfem21ParFiniteElementSpace20GetEssentialTrueDofsERKNS_5ArrayIiEERS2_i+0x20d) [0x71bd8d1f760d]
+    14 0x71bd930f2b8a No dladdr: /opt/spack/opt/spack/linux-zen3/palace-0.16.0-mxazkd5mg6ababvdar7nk36cftgez226/lib/libpalace.so(_ZN6palace3fem36ConstructFiniteElementSpaceHierarchyIN4mfem15ND_FECollectionEEENS_27FiniteElementSpaceHierarchyEiRKSt6vectorISt10unique_ptrINS_4MeshESt14default_deleteIS7_EESaISA_EERKS5_IS6_IT_S8_ISF_EESaISH_EEPKNS2_5ArrayIiEEPS5_ISN_SaISN_EE+0x4ca) [0x71bd930f2b8a]
+    15 0x71bd931d1a2f No dladdr: /opt/spack/opt/spack/linux-zen3/palace-0.16.0-mxazkd5mg6ababvdar7nk36cftgez226/lib/libpalace.so(_ZN6palace13SpaceOperatorC1ERKNS_6IoDataERKSt6vectorISt10unique_ptrINS_4MeshESt14default_deleteIS6_EESaIS9_EE+0x52f) [0x71bd931d1a2f]
+    16 0x71bd92f19066 No dladdr: /opt/spack/opt/spack/linux-zen3/palace-0.16.0-mxazkd5mg6ababvdar7nk36cftgez226/lib/libpalace.so(_ZNK6palace12DrivenSolver5SolveERKSt6vectorISt10unique_ptrINS_4MeshESt14default_deleteIS3_EESaIS6_EE+0xf6) [0x71bd92f19066]
+    17 0x71bd92ee69f6 No dladdr: /opt/spack/opt/spack/linux-zen3/palace-0.16.0-mxazkd5mg6ababvdar7nk36cftgez226/lib/libpalace.so(_ZNK6palace10BaseSolver23SolveEstimateMarkRefineERSt6vectorISt10unique_ptrINS_4MeshESt14default_deleteIS3_EESaIS6_EE+0xd6) [0x71bd92ee69f6]
+    18 0x63e28d370645 No dladdr: /opt/spack/opt/spack/linux-zen3/palace-0.16.0-mxazkd5mg6ababvdar7nk36cftgez226/bin/palace-x86_64.bin(+0xb645) [0x63e28d370645]
+    19 0x71bd8bc181ca No dladdr: /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca) [0x71bd8bc181ca]
+    20 0x71bd8bc1828b No dladdr: /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b) [0x71bd8bc1828b]
+    21 0x63e28d370c15 No dladdr: /opt/spack/opt/spack/linux-zen3/palace-0.16.0-mxazkd5mg6ababvdar7nk36cftgez226/bin/palace-x86_64.bin(+0xbc15) [0x63e28d370c15]
+
+
+
+LIBXSMM_VERSION: feature_bf32_via_amx_gemms-1.17-3832 (25693944)
+LIBXSMM_TARGET: hsw [AMD Ryzen 9 5950X 16-Core Processor]
+Registry and code: 13 MB
+Command (PID=85): /opt/spack/opt/spack/linux-zen3/palace-0.16.0-mxazkd5mg6ababvdar7nk36cftgez226/bin/palace-x86_64.bin driven_wave_gpu.jsonc
+Uptime: 0.244720 s
+--------------------------------------------------------------------------
+
+prterun noticed that process rank 0 with PID 85 on node fd8ccf1dcc04 exited on
+signal 6 (Aborted).
+--------------------------------------------------------------------------

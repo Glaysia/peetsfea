@@ -1,0 +1,98 @@
+{
+  "ElapsedTime": {
+    "Counts": {
+      "Adaptation": 0,
+      "CoarseSolve": 88,
+      "Construction": 2,
+      "DiskIO": 3,
+      "Div.-FreeProjection": 0,
+      "EigenvalueSolve": 0,
+      "Estimation": 12,
+      "FarFields": 0,
+      "Gridfunction": 0,
+      "Initialization": 2,
+      "LinearSolve": 6,
+      "MeshPreprocessing": 1,
+      "OperatorConstruction": 1,
+      "PROMConstruction": 0,
+      "PROMSolve": 0,
+      "Paraview": 7,
+      "Postprocessing": 14,
+      "Preconditioner": 88,
+      "Rebalancing": 0,
+      "Setup": 6,
+      "Solve": 12,
+      "TimeStepping": 0,
+      "Total": 1,
+      "WavePorts": 6
+    },
+    "Durations": {
+      "Adaptation": 0.0,
+      "CoarseSolve": 1.6436332220000003,
+      "Construction": 0.379583413,
+      "DiskIO": 0.007886589,
+      "Div.-FreeProjection": 0.0,
+      "EigenvalueSolve": 0.0,
+      "Estimation": 0.14506630099999995,
+      "FarFields": 0.0,
+      "Gridfunction": 0.0,
+      "Initialization": 0.14041836000000002,
+      "LinearSolve": 3.0120702529999988,
+      "MeshPreprocessing": 0.0046942780000000005,
+      "OperatorConstruction": 4.1086375749999995,
+      "PROMConstruction": 0.0,
+      "PROMSolve": 0.0,
+      "Paraview": 3.8208058700000005,
+      "Postprocessing": 0.18303117900000007,
+      "Preconditioner": 6.824915756999997,
+      "Rebalancing": 0.0,
+      "Setup": 8.60982979,
+      "Solve": 0.309205996,
+      "TimeStepping": 0.0,
+      "Total": 30.349150696,
+      "WavePorts": 1.134509959
+    }
+  },
+  "Excitations": [
+    [
+      [
+        1,
+        {
+          "CurrentDipole": [],
+          "LumpedPort": [],
+          "SurfaceCurrent": [],
+          "WavePort": [
+            1
+          ]
+        }
+      ]
+    ]
+  ],
+  "GitTag": "869ee5c",
+  "LinearSolver": {
+    "TotalIts": 76,
+    "TotalSolves": 6
+  },
+  "PeakMemoryMegabytes": {
+    "Average": 769.8828125,
+    "Max": 769.8828125,
+    "Min": 769.8828125,
+    "Total": 769.8828125
+  },
+  "PeakNodeMemoryMegabytes": {
+    "Average": 769.8828125,
+    "Max": 769.8828125,
+    "Min": 769.8828125,
+    "Total": 769.8828125
+  },
+  "Problem": {
+    "DegreesOfFreedom": 16544,
+    "MPISize": 1,
+    "MeshElements": 80,
+    "MultigridDegreesOfFreedom": [
+      320,
+      2224,
+      16544
+    ]
+  }
+}

@@ -1,0 +1,279 @@
+== nvidia-smi -L ==
+GPU 0: NVIDIA GeForce RTX 3070 (UUID: GPU-ca07c80d-4a89-0ea5-ef45-3eadd007ddd1)
+== palace run with HYPRE pool override ==
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+>> /opt/spack/opt/spack/linux-zen3/openmpi-5.0.10-dz6mcy4edceennvzyifk75dwa2amdnoq/bin/mpirun -n 1 /opt/spack/opt/spack/linux-zen3/palace-0.16.0-mxazkd5mg6ababvdar7nk36cftgez226/bin/palace-x86_64.bin driven_wave_gpu.jsonc
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+[peetsfea-phase0] HYPRE Umpire pool override: device=536870912 unified=536870912 pinned=67108864 status=(1,1,1)
+
+_____________     _______
+_____   __   \____ __   /____ ____________
+____   /_/  /  __ ` /  /  __ ` /  ___/  _ \
+___   _____/  /_/  /  /  /_/  /  /__/  ___/
+  /__/     \___,__/__/\___,__/\_____\_____/
+
+
+[38;2;255;255;000m--> Warning![0m
+Output folder is not empty; program will overwrite content! (postpro/driven_wave)
+Git changeset ID: 869ee5c
+Running with 1 MPI process
+Detected 1 CUDA device
+Device configuration: cuda,cpu
+Memory configuration: host-umpire,cuda-umpire
+Use GPU-aware MPI:    no
+libCEED backend: /gpu/cuda/magma
+
+Finished partitioning mesh into 1 subdomain
+
+Characteristic length and time scales:
+ Lc = 5.480e-02 m, tc = 1.828e-01 ns
+
+Mesh curvature order: 2
+Mesh bounding box:
+ (Xmin, Ymin, Zmin) = (-2.740e-02, -2.740e-02, +0.000e+00) m
+ (Xmax, Ymax, Zmax) = (+2.740e-02, +2.740e-02, +5.480e-02) m
+
+Parallel Mesh Stats:
+
+                minimum     average     maximum       total
+ vertices           125         125         125         125
+ edges              320         320         320         320
+ faces              276         276         276         276
+ elements            80          80          80          80
+ neighbors            0           0           0
+
+            minimum     maximum
+ h         0.192281    0.236086
+ kappa         1.25     2.13065
+
+Estimated current per-rank memory usage is: Min. 386.9M, Max. 386.9M, Avg. 386.9M, Total 386.9M
+Estimated current per-node memory usage is: Min. 386.9M, Max. 386.9M, Avg. 386.9M, Total 386.9M
+
+Configuring Robin impedance BC for wave ports at attributes:
+ 2: Index = 1, mode = 1, d = 0.000e+00 m,  n = (+0.0,+0.0,+1.0)
+
+Configuring wave port excitation source term at attributes:
+ 2: Index = 1
+
+Configuring Dirichlet PEC BC at attributes:
+ 3-4
+
+Computing frequency response for:
+Excitation with index 1 has contributions from:
+ Wave port  1
+
+Assembling system matrices, number of global unknowns:
+ H1 (p = 4): 5729, ND (p = 4): 16544, RT (p = 4): 15936
+ Operator assembly level: Partial
+ Mesh geometries:
+  Cube: P = 300, Q = 125 (quadrature order = 8)
+
+Calculating boundary modes at wave ports for ω/2π = 1.571e+01 GHz (2.871e+00)
+ Number of global unknowns for port 1:
+  H1: 337, ND: 656
+ Port 1, mode 1: kₙ = 3.452e+01-3.309e-02i m⁻¹
+
+Assembling multigrid hierarchy:
+ Level 0 (p = 1): 320 unknowns
+ Level 1 (p = 2): 2224 unknowns
+ Level 2 (p = 4): 16544 unknowns
+ Level 0 (auxiliary) (p = 1): 125 unknowns
+ Level 1 (auxiliary) (p = 2): 801 unknowns
+ Level 2 (auxiliary) (p = 4): 5729 unknowns
+
+It 1/6: ω/2π = 2.500e+00 GHz (total elapsed time = 4.08e+00 s)
+
+  Residual norms for GMRES solve
+  0 (restart 0) KSP residual norm 4.330001e+01
+  1 (restart 0) KSP residual norm 5.180445e+00
+  2 (restart 0) KSP residual norm 1.145602e-01
+  3 (restart 0) KSP residual norm 2.706399e-03
+  4 (restart 0) KSP residual norm 5.341303e-05
+  5 (restart 0) KSP residual norm 1.127178e-06
+  6 (restart 0) KSP residual norm 2.539821e-08
+GMRES solver converged in 6 iterations (avg. reduction factor: 2.893e-02)
+ Sol. ||E|| = 2.939048e+01 (||RHS|| = 1.587413e+00)
+ Field energy E (6.656e-10 J) + H (6.277e-10 J) = 1.293e-09 J
+ S[1][1] = +7.978e-01-5.959e-01i, |S[1][1]| = -3.648e-02, arg(S[1][1]) = -3.676e+01
+
+ Wrote fields to disk (Paraview) at step 1
+ Updating solution error estimates
+
+Calculating boundary modes at wave ports for ω/2π = 1.885e+01 GHz (3.446e+00)
+ Port 1, mode 1: kₙ = 6.086e+01-2.702e-02i m⁻¹
+
+It 2/6: ω/2π = 3.000e+00 GHz (total elapsed time = 7.64e+00 s)
+
+  Residual norms for GMRES solve
+  0 (restart 0) KSP residual norm 8.394190e+01
+  1 (restart 0) KSP residual norm 7.488713e+00
+  2 (restart 0) KSP residual norm 4.532150e-01
+  3 (restart 0) KSP residual norm 2.890076e-02
+  4 (restart 0) KSP residual norm 7.765790e-04
+  5 (restart 0) KSP residual norm 1.386694e-05
+  6 (restart 0) KSP residual norm 2.917180e-07
+  7 (restart 0) KSP residual norm 2.323722e-08
+GMRES solver converged in 7 iterations (avg. reduction factor: 4.579e-02)
+ Sol. ||E|| = 2.146281e+01 (||RHS|| = 2.309028e+00)
+ Field energy E (3.695e-10 J) + H (3.895e-10 J) = 7.590e-10 J
+ S[1][1] = -9.234e-01+3.765e-01i, |S[1][1]| = -2.427e-02, arg(S[1][1]) = +1.578e+02
+
+ Wrote fields to disk (Paraview) at step 2
+ Updating solution error estimates
+
+Calculating boundary modes at wave ports for ω/2π = 2.199e+01 GHz (4.020e+00)
+ Port 1, mode 1: kₙ = 8.169e+01-2.740e-02i m⁻¹
+
+It 3/6: ω/2π = 3.500e+00 GHz (total elapsed time = 1.08e+01 s)
+
+  Residual norms for GMRES solve
+  0 (restart 0) KSP residual norm 2.699239e+01
+  1 (restart 0) KSP residual norm 1.938676e+01
+  2 (restart 0) KSP residual norm 1.505373e+00
+  3 (restart 0) KSP residual norm 2.268217e-01
+  4 (restart 0) KSP residual norm 9.334694e-03
+  5 (restart 0) KSP residual norm 2.172896e-04
+  6 (restart 0) KSP residual norm 6.096515e-06
+  7 (restart 0) KSP residual norm 2.759481e-07
+  8 (restart 0) KSP residual norm 9.410993e-08
+  9 (restart 0) KSP residual norm 2.003997e-08
+GMRES solver converged in 9 iterations (avg. reduction factor: 9.574e-02)
+ Sol. ||E|| = 2.067875e+01 (||RHS|| = 2.889489e+00)
+ Field energy E (3.232e-10 J) + H (3.438e-10 J) = 6.669e-10 J
+ S[1][1] = +8.884e-01+4.529e-01i, |S[1][1]| = -2.476e-02, arg(S[1][1]) = +2.701e+01
+
+ Wrote fields to disk (Paraview) at step 3
+ Updating solution error estimates
+
+Calculating boundary modes at wave ports for ω/2π = 2.513e+01 GHz (4.594e+00)
+ Port 1, mode 1: kₙ = 1.005e+02-2.909e-02i m⁻¹
+
+It 4/6: ω/2π = 4.000e+00 GHz (total elapsed time = 1.43e+01 s)
+
+  Residual norms for GMRES solve
+  0 (restart 0) KSP residual norm 5.658858e+01
+  1 (restart 0) KSP residual norm 2.273047e+01
+  2 (restart 0) KSP residual norm 3.494164e+00
+  3 (restart 0) KSP residual norm 7.754734e-01
+  4 (restart 0) KSP residual norm 6.406339e-02
+  5 (restart 0) KSP residual norm 1.850999e-03
+  6 (restart 0) KSP residual norm 1.018513e-04
+  7 (restart 0) KSP residual norm 6.973508e-06
+  8 (restart 0) KSP residual norm 5.430470e-06
+  9 (restart 0) KSP residual norm 2.249311e-06
+ 10 (restart 0) KSP residual norm 7.784644e-07
+ 11 (restart 0) KSP residual norm 2.056618e-07
+ 12 (restart 0) KSP residual norm 1.753327e-07
+ 13 (restart 0) KSP residual norm 1.140504e-07
+ 14 (restart 0) KSP residual norm 2.281905e-08
+GMRES solver converged in 14 iterations (avg. reduction factor: 2.075e-01)
+ Sol. ||E|| = 2.083996e+01 (||RHS|| = 3.426151e+00)
+ Field energy E (3.448e-10 J) + H (3.051e-10 J) = 6.499e-10 J
+ S[1][1] = -1.879e-02-9.964e-01i, |S[1][1]| = -3.021e-02, arg(S[1][1]) = -9.108e+01
+
+ Wrote fields to disk (Paraview) at step 4
+ Updating solution error estimates
+
+Calculating boundary modes at wave ports for ω/2π = 2.827e+01 GHz (5.168e+00)
+ Port 1, mode 1: kₙ = 1.182e+02-3.129e-02i m⁻¹
+
+It 5/6: ω/2π = 4.500e+00 GHz (total elapsed time = 1.85e+01 s)
+
+  Residual norms for GMRES solve
+  0 (restart 0) KSP residual norm 1.604185e+02
+  1 (restart 0) KSP residual norm 3.321192e+01
+  2 (restart 0) KSP residual norm 6.403077e+00
+  3 (restart 0) KSP residual norm 2.251614e+00
+  4 (restart 0) KSP residual norm 3.445980e-01
+  5 (restart 0) KSP residual norm 7.228872e-02
+  6 (restart 0) KSP residual norm 5.039292e-02
+  7 (restart 0) KSP residual norm 2.867246e-02
+  8 (restart 0) KSP residual norm 7.758833e-03
+  9 (restart 0) KSP residual norm 3.338866e-03
+ 10 (restart 0) KSP residual norm 8.013198e-04
+ 11 (restart 0) KSP residual norm 5.431749e-04
+ 12 (restart 0) KSP residual norm 5.131369e-04
+ 13 (restart 0) KSP residual norm 5.260306e-05
+ 14 (restart 0) KSP residual norm 3.260435e-06
+ 15 (restart 0) KSP residual norm 8.485490e-07
+ 16 (restart 0) KSP residual norm 1.087178e-07
+GMRES solver converged in 16 iterations (avg. reduction factor: 2.609e-01)
+ Sol. ||E|| = 1.915714e+01 (||RHS|| = 3.941885e+00)
+ Field energy E (2.933e-10 J) + H (3.068e-10 J) = 6.001e-10 J
+ S[1][1] = -9.205e-01+3.822e-01i, |S[1][1]| = -2.891e-02, arg(S[1][1]) = +1.574e+02
+
+ Wrote fields to disk (Paraview) at step 5
+ Updating solution error estimates
+
+Calculating boundary modes at wave ports for ω/2π = 3.142e+01 GHz (5.743e+00)
+ Port 1, mode 1: kₙ = 1.354e+02-3.375e-02i m⁻¹
+
+It 6/6: ω/2π = 5.000e+00 GHz (total elapsed time = 2.29e+01 s)
+
+  Residual norms for GMRES solve
+  0 (restart 0) KSP residual norm 7.808510e+01
+  1 (restart 0) KSP residual norm 5.638352e+01
+  2 (restart 0) KSP residual norm 2.690637e+01
+  3 (restart 0) KSP residual norm 1.049723e+01
+  4 (restart 0) KSP residual norm 5.030474e+00
+  5 (restart 0) KSP residual norm 1.411357e+00
+  6 (restart 0) KSP residual norm 2.741873e-01
+  7 (restart 0) KSP residual norm 2.544374e-01
+  8 (restart 0) KSP residual norm 8.161996e-02
+  9 (restart 0) KSP residual norm 1.831517e-02
+ 10 (restart 0) KSP residual norm 1.261092e-02
+ 11 (restart 0) KSP residual norm 3.849237e-03
+ 12 (restart 0) KSP residual norm 2.868427e-03
+ 13 (restart 0) KSP residual norm 1.099201e-03
+ 14 (restart 0) KSP residual norm 7.123587e-04
+ 15 (restart 0) KSP residual norm 5.969973e-04
+ 16 (restart 0) KSP residual norm 1.509135e-04
+ 17 (restart 0) KSP residual norm 1.030252e-04
+ 18 (restart 0) KSP residual norm 1.720478e-05
+ 19 (restart 0) KSP residual norm 1.100486e-05
+ 20 (restart 0) KSP residual norm 2.385298e-06
+ 21 (restart 0) KSP residual norm 1.040335e-06
+ 22 (restart 0) KSP residual norm 2.287887e-07
+ 23 (restart 0) KSP residual norm 1.567147e-07
+ 24 (restart 0) KSP residual norm 8.312266e-08
+GMRES solver converged in 24 iterations (avg. reduction factor: 4.151e-01)
+ Sol. ||E|| = 1.922263e+01 (||RHS|| = 4.445613e+00)
+ Field energy E (2.782e-10 J) + H (3.025e-10 J) = 5.806e-10 J
+ S[1][1] = +6.407e-01+7.633e-01i, |S[1][1]| = -3.047e-02, arg(S[1][1]) = +4.999e+01
+
+ Wrote fields to disk (Paraview) at step 6
+ Updating solution error estimates
+
+Completed 0 iterations of adaptive mesh refinement (AMR):
+ Indicator norm = 1.323e-03, global unknowns = 16544
+ Max. iterations = 0, tol. = 1.000e-02
+
+Estimated peak per-rank memory usage is: Min. 769.9M, Max. 769.9M, Avg. 769.9M, Total 769.9M
+Estimated peak per-node memory usage is: Min. 769.9M, Max. 769.9M, Avg. 769.9M, Total 769.9M
+
+Elapsed Time Report (s)           Min.        Max.        Avg.
+==============================================================
+Initialization                   0.140       0.140       0.140
+  Mesh Preprocessing             0.005       0.005       0.005
+Operator Construction            4.109       4.109       4.109
+  Wave Ports                     1.135       1.135       1.135
+Linear Solve                     3.012       3.012       3.012
+  Setup                          8.610       8.610       8.610
+  Preconditioner                 6.825       6.825       6.825
+  Coarse Solve                   1.644       1.644       1.644
+Estimation                       0.145       0.145       0.145
+  Construction                   0.380       0.380       0.380
+  Solve                          0.309       0.309       0.309
+Postprocessing                   0.183       0.183       0.183
+  Paraview                       3.821       3.821       3.821
+Disk IO                          0.008       0.008       0.008
+--------------------------------------------------------------
+Total                           30.349      30.349      30.349
+

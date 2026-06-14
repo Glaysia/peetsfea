@@ -1,0 +1,3 @@
+fd3c14d6cbea44739d47f1b7285a9aefa7fff2d997bb4c7f610eed5bfd719215  /home/harry/Projects/PythonProjects/worktrees3/dev_3/run/palace/phase0_sanity/cpw/cpw_lumped_uniform_cpu_source.jsonc
+376c5797ce1d5bdaffc449b803c36ce2917d3d30105751b4a5d6d8e7feec2a9d  /home/harry/Projects/PythonProjects/worktrees3/dev_3/run/palace/phase0_sanity/cpw/cpw_lumped_uniform_gpu.jsonc
+d02bec1424b94ec0e6785cf00043499d541acee34f8e7aa0dc45435decc1028b  /home/harry/Projects/PythonProjects/worktrees3/dev_3/run/palace/phase0_sanity/cpw/mesh/cpw_lumped_0.msh

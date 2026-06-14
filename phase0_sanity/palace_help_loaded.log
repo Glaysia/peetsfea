@@ -1,0 +1,16 @@
+/opt/spack/opt/spack/linux-zen3/palace-0.16.0-mxazkd5mg6ababvdar7nk36cftgez226/bin/palace
+/opt/spack/opt/spack/linux-zen3/openmpi-5.0.10-dz6mcy4edceennvzyifk75dwa2amdnoq/bin/mpirun
+Usage: palace [OPTIONS] CONFIG_FILE
+
+Wrapper for launching Palace using MPI
+
+Options:
+  -h, --help                       Show this help message and exit
+  -dry-run, --dry-run              Parse configuration file for errors and exit
+  -serial, --serial                Call Palace without MPI launcher, default is false
+  -np, --np NUM_PROCS              How many MPI processes to use, default is 1
+  -nt, --nt NUM_THREADS            Number of OpenMP threads to use for OpenMP builds, default is 1 or the value of OMP_NUM_THREADS in the environment
+  -launcher, --launcher LAUNCHER   MPI launcher, default is `mpirun`
+  -launcher-args,
+    --launcher-args ARGS           Any extra arguments to pass to MPI launcher, for example `--map-by` or `--bind-to` with their respective options (quoted)
+

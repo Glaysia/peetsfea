@@ -1,0 +1,11 @@
+<ValidationInfo>
+  <DesignValid>true</DesignValid>
+  <IgnoreUnclassifiedObjects>false</IgnoreUnclassifiedObjects>
+  <SkipIntersectionChecks>false</SkipIntersectionChecks>
+  <EntityCheckLevel>Strict</EntityCheckLevel>
+  <ValidationLevel>Perform full validations with standard port validations</ValidationLevel>
+  <Messages>
+    <Message>[warning] rx_ssw_coil_ssw_copper and tx_ssw_coil_ssw_copper:  Solving inside a solid with high conductivity may require a large mesh</Message>
+    <Message>[warning] For broadband frequency models it is recommended to set &apos;Automatically use causal materials&apos; in the HFSS Design Settings for Lossy Dielectrics.  See &apos;Design Settings for HFSS&apos; in the help for more information.</Message>
+  </Messages>
+</ValidationInfo>
