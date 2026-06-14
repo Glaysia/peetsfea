@@ -1,7 +1,7 @@
 ---
 title: Plan Note Index
 created: 2026-04-17 @ 09:09
-updated: 2026-06-01 @ 00:00
+updated: 2026-06-14 @ 00:00
 tags:
   - sdd
 ---
@@ -15,6 +15,7 @@ Large changes start here. Parent hub: [sdd-index](../sdd-index.md). Template: [p
 - [0.3.0-ssw-fixed-ocp-viewer](0.3.0-ssw-fixed-ocp-viewer.md)
 - [0.3.0-ssw-aedt-design-space-identity](0.3.0-ssw-aedt-design-space-identity.md)
 - [0.3.0-ssw-fixed-toml-sampling](0.3.0-ssw-fixed-toml-sampling.md)
+- [0.3.0-palace-second-backend-roadmap](0.3.0-palace-second-backend-roadmap.md)
 
 ## Standing Plans
 - [0.2.22-sdd-adoption](0.2.22-sdd-adoption.md)

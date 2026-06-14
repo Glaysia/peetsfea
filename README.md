@@ -1,7 +1,7 @@
 ---
 title: peetsfea
 created: 2026-04-17 @ 09:09
-updated: 2026-06-01 @ 00:00
+updated: 2026-06-14 @ 00:00
 tags:
   - governance
 ---
@@ -78,6 +78,7 @@ cd run
 ## 문서
 - 목표: [GOAL.md](GOAL.md)
 - 현재 파이프라인: [docs/current-pipeline.md](docs/current-pipeline.md)
+- Palace 세컨드 백엔드 로드맵: [docs/palace-second-backend-roadmap.md](docs/palace-second-backend-roadmap.md)
 - 0.3.0 계획: [sdd/plans/0.3.0-minimal-step-two-port-reset.md](sdd/plans/0.3.0-minimal-step-two-port-reset.md)
 - 작업 규칙: [AGENTS.md](AGENTS.md)
 
