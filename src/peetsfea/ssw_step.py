@@ -130,6 +130,22 @@ class _BodyBox:
 
 
 @dataclass(frozen=True)
+class _CoilScenePart:
+    params: SswCoilParameters
+    assembly: cq.Assembly
+    placement: cq.Location
+    bodies: tuple[_BodyBox, ...]
+
+
+@dataclass(frozen=True)
+class _SswSceneBuild:
+    spec: SswFixedSpec
+    bodies: tuple[_BodyBox, ...]
+    assembly: cq.Assembly
+    parts: tuple[_CoilScenePart, ...]
+
+
+@dataclass(frozen=True)
 class _Bounds:
     xmin: float
     xmax: float
@@ -934,10 +950,11 @@ def _coilmaker_assembly(params: SswCoilParameters, fixed: FixedDimensions) -> cq
     return coilmaker.build_assembly(_coilmaker_config(params, fixed))
 
 
-def _ssw_port_anchor_world_xyz(
+def _ssw_port_anchor_world_xyz_from_placement(
     *,
     spec: SswFixedSpec,
     params: SswCoilParameters,
+    placement: cq.Location,
 ) -> Point3:
     if not params.is_ssw_enabled:
         raise ValueError(f"{params.role} does not have an SSW port anchor when is_ssw_enabled=false")
@@ -961,7 +978,6 @@ def _ssw_port_anchor_world_xyz(
     radial_mm = board_trace_width_mm / 2.0 - (face_mid_mm - face.start_mm)
     local_x_mm, local_y_mm = coilmaker._surface_point_on_side(config, frame, side, u_mid_mm, radial_mm)
     _, local_z_mm = coilmaker._top_copper_z_bounds(config)
-    placement = _placement_for_role(spec, params, _coilmaker_assembly(params, spec.fixed))
     probe_half_mm = 0.003
     bbox = _located_bbox(
         cq.Workplane("XY").box(probe_half_mm * 2.0, probe_half_mm * 2.0, probe_half_mm * 2.0).translate(
@@ -974,6 +990,16 @@ def _ssw_port_anchor_world_xyz(
         (bbox.ymin + bbox.ymax) / 2.0,
         (bbox.zmin + bbox.zmax) / 2.0,
     )
+
+
+def _ssw_port_anchor_world_xyz(
+    *,
+    spec: SswFixedSpec,
+    params: SswCoilParameters,
+) -> Point3:
+    assembly = _coilmaker_assembly(params, spec.fixed)
+    placement = _placement_for_role(spec, params, assembly)
+    return _ssw_port_anchor_world_xyz_from_placement(spec=spec, params=params, placement=placement)
 
 
 def _body_bounds(body: _BodyBox) -> _Bounds:
@@ -1204,6 +1230,27 @@ def _coilmaker_child_bodies(
     return _coilmaker_child_bodies_from_assembly(params=params, assembly=assembly, placement=placement)
 
 
+def _coil_scene_part(*, spec: SswFixedSpec, params: SswCoilParameters) -> _CoilScenePart:
+    assembly = _coilmaker_assembly(params, spec.fixed)
+    placement = _placement_for_role(spec, params, assembly)
+    bodies = _coilmaker_child_bodies_from_assembly(params=params, assembly=assembly, placement=placement)
+    return _CoilScenePart(params=params, assembly=assembly, placement=placement, bodies=bodies)
+
+
+def _coil_scene_parts(spec: SswFixedSpec) -> tuple[_CoilScenePart, ...]:
+    role_params: tuple[SswCoilParameters, ...] = (
+        (spec.tx, spec.tx_under, spec.rx) if spec.tx_under.is_under_coil_enabled else (spec.tx, spec.rx)
+    )
+    return tuple(_coil_scene_part(spec=spec, params=params) for params in role_params)
+
+
+def _scene_part_by_role(*, parts: tuple[_CoilScenePart, ...], role: Role) -> _CoilScenePart:
+    matches = tuple(part for part in parts if part.params.role == role)
+    if len(matches) != 1:
+        raise ValueError(f"expected exactly one SSW scene part for {role!r} (count={len(matches)})")
+    return matches[0]
+
+
 def _bodies_with_prefix(bodies: tuple[_BodyBox, ...], prefix: str) -> tuple[_BodyBox, ...]:
     matches = tuple(body for body in bodies if body.name.startswith(prefix))
     if len(matches) == 0:
@@ -1231,7 +1278,12 @@ def _assert_inside_bounds_with_tolerance(*, inner: _Bounds, outer: _Bounds, cont
         raise ValueError(f"{context} Z bounds must be inside TV")
 
 
-def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -> None:
+def _validate_scene_contract(
+    *,
+    spec: SswFixedSpec,
+    bodies: tuple[_BodyBox, ...],
+    parts: tuple[_CoilScenePart, ...],
+) -> None:
     tolerance = 1e-6
     tv_bounds = _body_bounds(_body_by_name(bodies, "tv"))
     tx_region_bounds = _body_bounds(_body_by_name(bodies, "tx_region"))
@@ -1304,14 +1356,24 @@ def _validate_scene_contract(spec: SswFixedSpec, bodies: tuple[_BodyBox, ...]) -
             f"TX SSW top must align to tx_region top "
             f"(tx_zmax={tx_bounds.zmax}, tx_region_zmax={tx_region_bounds.zmax})"
         )
-    tx_port_anchor = _ssw_port_anchor_world_xyz(spec=spec, params=spec.tx)
+    tx_part = _scene_part_by_role(parts=parts, role="tx_ssw_coil")
+    tx_port_anchor = _ssw_port_anchor_world_xyz_from_placement(
+        spec=spec,
+        params=spec.tx,
+        placement=tx_part.placement,
+    )
     if abs(tx_port_anchor[2] - tx_bounds.zmin) > tolerance:
         raise ValueError(
             f"TX SSW port anchor must be on the lower face "
             f"(port_z={tx_port_anchor[2]}, tx_zmin={tx_bounds.zmin})"
         )
     if spec.rx.is_ssw_enabled:
-        rx_port_anchor = _ssw_port_anchor_world_xyz(spec=spec, params=spec.rx)
+        rx_part = _scene_part_by_role(parts=parts, role="rx_ssw_coil")
+        rx_port_anchor = _ssw_port_anchor_world_xyz_from_placement(
+            spec=spec,
+            params=spec.rx,
+            placement=rx_part.placement,
+        )
         if abs(rx_port_anchor[0] - rx_bounds.xmin) > tolerance:
             raise ValueError(
                 f"RX SSW port anchor must be on the RX X-min copper face "
@@ -1549,6 +1611,7 @@ def _scene_action_trace(
     scene_step_path: Path,
     token_toml_path: Path,
     bodies: tuple[_BodyBox, ...],
+    parts: tuple[_CoilScenePart, ...],
     seed: int,
 ) -> tuple[coilmaker.ActionToken, ...]:
     actions: list[coilmaker.ActionToken] = [
@@ -1585,8 +1648,10 @@ def _scene_action_trace(
         tx_under_bounds = _combined_bounds(_bodies_with_prefix(bodies, "tx_under_coil_"), "TX under-coil bodies")
     ferrite_bodies = tuple(body for body in bodies if body.role == "ferrite")
     rx_port_face = "rx_x_min" if spec.rx.is_ssw_enabled else "normal_spiral_landing"
+    tx_part = _scene_part_by_role(parts=parts, role="tx_ssw_coil")
+    rx_part = _scene_part_by_role(parts=parts, role="rx_ssw_coil")
     rx_port_anchor = (
-        _ssw_port_anchor_world_xyz(spec=spec, params=spec.rx)
+        _ssw_port_anchor_world_xyz_from_placement(spec=spec, params=spec.rx, placement=rx_part.placement)
         if spec.rx.is_ssw_enabled
         else (rx_bounds.xmin, rx_bounds.center_y, rx_bounds.center_z)
     )
@@ -1598,7 +1663,11 @@ def _scene_action_trace(
             plane="XY",
             bounds=tx_bounds,
             port_face="lower_z",
-            port_anchor_world_xyz=_ssw_port_anchor_world_xyz(spec=spec, params=spec.tx),
+            port_anchor_world_xyz=_ssw_port_anchor_world_xyz_from_placement(
+                spec=spec,
+                params=spec.tx,
+                placement=tx_part.placement,
+            ),
             no_ssw_qturn_start_int=spec.tx.no_ssw_qturn_start_int,
             no_ssw_qturn_n_int=spec.tx.no_ssw_qturn_n_int,
         )
@@ -1726,42 +1795,41 @@ def write_coil_making_token_toml(
 
 
 @log_call_duration
-def build_ssw_body_boxes(spec: SswFixedSpec) -> tuple[_BodyBox, ...]:
-    tx_boxes = _coilmaker_child_bodies(spec=spec, params=spec.tx)
+def _build_ssw_scene(spec: SswFixedSpec) -> _SswSceneBuild:
+    parts = _coil_scene_parts(spec)
+    tx_boxes = _scene_part_by_role(parts=parts, role="tx_ssw_coil").bodies
     tx_under_boxes = (
-        _coilmaker_child_bodies(spec=spec, params=spec.tx_under) if spec.tx_under.is_under_coil_enabled else ()
+        _scene_part_by_role(parts=parts, role="tx_under_coil").bodies if spec.tx_under.is_under_coil_enabled else ()
     )
-    rx_boxes = _coilmaker_child_bodies(spec=spec, params=spec.rx)
+    rx_boxes = _scene_part_by_role(parts=parts, role="rx_ssw_coil").bodies
     ferrite_boxes = _mull_ferrite_sheet_boxes(spec=spec, tx_boxes=tx_boxes, rx_boxes=rx_boxes)
     bodies = (*_non_model_boxes(spec), *tx_boxes, *tx_under_boxes, *rx_boxes, *ferrite_boxes)
     names = tuple(body.name for body in bodies)
     if len(names) != len(set(names)):
         raise ValueError(f"SSW body names must be unique (body_names={names!r})")
-    _validate_scene_contract(spec, bodies)
-    return bodies
+    _validate_scene_contract(spec=spec, bodies=bodies, parts=parts)
+    assembly = _build_scene_assembly_from_parts(bodies=bodies, parts=parts)
+    return _SswSceneBuild(spec=spec, bodies=bodies, assembly=assembly, parts=parts)
 
 
 def _workplane_from_box(body: _BodyBox) -> cq.Workplane:
     return cq.Workplane("XY").box(*body.size_xyz).translate(body.center_xyz)
 
 
-@log_call_duration
-def build_ssw_assembly(spec: SswFixedSpec) -> cq.Assembly:
+def _build_scene_assembly_from_parts(
+    *,
+    bodies: tuple[_BodyBox, ...],
+    parts: tuple[_CoilScenePart, ...],
+) -> cq.Assembly:
     assembly = cq.Assembly(name="ssw_0_3_0_fixed")
-    body_boxes = build_ssw_body_boxes(spec)
-    for body in tuple(body for body in body_boxes if body.role in ("non_model", "ferrite")):
+    for body in tuple(body for body in bodies if body.role in ("non_model", "ferrite")):
         assembly.add(_workplane_from_box(body), name=body.name, color=_color_for_body(body))
-    coil_params: tuple[SswCoilParameters, ...] = (
-        (spec.tx, spec.tx_under, spec.rx) if spec.tx_under.is_under_coil_enabled else (spec.tx, spec.rx)
-    )
-    for params in coil_params:
-        child_assembly = _coilmaker_assembly(params, spec.fixed)
-        placement = _placement_for_role(spec, params, child_assembly)
-        for child in child_assembly.children:
+    for part in parts:
+        for child in part.assembly.children:
             child_name = _child_name(child)
             material = _coilmaker_child_material(child_name)
             body_for_color = _BodyBox(
-                name=f"{params.role}_{child_name}",
+                name=f"{part.params.role}_{child_name}",
                 role=_coilmaker_child_role(child_name),
                 material=material,
                 center_xyz=(0.0, 0.0, 0.0),
@@ -1770,11 +1838,21 @@ def build_ssw_assembly(spec: SswFixedSpec) -> cq.Assembly:
             )
             assembly.add(
                 _child_workplane(child),
-                name=f"{params.role}_{child_name}",
-                loc=placement * _child_location(child),
+                name=f"{part.params.role}_{child_name}",
+                loc=part.placement * _child_location(child),
                 color=_color_for_body(body_for_color),
             )
     return assembly
+
+
+@log_call_duration
+def build_ssw_body_boxes(spec: SswFixedSpec) -> tuple[_BodyBox, ...]:
+    return _build_ssw_scene(spec).bodies
+
+
+@log_call_duration
+def build_ssw_assembly(spec: SswFixedSpec) -> cq.Assembly:
+    return _build_ssw_scene(spec).assembly
 
 
 def _body_entry(body: _BodyBox) -> BodyLedgerEntry:
@@ -1857,12 +1935,13 @@ def export_ssw_step_artifacts(
     scene_step_path = output_dir / DEFAULT_SCENE_STEP_NAME
     ledger_path = output_dir / DEFAULT_LEDGER_NAME
     token_toml_path = output_dir / DEFAULT_TOKEN_TOML_NAME
-    bodies = build_ssw_body_boxes(spec)
+    scene = _build_ssw_scene(spec)
     token_trace = _scene_action_trace(
         spec=spec,
         scene_step_path=scene_step_path,
         token_toml_path=token_toml_path,
-        bodies=bodies,
+        bodies=scene.bodies,
+        parts=scene.parts,
         seed=seed,
     )
     write_coil_making_token_toml(
@@ -1871,8 +1950,7 @@ def export_ssw_step_artifacts(
         source_toml_path=source_toml_path,
         seed=seed,
     )
-    assembly = build_ssw_assembly(spec)
-    _save_ssw_scene_step(assembly=assembly, scene_step_path=scene_step_path)
+    _save_ssw_scene_step(assembly=scene.assembly, scene_step_path=scene_step_path)
     if not scene_step_path.is_file() or scene_step_path.stat().st_size <= 0:
         raise RuntimeError(f"CadQuery STEP export failed for SSW scene: {scene_step_path}")
     ledger = _build_ledger(
@@ -1880,7 +1958,7 @@ def export_ssw_step_artifacts(
         scene_step_path=scene_step_path,
         token_toml_path=token_toml_path,
         seed=seed,
-        bodies=bodies,
+        bodies=scene.bodies,
     )
     write_ssw_step_ledger(ledger_path=ledger_path, ledger=ledger)
     return {
