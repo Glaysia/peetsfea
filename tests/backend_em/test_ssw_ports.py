@@ -8,7 +8,7 @@ from typing import cast
 
 import pytest
 
-from entry.debug_view_0_3_0_ssw import (
+from peetsfea.ssw_aedt_artifacts import (
     AEDT_IMPORTED_LEDGER_NAME,
     AEDT_PORT_LEDGER_NAME,
     SOURCE_TOML_PATH,

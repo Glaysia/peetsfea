@@ -35,39 +35,31 @@ cd run
 ../.venv/bin/pyright ../src ../entry ../tests
 ```
 
-최소 STEP 샘플 artifact를 생성합니다.
+설계 공간 안에서 seed 범위로 랜덤 SSW STEP 파일을 생성하고, 그중 한 seed를 OCP로 봅니다. `entry/sample.py`가 유일한 entry 스크립트입니다.
 
 ```bash
 cd run
-../.venv/bin/python ../entry/sample.py
+# seed 0..9에 대해 STEP 생성 후 seed 0을 OCP에 표시
+../.venv/bin/python ../entry/sample.py --seed-start 0 --seed-end 9
+# 특정 seed만 OCP로 보기
+../.venv/bin/python ../entry/sample.py --seed-start 0 --seed-end 9 --view-seed 3
+# 병렬(워커 10개) 생성, 뷰어 없이
+../.venv/bin/python ../entry/sample.py --seed-start 0 --seed-end 99 --jobs 10 --no-view
 ```
 
-Headless AEDT setup-ready 프로젝트를 생성합니다.
+`--jobs N`은 seed별 생성을 N개 프로세스로 병렬 처리합니다(각 seed는 독립 디렉토리라 안전하며 결과는 결정적). `--debug`는 소스 상단 `DEBUG_*` 상수로 인자를 제어합니다.
 
-```bash
-cd run
-../.venv/bin/python ../entry/build.py
-```
-
-Solve와 CSV report export까지 실행합니다.
-
-```bash
-cd run
-../.venv/bin/python ../entry/build.py --solve
-```
+Headless AEDT setup/solve/report 경로는 패키지 공개 API(`peetsfea.run_ssw_random_sample_reports_from_toml_text`)와 `tests/backend_em`의 headless AEDT 통합 테스트로 실행합니다. 기존 minimal `entry/sample.py`·`entry/build.py` 진입점은 제거했습니다.
 
 ## 산출물
-기본 출력 위치는 `run/sampled/minimal/<design_id>/`입니다.
+`entry/sample.py`의 기본 출력 위치는 gitignored `run/ssw_step_samples/seed_<NNNNN>/`이며 seed마다 다음을 생성합니다.
 
-- `sampled.toml`
-- `<design_id>.source.toml`
-- `<design_id>.repro.toml`
-- `<design_id>.dataset.toml`
-- `minimal_scene.step`
-- `minimal_step_ledger.json`
-- `<design_id>.aedt`
-- `minimal_imported_ledger.json`
-- `Output_Variables_Table1.csv` when `--solve` is used
+- `<design_id>.toml` (sampled fixed point)
+- `ssw_scene.step`
+- `ssw_step_ledger.json`
+- `coil_making_token.toml`
+
+SSW headless AEDT 솔브 산출물(`<design_id>.aedt`, report CSV 등)은 공개 API 결과의 `output_dir` 아래에 생성됩니다.
 
 ## 규칙
 - `python -O`는 지원하지 않습니다. assertion은 runtime contract의 일부입니다.

@@ -9,7 +9,7 @@ import tomllib
 import cadquery as cq
 import pytest
 
-from entry.debug_view_0_3_0_ssw import AEDT_PORT_LEDGER_NAME, AEDT_SCENE_STEP_NAME, export_ssw_aedt_port_artifacts
+from peetsfea.ssw_aedt_artifacts import AEDT_PORT_LEDGER_NAME, AEDT_SCENE_STEP_NAME, export_ssw_aedt_port_artifacts
 import peetsfea.coilmaker as coilmaker
 import peetsfea.ssw_step as module_under_test
 from peetsfea.ssw_step import (
