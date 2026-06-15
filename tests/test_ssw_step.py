@@ -23,8 +23,8 @@ from peetsfea.ssw_step import (
 from peetsfea.ssw_step_constraints import SswConstraintPathRef, SswConstraintValueRef, parse_ssw_constraint_rules
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FIXED_TOML = REPO_ROOT / "examples" / "0.3.0_fixed.toml"
-SWEEP_TOML = REPO_ROOT / "examples" / "0.3.0_sweep.toml"
+FIXED_TOML = REPO_ROOT / "examples" / "0.3.2_fixed.toml"
+SWEEP_TOML = REPO_ROOT / "examples" / "0.3.2_sweep.toml"
 
 
 def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
@@ -645,7 +645,7 @@ def test_export_ssw_aedt_port_artifacts_writes_direct_edge_port_ledger(tmp_path:
     assert stored_ledger == ledger
     assert ledger["dimension_count"] == 20
     assert len(ledger["design_space_hash"]) == 16
-    assert ledger["design_id"] == f"0_3_1_p{ledger['design_space_hash']}"
+    assert ledger["design_id"] == f"0_3_2_p{ledger['design_space_hash']}"
     assert ledger["aedt_filename"] == f"{ledger['design_id']}.aedt"
     assert "port_sheet_names" not in ledger
     assert "tx_aedt_port_sheet" not in ledger["body_names"]

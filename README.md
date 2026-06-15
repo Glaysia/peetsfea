@@ -15,12 +15,12 @@ peetsfea는 TOML 명세에서 HFSS(AEDT) 설계를 결정적으로 생성하는 
 영문 문서는 [README.en.md](README.en.md)를 참고하세요.
 
 ## 현재 계약
-- 버전: `0.3.1`
+- 버전: `0.3.2`
 - 활성 입력: [examples/minimal_step_two_port.toml](examples/minimal_step_two_port.toml)
 - TOML surface: `[design]`과 `[[non_model_objects]]`만 허용
 - STEP surface: authored non-model box들과 고정 Tx/Rx port cell
 - EM surface: Tx 포트 1개, Rx 포트 1개, copper pad mesh, radiation boundary, `Setup1`, `Sweep`, `Output Variables Table1`
-- SSW debug 입력 [examples/0.3.0_fixed.toml](examples/0.3.0_fixed.toml)과 [examples/0.3.0_sweep.toml](examples/0.3.0_sweep.toml)은 0.2.25 type2와 같은 `[constraints]` / `[[constraints.rules]]` 표면을 쓰며, enabled SSW coil은 `gcd(turn_n_int, twist_factor) == 1`이어야 하고 RX SSW가 enabled일 때 RX `turn_n_int`는 1보다 커야 합니다. 0.3.1부터 TX/RX `void_profile`은 scaled void profile `1`로 고정합니다.
+- SSW debug 입력 [examples/0.3.2_fixed.toml](examples/0.3.2_fixed.toml)과 [examples/0.3.2_sweep.toml](examples/0.3.2_sweep.toml)은 0.2.25 type2와 같은 `[constraints]` / `[[constraints.rules]]` 표면을 쓰며, enabled SSW coil은 `gcd(turn_n_int, twist_factor) == 1`이어야 하고 RX SSW가 enabled일 때 RX `turn_n_int`는 1보다 커야 합니다. 0.3.1부터 TX/RX `void_profile`은 scaled void profile `1`로 고정합니다. 0.3.2 sweep SSOT는 [examples/0.3.2_sweep.toml](examples/0.3.2_sweep.toml)이며 `validate_sweep_toml_text`의 기준 design space입니다.
 - SSW debug의 `tx_under_coil`은 TX main coil과 별도인 두 번째 TX coil이며, `tx_region_max`의 global X-min 면 바깥에 붙는 YZ 평면 normal spiral입니다.
 - SSW debug MULL ferrite 위치는 TX Z축 `ferrite.tx_mull_position_ratio`와 RX X축 `ferrite.rx_mull_position_ratio`로 따로 제어합니다.
 - 기본 실행과 AEDT/PyAEDT 변경 검증은 headless이며 PyAEDT `False` return은 즉시 raise합니다.
@@ -81,6 +81,16 @@ cd run
 - Palace 세컨드 백엔드 로드맵: [docs/palace-second-backend-roadmap.md](docs/palace-second-backend-roadmap.md)
 - 0.3.0 계획: [sdd/plans/0.3.0-minimal-step-two-port-reset.md](sdd/plans/0.3.0-minimal-step-two-port-reset.md)
 - 작업 규칙: [AGENTS.md](AGENTS.md)
+
+## 0.3.2 runner 통합 API
+peetsfea-runner가 의존하는 공개 표면입니다. peetsfea는 ansysedt를 직접 기동/종료하거나 라이선스를 관리하지 않습니다.
+
+- `peetsfea.__version__ == "0.3.2"`, 패키지에 `py.typed` 동봉(공개 API strict 타입체킹).
+- `peetsfea.validate_sweep_toml_text(sweep_text)` — sweep TOML 전체 텍스트의 모든 swept range가 기준 sweep([examples/0.3.2_sweep.toml](examples/0.3.2_sweep.toml)) design space(상하한 + 정수/실수 플래그 + count>0) 이내인지 검사하고, 벗어나면 `PeetsfeaStageError`를 raise합니다.
+- `peetsfea.sample_fixed_candidates_from_toml_text(sweep_text, count, seed) -> list[str]` — sweep 1건을 fixed candidate `count`개 TOML 텍스트로 결정론적(동일 seed=동일 결과) 확장합니다. scratch는 환경의 `TMPDIR`을 따릅니다(`/tmp`·`/dev/shm` 직접 사용 금지).
+- `peetsfea.run_ssw_random_sample_reports_from_toml_text(candidate_toml_text, *, output_dir, seed, mode, grpc_port, aedt_pid=None)` — runner가 빌려준 warm ansysedt에 `grpc_port`(우선) 또는 `aedt_pid`로 attach하여 빌드·solve·report합니다. 자체 기동/종료를 하지 않고, 끝나면 프로젝트만 닫고 AEDT는 살린 채 반환합니다. attach 불가 시 `PeetsfeaStageError(stage="attach")`를 raise하여 runner가 해당 AEDT를 재활용하도록 합니다.
+- solve는 내부 watchdog로 `solve_hard_abort_seconds`(기본 3600s=60분)에 도달하면 `stop_simulations(clean_stop=True)`로 hard-abort하고 마지막 완료 패스 리포트를 남깁니다. 결과의 `solve_outcome`에 `completed`/`hard_aborted`가 담깁니다.
+- 모든 실패는 구조화 예외 `peetsfea.PeetsfeaStageError`(`stage`/`error_type`/`message`, `RuntimeError` 하위)로 보고됩니다.
 
 ## 호환성 정책
 장기 backward compatibility는 보장하지 않습니다. Minor release도 spec path, artifact contract, runtime entrypoint를 변경할 수 있습니다.

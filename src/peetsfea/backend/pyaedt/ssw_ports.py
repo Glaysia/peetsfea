@@ -5,6 +5,8 @@ import json
 import multiprocessing
 from pathlib import Path
 from collections.abc import Sequence
+import socket
+import threading
 import time
 from typing import Callable, Literal, Protocol, TypeAlias, TypedDict, cast
 
@@ -12,6 +14,7 @@ import psutil
 
 from peetsfea.aedt import Hfss
 from peetsfea.aedt.failfast import raise_on_false
+from peetsfea.errors import PeetsfeaStageError
 from peetsfea.aedt.protocols import (
     AnalysisSetupModuleSession,
     DesignSession,
@@ -114,6 +117,8 @@ SETUP_MINIMUM_CONVERGED_PASSES = 7
 SOLVE_TELEMETRY_SAMPLE_INTERVAL_SECONDS = 2.0
 SOLVE_TELEMETRY_SAMPLES_JSONL_NAME = "ssw_solve_telemetry_samples.jsonl"
 SOLVE_TELEMETRY_STOP_NAME = "ssw_solve_telemetry.stop"
+SOLVE_HARD_ABORT_SECONDS = 3600.0
+SOLVE_ABORT_GRACE_SECONDS = 120.0
 
 _TXRX_OUTPUT_VARIABLE_EXPRESSIONS: tuple[tuple[str, str], ...] = (
     ("Ltx_uH", "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"),
@@ -359,10 +364,18 @@ class SswSolveTelemetry(TypedDict):
     samples: list[SswSolveTelemetrySample]
 
 
+class SswSolveOutcome(TypedDict):
+    completed: bool
+    hard_aborted: bool
+    hard_abort_seconds: float
+    analyze_elapsed_ms: float
+
+
 class SswAedtReportCsvResult(TypedDict):
     setup: SswAedtPortSetupResult
     csv_paths: dict[str, str]
     solve_telemetry: SswSolveTelemetry
+    solve_outcome: SswSolveOutcome
 
 
 def create_headless_hfss(design_name: str) -> HfssSession:
@@ -371,6 +384,168 @@ def create_headless_hfss(design_name: str) -> HfssSession:
 
 def create_graphical_hfss(design_name: str) -> HfssSession:
     return cast(HfssSession, Hfss(design=design_name, non_graphical=False, new_desktop=True, close_on_exit=False))
+
+
+DEFAULT_ATTACH_HOST = "127.0.0.1"
+ATTACH_PROBE_TIMEOUT_SECONDS = 5.0
+
+
+def _grpc_port_is_listening(host: str, port: int, timeout_seconds: float = ATTACH_PROBE_TIMEOUT_SECONDS) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout_seconds):
+            return True
+    except OSError:
+        return False
+
+
+def _attach_hfss_via_port(*, design_name: str, host: str, grpc_port: int) -> HfssSession:
+    return cast(
+        HfssSession,
+        Hfss(
+            design=design_name,
+            non_graphical=True,
+            new_desktop=False,
+            close_on_exit=False,
+            machine=host,
+            port=grpc_port,
+        ),
+    )
+
+
+def _attach_hfss_via_pid(*, design_name: str, aedt_pid: int) -> HfssSession:
+    return cast(
+        HfssSession,
+        Hfss(
+            design=design_name,
+            non_graphical=True,
+            new_desktop=False,
+            close_on_exit=False,
+            aedt_process_id=aedt_pid,
+        ),
+    )
+
+
+def make_attached_hfss_factory(
+    *,
+    grpc_port: int | None,
+    aedt_pid: int | None = None,
+    host: str = DEFAULT_ATTACH_HOST,
+) -> HfssFactory:
+    """Build an :data:`HfssFactory` that attaches to an already-running ansysedt.
+
+    The runner keeps a warm, license-holding ansysedt and lends it via ``grpc_port`` (and
+    optionally ``aedt_pid``). The factory never starts or stops AEDT: it attaches with
+    ``new_desktop=False`` and ``close_on_exit=False``, trying the gRPC ``port`` first and the
+    ``pid`` second. When neither attaches it raises :class:`PeetsfeaStageError` (stage
+    ``"attach"``) so the runner can mark that ansysedt unusable, recycle it, and retry.
+    """
+    if grpc_port is None and aedt_pid is None:
+        raise PeetsfeaStageError(
+            stage="attach",
+            error_type="missing_attach_target",
+            message="attaching to an existing ansysedt requires a grpc_port or an aedt_pid",
+        )
+    if grpc_port is not None and (isinstance(grpc_port, bool) or not isinstance(grpc_port, int) or grpc_port <= 0):
+        raise PeetsfeaStageError(
+            stage="attach",
+            error_type="invalid_grpc_port",
+            message=f"grpc_port must be a positive int (actual={grpc_port!r})",
+        )
+    if aedt_pid is not None and (isinstance(aedt_pid, bool) or not isinstance(aedt_pid, int) or aedt_pid <= 0):
+        raise PeetsfeaStageError(
+            stage="attach",
+            error_type="invalid_aedt_pid",
+            message=f"aedt_pid must be a positive int (actual={aedt_pid!r})",
+        )
+
+    def factory(design_name: str) -> HfssSession:
+        failures: list[str] = []
+        if grpc_port is not None:
+            if _grpc_port_is_listening(host, grpc_port):
+                try:
+                    return _attach_hfss_via_port(design_name=design_name, host=host, grpc_port=grpc_port)
+                except Exception as exc:  # noqa: BLE001 — attach failure must surface structured
+                    failures.append(f"grpc_port {grpc_port}: {type(exc).__name__}: {exc}")
+            else:
+                failures.append(f"grpc_port {grpc_port}: no listener on {host}:{grpc_port}")
+        if aedt_pid is not None:
+            if psutil.pid_exists(aedt_pid):
+                try:
+                    return _attach_hfss_via_pid(design_name=design_name, aedt_pid=aedt_pid)
+                except Exception as exc:  # noqa: BLE001 — attach failure must surface structured
+                    failures.append(f"aedt_pid {aedt_pid}: {type(exc).__name__}: {exc}")
+            else:
+                failures.append(f"aedt_pid {aedt_pid}: process not found")
+        raise PeetsfeaStageError(
+            stage="attach",
+            error_type="aedt_unreachable",
+            message="could not attach to a running ansysedt (" + "; ".join(failures) + ")",
+        )
+
+    return factory
+
+
+def _release_keeping_desktop_alive(hfss: HfssSession) -> None:
+    """Close only the active project and detach, leaving the borrowed ansysedt running."""
+    project_name = hfss.project_name
+    hfss.close_project(project_name, save=False)
+    raise_on_false(
+        hfss.desktop_class.release_desktop(close_projects=False, close_on_exit=False),
+        operation="release_desktop",
+        context={"close_projects": False, "close_on_exit": False},
+    )
+
+
+def _analyze_with_hard_abort(
+    *,
+    hfss: HfssSession,
+    setup_name: str,
+    hard_abort_seconds: float,
+    abort_grace_seconds: float = SOLVE_ABORT_GRACE_SECONDS,
+) -> SswSolveOutcome:
+    """Run ``analyze_setup`` with an internal hard-abort watchdog.
+
+    ``analyze_setup`` blocks AEDT until convergence, so it runs on a worker thread while the
+    caller enforces ``hard_abort_seconds``. On timeout the watchdog issues
+    ``stop_simulations(clean_stop=True)`` so the last completed pass stays solved and its report
+    remains exportable, then returns ``hard_aborted=True``. A worker-side analyze failure is
+    re-raised as a structured solve error.
+    """
+    worker_error: dict[str, str] = {}
+
+    def _worker() -> None:
+        try:
+            raise_on_false(
+                hfss.analyze_setup(setup_name, blocking=True),
+                operation="analyze_setup",
+                context={"setup_name": setup_name},
+            )
+        except BaseException as exc:  # noqa: BLE001 — propagate to the caller thread via the dict
+            worker_error["message"] = f"{type(exc).__name__}: {exc}"
+
+    started = time.monotonic()
+    worker = threading.Thread(target=_worker, name="ssw-analyze-setup", daemon=True)
+    worker.start()
+    worker.join(timeout=hard_abort_seconds)
+    if worker.is_alive():
+        hfss.stop_simulations(clean_stop=True)
+        worker.join(timeout=abort_grace_seconds)
+        elapsed_ms = (time.monotonic() - started) * 1000.0
+        return {
+            "completed": False,
+            "hard_aborted": True,
+            "hard_abort_seconds": hard_abort_seconds,
+            "analyze_elapsed_ms": elapsed_ms,
+        }
+    elapsed_ms = (time.monotonic() - started) * 1000.0
+    if "message" in worker_error:
+        raise PeetsfeaStageError(stage="solve", error_type="analyze_failed", message=worker_error["message"])
+    return {
+        "completed": True,
+        "hard_aborted": False,
+        "hard_abort_seconds": hard_abort_seconds,
+        "analyze_elapsed_ms": elapsed_ms,
+    }
 
 
 def write_ssw_aedt_port_ledger(*, ledger_path: Path, ledger: SswAedtPortStepLedger) -> None:
@@ -2108,6 +2283,8 @@ def solve_ssw_aedt_ports(
     setup_minimum_passes: int = SETUP_MINIMUM_PASSES,
     setup_minimum_converged_passes: int = SETUP_MINIMUM_CONVERGED_PASSES,
     telemetry_sample_interval_seconds: float = SOLVE_TELEMETRY_SAMPLE_INTERVAL_SECONDS,
+    keep_desktop_alive: bool = False,
+    solve_hard_abort_seconds: float = SOLVE_HARD_ABORT_SECONDS,
 ) -> SswAedtReportCsvResult:
     hfss = hfss_factory(design_name)
     try:
@@ -2127,18 +2304,30 @@ def solve_ssw_aedt_ports(
         )
         monitor.start()
         try:
-            raise_on_false(hfss.analyze_setup(SETUP_NAME, blocking=True), operation="analyze_setup", context={"setup_name": SETUP_NAME})
+            solve_outcome = _analyze_with_hard_abort(
+                hfss=hfss,
+                setup_name=SETUP_NAME,
+                hard_abort_seconds=solve_hard_abort_seconds,
+            )
         finally:
             solve_telemetry = monitor.stop()
         csv_paths = _export_ssw_report_csvs(hfss=hfss, output_dir=csv_output_dir)
         raise_on_false(hfss.save_project(str(output_aedt_path)), operation="save_project", context={"path": str(output_aedt_path)})
-        return {"setup": setup, "csv_paths": csv_paths, "solve_telemetry": solve_telemetry}
+        return {
+            "setup": setup,
+            "csv_paths": csv_paths,
+            "solve_telemetry": solve_telemetry,
+            "solve_outcome": solve_outcome,
+        }
     finally:
-        raise_on_false(
-            hfss.desktop_class.release_desktop(close_projects=True, close_on_exit=True),
-            operation="release_desktop",
-            context={"close_projects": True, "close_on_exit": True},
-        )
+        if keep_desktop_alive:
+            _release_keeping_desktop_alive(hfss)
+        else:
+            raise_on_false(
+                hfss.desktop_class.release_desktop(close_projects=True, close_on_exit=True),
+                operation="release_desktop",
+                context={"close_projects": True, "close_on_exit": True},
+            )
 
 
 __all__ = [
@@ -2158,6 +2347,9 @@ __all__ = [
     "SETUP_MAXIMUM_PASSES",
     "SETUP_MINIMUM_CONVERGED_PASSES",
     "SETUP_MINIMUM_PASSES",
+    "SOLVE_ABORT_GRACE_SECONDS",
+    "SOLVE_HARD_ABORT_SECONDS",
+    "SswSolveOutcome",
     "SOLVE_TELEMETRY_SAMPLE_INTERVAL_SECONDS",
     "SOLVE_TELEMETRY_SAMPLES_JSONL_NAME",
     "SOLVE_TELEMETRY_STOP_NAME",
@@ -2167,8 +2359,10 @@ __all__ = [
     "SswAedtReportsSummary",
     "SswSolveTelemetry",
     "SswSolveTelemetrySample",
+    "DEFAULT_ATTACH_HOST",
     "create_graphical_hfss",
     "create_headless_hfss",
+    "make_attached_hfss_factory",
     "load_ssw_aedt_port_ledger",
     "setup_ssw_aedt_ports",
     "setup_ssw_aedt_ports_into_hfss",

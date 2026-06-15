@@ -17,8 +17,8 @@ from peetsfea.ssw_design_space import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FIXED_TOML = REPO_ROOT / "examples" / "0.3.0_fixed.toml"
-SWEEP_TOML = REPO_ROOT / "examples" / "0.3.0_sweep.toml"
+FIXED_TOML = REPO_ROOT / "examples" / "0.3.2_fixed.toml"
+SWEEP_TOML = REPO_ROOT / "examples" / "0.3.2_sweep.toml"
 
 
 def _candidate(tmp_path: Path, text: str) -> Path:
@@ -93,7 +93,7 @@ def test_aedt_identity_is_deterministic_short_point_name() -> None:
     assert first == second
     assert first.dimension_count == 20
     assert len(first.point_hash) == 16
-    assert first.design_id == f"0_3_1_p{first.point_hash}"
+    assert first.design_id == f"0_3_2_p{first.point_hash}"
     assert first.aedt_filename == f"{first.design_id}.aedt"
     assert "ssw" not in first.design_id
 
@@ -305,6 +305,12 @@ def test_run_ssw_random_sample_reports_preserves_full_point_ledger(
         return {
             "setup": {},
             "csv_paths": csv_paths,
+            "solve_outcome": {
+                "completed": True,
+                "hard_aborted": False,
+                "hard_abort_seconds": 3600.0,
+                "analyze_elapsed_ms": 1500.0,
+            },
             "solve_telemetry": {
                 "started_at": "2026-06-14T00:00:00.000+09:00",
                 "finished_at": "2026-06-14T00:00:02.000+09:00",
@@ -366,6 +372,9 @@ def test_run_ssw_random_sample_reports_preserves_full_point_ledger(
     assert set(result["csv_text_by_report"]) == set(SSW_REPORT_NAMES)
     assert result["setup_pass_counts"] == {"maximum_passes": 5, "minimum_passes": 1, "minimum_converged_passes": 1}
     assert result["solve_telemetry"]["elapsed_ms"] == 2000.0
+    assert result["solve_outcome"]["completed"] is True
+    assert result["solve_outcome"]["hard_aborted"] is False
+    assert result["output_dir"] == str(output_dir)
     raw_ledger = Path(result["sample_point_ledger_path"]).read_text(encoding="utf-8")
     ledger_obj = json.loads(raw_ledger)
     assert ledger_obj["point_values"] == result["point_values"]
@@ -373,3 +382,4 @@ def test_run_ssw_random_sample_reports_preserves_full_point_ledger(
     assert ledger_obj["point_hash"] == result["point_hash"]
     assert ledger_obj["setup_pass_counts"] == result["setup_pass_counts"]
     assert ledger_obj["solve_telemetry"] == result["solve_telemetry"]
+    assert ledger_obj["solve_outcome"] == result["solve_outcome"]

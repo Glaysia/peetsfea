@@ -758,6 +758,7 @@ class Hfss(RawHfss, _WrappedAccess):
             "assign_radiation_boundary_to_faces",
             "analyze_setup",
             "change_validation_settings",
+            "close_project",
             "create_output_variable",
             "delete_setup",
             "desktop_class",
@@ -767,8 +768,10 @@ class Hfss(RawHfss, _WrappedAccess):
             "modeler",
             "oboundary",
             "odesign",
+            "project_name",
             "save_project",
             "setup_names",
+            "stop_simulations",
         }
     )
 
@@ -914,6 +917,11 @@ class Hfss(RawHfss, _WrappedAccess):
             context={"setup_name": name, "blocking": blocking},
         )
 
+    def stop_simulations(self, clean_stop: bool = True) -> object:
+        return _require_callable_attr(object.__getattribute__(self, "_raw"), "stop_simulations", owner="Hfss")(
+            clean_stop=clean_stop,
+        )
+
     def create_output_variable(self, variable: str, expression: str, solution: str) -> object:
         validate_aedt_name(variable, field="variable")
         return raise_on_false(
@@ -993,3 +1001,18 @@ class Hfss(RawHfss, _WrappedAccess):
             operation="save_project",
             context={"path": path},
         )
+
+    def close_project(self, name: str, save: bool = True) -> object:
+        validate_aedt_name(name, field="project_name")
+        return raise_on_false(
+            _require_callable_attr(object.__getattribute__(self, "_raw"), "close_project", owner="Hfss")(
+                name=name,
+                save=save,
+            ),
+            operation="close_project",
+            context={"name": name, "save": save},
+        )
+
+    @property
+    def project_name(self) -> str:
+        return _require_str_attr(object.__getattribute__(self, "_raw"), "project_name", owner="Hfss")

@@ -9,11 +9,12 @@ from pathlib import Path
 from typing import Literal
 import tomllib
 
+from peetsfea.errors import PeetsfeaStageError
 from peetsfea.ssw_step import build_ssw_body_boxes, load_ssw_fixed_spec
 
-SPEC_VERSION = "0.3.1"
+SPEC_VERSION = "0.3.2"
 SCHEMA_ID = "peetsfea.ssw_coil.step.v1"
-DEFAULT_REFERENCE_TOML_PATH = Path(__file__).resolve().parents[2] / "examples" / "0.3.0_sweep.toml"
+DEFAULT_REFERENCE_TOML_PATH = Path(__file__).resolve().parents[2] / "examples" / "0.3.2_sweep.toml"
 
 RangeValue = int | float
 TomlRoot = dict[str, object]
@@ -125,16 +126,20 @@ def _range_definition(table: dict[str, object], path: str) -> _RangeDefinition:
     return _RangeDefinition(path=path, is_integer=raw_integer, lower=lower, upper=upper, count=count)
 
 
-def _load_toml_root(toml_path: Path) -> TomlRoot:
-    raw_root = tomllib.loads(toml_path.read_text(encoding="utf-8"))
-    root = _require_table(raw_root, str(toml_path))
-    spec_version = _require_non_empty_str(root, "spec_version", str(toml_path))
+def _load_toml_root_from_text(toml_text: str, source_name: str) -> TomlRoot:
+    raw_root = tomllib.loads(toml_text)
+    root = _require_table(raw_root, source_name)
+    spec_version = _require_non_empty_str(root, "spec_version", source_name)
     if spec_version != SPEC_VERSION:
-        raise ValueError(f"{toml_path} spec_version must be {SPEC_VERSION!r} (actual={spec_version!r})")
-    schema_id = _require_non_empty_str(root, "schema_id", str(toml_path))
+        raise ValueError(f"{source_name} spec_version must be {SPEC_VERSION!r} (actual={spec_version!r})")
+    schema_id = _require_non_empty_str(root, "schema_id", source_name)
     if schema_id != SCHEMA_ID:
-        raise ValueError(f"{toml_path} schema_id must be {SCHEMA_ID!r} (actual={schema_id!r})")
+        raise ValueError(f"{source_name} schema_id must be {SCHEMA_ID!r} (actual={schema_id!r})")
     return root
+
+
+def _load_toml_root(toml_path: Path) -> TomlRoot:
+    return _load_toml_root_from_text(toml_path.read_text(encoding="utf-8"), str(toml_path))
 
 
 def _record_range(ranges: dict[str, _RangeDefinition], table: dict[str, object], path: str) -> None:
@@ -254,13 +259,12 @@ def _is_point(candidate_ranges: dict[str, _RangeDefinition], free_owner_paths: t
     return True
 
 
-def check_ssw_toml_in_design_space(
-    candidate_toml_path: Path,
-    reference_toml_path: Path = DEFAULT_REFERENCE_TOML_PATH,
+def _check_ranges_in_design_space(
+    candidate_ranges: dict[str, _RangeDefinition],
+    reference_toml_path: Path,
 ) -> SswDesignSpaceCheckResult:
     free_ranges = _reference_free_ranges(reference_toml_path)
     free_owner_paths = tuple(sorted(free_ranges))
-    candidate_ranges = _range_definitions(_load_toml_root(candidate_toml_path))
     violations: list[SswDesignSpaceViolation] = []
     for path in free_owner_paths:
         reference = free_ranges[path]
@@ -278,6 +282,23 @@ def check_ssw_toml_in_design_space(
         free_owner_paths=free_owner_paths,
         violations=tuple(violations),
     )
+
+
+def check_ssw_toml_in_design_space(
+    candidate_toml_path: Path,
+    reference_toml_path: Path = DEFAULT_REFERENCE_TOML_PATH,
+) -> SswDesignSpaceCheckResult:
+    candidate_ranges = _range_definitions(_load_toml_root(candidate_toml_path))
+    return _check_ranges_in_design_space(candidate_ranges, reference_toml_path)
+
+
+def check_ssw_toml_text_in_design_space(
+    candidate_toml_text: str,
+    reference_toml_path: Path = DEFAULT_REFERENCE_TOML_PATH,
+    source_name: str = "<sweep_toml_text>",
+) -> SswDesignSpaceCheckResult:
+    candidate_ranges = _range_definitions(_load_toml_root_from_text(candidate_toml_text, source_name))
+    return _check_ranges_in_design_space(candidate_ranges, reference_toml_path)
 
 
 def _point_value(range_def: _RangeDefinition) -> RangeValue:
@@ -618,6 +639,54 @@ def sample_ssw_fixed_tomls(
     )
 
 
+def _design_space_violation_message(result: SswDesignSpaceCheckResult) -> str:
+    return "; ".join(f"{violation.path}:{violation.code}" for violation in result.violations)
+
+
+def validate_sweep_toml_text(sweep_text: str) -> None:
+    """Raise :class:`PeetsfeaStageError` when ``sweep_text`` leaves the reference design space.
+
+    Full strictness: bounds, integer-flag parity, and positive counts are all checked against
+    the reference sweep SSOT (:data:`DEFAULT_REFERENCE_TOML_PATH`). Returns ``None`` when valid.
+    """
+    try:
+        result = check_ssw_toml_text_in_design_space(sweep_text, source_name="<sweep_toml_text>")
+    except (TypeError, ValueError) as exc:
+        raise PeetsfeaStageError(stage="validate", error_type=type(exc).__name__, message=str(exc)) from exc
+    if not result.is_subset:
+        raise PeetsfeaStageError(
+            stage="validate",
+            error_type="design_space_violation",
+            message=f"sweep TOML is outside the reference design space ({_design_space_violation_message(result)})",
+        )
+
+
+def sample_fixed_candidates_from_toml_text(sweep_text: str, count: int, seed: int) -> list[str]:
+    """Expand a sweep TOML text into ``count`` fixed candidate TOML texts.
+
+    Deterministic for a given ``(sweep_text, count, seed)``. The scratch directory honors the
+    ambient ``TMPDIR``/``TMP`` environment so the runner controls placement (no hardcoded
+    ``/tmp`` or ``/dev/shm`` use).
+    """
+    validate_sweep_toml_text(sweep_text)
+    try:
+        with tempfile.TemporaryDirectory(prefix="ssw_candidate_") as scratch_text:
+            scratch_dir = Path(scratch_text)
+            sweep_path = scratch_dir / "sweep.toml"
+            sweep_path.write_text(sweep_text, encoding="utf-8")
+            batch = sample_ssw_fixed_tomls(
+                sample_count=count,
+                seed=seed,
+                sweep_toml_path=sweep_path,
+                output_dir=scratch_dir / "candidates",
+            )
+            return [sample.toml_path.read_text(encoding="utf-8") for sample in batch.samples]
+    except PeetsfeaStageError:
+        raise
+    except (TypeError, ValueError, RuntimeError, FileExistsError) as exc:
+        raise PeetsfeaStageError(stage="sample", error_type=type(exc).__name__, message=str(exc)) from exc
+
+
 __all__ = [
     "DEFAULT_REFERENCE_TOML_PATH",
     "SswAedtIdentity",
@@ -627,6 +696,9 @@ __all__ = [
     "SswSampledTomlBatch",
     "build_ssw_aedt_identity",
     "check_ssw_toml_in_design_space",
+    "check_ssw_toml_text_in_design_space",
     "point_values_for_ssw_fixed_toml",
+    "sample_fixed_candidates_from_toml_text",
     "sample_ssw_fixed_tomls",
+    "validate_sweep_toml_text",
 ]
