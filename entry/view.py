@@ -2,7 +2,8 @@
 
 By default this calls ``entry/sample.py`` to generate STEP files for the seed range, then shows
 ``--view-seed`` in the OCP viewer. Pass ``--no-sample`` to skip generation and view a seed that
-was already sampled into the output directory.
+was already sampled into the output directory. Pass ``--fixed`` to generate and view the authored
+fixed-point TOML (``examples/0.3.2_fixed.toml``) instead of a sampled seed.
 
 The viewer shows the rebuilt ``cq.Assembly`` (copper/coil/ferrite/non-model colors and
 transparency), not the flattened STEP re-import which renders as a single default material.
@@ -11,6 +12,7 @@ Run from ``run/``:
 
     ../.venv/bin/python ../entry/view.py --seed-start 0 --seed-end 9 --view-seed 3
     ../.venv/bin/python ../entry/view.py --view-seed 3 --no-sample
+    ../.venv/bin/python ../entry/view.py --fixed   # view examples/0.3.2_fixed.toml
     ../.venv/bin/python ../entry/view.py --debug   # use the hardcoded DEBUG_* constants
 """
 
@@ -26,7 +28,12 @@ if __package__ in {None, ""}:
 
 from ocp_vscode import Camera, Collapse, show
 
-from peetsfea.ssw_step import build_ssw_assembly, load_ssw_fixed_spec
+from peetsfea.ssw_step import (
+    DEFAULT_SOURCE_TOML_PATH,
+    build_ssw_assembly,
+    export_ssw_step_artifacts,
+    load_ssw_fixed_spec,
+)
 
 from entry.sample import (
     DEFAULT_OUTPUT_DIR,
@@ -41,6 +48,9 @@ from peetsfea.ssw_design_space import DEFAULT_REFERENCE_TOML_PATH
 
 OCP_PORT = 3939
 TOKEN_TOML_NAME = "coil_making_token.toml"
+FIXED_SUBDIR = "fixed"
+DEFAULT_FIXED_TOML = DEFAULT_SOURCE_TOML_PATH  # examples/0.3.2_fixed.toml
+FIXED_SEED = -1  # sentinel: not sampled from a seed
 
 # --debug uses these hardcoded constants instead of CLI args, so the VS Code launch.json
 # config can run `view.py --debug` with no arguments. Edit these to control a debug run.
@@ -49,8 +59,10 @@ DEBUG_SEED_END = 49
 DEBUG_VIEW_SEED = 1
 DEBUG_JOBS = 12
 DEBUG_NO_SAMPLE = False
+DEBUG_FIXED = False
 DEBUG_OUTPUT_DIR = DEFAULT_OUTPUT_DIR
 DEBUG_SWEEP_TOML = DEFAULT_REFERENCE_TOML_PATH
+DEBUG_FIXED_TOML = DEFAULT_FIXED_TOML
 
 
 @dataclass(frozen=True)
@@ -60,8 +72,10 @@ class ViewConfig:
     view_seed: int
     jobs: int
     no_sample: bool
+    fixed: bool
     output_dir: Path
     sweep_toml: Path
+    fixed_toml: Path
 
 
 def load_existing_sample(*, output_root: Path, seed: int) -> SampledStep:
@@ -87,6 +101,31 @@ def load_existing_sample(*, output_root: Path, seed: int) -> SampledStep:
     )
 
 
+def generate_fixed(*, fixed_toml: Path, output_root: Path) -> SampledStep:
+    """Export the authored fixed-point TOML (examples/0.3.2_fixed.toml) to a STEP scene."""
+    if not fixed_toml.is_file():
+        raise FileNotFoundError(f"fixed TOML does not exist: {fixed_toml}")
+    fixed_dir = output_root / FIXED_SUBDIR
+    fixed_dir.mkdir(parents=True, exist_ok=True)
+    artifacts = export_ssw_step_artifacts(source_toml_path=fixed_toml, output_dir=fixed_dir, seed=0)
+    step_path = Path(artifacts["scene_step_path"])
+    if not step_path.is_file():
+        raise FileNotFoundError(f"fixed STEP export did not create a scene file: {step_path}")
+    return SampledStep(
+        seed=FIXED_SEED,
+        design_id=fixed_toml.stem,
+        toml_path=fixed_toml,
+        step_path=step_path,
+        sample_dir=fixed_dir,
+    )
+
+
+def _display_name(sample: SampledStep) -> str:
+    if sample.seed == FIXED_SEED:
+        return f"fixed_{sample.design_id}"
+    return f"seed_{sample.seed:05d}_{sample.design_id}"
+
+
 def show_sample_in_ocp(sample: SampledStep) -> None:
     # Show the cq.Assembly rebuilt from the sampled spec, not the imported STEP: the assembly
     # carries per-body color and transparency (copper/coil/ferrite/non-model), whereas a
@@ -95,7 +134,7 @@ def show_sample_in_ocp(sample: SampledStep) -> None:
     assembly = build_ssw_assembly(spec)
     show(
         assembly,
-        names=[f"seed_{sample.seed:05d}_{sample.design_id}"],
+        names=[_display_name(sample)],
         axes=True,
         axes0=True,
         grid=True,
@@ -118,6 +157,12 @@ def _resolve_config(argv: list[str]) -> ViewConfig:
         action="store_true",
         help="do not re-run sampling; view a seed already generated in --output-dir",
     )
+    parser.add_argument(
+        "--fixed",
+        action="store_true",
+        help="ignore seeds; generate and view the authored fixed-point TOML (examples/0.3.2_fixed.toml)",
+    )
+    parser.add_argument("--fixed-toml", type=Path, default=DEFAULT_FIXED_TOML, help="fixed-point TOML for --fixed")
     add_sampling_arguments(parser)
     args = parser.parse_args(argv)
     if args.debug:
@@ -127,11 +172,28 @@ def _resolve_config(argv: list[str]) -> ViewConfig:
             view_seed=DEBUG_VIEW_SEED,
             jobs=DEBUG_JOBS,
             no_sample=DEBUG_NO_SAMPLE,
+            fixed=DEBUG_FIXED,
             output_dir=DEBUG_OUTPUT_DIR,
             sweep_toml=DEBUG_SWEEP_TOML,
+            fixed_toml=DEBUG_FIXED_TOML,
         )
     if args.jobs < 1:
         parser.error(f"--jobs must be >= 1 (actual={args.jobs})")
+    if args.fixed:
+        if args.no_sample:
+            parser.error("--fixed and --no-sample are mutually exclusive")
+        # seeds are unused in fixed mode.
+        return ViewConfig(
+            seed_start=FIXED_SEED,
+            seed_end=FIXED_SEED,
+            view_seed=FIXED_SEED,
+            jobs=args.jobs,
+            no_sample=False,
+            fixed=True,
+            output_dir=args.output_dir,
+            sweep_toml=args.sweep_toml,
+            fixed_toml=args.fixed_toml,
+        )
     if args.no_sample:
         if args.view_seed is None:
             parser.error("--view-seed is required with --no-sample")
@@ -142,11 +204,13 @@ def _resolve_config(argv: list[str]) -> ViewConfig:
             view_seed=args.view_seed,
             jobs=args.jobs,
             no_sample=True,
+            fixed=False,
             output_dir=args.output_dir,
             sweep_toml=args.sweep_toml,
+            fixed_toml=args.fixed_toml,
         )
     if args.seed_start is None or args.seed_end is None:
-        parser.error("--seed-start and --seed-end are required unless --debug or --no-sample is set")
+        parser.error("--seed-start and --seed-end are required unless --debug, --no-sample, or --fixed is set")
     if args.seed_end < args.seed_start:
         parser.error(f"--seed-end ({args.seed_end}) must be >= --seed-start ({args.seed_start})")
     view_seed = args.seed_start if args.view_seed is None else args.view_seed
@@ -158,13 +222,21 @@ def _resolve_config(argv: list[str]) -> ViewConfig:
         view_seed=view_seed,
         jobs=args.jobs,
         no_sample=False,
+        fixed=False,
         output_dir=args.output_dir,
         sweep_toml=args.sweep_toml,
+        fixed_toml=args.fixed_toml,
     )
 
 
 def main(argv: list[str] | None = None) -> SampledStep:
     config = _resolve_config(sys.argv[1:] if argv is None else argv)
+    if config.fixed:
+        print(f"--fixed set; generating STEP from {config.fixed_toml}")
+        view_sample = generate_fixed(fixed_toml=config.fixed_toml, output_root=config.output_dir)
+        print(f"\nShowing fixed design ({view_sample.design_id}) in OCP on port {OCP_PORT} ...")
+        show_sample_in_ocp(view_sample)
+        return view_sample
     if config.no_sample:
         print(f"--no-sample set; reusing generated artifacts under {config.output_dir}")
         view_sample = load_existing_sample(output_root=config.output_dir, seed=config.view_seed)

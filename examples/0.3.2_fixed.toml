@@ -164,7 +164,7 @@ range = [true, 1, 1, 1]
 description = "TX SSW enable flag"
 
 [modeled_objects.turn_n_int]
-range = [true, 4, 4, 1]
+range = [true, 3, 3, 1]
 description = "TX SSW band count"
 
 [modeled_objects.gap_ratio]
@@ -172,7 +172,7 @@ range = [false, 0.44, 0.44, 1]
 description = "TX SSW pitch 중 gap 비율"
 
 [modeled_objects.void_area_ratio]
-range = [false, 0.5, 0.5, 1]
+range = [false, 0.25, 0.25, 1]
 description = "TX 중앙 void area ratio"
 
 [modeled_objects.void_profile]
@@ -192,7 +192,7 @@ range = [false, 8.0, 8.0, 1]
 description = "TX SSW two-PCB gap(mm)"
 
 [modeled_objects.twist_factor]
-range = [true, 3, 3, 1]
+range = [true, 5, 5, 1]
 description = "TX SSW band pitch shift per loop"
 
 [[modeled_objects]]
@@ -256,7 +256,7 @@ range = [true, 1, 1, 1]
 description = "RX SSW enable flag"
 
 [modeled_objects.turn_n_int]
-range = [true, 4, 4, 1]
+range = [true, 3, 3, 1]
 description = "RX SSW band count"
 
 [modeled_objects.gap_ratio]
@@ -264,7 +264,7 @@ range = [false, 0.6, 0.6, 1]
 description = "RX SSW pitch 중 gap 비율"
 
 [modeled_objects.void_area_ratio]
-range = [false, 0.25, 0.25, 1]
+range = [false, 0.5, 0.5, 1]
 description = "RX 중앙 void area ratio"
 
 [modeled_objects.void_profile]
@@ -284,7 +284,7 @@ range = [false, 3.0, 3.0, 1]
 description = "RX SSW two-PCB gap(mm)"
 
 [modeled_objects.twist_factor]
-range = [true, 3, 3, 1]
+range = [true, 5, 5, 1]
 description = "RX SSW band pitch shift per loop"
 
 [constraints]
