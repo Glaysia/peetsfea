@@ -1,16 +1,14 @@
-# 0.3.2 SSW sampled authoring input.
+# 0.3.3 SSW fixed authoring input.
 # ----------------------------------------------------------------------------
-# 이 파일은 0.3.2 SSW coil sweep의 SSOT다.
-# TX/RX 각각의 sampled coil 변수, fixed compatibility 변수,
-# shared layout 변수와 shared ferrite 변수를 포함하며,
-# 자유변수 기준 총 20차원이다.
+# 이 파일은 peetsfea package data 0.3.3_sweep.toml의 frozen realization이다.
+# sweep과 같은 public field surface를 유지하되, 모든 sampled coil/layout 변수는 count=1로 고정한다.
 #
 # Range 형식:
 # - [true, start, end, count]는 integer 후보 range다.
 # - [false, start, end, count]는 float 후보 range다.
-# - fixed TOML에서는 같은 public field를 [*, value, value, 1]로 freeze한다.
+# - fixed TOML은 같은 public field를 [*, value, value, 1]로 freeze한다.
 
-spec_version = "0.3.2"
+spec_version = "0.3.3"
 schema_id = "peetsfea.ssw_coil.step.v1"
 runtime_compatible = false
 
@@ -59,7 +57,7 @@ range = [false, 180.0, 180.0, 1]
 description = "Maximum coil height(mm)"
 
 [fixed_dimensions.tx_rx_min_distance_mm]
-range = [false, 50.0, 200.0, 100]
+range = [false, 100.0, 100.0, 1]
 description = "Minimum edge-to-edge distance between TX and RX coils(mm)"
 
 [fixed_dimensions.mull_ferrite_thickness_mm]
@@ -75,7 +73,7 @@ range = [true, 1, 1, 1]
 description = "TX MULL ferrite sheet enable flag"
 
 [ferrite.tx_mull_position_ratio]
-range = [false, 0.0, 0.9, 24]
+range = [false, 0.0, 0.0, 1]
 description = "TX MULL ferrite Z position ratio: 0 tx_region_max bottom, 1 TX coil-adjacent"
 
 [ferrite.rx_mull_is_enabled]
@@ -83,7 +81,7 @@ range = [true, 0, 0, 1]
 description = "RX MULL ferrite sheet enable flag"
 
 [ferrite.rx_mull_position_ratio]
-range = [false, 0.0, 1.0, 11]
+range = [false, 0.0, 0.0, 1]
 description = "RX MULL ferrite X position ratio: 0 rx_region_max X-min, 1 RX coil-adjacent"
 
 # ----------------------------------------------------------------------------
@@ -111,7 +109,7 @@ non_model = true
 material = "vacuum"
 plane = "XY"
 origin_xyz = [0.0, -921.0, 0.0]
-size_xyz = [480.0, 1842.0, 290.0]
+size_xyz = [480.0, 1842.0, 240.0]
 transparency = 0.2
 
 [[non_model_objects]]
@@ -122,9 +120,9 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "XY"
-# Largest TX coil XY bounds in this sweep. The region thickness
-# is capped at 55 mm, and export resolves this box to the current
-# TX placement.
+# Largest TX coil XY bounds from peetsfea package data 0.3.3_sweep.toml.
+# The region thickness is capped at 55 mm, and export resolves
+# this box to the current TX placement.
 origin_xyz = [0.0, -240.07, 0.0]
 size_xyz = [240.14, 480.14, 55.0]
 transparency = 0.35
@@ -137,8 +135,8 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "YZ"
-# Largest RX coil YZ bounds in this sweep. The region thickness is
-# capped at 5 mm.
+# Largest RX coil YZ bounds from peetsfea package data 0.3.3_sweep.toml.
+# The region thickness is capped at 5 mm.
 origin_xyz = [-0.07, -240.07, 339.93]
 size_xyz = [5.0, 480.14, 240.14]
 transparency = 0.35
@@ -154,11 +152,11 @@ material = "composite"
 model_state = true
 
 [modeled_objects.width_ratio]
-range = [false, 0.025, 1.0, 500]
+range = [false, 0.8, 0.8, 1]
 description = "TX SSW coil width ratio against fixed_dimensions.width_max_mm"
 
 [modeled_objects.height_ratio]
-range = [false, 0.025, 1.0, 500]
+range = [false, 0.8, 0.8, 1]
 description = "TX SSW coil height ratio against fixed_dimensions.height_max_mm"
 
 [modeled_objects.is_ssw_enabled]
@@ -166,15 +164,15 @@ range = [true, 1, 1, 1]
 description = "TX SSW enable flag"
 
 [modeled_objects.turn_n_int]
-range = [true, 2, 10, 10]
+range = [true, 4, 4, 1]
 description = "TX SSW band count"
 
 [modeled_objects.gap_ratio]
-range = [false, 0.1, 0.9, 50]
+range = [false, 0.44, 0.44, 1]
 description = "TX SSW pitch 중 gap 비율"
 
 [modeled_objects.void_area_ratio]
-range = [false, 0.1, 0.9, 50]
+range = [false, 0.5, 0.5, 1]
 description = "TX 중앙 void area ratio"
 
 [modeled_objects.void_profile]
@@ -190,11 +188,11 @@ range = [true, 0, 0, 1]
 description = "TX non-SSW quarter-turn count; fixed disabled for 0.3.0 SSW"
 
 [modeled_objects.pcb_gap_mm]
-range = [false, 1.0, 10.0, 50]
+range = [false, 8.0, 8.0, 1]
 description = "TX SSW two-PCB gap(mm)"
 
 [modeled_objects.twist_factor]
-range = [true, 1, 10, 10]
+range = [true, 3, 3, 1]
 description = "TX SSW band pitch shift per loop"
 
 [[modeled_objects]]
@@ -246,27 +244,27 @@ material = "composite"
 model_state = true
 
 [modeled_objects.width_ratio]
-range = [false, 0.025, 1.0, 500]
+range = [false, 0.9, 0.9, 1]
 description = "RX SSW coil width ratio against fixed_dimensions.width_max_mm"
 
 [modeled_objects.height_ratio]
-range = [false, 0.025, 1.0, 500]
+range = [false, 0.9, 0.9, 1]
 description = "RX SSW coil height ratio against fixed_dimensions.height_max_mm"
 
 [modeled_objects.is_ssw_enabled]
-range = [true, 0, 1, 2]
+range = [true, 1, 1, 1]
 description = "RX SSW enable flag"
 
 [modeled_objects.turn_n_int]
-range = [true, 1, 10, 10]
+range = [true, 4, 4, 1]
 description = "RX SSW band count"
 
 [modeled_objects.gap_ratio]
-range = [false, 0.1, 0.9, 50]
+range = [false, 0.6, 0.6, 1]
 description = "RX SSW pitch 중 gap 비율"
 
 [modeled_objects.void_area_ratio]
-range = [false, 0.1, 0.9, 50]
+range = [false, 0.25, 0.25, 1]
 description = "RX 중앙 void area ratio"
 
 [modeled_objects.void_profile]
@@ -274,19 +272,19 @@ range = [true, 1, 1, 1]
 description = "RX void profile: 0 rectangular void, 1 scaled void"
 
 [modeled_objects.no_ssw_qturn_start_int]
-range = [true, 0, 7, 8]
+range = [true, 3, 3, 1]
 description = "RX non-SSW quarter-turn start index; fixed disabled for 0.3.0 SSW"
 
 [modeled_objects.no_ssw_qturn_n_int]
-range = [true, 0, 3, 4]
+range = [true, 0, 0, 1]
 description = "RX non-SSW quarter-turn count; fixed disabled for 0.3.0 SSW"
 
 [modeled_objects.pcb_gap_mm]
-range = [false, 1.0, 4.5, 25]
+range = [false, 3.0, 3.0, 1]
 description = "RX SSW two-PCB gap(mm)"
 
 [modeled_objects.twist_factor]
-range = [true, 1, 10, 10]
+range = [true, 3, 3, 1]
 description = "RX SSW band pitch shift per loop"
 
 [constraints]

@@ -3,7 +3,7 @@
 By default this calls ``entry/sample.py`` to generate STEP files for the seed range, then shows
 ``--view-seed`` in the OCP viewer. Pass ``--no-sample`` to skip generation and view a seed that
 was already sampled into the output directory. Pass ``--fixed`` to generate and view the authored
-fixed-point TOML (``examples/0.3.2_fixed.toml``) instead of a sampled seed.
+fixed-point TOML (``peetsfea data 0.3.3_fixed.toml``) instead of a sampled seed.
 
 The viewer shows the rebuilt ``cq.Assembly`` (copper/coil/ferrite/non-model colors and
 transparency), not the flattened STEP re-import which renders as a single default material.
@@ -12,7 +12,7 @@ Run from ``run/``:
 
     ../.venv/bin/python ../entry/view.py --seed-start 0 --seed-end 9 --view-seed 3
     ../.venv/bin/python ../entry/view.py --view-seed 3 --no-sample
-    ../.venv/bin/python ../entry/view.py --fixed   # view examples/0.3.2_fixed.toml
+    ../.venv/bin/python ../entry/view.py --fixed   # view peetsfea data 0.3.3_fixed.toml
     ../.venv/bin/python ../entry/view.py --debug   # use the hardcoded DEBUG_* constants
 """
 
@@ -49,7 +49,7 @@ from peetsfea.ssw_design_space import DEFAULT_REFERENCE_TOML_PATH
 OCP_PORT = 3939
 TOKEN_TOML_NAME = "coil_making_token.toml"
 FIXED_SUBDIR = "fixed"
-DEFAULT_FIXED_TOML = DEFAULT_SOURCE_TOML_PATH  # examples/0.3.2_fixed.toml
+DEFAULT_FIXED_TOML = DEFAULT_SOURCE_TOML_PATH  # peetsfea data 0.3.3_fixed.toml
 FIXED_SEED = -1  # sentinel: not sampled from a seed
 
 # --debug uses these hardcoded constants instead of CLI args, so the VS Code launch.json
@@ -102,7 +102,7 @@ def load_existing_sample(*, output_root: Path, seed: int) -> SampledStep:
 
 
 def generate_fixed(*, fixed_toml: Path, output_root: Path) -> SampledStep:
-    """Export the authored fixed-point TOML (examples/0.3.2_fixed.toml) to a STEP scene."""
+    """Export the authored fixed-point TOML (peetsfea data 0.3.3_fixed.toml) to a STEP scene."""
     if not fixed_toml.is_file():
         raise FileNotFoundError(f"fixed TOML does not exist: {fixed_toml}")
     fixed_dir = output_root / FIXED_SUBDIR
@@ -160,7 +160,7 @@ def _resolve_config(argv: list[str]) -> ViewConfig:
     parser.add_argument(
         "--fixed",
         action="store_true",
-        help="ignore seeds; generate and view the authored fixed-point TOML (examples/0.3.2_fixed.toml)",
+        help="ignore seeds; generate and view the authored fixed-point TOML (peetsfea data 0.3.3_fixed.toml)",
     )
     parser.add_argument("--fixed-toml", type=Path, default=DEFAULT_FIXED_TOML, help="fixed-point TOML for --fixed")
     add_sampling_arguments(parser)

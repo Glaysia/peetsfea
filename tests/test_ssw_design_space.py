@@ -8,8 +8,9 @@ import pytest
 
 from peetsfea.backend.pyaedt.ssw_ports import SSW_REPORT_NAMES
 import peetsfea.ssw_random_sample_reports as ssw_random_sample_reports
-from peetsfea.ssw_step import load_ssw_fixed_spec
+from peetsfea.ssw_step import DEFAULT_SOURCE_TOML_PATH, load_ssw_fixed_spec
 from peetsfea.ssw_design_space import (
+    DEFAULT_REFERENCE_TOML_PATH,
     build_ssw_aedt_identity,
     check_ssw_toml_in_design_space,
     point_values_for_ssw_fixed_toml,
@@ -17,8 +18,8 @@ from peetsfea.ssw_design_space import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FIXED_TOML = REPO_ROOT / "examples" / "0.3.2_fixed.toml"
-SWEEP_TOML = REPO_ROOT / "examples" / "0.3.2_sweep.toml"
+FIXED_TOML = DEFAULT_SOURCE_TOML_PATH
+SWEEP_TOML = DEFAULT_REFERENCE_TOML_PATH
 
 
 def _candidate(tmp_path: Path, text: str) -> Path:
@@ -93,7 +94,7 @@ def test_aedt_identity_is_deterministic_short_point_name() -> None:
     assert first == second
     assert first.dimension_count == 20
     assert len(first.point_hash) == 16
-    assert first.design_id == f"0_3_2_p{first.point_hash}"
+    assert first.design_id == f"0_3_3_p{first.point_hash}"
     assert first.aedt_filename == f"{first.design_id}.aedt"
     assert "ssw" not in first.design_id
 
