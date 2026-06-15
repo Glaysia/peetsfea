@@ -1,15 +1,14 @@
-"""Sample random in-design-space SSW STEP files over a seed range and view one in OCP.
+"""Sample random in-design-space SSW STEP files over a seed range.
 
 Each seed in ``[--seed-start, --seed-end]`` draws one random point inside the reference design
 space (``examples/0.3.2_sweep.toml``), freezes it to a fixed TOML, and exports a STEP scene plus
-its ledger/token TOML into a gitignored output directory. After generation the script prints a
-seed -> design_id -> step index and shows the ``--view-seed`` scene in the OCP viewer.
+its ledger/token TOML into a gitignored output directory (one ``seed_<NNNNN>/`` per seed). This
+module only generates artifacts; use ``entry/view.py`` to display a seed in the OCP viewer.
 
 Run from ``run/``:
 
     ../.venv/bin/python ../entry/sample.py --seed-start 0 --seed-end 9
-    ../.venv/bin/python ../entry/sample.py --seed-start 0 --seed-end 99 --jobs 10 --no-view
-    ../.venv/bin/python ../entry/sample.py --seed-start 0 --seed-end 9 --view-seed 3
+    ../.venv/bin/python ../entry/sample.py --seed-start 0 --seed-end 99 --jobs 10
     ../.venv/bin/python ../entry/sample.py --debug   # use the hardcoded DEBUG_* constants
 """
 
@@ -25,37 +24,32 @@ from pathlib import Path
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import cadquery as cq
-from ocp_vscode import Camera, Collapse, show
-
 from peetsfea.ssw_design_space import DEFAULT_REFERENCE_TOML_PATH, sample_ssw_fixed_tomls
 from peetsfea.ssw_step import export_ssw_step_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "run" / "ssw_step_samples"
-OCP_PORT = 3939
+SCENE_STEP_NAME = "ssw_scene.step"
 
 # --debug uses these hardcoded constants instead of CLI args, so the VS Code launch.json
 # config can run `sample.py --debug` with no arguments. Edit these to control a debug run.
 DEBUG_SEED_START = 0
 DEBUG_SEED_END = 9
-DEBUG_VIEW_SEED = 0
-DEBUG_NO_VIEW = False
+DEBUG_JOBS = 10
 DEBUG_OUTPUT_DIR = DEFAULT_OUTPUT_DIR
 DEBUG_SWEEP_TOML = DEFAULT_REFERENCE_TOML_PATH
-# Keep DEBUG_JOBS at 1: workers run in child processes where breakpoints will not hit.
-DEBUG_JOBS = 10
 
 
 class SampledStep:
-    def __init__(self, *, seed: int, design_id: str, step_path: Path, sample_dir: Path) -> None:
+    def __init__(self, *, seed: int, design_id: str, toml_path: Path, step_path: Path, sample_dir: Path) -> None:
         self.seed = seed
         self.design_id = design_id
+        self.toml_path = toml_path
         self.step_path = step_path
         self.sample_dir = sample_dir
 
 
-def _seed_output_dir(*, output_root: Path, seed: int) -> Path:
+def seed_output_dir(*, output_root: Path, seed: int) -> Path:
     return output_root / f"seed_{seed:05d}"
 
 
@@ -66,7 +60,7 @@ def generate_step_for_seed(
     output_root: Path,
     reference_toml_path: Path,
 ) -> SampledStep:
-    sample_dir = _seed_output_dir(output_root=output_root, seed=seed)
+    sample_dir = seed_output_dir(output_root=output_root, seed=seed)
     shutil.rmtree(sample_dir, ignore_errors=True)
     sample_dir.mkdir(parents=True, exist_ok=True)
     batch = sample_ssw_fixed_tomls(
@@ -81,7 +75,13 @@ def generate_step_for_seed(
     step_path = Path(artifacts["scene_step_path"])
     if not step_path.is_file():
         raise FileNotFoundError(f"STEP export did not create a scene file for seed {seed}: {step_path}")
-    return SampledStep(seed=seed, design_id=sample.design_id, step_path=step_path, sample_dir=sample_dir)
+    return SampledStep(
+        seed=seed,
+        design_id=sample.design_id,
+        toml_path=sample.toml_path,
+        step_path=step_path,
+        sample_dir=sample_dir,
+    )
 
 
 def generate_steps(*, seeds: list[int], sweep_toml_path: Path, output_root: Path, jobs: int) -> list[SampledStep]:
@@ -113,36 +113,53 @@ def generate_steps(*, seeds: list[int], sweep_toml_path: Path, output_root: Path
             for seed in seeds
         }
         for future in as_completed(futures):
-            by_seed[futures[future]] = future.result()
+            seed = futures[future]
+            try:
+                by_seed[seed] = future.result()
+            except Exception as exc:
+                raise RuntimeError(f"SSW STEP generation failed for seed {seed}") from exc
     return [by_seed[seed] for seed in seeds]
-
-
-def show_step_in_ocp(sample: SampledStep) -> None:
-    imported = cq.importers.importStep(str(sample.step_path))
-    solids = tuple(imported.solids().vals())
-    if len(solids) == 0:
-        raise RuntimeError(f"generated SSW STEP contains no solids: {sample.step_path}")
-    show(
-        imported,
-        names=[f"seed_{sample.seed:05d}_{sample.design_id}"],
-        axes=True,
-        axes0=True,
-        grid=True,
-        collapse=Collapse.ROOT,
-        reset_camera=Camera.RESET,
-        port=OCP_PORT,
-    )
 
 
 @dataclass(frozen=True)
 class RunConfig:
     seed_start: int
     seed_end: int
-    view_seed: int | None
-    no_view: bool
     output_dir: Path
     sweep_toml: Path
     jobs: int
+
+
+def run_sampling(config: RunConfig) -> list[SampledStep]:
+    """Generate every seed in the config's range and print a seed -> design_id -> step index."""
+    if config.seed_end < config.seed_start:
+        raise ValueError(f"seed_end ({config.seed_end}) must be >= seed_start ({config.seed_start})")
+    if config.jobs < 1:
+        raise ValueError(f"jobs must be >= 1 (actual={config.jobs})")
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+    seeds = list(range(config.seed_start, config.seed_end + 1))
+    worker_count = min(config.jobs, len(seeds))
+    print(f"Generating {len(seeds)} SSW STEP file(s) with {worker_count} worker(s) ...")
+    samples = generate_steps(
+        seeds=seeds,
+        sweep_toml_path=config.sweep_toml,
+        output_root=config.output_dir,
+        jobs=config.jobs,
+    )
+    print(f"\nGenerated {len(samples)} SSW STEP file(s) under {config.output_dir}")
+    print(f"{'seed':>6}  {'design_id':<24}  step")
+    for sample in samples:
+        print(f"{sample.seed:>6}  {sample.design_id:<24}  {sample.step_path}")
+    return samples
+
+
+def add_sampling_arguments(parser: argparse.ArgumentParser) -> None:
+    """Register the shared generation arguments (reused by entry/view.py)."""
+    parser.add_argument("--seed-start", type=int, default=None, help="first seed (inclusive)")
+    parser.add_argument("--seed-end", type=int, default=None, help="last seed (inclusive)")
+    parser.add_argument("--jobs", "-j", type=int, default=1, help="parallel worker processes for generation")
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="gitignored output root")
+    parser.add_argument("--sweep-toml", type=Path, default=DEFAULT_REFERENCE_TOML_PATH, help="sweep SSOT TOML")
 
 
 def _resolve_config(argv: list[str]) -> RunConfig:
@@ -152,25 +169,12 @@ def _resolve_config(argv: list[str]) -> RunConfig:
         action="store_true",
         help="ignore CLI args and use the hardcoded DEBUG_* constants (for VS Code launch.json)",
     )
-    parser.add_argument("--seed-start", type=int, default=None, help="first seed (inclusive)")
-    parser.add_argument("--seed-end", type=int, default=None, help="last seed (inclusive)")
-    parser.add_argument(
-        "--view-seed",
-        type=int,
-        default=None,
-        help="seed whose STEP is shown in OCP (default: --seed-start)",
-    )
-    parser.add_argument("--no-view", action="store_true", help="generate only, skip the OCP viewer")
-    parser.add_argument("--jobs", "-j", type=int, default=1, help="parallel worker processes for generation")
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="gitignored output root")
-    parser.add_argument("--sweep-toml", type=Path, default=DEFAULT_REFERENCE_TOML_PATH, help="sweep SSOT TOML")
+    add_sampling_arguments(parser)
     args = parser.parse_args(argv)
     if args.debug:
         return RunConfig(
             seed_start=DEBUG_SEED_START,
             seed_end=DEBUG_SEED_END,
-            view_seed=DEBUG_VIEW_SEED,
-            no_view=DEBUG_NO_VIEW,
             output_dir=DEBUG_OUTPUT_DIR,
             sweep_toml=DEBUG_SWEEP_TOML,
             jobs=DEBUG_JOBS,
@@ -182,8 +186,6 @@ def _resolve_config(argv: list[str]) -> RunConfig:
     return RunConfig(
         seed_start=args.seed_start,
         seed_end=args.seed_end,
-        view_seed=args.view_seed,
-        no_view=args.no_view,
         output_dir=args.output_dir,
         sweep_toml=args.sweep_toml,
         jobs=args.jobs,
@@ -192,37 +194,7 @@ def _resolve_config(argv: list[str]) -> RunConfig:
 
 def main(argv: list[str] | None = None) -> list[SampledStep]:
     config = _resolve_config(sys.argv[1:] if argv is None else argv)
-    if config.seed_end < config.seed_start:
-        raise ValueError(f"seed_end ({config.seed_end}) must be >= seed_start ({config.seed_start})")
-    view_seed = config.seed_start if config.view_seed is None else config.view_seed
-    if not config.no_view and not (config.seed_start <= view_seed <= config.seed_end):
-        raise ValueError(f"view_seed ({view_seed}) must be within [{config.seed_start}, {config.seed_end}]")
-
-    output_root: Path = config.output_dir
-    output_root.mkdir(parents=True, exist_ok=True)
-    seeds = list(range(config.seed_start, config.seed_end + 1))
-    worker_count = min(config.jobs, len(seeds))
-    print(f"Generating {len(seeds)} SSW STEP file(s) with {worker_count} worker(s) ...")
-    samples = generate_steps(
-        seeds=seeds,
-        sweep_toml_path=config.sweep_toml,
-        output_root=output_root,
-        jobs=config.jobs,
-    )
-
-    print(f"\nGenerated {len(samples)} SSW STEP file(s) under {output_root}")
-    print(f"{'seed':>6}  {'design_id':<24}  step")
-    for sample in samples:
-        print(f"{sample.seed:>6}  {sample.design_id:<24}  {sample.step_path}")
-
-    if config.no_view:
-        print("\nno-view set; skipping OCP viewer.")
-        return samples
-
-    view_sample = next(sample for sample in samples if sample.seed == view_seed)
-    print(f"\nShowing seed {view_seed} ({view_sample.design_id}) in OCP on port {OCP_PORT} ...")
-    show_step_in_ocp(view_sample)
-    return samples
+    return run_sampling(config)
 
 
 if __name__ == "__main__":

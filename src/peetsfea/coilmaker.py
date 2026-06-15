@@ -1511,7 +1511,10 @@ def _ssw_port_gap_spec(
     try:
         return next(candidates)
     except StopIteration as exc:
-        raise RuntimeError("No intact SSW trace region found for the 2 mm port gap") from exc
+        # Infeasible-but-in-range point (e.g. few turns / wide trace leaves no spot for the
+        # 2 mm port gap). Raise ValueError so the sampler rejects this draw and resamples,
+        # consistent with the other geometry validation failures here.
+        raise ValueError("No intact SSW trace region found for the 2 mm port gap") from exc
 
 
 def _ssw_trace_context(config: RuntimeConfig, frame: CoilFrame) -> SswTraceContext:

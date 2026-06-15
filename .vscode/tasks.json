@@ -17,19 +17,9 @@
       "problemMatcher": []
     },
     {
-      "label": "prepare-minimal-step-debug",
-      "dependsOrder": "sequence",
-      "dependsOn": [
-        "clean-run",
-        "install-peetsfea-all"
-      ],
-      "problemMatcher": []
-    },
-    {
       "label": "prepare-0.3.0-ssw-debug",
       "dependsOrder": "sequence",
       "dependsOn": [
-        "clean-run",
         "install-peetsfea-all"
       ],
       "problemMatcher": []

@@ -2,10 +2,10 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug SSW STEP sampler (sample.py --debug)",
+      "name": "Debug SSW viewer (view.py --debug)",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/entry/sample.py",
+      "program": "${workspaceFolder}/entry/view.py",
       "args": ["--debug"],
       "cwd": "${workspaceFolder}/run",
       "python": "${workspaceFolder}/.venv/bin/python",

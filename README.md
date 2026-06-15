@@ -35,19 +35,22 @@ cd run
 ../.venv/bin/pyright ../src ../entry ../tests
 ```
 
-설계 공간 안에서 seed 범위로 랜덤 SSW STEP 파일을 생성하고, 그중 한 seed를 OCP로 봅니다. `entry/sample.py`가 유일한 entry 스크립트입니다.
+설계 공간 안에서 seed 범위로 랜덤 SSW STEP 파일을 생성하고(`entry/sample.py`), 그중 한 seed를 OCP로 봅니다(`entry/view.py`).
 
 ```bash
 cd run
-# seed 0..9에 대해 STEP 생성 후 seed 0을 OCP에 표시
-../.venv/bin/python ../entry/sample.py --seed-start 0 --seed-end 9
-# 특정 seed만 OCP로 보기
-../.venv/bin/python ../entry/sample.py --seed-start 0 --seed-end 9 --view-seed 3
-# 병렬(워커 10개) 생성, 뷰어 없이
-../.venv/bin/python ../entry/sample.py --seed-start 0 --seed-end 99 --jobs 10 --no-view
+# 생성만: seed 0..99를 워커 10개로 병렬 생성
+../.venv/bin/python ../entry/sample.py --seed-start 0 --seed-end 99 --jobs 10
+# 생성 후 seed 3을 OCP에 표시
+../.venv/bin/python ../entry/view.py --seed-start 0 --seed-end 9 --view-seed 3
+# 이미 생성된 결과를 재생성 없이 보기만
+../.venv/bin/python ../entry/view.py --view-seed 3 --no-sample
 ```
 
-`--jobs N`은 seed별 생성을 N개 프로세스로 병렬 처리합니다(각 seed는 독립 디렉토리라 안전하며 결과는 결정적). `--debug`는 소스 상단 `DEBUG_*` 상수로 인자를 제어합니다.
+- 생성물은 gitignored `run/ssw_step_samples/seed_<NNNNN>/`에 들어갑니다(`ssw_scene.step`, `<design_id>.toml`, `ssw_step_ledger.json`, `coil_making_token.toml`).
+- `--jobs N`은 seed별 생성을 N개 프로세스로 병렬 처리합니다(각 seed는 독립 디렉토리라 안전하며 결과는 결정적).
+- `view.py`는 STEP re-import가 아니라 sampled spec으로 재구성한 `cq.Assembly`를 표시하므로 역할별 색상·투명도가 유지됩니다. `--no-sample`은 재생성 없이 기존 결과만 봅니다.
+- `--debug`는 각 스크립트 상단 `DEBUG_*` 상수로 인자를 제어합니다(VS Code launch.json은 `view.py --debug`를 실행).
 
 Headless AEDT setup/solve/report 경로는 패키지 공개 API(`peetsfea.run_ssw_random_sample_reports_from_toml_text`)와 `tests/backend_em`의 headless AEDT 통합 테스트로 실행합니다. 기존 minimal `entry/sample.py`·`entry/build.py` 진입점은 제거했습니다.
 
