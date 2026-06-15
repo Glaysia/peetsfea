@@ -13,8 +13,8 @@ peetsfea는 TOML 명세에서 SSW 코일 설계를 결정적으로 생성하고,
 영문 문서는 [README.en.md](README.en.md)를 참고하세요.
 
 ## 현재 계약
-- 버전: `0.3.3`
-- 설계 공간 SSOT: 패키지 데이터 `src/peetsfea/data/0.3.3_sweep.toml` (`DEFAULT_REFERENCE_TOML_PATH`). 정규 fixed 점은 `src/peetsfea/data/0.3.3_fixed.toml` (`DEFAULT_SOURCE_TOML_PATH`). 둘 다 wheel에 동봉되어 설치 환경에서도 해석됩니다.
+- 버전: `0.3.4`
+- 설계 공간 SSOT: 패키지 데이터 `src/peetsfea/data/0.3.4_sweep.toml` (`DEFAULT_REFERENCE_TOML_PATH`). 정규 fixed 점은 `src/peetsfea/data/0.3.4_fixed.toml` (`DEFAULT_SOURCE_TOML_PATH`). 둘 다 wheel에 동봉되어 설치 환경에서도 해석됩니다.
 - TOML surface: `[design]` · `[backend]` · `[fixed_dimensions]` · `[[modeled_objects]]`(tx/rx/under coil) · `[ferrite]` · `[constraints]`.
 - 제약: enabled SSW coil은 `gcd(turn_n_int, twist_factor) == 1`, RX SSW가 enabled이면 RX `turn_n_int > 1`, TX/RX `void_profile`은 scaled void profile `1`로 고정.
 - `tx_under_coil`은 TX main coil과 별도인 두 번째 TX coil이며, `tx_region_max`의 global X-min 면 바깥에 붙는 YZ 평면 normal spiral입니다([GOAL.md](GOAL.md)).
@@ -41,7 +41,7 @@ cd run
 ../.venv/bin/python ../entry/view.py --seed-start 0 --seed-end 9 --view-seed 3
 # 이미 생성된 결과를 재생성 없이 보기만
 ../.venv/bin/python ../entry/view.py --view-seed 3 --no-sample
-# 정규 fixed 점(data/0.3.3_fixed.toml)을 생성·표시
+# 정규 fixed 점(data/0.3.4_fixed.toml)을 생성·표시
 ../.venv/bin/python ../entry/view.py --fixed
 ```
 
@@ -62,10 +62,10 @@ Headless AEDT setup/solve/report 경로는 패키지 공개 API(`peetsfea.run_ss
 
 SSW headless AEDT 솔브 산출물(`<design_id>.aedt`, report CSV 등)은 공개 API 결과의 `output_dir` 아래에 생성됩니다.
 
-## runner 통합 (0.3.3)
+## runner 통합 (0.3.4)
 peetsfea-runner가 의존하는 공개 표면입니다. peetsfea는 ansysedt를 직접 기동/종료하거나 라이선스를 관리하지 않습니다. 전체 계약은 [docs/runner-integration.md](docs/runner-integration.md)를 보세요.
 
-- `peetsfea.__version__ == "0.3.3"`, 패키지에 `py.typed` 동봉.
+- `peetsfea.__version__ == "0.3.4"`, 패키지에 `py.typed` 동봉.
 - `peetsfea.validate_sweep_toml_text(text)` — sweep의 모든 swept range가 기준 sweep design space(상하한 + 정수/실수 플래그 + count>0) 이내인지 검사, 벗어나면 `PeetsfeaStageError`.
 - `peetsfea.sample_fixed_candidates_from_toml_text(text, count, seed) -> list[str]` — 결정론적, scratch는 `TMPDIR` 준수.
 - `peetsfea.run_ssw_random_sample_reports_from_toml_text(..., grpc_port, aedt_pid=None)` — warm ansysedt에 attach(자체 기동 금지), solve 후 프로젝트만 닫고 AEDT는 살린 채 구조화 결과 반환. solve는 60분 hard-abort watchdog 포함.

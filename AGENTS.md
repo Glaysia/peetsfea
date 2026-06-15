@@ -25,7 +25,7 @@ Project rules for coding agents working in this repository.
 - **PyAEDT backend**: delegate modeling/simulation to PyAEDT.
 - **Dataset generation**: produce datasets via parameter sweeps/sampling.
 
-## Active surface (0.3.3)
+## Active surface (0.3.4)
 - The active product path is the SSW design-space + headless HFSS setup/solve/report pipeline:
   `ssw_design_space`, `ssw_step`, `ssw_aedt_artifacts`, `backend/pyaedt/ssw_ports`, and
   `ssw_random_sample_reports` (the runner-facing API — see [docs/runner-integration.md](docs/runner-integration.md)).

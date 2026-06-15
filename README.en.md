@@ -15,9 +15,9 @@ on (see *Runner integration*).
 For Korean documentation, see [README.md](README.md).
 
 ## Current contract
-- Version: `0.3.3`
-- Design-space SSOT: package data `src/peetsfea/data/0.3.3_sweep.toml` (`DEFAULT_REFERENCE_TOML_PATH`).
-  The canonical fixed point is `src/peetsfea/data/0.3.3_fixed.toml` (`DEFAULT_SOURCE_TOML_PATH`).
+- Version: `0.3.4`
+- Design-space SSOT: package data `src/peetsfea/data/0.3.4_sweep.toml` (`DEFAULT_REFERENCE_TOML_PATH`).
+  The canonical fixed point is `src/peetsfea/data/0.3.4_fixed.toml` (`DEFAULT_SOURCE_TOML_PATH`).
   Both ship in the wheel and resolve in installed environments.
 - TOML surface: `[design]` · `[backend]` · `[fixed_dimensions]` · `[[modeled_objects]]` (tx/rx/under
   coil) · `[ferrite]` · `[constraints]`.
@@ -49,7 +49,7 @@ cd run
 ../.venv/bin/python ../entry/sample.py --seed-start 0 --seed-end 99 --jobs 10
 ../.venv/bin/python ../entry/view.py --seed-start 0 --seed-end 9 --view-seed 3
 ../.venv/bin/python ../entry/view.py --view-seed 3 --no-sample
-../.venv/bin/python ../entry/view.py --fixed   # build/view data/0.3.3_fixed.toml
+../.venv/bin/python ../entry/view.py --fixed   # build/view data/0.3.4_fixed.toml
 ```
 
 Output goes under gitignored `run/ssw_step_samples/seed_<NNNNN>/` (`ssw_scene.step`,
@@ -57,11 +57,11 @@ Output goes under gitignored `run/ssw_step_samples/seed_<NNNNN>/` (`ssw_scene.st
 across N processes (each seed in its own directory; results are deterministic). `view.py` shows the
 rebuilt `cq.Assembly` so per-role color and transparency are preserved.
 
-## Runner integration (0.3.3)
+## Runner integration (0.3.4)
 peetsfea never starts/stops `ansysedt` or manages licenses. Full contract in
 [docs/runner-integration.md](docs/runner-integration.md).
 
-- `peetsfea.__version__ == "0.3.3"`, ships `py.typed`.
+- `peetsfea.__version__ == "0.3.4"`, ships `py.typed`.
 - `validate_sweep_toml_text(text)` — reject sweeps outside the reference design space.
 - `sample_fixed_candidates_from_toml_text(text, count, seed) -> list[str]` — deterministic; honors `TMPDIR`.
 - `run_ssw_random_sample_reports_from_toml_text(..., grpc_port, aedt_pid=None)` — attach to a warm

@@ -18,12 +18,12 @@ from peetsfea.ssw_step_constraints import (
     require_ssw_constraints_satisfied,
 )
 
-DEFAULT_SOURCE_TOML_PATH = Path(__file__).resolve().parent / "data" / "0.3.3_fixed.toml"
+DEFAULT_SOURCE_TOML_PATH = Path(__file__).resolve().parent / "data" / "0.3.4_fixed.toml"
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[2] / "run" / "ssw_0_3_0_fixed"
 DEFAULT_SCENE_STEP_NAME = "ssw_scene.step"
 DEFAULT_LEDGER_NAME = "ssw_step_ledger.json"
 DEFAULT_TOKEN_TOML_NAME = "coil_making_token.toml"
-SPEC_VERSION = "0.3.3"
+SPEC_VERSION = "0.3.4"
 SCHEMA_ID = "peetsfea.ssw_coil.step.v1"
 SUPPORTED_UNITS = "mm"
 MULL_FERRITE_MATERIAL = "mull_ferrite"
@@ -1642,7 +1642,7 @@ def _scene_action_trace(
         _action_token(
             index=0,
             op="BEGIN_SSW_SCENE",
-            target="scene.0.3.3_fixed",
+            target="scene.0.3.4_fixed",
             inputs=(),
             params=(
                 ("source_toml_path", spec.source_toml_path),

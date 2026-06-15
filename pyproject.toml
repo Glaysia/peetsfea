@@ -1,6 +1,6 @@
 [project]
 name = "peetsfea"
-version = "0.3.3"
+version = "0.3.4"
 description = "Minimal STEP-based two-port HFSS baseline."
 readme = "README.md"
 requires-python = "==3.12.12"
@@ -11,6 +11,7 @@ dependencies = [
 [project.optional-dependencies]
 all = [
   "build123d>=0.10.0",
+  "cadquery>=2.5",
   "ocp-vscode>=3.1.2",
   "pyaedt[graphics]==0.25.1",
   "psutil",
