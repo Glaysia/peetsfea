@@ -15,7 +15,7 @@ on (see *Runner integration*).
 For Korean documentation, see [README.md](README.md).
 
 ## Current contract
-- Version: `0.3.6`
+- Version: `0.3.7`
 - Design-space SSOT: package data `src/peetsfea/data/0.3.x_sweep.toml` (`DEFAULT_REFERENCE_TOML_PATH`).
   The canonical fixed point is `src/peetsfea/data/0.3.x_fixed.toml` (`DEFAULT_SOURCE_TOML_PATH`).
   Both ship in the wheel and resolve in installed environments.
@@ -57,11 +57,11 @@ Output goes under gitignored `run/ssw_step_samples/seed_<NNNNN>/` (`ssw_scene.st
 across N processes (each seed in its own directory; results are deterministic). `view.py` shows the
 rebuilt `cq.Assembly` so per-role color and transparency are preserved.
 
-## Runner integration (0.3.6)
+## Runner integration (0.3.7)
 peetsfea never starts/stops `ansysedt` or manages licenses. Full contract in
 [docs/runner-integration.md](docs/runner-integration.md).
 
-- `peetsfea.__version__ == "0.3.6"`, ships `py.typed`.
+- `peetsfea.__version__ == "0.3.7"`, ships `py.typed`.
 - `validate_sweep_toml_text(text)` — reject sweeps outside the reference design space.
 - `sample_fixed_candidates_from_toml_text(text, count, seed) -> list[str]` — deterministic; honors `TMPDIR`.
 - `run_ssw_random_sample_reports_from_toml_text(..., grpc_port, aedt_pid=None)` — attach to a warm

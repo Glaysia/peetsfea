@@ -1,4 +1,4 @@
-# 0.3.6 SSW fixed authoring input.
+# 0.3.7 SSW fixed authoring input.
 # ----------------------------------------------------------------------------
 # 이 파일은 peetsfea package data 0.3.x_sweep.toml의 frozen realization이다.
 # sweep과 같은 public field surface를 유지하되, 모든 sampled coil/layout 변수는 count=1로 고정한다.
@@ -8,7 +8,7 @@
 # - [false, start, end, count]는 float 후보 range다.
 # - fixed TOML은 같은 public field를 [*, value, value, 1]로 freeze한다.
 
-spec_version = "0.3.6"
+spec_version = "0.3.7"
 schema_id = "peetsfea.ssw_coil.step.v1"
 runtime_compatible = false
 

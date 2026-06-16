@@ -647,7 +647,7 @@ def test_export_ssw_aedt_port_artifacts_writes_direct_edge_port_ledger(tmp_path:
     assert stored_ledger == ledger
     assert ledger["dimension_count"] == 21
     assert len(ledger["design_space_hash"]) == 16
-    assert ledger["design_id"] == f"0_3_6_p{ledger['design_space_hash']}"
+    assert ledger["design_id"] == f"0_3_7_p{ledger['design_space_hash']}"
     assert ledger["aedt_filename"] == f"{ledger['design_id']}.aedt"
     assert "port_sheet_names" not in ledger
     assert "tx_aedt_port_sheet" not in ledger["body_names"]

@@ -1,4 +1,4 @@
-# Runner Integration (peetsfea 0.3.6)
+# Runner Integration (peetsfea 0.3.7)
 
 What `peetsfea-runner` depends on in the `peetsfea` package, and the status of each item.
 
@@ -8,7 +8,7 @@ What `peetsfea-runner` depends on in the `peetsfea` package, and the status of e
 ## Public API
 
 ```python
-peetsfea.__version__                       # "0.3.6"; package ships py.typed
+peetsfea.__version__                       # "0.3.7"; package ships py.typed
 
 # Reject sweeps outside the reference design space (raises PeetsfeaStageError).
 peetsfea.validate_sweep_toml_text(sweep_text: str) -> None
@@ -29,7 +29,7 @@ peetsfea.PeetsfeaStageError   # structured failure (stage / error_type / message
 
 | # | Requirement | Where |
 |---|-------------|-------|
-| 1 | `__version__ == "0.3.6"` + `py.typed` for strict typing of the public API | `version.py`, `py.typed` |
+| 1 | `__version__ == "0.3.7"` + `py.typed` for strict typing of the public API | `version.py`, `py.typed` |
 | 2 | Attach to an already-running `ansysedt` via `grpc_port` (then `pid`); never self-launch; `close_on_exit=False`; fail-fast (`stage="attach"`) when unreachable | `make_attached_hfss_factory` (`backend/pyaedt/ssw_ports.py`) |
 | 3 | On finish, close only the project and leave AEDT alive for reuse | `keep_desktop_alive` → `_release_keeping_desktop_alive` |
 | 4 | 60-min hard-abort watchdog (`SOLVE_HARD_ABORT_SECONDS=3600`) that still exports the last completed pass; `solve_outcome` reports `completed`/`hard_aborted` | `_analyze_with_hard_abort` |
