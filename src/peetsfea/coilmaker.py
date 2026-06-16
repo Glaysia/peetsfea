@@ -35,8 +35,8 @@ class FixedDimensions:
 
 @dataclass(frozen=True)
 class CommonCoilParameters:
-    WIDTH_RATIO: float = 0.6                # [false, 0.025, 1.0, 500]
-    HEIGHT_RATIO: float = 0.6               # [false, 0.025, 1.0, 500]
+    WIDTH_RATIO: float = 0.6                # [false, 0.0555556, 1.0, 500]
+    HEIGHT_RATIO: float = 0.6               # [false, 0.0555556, 1.0, 500]
     IS_SSW_ENABLED: bool = True             # [true, 1, 1, 1]    deprecated
     TURN_N_INT: int = 3                     # [true, 1, 10, 10]  
     GAP_RATIO: float = 0.24                 # [false, 0.1, 0.9, 50]  

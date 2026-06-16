@@ -56,7 +56,7 @@ FIXED_SEED = -1  # sentinel: not sampled from a seed
 # config can run `view.py --debug` with no arguments. Edit these to control a debug run.
 DEBUG_SEED_START = 0
 DEBUG_SEED_END = 10
-DEBUG_VIEW_SEED = 1
+DEBUG_VIEW_SEED = 9
 DEBUG_JOBS = 12
 DEBUG_NO_SAMPLE = False
 DEBUG_FIXED = False

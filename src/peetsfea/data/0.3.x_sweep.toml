@@ -158,11 +158,11 @@ material = "composite"
 model_state = true
 
 [modeled_objects.width_ratio]
-range = [false, 0.025, 1.0, 500]
+range = [false, 0.0555556, 1.0, 500]
 description = "TX SSW coil width ratio against fixed_dimensions.width_max_mm"
 
 [modeled_objects.height_ratio]
-range = [false, 0.025, 1.0, 500]
+range = [false, 0.0555556, 1.0, 500]
 description = "TX SSW coil height ratio against fixed_dimensions.height_max_mm"
 
 [modeled_objects.is_ssw_enabled]
@@ -250,11 +250,11 @@ material = "composite"
 model_state = true
 
 [modeled_objects.width_ratio]
-range = [false, 0.025, 1.0, 500]
+range = [false, 0.0555556, 1.0, 500]
 description = "RX SSW coil width ratio against fixed_dimensions.width_max_mm"
 
 [modeled_objects.height_ratio]
-range = [false, 0.025, 1.0, 500]
+range = [false, 0.0555556, 1.0, 500]
 description = "RX SSW coil height ratio against fixed_dimensions.height_max_mm"
 
 [modeled_objects.is_ssw_enabled]
