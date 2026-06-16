@@ -1,7 +1,7 @@
 """Sample random in-design-space SSW STEP files over a seed range.
 
 Each seed in ``[--seed-start, --seed-end]`` draws one random point inside the reference design
-space (``peetsfea data 0.3.4_sweep.toml``), freezes it to a fixed TOML, and exports a STEP scene plus
+space (``peetsfea data 0.3.5_sweep.toml``), freezes it to a fixed TOML, and exports a STEP scene plus
 its ledger/token TOML into a gitignored output directory (one ``seed_<NNNNN>/`` per seed). This
 module only generates artifacts; use ``entry/view.py`` to display a seed in the OCP viewer.
 

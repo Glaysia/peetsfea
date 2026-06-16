@@ -94,7 +94,7 @@ def test_aedt_identity_is_deterministic_short_point_name() -> None:
     assert first == second
     assert first.dimension_count == 20
     assert len(first.point_hash) == 16
-    assert first.design_id == f"0_3_4_p{first.point_hash}"
+    assert first.design_id == f"0_3_5_p{first.point_hash}"
     assert first.aedt_filename == f"{first.design_id}.aedt"
     assert "ssw" not in first.design_id
 

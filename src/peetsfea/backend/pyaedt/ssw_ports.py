@@ -5,7 +5,9 @@ import json
 import multiprocessing
 from pathlib import Path
 from collections.abc import Sequence
+import shutil
 import socket
+import subprocess
 import threading
 import time
 from typing import Callable, Literal, Protocol, TypeAlias, TypedDict, cast
@@ -119,6 +121,9 @@ SOLVE_TELEMETRY_SAMPLES_JSONL_NAME = "ssw_solve_telemetry_samples.jsonl"
 SOLVE_TELEMETRY_STOP_NAME = "ssw_solve_telemetry.stop"
 SOLVE_HARD_ABORT_SECONDS = 3600.0
 SOLVE_ABORT_GRACE_SECONDS = 120.0
+SOLVE_CORES = 4
+GPU_DETECT_TIMEOUT_SECONDS = 20.0
+SOLVE_FALLBACK_MIN_SECONDS = 60.0
 
 _TXRX_OUTPUT_VARIABLE_EXPRESSIONS: tuple[tuple[str, str], ...] = (
     ("Ltx_uH", "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"),
@@ -361,7 +366,44 @@ class SswSolveTelemetry(TypedDict):
     peak_cpu_percent_total: float
     peak_rss_bytes_total: int
     peak_vms_bytes_total: int
+    gpu_used: bool
+    gpu_device_name: str
+    solver_cores: int
     samples: list[SswSolveTelemetrySample]
+
+
+class SswSolverResources(TypedDict):
+    gpu_count: int
+    gpu_device_name: str
+    cores: int
+
+
+def _detect_gpus() -> tuple[int, str]:
+    """Best-effort GPU detection via ``nvidia-smi``. Returns (count, first_device_name)."""
+    nvidia_smi = shutil.which("nvidia-smi")
+    if nvidia_smi is None:
+        return (0, "")
+    try:
+        completed = subprocess.run(
+            [nvidia_smi, "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=GPU_DETECT_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return (0, "")
+    if completed.returncode != 0:
+        return (0, "")
+    names = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+    if len(names) == 0:
+        return (0, "")
+    return (len(names), names[0])
+
+
+def detect_solver_resources() -> SswSolverResources:
+    """Resolve solver resources at solve time: fixed ``cores`` plus auto-detected GPUs."""
+    gpu_count, gpu_device_name = _detect_gpus()
+    return {"gpu_count": gpu_count, "gpu_device_name": gpu_device_name, "cores": SOLVE_CORES}
 
 
 class SswSolveOutcome(TypedDict):
@@ -496,56 +538,97 @@ def _release_keeping_desktop_alive(hfss: HfssSession) -> None:
     )
 
 
-def _analyze_with_hard_abort(
+class _AnalyzeAttempt(TypedDict):
+    status: Literal["completed", "aborted", "failed"]
+    error: str
+
+
+def _run_analyze_attempt(
     *,
     hfss: HfssSession,
     setup_name: str,
-    hard_abort_seconds: float,
-    abort_grace_seconds: float = SOLVE_ABORT_GRACE_SECONDS,
-) -> SswSolveOutcome:
-    """Run ``analyze_setup`` with an internal hard-abort watchdog.
+    cores: int,
+    gpus: int,
+    deadline_seconds: float,
+    abort_grace_seconds: float,
+) -> _AnalyzeAttempt:
+    """Run one ``analyze_setup`` attempt under the hard-abort watchdog.
 
-    ``analyze_setup`` blocks AEDT until convergence, so it runs on a worker thread while the
-    caller enforces ``hard_abort_seconds``. On timeout the watchdog issues
-    ``stop_simulations(clean_stop=True)`` so the last completed pass stays solved and its report
-    remains exportable, then returns ``hard_aborted=True``. A worker-side analyze failure is
-    re-raised as a structured solve error.
+    ``analyze_setup`` blocks AEDT until convergence, so it runs on a worker thread while the caller
+    enforces ``deadline_seconds``. On timeout the watchdog issues ``stop_simulations(clean_stop=True)``
+    so the last completed pass stays solved and exportable.
     """
     worker_error: dict[str, str] = {}
 
     def _worker() -> None:
         try:
             raise_on_false(
-                hfss.analyze_setup(setup_name, blocking=True),
+                hfss.analyze_setup(setup_name, blocking=True, cores=cores, gpus=gpus),
                 operation="analyze_setup",
-                context={"setup_name": setup_name},
+                context={"setup_name": setup_name, "cores": cores, "gpus": gpus},
             )
         except BaseException as exc:  # noqa: BLE001 — propagate to the caller thread via the dict
             worker_error["message"] = f"{type(exc).__name__}: {exc}"
 
-    started = time.monotonic()
     worker = threading.Thread(target=_worker, name="ssw-analyze-setup", daemon=True)
     worker.start()
-    worker.join(timeout=hard_abort_seconds)
+    worker.join(timeout=deadline_seconds)
     if worker.is_alive():
         hfss.stop_simulations(clean_stop=True)
         worker.join(timeout=abort_grace_seconds)
-        elapsed_ms = (time.monotonic() - started) * 1000.0
-        return {
-            "completed": False,
-            "hard_aborted": True,
-            "hard_abort_seconds": hard_abort_seconds,
-            "analyze_elapsed_ms": elapsed_ms,
-        }
-    elapsed_ms = (time.monotonic() - started) * 1000.0
+        return {"status": "aborted", "error": ""}
     if "message" in worker_error:
-        raise PeetsfeaStageError(stage="solve", error_type="analyze_failed", message=worker_error["message"])
-    return {
-        "completed": True,
-        "hard_aborted": False,
+        return {"status": "failed", "error": worker_error["message"]}
+    return {"status": "completed", "error": ""}
+
+
+def _analyze_with_hard_abort(
+    *,
+    hfss: HfssSession,
+    setup_name: str,
+    hard_abort_seconds: float,
+    cores: int,
+    gpus: int,
+    abort_grace_seconds: float = SOLVE_ABORT_GRACE_SECONDS,
+) -> tuple[SswSolveOutcome, bool]:
+    """Analyze with the hard-abort watchdog, auto-enabling GPU and falling back to CPU.
+
+    When ``gpus > 0`` the first attempt enables GPU acceleration. If that attempt *fails* (e.g. no
+    HPC Pack license or driver issue — distinct from a timeout abort), it silently retries on CPU
+    (``gpus=0``) with the remaining time budget so the job still completes. Returns the outcome and
+    whether GPU acceleration was actually used.
+    """
+    started = time.monotonic()
+    attempt = _run_analyze_attempt(
+        hfss=hfss,
+        setup_name=setup_name,
+        cores=cores,
+        gpus=gpus,
+        deadline_seconds=hard_abort_seconds,
+        abort_grace_seconds=abort_grace_seconds,
+    )
+    gpu_used = gpus > 0 and attempt["status"] != "failed"
+    if attempt["status"] == "failed" and gpus > 0:
+        remaining = max(SOLVE_FALLBACK_MIN_SECONDS, hard_abort_seconds - (time.monotonic() - started))
+        attempt = _run_analyze_attempt(
+            hfss=hfss,
+            setup_name=setup_name,
+            cores=cores,
+            gpus=0,
+            deadline_seconds=remaining,
+            abort_grace_seconds=abort_grace_seconds,
+        )
+        gpu_used = False
+    elapsed_ms = (time.monotonic() - started) * 1000.0
+    if attempt["status"] == "failed":
+        raise PeetsfeaStageError(stage="solve", error_type="analyze_failed", message=attempt["error"])
+    outcome: SswSolveOutcome = {
+        "completed": attempt["status"] == "completed",
+        "hard_aborted": attempt["status"] == "aborted",
         "hard_abort_seconds": hard_abort_seconds,
         "analyze_elapsed_ms": elapsed_ms,
     }
+    return outcome, gpu_used
 
 
 def write_ssw_aedt_port_ledger(*, ledger_path: Path, ledger: SswAedtPortStepLedger) -> None:
@@ -1332,6 +1415,9 @@ class _SolveTelemetryMonitor:
             "peak_cpu_percent_total": max(sample["cpu_percent_total"] for sample in samples),
             "peak_rss_bytes_total": max(sample["rss_bytes_total"] for sample in samples),
             "peak_vms_bytes_total": max(sample["vms_bytes_total"] for sample in samples),
+            "gpu_used": False,
+            "gpu_device_name": "",
+            "solver_cores": 0,
             "samples": samples,
         }
 
@@ -2302,15 +2388,21 @@ def solve_ssw_aedt_ports(
             sample_interval_seconds=telemetry_sample_interval_seconds,
             output_dir=csv_output_dir,
         )
+        resources = detect_solver_resources()
         monitor.start()
         try:
-            solve_outcome = _analyze_with_hard_abort(
+            solve_outcome, gpu_used = _analyze_with_hard_abort(
                 hfss=hfss,
                 setup_name=SETUP_NAME,
                 hard_abort_seconds=solve_hard_abort_seconds,
+                cores=resources["cores"],
+                gpus=resources["gpu_count"],
             )
         finally:
             solve_telemetry = monitor.stop()
+        solve_telemetry["gpu_used"] = gpu_used
+        solve_telemetry["gpu_device_name"] = resources["gpu_device_name"] if gpu_used else ""
+        solve_telemetry["solver_cores"] = resources["cores"]
         csv_paths = _export_ssw_report_csvs(hfss=hfss, output_dir=csv_output_dir)
         raise_on_false(hfss.save_project(str(output_aedt_path)), operation="save_project", context={"path": str(output_aedt_path)})
         return {
@@ -2348,8 +2440,11 @@ __all__ = [
     "SETUP_MINIMUM_CONVERGED_PASSES",
     "SETUP_MINIMUM_PASSES",
     "SOLVE_ABORT_GRACE_SECONDS",
+    "SOLVE_CORES",
     "SOLVE_HARD_ABORT_SECONDS",
     "SswSolveOutcome",
+    "SswSolverResources",
+    "detect_solver_resources",
     "SOLVE_TELEMETRY_SAMPLE_INTERVAL_SECONDS",
     "SOLVE_TELEMETRY_SAMPLES_JSONL_NAME",
     "SOLVE_TELEMETRY_STOP_NAME",

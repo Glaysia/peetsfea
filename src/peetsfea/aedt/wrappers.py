@@ -906,15 +906,21 @@ class Hfss(RawHfss, _WrappedAccess):
             context={"assignment": assignment, "name": name},
         )
 
-    def analyze_setup(self, name: str, blocking: bool = True) -> object:
+    def analyze_setup(self, name: str, blocking: bool = True, cores: int = 0, gpus: int = 0) -> object:
         validate_aedt_name(name, field="setup_name")
+        # Forcing explicit core/GPU counts requires manual HPC settings; with UseAutoSettings on,
+        # AEDT can override NumCores/NumGPUs. When neither is set, defer to AEDT's auto settings.
+        use_auto_settings = cores == 0 and gpus == 0
         return raise_on_false(
             _require_callable_attr(object.__getattribute__(self, "_raw"), "analyze_setup", owner="Hfss")(
                 name,
+                cores=cores,
+                gpus=gpus,
+                use_auto_settings=use_auto_settings,
                 blocking=blocking,
             ),
             operation="analyze_setup",
-            context={"setup_name": name, "blocking": blocking},
+            context={"setup_name": name, "blocking": blocking, "cores": cores, "gpus": gpus},
         )
 
     def stop_simulations(self, clean_stop: bool = True) -> object:

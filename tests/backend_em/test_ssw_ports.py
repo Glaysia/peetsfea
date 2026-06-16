@@ -457,7 +457,7 @@ class _FakeHfss:
         self.saved_paths.append(path)
         return True
 
-    def analyze_setup(self, name: str, blocking: bool = True) -> object:
+    def analyze_setup(self, name: str, blocking: bool = True, cores: int = 0, gpus: int = 0) -> object:
         self.analyze_setup_calls.append((name, blocking))
         return self.analyze_setup_result
 
