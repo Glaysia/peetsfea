@@ -587,15 +587,15 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
         "tx_ssw_coil_ssw_copper",
         "tx_ssw_coil_pcb_1_fr4",
     ]
-    assert mesh_payload[mesh_payload.index("MaxLength:=") + 1] == "1mm"
-    assert mesh_payload[mesh_payload.index("NumMaxElem:=") + 1] == "150000"
+    assert mesh_payload[mesh_payload.index("MaxLength:=") + 1] == "0.25um"
+    assert mesh_payload[mesh_payload.index("NumMaxElem:=") + 1] == "90000"
     assert hfss.odesign.analysis_setup_module.insert_setup_calls[0][0] == "HfssDriven"
     setup_payload = hfss.odesign.analysis_setup_module.insert_setup_calls[0][1]
     assert setup_payload[0] == "NAME:Setup1"
     assert setup_payload[setup_payload.index("Frequency:=") + 1] == "6.78MHz"
     assert setup_payload[setup_payload.index("MaxDeltaS:=") + 1] == 0.005
-    assert setup_payload[setup_payload.index("MaximumPasses:=") + 1] == 35
-    assert setup_payload[setup_payload.index("MinimumPasses:=") + 1] == 12
+    assert setup_payload[setup_payload.index("MaximumPasses:=") + 1] == 18
+    assert setup_payload[setup_payload.index("MinimumPasses:=") + 1] == 8
     assert setup_payload[setup_payload.index("MinimumConvergedPasses:=") + 1] == 9
     assert setup_payload[setup_payload.index("BasisOrder:=") + 1] == 0
     assert setup_payload[setup_payload.index("DrivenSolverType:=") + 1] == "Direct Solver"
@@ -672,8 +672,8 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
         "tx_ssw_coil_ssw_copper",
         "tx_ssw_coil_pcb_1_fr4",
     ]
-    assert result["mesh"]["max_length"] == "1mm"
-    assert result["mesh"]["num_max_elem"] == "150000"
+    assert result["mesh"]["max_length"] == "0.25um"
+    assert result["mesh"]["num_max_elem"] == "90000"
     assert hfss.modeler.create_region_calls == [
         {"pad_value": 2000, "pad_type": "Absolute Offset", "name": "Region_Abs_2000mm"}
     ]
@@ -1180,7 +1180,7 @@ def test_setup_ssw_aedt_ports_runs_real_headless_ansys() -> None:
         "tx_ssw_coil_ssw_copper",
         *ledger["fr4_body_names"],
     ]
-    assert imported["mesh"]["max_length"] == "1mm"
+    assert imported["mesh"]["max_length"] == "0.25um"
     assert imported["boundary"]["region_name"] == "Region_Abs_2000mm"
     assert imported["boundary"]["face_count"] == "6"
     assert imported["analysis_setup"]["setup_name"] == "Setup1"

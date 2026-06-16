@@ -95,8 +95,8 @@ ANALYSIS_MODULE_NAME = "AnalysisSetup"
 MESH_OPERATION_NAME = "Length1"
 MESH_RX_COPPER_CANDIDATES = ("rx_ssw_coil_coil_copper", "rx_ssw_coil_ssw_copper")
 MESH_TX_COPPER_NAME = "tx_ssw_coil_ssw_copper"
-MESH_MAX_LENGTH = "1mm"
-MESH_MAX_ELEMENTS = "150000"
+MESH_MAX_LENGTH = "0.25um"
+MESH_MAX_ELEMENTS = "90000"
 SETUP_NAME = "Setup1"
 SWEEP_NAME = "Sweep"
 SETUP_FREQUENCY = "6.78MHz"
@@ -113,8 +113,8 @@ TX_SOURCE_MAGNITUDE = "100V"
 TX_SOURCE_PHASE = "0deg"
 RX_SOURCE_MAGNITUDE = "100V"
 RX_SOURCE_PHASE = "90deg"
-SETUP_MAXIMUM_PASSES = 35
-SETUP_MINIMUM_PASSES = 12
+SETUP_MAXIMUM_PASSES = 18
+SETUP_MINIMUM_PASSES = 8
 SETUP_MINIMUM_CONVERGED_PASSES = 9
 SOLVE_TELEMETRY_SAMPLE_INTERVAL_SECONDS = 2.0
 SOLVE_TELEMETRY_SAMPLES_JSONL_NAME = "ssw_solve_telemetry_samples.jsonl"
@@ -1448,7 +1448,7 @@ def _setup_payload(
         "MinimumConvergedPasses:=",
         minimum_converged_passes,
         "PercentRefinement:=",
-        30,
+        23,
         "IsEnabled:=",
         True,
         [
@@ -1626,7 +1626,7 @@ def _insert_recorded_setup_and_sweep(
             "maximum_passes": maximum_passes,
             "minimum_passes": minimum_passes,
             "minimum_converged_passes": minimum_converged_passes,
-            "percent_refinement": 30,
+            "percent_refinement": 23,
             "basis_order": 0,
             "port_accuracy": 2,
             "driven_solver_type": "Direct Solver",

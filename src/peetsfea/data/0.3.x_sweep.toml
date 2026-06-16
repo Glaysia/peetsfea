@@ -1,16 +1,16 @@
-# 0.3.5 SSW sampled authoring input.
+# 0.3.6 SSW sampled authoring input.
 # ----------------------------------------------------------------------------
-# 이 파일은 0.3.5 SSW coil sweep의 SSOT다.
+# 이 파일은 0.3.6 SSW coil sweep의 SSOT다.
 # TX/RX 각각의 sampled coil 변수, fixed compatibility 변수,
 # shared layout 변수와 shared ferrite 변수를 포함하며,
-# 자유변수 기준 총 20차원이다.
+# 자유변수 기준 총 21차원이다.
 #
 # Range 형식:
 # - [true, start, end, count]는 integer 후보 range다.
 # - [false, start, end, count]는 float 후보 range다.
 # - fixed TOML에서는 같은 public field를 [*, value, value, 1]로 freeze한다.
 
-spec_version = "0.3.5"
+spec_version = "0.3.6"
 schema_id = "peetsfea.ssw_coil.step.v1"
 runtime_compatible = false
 
@@ -77,6 +77,10 @@ description = "TX MULL ferrite sheet enable flag"
 [ferrite.tx_mull_position_ratio]
 range = [false, 0.0, 0.9, 24]
 description = "TX MULL ferrite Z position ratio: 0 tx_region_max bottom, 1 TX coil-adjacent"
+
+[ferrite.tx_mull_sheet_count]
+range = [true, 1, 3, 3]
+description = "TX MULL ferrite sheet count, stacked downward with a one-thickness gap between sheets"
 
 [ferrite.rx_mull_is_enabled]
 range = [true, 0, 0, 1]

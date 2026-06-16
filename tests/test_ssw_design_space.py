@@ -66,10 +66,11 @@ def test_fixed_toml_is_reference_design_space_point() -> None:
 
     assert result.is_subset is True
     assert result.is_point is True
-    assert result.dimension_count == 20
-    assert len(result.free_owner_paths) == 20
+    assert result.dimension_count == 21
+    assert len(result.free_owner_paths) == 21
     assert result.violations == ()
     assert "ferrite.tx_mull_position_ratio" in result.free_owner_paths
+    assert "ferrite.tx_mull_sheet_count" in result.free_owner_paths
     assert "ferrite.rx_mull_position_ratio" in result.free_owner_paths
     assert "ferrite.tx_mull_is_enabled" not in result.free_owner_paths
     assert "ferrite.rx_mull_is_enabled" not in result.free_owner_paths
@@ -92,9 +93,9 @@ def test_aedt_identity_is_deterministic_short_point_name() -> None:
     second = build_ssw_aedt_identity(FIXED_TOML, SWEEP_TOML)
 
     assert first == second
-    assert first.dimension_count == 20
+    assert first.dimension_count == 21
     assert len(first.point_hash) == 16
-    assert first.design_id == f"0_3_5_p{first.point_hash}"
+    assert first.design_id == f"0_3_6_p{first.point_hash}"
     assert first.aedt_filename == f"{first.design_id}.aedt"
     assert "ssw" not in first.design_id
 
@@ -183,7 +184,7 @@ def test_sample_ssw_fixed_tomls_generates_valid_unique_points(tmp_path: Path) ->
     assert batch.source_toml_path == SWEEP_TOML
     assert batch.reference_toml_path == SWEEP_TOML
     assert batch.output_dir == output_dir
-    assert batch.dimension_count == 20
+    assert batch.dimension_count == 21
     assert len(batch.samples) == 3
     assert len({sample.design_id for sample in batch.samples}) == 3
     for expected_index, sample in enumerate(batch.samples):
@@ -366,8 +367,8 @@ def test_run_ssw_random_sample_reports_preserves_full_point_ledger(
 
     assert result["mode"] == "semi_dry"
     assert result["seed"] == 2468
-    assert result["dimension_count"] == 20
-    assert len(result["free_owner_paths"]) == 20
+    assert result["dimension_count"] == 21
+    assert len(result["free_owner_paths"]) == 21
     assert set(result["point_values"]) == set(result["free_owner_paths"])
     assert set(result["csv_paths"]) == set(SSW_REPORT_NAMES)
     assert set(result["csv_text_by_report"]) == set(SSW_REPORT_NAMES)

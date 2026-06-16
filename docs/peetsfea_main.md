@@ -1,4 +1,4 @@
-# peetsfea 0.3.5 — 사양서 (runner 의존 계약)
+# peetsfea 0.3.6 — 사양서 (runner 의존 계약)
 
 > peetsfea-runner가 의존 패키지 `peetsfea`에 요구하는 **계약 사양**이다. 현재 배포본은 **0.3.4**이며,
 > 이 문서는 다음 버전 **0.3.5**의 사양을 정의한다. 0.3.5의 신규 항목은 **§9 자동 GPU 가속** 하나이고,
@@ -14,7 +14,7 @@
 **원칙:** peetsfea는 ansysedt를 직접 켜고/끄거나 라이선스를 관리하지 않는다. ansysedt 수명은 edtmgr가 소유한다.
 
 ## 1. 버전 / 패키징
-1. `peetsfea.__version__ == "0.3.5"`.
+1. `peetsfea.__version__ == "0.3.6"`.
 2. 컨테이너에 runner와 함께 설치 가능(Python 3.12). **`py.typed`** 동봉(runner는 strict 타입체킹).
 3. **패키지 데이터 동봉(0.3.4 확립, 유지):** 기준 sweep(`peetsfea/data/0.3.x_sweep.toml`)·fixed 예제·
    ferrite 데이터셋(`peetsfea/data/mu_p.tab`)을 **패키지 내부에 동봉**하고 경로를 package-relative/
@@ -88,7 +88,7 @@ peetsfea는 ansysedt 기동·종료·재기동, EDT 라이선스 획득/반납�
   — 내부에서 GPU 자동 감지·활성(§9).
 - `validate_sweep_toml_text(sweep_text) -> None`
 - `sample_fixed_candidates_from_toml_text(sweep_text, count, seed) -> list[str]`
-- `peetsfea.__version__ == "0.3.5"`
+- `peetsfea.__version__ == "0.3.6"`
 
 ## 11. 잔여 협의
 - GPU 감지 방법(CUDA 런타임 import vs `nvidia-smi` 호출 vs 환경변수)과 폴백 판정 기준.

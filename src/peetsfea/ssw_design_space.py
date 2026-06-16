@@ -12,9 +12,9 @@ import tomllib
 from peetsfea.errors import PeetsfeaStageError
 from peetsfea.ssw_step import build_ssw_body_boxes, load_ssw_fixed_spec
 
-SPEC_VERSION = "0.3.5"
+SPEC_VERSION = "0.3.6"
 SCHEMA_ID = "peetsfea.ssw_coil.step.v1"
-DEFAULT_REFERENCE_TOML_PATH = Path(__file__).resolve().parent / "data" / "0.3.5_sweep.toml"
+DEFAULT_REFERENCE_TOML_PATH = Path(__file__).resolve().parent / "data" / "0.3.x_sweep.toml"
 
 RangeValue = int | float
 TomlRoot = dict[str, object]

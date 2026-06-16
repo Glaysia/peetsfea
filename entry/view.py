@@ -55,7 +55,7 @@ FIXED_SEED = -1  # sentinel: not sampled from a seed
 # --debug uses these hardcoded constants instead of CLI args, so the VS Code launch.json
 # config can run `view.py --debug` with no arguments. Edit these to control a debug run.
 DEBUG_SEED_START = 0
-DEBUG_SEED_END = 49
+DEBUG_SEED_END = 10
 DEBUG_VIEW_SEED = 1
 DEBUG_JOBS = 12
 DEBUG_NO_SAMPLE = False

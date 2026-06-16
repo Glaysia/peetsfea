@@ -1,6 +1,6 @@
-# 0.3.5 SSW fixed authoring input.
+# 0.3.6 SSW fixed authoring input.
 # ----------------------------------------------------------------------------
-# 이 파일은 peetsfea package data 0.3.5_sweep.toml의 frozen realization이다.
+# 이 파일은 peetsfea package data 0.3.x_sweep.toml의 frozen realization이다.
 # sweep과 같은 public field surface를 유지하되, 모든 sampled coil/layout 변수는 count=1로 고정한다.
 #
 # Range 형식:
@@ -8,7 +8,7 @@
 # - [false, start, end, count]는 float 후보 range다.
 # - fixed TOML은 같은 public field를 [*, value, value, 1]로 freeze한다.
 
-spec_version = "0.3.5"
+spec_version = "0.3.6"
 schema_id = "peetsfea.ssw_coil.step.v1"
 runtime_compatible = false
 
@@ -76,6 +76,10 @@ description = "TX MULL ferrite sheet enable flag"
 range = [false, 0.0, 0.0, 1]
 description = "TX MULL ferrite Z position ratio: 0 tx_region_max bottom, 1 TX coil-adjacent"
 
+[ferrite.tx_mull_sheet_count]
+range = [true, 1, 1, 1]
+description = "TX MULL ferrite sheet count, stacked downward with a one-thickness gap between sheets"
+
 [ferrite.rx_mull_is_enabled]
 range = [true, 0, 0, 1]
 description = "RX MULL ferrite sheet enable flag"
@@ -120,7 +124,7 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "XY"
-# Largest TX coil XY bounds from peetsfea package data 0.3.5_sweep.toml.
+# Largest TX coil XY bounds from peetsfea package data 0.3.x_sweep.toml.
 # The region thickness is capped at 55 mm, and export resolves
 # this box to the current TX placement.
 origin_xyz = [0.0, -240.07, 0.0]
@@ -135,7 +139,7 @@ present = true
 non_model = true
 material = "vacuum"
 plane = "YZ"
-# Largest RX coil YZ bounds from peetsfea package data 0.3.5_sweep.toml.
+# Largest RX coil YZ bounds from peetsfea package data 0.3.x_sweep.toml.
 # The region thickness is capped at 5 mm.
 origin_xyz = [-0.07, -240.07, 339.93]
 size_xyz = [5.0, 480.14, 240.14]

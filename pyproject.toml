@@ -1,6 +1,6 @@
 [project]
 name = "peetsfea"
-version = "0.3.5"
+version = "0.3.6"
 description = "Minimal STEP-based two-port HFSS baseline."
 readme = "README.md"
 requires-python = "==3.12.12"
