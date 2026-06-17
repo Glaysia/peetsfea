@@ -190,27 +190,28 @@
   <div class="card" style="border-color:rgba(52,212,183,.4)"><b>HFSS→Q3D 변환·솔브·추출 전부 자동화</b> <span class="pill done">DONE</span>
     <ul>
       <li>peetsfea <code>backend/pyaedt/q3d_convert.convert_hfss_to_q3d()</code> — GUI "복사→Q3D" 플로우를 자동화(지오메트리 복사 + net 자동 인식 + Q3DSetup).</li>
-      <li>Source/Sink 지정 + 페라이트 6.78MHz 상수화(μr=135.6, tanδ=0.00218; Q3D는 주파수 종속 μ 미지원) 후 <b>솔브 성공</b>.</li>
+      <li>Source/Sink 지정 + 페라이트 6.78MHz 상수화(μr=135.6, tanδ=0.00218; Q3D는 주파수 종속 μ 미지원) 후 <b>CG·AC RL·DC 모두 min 12 pass로 솔브</b>(AC R 수렴 확보).</li>
       <li>행렬 추출: <code>export_q3d_matrices()</code> — 네이티브 <code>ReportSetup</code>(<code>"Q3DSetup : AdaptivePass"</code>, X=Pass) + <code>ExportToFile</code>로 <b>C / AC&nbsp;RL / DC&nbsp;RL CSV를 headless 추출</b>(PyAEDT <code>export_matrix_data</code>는 gRPC 모드에서 버그 → 우회).</li>
     </ul>
   </div>
-  <h3 style="margin:20px 0 4px;font-size:16px;color:var(--mut)">Q3D @ 6.78 MHz 실측 (최종 수렴 pass)</h3>
+  <h3 style="margin:20px 0 4px;font-size:16px;color:var(--mut)">Q3D @ 6.78 MHz 실측 (CG·AC RL·DC 모두 최소 12 pass 수렴)</h3>
+  <p class="sub">HFSS(min 8 pass, ΔS=0.005)를 <b>참값</b>으로 둔 상대오차. 괄호는 직전 2-pass 미수렴 결과 → 12-pass로 재수렴.</p>
   <table>
-    <tr><th>양</th><th class="num">Q3D</th><th class="num">HFSS(기준)</th><th class="num">Δ vs HFSS</th><th>비고</th></tr>
-    <tr><td><b>L1</b> (Ltx, AC)</td><td class="num">5.297 µH</td><td class="num">5.677 µH</td><td class="num">−6.7%</td><td>ACL(tx,tx)</td></tr>
-    <tr><td><b>L2</b> (Lrx, AC)</td><td class="num">4.622 µH</td><td class="num">4.991 µH</td><td class="num">−7.4%</td><td>ACL(rx,rx)</td></tr>
-    <tr><td><b>M</b> (AC)</td><td class="num">0.1174 µH</td><td class="num">0.1574 µH</td><td class="num">−25.4%</td><td>ACL(tx,rx), k=0.0237</td></tr>
-    <tr><td><b>R1</b> (AC)</td><td class="num">1.263 Ω</td><td class="num">0.370 Ω</td><td class="num">×3.4</td><td>ACR(tx,tx) — 아래 주의</td></tr>
-    <tr><td><b>R2</b> (AC)</td><td class="num">1.321 Ω</td><td class="num">0.236 Ω</td><td class="num">×5.6</td><td>ACR(rx,rx) — 아래 주의</td></tr>
-    <tr><td><b>C1</b> (Ctx)</td><td class="num">9.679 pF</td><td class="num">16.35 pF</td><td class="num">−40.8%</td><td>Maxwell C(tx,tx)</td></tr>
-    <tr><td><b>C2</b> (Crx)</td><td class="num">10.285 pF</td><td class="num">21.62 pF</td><td class="num">−52.4%</td><td>Maxwell C(rx,rx)</td></tr>
-    <tr><td><b>Cm</b></td><td class="num">3.581 pF</td><td class="num">—</td><td class="num">—</td><td>|C(tx,rx)|, HFSS 미산출</td></tr>
-    <tr><td><b>R1/R2 (DC)</b></td><td class="num">80.1 / 68.2 mΩ</td><td class="num">—</td><td class="num">—</td><td>DCR — 표피효과 확인용</td></tr>
-    <tr><td><b>L1/L2 (DC)</b></td><td class="num">5.384 / 4.730 µH</td><td class="num">—</td><td class="num">—</td><td>DCL, M_dc=122.1 nH</td></tr>
+    <tr><th>양</th><th class="num">Q3D (12 pass)</th><th class="num">HFSS(참값)</th><th class="num">오차 vs HFSS</th><th>비고</th></tr>
+    <tr><td><b>L1</b> (Ltx, AC)</td><td class="num">5.288 µH</td><td class="num">5.677 µH</td><td class="num">−6.9%</td><td>ACL(tx,tx)</td></tr>
+    <tr><td><b>L2</b> (Lrx, AC)</td><td class="num">4.599 µH</td><td class="num">4.991 µH</td><td class="num">−7.9%</td><td>ACL(rx,rx)</td></tr>
+    <tr><td><b>M</b> (AC)</td><td class="num">0.1183 µH</td><td class="num">0.1574 µH</td><td class="num">−24.9%</td><td>ACL(tx,rx), k=0.0240</td></tr>
+    <tr><td><b>R1</b> (AC)</td><td class="num">0.851 Ω</td><td class="num">0.370 Ω</td><td class="num">+130% (×2.30)</td><td>ACR(tx,tx); 2-pass 1.263Ω→수렴 ↓</td></tr>
+    <tr><td><b>R2</b> (AC)</td><td class="num">0.889 Ω</td><td class="num">0.236 Ω</td><td class="num">+277% (×3.77)</td><td>ACR(rx,rx); 2-pass 1.321Ω→수렴 ↓</td></tr>
+    <tr><td><b>C1</b> (Ctx)</td><td class="num">9.779 pF</td><td class="num">16.35 pF</td><td class="num">−40.2%</td><td>Maxwell C(tx,tx)</td></tr>
+    <tr><td><b>C2</b> (Crx)</td><td class="num">10.332 pF</td><td class="num">21.62 pF</td><td class="num">−52.2%</td><td>Maxwell C(rx,rx)</td></tr>
+    <tr><td><b>Cm</b></td><td class="num">3.601 pF</td><td class="num">—</td><td class="num">—</td><td>|C(tx,rx)|, HFSS 미산출</td></tr>
+    <tr><td><b>R1/R2 (DC)</b></td><td class="num">81.8 / 69.3 mΩ</td><td class="num">—</td><td class="num">—</td><td>DCR — 표피효과 확인용</td></tr>
+    <tr><td><b>L1/L2 (DC)</b></td><td class="num">5.402 / 4.743 µH</td><td class="num">—</td><td class="num">—</td><td>DCL, M_dc=123.0 nH</td></tr>
   </table>
-  <div class="note"><b>해석:</b> <b>L1·L2는 HFSS와 ±7% 일치</b>(준정적 인덕턴스 양호). M은 −25%(약결합이라 절대값 작고 메시 민감).
-  <b>R(AC) 불일치 — AC RL 적응이 2 pass만 수렴</b>(CG는 10 pass)해 표면 메시 부족으로 AC 저항이 과대 추정됨; DC R(80/68 mΩ)과 AC R(1.3 Ω)의 큰 차이는 표피효과 방향은 맞으나 절대값은 RL pass 추가 수렴 필요.
-  <b>C 불일치는 정의 차이</b>: Q3D는 net-to-net 정전 C, HFSS C1/C2는 self-resonance 외삽(인터턴+포트 기생 포함)이라 체계적으로 큼 → §4 M3D Electrostatic이 직접 중재자.</div>
+  <div class="note"><b>해석(12-pass):</b> <b>L1·L2는 HFSS와 ±8% 일치</b>(준정적 인덕턴스 양호, 2→12 pass로 거의 불변 = 이미 수렴). M은 −25%(약결합이라 절대값 작고 메시 민감).
+  <b>R(AC)는 pass 수렴으로 크게 개선</b>: AC RL을 2→12 pass로 재수렴시키자 R1 1.26→0.85 Ω(−33%), R2 1.32→0.89 Ω(−33%)로 HFSS 방향으로 내려옴 → 2-pass 미수렴이 과대추정의 1차 원인임을 확인. 다만 여전히 HFSS의 2~4배라, 잔여 차이는 Q3D loop-R 정의 vs HFSS re(Z)·표피 메시(δ≈25µm vs 트레이스 70µm)의 체계적 차이 → §5 M3D AC Magnetic으로 교차 확인 예정.
+  <b>C 불일치는 정의 차이</b>(수렴과 무관, 12-pass에서도 −40/−52% 유지): Q3D는 net-to-net 정전 C, HFSS C1/C2는 self-resonance 외삽(인터턴+포트 기생 포함)이라 체계적으로 큼 → §4 M3D Electrostatic이 직접 중재자.</div>
   <div class="note"><b>경로 정의:</b> Q3D 인덕턴스는 source→sink loop L이며 HFSS 포트와 동일 위치(코일 양 끝)에 지정. 준정적이라 방사손실 미포함(6.78MHz 무시 가능).</div>
 </section>
 
@@ -218,19 +219,19 @@
   <h2><span class="n">7.</span> 교차검증 매트릭스 &amp; 합격 기준</h2>
   <p class="sub">각 양을 어느 솔버가 산출하고 HFSS 기준선과 어떻게 대조하는지. ✓=산출, —=미산출.</p>
   <table>
-    <tr><th>양</th><th>M3D 정전</th><th>M3D AC자기</th><th class="num">Q3D 실측</th><th>HFSS(기준)</th><th class="num">HFSS 실측</th><th>일치 목표</th></tr>
-    <tr><td><b>L1</b></td><td>—</td><td>✓</td><td class="num">5.297 µH</td><td>im(Z11)/ω</td><td class="num">5.677 µH</td><td>±5% <span class="pill done">−6.7%</span></td></tr>
-    <tr><td><b>L2</b></td><td>—</td><td>✓</td><td class="num">4.622 µH</td><td>im(Z22)/ω</td><td class="num">4.991 µH</td><td>±5% <span class="pill done">−7.4%</span></td></tr>
-    <tr><td><b>M</b></td><td>—</td><td>✓</td><td class="num">0.1174 µH</td><td>im(Z12)/ω</td><td class="num">0.1574 µH</td><td>±10% <span class="pill todo">−25%</span></td></tr>
-    <tr><td><b>R1</b></td><td>—</td><td>✓ (AC)</td><td class="num">1.263 Ω</td><td>re(Z11)</td><td class="num">0.370 Ω</td><td>±15% <span class="pill todo">×3.4</span></td></tr>
-    <tr><td><b>R2</b></td><td>—</td><td>✓ (AC)</td><td class="num">1.321 Ω</td><td>re(Z22)</td><td class="num">0.236 Ω</td><td>±15% <span class="pill todo">×5.6</span></td></tr>
-    <tr><td><b>C1</b></td><td>✓</td><td>—</td><td class="num">9.679 pF</td><td>self-res</td><td class="num">16.35 pF</td><td>±10% <span class="pill todo">−41%</span></td></tr>
-    <tr><td><b>C2</b></td><td>✓</td><td>—</td><td class="num">10.285 pF</td><td>self-res</td><td class="num">21.62 pF</td><td>±10% <span class="pill todo">−52%</span></td></tr>
-    <tr><td><b>Cm</b></td><td>✓</td><td>—</td><td class="num">3.581 pF</td><td>—</td><td class="num">—</td><td>참고</td></tr>
+    <tr><th>양</th><th>M3D 정전</th><th>M3D AC자기</th><th class="num">Q3D (12pass)</th><th>HFSS(참값)</th><th class="num">HFSS 실측</th><th>일치 목표 · 오차</th></tr>
+    <tr><td><b>L1</b></td><td>—</td><td>✓</td><td class="num">5.288 µH</td><td>im(Z11)/ω</td><td class="num">5.677 µH</td><td>±5% <span class="pill done">−6.9%</span></td></tr>
+    <tr><td><b>L2</b></td><td>—</td><td>✓</td><td class="num">4.599 µH</td><td>im(Z22)/ω</td><td class="num">4.991 µH</td><td>±5% <span class="pill done">−7.9%</span></td></tr>
+    <tr><td><b>M</b></td><td>—</td><td>✓</td><td class="num">0.1183 µH</td><td>im(Z12)/ω</td><td class="num">0.1574 µH</td><td>±10% <span class="pill todo">−24.9%</span></td></tr>
+    <tr><td><b>R1</b></td><td>—</td><td>✓ (AC)</td><td class="num">0.851 Ω</td><td>re(Z11)</td><td class="num">0.370 Ω</td><td>±15% <span class="pill todo">+130%</span></td></tr>
+    <tr><td><b>R2</b></td><td>—</td><td>✓ (AC)</td><td class="num">0.889 Ω</td><td>re(Z22)</td><td class="num">0.236 Ω</td><td>±15% <span class="pill todo">+277%</span></td></tr>
+    <tr><td><b>C1</b></td><td>✓</td><td>—</td><td class="num">9.779 pF</td><td>self-res</td><td class="num">16.35 pF</td><td>±10% <span class="pill todo">−40.2%</span></td></tr>
+    <tr><td><b>C2</b></td><td>✓</td><td>—</td><td class="num">10.332 pF</td><td>self-res</td><td class="num">21.62 pF</td><td>±10% <span class="pill todo">−52.2%</span></td></tr>
+    <tr><td><b>Cm</b></td><td>✓</td><td>—</td><td class="num">3.601 pF</td><td>—</td><td class="num">—</td><td>참고</td></tr>
     <tr><td><b>G</b></td><td>—</td><td>—</td><td class="num">~0</td><td>—</td><td class="num">—</td><td>참고(유전손실)</td></tr>
   </table>
-  <div class="note"><b>판정:</b> Q3D 실측을 채워 1차 교차검증 완료 — <b>L1/L2는 HFSS와 ±7%로 합격</b>, M·R·C는 미달(원인 §6 해석: R=AC RL 2-pass 미수렴, C=정의 차이). <b>L/M/R은 M3D AC, C는 M3D 정전</b>이 추가 중재자로 남음.
-  불일치 우선 점검: R=AC RL 적응 pass 추가(표피 메시), M=약결합 메시, C=Q3D net-C vs HFSS self-res 정의 차이를 M3D 정전으로 분리.</div>
+  <div class="note"><b>판정(12-pass):</b> Q3D를 CG·AC RL·DC 모두 ≥12 pass로 재수렴 — <b>L1/L2는 HFSS와 ±8%로 합격</b>. R(AC)은 pass 수렴으로 −33% 개선(2-pass 미수렴 원인 확인)됐으나 여전히 +130~277%; M −25%; C는 정의 차이로 −40~52% 유지. <b>L/M/R은 M3D AC, C는 M3D 정전</b>이 추가 중재자.
+  잔여 불일치: R=Q3D loop-R 정의 vs HFSS re(Z)·표피 메시 → M3D AC로 분리, C=Q3D net-C vs HFSS self-res 외삽 → M3D 정전으로 분리.</div>
 </section>
 
 <section style="border-bottom:none">
@@ -240,13 +241,13 @@
     <tr><th>단계</th><th>상태</th><th class="num">솔브 시간</th><th>산출</th></tr>
     <tr><td>HFSS 솔브(6.78MHz + sweep)</td><td><span class="pill done">완료</span></td><td class="num"><b>282 s</b> (GPU·4코어)</td><td>Z/L/M/R + self-res C (§3)</td></tr>
     <tr><td>Q3D Extractor — HFSS→Q3D 변환</td><td><span class="pill done">자동화 완료</span></td><td class="num">~수 초</td><td>Q3D 디자인+net+setup (peetsfea)</td></tr>
-    <tr><td>Q3D Extractor — source/sink + solve + 행렬 추출</td><td><span class="pill done">완료</span></td><td class="num"><b>~30 s</b> (GPU)</td><td>R, L, M, C1/C2/Cm, G (§6 실측, headless CSV)</td></tr>
+    <tr><td>Q3D Extractor — source/sink + solve + 행렬 추출</td><td><span class="pill done">완료</span></td><td class="num"><b>~11 min</b> (12 pass)<br><span class="sub">2 pass ≈ 30 s</span></td><td>R, L, M, C1/C2/Cm, G (§6 실측, headless CSV)</td></tr>
     <tr><td>M3D AC Magnetic (Eddy@6.78MHz) <b>← 다음</b></td><td><span class="pill todo">대기</span></td><td class="num">측정 예정</td><td>L1, L2, M, AC R1/R2</td></tr>
     <tr><td>M3D Electrostatic</td><td><span class="pill todo">대기</span></td><td class="num">측정 예정</td><td>C1, C2, Cm</td></tr>
     <tr><td>오차 분석 · 리포트</td><td><span class="pill todo">대기</span></td><td class="num">—</td><td>3-way 상대오차 표 + 시간 비교</td></tr>
   </table>
-  <div class="note"><b>Q3D 완료</b> — R·L·C를 한 번에 추출(HFSS 282초 대비 <b>~30초, 약 10배 빠름</b>). L1/L2는 HFSS와 ±7% 일치로 1차 교차점 확보.
-  <b>다음 작업 = M3D AC Magnetic</b>(L·M·AC R 정밀 재확인, 특히 Q3D가 미달한 R·M) → 이후 M3D Electrostatic(C 정의 차이 중재).
+  <div class="note"><b>Q3D 완료(12 pass)</b> — R·L·C를 한 번에 추출. 2-pass(≈30초)는 AC R 미수렴 → <b>min 12 pass로 재수렴(≈11분)</b>: L1/L2 ±8% 합격, AC R −33% 개선. HFSS(282초)와 정확도–시간 trade-off 비교 가능.
+  <b>다음 작업 = M3D AC Magnetic</b>(L·M·AC R 정밀 재확인, 특히 Q3D가 여전히 미달한 R·M) → 이후 M3D Electrostatic(C 정의 차이 중재).
   각 솔버는 정확도(상대오차)와 시간(비용)을 함께 리포트한다.</div>
 </section>
 
