@@ -51,7 +51,7 @@
   <p class="lede">동일한 fixed SSW 코일 형상(<code>data/0.3.x_fixed.toml</code>)에 대해
   Maxwell&nbsp;3D Electrostatic의 C, Maxwell&nbsp;3D AC&nbsp;Magnetic의 L·R, Q3D Extractor의 R·L·C,
   HFSS frequency-sweep의 Z-파라미터에서 유도한 L/M/R/C가 <b>6.78&nbsp;MHz</b>에서 서로 일치하는지 검증한다.
-  HFSS·Q3D는 <span class="pill done">실행 완료</span>(§3·§6), Maxwell&nbsp;3D는 <span class="pill todo">미실행(본 계획)</span>.</p>
+  HFSS·Q3D·M3D&nbsp;Electrostatic은 <span class="pill done">실행 완료</span>(§3·§6·§4), M3D&nbsp;AC&nbsp;Magnetic만 <span class="pill todo">대기</span>.</p>
 </div></header>
 
 <main class="wrap">
@@ -72,7 +72,7 @@
     <div class="card">
       <b>솔버별 1차 산출</b>
       <ul>
-        <li><b>M3D Electrostatic</b> → C1, C2, 상호 Cm <span class="pill todo">TODO</span></li>
+        <li><b>M3D Electrostatic</b> → C1, C2, 상호 Cm <span class="pill done">DONE</span></li>
         <li><b>M3D AC Magnetic(Eddy@6.78MHz)</b> → L1, L2, M, AC R1/R2 <span class="pill todo">TODO</span></li>
         <li><b>Q3D Extractor(AC RL + Cap)</b> → R·L·M·C·G 일괄 <span class="pill done">DONE</span></li>
         <li><b>HFSS freq sweep</b> → Z11/Z12/Z22 → L/M/R, self-resonance로 C <span class="pill done">DONE</span></li>
@@ -138,27 +138,24 @@
 </section>
 
 <section>
-  <h2><span class="n">4.</span> Maxwell 3D Electrostatic <span class="pill todo">미실행 — 계획</span></h2>
-  <p class="sub">정전 캐패시턴스 행렬 [C] 추출 → C1, C2, Cm. (주파수 무관, DC 가정)</p>
-  <div class="grid2">
-    <div class="card"><b>설정</b>
-      <ul>
-        <li>Solution type: <b>Electrostatic</b>.</li>
-        <li>재료: copper=PEC급 도체, FR4 εr≈4.4, MULL ferrite εr(데이터시트), 나머지 vacuum.</li>
-        <li>Region: 코일 최대치수의 ~2–3배 air box, 바깥면 <b>Balloon</b> 경계(무한원 기준).</li>
-        <li>도체 net 정의: <b>TX 코일 전체 = net_TX</b>, <b>RX 코일 전체 = net_RX</b>(연속 도체 1개씩). under-coil은 TX와 직렬이므로 net_TX에 포함.</li>
-      </ul>
-    </div>
-    <div class="card"><b>여기 · 행렬 · 산출</b>
-      <ul>
-        <li>Excitation: 두 net에 <b>Voltage</b> 할당(예: TX=1V, RX=1V) 후 Parameters → <b>Matrix</b>(Capacitance) 정의.</li>
-        <li>Maxwell C-matrix [Cij] 산출 → SPICE 변환:
-          <b>C1 = ΣⱼC1ⱼ</b>(net_TX 대지/무한원 self), <b>C2 = ΣⱼC2ⱼ</b>, <b>Cm = −C12</b>.</li>
-        <li>비교: 위 C1/C2를 HFSS self-resonance값(16.35 / 21.62 pF) 및 Q3D Cap과 대조.</li>
-      </ul>
-    </div>
+  <h2><span class="n">4.</span> Maxwell 3D Electrostatic <span class="pill done">실행 완료</span></h2>
+  <p class="sub">정전 캐패시턴스 행렬 [C] 추출 → C1, C2, Cm. (주파수 무관, DC 가정) — 저항은 전류가 없어 원리상 산출 불가.</p>
+  <div class="card" style="border-color:rgba(52,212,183,.4)"><b>HFSS→M3D Electrostatic 변환·솔브·추출 자동화</b> <span class="pill done">DONE</span>
+    <ul>
+      <li>peetsfea <code>backend/pyaedt/m3d_electrostatic.extract_m3d_es_capacitance()</code> — 지오메트리 복사 → HFSS vacuum/region 잔재 제거 → 도체 자동 감지 → 전압 여기 + <b>접지된 air region</b> → C-matrix 솔브 → <code>export_matrix</code>.</li>
+      <li><b>접지 기준이 핵심</b>: 도체 2개만 두면 Maxwell C-matrix가 coupling=1로 퇴화(한 코일 필드가 전부 상대 코일로 종단). air region 외곽면을 0&nbsp;V 접지하면 self-C가 분리됨 → coupling 0.176(물리적).</li>
+    </ul>
   </div>
-  <div class="note"><b>메시:</b> 표면 근사 + 에너지기반 적응, <b>Percent Error 1%</b> 목표. 트레이스 모서리·트레이스간 갭·PCB 유전체 경계에서 C가 결정되므로 갭/모서리 세분이 핵심. 수렴은 ΔEnergy &lt; 1%로 판정.</div>
+  <h3 style="margin:20px 0 4px;font-size:16px;color:var(--mut)">M3D Electrostatic 실측 (3-way 비교, HFSS=참값)</h3>
+  <table>
+    <tr><th>양</th><th class="num">M3D 정전</th><th class="num">Q3D</th><th class="num">HFSS(참값)</th><th class="num">M3D 오차</th></tr>
+    <tr><td><b>C1</b> (Ctx)</td><td class="num">12.05 pF</td><td class="num">9.78 pF</td><td class="num">16.35 pF</td><td class="num">−26.3%</td></tr>
+    <tr><td><b>C2</b> (Crx)</td><td class="num">14.01 pF</td><td class="num">10.33 pF</td><td class="num">21.62 pF</td><td class="num">−35.2%</td></tr>
+    <tr><td><b>Cm</b></td><td class="num">2.292 pF</td><td class="num">3.581 pF</td><td class="num">—</td><td class="num">참고</td></tr>
+    <tr><td>coupling k_C</td><td class="num">0.176</td><td class="num">—</td><td class="num">—</td><td class="num">물리적(&lt;1)</td></tr>
+  </table>
+  <div class="note"><b>해석:</b> <b>M3D 정전이 Q3D보다 HFSS에 더 가깝다</b>(C1 −26% vs Q3D −40%, C2 −35% vs −52%). 세 솔버 모두 HFSS self-resonance값보다 작은데, 이는 <b>C 정의 차이</b> 때문: HFSS C1/C2는 self-resonance(트레이스간·인터턴·포트 기생 모두 포함한 유효 C)에서 역산한 값이라 체계적으로 큼. M3D 정전·Q3D는 net-to-ground 정전 C라 그 일부만 본다. <b>정전 솔버끼리(M3D vs Q3D)는 정의가 같아</b> C1 12.05 vs 9.78로 ~20% 내 일치 — 정전 C 자체는 교차검증 성립.
+  <b>주의(접지박스):</b> self-C는 접지 air box 거리에 의존(여기 padding 100%). 무한원 기준 대비 다소 과대 가능 → box를 키우면 Q3D(무한원)값으로 수렴.</div>
 </section>
 
 <section>
@@ -225,9 +222,9 @@
     <tr><td><b>M</b></td><td>—</td><td>✓</td><td class="num">0.1183 µH</td><td>im(Z12)/ω</td><td class="num">0.1574 µH</td><td>±10% <span class="pill todo">−24.9%</span></td></tr>
     <tr><td><b>R1</b></td><td>—</td><td>✓ (AC)</td><td class="num">0.851 Ω</td><td>re(Z11)</td><td class="num">0.370 Ω</td><td>±15% <span class="pill todo">+130%</span></td></tr>
     <tr><td><b>R2</b></td><td>—</td><td>✓ (AC)</td><td class="num">0.889 Ω</td><td>re(Z22)</td><td class="num">0.236 Ω</td><td>±15% <span class="pill todo">+277%</span></td></tr>
-    <tr><td><b>C1</b></td><td>✓</td><td>—</td><td class="num">9.779 pF</td><td>self-res</td><td class="num">16.35 pF</td><td>±10% <span class="pill todo">−40.2%</span></td></tr>
-    <tr><td><b>C2</b></td><td>✓</td><td>—</td><td class="num">10.332 pF</td><td>self-res</td><td class="num">21.62 pF</td><td>±10% <span class="pill todo">−52.2%</span></td></tr>
-    <tr><td><b>Cm</b></td><td>✓</td><td>—</td><td class="num">3.601 pF</td><td>—</td><td class="num">—</td><td>참고</td></tr>
+    <tr><td><b>C1</b></td><td class="num">12.05 pF</td><td>—</td><td class="num">9.779 pF</td><td>self-res</td><td class="num">16.35 pF</td><td>M3D <span class="pill todo">−26%</span> · Q3D −40%</td></tr>
+    <tr><td><b>C2</b></td><td class="num">14.01 pF</td><td>—</td><td class="num">10.332 pF</td><td>self-res</td><td class="num">21.62 pF</td><td>M3D <span class="pill todo">−35%</span> · Q3D −52%</td></tr>
+    <tr><td><b>Cm</b></td><td class="num">2.292 pF</td><td>—</td><td class="num">3.601 pF</td><td>—</td><td class="num">—</td><td>참고</td></tr>
     <tr><td><b>G</b></td><td>—</td><td>—</td><td class="num">~0</td><td>—</td><td class="num">—</td><td>참고(유전손실)</td></tr>
   </table>
   <div class="note"><b>판정(12-pass):</b> Q3D를 CG·AC RL·DC 모두 ≥12 pass로 재수렴 — <b>L1/L2는 HFSS와 ±8%로 합격</b>. R(AC)은 pass 수렴으로 −33% 개선(2-pass 미수렴 원인 확인)됐으나 여전히 +130~277%; M −25%; C는 정의 차이로 −40~52% 유지. <b>L/M/R은 M3D AC, C는 M3D 정전</b>이 추가 중재자.
@@ -242,8 +239,8 @@
     <tr><td>HFSS 솔브(6.78MHz + sweep)</td><td><span class="pill done">완료</span></td><td class="num"><b>282 s</b> (GPU·4코어)</td><td>Z/L/M/R + self-res C (§3)</td></tr>
     <tr><td>Q3D Extractor — HFSS→Q3D 변환</td><td><span class="pill done">자동화 완료</span></td><td class="num">~수 초</td><td>Q3D 디자인+net+setup (peetsfea)</td></tr>
     <tr><td>Q3D Extractor — source/sink + solve + 행렬 추출</td><td><span class="pill done">완료</span></td><td class="num"><b>~11 min</b> (12 pass)<br><span class="sub">2 pass ≈ 30 s</span></td><td>R, L, M, C1/C2/Cm, G (§6 실측, headless CSV)</td></tr>
-    <tr><td>M3D AC Magnetic (Eddy@6.78MHz) <b>← 다음</b></td><td><span class="pill todo">대기</span></td><td class="num">측정 예정</td><td>L1, L2, M, AC R1/R2</td></tr>
-    <tr><td>M3D Electrostatic</td><td><span class="pill todo">대기</span></td><td class="num">측정 예정</td><td>C1, C2, Cm</td></tr>
+    <tr><td>M3D Electrostatic — C 추출</td><td><span class="pill done">완료</span></td><td class="num"><b>~15 min</b></td><td>C1=12.05, C2=14.01, Cm=2.29 pF (§4, headless)</td></tr>
+    <tr><td>M3D AC Magnetic (Eddy@6.78MHz) <b>← 다음</b></td><td><span class="pill todo">대기</span></td><td class="num">측정 예정</td><td>L1, L2, M, AC R1/R2 (특히 R 기준)</td></tr>
     <tr><td>오차 분석 · 리포트</td><td><span class="pill todo">대기</span></td><td class="num">—</td><td>3-way 상대오차 표 + 시간 비교</td></tr>
   </table>
   <div class="note"><b>Q3D 완료(12 pass)</b> — R·L·C를 한 번에 추출. 2-pass(≈30초)는 AC R 미수렴 → <b>min 12 pass로 재수렴(≈11분)</b>: L1/L2 ±8% 합격, AC R −33% 개선. HFSS(282초)와 정확도–시간 trade-off 비교 가능.
@@ -293,6 +290,6 @@
 </section>
 
 </main>
-<footer><div class="wrap">peetsfea 0.3.7 · EM cross-validation · HFSS + Q3D @ 6.78 MHz · Q3D AC R 부적합(부록 A) · Maxwell 3D pending</div></footer>
+<footer><div class="wrap">peetsfea 0.3.7 · EM cross-validation · HFSS + Q3D @ 6.78 MHz · Q3D AC R 부적합(부록 A) · M3D Electrostatic C 완료 · M3D AC Magnetic pending</div></footer>
 </body>
 </html>
