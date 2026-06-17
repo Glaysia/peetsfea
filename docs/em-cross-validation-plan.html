@@ -185,14 +185,21 @@
 </section>
 
 <section>
-  <h2><span class="n">6.</span> Q3D Extractor (RLCG 직접 추출) <span class="pill todo">미실행 — 계획</span></h2>
+  <h2><span class="n">6.</span> Q3D Extractor (RLCG 직접 추출) <span class="pill done">변환 자동화 완료</span></h2>
   <p class="sub">준정적 parasitic 추출기 — R·L·C·G를 한 도구에서. 6.78MHz는 self-resonance(~15MHz) 이하라 준정적 가정 유효 → <b>모든 양의 원스톱 교차검증</b>.</p>
+  <div class="card" style="border-color:rgba(52,212,183,.4)"><b>HFSS→Q3D 변환 자동화</b> <span class="pill done">DONE</span>
+    <ul>
+      <li>peetsfea <code>backend/pyaedt/q3d_convert.convert_hfss_to_q3d()</code> — GUI "복사→Q3D" 플로우를 자동화.</li>
+      <li>headless 검증: HFSS 디자인에서 <b>Q3D_from_HFSS</b> 생성 → 지오메트리 12개 복사 → <b>net 2개 자동 인식(tx_ssw_coil_ssw_copper, rx_ssw_coil_ssw_copper)</b> → <b>Q3DSetup @ 6.78MHz</b>(Cap+AC RL+DC RL) 저장.</li>
+      <li><b>남은 수동 작업(GUI):</b> 각 net에 Source/Sink 지정 후 Analyze → 행렬 추출.</li>
+    </ul>
+  </div>
   <div class="grid2">
     <div class="card"><b>설정 · net/터미널</b>
       <ul>
-        <li>같은 STEP import. 도체를 net으로: <b>net_TX, net_RX</b>(연속 도체).</li>
-        <li>각 net에 <b>Source / Sink</b> 지정(전류 입·출구 = 코일 양 끝, HFSS 포트 위치와 동일하게).</li>
-        <li>Setup 2종: <b>AC RL @ 6.78 MHz</b> + <b>Capacitance</b>(둘 다 한 프로젝트에서 솔브).</li>
+        <li>지오메트리·net·setup은 자동(위). 도체 net = <b>tx_ssw_coil_ssw_copper / rx_ssw_coil_ssw_copper</b>.</li>
+        <li><b>Source / Sink</b>만 지정(전류 입·출구 = 코일 양 끝, HFSS 포트 위치와 동일하게).</li>
+        <li>Setup: <b>AC RL @ 6.78 MHz</b> + <b>Capacitance</b>(자동 생성, 한 프로젝트에서 동시 솔브).</li>
       </ul>
     </div>
     <div class="card"><b>산출 · 비교</b>
@@ -233,7 +240,8 @@
   <table>
     <tr><th>단계</th><th>상태</th><th class="num">솔브 시간</th><th>산출</th></tr>
     <tr><td>HFSS 솔브(6.78MHz + sweep)</td><td><span class="pill done">완료</span></td><td class="num"><b>282 s</b> (GPU·4코어)</td><td>Z/L/M/R + self-res C (§3)</td></tr>
-    <tr><td>Q3D Extractor (AC RL + Cap) <b>← 다음</b></td><td><span class="pill todo">다음 작업</span></td><td class="num">측정 예정</td><td>R, L, M, C1/C2/Cm, G</td></tr>
+    <tr><td>Q3D Extractor — HFSS→Q3D 변환</td><td><span class="pill done">자동화 완료</span></td><td class="num">~수 초</td><td>Q3D 디자인+net+setup (peetsfea)</td></tr>
+    <tr><td>Q3D Extractor — source/sink + solve <b>← 다음</b></td><td><span class="pill todo">다음 작업(GUI)</span></td><td class="num">측정 예정</td><td>R, L, M, C1/C2/Cm, G</td></tr>
     <tr><td>M3D AC Magnetic (Eddy@6.78MHz)</td><td><span class="pill todo">대기</span></td><td class="num">측정 예정</td><td>L1, L2, M, AC R1/R2</td></tr>
     <tr><td>M3D Electrostatic</td><td><span class="pill todo">대기</span></td><td class="num">측정 예정</td><td>C1, C2, Cm</td></tr>
     <tr><td>오차 분석 · 리포트</td><td><span class="pill todo">대기</span></td><td class="num">—</td><td>3-way 상대오차 표 + 시간 비교</td></tr>
