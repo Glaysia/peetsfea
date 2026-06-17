@@ -1,84 +1,85 @@
 ---
 title: peetsfea
 created: 2026-04-17 @ 09:09
-updated: 2026-06-01 @ 00:00
+updated: 2026-06-16 @ 00:00
 tags:
   - governance
 ---
 
 # peetsfea
 
-peetsfea is a Python project for deterministic HFSS (AEDT) design generation from TOML specs.
-
-The 0.3.0 baseline removes the accumulated geometry generation implementation and keeps only the active non-model TOML + minimal STEP + two metal ports + headless EM setup/solve/report path.
+peetsfea deterministically generates SSW coil designs from TOML specs and drives a headless
+HFSS (AEDT) setup/solve/report pipeline. It exposes the public API that `peetsfea-runner` depends
+on (see *Runner integration*).
 
 For Korean documentation, see [README.md](README.md).
 
-## Current Contract
-- Version: `0.3.0`
-- Active input: [examples/minimal_step_two_port.toml](examples/minimal_step_two_port.toml)
-- TOML surface: only `[design]` and `[[non_model_objects]]`
-- STEP surface: authored non-model boxes and fixed Tx/Rx port cells
-- EM surface: one Tx port, one Rx port, copper pad mesh, radiation boundary, `Setup1`, `Sweep`, and `Output Variables Table1`
-- SSW debug inputs [examples/0.3.0_fixed.toml](examples/0.3.0_fixed.toml) and [examples/0.3.0_sweep.toml](examples/0.3.0_sweep.toml) use the same `[constraints]` / `[[constraints.rules]]` surface as 0.2.25 type2; each enabled SSW coil must satisfy `gcd(turn_n_int, twist_factor) == 1`, and RX `turn_n_int` must be greater than 1 when RX SSW is enabled.
-- SSW debug `tx_under_coil` is the second TX coil, separate from the TX main coil, and is a YZ-plane normal spiral attached outside the global X-min face of `tx_region_max`.
-- SSW debug MULL ferrite placement is controlled separately by TX Z-axis `ferrite.tx_mull_position_ratio` and RX X-axis `ferrite.rx_mull_position_ratio`.
-- Default execution is headless, and PyAEDT `False` returns raise immediately.
+## Current contract
+- Version: `0.3.7`
+- Design-space SSOT: package data `src/peetsfea/data/0.3.x_sweep.toml` (`DEFAULT_REFERENCE_TOML_PATH`).
+  The canonical fixed point is `src/peetsfea/data/0.3.x_fixed.toml` (`DEFAULT_SOURCE_TOML_PATH`).
+  Both ship in the wheel and resolve in installed environments.
+- TOML surface: `[design]` · `[backend]` · `[fixed_dimensions]` · `[[modeled_objects]]` (tx/rx/under
+  coil) · `[ferrite]` · `[constraints]`.
+- Constraints: an enabled SSW coil must satisfy `gcd(turn_n_int, twist_factor) == 1`; RX `turn_n_int`
+  must be `> 1` when RX SSW is enabled; TX/RX `void_profile` is fixed to scaled void profile `1`.
+- `tx_under_coil` is the second TX coil (separate from the TX main coil), a YZ-plane normal spiral
+  attached outside the global X-min face of `tx_region_max` (see [GOAL.md](GOAL.md)).
+- MULL ferrite placement is controlled separately by TX `ferrite.tx_mull_position_ratio` and RX
+  `ferrite.rx_mull_position_ratio`.
+- EM surface: one Tx port (`1_T1`), one Rx port (`2_T1`), copper pad mesh, radiation boundary,
+  `Setup1`, `Sweep`, and report tables.
+- Default execution and AEDT/PyAEDT validation are headless; PyAEDT `False` returns raise
+  immediately. Any AEDT/PyAEDT code change must pass a real headless AEDT validation.
 
 ## Execution
-Run tests from `run/`.
+Run from `run/`:
 
 ```bash
 cd run
-../.venv/bin/pytest -q ../tests
+../.venv/bin/pytest -q ../tests -m "not pyaedt_integration"   # pure Python
 ../.venv/bin/pyright ../src ../entry ../tests
 ```
 
-Generate the minimal sampled STEP artifacts.
+Generate random in-design-space SSW STEP files over a seed range (`entry/sample.py`) and view one
+in the OCP viewer (`entry/view.py`):
 
 ```bash
 cd run
-../.venv/bin/python ../entry/sample.py
+../.venv/bin/python ../entry/sample.py --seed-start 0 --seed-end 99 --jobs 10
+../.venv/bin/python ../entry/view.py --seed-start 0 --seed-end 9 --view-seed 3
+../.venv/bin/python ../entry/view.py --view-seed 3 --no-sample
+../.venv/bin/python ../entry/view.py --fixed   # build/view data/0.3.x_fixed.toml
 ```
 
-Create the headless AEDT setup-ready project.
+Output goes under gitignored `run/ssw_step_samples/seed_<NNNNN>/` (`ssw_scene.step`,
+`<design_id>.toml`, `ssw_step_ledger.json`, `coil_making_token.toml`). `--jobs N` runs generation
+across N processes (each seed in its own directory; results are deterministic). `view.py` shows the
+rebuilt `cq.Assembly` so per-role color and transparency are preserved.
 
-```bash
-cd run
-../.venv/bin/python ../entry/build.py
-```
+## Runner integration (0.3.7)
+peetsfea never starts/stops `ansysedt` or manages licenses. Full contract in
+[docs/runner-integration.md](docs/runner-integration.md).
 
-Run solve and CSV report export.
-
-```bash
-cd run
-../.venv/bin/python ../entry/build.py --solve
-```
-
-## Artifacts
-Default output goes under `run/sampled/minimal/<design_id>/`.
-
-- `sampled.toml`
-- `<design_id>.source.toml`
-- `<design_id>.repro.toml`
-- `<design_id>.dataset.toml`
-- `minimal_scene.step`
-- `minimal_step_ledger.json`
-- `<design_id>.aedt`
-- `minimal_imported_ledger.json`
-- `Output_Variables_Table1.csv` when `--solve` is used
+- `peetsfea.__version__ == "0.3.7"`, ships `py.typed`.
+- `validate_sweep_toml_text(text)` — reject sweeps outside the reference design space.
+- `sample_fixed_candidates_from_toml_text(text, count, seed) -> list[str]` — deterministic; honors `TMPDIR`.
+- `run_ssw_random_sample_reports_from_toml_text(..., grpc_port, aedt_pid=None)` — attach to a warm
+  ansysedt (never self-launch), solve, then close only the project (AEDT stays alive). Solve has a
+  60-minute hard-abort watchdog.
+- All failures raise `peetsfea.PeetsfeaStageError` (`stage`/`error_type`/`message`, subclass of `RuntimeError`).
 
 ## Rules
-- `python -O` is unsupported because assertions are part of the runtime contract.
-- Runtime state under `src/` must not rely on nullable or fallback-driven paths.
-- GUI AEDT validation is opt-in only.
-- Removed type2, rect-void, and legacy geometry paths are not retained as active or legacy implementation surfaces in 0.3.0.
+- `python -O` is unsupported (assertions are part of the runtime contract).
+- Runtime state under `src/` must not rely on nullable or fallback paths ([CODE_COMMANDMENTS.md](CODE_COMMANDMENTS.md)).
+- GUI AEDT is diagnosis only and never replaces headless validation.
 
 ## Documentation
 - Goal: [GOAL.md](GOAL.md)
-- Current pipeline: [docs/current-pipeline.md](docs/current-pipeline.md)
-- 0.3.0 plan: [sdd/plans/0.3.0-minimal-step-two-port-reset.md](sdd/plans/0.3.0-minimal-step-two-port-reset.md)
-- Agent rules: [AGENTS.md](AGENTS.md)
+- Runner integration: [docs/runner-integration.md](docs/runner-integration.md)
+- Palace second-backend roadmap: [docs/palace-second-backend-roadmap.md](docs/palace-second-backend-roadmap.md)
+- Agent rules: [AGENTS.md](AGENTS.md) · Code commandments: [CODE_COMMANDMENTS.md](CODE_COMMANDMENTS.md)
 
 ## Compatibility
-Long-term backward compatibility is not guaranteed. Minor releases may change spec paths, artifact contracts, and runtime entrypoints.
+Long-term backward compatibility is not guaranteed. Minor releases may change spec paths, artifact
+contracts, and runtime entrypoints.

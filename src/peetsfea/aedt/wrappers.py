@@ -758,6 +758,7 @@ class Hfss(RawHfss, _WrappedAccess):
             "assign_radiation_boundary_to_faces",
             "analyze_setup",
             "change_validation_settings",
+            "close_project",
             "create_output_variable",
             "delete_setup",
             "desktop_class",
@@ -767,8 +768,10 @@ class Hfss(RawHfss, _WrappedAccess):
             "modeler",
             "oboundary",
             "odesign",
+            "project_name",
             "save_project",
             "setup_names",
+            "stop_simulations",
         }
     )
 
@@ -903,15 +906,26 @@ class Hfss(RawHfss, _WrappedAccess):
             context={"assignment": assignment, "name": name},
         )
 
-    def analyze_setup(self, name: str, blocking: bool = True) -> object:
+    def analyze_setup(self, name: str, blocking: bool = True, cores: int = 0, gpus: int = 0) -> object:
         validate_aedt_name(name, field="setup_name")
+        # Forcing explicit core/GPU counts requires manual HPC settings; with UseAutoSettings on,
+        # AEDT can override NumCores/NumGPUs. When neither is set, defer to AEDT's auto settings.
+        use_auto_settings = cores == 0 and gpus == 0
         return raise_on_false(
             _require_callable_attr(object.__getattribute__(self, "_raw"), "analyze_setup", owner="Hfss")(
                 name,
+                cores=cores,
+                gpus=gpus,
+                use_auto_settings=use_auto_settings,
                 blocking=blocking,
             ),
             operation="analyze_setup",
-            context={"setup_name": name, "blocking": blocking},
+            context={"setup_name": name, "blocking": blocking, "cores": cores, "gpus": gpus},
+        )
+
+    def stop_simulations(self, clean_stop: bool = True) -> object:
+        return _require_callable_attr(object.__getattribute__(self, "_raw"), "stop_simulations", owner="Hfss")(
+            clean_stop=clean_stop,
         )
 
     def create_output_variable(self, variable: str, expression: str, solution: str) -> object:
@@ -993,3 +1007,18 @@ class Hfss(RawHfss, _WrappedAccess):
             operation="save_project",
             context={"path": path},
         )
+
+    def close_project(self, name: str, save: bool = True) -> object:
+        validate_aedt_name(name, field="project_name")
+        return raise_on_false(
+            _require_callable_attr(object.__getattribute__(self, "_raw"), "close_project", owner="Hfss")(
+                name=name,
+                save=save,
+            ),
+            operation="close_project",
+            context={"name": name, "save": save},
+        )
+
+    @property
+    def project_name(self) -> str:
+        return _require_str_attr(object.__getattribute__(self, "_raw"), "project_name", owner="Hfss")

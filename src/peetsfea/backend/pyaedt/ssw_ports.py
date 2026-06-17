@@ -5,6 +5,10 @@ import json
 import multiprocessing
 from pathlib import Path
 from collections.abc import Sequence
+import shutil
+import socket
+import subprocess
+import threading
 import time
 from typing import Callable, Literal, Protocol, TypeAlias, TypedDict, cast
 
@@ -12,6 +16,7 @@ import psutil
 
 from peetsfea.aedt import Hfss
 from peetsfea.aedt.failfast import raise_on_false
+from peetsfea.errors import PeetsfeaStageError
 from peetsfea.aedt.protocols import (
     AnalysisSetupModuleSession,
     DesignSession,
@@ -36,7 +41,7 @@ FR4_DIELECTRIC_LOSS_TANGENT = "0.02"
 MULL_FERRITE_ALIAS = "mull_ferrite"
 MULL_FERRITE_MATERIAL = "MULL12060ferrite"
 MULL_FERRITE_APPEARANCE_RGB = (89, 94, 107)
-NOTEBOOK_DATASET_IMPORT_PATH = Path(__file__).resolve().parents[4] / "notebooks" / "mu_p.tab"
+NOTEBOOK_DATASET_IMPORT_PATH = Path(__file__).resolve().parents[2] / "data" / "mu_p.tab"
 MU_R_REAL_DATASET_NAME = "$mu_r_real"
 MU_TAND_M_DATASET_NAME = "$mu_tand_m"
 MU_R_REAL_DATASET_POINTS = (
@@ -108,12 +113,17 @@ TX_SOURCE_MAGNITUDE = "100V"
 TX_SOURCE_PHASE = "0deg"
 RX_SOURCE_MAGNITUDE = "100V"
 RX_SOURCE_PHASE = "90deg"
-SETUP_MAXIMUM_PASSES = 35
-SETUP_MINIMUM_PASSES = 17
-SETUP_MINIMUM_CONVERGED_PASSES = 7
+SETUP_MAXIMUM_PASSES = 11
+SETUP_MINIMUM_PASSES = 8
+SETUP_MINIMUM_CONVERGED_PASSES = 9
 SOLVE_TELEMETRY_SAMPLE_INTERVAL_SECONDS = 2.0
 SOLVE_TELEMETRY_SAMPLES_JSONL_NAME = "ssw_solve_telemetry_samples.jsonl"
 SOLVE_TELEMETRY_STOP_NAME = "ssw_solve_telemetry.stop"
+SOLVE_HARD_ABORT_SECONDS = 3600.0
+SOLVE_ABORT_GRACE_SECONDS = 120.0
+SOLVE_CORES = 4
+GPU_DETECT_TIMEOUT_SECONDS = 20.0
+SOLVE_FALLBACK_MIN_SECONDS = 60.0
 
 _TXRX_OUTPUT_VARIABLE_EXPRESSIONS: tuple[tuple[str, str], ...] = (
     ("Ltx_uH", "im(Zt(TX_TML,TX_TML))/2/pi/freq*1e6"),
@@ -356,13 +366,58 @@ class SswSolveTelemetry(TypedDict):
     peak_cpu_percent_total: float
     peak_rss_bytes_total: int
     peak_vms_bytes_total: int
+    gpu_used: bool
+    gpu_device_name: str
+    solver_cores: int
     samples: list[SswSolveTelemetrySample]
+
+
+class SswSolverResources(TypedDict):
+    gpu_count: int
+    gpu_device_name: str
+    cores: int
+
+
+def _detect_gpus() -> tuple[int, str]:
+    """Best-effort GPU detection via ``nvidia-smi``. Returns (count, first_device_name)."""
+    nvidia_smi = shutil.which("nvidia-smi")
+    if nvidia_smi is None:
+        return (0, "")
+    try:
+        completed = subprocess.run(
+            [nvidia_smi, "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=GPU_DETECT_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return (0, "")
+    if completed.returncode != 0:
+        return (0, "")
+    names = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+    if len(names) == 0:
+        return (0, "")
+    return (len(names), names[0])
+
+
+def detect_solver_resources() -> SswSolverResources:
+    """Resolve solver resources at solve time: fixed ``cores`` plus auto-detected GPUs."""
+    gpu_count, gpu_device_name = _detect_gpus()
+    return {"gpu_count": gpu_count, "gpu_device_name": gpu_device_name, "cores": SOLVE_CORES}
+
+
+class SswSolveOutcome(TypedDict):
+    completed: bool
+    hard_aborted: bool
+    hard_abort_seconds: float
+    analyze_elapsed_ms: float
 
 
 class SswAedtReportCsvResult(TypedDict):
     setup: SswAedtPortSetupResult
     csv_paths: dict[str, str]
     solve_telemetry: SswSolveTelemetry
+    solve_outcome: SswSolveOutcome
 
 
 def create_headless_hfss(design_name: str) -> HfssSession:
@@ -371,6 +426,209 @@ def create_headless_hfss(design_name: str) -> HfssSession:
 
 def create_graphical_hfss(design_name: str) -> HfssSession:
     return cast(HfssSession, Hfss(design=design_name, non_graphical=False, new_desktop=True, close_on_exit=False))
+
+
+DEFAULT_ATTACH_HOST = "127.0.0.1"
+ATTACH_PROBE_TIMEOUT_SECONDS = 5.0
+
+
+def _grpc_port_is_listening(host: str, port: int, timeout_seconds: float = ATTACH_PROBE_TIMEOUT_SECONDS) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout_seconds):
+            return True
+    except OSError:
+        return False
+
+
+def _attach_hfss_via_port(*, design_name: str, host: str, grpc_port: int) -> HfssSession:
+    return cast(
+        HfssSession,
+        Hfss(
+            design=design_name,
+            non_graphical=True,
+            new_desktop=False,
+            close_on_exit=False,
+            machine=host,
+            port=grpc_port,
+        ),
+    )
+
+
+def _attach_hfss_via_pid(*, design_name: str, aedt_pid: int) -> HfssSession:
+    return cast(
+        HfssSession,
+        Hfss(
+            design=design_name,
+            non_graphical=True,
+            new_desktop=False,
+            close_on_exit=False,
+            aedt_process_id=aedt_pid,
+        ),
+    )
+
+
+def make_attached_hfss_factory(
+    *,
+    grpc_port: int | None,
+    aedt_pid: int | None = None,
+    host: str = DEFAULT_ATTACH_HOST,
+) -> HfssFactory:
+    """Build an :data:`HfssFactory` that attaches to an already-running ansysedt.
+
+    The runner keeps a warm, license-holding ansysedt and lends it via ``grpc_port`` (and
+    optionally ``aedt_pid``). The factory never starts or stops AEDT: it attaches with
+    ``new_desktop=False`` and ``close_on_exit=False``, trying the gRPC ``port`` first and the
+    ``pid`` second. When neither attaches it raises :class:`PeetsfeaStageError` (stage
+    ``"attach"``) so the runner can mark that ansysedt unusable, recycle it, and retry.
+    """
+    if grpc_port is None and aedt_pid is None:
+        raise PeetsfeaStageError(
+            stage="attach",
+            error_type="missing_attach_target",
+            message="attaching to an existing ansysedt requires a grpc_port or an aedt_pid",
+        )
+    if grpc_port is not None and (isinstance(grpc_port, bool) or not isinstance(grpc_port, int) or grpc_port <= 0):
+        raise PeetsfeaStageError(
+            stage="attach",
+            error_type="invalid_grpc_port",
+            message=f"grpc_port must be a positive int (actual={grpc_port!r})",
+        )
+    if aedt_pid is not None and (isinstance(aedt_pid, bool) or not isinstance(aedt_pid, int) or aedt_pid <= 0):
+        raise PeetsfeaStageError(
+            stage="attach",
+            error_type="invalid_aedt_pid",
+            message=f"aedt_pid must be a positive int (actual={aedt_pid!r})",
+        )
+
+    def factory(design_name: str) -> HfssSession:
+        failures: list[str] = []
+        if grpc_port is not None:
+            if _grpc_port_is_listening(host, grpc_port):
+                try:
+                    return _attach_hfss_via_port(design_name=design_name, host=host, grpc_port=grpc_port)
+                except Exception as exc:  # noqa: BLE001 — attach failure must surface structured
+                    failures.append(f"grpc_port {grpc_port}: {type(exc).__name__}: {exc}")
+            else:
+                failures.append(f"grpc_port {grpc_port}: no listener on {host}:{grpc_port}")
+        if aedt_pid is not None:
+            if psutil.pid_exists(aedt_pid):
+                try:
+                    return _attach_hfss_via_pid(design_name=design_name, aedt_pid=aedt_pid)
+                except Exception as exc:  # noqa: BLE001 — attach failure must surface structured
+                    failures.append(f"aedt_pid {aedt_pid}: {type(exc).__name__}: {exc}")
+            else:
+                failures.append(f"aedt_pid {aedt_pid}: process not found")
+        raise PeetsfeaStageError(
+            stage="attach",
+            error_type="aedt_unreachable",
+            message="could not attach to a running ansysedt (" + "; ".join(failures) + ")",
+        )
+
+    return factory
+
+
+def _release_keeping_desktop_alive(hfss: HfssSession) -> None:
+    """Close only the active project and detach, leaving the borrowed ansysedt running."""
+    project_name = hfss.project_name
+    hfss.close_project(project_name, save=False)
+    raise_on_false(
+        hfss.desktop_class.release_desktop(close_projects=False, close_on_exit=False),
+        operation="release_desktop",
+        context={"close_projects": False, "close_on_exit": False},
+    )
+
+
+class _AnalyzeAttempt(TypedDict):
+    status: Literal["completed", "aborted", "failed"]
+    error: str
+
+
+def _run_analyze_attempt(
+    *,
+    hfss: HfssSession,
+    setup_name: str,
+    cores: int,
+    gpus: int,
+    deadline_seconds: float,
+    abort_grace_seconds: float,
+) -> _AnalyzeAttempt:
+    """Run one ``analyze_setup`` attempt under the hard-abort watchdog.
+
+    ``analyze_setup`` blocks AEDT until convergence, so it runs on a worker thread while the caller
+    enforces ``deadline_seconds``. On timeout the watchdog issues ``stop_simulations(clean_stop=True)``
+    so the last completed pass stays solved and exportable.
+    """
+    worker_error: dict[str, str] = {}
+
+    def _worker() -> None:
+        try:
+            raise_on_false(
+                hfss.analyze_setup(setup_name, blocking=True, cores=cores, gpus=gpus),
+                operation="analyze_setup",
+                context={"setup_name": setup_name, "cores": cores, "gpus": gpus},
+            )
+        except BaseException as exc:  # noqa: BLE001 — propagate to the caller thread via the dict
+            worker_error["message"] = f"{type(exc).__name__}: {exc}"
+
+    worker = threading.Thread(target=_worker, name="ssw-analyze-setup", daemon=True)
+    worker.start()
+    worker.join(timeout=deadline_seconds)
+    if worker.is_alive():
+        hfss.stop_simulations(clean_stop=True)
+        worker.join(timeout=abort_grace_seconds)
+        return {"status": "aborted", "error": ""}
+    if "message" in worker_error:
+        return {"status": "failed", "error": worker_error["message"]}
+    return {"status": "completed", "error": ""}
+
+
+def _analyze_with_hard_abort(
+    *,
+    hfss: HfssSession,
+    setup_name: str,
+    hard_abort_seconds: float,
+    cores: int,
+    gpus: int,
+    abort_grace_seconds: float = SOLVE_ABORT_GRACE_SECONDS,
+) -> tuple[SswSolveOutcome, bool]:
+    """Analyze with the hard-abort watchdog, auto-enabling GPU and falling back to CPU.
+
+    When ``gpus > 0`` the first attempt enables GPU acceleration. If that attempt *fails* (e.g. no
+    HPC Pack license or driver issue — distinct from a timeout abort), it silently retries on CPU
+    (``gpus=0``) with the remaining time budget so the job still completes. Returns the outcome and
+    whether GPU acceleration was actually used.
+    """
+    started = time.monotonic()
+    attempt = _run_analyze_attempt(
+        hfss=hfss,
+        setup_name=setup_name,
+        cores=cores,
+        gpus=gpus,
+        deadline_seconds=hard_abort_seconds,
+        abort_grace_seconds=abort_grace_seconds,
+    )
+    gpu_used = gpus > 0 and attempt["status"] != "failed"
+    if attempt["status"] == "failed" and gpus > 0:
+        remaining = max(SOLVE_FALLBACK_MIN_SECONDS, hard_abort_seconds - (time.monotonic() - started))
+        attempt = _run_analyze_attempt(
+            hfss=hfss,
+            setup_name=setup_name,
+            cores=cores,
+            gpus=0,
+            deadline_seconds=remaining,
+            abort_grace_seconds=abort_grace_seconds,
+        )
+        gpu_used = False
+    elapsed_ms = (time.monotonic() - started) * 1000.0
+    if attempt["status"] == "failed":
+        raise PeetsfeaStageError(stage="solve", error_type="analyze_failed", message=attempt["error"])
+    outcome: SswSolveOutcome = {
+        "completed": attempt["status"] == "completed",
+        "hard_aborted": attempt["status"] == "aborted",
+        "hard_abort_seconds": hard_abort_seconds,
+        "analyze_elapsed_ms": elapsed_ms,
+    }
+    return outcome, gpu_used
 
 
 def write_ssw_aedt_port_ledger(*, ledger_path: Path, ledger: SswAedtPortStepLedger) -> None:
@@ -1157,6 +1415,9 @@ class _SolveTelemetryMonitor:
             "peak_cpu_percent_total": max(sample["cpu_percent_total"] for sample in samples),
             "peak_rss_bytes_total": max(sample["rss_bytes_total"] for sample in samples),
             "peak_vms_bytes_total": max(sample["vms_bytes_total"] for sample in samples),
+            "gpu_used": False,
+            "gpu_device_name": "",
+            "solver_cores": 0,
             "samples": samples,
         }
 
@@ -1187,7 +1448,7 @@ def _setup_payload(
         "MinimumConvergedPasses:=",
         minimum_converged_passes,
         "PercentRefinement:=",
-        30,
+        23,
         "IsEnabled:=",
         True,
         [
@@ -1365,7 +1626,7 @@ def _insert_recorded_setup_and_sweep(
             "maximum_passes": maximum_passes,
             "minimum_passes": minimum_passes,
             "minimum_converged_passes": minimum_converged_passes,
-            "percent_refinement": 30,
+            "percent_refinement": 23,
             "basis_order": 0,
             "port_accuracy": 2,
             "driven_solver_type": "Direct Solver",
@@ -2108,6 +2369,8 @@ def solve_ssw_aedt_ports(
     setup_minimum_passes: int = SETUP_MINIMUM_PASSES,
     setup_minimum_converged_passes: int = SETUP_MINIMUM_CONVERGED_PASSES,
     telemetry_sample_interval_seconds: float = SOLVE_TELEMETRY_SAMPLE_INTERVAL_SECONDS,
+    keep_desktop_alive: bool = False,
+    solve_hard_abort_seconds: float = SOLVE_HARD_ABORT_SECONDS,
 ) -> SswAedtReportCsvResult:
     hfss = hfss_factory(design_name)
     try:
@@ -2125,20 +2388,38 @@ def solve_ssw_aedt_ports(
             sample_interval_seconds=telemetry_sample_interval_seconds,
             output_dir=csv_output_dir,
         )
+        resources = detect_solver_resources()
         monitor.start()
         try:
-            raise_on_false(hfss.analyze_setup(SETUP_NAME, blocking=True), operation="analyze_setup", context={"setup_name": SETUP_NAME})
+            solve_outcome, gpu_used = _analyze_with_hard_abort(
+                hfss=hfss,
+                setup_name=SETUP_NAME,
+                hard_abort_seconds=solve_hard_abort_seconds,
+                cores=resources["cores"],
+                gpus=resources["gpu_count"],
+            )
         finally:
             solve_telemetry = monitor.stop()
+        solve_telemetry["gpu_used"] = gpu_used
+        solve_telemetry["gpu_device_name"] = resources["gpu_device_name"] if gpu_used else ""
+        solve_telemetry["solver_cores"] = resources["cores"]
         csv_paths = _export_ssw_report_csvs(hfss=hfss, output_dir=csv_output_dir)
         raise_on_false(hfss.save_project(str(output_aedt_path)), operation="save_project", context={"path": str(output_aedt_path)})
-        return {"setup": setup, "csv_paths": csv_paths, "solve_telemetry": solve_telemetry}
+        return {
+            "setup": setup,
+            "csv_paths": csv_paths,
+            "solve_telemetry": solve_telemetry,
+            "solve_outcome": solve_outcome,
+        }
     finally:
-        raise_on_false(
-            hfss.desktop_class.release_desktop(close_projects=True, close_on_exit=True),
-            operation="release_desktop",
-            context={"close_projects": True, "close_on_exit": True},
-        )
+        if keep_desktop_alive:
+            _release_keeping_desktop_alive(hfss)
+        else:
+            raise_on_false(
+                hfss.desktop_class.release_desktop(close_projects=True, close_on_exit=True),
+                operation="release_desktop",
+                context={"close_projects": True, "close_on_exit": True},
+            )
 
 
 __all__ = [
@@ -2158,6 +2439,12 @@ __all__ = [
     "SETUP_MAXIMUM_PASSES",
     "SETUP_MINIMUM_CONVERGED_PASSES",
     "SETUP_MINIMUM_PASSES",
+    "SOLVE_ABORT_GRACE_SECONDS",
+    "SOLVE_CORES",
+    "SOLVE_HARD_ABORT_SECONDS",
+    "SswSolveOutcome",
+    "SswSolverResources",
+    "detect_solver_resources",
     "SOLVE_TELEMETRY_SAMPLE_INTERVAL_SECONDS",
     "SOLVE_TELEMETRY_SAMPLES_JSONL_NAME",
     "SOLVE_TELEMETRY_STOP_NAME",
@@ -2167,8 +2454,10 @@ __all__ = [
     "SswAedtReportsSummary",
     "SswSolveTelemetry",
     "SswSolveTelemetrySample",
+    "DEFAULT_ATTACH_HOST",
     "create_graphical_hfss",
     "create_headless_hfss",
+    "make_attached_hfss_factory",
     "load_ssw_aedt_port_ledger",
     "setup_ssw_aedt_ports",
     "setup_ssw_aedt_ports_into_hfss",

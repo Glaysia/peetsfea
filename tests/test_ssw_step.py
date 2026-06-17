@@ -9,7 +9,7 @@ import tomllib
 import cadquery as cq
 import pytest
 
-from entry.debug_view_0_3_0_ssw import AEDT_PORT_LEDGER_NAME, AEDT_SCENE_STEP_NAME, export_ssw_aedt_port_artifacts
+from peetsfea.ssw_aedt_artifacts import AEDT_PORT_LEDGER_NAME, AEDT_SCENE_STEP_NAME, export_ssw_aedt_port_artifacts
 import peetsfea.coilmaker as coilmaker
 import peetsfea.ssw_step as module_under_test
 from peetsfea.ssw_step import (
@@ -22,9 +22,11 @@ from peetsfea.ssw_step import (
 )
 from peetsfea.ssw_step_constraints import SswConstraintPathRef, SswConstraintValueRef, parse_ssw_constraint_rules
 
+from peetsfea.ssw_design_space import DEFAULT_REFERENCE_TOML_PATH
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FIXED_TOML = REPO_ROOT / "examples" / "0.3.0_fixed.toml"
-SWEEP_TOML = REPO_ROOT / "examples" / "0.3.0_sweep.toml"
+FIXED_TOML = module_under_test.DEFAULT_SOURCE_TOML_PATH
+SWEEP_TOML = DEFAULT_REFERENCE_TOML_PATH
 
 
 def test_load_ssw_fixed_spec_reads_tx_rx_frozen_contract() -> None:
@@ -643,9 +645,9 @@ def test_export_ssw_aedt_port_artifacts_writes_direct_edge_port_ledger(tmp_path:
     assert port_ledger_path.is_file()
     stored_ledger = json.loads(port_ledger_path.read_text(encoding="utf-8"))
     assert stored_ledger == ledger
-    assert ledger["dimension_count"] == 20
+    assert ledger["dimension_count"] == 21
     assert len(ledger["design_space_hash"]) == 16
-    assert ledger["design_id"] == f"0_3_1_p{ledger['design_space_hash']}"
+    assert ledger["design_id"] == f"0_3_7_p{ledger['design_space_hash']}"
     assert ledger["aedt_filename"] == f"{ledger['design_id']}.aedt"
     assert "port_sheet_names" not in ledger
     assert "tx_aedt_port_sheet" not in ledger["body_names"]

@@ -2,10 +2,11 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug 0.3.0 SSW OCP Viewer",
+      "name": "Debug SSW viewer (view.py --debug)",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/entry/debug_view_0_3_0_ssw.py",
+      "program": "${workspaceFolder}/entry/view.py",
+      "args": ["--debug"],
       "cwd": "${workspaceFolder}/run",
       "python": "${workspaceFolder}/.venv/bin/python",
       "console": "integratedTerminal",

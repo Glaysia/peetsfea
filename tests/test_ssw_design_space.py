@@ -8,8 +8,9 @@ import pytest
 
 from peetsfea.backend.pyaedt.ssw_ports import SSW_REPORT_NAMES
 import peetsfea.ssw_random_sample_reports as ssw_random_sample_reports
-from peetsfea.ssw_step import load_ssw_fixed_spec
+from peetsfea.ssw_step import DEFAULT_SOURCE_TOML_PATH, load_ssw_fixed_spec
 from peetsfea.ssw_design_space import (
+    DEFAULT_REFERENCE_TOML_PATH,
     build_ssw_aedt_identity,
     check_ssw_toml_in_design_space,
     point_values_for_ssw_fixed_toml,
@@ -17,8 +18,8 @@ from peetsfea.ssw_design_space import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-FIXED_TOML = REPO_ROOT / "examples" / "0.3.0_fixed.toml"
-SWEEP_TOML = REPO_ROOT / "examples" / "0.3.0_sweep.toml"
+FIXED_TOML = DEFAULT_SOURCE_TOML_PATH
+SWEEP_TOML = DEFAULT_REFERENCE_TOML_PATH
 
 
 def _candidate(tmp_path: Path, text: str) -> Path:
@@ -65,10 +66,11 @@ def test_fixed_toml_is_reference_design_space_point() -> None:
 
     assert result.is_subset is True
     assert result.is_point is True
-    assert result.dimension_count == 20
-    assert len(result.free_owner_paths) == 20
+    assert result.dimension_count == 21
+    assert len(result.free_owner_paths) == 21
     assert result.violations == ()
     assert "ferrite.tx_mull_position_ratio" in result.free_owner_paths
+    assert "ferrite.tx_mull_sheet_count" in result.free_owner_paths
     assert "ferrite.rx_mull_position_ratio" in result.free_owner_paths
     assert "ferrite.tx_mull_is_enabled" not in result.free_owner_paths
     assert "ferrite.rx_mull_is_enabled" not in result.free_owner_paths
@@ -91,9 +93,9 @@ def test_aedt_identity_is_deterministic_short_point_name() -> None:
     second = build_ssw_aedt_identity(FIXED_TOML, SWEEP_TOML)
 
     assert first == second
-    assert first.dimension_count == 20
+    assert first.dimension_count == 21
     assert len(first.point_hash) == 16
-    assert first.design_id == f"0_3_1_p{first.point_hash}"
+    assert first.design_id == f"0_3_7_p{first.point_hash}"
     assert first.aedt_filename == f"{first.design_id}.aedt"
     assert "ssw" not in first.design_id
 
@@ -182,7 +184,7 @@ def test_sample_ssw_fixed_tomls_generates_valid_unique_points(tmp_path: Path) ->
     assert batch.source_toml_path == SWEEP_TOML
     assert batch.reference_toml_path == SWEEP_TOML
     assert batch.output_dir == output_dir
-    assert batch.dimension_count == 20
+    assert batch.dimension_count == 21
     assert len(batch.samples) == 3
     assert len({sample.design_id for sample in batch.samples}) == 3
     for expected_index, sample in enumerate(batch.samples):
@@ -305,6 +307,12 @@ def test_run_ssw_random_sample_reports_preserves_full_point_ledger(
         return {
             "setup": {},
             "csv_paths": csv_paths,
+            "solve_outcome": {
+                "completed": True,
+                "hard_aborted": False,
+                "hard_abort_seconds": 3600.0,
+                "analyze_elapsed_ms": 1500.0,
+            },
             "solve_telemetry": {
                 "started_at": "2026-06-14T00:00:00.000+09:00",
                 "finished_at": "2026-06-14T00:00:02.000+09:00",
@@ -359,13 +367,16 @@ def test_run_ssw_random_sample_reports_preserves_full_point_ledger(
 
     assert result["mode"] == "semi_dry"
     assert result["seed"] == 2468
-    assert result["dimension_count"] == 20
-    assert len(result["free_owner_paths"]) == 20
+    assert result["dimension_count"] == 21
+    assert len(result["free_owner_paths"]) == 21
     assert set(result["point_values"]) == set(result["free_owner_paths"])
     assert set(result["csv_paths"]) == set(SSW_REPORT_NAMES)
     assert set(result["csv_text_by_report"]) == set(SSW_REPORT_NAMES)
     assert result["setup_pass_counts"] == {"maximum_passes": 5, "minimum_passes": 1, "minimum_converged_passes": 1}
     assert result["solve_telemetry"]["elapsed_ms"] == 2000.0
+    assert result["solve_outcome"]["completed"] is True
+    assert result["solve_outcome"]["hard_aborted"] is False
+    assert result["output_dir"] == str(output_dir)
     raw_ledger = Path(result["sample_point_ledger_path"]).read_text(encoding="utf-8")
     ledger_obj = json.loads(raw_ledger)
     assert ledger_obj["point_values"] == result["point_values"]
@@ -373,3 +384,4 @@ def test_run_ssw_random_sample_reports_preserves_full_point_ledger(
     assert ledger_obj["point_hash"] == result["point_hash"]
     assert ledger_obj["setup_pass_counts"] == result["setup_pass_counts"]
     assert ledger_obj["solve_telemetry"] == result["solve_telemetry"]
+    assert ledger_obj["solve_outcome"] == result["solve_outcome"]

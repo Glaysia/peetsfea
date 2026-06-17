@@ -35,8 +35,8 @@ class FixedDimensions:
 
 @dataclass(frozen=True)
 class CommonCoilParameters:
-    WIDTH_RATIO: float = 0.6                # [false, 0.025, 1.0, 500]
-    HEIGHT_RATIO: float = 0.6               # [false, 0.025, 1.0, 500]
+    WIDTH_RATIO: float = 0.6                # [false, 0.0555556, 1.0, 500]
+    HEIGHT_RATIO: float = 0.6               # [false, 0.0555556, 1.0, 500]
     IS_SSW_ENABLED: bool = True             # [true, 1, 1, 1]    deprecated
     TURN_N_INT: int = 3                     # [true, 1, 10, 10]  
     GAP_RATIO: float = 0.24                 # [false, 0.1, 0.9, 50]  
@@ -1511,7 +1511,10 @@ def _ssw_port_gap_spec(
     try:
         return next(candidates)
     except StopIteration as exc:
-        raise RuntimeError("No intact SSW trace region found for the 2 mm port gap") from exc
+        # Infeasible-but-in-range point (e.g. few turns / wide trace leaves no spot for the
+        # 2 mm port gap). Raise ValueError so the sampler rejects this draw and resamples,
+        # consistent with the other geometry validation failures here.
+        raise ValueError("No intact SSW trace region found for the 2 mm port gap") from exc
 
 
 def _ssw_trace_context(config: RuntimeConfig, frame: CoilFrame) -> SswTraceContext:

@@ -8,7 +8,7 @@ from typing import cast
 
 import pytest
 
-from entry.debug_view_0_3_0_ssw import (
+from peetsfea.ssw_aedt_artifacts import (
     AEDT_IMPORTED_LEDGER_NAME,
     AEDT_PORT_LEDGER_NAME,
     SOURCE_TOML_PATH,
@@ -457,7 +457,7 @@ class _FakeHfss:
         self.saved_paths.append(path)
         return True
 
-    def analyze_setup(self, name: str, blocking: bool = True) -> object:
+    def analyze_setup(self, name: str, blocking: bool = True, cores: int = 0, gpus: int = 0) -> object:
         self.analyze_setup_calls.append((name, blocking))
         return self.analyze_setup_result
 
@@ -594,9 +594,9 @@ def test_setup_ssw_aedt_ports_into_hfss_creates_tx_rx_terminal_ports(tmp_path: P
     assert setup_payload[0] == "NAME:Setup1"
     assert setup_payload[setup_payload.index("Frequency:=") + 1] == "6.78MHz"
     assert setup_payload[setup_payload.index("MaxDeltaS:=") + 1] == 0.005
-    assert setup_payload[setup_payload.index("MaximumPasses:=") + 1] == 35
-    assert setup_payload[setup_payload.index("MinimumPasses:=") + 1] == 17
-    assert setup_payload[setup_payload.index("MinimumConvergedPasses:=") + 1] == 7
+    assert setup_payload[setup_payload.index("MaximumPasses:=") + 1] == 11
+    assert setup_payload[setup_payload.index("MinimumPasses:=") + 1] == 8
+    assert setup_payload[setup_payload.index("MinimumConvergedPasses:=") + 1] == 9
     assert setup_payload[setup_payload.index("BasisOrder:=") + 1] == 0
     assert setup_payload[setup_payload.index("DrivenSolverType:=") + 1] == "Direct Solver"
     assert hfss.odesign.analysis_setup_module.insert_sweep_calls[0][0] == "Setup1"
