@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EM 교차검증 계획서 — M3D(정전·AC자기) vs HFSS Z @ 6.78 MHz</title>
+<style>
+  :root{--bg:#0b1020;--panel:#161f3d;--soft:#121a33;--bd:#26315c;--tx:#e6ebff;--mut:#9aa6c9;
+        --ac:#5b8cff;--ac2:#34d4b7;--warn:#ffb454;--ok:#34d4b7;--todo:#ffb454;--code:#0d1428;}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1100px 560px at 82% -8%,#1a2342 0,transparent 60%),var(--bg);
+       color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;line-height:1.65}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  header{padding:64px 0 28px;border-bottom:1px solid var(--bd)}
+  .badge{display:inline-flex;gap:8px;align-items:center;padding:5px 12px;border:1px solid var(--bd);
+         background:var(--soft);border-radius:999px;font-size:12.5px;color:var(--mut)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ac2);box-shadow:0 0 10px var(--ac2)}
+  h1{font-size:clamp(26px,4.4vw,40px);line-height:1.15;margin:18px 0 8px;letter-spacing:-.02em}
+  h1 .g{background:linear-gradient(90deg,var(--ac),var(--ac2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lede{color:var(--mut);max-width:760px;font-size:16px}
+  section{padding:34px 0;border-bottom:1px solid var(--bd)}
+  h2{font-size:22px;margin:0 0 6px;letter-spacing:-.01em}
+  h2 .n{color:var(--ac2);font-variant-numeric:tabular-nums}
+  .sub{color:var(--mut);margin:0 0 18px;font-size:14.5px}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0}
+  th,td{padding:9px 12px;border:1px solid var(--bd);text-align:left;vertical-align:top}
+  th{background:var(--soft);color:var(--mut);font-weight:600}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  code{font-family:"SFMono-Regular",Consolas,Menlo,monospace;font-size:.92em;background:var(--code);
+       padding:1px 6px;border-radius:6px;color:#cdd9ff}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700}
+  .done{background:rgba(52,212,183,.15);color:var(--ok);border:1px solid rgba(52,212,183,.35)}
+  .todo{background:rgba(255,180,84,.13);color:var(--todo);border:1px solid rgba(255,180,84,.35)}
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:18px;margin:10px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .note{margin-top:12px;padding:12px 16px;border-radius:10px;background:rgba(255,180,84,.08);
+        border:1px solid rgba(255,180,84,.3);color:#ffd9a3;font-size:13.5px}
+  .big{font-size:20px;font-weight:700;color:var(--ac2);font-variant-numeric:tabular-nums}
+  ul{margin:6px 0 0;padding-left:20px;color:var(--mut)}
+  ul li{margin:3px 0}
+  .eq{background:var(--code);border:1px solid var(--bd);border-radius:10px;padding:12px 16px;color:#cdd9ff;
+      font-family:"SFMono-Regular",Consolas,Menlo,monospace;font-size:13.5px;overflow-x:auto}
+  footer{padding:28px 0 56px;color:var(--mut);font-size:13px}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <span class="badge"><span class="dot"></span> peetsfea · EM 교차검증 계획 · 6.78&nbsp;MHz</span>
+  <h1>4-솔버 <span class="g">교차검증</span>: M3D 정전 · M3D AC 자기 · Q3D · HFSS Z-파라미터</h1>
+  <p class="lede">동일한 fixed SSW 코일 형상(<code>data/0.3.x_fixed.toml</code>)에 대해
+  Maxwell&nbsp;3D Electrostatic의 C, Maxwell&nbsp;3D AC&nbsp;Magnetic의 L·R, Q3D Extractor의 R·L·C,
+  HFSS frequency-sweep의 Z-파라미터에서 유도한 L/M/R/C가 <b>6.78&nbsp;MHz</b>에서 서로 일치하는지 검증한다.
+  HFSS는 <span class="pill done">실행 완료</span>, Maxwell&nbsp;3D·Q3D는 <span class="pill todo">미실행(본 계획)</span>.</p>
+</div></header>
+
+<main class="wrap">
+
+<section>
+  <h2><span class="n">1.</span> 목적과 가설</h2>
+  <p class="sub">네 가지 EM 솔버가 같은 코일의 같은 양을 계산하면 동일 결과가 나와야 한다 — 이를 정량 확인.</p>
+  <div class="grid2">
+    <div class="card">
+      <b>검증 대상 양 (6.78 MHz)</b>
+      <ul>
+        <li><b>L1, L2, M</b> — 자기 인덕턴스(self)와 상호 인덕턴스</li>
+        <li><b>C1, C2</b> — TX/RX 코일 자기 캐패시턴스</li>
+        <li><b>R1, R2</b> — AC 직렬 저항(표피/근접 손실)</li>
+        <li><b>Z11, Z12, Z22</b> — 2-포트 임피던스(HFSS 1차 산출)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <b>솔버별 1차 산출</b>
+      <ul>
+        <li><b>M3D Electrostatic</b> → C1, C2, 상호 Cm <span class="pill todo">TODO</span></li>
+        <li><b>M3D AC Magnetic(Eddy@6.78MHz)</b> → L1, L2, M, AC R1/R2 <span class="pill todo">TODO</span></li>
+        <li><b>Q3D Extractor(AC RL + Cap)</b> → R·L·M·C·G 일괄 <span class="pill todo">TODO</span></li>
+        <li><b>HFSS freq sweep</b> → Z11/Z12/Z22 → L/M/R, self-resonance로 C <span class="pill done">DONE</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="note"><b>합격 가설:</b> L(self/mutual)은 ±5%(M), R은 메시 민감으로 ±15%, C는 ±10% 이내 일치.
+  불일치 시 메시/경계/포트 정의 차이를 원인 후보로 추적.
+  <b>또한 솔버별 솔브 시간(비용)</b>을 함께 기록해 정확도–속도 trade-off를 비교한다(HFSS = 282초 기준, §8).</div>
+</section>
+
+<section>
+  <h2><span class="n">2.</span> 형상 (공통 입력)</h2>
+  <p class="sub">design_id <code>0_3_7_p6561d2a5c7808f6e</code> · 외형 한계 360×180&nbsp;mm · TX–RX edge-to-edge <b>100&nbsp;mm</b></p>
+  <table>
+    <tr><th>코일</th><th class="num">크기 (mm)</th><th class="num">turn</th><th class="num">twist</th>
+        <th class="num">gap_ratio</th><th class="num">void</th><th class="num">PCB gap (mm)</th></tr>
+    <tr><td><b>TX</b> (tx_ssw_coil)</td><td class="num">288 × 144</td><td class="num">4</td><td class="num">3</td>
+        <td class="num">0.44</td><td class="num">0.50</td><td class="num">8.0</td></tr>
+    <tr><td><b>RX</b> (rx_ssw_coil)</td><td class="num">324 × 162</td><td class="num">4</td><td class="num">3</td>
+        <td class="num">0.60</td><td class="num">0.25</td><td class="num">3.0</td></tr>
+  </table>
+  <p class="sub" style="margin-top:8px">도체: copper(0.07&nbsp;mm), FR4(0.24&nbsp;mm) 2-PCB, MULL ferrite sheet(0.12&nbsp;mm). 모든 솔버가 동일 STEP/형상을 import.</p>
+</section>
+
+<section>
+  <h2><span class="n">3.</span> HFSS <span class="pill done">실행 완료</span></h2>
+  <p class="sub">Terminal-driven HFSS, <code>Setup1 @ 6.78MHz</code> 적응 메시 + interpolating sweep 0.1–100&nbsp;MHz(81pt).</p>
+  <div class="card">
+    <b>설정 (peetsfea 0.3.7)</b>
+    <ul>
+      <li>적응: MaximumPasses <b>11</b> / Minimum <b>8</b> / MinimumConverged <b>9</b>, MaxDeltaS <b>0.005</b>, PercentRefinement 23, BasisOrder 0(mixed)</li>
+      <li>메시 seed: NumMaxElem <b>50,000</b> + MaxLength <b>1mm</b> (RestrictLength·RestrictElem) → 적응 후 <b>최종 156,761 tets</b></li>
+      <li>포트: TX <code>1_T1</code>, RX <code>2_T1</code> (lumped terminal), TX 100V@0°, RX 100V@90°</li>
+      <li>경계: radiation, region margin 2000mm · 수렴 <b>MaxMagDeltaS = 0.00088</b> (&lt; 0.005 ✓)</li>
+      <li><b>솔브 시간: 282초(≈4.7분)</b> · GPU(RTX 3070, gpu_used=True) · 4 cores · 11 adaptive passes</li>
+    </ul>
+  </div>
+
+  <p class="sub" style="margin-top:18px"><b>추출식</b> (ω = 2π·6.78×10⁶ = 4.2599×10⁷ rad/s):</p>
+  <div class="eq">L1 = im(Z11)/ω &nbsp; L2 = im(Z22)/ω &nbsp; M = im(Z12)/ω<br>
+  R1 = re(Z11) &nbsp; R2 = re(Z22) &nbsp; k = M/√(L1·L2)<br>
+  C(self-res): im(Z)=0 인 f₀에서 &nbsp; C = 1 / ((2πf₀)²·L)</div>
+
+  <h3 style="margin:20px 0 4px;font-size:16px;color:var(--mut)">HFSS @ 6.78 MHz 실측</h3>
+  <table>
+    <tr><th>양</th><th class="num">값</th><th>비고</th></tr>
+    <tr><td><b>Z11</b></td><td class="num">0.3699 + j241.85 Ω</td><td>|Z11| = 241.85 Ω</td></tr>
+    <tr><td><b>Z22</b></td><td class="num">0.2362 + j212.63 Ω</td><td></td></tr>
+    <tr><td><b>Z12</b></td><td class="num">0.01230 + j6.7063 Ω</td><td>약결합</td></tr>
+    <tr><td><b>L1</b> (Ltx)</td><td class="num">5.6772 µH</td><td>= im(Z11)/ω</td></tr>
+    <tr><td><b>L2</b> (Lrx)</td><td class="num">4.9912 µH</td><td>= im(Z22)/ω</td></tr>
+    <tr><td><b>M</b></td><td class="num">0.1574 µH</td><td>= im(Z12)/ω, k = 0.0296</td></tr>
+    <tr><td><b>R1</b></td><td class="num">0.3699 Ω</td><td>= re(Z11), Qtx ≈ 654</td></tr>
+    <tr><td><b>R2</b></td><td class="num">0.2362 Ω</td><td>= re(Z22), Qrx ≈ 900</td></tr>
+    <tr><td><b>C1</b></td><td class="num">16.35 pF</td><td>TX self-resonance 16.52 MHz</td></tr>
+    <tr><td><b>C2</b></td><td class="num">21.62 pF</td><td>RX self-resonance 15.32 MHz</td></tr>
+  </table>
+  <div class="note"><b>주의(C):</b> HFSS driven 솔루션은 캐패시턴스를 직접 출력하지 않으므로 C1/C2는
+  <b>주파수 sweep의 self-resonance(im(Z)=0)에서 유도</b>한 값이다. 이는 정밀 정전값이 아니라 <i>sanity 비교용</i>이며,
+  <b>정밀 C는 M3D Electrostatic이 1차 산출</b>한다. 또한 NumMaxElem=50,000은 초기(seed) 메시 상한이고
+  적응 세분으로 최종 156,761 tets가 된 것은 정상.</div>
+</section>
+
+<section>
+  <h2><span class="n">4.</span> Maxwell 3D Electrostatic <span class="pill todo">미실행 — 계획</span></h2>
+  <p class="sub">정전 캐패시턴스 행렬 [C] 추출 → C1, C2, Cm. (주파수 무관, DC 가정)</p>
+  <div class="grid2">
+    <div class="card"><b>설정</b>
+      <ul>
+        <li>Solution type: <b>Electrostatic</b>.</li>
+        <li>재료: copper=PEC급 도체, FR4 εr≈4.4, MULL ferrite εr(데이터시트), 나머지 vacuum.</li>
+        <li>Region: 코일 최대치수의 ~2–3배 air box, 바깥면 <b>Balloon</b> 경계(무한원 기준).</li>
+        <li>도체 net 정의: <b>TX 코일 전체 = net_TX</b>, <b>RX 코일 전체 = net_RX</b>(연속 도체 1개씩). under-coil은 TX와 직렬이므로 net_TX에 포함.</li>
+      </ul>
+    </div>
+    <div class="card"><b>여기 · 행렬 · 산출</b>
+      <ul>
+        <li>Excitation: 두 net에 <b>Voltage</b> 할당(예: TX=1V, RX=1V) 후 Parameters → <b>Matrix</b>(Capacitance) 정의.</li>
+        <li>Maxwell C-matrix [Cij] 산출 → SPICE 변환:
+          <b>C1 = ΣⱼC1ⱼ</b>(net_TX 대지/무한원 self), <b>C2 = ΣⱼC2ⱼ</b>, <b>Cm = −C12</b>.</li>
+        <li>비교: 위 C1/C2를 HFSS self-resonance값(16.35 / 21.62 pF) 및 Q3D Cap과 대조.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="note"><b>메시:</b> 표면 근사 + 에너지기반 적응, <b>Percent Error 1%</b> 목표. 트레이스 모서리·트레이스간 갭·PCB 유전체 경계에서 C가 결정되므로 갭/모서리 세분이 핵심. 수렴은 ΔEnergy &lt; 1%로 판정.</div>
+</section>
+
+<section>
+  <h2><span class="n">5.</span> Maxwell 3D AC Magnetic (Eddy Current @ 6.78 MHz) <span class="pill todo">미실행 — 계획</span></h2>
+  <p class="sub">6.78MHz 와전류 해석으로 인덕턴스 행렬 [L]과 AC 저항 추출 → L1, L2, M, R1, R2.</p>
+  <div class="grid2">
+    <div class="card"><b>설정</b>
+      <ul>
+        <li>Solution type: <b>Eddy Current</b>, <b>Adaptive Frequency = 6.78 MHz</b>(HFSS와 동일).</li>
+        <li>copper를 <b>solid conductor</b>로(σ=5.8e7), eddy effect ON(표피·근접 포함). ferrite는 μ/loss 데이터.</li>
+        <li>Region: air box + 바깥면 <b>Zero Tangential H(또는 Balloon)</b>.</li>
+      </ul>
+    </div>
+    <div class="card"><b>여기 · 행렬 · 산출</b>
+      <ul>
+        <li>Excitation: 각 코일 단면에 <b>Current</b> 여기(터미널 in/out, TX·RX 각 1A). Parameters → <b>Matrix</b>(L) 정의.</li>
+        <li>산출: <b>L1=L11, L2=L22, M=L12</b>; AC 저항은 옴손실 적분 <b>Rᵢ = 2·P_loss,ᵢ / |Iᵢ|²</b>(또는 매트릭스 R 항).</li>
+        <li>비교: HFSS Z 유도값(L1=5.677, L2=4.991, M=0.1574 µH; R1=0.370, R2=0.236 Ω)과 직접 대조.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="note"><b>표피효과(핵심):</b> 6.78MHz copper 표피깊이 <b>δ ≈ 25 µm</b>. 트레이스 두께 70 µm(0.07mm) ≈ <b>2.8δ</b>이므로
+  두께방향 <b>≥3층 메시(skin-depth based / layered)</b>가 필수 — 부족하면 R(및 일부 L)이 어긋난다. 적응 %error 0.5–1% 목표.</div>
+</section>
+
+<section>
+  <h2><span class="n">6.</span> Q3D Extractor (RLCG 직접 추출) <span class="pill todo">미실행 — 계획</span></h2>
+  <p class="sub">준정적 parasitic 추출기 — R·L·C·G를 한 도구에서. 6.78MHz는 self-resonance(~15MHz) 이하라 준정적 가정 유효 → <b>모든 양의 원스톱 교차검증</b>.</p>
+  <div class="grid2">
+    <div class="card"><b>설정 · net/터미널</b>
+      <ul>
+        <li>같은 STEP import. 도체를 net으로: <b>net_TX, net_RX</b>(연속 도체).</li>
+        <li>각 net에 <b>Source / Sink</b> 지정(전류 입·출구 = 코일 양 끝, HFSS 포트 위치와 동일하게).</li>
+        <li>Setup 2종: <b>AC RL @ 6.78 MHz</b> + <b>Capacitance</b>(둘 다 한 프로젝트에서 솔브).</li>
+      </ul>
+    </div>
+    <div class="card"><b>산출 · 비교</b>
+      <ul>
+        <li>AC RL → <b>L11=L1, L22=L2, L12=M</b>(loop 인덕턴스), <b>R11=R1, R22=R2</b>(6.78MHz AC).</li>
+        <li>Capacitance → Maxwell C-matrix → <b>C1, C2, Cm</b>.</li>
+        <li>G(컨덕턴스) 추가 산출(유전손실 참고용).</li>
+        <li>비교: L/M/R은 HFSS·M3D AC와, C는 HFSS self-res·M3D 정전과 동시 대조.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="note"><b>주의:</b> Q3D 인덕턴스는 <b>source→sink 경로 기반 loop L</b>이므로, HFSS 포트/M3D 전류경로와 <b>동일 경로 정의</b>여야 비교가 성립.
+  AC RL은 표피효과를 포함하므로 표면 메시(skin-depth) 필요. 준정적이라 방사손실은 미포함(6.78MHz에서 무시 가능).</div>
+</section>
+
+<section>
+  <h2><span class="n">7.</span> 교차검증 매트릭스 &amp; 합격 기준</h2>
+  <p class="sub">각 양을 어느 솔버가 산출하고 HFSS 기준선과 어떻게 대조하는지. ✓=산출, —=미산출.</p>
+  <table>
+    <tr><th>양</th><th>M3D 정전</th><th>M3D AC자기</th><th>Q3D</th><th>HFSS(기준)</th><th class="num">HFSS 실측</th><th>일치 목표</th></tr>
+    <tr><td><b>L1</b></td><td>—</td><td>✓</td><td>✓ (AC RL)</td><td>im(Z11)/ω</td><td class="num">5.677 µH</td><td>±5%</td></tr>
+    <tr><td><b>L2</b></td><td>—</td><td>✓</td><td>✓ (AC RL)</td><td>im(Z22)/ω</td><td class="num">4.991 µH</td><td>±5%</td></tr>
+    <tr><td><b>M</b></td><td>—</td><td>✓</td><td>✓ (AC RL)</td><td>im(Z12)/ω</td><td class="num">0.1574 µH</td><td>±10%</td></tr>
+    <tr><td><b>R1</b></td><td>—</td><td>✓ (AC)</td><td>✓ (AC RL)</td><td>re(Z11)</td><td class="num">0.370 Ω</td><td>±15%</td></tr>
+    <tr><td><b>R2</b></td><td>—</td><td>✓ (AC)</td><td>✓ (AC RL)</td><td>re(Z22)</td><td class="num">0.236 Ω</td><td>±15%</td></tr>
+    <tr><td><b>C1</b></td><td>✓</td><td>—</td><td>✓ (Cap)</td><td>self-res</td><td class="num">16.35 pF</td><td>±10%</td></tr>
+    <tr><td><b>C2</b></td><td>✓</td><td>—</td><td>✓ (Cap)</td><td>self-res</td><td class="num">21.62 pF</td><td>±10%</td></tr>
+    <tr><td><b>Cm</b></td><td>✓</td><td>—</td><td>✓ (Cap)</td><td>—</td><td class="num">—</td><td>참고</td></tr>
+    <tr><td><b>G</b></td><td>—</td><td>—</td><td>✓</td><td>—</td><td class="num">—</td><td>참고(유전손실)</td></tr>
+  </table>
+  <div class="note"><b>판정:</b> "HFSS 실측"을 기준선으로 M3D·Q3D 값을 채워 상대오차 계산. <b>L/M/R은 3-way(HFSS·M3D AC·Q3D), C는 3-way(HFSS self-res·M3D 정전·Q3D)</b>로 대조 → Q3D가 모든 양의 교차점.
+  불일치 시: R=표피 메시, L=포트/source-sink 경로 일치, C=유전체·갭 메시를 우선 점검.</div>
+</section>
+
+<section style="border-bottom:none">
+  <h2><span class="n">8.</span> 진행 상태 · 솔브 시간 · 다음 단계</h2>
+  <p class="sub">정확도뿐 아니라 <b>솔브 시간(비용)</b>도 비교 축이다 — 솔버별 시간을 같이 기록한다.</p>
+  <table>
+    <tr><th>단계</th><th>상태</th><th class="num">솔브 시간</th><th>산출</th></tr>
+    <tr><td>HFSS 솔브(6.78MHz + sweep)</td><td><span class="pill done">완료</span></td><td class="num"><b>282 s</b> (GPU·4코어)</td><td>Z/L/M/R + self-res C (§3)</td></tr>
+    <tr><td>Q3D Extractor (AC RL + Cap) <b>← 다음</b></td><td><span class="pill todo">다음 작업</span></td><td class="num">측정 예정</td><td>R, L, M, C1/C2/Cm, G</td></tr>
+    <tr><td>M3D AC Magnetic (Eddy@6.78MHz)</td><td><span class="pill todo">대기</span></td><td class="num">측정 예정</td><td>L1, L2, M, AC R1/R2</td></tr>
+    <tr><td>M3D Electrostatic</td><td><span class="pill todo">대기</span></td><td class="num">측정 예정</td><td>C1, C2, Cm</td></tr>
+    <tr><td>오차 분석 · 리포트</td><td><span class="pill todo">대기</span></td><td class="num">—</td><td>3-way 상대오차 표 + 시간 비교</td></tr>
+  </table>
+  <div class="note"><b>다음 작업 = Q3D Extractor</b>(본 계획서 완성 직후 실행). R·L·C를 한 번에 뽑아 모든 양의 1차 교차점을 빠르게 확보하고
+  <b>솔브 시간도 HFSS(282초)와 비교</b>한다. 이후 M3D AC Magnetic → M3D Electrostatic으로 물리별 정밀 확인.
+  각 솔버는 정확도(상대오차)와 시간(비용)을 함께 리포트한다.</div>
+</section>
+
+</main>
+<footer><div class="wrap">peetsfea 0.3.7 · EM cross-validation plan · HFSS @ 6.78 MHz (design 0_3_7_p6561d2a5c7808f6e) · Maxwell 3D · Q3D pending</div></footer>
+</body>
+</html>
