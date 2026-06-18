@@ -54,20 +54,24 @@ HFSS는 `magnetic_loss_tangent` + `pwlx($mu,Freq)`로 모델링. 그래서 0.16.
 
 ## Acceptance
 M1 — 서브모듈 소스 빌드 (upstream-동등)
-- [ ] `solver/palace` 서브모듈 체크아웃(`git submodule update --init`) → `solver/docker/build.sh` → `peetsfea-palace:dev` 빌드 성공(CUDA, cuda_arch=86), 서브모듈 소스 in-tree 빌드.
-- [ ] phase0 예제(cylinder/CPW)가 GPU로 port-S.csv 산출(HYPRE pool override로 OOM 없이).
-- [ ] no-ferrite/유전 케이스 결과가 upstream Palace와 일치(회귀).
+- [x] `solver/palace` 서브모듈 체크아웃(`git submodule update --init`) → `solver/docker/build.sh` → `peetsfea-palace:dev` 빌드 성공(CUDA, cuda_arch=86), 서브모듈 소스 in-tree 빌드.
+- [x] phase0 예제(cylinder/CPW)가 GPU로 port-S.csv 산출(HYPRE pool override로 OOM 없이).
+- [x] no-ferrite/유전 케이스 결과가 upstream Palace와 일치(회귀).
 
 M-fork — 0.16.1pf: 복소 μ(자기손실) + 분산 material
-- [ ] `solver/palace`(Glaysia/palace)에 magnetic loss(μ″)/복소 μ + μ(f)/ε(f) dispersion commit, config schema 확장 + 문서. 이미지 `palace:0.16.1pf`로 빌드.
-- [ ] ferrite μ=135.59−j0.296 단일주파수 solve → 자기손실≠0, HFSS ferrite 방향과 정합(단위 검증).
-- [ ] upstream no-ferrite 회귀 무파손 재확인.
-- [ ] 새 config 스키마를 GOAL1에 전달(orchestrator emit 가능).
+- [x] `solver/palace`(Glaysia/palace)에 magnetic loss(μ″)/복소 μ + μ(f)/ε(f) dispersion commit, config schema 확장 + 문서. 이미지 `palace:0.16.1pf`로 빌드.
+- [x] ferrite μ=135.59−j0.296 단일주파수 solve → 자기손실≠0, HFSS ferrite 방향과 정합(단위 검증).
+- [x] upstream no-ferrite 회귀 무파손 재확인.
+- [x] 새 config 스키마를 GOAL1에 전달(orchestrator emit 가능).
 
 ## 완료 증거 패키지 (리뷰 시 제출)
 docker build 로그 + 이미지 태그/digest · fork commit · phase0 예제 GPU 실행 stdout + port-S.csv ·
 upstream 회귀 비교(no-ferrite 수치 동일) · 복소 μ 단위 검증(μ=135.59−j0.296 → 손실/HFSS 대조) ·
 config schema 문서.
+
+완료 증거 문서:
+- GOAL1 emit 계약: `solver/docs/palace-0.16.1pf-material-contract.md`
+- 검증 패키지: `solver/docs/palace-0.16.1pf-validation.md`
 
 ## 리뷰가 볼 것
 1. **회귀 무파손**(upstream no-ferrite == fork).
