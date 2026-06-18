@@ -110,7 +110,7 @@ RUN source /opt/spack/share/spack/setup-env.sh \
  && mkdir -p ${PEETSFEA_PALACE_INSTALL_PREFIX}/lib \
  && mpicc -shared -fPIC -O2 /tmp/hypre_pool_override.c \
       -I"${hypre_prefix}/include" -L"${hypre_prefix}/lib" -lHYPRE \
-      -Wl,-rpath,"${hypre_prefix}/lib" \
+      -ldl -Wl,-rpath,"${hypre_prefix}/lib" \
       -o ${PEETSFEA_PALACE_INSTALL_PREFIX}/lib/libhypre_pool_override.so \
  && chmod +x /usr/local/bin/palace \
  && printf '%s\n' \
@@ -134,13 +134,20 @@ RUN printf '%s\n' \
       'spack load cuda mpi 2>/dev/null || true' \
       'export PEETSFEA_PALACE_HOME=/opt/peetsfea-palace' \
       'export PEETSFEA_HYPRE_POOL_OVERRIDE=/opt/peetsfea-palace/lib/libhypre_pool_override.so' \
+      'export LD_LIBRARY_PATH=/opt/spack/var/spack/environments/palace/.spack-env/view/lib:/opt/spack/var/spack/environments/palace/.spack-env/view/lib64:${LD_LIBRARY_PATH:-}' \
       'export PATH=/usr/local/bin:/opt/peetsfea-palace/bin:$PATH' \
       > /etc/profile.d/zz-palace-env.sh \
     && chmod +x /etc/profile.d/zz-palace-env.sh
+
+ENV PEETSFEA_PALACE_HOME=/opt/peetsfea-palace \
+    PEETSFEA_HYPRE_POOL_OVERRIDE=/opt/peetsfea-palace/lib/libhypre_pool_override.so \
+    LD_LIBRARY_PATH=/opt/spack/var/spack/environments/palace/.spack-env/view/lib:/opt/spack/var/spack/environments/palace/.spack-env/view/lib64 \
+    PATH=/usr/local/bin:/opt/peetsfea-palace/bin:/opt/spack/var/spack/environments/palace/.spack-env/view/bin:$PATH
 
 # phase0 finding: default HYPRE/Umpire CUDA pools overshoot small-VRAM cards and
 # abort with cudaMalloc OOM. The pfsolver orchestrator sets VRAM-fitted pool
 # sizes before invoking palace; this label records the knob so it is never lost.
 LABEL org.peetsfea.hypre_pool_override="device/unified=512MiB pinned=64MiB (tune to VRAM)"
 
+ENTRYPOINT []
 CMD ["/bin/bash", "-l"]

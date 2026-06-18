@@ -11,6 +11,8 @@ repo="$(cd "${here}/../.." && pwd)"
 image="${IMAGE:-peetsfea-palace:dev}"
 
 if [ "$#" -eq 0 ]; then
-  exec docker run --rm -it --gpus all -v "${repo}:/work" -w /work "${image}" /bin/bash -l
+  exec docker run --rm -it --gpus all --entrypoint /bin/bash \
+    -v "${repo}:/work" -w /work "${image}" -l
 fi
-exec docker run --rm --gpus all -v "${repo}:/work" -w /work "${image}" /bin/bash -lc 'exec "$@"' -- "$@"
+exec docker run --rm --gpus all --entrypoint /bin/bash \
+  -v "${repo}:/work" -w /work "${image}" -lc 'exec "$@"' -- "$@"

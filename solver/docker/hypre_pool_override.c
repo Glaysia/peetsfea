@@ -1,10 +1,15 @@
 #include <errno.h>
+#include <dlfcn.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 
 #include "HYPRE_utilities.h"
+
+typedef HYPRE_Int (*peetsfea_hypre_initialize_fn)(void);
+
+static int peetsfea_pool_sizes_applied = 0;
 
 static size_t peetsfea_pool_size_from_env(const char *name, size_t fallback)
 {
@@ -25,8 +30,11 @@ static size_t peetsfea_pool_size_from_env(const char *name, size_t fallback)
   return (size_t)parsed;
 }
 
-__attribute__((constructor)) static void peetsfea_set_hypre_pool_sizes(void)
+static void peetsfea_set_hypre_pool_sizes(void)
 {
+  if (peetsfea_pool_sizes_applied != 0) {
+    return;
+  }
   const size_t device_pool_bytes =
       peetsfea_pool_size_from_env("PEETSFEA_HYPRE_DEVICE_POOL_BYTES", 512ULL * 1024ULL * 1024ULL);
   const size_t unified_pool_bytes =
@@ -50,4 +58,29 @@ __attribute__((constructor)) static void peetsfea_set_hypre_pool_sizes(void)
             (int)device_status, (int)unified_status, (int)pinned_status);
     abort();
   }
+  peetsfea_pool_sizes_applied = 1;
+}
+
+HYPRE_Int HYPRE_Initialize(void)
+{
+  dlerror();
+  peetsfea_hypre_initialize_fn real_hypre_initialize =
+      (peetsfea_hypre_initialize_fn)dlsym(RTLD_NEXT, "HYPRE_Initialize");
+  const char *dlsym_error = dlerror();
+  if (dlsym_error != NULL || real_hypre_initialize == NULL) {
+    fprintf(stderr,
+            "[peetsfea-palace] fatal: failed to resolve real HYPRE_Initialize: %s\n",
+            dlsym_error == NULL ? "unknown error" : dlsym_error);
+    abort();
+  }
+
+  const HYPRE_Int initialize_status = real_hypre_initialize();
+  if (initialize_status != 0) {
+    fprintf(stderr,
+            "[peetsfea-palace] fatal: HYPRE_Initialize failed status=%d\n",
+            (int)initialize_status);
+    abort();
+  }
+  peetsfea_set_hypre_pool_sizes();
+  return initialize_status;
 }
