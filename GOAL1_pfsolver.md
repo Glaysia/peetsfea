@@ -5,8 +5,9 @@
 
 ## 목표
 `solver/pfsolver` 독립 Python API 서브프로젝트가 동작하고, `inspect_bundle`·`mesh_bundle`·`solve_bundle`
-API가 **no-ferrite 단일주파수(6.78 MHz)** 에서 Palace wrapper가 감싼 컨테이너 Palace를 호출해 2-포트 terminal Z를 산출,
-HFSS no-ferrite와 부호/shape/단위가 일치하는 상태까지.
+API가 **no-ferrite 단일주파수(6.78 MHz)** 에서 Palace wrapper가 감싼 컨테이너 Palace를 호출해
+2-포트 terminal Z를 산출하고 재현 가능한 manifest를 남기는 상태까지. HFSS no-ferrite numeric 기준선은
+GOAL2가 따로 채운 뒤 교차검증한다.
 
 ## 아키텍처 (pyaedt → ansysedt 구도)
 - `pfsolver` = **독립 Python API 서브프로젝트** (`solver/pfsolver`, pyright strict + pydantic), **도커 밖**.
@@ -59,12 +60,14 @@ HFSS no-ferrite와 부호/shape/단위가 일치하는 상태까지.
 - **부호 계약.** Z12/Z21은 HFSS port current 방향 기준 고정. Z는 Palace `port-S.csv`에서 S→Z로 산출하고, `port-V.csv`의 `V_inc`+total V로 재구성한 S가 `port-S.csv`와 일치해야 한다. raw `port-I.csv`는 audit 산출물로 보존한다.
 - **재현성.** `solver_manifest.json`: Palace commit, pfsolver commit, palace run command, mesh hash, config hash, GPU name/VRAM, MPI ranks, HYPRE pool, design_id/provenance, wall time, 수렴 정보.
 
-## 선행 task — HFSS no-ferrite 기준값 (이 스트림에 포함)
-pfsolver no-ferrite와 맞댈 정답이 없다(현재 HFSS는 ferrite-enabled). HFSS no-ferrite 1회 실행해 교차검증 §3.2 채움.
+## 교차검증 의존성 — HFSS no-ferrite 기준값 (GOAL2)
+pfsolver no-ferrite와 맞댈 정답이 없다(현재 HFSS는 ferrite-enabled). HFSS no-ferrite 1회 실행과 교차검증 §3.2 채움은 GOAL2가 담당한다.
 - 입력 `src/peetsfea/data/0.3.x_fixed.toml`(design_id `0_3_7_p6561d2a5c7808f6e`) · TX MULL ferrite를 **non-model**
   (`hfss.modeler.set_object_model_state(<ferrite>, False)`, ssw_ports.py) · 동일 `Setup1 @ 6.78MHz` solve ·
   기존 출력변수(`Ltx/Lrx/M/k/Q/Z`) 추출 · `peetsfea-main/.venv` pyaedt, warm ansysedt attach.
 - 증거: report CSV + 로그 + ferrite non-model 확인 + §3.2 채움(ferrite 대비 L↓·k↓ sanity).
+- 나중에 Palace field output에서 E/H 또는 B-field plot 이미지를 생성해
+  `docs/solver-vs-hfss-crossvalidation-plan.html`에 실제 이미지로 첨부한다(테이블 숫자만 남기지 않음).
 
 ## 완료 증거 패키지 (리뷰 시 제출)
 Palace wrapper + Python API 호출 코드/로그 · `inspect_bundle(...).to_json()` 출력 · negative pytest 로그(파일 누락·port 불일치·GPU 없음 raise) ·
@@ -75,14 +78,15 @@ Palace 실행 command + stdout/stderr · `port-S/V/I.csv`·`network.csv`·`solve
 ## 현재 중간 증거 (2026-06-18)
 - `solver/pfsolver` 독립 서브모듈: Python API만 제공, console script 없음.
 - `../../.venv/bin/pyright` → 0 errors, `../../.venv/bin/python -m pytest -q` → 9 passed.
-- stock `palace:0.16.1` 로컬 이미지 build 완료(`localhost/palace:0.16.1`, image `4f5bf61fa661`) 및 `~/.local/bin/palace --help/--version` wrapper 동작 확인.
+- stock `palace:0.16.1` 로컬 이미지 build 완료(`localhost/palace:0.16.1`, image `8df41bb914ac`, source `d2b68b6` stock packaging baseline) 및 `~/.local/bin/palace --help/--version` wrapper 동작 확인.
 - `run/ssw_0_3_0_fixed` inspect: body 11 / copper 2 / fr4 4 / ferrite 1 / non_model 4.
 - `run/pfsolver_no_ferrite_bundle` inspect: copper 2 / fr4 4 / ferrite 0 / non_model 4, ferrite_enabled=false.
 - `run/pfsolver_no_ferrite_mesh/mesh.msh` · `mesh_tags.json` · `palace_config.json` 생성, body tags 10 / port tags 2 / absorbing boundary 999.
 - Palace JSON schema 검증 및 `~/.local/bin/palace -dry-run palace_config.json` 통과.
-- `pfsolver.solve_bundle(..., mpi_ranks=1)` 진단 solve 완료: `run/pfsolver_no_ferrite_solve_rank1/network.csv` · `derived.csv` · `port_vi.csv` · `solver_manifest.json`; manifest `pfsolver_commit=8111dd2177eaade60262ada970d3e65e7b681d1f`, wall time 30.9 s, Palace stdout에 `GMRES solver converged in 3 iterations` 2회 기록.
-- 기본 4-rank acceptance solve는 현재 GPU free VRAM 부족으로 preflight 차단: `free=2696 MiB`, Palace 4-rank 요구 `required>=3072 MiB`. 다른 `dl` Python process가 2924 MiB 사용 중이라 해당 프로세스 종료/완료 후 재실행 필요.
-- HFSS no-ferrite 기준선은 아직 미실행.
+- `pfsolver.solve_bundle(..., mpi_ranks=1)` 진단 solve 완료: `run/pfsolver_no_ferrite_solve_rank1/network.csv` · `derived.csv` · `port_vi.csv` · `solver_manifest.json`; manifest `pfsolver_commit=8111dd2177eaade60262ada970d3e65e7b681d1f`, wall time 26.0 s, Palace stdout에 `GMRES solver converged in 3 iterations` 2회 기록.
+- `pfsolver.solve_bundle(..., mpi_ranks=2)` MPI 진단 solve 완료: `run/pfsolver_no_ferrite_solve_rank2/*`; manifest wall time 28.5 s, Palace peak memory total 1.8 GiB, HYPRE pool override가 rank별 적용됨.
+- 기본 4-rank acceptance solve는 현재 GPU free VRAM 부족으로 preflight 차단: `free=2506 MiB`, Palace 4-rank 요구 `required>=3072 MiB`. 다른 `dl` Python process가 2924 MiB 사용 중이라 해당 프로세스 종료/완료 후 재실행 필요.
+- HFSS no-ferrite 기준선은 GOAL2에서 진행 예정.
 
 ## Acceptance
 Phase A — `inspect`
@@ -99,11 +103,12 @@ Phase B — `mesh` + config 검증
 
 Phase C — `solve`(no-ferrite, 단일주파수)
 - [x] `pfsolver.solve_bundle(bundle_dir=..., mpi_ranks=1)`가 Palace wrapper를 GPU로 완주 → network/derived/port_vi/manifest 생성(진단 실제 실행).
+- [x] `pfsolver.solve_bundle(bundle_dir=..., mpi_ranks=2)`가 Palace wrapper MPI 경로로 완주(진단 실제 실행).
 - [ ] 기본 `mpi_ranks=4` acceptance solve가 RTX 3070에서 완주.
 - [x] GPU 미부착 시 즉시 exception(폴백 없음, unit test).
 - [ ] phase0 HYPRE OOM이 VRAM/MPI-rank 적응 pool로 통과(8 GB RTX 3070, 4-rank).
 - [x] rank1 manifest 재현 필드 전부.
 
 ## Definition of Done
-`inspect_bundle`·`mesh_bundle`·`solve_bundle`가 no-ferrite 단일주파수에서 Palace 실제 실행으로 `network.csv`를 만들고, Z가 HFSS
-no-ferrite와 **부호/shape/단위 일치**. numeric tolerance는 §3.2 기준값 채워진 뒤에만 요구.
+`inspect_bundle`·`mesh_bundle`·`solve_bundle`가 no-ferrite 단일주파수에서 Palace 실제 실행으로 `network.csv`를 만들고,
+manifest/port audit 산출물을 남긴다. HFSS no-ferrite와의 **부호/shape/단위 일치** 및 numeric tolerance는 GOAL2의 §3.2 기준값이 채워진 뒤에 판정한다.

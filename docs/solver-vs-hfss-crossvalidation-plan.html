@@ -59,7 +59,7 @@
   <h1><span class="g">교차검증 계획</span>: 오픈소스 CUDA 솔버 ⟷ HFSS 터미널 Z-파라미터</h1>
   <p class="lede">동일한 fixed SSW 코일 STEP(<code>src/peetsfea/data/0.3.x_fixed.toml</code> → <code>ssw_scene.step</code>)에 대해,
   <b>HFSS terminal full-wave</b>(ferrite-enabled 실측 <span class="pill done">완료</span>, no-ferrite 재실행 대기)와
-  <b>오픈소스 CUDA full-wave Python API <code>pfsolver</code></b>(<code>solver/pfsolver</code> 독립 서브모듈, <span class="pill done">inspect/mesh/rank1 solve 구현</span>, 4-rank acceptance 대기)가
+  <b>오픈소스 CUDA full-wave Python API <code>pfsolver</code></b>(<code>solver/pfsolver</code> 독립 서브모듈, <span class="pill done">inspect/mesh/rank1·rank2 solve 구현</span>, 4-rank acceptance 대기)가
   <b>6.78&nbsp;MHz</b>에서 같은 Z(f)·L·M·R·C·k를 내는지 검증한다. pfsolver 결과 열은 <b>의도적으로 빈칸</b>으로 두고 실제 Palace 실행 후 채운다(§4·§5).
   4-솔버 준정적 비교는 별도 문서 <code>em-cross-validation-plan.html</code> 참고.</p>
 </div></header>
@@ -77,7 +77,7 @@
         <li><b>L1, L2, M, k</b> — im(Z)/ω 유도</li>
         <li><b>R1, R2, Q1, Q2</b> — re(Z), AC 손실</li>
         <li><b>C1, C2 / SRF</b> — full-wave라 self-resonance 직접 산출</li>
-        <li><b>손실·field</b> — copper/ferrite loss, air-gap B-plane (선택)</li>
+        <li><b>손실·field</b> — copper/ferrite loss, air-gap B-plane, field plot 이미지 첨부</li>
       </ul>
     </div>
     <div class="card">
@@ -157,8 +157,8 @@
 </section>
 
 <section>
-  <h2><span class="n">4.</span> pfsolver (Palace full-wave) <span class="pill todo">rank1 solve 완료 · 4-rank 대기</span></h2>
-  <p class="sub">오픈소스 CUDA full-wave 경로. <code>solver/pfsolver</code> Python API가 같은 STEP을 gmsh로 메시 → Palace wrapper(<code>~/.local/bin/palace</code>)가 stock <code>palace:0.16.1</code> 엔진 솔브 → port S/V/I → Z(f). rank1 진단 solve는 완료됐지만, 아래 비교 표는 <b>HFSS no-ferrite 기준선과 기본 4-rank acceptance 실행 후</b> 채운다.
+  <h2><span class="n">4.</span> pfsolver (Palace full-wave) <span class="pill todo">rank1·rank2 solve 완료 · 4-rank 대기</span></h2>
+  <p class="sub">오픈소스 CUDA full-wave 경로. <code>solver/pfsolver</code> Python API가 같은 STEP을 gmsh로 메시 → Palace wrapper(<code>~/.local/bin/palace</code>)가 stock <code>palace:0.16.1</code> 엔진 솔브 → port S/V/I → Z(f). rank1·rank2 진단 solve는 완료됐지만, 아래 비교 표는 <b>HFSS no-ferrite 기준선과 기본 4-rank acceptance 실행 후</b> 채운다.
   <b>1차 비교 대상은 §3.2 HFSS no-ferrite</b>(아래 표의 "HFSS(참값)" 열은 현재 ferrite-enabled 참고값 → no-ferrite 재실행 후 교체).</p>
   <div class="card" style="border-color:rgba(118,185,0,.35)">
     <b>현재 설정 (HFSS와 정렬)</b>
@@ -170,7 +170,7 @@
       <li>실행: peetsfea-facing CLI 없음. Python API가 <span class="pill cudapill">CUDA</span> <code>Solver.Device=GPU</code> + 4-core MPI Palace wrapper를 호출, HYPRE Umpire pool은 free VRAM/MPI rank 기준으로 adaptive 설정.</li>
     </ul>
   </div>
-  <div class="note ok"><b>현재 Palace 증거:</b> stock <code>palace:0.16.1</code> 로컬 이미지와 <code>~/.local/bin/palace</code> wrapper가 동작한다. <code>run/pfsolver_no_ferrite_mesh/palace_config.json</code> dry-run 통과, <code>pfsolver.solve_bundle(..., mpi_ranks=1)</code> 진단 solve는 <code>run/pfsolver_no_ferrite_solve_rank1/network.csv</code> · <code>derived.csv</code> · <code>port_vi.csv</code> · <code>solver_manifest.json</code>를 생성했고 manifest는 <code>pfsolver_commit=8111dd2</code>, wall time 30.9 s를 기록했다. Palace stdout에는 GMRES 3-iteration 수렴이 기록됐다. 기본 4-rank run은 현재 RTX 3070 free VRAM 2696 MiB로 acceptance 요구 3072 MiB에 못 미쳐 preflight에서 중단한다.</div>
+  <div class="note ok"><b>현재 Palace 증거:</b> stock <code>palace:0.16.1</code> 로컬 이미지와 <code>~/.local/bin/palace</code> wrapper가 동작한다. <code>run/pfsolver_no_ferrite_mesh/palace_config.json</code> dry-run 통과, <code>pfsolver.solve_bundle(..., mpi_ranks=1)</code> 진단 solve는 <code>run/pfsolver_no_ferrite_solve_rank1/*</code>를 생성했고 manifest는 <code>pfsolver_commit=8111dd2</code>, wall time 26.0 s를 기록했다. <code>mpi_ranks=2</code> MPI 진단 solve도 <code>run/pfsolver_no_ferrite_solve_rank2/*</code>로 완주했고 wall time 28.5 s, Palace peak memory total 1.8 GiB를 기록했다. 기본 4-rank run은 현재 RTX 3070 free VRAM 2506 MiB로 acceptance 요구 3072 MiB에 못 미쳐 preflight에서 중단한다.</div>
   <h3>pfsolver @ 6.78 MHz (채울 예정)</h3>
   <table>
     <tr><th>양</th><th class="num">pfsolver 값</th><th class="num">HFSS(참값)</th><th class="num">오차 vs HFSS</th><th>판정</th></tr>
@@ -193,6 +193,7 @@
   L = im(Z)/ω,  R = re(Z),  M = im(Z12)/ω,  k = M/√(L1·L2),  Q = ωL/R<br>
   C·SRF: sweep에서 im(Z)=0 인 f₀ →  C = 1 / ((2πf₀)²·L)</div>
   <div class="note"><b>부호 함정:</b> Z는 <code>port-S.csv</code>에서 산출한다. Palace의 <code>port-V/I.csv</code>는 open-circuit Z 행렬이 아니므로 직접 V/I로 Z를 만들지 않고, <code>V_inc</code>+total V로 S를 재구성해 <code>port-S.csv</code>와 일치하는지 검증한다. HFSS와 같은 port current 방향으로 고정한 뒤에만 표를 채운다.</div>
+  <div class="note"><b>Field plot TODO:</b> 4-rank acceptance 이후 Palace field output에서 air-gap E/H 또는 B-field plot 이미지를 생성해 이 HTML에 실제 이미지로 첨부한다. 숫자 표만 남기지 않고, 형상/포트/field sanity를 눈으로 확인할 수 있게 둔다.</div>
 </section>
 
 <section>
@@ -232,6 +233,7 @@
       <tr><td><b>5 Solve</b></td><td>CUDA + 4-core MPI full-wave, 6.78 MHz</td><td>Python API → Palace wrapper → stock/forked Palace <code>Driven</code> 엔진 CLI</td></tr>
       <tr><td><b>6 Post</b></td><td>port-S/V/I.csv → Z(f), 부호·Z₀ 정규화, L/M/R/C/k, 손실</td><td>Python postprocess</td></tr>
       <tr><td><b>7 Emit</b></td><td>solver-neutral <code>em_result.json</code> + network/derived/loss CSV + manifest</td><td>공통 스키마</td></tr>
+      <tr><td><b>8 Visual</b></td><td>Palace field output → field plot PNG/SVG → HTML 첨부</td><td>postprocess</td></tr>
     </table>
   </div>
 
@@ -243,7 +245,7 @@
   <div class="phase done"><b>M3 — <code>pfsolver.mesh_bundle()</code>: gmsh tet + physical group 태깅</b>
     <div class="m">no-ferrite SSW bundle에서 STEP→tet, copper/FR4/port/boundary physical group, Palace JSON schema 검증 통과.</div></div>
   <div class="phase"><b>M4 — <code>pfsolver.solve_bundle()</code>: no-ferrite 단일 주파수부터</b>
-    <div class="m">rank1 진단 실제 실행 완료. 기본 4-rank acceptance는 현재 다른 GPU 프로세스 때문에 free VRAM이 부족해 대기.</div></div>
+    <div class="m">rank1/rank2 진단 실제 실행 완료. 기본 4-rank acceptance는 현재 다른 GPU 프로세스 때문에 free VRAM이 부족해 대기.</div></div>
   <div class="phase"><b>M5 — postprocess → Z(f) + 이 표 채우기</b>
     <div class="m">S→Z 후처리와 port-V 기반 S 검증, rank1 산출물 생성 완료. §4·§5 pfsolver 열은 HFSS no-ferrite 기준선과 4-rank acceptance 실행 뒤 채움.</div></div>
   <div class="phase"><b>M-fork — Palace 패치: 복소 μ(자기손실) + 주파수 종속 material</b>
@@ -262,15 +264,15 @@
     <tr><td>독립 Python API 서브모듈 + GPU 게이트</td><td><span class="pill done">구현</span></td><td class="num">—</td><td><code>solver/pfsolver</code> API, CLI 없음</td></tr>
     <tr><td>stock Palace 0.16.1 로컬 이미지(M1)</td><td><span class="pill done">완료</span></td><td class="num">1회 빌드 완료</td><td><code>~/.local/bin/palace</code> wrapper → <code>palace:0.16.1</code></td></tr>
     <tr><td>ingest+mesh, no-ferrite(M2–M3)</td><td><span class="pill done">검증</span></td><td class="num">~초</td><td><code>run/pfsolver_no_ferrite_mesh/mesh.msh</code> + config</td></tr>
-    <tr><td>solve+post, no-ferrite(M4–M5)</td><td><span class="pill todo">rank1 완료 / 4-rank 대기</span></td><td class="num">rank1 30.9 s</td><td><code>run/pfsolver_no_ferrite_solve_rank1/*</code>; 4-rank는 GPU free VRAM 확보 후</td></tr>
+    <tr><td>solve+post, no-ferrite(M4–M5)</td><td><span class="pill todo">rank1·rank2 완료 / 4-rank 대기</span></td><td class="num">rank1 26.0 s<br>rank2 28.5 s</td><td><code>run/pfsolver_no_ferrite_solve_rank1/*</code><br><code>run/pfsolver_no_ferrite_solve_rank2/*</code>; 4-rank는 GPU free VRAM 확보 후</td></tr>
     <tr><td>Palace 패치: 복소 μ 자기손실(M-fork)</td><td><span class="pill todo">예정</span></td><td class="num">코어 수정</td><td>ferrite μ″ + μ(f) → V3 선행조건</td></tr>
-    <tr><td>sweep·C·손실·field, ferrite 포함(M5b)</td><td><span class="pill todo">예정</span></td><td class="num">—</td><td>SRF·C·loss·B-plane</td></tr>
+    <tr><td>sweep·C·손실·field, ferrite 포함(M5b)</td><td><span class="pill todo">예정</span></td><td class="num">—</td><td>SRF·C·loss·B-plane + HTML field plot image</td></tr>
     <tr><td>교차검증 판정 + 리포트</td><td><span class="pill todo">예정</span></td><td class="num">—</td><td>합격/불일치 원인 분석</td></tr>
   </table>
-  <div class="note ok"><b>요약:</b> HFSS ferrite-enabled 참고값과 빈 pfsolver 표가 나란히 준비됐다. <code>pfsolver</code> 독립 Python API, no-ferrite mesh/config, stock Palace 0.16.1 wrapper, rank1 진단 solve는 동작한다. 다음 액션은 <b>GPU free VRAM 확보 후 4-rank acceptance solve</b>와 <b>HFSS no-ferrite 기준선</b>이다. pfsolver 열이 채워지고 tolerance를 통과하면, 이 설계점에서 HFSS 라이선스 없이 동일 Z를 재현했다는 첫 증거가 된다.</div>
+  <div class="note ok"><b>요약:</b> HFSS ferrite-enabled 참고값과 빈 pfsolver 표가 나란히 준비됐다. <code>pfsolver</code> 독립 Python API, no-ferrite mesh/config, stock Palace 0.16.1 wrapper, rank1/rank2 진단 solve는 동작한다. 다음 액션은 <b>GPU free VRAM 확보 후 4-rank acceptance solve</b>와 <b>HFSS no-ferrite 기준선</b>이다. pfsolver 열이 채워지고 tolerance를 통과하면, 이 설계점에서 HFSS 라이선스 없이 동일 Z를 재현했다는 첫 증거가 된다.</div>
 </section>
 
 </main>
-<footer><div class="wrap">peetsfea 0.3.7 · pfsolver vs HFSS 교차검증 <b>계획</b> @ 6.78 MHz · HFSS no-ferrite 대기 / pfsolver inspect+mesh+rank1 solve 구현 · 4-rank GPU acceptance 대기 · ferrite 자기손실은 Palace fork 패치(복소 μ) · 준정적 4-솔버 비교는 em-cross-validation-plan.html</div></footer>
+<footer><div class="wrap">peetsfea 0.3.7 · pfsolver vs HFSS 교차검증 <b>계획</b> @ 6.78 MHz · HFSS no-ferrite 대기 / pfsolver inspect+mesh+rank1/rank2 solve 구현 · 4-rank GPU acceptance 대기 · ferrite 자기손실은 Palace fork 패치(복소 μ) · 준정적 4-솔버 비교는 em-cross-validation-plan.html</div></footer>
 </body>
 </html>
