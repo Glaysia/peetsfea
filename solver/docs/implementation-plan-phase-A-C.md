@@ -13,7 +13,7 @@
 > `mpirun -np 4 palace <config.json>`를 소유하며, 이 CLI는 pfsolver 사용자 표면이 아니라 Palace 엔진 경계다.
 > (이전 C++ 드라이버 `solver/src/*`는 폐기됨.) gmsh는 **Python API** in-process.
 
-- 코어: **forked Palace** `Driven`(full-wave). CUDA mandatory, 4-core MPI, CPU 폴백 없음.
+- 코어: **Palace** `Driven`(full-wave). no-ferrite는 stock `palace:0.16.1`, ferrite 복소 μ 단계는 forked `palace:0.16.1pf`. CUDA mandatory, 4-core MPI, CPU 폴백 없음.
 - **Sweep 모델(중요):** HFSS terminal-network처럼 **단일 주파수(6.78 MHz)에서 메시를 한 번 확정**하고, 그 **같은 메시를 다른 주파수에 재사용**해 sweep한다(주파수마다 re-mesh/재적응하는 "진짜 sweep"은 자원 과다라 안 함). 이는 Palace `Driven`의 native 동작(고정 메시 위 다주파수 해; 필요시 PROM/adaptive fast sweep)과 정확히 일치.
 
 Python API 최종형: `pfsolver.inspect_bundle(bundle_dir)`, `pfsolver.mesh_bundle(bundle_dir, ...)`,
@@ -89,7 +89,7 @@ Python API 최종형: `pfsolver.inspect_bundle(bundle_dir)`, `pfsolver.mesh_bund
 - acceptance: group 수·태깅이 `inspect` 모델과 1:1, gmsh 무에러.
 
 ### B.2 config emit (`solver/pfsolver/src/pfsolver/palace_config.py`)
-- `Scene` + mesh tags → forked Palace `Driven` config(JSON):
+- `Scene` + mesh tags → Palace `Driven` config(JSON):
   `Problem.Type=Driven`, `Domains.Materials`(group별 ε/μ/σ/LossTan),
   `Boundaries.LumpedPort`×2(tx/rx, Z₀=50Ω, edge group), `Boundaries.Absorbing`(외곽),
   `Solver.Device=GPU`, 단일 주파수 6.78 MHz.
@@ -125,7 +125,7 @@ Python API 최종형: `pfsolver.inspect_bundle(bundle_dir)`, `pfsolver.mesh_bund
 ### C.2 HYPRE Umpire pool 적응
 - free VRAM 기반 device/unified/pinned pool 크기 산출
   (phase0 기준: device/unified 512 MiB, pinned 64 MiB; VRAM에 비례 스케일).
-- forked Palace에 pool 크기 주입(환경변수/override lib 또는 config 필드).
+- Palace 엔진에 pool 크기 주입(환경변수/override lib 또는 config 필드).
 - acceptance: 8 GB RTX 3070에서 cpw/cylinder 예제가 OOM 없이 완주(phase0 재현).
 
 ### C.3 MPI (Palace engine)
@@ -138,7 +138,7 @@ Python API 최종형: `pfsolver.inspect_bundle(bundle_dir)`, `pfsolver.mesh_bund
 - mesh가 VRAM 초과 시 분할/감 refine 전략(우선 경고+가이드, 자동화는 후속).
 
 ### C.5 telemetry → `solver_manifest.json`
-- solver(name=forked-palace, commit), run command, mesh 입력 해시, pool 설정,
+- solver(name=palace, version/commit), run command, mesh 입력 해시, pool 설정,
   gpu_name·vram, mpi ranks, wall time, 수렴 정보, bundle design_id/provenance.
 
 ### C.6 acceptance
@@ -150,7 +150,7 @@ Python API 최종형: `pfsolver.inspect_bundle(bundle_dir)`, `pfsolver.mesh_bund
 ---
 
 ## Phase A–C 종료 시점의 상태
-- `pfsolver.inspect_bundle`·`mesh_bundle`·`solve_bundle` 동작, **no-ferrite 단일주파수**에서 forked Palace가
+- `pfsolver.inspect_bundle`·`mesh_bundle`·`solve_bundle` 동작, **no-ferrite 단일주파수**에서 Palace wrapper가
   2-포트 Z를 산출하고 HFSS와 부호/shape/단위 일치.
 - 교차검증 문서 §4·§5의 pfsolver 열을 **no-ferrite 행부터** 채우기 시작.
 - 다음(D+): SSW 코일 본체, ferrite(= **M-fork 복소 μ 패치** 선행), sweep·SRF·C, loss/field,

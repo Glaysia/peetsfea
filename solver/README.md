@@ -7,7 +7,7 @@ HFSS를 대체해 0.3.7 STEP 번들에서 terminal-network Z(f)를 산출한다.
   번들 ingest → gmsh(Python) 메시 → Palace config emit → `~/.local/bin/palace` 엔진 래퍼 호출 → CSV→Z → manifest.
 - peetsfea-facing CLI는 없다. peetsfea는 나중에 `pfsolver` Python API를 import/call한다.
 - 컨테이너 런타임은 Palace 래퍼가 숨긴다. 로컬 dev 기본은 stock `palace:0.16.1`; ferrite 포크 단계는 `PFSOLVER_PALACE_IMAGE=palace:0.16.1pf`.
-- **C++은 forked Palace 안에만** (주파수 종속 복소 μ 패치). 오케스트레이터엔 C++ 없음.
+- **C++은 Palace 엔진 안에만** (주파수 종속 복소 μ 패치는 Palace fork). 오케스트레이터엔 C++ 없음.
 - `pfsolver`와 Palace의 안정 인터페이스 = **Palace wrapper CLI(JSON config / CSV)**. Palace엔 stable 공개 libpalace 없음.
 
 ## 모드

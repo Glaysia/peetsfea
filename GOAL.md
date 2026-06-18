@@ -7,13 +7,14 @@
 ## 두 스트림
 - **[GOAL1_pfsolver.md](GOAL1_pfsolver.md)** — `solver/pfsolver` 독립 Python API 서브프로젝트.
   peetsfea가 나중에 Python API로 호출할 `inspect_bundle`/`mesh_bundle`/`solve_bundle` 표면을 제공하고,
-  no-ferrite 단일주파수에서 도커 Palace를 호출해 Z(f)를 산출한다. HFSS no-ferrite 기준값 생성(§3.2)도 이 스트림.
+  no-ferrite 단일주파수에서 Palace wrapper(`~/.local/bin/palace`)를 호출해 Z(f)를 산출한다.
+  HFSS no-ferrite 기준값 생성(§3.2)도 이 스트림.
 - **[GOAL2_forked_palace.md](GOAL2_forked_palace.md)** — Palace fork: CUDA 도커 엔진(`peetsfea-palace:dev`) + 주파수 종속 복소 μ(자기손실) 패치.
 
 ## 아키텍처 (pyaedt → ansysedt 구도)
 - `pfsolver` = **독립 Python API 서브프로젝트**(`solver/pfsolver`, pyright strict + pydantic), 도커 밖.
 - peetsfea-facing CLI는 만들지 않는다. peetsfea는 나중에 `pfsolver` Python API를 import/call한다.
-- **Docker = forked Palace 엔진만**(CUDA C++). C++은 포크 안에만, 오케스트레이터엔 없음.
+- **컨테이너 = Palace 엔진만**(CUDA C++). C++은 Palace 포크 안에만, 오케스트레이터엔 없음.
 - `pfsolver`와 Palace 엔진의 경계만 **Palace wrapper CLI(JSON config / CSV)** 다. 로컬 기본은 `~/.local/bin/palace <config.json>`이고, 래퍼가 컨테이너와 `mpirun -np 4 palace`를 소유한다. Palace엔 stable libpalace 없음 → 이 내부 엔진 호출이 안정 계약.
 
 ## 병렬성 (두 스트림이 어떻게 안 막히나)
@@ -34,7 +35,7 @@ HFSS terminal처럼 **단일 주파수에서 메시 확정 → 같은 메시로 
 - 구현은 에이전트들이 각 GOAL을 따라 **병렬** 진행.
 - Claude(나)는 1시간마다 호출되어 **각 스트림의 Acceptance/Hard Rules 기준으로 검수**(코드 안 짬, 증거 요구).
 - "완료"는 주장 아니라 각 GOAL의 **완료 증거 패키지**로 증명. mock/stub·silent degrade·CPU 폴백·Python API/Palace JSON-CSV 계약 파손은 미완.
-- 공통 강조: ① 실제 Palace run 증거 ② 아키텍처 경계(`solver/pfsolver`=Python API / 도커 안=포크 Palace만) ③ no-ferrite↔ferrite 경계 ④ Palace JSON/CSV 계약 보존 ⑤ manifest 재현성.
+- 공통 강조: ① 실제 Palace run 증거 ② 아키텍처 경계(`solver/pfsolver`=Python API / 컨테이너 안=Palace 엔진만) ③ no-ferrite↔ferrite 경계 ④ Palace JSON/CSV 계약 보존 ⑤ manifest 재현성.
 
 ## 공통 기준값 / 참조
 - 물성 SSOT: [solver/data/materials.toml](solver/data/materials.toml) (copper σ=5.8e7, FR4 εr 4.4/tanδ 0.02, ferrite μ=135.59−j0.296 등).

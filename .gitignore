@@ -72,3 +72,18 @@ run/*
 
 tmp*/*
 .obsidian/workspace.json
+
+# Palace solver run output (regenerable; was noisy in git)
+phase0_sanity/*/postpro/
+*.vtu
+*.pvtu
+*.pvd
+
+# Redundant upstream Palace examples clone (use solver/palace/examples instead)
+phase0_sanity/palace_v0.16.0_examples/
+
+# pfsolver Python build/cache
+solver/pfsolver/**/__pycache__/
+solver/pfsolver/.pytest_cache/
+solver/pfsolver/**/*.egg-info/
+solver/pfsolver/.venv/

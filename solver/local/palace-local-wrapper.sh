@@ -29,7 +29,10 @@ case "${RUNTIME}" in
 esac
 
 # CUDA mandatory: the image is CUDA-only; if no GPU is attached, palace fails.
+# The image's /usr/local/bin/palace wrapper owns LD_PRELOAD and delegates to the
+# installed Palace MPI wrapper. Keep MPI inside the container, but pass rank and
+# root-allowance options to that wrapper instead of nesting mpirun here.
 exec "${RUNTIME}" run --rm "${gpu[@]}" \
   -v "${workdir}:${workdir}" -w "${workdir}" \
   "${IMAGE}" \
-  /bin/bash -lc 'exec mpirun --allow-run-as-root -np "$0" palace "$@"' "${RANKS}" "$@"
+  /bin/bash -lc 'exec palace -np "$0" -launcher-args "--allow-run-as-root" "$@"' "${RANKS}" "$@"

@@ -5,7 +5,7 @@
 
 ## 목표
 `solver/pfsolver` 독립 Python API 서브프로젝트가 동작하고, `inspect_bundle`·`mesh_bundle`·`solve_bundle`
-API가 **no-ferrite 단일주파수(6.78 MHz)** 에서 도커 안 Palace를 호출해 2-포트 terminal Z를 산출,
+API가 **no-ferrite 단일주파수(6.78 MHz)** 에서 Palace wrapper가 감싼 컨테이너 Palace를 호출해 2-포트 terminal Z를 산출,
 HFSS no-ferrite와 부호/shape/단위가 일치하는 상태까지.
 
 ## 아키텍처 (pyaedt → ansysedt 구도)
@@ -13,12 +13,12 @@ HFSS no-ferrite와 부호/shape/단위가 일치하는 상태까지.
 - peetsfea-facing CLI는 만들지 않는다. peetsfea는 나중에 `pfsolver` Python API를 import/call한다.
 - repo root `src/peetsfea/`에 구현하지 않는다. `solver/pfsolver/`는 `solver/palace/`와 별도 서브모듈/서브프로젝트로 개발한다.
 - 역할: 번들 ingest → **gmsh(Python API)** 메시 → Palace `Driven` config(JSON) emit →
-  **도커 Palace 엔진 CLI 호출**(JSON in / CSV out) → CSV→Z 후처리 → manifest.
+  **Palace wrapper CLI 호출**(JSON in / CSV out) → CSV→Z 후처리 → manifest.
 - 컨테이너 안엔 **Palace 엔진만**(stock `palace:0.16.1`, ferrite 단계는 GOAL2 산출 `palace:0.16.1pf`). 오케스트레이터엔 C++ 없음.
 
 ## 병렬성 (GOAL2와의 경계)
 - **Phase A(inspect)·B(mesh·config·dry-run)** 는 Palace solve가 필요 없다 → **GOAL2와 완전 병렬, 의존 0.**
-- **Phase C(solve)** 만 도커 Palace 이미지가 필요 → **GOAL2의 M1(upstream-동등 빌드)** 이면 충분(μ 패치 불필요).
+- **Phase C(solve)** 만 Palace 이미지/래퍼가 필요 → **GOAL2의 M1(upstream-동등 빌드)** 이면 충분(μ 패치 불필요).
   no-ferrite는 upstream Palace 기능만 쓴다.
 - **ferrite(복소 μ)** 만 GOAL2의 M-fork에 의존 → 이번 push 범위 밖(나중).
 - 임시 unblock: GOAL2 이미지 전이라도 Phase C는 stock upstream `palace` 이미지로 개발/테스트 가능(no-ferrite라 동등).
@@ -38,7 +38,7 @@ HFSS no-ferrite와 부호/shape/단위가 일치하는 상태까지.
 ## 범위 (이번 push)
 포함: `inspect_bundle()`(번들 ingest, pydantic, 누락 즉시 fail) ·
 `mesh_bundle()`(gmsh tet + physical group 태깅) ·
-`solve_bundle()`(no-ferrite 단일주파수 6.78 MHz, 도커 Palace, CUDA+4-core MPI) · 출력 스키마
+`solve_bundle()`(no-ferrite 단일주파수 6.78 MHz, Palace wrapper, CUDA+4-core MPI) · 출력 스키마
 (`em_result.json`·`network.csv`·`derived.csv`·`port_vi.csv`·`solver_manifest.json`).
 제외: ferrite(복소 μ, GOAL2 후) · sweep/SRF/C · loss/field · Mode 2/3 추론.
 
@@ -49,7 +49,7 @@ HFSS no-ferrite와 부호/shape/단위가 일치하는 상태까지.
   + `solver/data/materials.toml`(물성 SSOT).
 
 ## Hard Rules (위반 시 즉시 실패 — degrade 금지)
-- **CUDA mandatory.** 도커 Palace는 CUDA-only. 오케스트레이터가 invoke 전 GPU 게이트(`nvidia-smi`)를 통과하지 못하면 즉시 exception. **CPU 폴백 없음.**
+- **CUDA mandatory.** Palace 엔진은 CUDA-only. 오케스트레이터가 invoke 전 GPU 게이트(`nvidia-smi`)를 통과하지 못하면 즉시 exception. **CPU 폴백 없음.**
 - **아키텍처 경계.** 오케스트레이터는 Python(도커 밖). 도커 안에 Python 넣지 않음. C++ 드라이버 부활 금지.
 - **No pfsolver CLI.** 사용자/peetsfea-facing 진입점은 Python API뿐이다. CLI wrapper/entrypoint/console script를 만들지 않는다.
 - **Full-wave only.** Palace `Driven`. MQS/electrostatic/Q3D 도피 금지.
@@ -72,20 +72,29 @@ gmsh mesh/group summary · Palace **config 검증(validate-config/schema/dry-run
 Palace 실행 command + stdout/stderr · `port-S/V/I.csv`·`network.csv`·`solver_manifest.json` 경로 ·
 `solver/pfsolver` pytest(unit/integration) + **pyright strict** 통과.
 
+## 현재 중간 증거 (2026-06-18)
+- `solver/pfsolver` 독립 서브모듈: Python API만 제공, console script 없음.
+- `../../.venv/bin/pyright` → 0 errors, `../../.venv/bin/python -m pytest -q` → 7 passed.
+- `run/ssw_0_3_0_fixed` inspect: body 11 / copper 2 / fr4 4 / ferrite 1 / non_model 4.
+- `run/pfsolver_no_ferrite_bundle` inspect: copper 2 / fr4 4 / ferrite 0 / non_model 4, ferrite_enabled=false.
+- `run/pfsolver_no_ferrite_mesh/mesh.msh` · `mesh_tags.json` · `palace_config.json` 생성, body tags 10 / port tags 2 / absorbing boundary 999.
+- Palace JSON schema 검증 및 `~/.local/bin/palace -dry-run palace_config.json` 통과. 실제 solve와 HFSS no-ferrite 기준선은 다음 단계.
+
 ## Acceptance
 Phase A — `inspect`
-- [ ] `pfsolver.inspect_bundle(Path("run/ssw_0_3_0_fixed"))` → body 11 / copper 2 / fr4 4 / ferrite 1 / non_model 4, port tx 1·rx 1.
-- [ ] 번들 파일 1개 지우면 pydantic/contract exception으로 즉시 실패.
-- [ ] `Scene.to_json()`이 body·port 좌표·freq·material·ferrite flag를 빠짐없이 직렬화.
-- [ ] 파서 pytest + pyright strict 통과.
+- [x] `pfsolver.inspect_bundle(Path("run/ssw_0_3_0_fixed"))` → body 11 / copper 2 / fr4 4 / ferrite 1 / non_model 4, port tx 1·rx 1.
+- [x] 번들 파일 1개 지우면 pydantic/contract exception으로 즉시 실패(unit test).
+- [x] `Scene.to_json()`이 body·port 좌표·freq·material·ferrite flag를 빠짐없이 직렬화.
+- [x] 파서 pytest + pyright strict 통과.
 
 Phase B — `mesh` + config 검증
-- [ ] gmsh 무에러 `mesh.msh` + group↔role 태그, group이 inspect 모델과 1:1.
-- [ ] emit한 Palace config가 validate-config/dry-run 통과.
+- [x] gmsh 무에러 `mesh.msh` + group↔role 태그, group이 inspect 모델과 1:1.
+- [x] emit한 Palace config가 JSON schema 검증 통과.
+- [x] `~/.local/bin/palace -dry-run palace_config.json` 실행 통과(`palace:0.16.1`).
 - [ ] minimal two-port에서 S/Z 2×2·단위·상반성(Z=Zᵀ); S→Z와 V/I→Z 두 경로 일치(부호 포함).
 
 Phase C — `solve`(no-ferrite, 단일주파수)
-- [ ] `pfsolver.solve_bundle(bundle_dir=...)`가 도커 Palace를 GPU로 완주 → network/derived/port_vi/manifest 생성(실제 실행).
+- [ ] `pfsolver.solve_bundle(bundle_dir=...)`가 Palace wrapper를 GPU로 완주 → network/derived/port_vi/manifest 생성(실제 실행).
 - [ ] GPU 미부착 시 즉시 exception(폴백 없음).
 - [ ] phase0 HYPRE OOM이 VRAM 적응 pool로 통과(8 GB RTX 3070).
 - [ ] manifest 재현 필드 전부.
