@@ -7,7 +7,7 @@
 `solver/pfsolver` 독립 Python API 서브프로젝트가 동작하고, `inspect_bundle`·`mesh_bundle`·`solve_bundle`
 API가 **no-ferrite 단일주파수(6.78 MHz)** 에서 Palace wrapper가 감싼 컨테이너 Palace를 호출해
 2-포트 terminal Z를 산출하고 재현 가능한 manifest를 남기는 상태까지. HFSS no-ferrite numeric 기준선은
-GOAL2가 따로 채운 뒤 교차검증한다.
+GOAL2가 채웠고, 현재 pfsolver 수치 교차검증은 conductor/air-domain 모델링 보정 전이라 FAIL로 기록한다.
 
 ## 아키텍처 (pyaedt → ansysedt 구도)
 - `pfsolver` = **독립 Python API 서브프로젝트** (`solver/pfsolver`, pyright strict + pydantic), **도커 밖**.
@@ -75,7 +75,7 @@ gmsh mesh/group summary · Palace **config 검증(validate-config/schema/dry-run
 Palace 실행 command + stdout/stderr · `port-S/V/I.csv`·`network.csv`·`solver_manifest.json` 경로 ·
 `solver/pfsolver` pytest(unit/integration) + **pyright strict** 통과.
 
-## 현재 중간 증거 (2026-06-18)
+## 현재 증거 (2026-06-19)
 - `solver/pfsolver` 독립 서브모듈: Python API만 제공, console script 없음.
 - `../../.venv/bin/pyright` → 0 errors, `../../.venv/bin/python -m pytest -q` → 11 passed.
 - stock `palace:0.16.1` 로컬 이미지 build 완료(`localhost/palace:0.16.1`, image `8df41bb914ac`, source `d2b68b6` stock packaging baseline) 및 `~/.local/bin/palace --help/--version` wrapper 동작 확인.
@@ -85,8 +85,10 @@ Palace 실행 command + stdout/stderr · `port-S/V/I.csv`·`network.csv`·`solve
 - Palace JSON schema 검증 및 `~/.local/bin/palace -dry-run palace_config.json` 통과.
 - `pfsolver.solve_bundle(..., mpi_ranks=1)` 진단 solve 완료: `run/pfsolver_no_ferrite_solve_rank1/network.csv` · `derived.csv` · `port_vi.csv` · `solver_manifest.json`; manifest `pfsolver_commit=8111dd2177eaade60262ada970d3e65e7b681d1f`, wall time 26.0 s, Palace stdout에 `GMRES solver converged in 3 iterations` 2회 기록.
 - `pfsolver.solve_bundle(..., mpi_ranks=2)` MPI 진단 solve 완료: `run/pfsolver_no_ferrite_solve_rank2/*`; manifest wall time 28.5 s, Palace peak memory total 1.8 GiB, HYPRE pool override가 rank별 적용됨.
-- 기본 4-rank acceptance solve는 현재 GPU free VRAM 부족으로 preflight 차단: `free=2339 MiB`, Palace 4-rank 요구 `required>=3072 MiB`. 다른 `dl` Python process가 2924 MiB 사용 중이라 해당 프로세스 종료/완료 후 재실행 필요.
+- `pfsolver.solve_bundle(..., mpi_ranks=4)` 기본 acceptance solve 완료: `run/pfsolver_no_ferrite_solve_rank4/network.csv` · `derived.csv` · `port_vi.csv` · `solver_manifest.json`; manifest `pfsolver_commit=a5cb138cf50473f905c24552e444a903fa0121bc`, wall time 27.2 s, Palace stdout에 `Running with 4 MPI processes` 및 `GMRES solver converged in 3 iterations` 2회 기록.
+- phase0 HYPRE OOM 경로 통과: 4-rank stderr에 HYPRE pool override 4회 적용(`device=86654976`, `unified=86654976`, `pinned=16777216`), Palace peak memory total 3.1 GiB.
 - HFSS no-ferrite 기준선 완료: `run/hfss_no_ferrite_fixed_full/Results1_Pass.csv` · `Results2_Last.csv` · `Results3_Freq.csv`; ferrite body 0, non_model 4, `Setup1 @ 6.78MHz`, 11 pass, sweep 0.1–100 MHz 81pt, solve 592.7 s. 기준값: Ltx 5.6732 µH, Lrx 5.0391 µH, M 0.1523 µH, k 0.02849, R1 0.2798 Ω, R2 0.2151 Ω.
+- HFSS numeric cross-validation은 FAIL: rank4 pfsolver 값은 Ltx 1.05e-9 µH, Lrx 5.17e-10 µH, M 6.07e-16 µH, R1 0.000421 Ω, R2 0.000424 Ω로 HFSS 대비 약 100% 낮다. API/solver orchestration acceptance는 닫혔지만, HFSS 동등 수치 재현은 Palace conductor boundary + air-domain/absorbing-boundary 모델링 보정 후 별도 진행한다.
 
 ## Acceptance
 Phase A — `inspect`
@@ -105,9 +107,9 @@ Phase B — `mesh` + config 검증
 Phase C — `solve`(no-ferrite, 단일주파수)
 - [x] `pfsolver.solve_bundle(bundle_dir=..., mpi_ranks=1)`가 Palace wrapper를 GPU로 완주 → network/derived/port_vi/manifest 생성(진단 실제 실행).
 - [x] `pfsolver.solve_bundle(bundle_dir=..., mpi_ranks=2)`가 Palace wrapper MPI 경로로 완주(진단 실제 실행).
-- [ ] 기본 `mpi_ranks=4` acceptance solve가 RTX 3070에서 완주.
+- [x] 기본 `mpi_ranks=4` acceptance solve가 RTX 3070에서 완주.
 - [x] GPU 미부착 시 즉시 exception(폴백 없음, unit test).
-- [ ] phase0 HYPRE OOM이 VRAM/MPI-rank 적응 pool로 통과(8 GB RTX 3070, 4-rank).
+- [x] phase0 HYPRE OOM이 VRAM/MPI-rank 적응 pool로 통과(8 GB RTX 3070, 4-rank).
 - [x] rank1 manifest 재현 필드 전부.
 
 ## Definition of Done

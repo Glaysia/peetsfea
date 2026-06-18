@@ -34,6 +34,7 @@
   .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700}
   .done{background:rgba(52,212,183,.15);color:var(--ok);border:1px solid rgba(52,212,183,.35)}
   .todo{background:rgba(255,180,84,.13);color:var(--todo);border:1px solid rgba(255,180,84,.35)}
+  .fail{background:rgba(255,93,93,.13);color:#ff9b9b;border:1px solid rgba(255,93,93,.35)}
   .cudapill{background:rgba(118,185,0,.14);color:#a9e05a;border:1px solid rgba(118,185,0,.4)}
   .card{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:18px;margin:10px 0}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -41,6 +42,7 @@
   .note{margin-top:12px;padding:12px 16px;border-radius:10px;background:rgba(255,180,84,.08);
         border:1px solid rgba(255,180,84,.3);color:#ffd9a3;font-size:13.5px}
   .note.ok{background:rgba(52,212,183,.08);border-color:rgba(52,212,183,.3);color:#a9ecdc}
+  .note.warn{background:rgba(255,93,93,.08);border-color:rgba(255,93,93,.3);color:#ffc4c4}
   ul{margin:6px 0 0;padding-left:20px;color:var(--mut)}
   ul li{margin:3px 0}
   .eq{background:var(--code);border:1px solid var(--bd);border-radius:10px;padding:12px 16px;color:#cdd9ff;
@@ -59,8 +61,8 @@
   <h1><span class="g">교차검증 계획</span>: 오픈소스 CUDA 솔버 ⟷ HFSS 터미널 Z-파라미터</h1>
   <p class="lede">동일한 fixed SSW 코일 STEP(<code>src/peetsfea/data/0.3.x_fixed.toml</code> → <code>ssw_scene.step</code>)에 대해,
   <b>HFSS terminal full-wave</b>(ferrite-enabled 실측 <span class="pill done">완료</span>, no-ferrite <span class="pill done">완료</span>)와
-  <b>오픈소스 CUDA full-wave Python API <code>pfsolver</code></b>(<code>solver/pfsolver</code> 독립 서브모듈, <span class="pill done">inspect/mesh/rank1·rank2 solve 구현</span>, 4-rank acceptance 대기)가
-  <b>6.78&nbsp;MHz</b>에서 같은 Z(f)·L·M·R·C·k를 내는지 검증한다. pfsolver 결과 열은 <b>의도적으로 빈칸</b>으로 두고 실제 Palace 실행 후 채운다(§4·§5).
+  <b>오픈소스 CUDA full-wave Python API <code>pfsolver</code></b>(<code>solver/pfsolver</code> 독립 서브모듈, <span class="pill done">inspect/mesh/rank1·rank2·rank4 solve 구현</span>, numeric calibration 필요)가
+  <b>6.78&nbsp;MHz</b>에서 같은 Z(f)·L·M·R·C·k를 내는지 검증한다. pfsolver rank4 결과는 §4·§5에 채웠고, 현재 numeric parity는 FAIL이다.
   4-솔버 준정적 비교는 별도 문서 <code>em-cross-validation-plan.html</code> 참고.</p>
 </div></header>
 
@@ -160,35 +162,35 @@
 </section>
 
 <section>
-  <h2><span class="n">4.</span> pfsolver (Palace full-wave) <span class="pill todo">rank1·rank2 solve 완료 · 4-rank 대기</span></h2>
-  <p class="sub">오픈소스 CUDA full-wave 경로. <code>solver/pfsolver</code> Python API가 같은 STEP을 gmsh로 메시 → Palace wrapper(<code>~/.local/bin/palace</code>)가 stock <code>palace:0.16.1</code> 엔진 솔브 → port S/V/I → Z(f). rank1·rank2 진단 solve는 완료됐지만, 아래 비교 표는 <b>HFSS no-ferrite 기준선과 기본 4-rank acceptance 실행 후</b> 채운다.
-  <b>1차 비교 대상은 §3.2 HFSS no-ferrite</b>(아래 표의 "HFSS(참값)" 열은 현재 ferrite-enabled 참고값 → no-ferrite 재실행 후 교체).</p>
+  <h2><span class="n">4.</span> pfsolver (Palace full-wave) <span class="pill done">rank1·rank2·rank4 solve 완료</span></h2>
+  <p class="sub">오픈소스 CUDA full-wave 경로. <code>solver/pfsolver</code> Python API가 같은 STEP을 gmsh로 메시 → Palace wrapper(<code>~/.local/bin/palace</code>)가 stock <code>palace:0.16.1</code> 엔진 솔브 → port S/V/I → Z(f). 기본 4-rank acceptance는 완료됐고,
+  <b>1차 비교 대상은 §3.2 HFSS no-ferrite</b>다. 현재 수치 비교는 FAIL이며, 다음 보정 대상은 Palace conductor boundary와 air-domain/absorbing-boundary 모델링이다.</p>
   <div class="card" style="border-color:rgba(118,185,0,.35)">
     <b>현재 설정 (HFSS와 정렬)</b>
     <ul>
-      <li>문제 유형: <code>Driven</code>(주파수영역 full-wave), 6.78 MHz point + sweep 0.1–100 MHz.</li>
+      <li>문제 유형: <code>Driven</code>(주파수영역 full-wave), GOAL1은 6.78 MHz point. sweep 0.1–100 MHz는 M5b.</li>
       <li>포트: LumpedPort ×2 (<code>1_T1</code>/<code>2_T1</code>), Z₀=50 Ω 기준, current 방향 명시.</li>
-      <li>재질: copper σ=5.8e7, FR4 εr/tanδ <span class="pill done">upstream OK</span>; ferrite 복소 μ(135.6 − j0.296, tanδ_m 0.00218) <span class="pill todo">fork 패치 필요</span>; vacuum region + 흡수경계.</li>
-      <li>메시: gmsh(OpenCASCADE)로 STEP→tet, copper edge·port gap refine; p-refinement 적응.</li>
+      <li>재질: copper σ=5.8e7, FR4 εr/tanδ <span class="pill done">upstream OK</span>; ferrite 복소 μ(135.6 − j0.296, tanδ_m 0.00218) <span class="pill todo">fork 패치 필요</span>; vacuum/helper domain + 흡수경계 모델은 numeric 보정 대상.</li>
+      <li>메시: gmsh(OpenCASCADE)로 STEP→tet, physical group으로 body/port/boundary 태깅.</li>
       <li>실행: peetsfea-facing CLI 없음. Python API가 <span class="pill cudapill">CUDA</span> <code>Solver.Device=GPU</code> + 4-core MPI Palace wrapper를 호출, HYPRE Umpire pool은 free VRAM/MPI rank 기준으로 adaptive 설정.</li>
     </ul>
   </div>
-  <div class="note ok"><b>현재 Palace 증거:</b> stock <code>palace:0.16.1</code> 로컬 이미지와 <code>~/.local/bin/palace</code> wrapper가 동작한다. <code>run/pfsolver_no_ferrite_mesh/palace_config.json</code> dry-run 통과, <code>pfsolver.solve_bundle(..., mpi_ranks=1)</code> 진단 solve는 <code>run/pfsolver_no_ferrite_solve_rank1/*</code>를 생성했고 manifest는 <code>pfsolver_commit=8111dd2</code>, wall time 26.0 s를 기록했다. <code>mpi_ranks=2</code> MPI 진단 solve도 <code>run/pfsolver_no_ferrite_solve_rank2/*</code>로 완주했고 wall time 28.5 s, Palace peak memory total 1.8 GiB를 기록했다. postprocess unit test는 2-port <code>S→Z</code>, <code>z*_ohm</code> 컬럼, <code>port-S</code>↔<code>port-V</code> 검증, non-reciprocal Z reject를 포함해 통과한다. 기본 4-rank run은 현재 RTX 3070 free VRAM 2339 MiB로 acceptance 요구 3072 MiB에 못 미쳐 preflight에서 중단한다.</div>
-  <h3>pfsolver @ 6.78 MHz (채울 예정)</h3>
+  <div class="note ok"><b>현재 Palace 증거:</b> stock <code>palace:0.16.1</code> 로컬 이미지와 <code>~/.local/bin/palace</code> wrapper가 동작한다. <code>run/pfsolver_no_ferrite_mesh/palace_config.json</code> dry-run 통과, <code>pfsolver.solve_bundle(..., mpi_ranks=1)</code> 진단 solve는 <code>run/pfsolver_no_ferrite_solve_rank1/*</code>를 생성했고 wall time 26.0 s를 기록했다. <code>mpi_ranks=2</code> MPI 진단 solve도 <code>run/pfsolver_no_ferrite_solve_rank2/*</code>로 완주했고 wall time 28.5 s, Palace peak memory total 1.8 GiB를 기록했다. 기본 <code>mpi_ranks=4</code> acceptance도 <code>run/pfsolver_no_ferrite_solve_rank4/*</code>로 완주했고 manifest는 <code>pfsolver_commit=a5cb138</code>, wall time 27.2 s, GPU free 5289 MiB, HYPRE pool 86.7 MB/rank, Palace peak memory total 3.1 GiB를 기록했다. postprocess unit test는 2-port <code>S→Z</code>, <code>z*_ohm</code> 컬럼, <code>port-S</code>↔<code>port-V</code> 검증, non-reciprocal Z reject를 포함해 통과한다.</div>
+  <h3>pfsolver @ 6.78 MHz (rank4 acceptance 산출)</h3>
   <table>
     <tr><th>양</th><th class="num">pfsolver 값</th><th class="num">HFSS(참값)</th><th class="num">오차 vs HFSS</th><th>판정</th></tr>
-    <tr><td><b>Z11</b></td><td class="todo-cell">— TBD</td><td class="num">0.3699 + j241.85</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>Z22</b></td><td class="todo-cell">— TBD</td><td class="num">0.2362 + j212.63</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>Z12</b></td><td class="todo-cell">— TBD</td><td class="num">0.01230 + j6.7063</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>L1</b></td><td class="todo-cell">— TBD</td><td class="num">5.6772 µH</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>L2</b></td><td class="todo-cell">— TBD</td><td class="num">4.9912 µH</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>M</b></td><td class="todo-cell">— TBD</td><td class="num">0.1574 µH</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>R1</b></td><td class="todo-cell">— TBD</td><td class="num">0.3699 Ω</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>R2</b></td><td class="todo-cell">— TBD</td><td class="num">0.2362 Ω</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>C1 / SRF</b></td><td class="todo-cell">— TBD</td><td class="num">16.35 pF / 16.52 MHz</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>C2 / SRF</b></td><td class="todo-cell">— TBD</td><td class="num">21.62 pF / 15.32 MHz</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>k</b></td><td class="todo-cell">— TBD</td><td class="num">0.0296</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td>솔브 시간</td><td class="todo-cell">— TBD</td><td class="num">282 s</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>Z11</b></td><td class="num">0.000421 + j4.48e-8 Ω</td><td class="num">0.2798 + j241.68 Ω</td><td class="num">|Z| -99.9998%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>Z22</b></td><td class="num">0.000424 + j2.20e-8 Ω</td><td class="num">0.2151 + j214.66 Ω</td><td class="num">|Z| -99.9998%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>Z12</b></td><td class="num">~0 + j~0 Ω</td><td class="num">0.00885 + j6.489 Ω</td><td class="num">~-100%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>L1</b></td><td class="num">1.05e-9 µH</td><td class="num">5.6732 µH</td><td class="num">-100%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>L2</b></td><td class="num">5.17e-10 µH</td><td class="num">5.0391 µH</td><td class="num">-100%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>M</b></td><td class="num">6.07e-16 µH</td><td class="num">0.1523 µH</td><td class="num">-100%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>R1</b></td><td class="num">0.000421 Ω</td><td class="num">0.2798 Ω</td><td class="num">-99.85%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>R2</b></td><td class="num">0.000424 Ω</td><td class="num">0.2151 Ω</td><td class="num">-99.80%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>C1 / SRF</b></td><td class="todo-cell">scope out</td><td class="num">13.61 pF / 18.11 MHz</td><td class="todo-cell">—</td><td><span class="pill todo">M5b</span></td></tr>
+    <tr><td><b>C2 / SRF</b></td><td class="todo-cell">scope out</td><td class="num">17.79 pF / 16.81 MHz</td><td class="todo-cell">—</td><td><span class="pill todo">M5b</span></td></tr>
+    <tr><td><b>k</b></td><td class="num">8.23e-7</td><td class="num">0.02849</td><td class="num">-99.997%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td>솔브 시간</td><td class="num">27.2 s</td><td class="num">592.7 s</td><td class="num">faster</td><td><span class="pill done">실행 OK</span></td></tr>
   </table>
   <h3>추출식 (Palace 출력 → Z)</h3>
   <div class="eq">port-S.csv → S(f);  Z = Z₀ (I+S)(I−S)⁻¹   (Z₀=50Ω 기준, 정규화)<br>
@@ -201,24 +203,25 @@
 
 <section>
   <h2><span class="n">5.</span> 교차검증 매트릭스 &amp; 합격 기준</h2>
-  <p class="sub">HFSS=참값, pfsolver=구현 후 채움. 각 양의 tolerance와 현재 상태. <b>1차 기준은 §3.2 no-ferrite</b>다.</p>
+  <p class="sub">HFSS=참값, pfsolver=rank4 산출. 각 양의 tolerance와 현재 상태. <b>1차 기준은 §3.2 no-ferrite</b>다.</p>
   <table>
     <tr><th>양</th><th class="num">HFSS(참값)</th><th class="num">pfsolver</th><th class="num">tolerance</th><th class="num">오차</th><th>상태</th></tr>
-    <tr><td><b>L1</b></td><td class="num">5.6732 µH</td><td class="todo-cell">— TBD</td><td class="num">±5%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>L2</b></td><td class="num">5.0391 µH</td><td class="todo-cell">— TBD</td><td class="num">±5%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>M</b></td><td class="num">0.1523 µH</td><td class="todo-cell">— TBD</td><td class="num">±5%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>k</b></td><td class="num">0.02849</td><td class="todo-cell">— TBD</td><td class="num">±10%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>R1</b></td><td class="num">0.2798 Ω</td><td class="todo-cell">— TBD</td><td class="num">±15%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>R2</b></td><td class="num">0.2151 Ω</td><td class="todo-cell">— TBD</td><td class="num">±15%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>Q1/Q2</b></td><td class="num">863.9 / 997.9</td><td class="todo-cell">— TBD</td><td class="num">±15%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>|Z11|/|Z22|</b></td><td class="num">241.68 / 214.66 Ω</td><td class="todo-cell">— TBD</td><td class="num">±5%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td><b>C1/C2 (SRF)</b></td><td class="num">13.61 / 17.79 pF</td><td class="todo-cell">— TBD</td><td class="num">±10%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td>상반성 Z=Zᵀ</td><td class="num">✓</td><td class="todo-cell">— TBD</td><td class="num">필수</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
-    <tr><td>passivity re(Z)⪰0</td><td class="num">✓</td><td class="todo-cell">— TBD</td><td class="num">필수</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>L1</b></td><td class="num">5.6732 µH</td><td class="num">1.05e-9 µH</td><td class="num">±5%</td><td class="num">-100%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>L2</b></td><td class="num">5.0391 µH</td><td class="num">5.17e-10 µH</td><td class="num">±5%</td><td class="num">-100%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>M</b></td><td class="num">0.1523 µH</td><td class="num">6.07e-16 µH</td><td class="num">±5%</td><td class="num">-100%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>k</b></td><td class="num">0.02849</td><td class="num">8.23e-7</td><td class="num">±10%</td><td class="num">-99.997%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>R1</b></td><td class="num">0.2798 Ω</td><td class="num">0.000421 Ω</td><td class="num">±15%</td><td class="num">-99.85%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>R2</b></td><td class="num">0.2151 Ω</td><td class="num">0.000424 Ω</td><td class="num">±15%</td><td class="num">-99.80%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>Q1/Q2</b></td><td class="num">863.9 / 997.9</td><td class="num">~1.06e-4 / ~5.20e-5</td><td class="num">±15%</td><td class="num">~-100%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>|Z11|/|Z22|</b></td><td class="num">241.68 / 214.66 Ω</td><td class="num">0.000421 / 0.000424 Ω</td><td class="num">±5%</td><td class="num">-99.9998%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>C1/C2 (SRF)</b></td><td class="num">13.61 / 17.79 pF</td><td class="todo-cell">scope out</td><td class="num">±10%</td><td class="todo-cell">—</td><td><span class="pill todo">M5b</span></td></tr>
+    <tr><td>상반성 Z=Zᵀ</td><td class="num">✓</td><td class="num">✓</td><td class="num">필수</td><td class="num">pass</td><td><span class="pill done">통과</span></td></tr>
+    <tr><td>passivity re(Z)⪰0</td><td class="num">✓</td><td class="num">✓</td><td class="num">필수</td><td class="num">pass</td><td><span class="pill done">통과</span></td></tr>
   </table>
   <div class="note"><b>합격 판정 규칙:</b> 모든 scalar(L/M/k/|Z|)가 tolerance 이내 + 상반성·passivity 통과 + sweep 곡선이 SRF 부근까지 정성 일치하면
   <b>"pfsolver가 이 설계점에서 HFSS terminal Z를 재현"</b>으로 판정. R은 표피 메시 의존이 커 ±15%를 1차 목표로 두되, 메시 수렴으로 ±5% 도달을 추적.
   단일 점 합격 후 §6 검증 사다리(V0→V4)로 확장.</div>
+  <div class="note warn"><b>현재 판정:</b> GOAL1 Python API/Palace orchestration acceptance는 완료. HFSS numeric parity는 실패했으므로 다음 작업은 copper를 volume material로 넣는 현재 모델을 Palace의 PEC/finite-conductivity boundary 모델과 독립 air domain으로 재구성하는 것이다.</div>
 </section>
 
 <section>
@@ -231,7 +234,7 @@
       <tr><th>단계</th><th>입력 → 출력</th><th>도구</th></tr>
       <tr><td><b>1 Ingest</b></td><td>STEP + ledger + port_ledger + token + TOML → role/material/port 정체성</td><td>Python + pydantic</td></tr>
       <tr><td><b>2 Tag</b></td><td>copper/FR4/ferrite/vacuum domain + lumped port endpoint + 경계</td><td>ledger 매핑</td></tr>
-      <tr><td><b>3 Mesh</b></td><td>STEP → tet .msh, copper edge·port gap refine</td><td>gmsh (Python API)</td></tr>
+      <tr><td><b>3 Mesh</b></td><td>STEP → tet .msh, body/port/boundary physical group</td><td>gmsh (Python API)</td></tr>
       <tr><td><b>4 Assemble</b></td><td>full-wave curl-curl + 재질 + LumpedPort → Palace <code>.json</code> config</td><td>Python config emit</td></tr>
       <tr><td><b>5 Solve</b></td><td>CUDA + 4-core MPI full-wave, 6.78 MHz</td><td>Python API → Palace wrapper → stock/forked Palace <code>Driven</code> 엔진 CLI</td></tr>
       <tr><td><b>6 Post</b></td><td>port-S/V/I.csv → Z(f), 부호·Z₀ 정규화, L/M/R/C/k, 손실</td><td>Python postprocess</td></tr>
@@ -247,10 +250,10 @@
     <div class="m">STEP+ledger+port_ledger+token+TOML → body/material/port edge/boundary/frequency 전부 복원, 누락 즉시 exception. pyright strict + pytest 통과.</div></div>
   <div class="phase done"><b>M3 — <code>pfsolver.mesh_bundle()</code>: gmsh tet + physical group 태깅</b>
     <div class="m">no-ferrite SSW bundle에서 STEP→tet, copper/FR4/port/boundary physical group, Palace JSON schema 검증 통과.</div></div>
-  <div class="phase"><b>M4 — <code>pfsolver.solve_bundle()</code>: no-ferrite 단일 주파수부터</b>
-    <div class="m">rank1/rank2 진단 실제 실행 완료. 기본 4-rank acceptance는 현재 다른 GPU 프로세스 때문에 free VRAM이 부족해 대기.</div></div>
-  <div class="phase"><b>M5 — postprocess → Z(f) + 이 표 채우기</b>
-    <div class="m">S→Z 후처리와 port-V 기반 S 검증, rank1 산출물 생성 완료. §4·§5 pfsolver 열은 HFSS no-ferrite 기준선과 4-rank acceptance 실행 뒤 채움.</div></div>
+  <div class="phase done"><b>M4 — <code>pfsolver.solve_bundle()</code>: no-ferrite 단일 주파수부터</b>
+    <div class="m">rank1/rank2 진단 실제 실행 및 기본 rank4 acceptance 완료. GPU mandatory, HYPRE pool override, manifest 재현 필드 확인.</div></div>
+  <div class="phase done"><b>M5 — postprocess → Z(f) + 이 표 채우기</b>
+    <div class="m">S→Z 후처리와 port-V 기반 S 검증, rank4 산출물 생성 완료. numeric parity는 FAIL로 기록하고 conductor/air-domain 모델링 보정으로 분리.</div></div>
   <div class="phase"><b>M-fork — Palace 패치: 복소 μ(자기손실) + 주파수 종속 material</b>
     <div class="m">forked Palace material/assembly에 magnetic loss tangent(μ″) + μ(f)/ε(f) dispersion 추가. ferrite 검증(V3)·dispersive sweep의 선행 조건. upstream엔 없는 항이라 fork에서만 가능. 단위 검증: ferrite μ=135.6−j0.296 주입 → HFSS와 대조.</div></div>
   <div class="phase"><b>M5b — sweep(메시 재사용) + SRF·C, 손실, field (ferrite는 M-fork 후)</b>
@@ -267,15 +270,15 @@
     <tr><td>독립 Python API 서브모듈 + GPU 게이트</td><td><span class="pill done">구현</span></td><td class="num">—</td><td><code>solver/pfsolver</code> API, CLI 없음</td></tr>
     <tr><td>stock Palace 0.16.1 로컬 이미지(M1)</td><td><span class="pill done">완료</span></td><td class="num">1회 빌드 완료</td><td><code>~/.local/bin/palace</code> wrapper → <code>palace:0.16.1</code></td></tr>
     <tr><td>ingest+mesh, no-ferrite(M2–M3)</td><td><span class="pill done">검증</span></td><td class="num">~초</td><td><code>run/pfsolver_no_ferrite_mesh/mesh.msh</code> + config</td></tr>
-    <tr><td>solve+post, no-ferrite(M4–M5)</td><td><span class="pill todo">rank1·rank2 완료 / 4-rank 대기</span></td><td class="num">rank1 26.0 s<br>rank2 28.5 s</td><td><code>run/pfsolver_no_ferrite_solve_rank1/*</code><br><code>run/pfsolver_no_ferrite_solve_rank2/*</code>; 4-rank는 GPU free VRAM 확보 후</td></tr>
+    <tr><td>solve+post, no-ferrite(M4–M5)</td><td><span class="pill done">rank1·rank2·rank4 완료</span></td><td class="num">rank1 26.0 s<br>rank2 28.5 s<br>rank4 27.2 s</td><td><code>run/pfsolver_no_ferrite_solve_rank1/*</code><br><code>run/pfsolver_no_ferrite_solve_rank2/*</code><br><code>run/pfsolver_no_ferrite_solve_rank4/*</code></td></tr>
     <tr><td>Palace 패치: 복소 μ 자기손실(M-fork)</td><td><span class="pill todo">예정</span></td><td class="num">코어 수정</td><td>ferrite μ″ + μ(f) → V3 선행조건</td></tr>
     <tr><td>sweep·C·손실·field, ferrite 포함(M5b)</td><td><span class="pill todo">예정</span></td><td class="num">—</td><td>SRF·C·loss·B-plane + HTML field plot image</td></tr>
-    <tr><td>교차검증 판정 + 리포트</td><td><span class="pill todo">예정</span></td><td class="num">—</td><td>합격/불일치 원인 분석</td></tr>
+    <tr><td>교차검증 판정 + 리포트</td><td><span class="pill fail">numeric FAIL</span></td><td class="num">—</td><td>conductor boundary + air-domain 모델링 보정 필요</td></tr>
   </table>
-  <div class="note ok"><b>요약:</b> HFSS ferrite-enabled 참고값과 HFSS no-ferrite 1차 기준선이 준비됐다. <code>pfsolver</code> 독립 Python API, no-ferrite mesh/config, stock Palace 0.16.1 wrapper, rank1/rank2 진단 solve는 동작한다. 다음 액션은 <b>GPU free VRAM 확보 후 4-rank acceptance solve</b>와 §5 pfsolver 열 채움이다. pfsolver 열이 채워지고 tolerance를 통과하면, 이 설계점에서 HFSS 라이선스 없이 동일 Z를 재현했다는 첫 증거가 된다.</div>
+  <div class="note ok"><b>요약:</b> GOAL1의 독립 Python API, no-ferrite mesh/config, stock Palace 0.16.1 wrapper, rank1/rank2/rank4 solve, S→Z postprocess, manifest 산출은 완료됐다. HFSS no-ferrite numeric parity는 실패했으므로, 다음 액션은 <b>Palace conductor boundary + air-domain/absorbing-boundary 모델링 보정</b>이다.</div>
 </section>
 
 </main>
-<footer><div class="wrap">peetsfea 0.3.7 · pfsolver vs HFSS 교차검증 <b>계획</b> @ 6.78 MHz · HFSS no-ferrite 완료 / pfsolver inspect+mesh+rank1/rank2 solve 구현 · 4-rank GPU acceptance 대기 · ferrite 자기손실은 Palace fork 패치(복소 μ) · 준정적 4-솔버 비교는 em-cross-validation-plan.html</div></footer>
+<footer><div class="wrap">peetsfea 0.3.7 · pfsolver vs HFSS 교차검증 <b>계획</b> @ 6.78 MHz · HFSS no-ferrite 완료 / pfsolver inspect+mesh+rank1/rank2/rank4 solve 구현 · numeric parity FAIL · ferrite 자기손실은 Palace fork 패치(복소 μ) · 준정적 4-솔버 비교는 em-cross-validation-plan.html</div></footer>
 </body>
 </html>
