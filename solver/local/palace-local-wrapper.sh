@@ -4,12 +4,12 @@
 # pfsolver invokes `palace <config.json>` exactly as if Palace were a local
 # binary; this wrapper runs it inside the container, the same way pyaedt drives
 # the podman-wrapped ansysedt. It runs STOCK released Palace 0.16.1 (no fork
-# magnetic-loss patches). The fork's patched engine is version 0.16.1pfs and
+# magnetic-loss patches). The fork's patched engine is version 0.16.1pf and
 # uses a different image tag (PFSOLVER_PALACE_IMAGE).
 #
 # Runtime-agnostic by env:
 #   PFSOLVER_CONTAINER_RUNTIME = podman (default) | docker
-#   PFSOLVER_PALACE_IMAGE      = palace:0.16.1 (default; stock). fork → palace:0.16.1pfs
+#   PFSOLVER_PALACE_IMAGE      = palace:0.16.1 (default; stock). fork → palace:0.16.1pf
 #   PFSOLVER_MPI_RANKS         = 4 (default)
 #   PFSOLVER_WORKDIR           = $PWD (mounted at the same path so config/mesh
 #                                paths stay valid)

@@ -5,8 +5,8 @@ pyaedt가 podman-wrapped ansysedt를 쓰는 것과 동일한 패턴.
 
 ## 지금 쓰는 버전 (중요)
 - **stock 릴리스 `0.16.1`** (포크 패치 없음). 이미지 태그 `palace:0.16.1`.
-- 포크가 개발하는 자기손실 패치 버전 = **`0.16.1pfs`** (이미지 `palace:0.16.1pfs`, GOAL2 산출). pfsolver는
-  당장은 stock `0.16.1`을 쓰고, ferrite 단계에서 `PFSOLVER_PALACE_IMAGE=palace:0.16.1pfs`로 바꾼다.
+- 포크가 개발하는 자기손실 패치 버전 = **`0.16.1pf`** (이미지 `palace:0.16.1pf`, GOAL2 산출). pfsolver는
+  당장은 stock `0.16.1`을 쓰고, ferrite 단계에서 `PFSOLVER_PALACE_IMAGE=palace:0.16.1pf`로 바꾼다.
 
 ## 설치
 ```bash
@@ -22,7 +22,7 @@ pfsolver는 `palace`를 **런타임 무관 래퍼**로 부른다. 직접 `docker
 - 기본: `~/.local/bin/palace <config.json>` (PATH에 `~/.local/bin`).
 - 환경변수로 제어:
   - `PFSOLVER_CONTAINER_RUNTIME=podman|docker` (기본 podman, NVIDIA CDI `/etc/cdi/nvidia.yaml`)
-  - `PFSOLVER_PALACE_IMAGE=palace:0.16.1` (포크 단계엔 `palace:0.16.1pfs`)
+  - `PFSOLVER_PALACE_IMAGE=palace:0.16.1` (포크 단계엔 `palace:0.16.1pf`)
   - `PFSOLVER_MPI_RANKS=4`
   - `PFSOLVER_WORKDIR=$PWD` (config/mesh 경로가 컨테이너 안에서도 동일하게 보이도록 같은 경로로 마운트)
 - 산출: 컨테이너가 `postpro/port-S.csv`·`port-V.csv`·`port-I.csv`를 `PFSOLVER_WORKDIR` 아래에 남김 → pfsolver가 읽어 Z 도출.

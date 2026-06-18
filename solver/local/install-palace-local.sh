@@ -9,9 +9,9 @@
 # Palace 0.16.1 in a container — pfsolver (and Codex) call it as if local, the
 # way pyaedt calls the podman-wrapped ansysedt.
 #
-# The fork's patched engine (magnetic loss) is version 0.16.1pfs and is built
-# separately as palace:0.16.1pfs; point the wrapper at it with
-# PFSOLVER_PALACE_IMAGE=palace:0.16.1pfs.
+# The fork's patched engine (magnetic loss) is version 0.16.1pf and is built
+# separately as palace:0.16.1pf; point the wrapper at it with
+# PFSOLVER_PALACE_IMAGE=palace:0.16.1pf.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,7 +28,12 @@ build_image() {
     echo "FATAL: solver/palace submodule not checked out (run: git submodule update --init solver/palace)" >&2
     exit 2; }
   echo "building ${image} via ${runtime} (heavy; spack builds Palace deps)…"
-  "${runtime}" build -f "${solver}/docker/Dockerfile.base" -t "${image}" "${solver}"
+  # Dockerfile uses SHELL ["/bin/bash","-lc"] + `source`; podman's default OCI
+  # format ignores SHELL and runs RUN under /bin/sh (source -> exit 127).
+  # --format docker makes podman honor the SHELL directive. docker needs no flag.
+  fmt=()
+  [ "${runtime}" = "podman" ] && fmt=(--format docker)
+  "${runtime}" build "${fmt[@]}" -f "${solver}/docker/Dockerfile.base" -t "${image}" "${solver}"
   echo "built: ${image}"
 }
 

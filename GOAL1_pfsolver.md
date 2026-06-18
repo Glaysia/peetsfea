@@ -30,7 +30,7 @@ HFSS no-ferrite와 부호/shape/단위가 일치하는 상태까지.
   - 클러스터 = enroot/pyxis(`srun --container-image=…`). 같은 계약(config in / CSV out)이라 래퍼만 다름.
   - 제어 env: `PFSOLVER_CONTAINER_RUNTIME`(podman/docker)·`PFSOLVER_PALACE_IMAGE`·`PFSOLVER_MPI_RANKS`(4)·`PFSOLVER_WORKDIR`.
   - 래퍼가 컨테이너 안에서 `mpirun -np 4 palace`(4 rank, GPU, HYPRE pool override LD_PRELOAD) 실행.
-- **지금은 stock 릴리스 `palace:0.16.1`**(포크 패치 없음, no-ferrite 충분). ferrite 단계에서 `PFSOLVER_PALACE_IMAGE=palace:0.16.1pfs`(GOAL2 포크)로 전환.
+- **지금은 stock 릴리스 `palace:0.16.1`**(포크 패치 없음, no-ferrite 충분). ferrite 단계에서 `PFSOLVER_PALACE_IMAGE=palace:0.16.1pf`(GOAL2 포크)로 전환.
 - 출력: Palace가 `postpro/port-S.csv`·`port-V.csv`·`port-I.csv`(+ field) 산출 → 오케스트레이터가 읽어 Z 도출.
 - no-ferrite는 upstream material 키(`Permeability`/`Permittivity`/`LossTan`/`Conductivity`)만 사용.
   ferrite 자기손실 config 필드는 GOAL2가 정의 → 그때 orchestrator가 emit(나중).
