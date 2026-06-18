@@ -65,7 +65,7 @@ pfsolver no-ferrite와 맞댈 정답이 없다(현재 HFSS는 ferrite-enabled). 
 - 입력 `src/peetsfea/data/0.3.x_fixed.toml`(design_id `0_3_7_p6561d2a5c7808f6e`) · TX MULL ferrite를 **non-model**
   (`hfss.modeler.set_object_model_state(<ferrite>, False)`, ssw_ports.py) · 동일 `Setup1 @ 6.78MHz` solve ·
   기존 출력변수(`Ltx/Lrx/M/k/Q/Z`) 추출 · `peetsfea-main/.venv` pyaedt, warm ansysedt attach.
-- 증거: report CSV + 로그 + ferrite non-model 확인 + §3.2 채움(ferrite 대비 L↓·k↓ sanity).
+- 증거: report CSV + 로그 + ferrite non-model 확인 + §3.2 채움(ferrite 대비 k↓·R↓·Q↑ sanity, L caveat 기록).
 - 나중에 Palace field output에서 E/H 또는 B-field plot 이미지를 생성해
   `docs/solver-vs-hfss-crossvalidation-plan.html`에 실제 이미지로 첨부한다(테이블 숫자만 남기지 않음).
 
@@ -87,7 +87,7 @@ Palace 실행 command + stdout/stderr · `port-S/V/I.csv`·`network.csv`·`solve
 - `pfsolver.solve_bundle(..., mpi_ranks=2)` MPI 진단 solve 완료: `run/pfsolver_no_ferrite_solve_rank2/*`; manifest wall time 28.5 s, Palace peak memory total 1.8 GiB, HYPRE pool override가 rank별 적용됨.
 - `pfsolver.solve_bundle(..., mpi_ranks=4)` 기본 acceptance solve 완료: `run/pfsolver_no_ferrite_solve_rank4/network.csv` · `derived.csv` · `port_vi.csv` · `solver_manifest.json`; manifest `pfsolver_commit=a5cb138cf50473f905c24552e444a903fa0121bc`, wall time 27.2 s, Palace stdout에 `Running with 4 MPI processes` 및 `GMRES solver converged in 3 iterations` 2회 기록.
 - phase0 HYPRE OOM 경로 통과: 4-rank stderr에 HYPRE pool override 4회 적용(`device=86654976`, `unified=86654976`, `pinned=16777216`), Palace peak memory total 3.1 GiB.
-- HFSS no-ferrite 기준선 완료: `run/hfss_no_ferrite_fixed_full/Results1_Pass.csv` · `Results2_Last.csv` · `Results3_Freq.csv`; ferrite body 0, non_model 4, `Setup1 @ 6.78MHz`, 11 pass, sweep 0.1–100 MHz 81pt, solve 592.7 s. 기준값: Ltx 5.6732 µH, Lrx 5.0391 µH, M 0.1523 µH, k 0.02849, R1 0.2798 Ω, R2 0.2151 Ω.
+- HFSS exact no-ferrite 기준선 완료: `run/hfss_no_ferrite_nonmodel_full/Results1_Pass.csv` · `Results2_Last.csv` · `hfss_no_ferrite_nonmodel_full.log`; `tx_mull_ferrite_sheet`는 geometry에 유지하고 `non_model_body_names`에 포함(`model_state=false`), `Setup1 @ 6.78MHz`, 마지막 유효 pass 9, solve 194 s. 기준값: Ltx 5.6993 µH, Lrx 4.9985 µH, M 0.1570 µH, k 0.02942, R1 0.3539 Ω, R2 0.2281 Ω. 비교용 ferrite-enabled current run도 완료: `run/hfss_ferrite_enabled_current_full/Results1_Pass.csv` · `Results2_Last.csv` · `Results3_Freq.csv`, solve 377.4 s.
 - HFSS numeric cross-validation은 FAIL: rank4 pfsolver 값은 Ltx 1.05e-9 µH, Lrx 5.17e-10 µH, M 6.07e-16 µH, R1 0.000421 Ω, R2 0.000424 Ω로 HFSS 대비 약 100% 낮다. API/solver orchestration acceptance는 닫혔지만, HFSS 동등 수치 재현은 Palace conductor boundary + air-domain/absorbing-boundary 모델링 보정 후 별도 진행한다.
 
 ## Acceptance
