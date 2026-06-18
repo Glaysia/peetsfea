@@ -3,11 +3,12 @@
 HFSS를 대체해 0.3.7 STEP 번들에서 terminal-network Z(f)를 산출한다.
 
 ## 아키텍처 (pyaedt → ansysedt 구도)
-- **pfsolver = Python 오케스트레이터** (pyright strict + pydantic). peetsfea 생태계 안, **도커 밖**.
-  번들 ingest → gmsh(Python) 메시 → Palace config emit → **도커 forked Palace를 CLI 호출** → CSV→Z → manifest.
+- **pfsolver = 독립 Python API 서브프로젝트** (`solver/pfsolver`, pyright strict + pydantic). **도커 밖**.
+  번들 ingest → gmsh(Python) 메시 → Palace config emit → **도커 forked Palace 엔진 CLI 호출** → CSV→Z → manifest.
+- peetsfea-facing CLI는 없다. peetsfea는 나중에 `pfsolver` Python API를 import/call한다.
 - **Docker = forked Palace 엔진만** (`peetsfea-palace:dev`, CUDA C++). 유일하게 컨테이너화되는 것.
 - **C++은 forked Palace 안에만** (주파수 종속 복소 μ 패치). 오케스트레이터엔 C++ 없음.
-- 안정 인터페이스 = **CLI(JSON config / CSV)**. Palace엔 stable 공개 libpalace 없음.
+- `pfsolver`와 Palace의 안정 인터페이스 = **Docker Palace CLI(JSON config / CSV)**. Palace엔 stable 공개 libpalace 없음.
 
 ## 모드
 - **Mode 1 = FEM** (지금 구축). 정밀 Z(f).
@@ -25,9 +26,9 @@ solver/
     Dockerfile.base            # forked Palace CUDA 엔진 이미지
     build.sh                   # docker build -> peetsfea-palace:dev
     shell.sh                   # GPU 붙은 dev 컨테이너 셸 (포크 빌드/palace 실행)
+  pfsolver/                    # 독립 Python API 서브프로젝트(별도 서브모듈 대상)
   docs/implementation-plan-phase-A-C.md
 ```
-Python 오케스트레이터 코드 위치/패키징은 구현 시 확정(peetsfea 생태계).
 
 ## Palace 엔진 도커
 ```bash

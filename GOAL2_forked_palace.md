@@ -1,17 +1,24 @@
-# GOAL 2 — forked Palace (CUDA 엔진 + 복소 μ 패치) (스트림 B)
+# GOAL 2 — forked Palace 0.16.1 (CUDA 엔진 + 복소 μ 패치) (스트림 B)
 
-병렬 작업 둘 중 **B**. 짝: [GOAL1_pfsolver.md](GOAL1_pfsolver.md)(Python 오케스트레이터).
-이 스트림은 **Palace를 fork**해서 도커 CUDA 엔진 이미지로 빌드하고, **주파수 종속 복소 투자율(자기손실 μ″)**을 추가한다.
+병렬 작업 둘 중 **B**. 짝: [GOAL1_pfsolver.md](GOAL1_pfsolver.md)(Python API 오케스트레이터).
+이 스트림은 **포크한 Palace를 별도 서브모듈로 개발**한다 — upstream 0.16.0에서 시작해 **0.16.1**로,
+**주파수 종속 복소 투자율(자기손실 μ″)**을 추가하는 게 0.16.1의 핵심 기능이다.
+
+## 포크 / 서브모듈 (중요)
+- 포크 repo: **`github.com/Glaysia/palace`** (awslabs/palace fork).
+- 위치: **`solver/palace` git submodule**(`.gitmodules`). 현재 베이스 `v0.16.0`(commit `869ee5c`).
+- pfsolver(GOAL1)와 **완전히 별도**로 이 서브모듈 안에서 개발한다. 자기손실 패치 commit들이 쌓여 **0.16.1**이 된다.
+- 도커는 `solver/palace` 서브모듈 소스를 **in-tree로 빌드**해 바이너리를 만든다(spack 패키지 복사본이 아니라 서브모듈 소스).
 
 ## 왜 fork인가 (근거)
 upstream Palace 0.16.0 material은 `Permeability`(실수 μ)·`Permittivity`·`LossTan`(유전체)·`Conductivity`만 지원
 (`config/domains.md` 확인). **페라이트 자기손실 μ″(magnetic loss tangent)·주파수 종속 μ(f)/ε(f)를 넣을 항이 없다.**
-HFSS는 `magnetic_loss_tangent` + `pwlx($mu,Freq)`로 모델링. 그래서 fork에서 직접 추가한다(우리가 owns).
+HFSS는 `magnetic_loss_tangent` + `pwlx($mu,Freq)`로 모델링. 그래서 0.16.1 포크에서 직접 추가한다(우리가 owns).
 
 ## 산출물
 - **`peetsfea-palace:dev`** 도커 이미지(`solver/docker/Dockerfile.base`, `build.sh`, `shell.sh`).
-  Palace 0.16.0 fork(vendored), `+cuda cuda_arch=86`, HYPRE Umpire pool override(8 GB VRAM 대응).
-- fork 소스 트리(in-tree 빌드), 복소 μ 패치, config schema 확장.
+  `solver/palace` 서브모듈 소스 in-tree 빌드, `+cuda cuda_arch=86`, HYPRE Umpire pool override(8 GB VRAM 대응).
+- `solver/palace`(Glaysia/palace) 0.16.1 커밋들: 복소 μ 패치 + config schema 확장.
 
 ## 병렬성 (GOAL1과의 경계)
 - **M1(upstream-동등 빌드)을 먼저** 내라 → GOAL1의 Phase C(solve, no-ferrite)가 이걸로 돌아간다(μ 패치 불필요).
@@ -42,13 +49,13 @@ HFSS는 `magnetic_loss_tangent` + `pwlx($mu,Freq)`로 모델링. 그래서 fork�
 - 검증: 이 복소 μ 주입 시 자기손실이 0이 아니고, ferrite-enabled HFSS의 R/Q/L 방향과 일치(L↑·손실↑).
 
 ## Acceptance
-M1 — upstream-동등 fork 빌드
-- [ ] `solver/docker/build.sh` → `peetsfea-palace:dev` 빌드 성공(CUDA, cuda_arch=86).
+M1 — 서브모듈 소스 빌드 (upstream-동등)
+- [ ] `solver/palace` 서브모듈 체크아웃(`git submodule update --init`) → `solver/docker/build.sh` → `peetsfea-palace:dev` 빌드 성공(CUDA, cuda_arch=86), 서브모듈 소스 in-tree 빌드.
 - [ ] phase0 예제(cylinder/CPW)가 GPU로 port-S.csv 산출(HYPRE pool override로 OOM 없이).
 - [ ] no-ferrite/유전 케이스 결과가 upstream Palace와 일치(회귀).
 
-M-fork — 복소 μ(자기손실) + 분산 material
-- [ ] fork material 모델에 magnetic loss(μ″)/복소 μ + μ(f)/ε(f) dispersion 추가, config schema 확장 + 문서.
+M-fork — 0.16.1: 복소 μ(자기손실) + 분산 material
+- [ ] `solver/palace`(Glaysia/palace)에 magnetic loss(μ″)/복소 μ + μ(f)/ε(f) dispersion commit, config schema 확장 + 문서.
 - [ ] ferrite μ=135.59−j0.296 단일주파수 solve → 자기손실≠0, HFSS ferrite 방향과 정합(단위 검증).
 - [ ] upstream no-ferrite 회귀 무파손 재확인.
 - [ ] 새 config 스키마를 GOAL1에 전달(orchestrator emit 가능).

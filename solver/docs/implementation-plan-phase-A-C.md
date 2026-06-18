@@ -5,15 +5,18 @@
 
 - 상위 문서: [`../../cpp-cuda-fem-solver-longterm-plan.html`](../../cpp-cuda-fem-solver-longterm-plan.html)
   (§6 파이프라인·§11 로드맵), 교차검증 [`../../docs/solver-vs-hfss-crossvalidation-plan.html`](../../docs/solver-vs-hfss-crossvalidation-plan.html)
-> **아키텍처 (확정, pyaedt→ansysedt 구도):** `pfsolver`는 **Python 오케스트레이터**(pyright strict + pydantic)다.
-> **도커 안엔 forked Palace 엔진만**(CUDA C++). 오케스트레이터가 도커 palace를 **CLI(JSON config / CSV)** 로 호출한다.
-> 아래 본문의 C++ struct 스케치는 **pydantic 모델로 읽고**, "library 링크/in-process"는 **CLI 호출**로 읽는다.
+> **아키텍처 (확정, pyaedt→ansysedt 구도):** `pfsolver`는 `solver/pfsolver` 아래의
+> **독립 Python API 서브프로젝트**(pyright strict + pydantic)다.
+> peetsfea-facing CLI는 만들지 않는다. peetsfea는 나중에 Python API를 import/call한다.
+> **도커 안엔 forked Palace 엔진만**(CUDA C++). 오케스트레이터가 도커 palace 엔진을
+> **CLI(JSON config / CSV)** 로 호출한다. 이 CLI는 pfsolver 사용자 표면이 아니라 Palace 엔진 경계다.
 > (이전 C++ 드라이버 `solver/src/*`는 폐기됨.) gmsh는 **Python API** in-process.
 
 - 코어: **forked Palace** `Driven`(full-wave). CUDA mandatory, 4-core MPI, CPU 폴백 없음.
 - **Sweep 모델(중요):** HFSS terminal-network처럼 **단일 주파수(6.78 MHz)에서 메시를 한 번 확정**하고, 그 **같은 메시를 다른 주파수에 재사용**해 sweep한다(주파수마다 re-mesh/재적응하는 "진짜 sweep"은 자원 과다라 안 함). 이는 Palace `Driven`의 native 동작(고정 메시 위 다주파수 해; 필요시 PROM/adaptive fast sweep)과 정확히 일치.
 
-CLI 최종형: `pfsolver {inspect|mesh|solve} <bundle_dir>`.
+Python API 최종형: `pfsolver.inspect_bundle(bundle_dir)`, `pfsolver.mesh_bundle(bundle_dir, ...)`,
+`pfsolver.solve_bundle(bundle_dir, ...)`.
 `<bundle_dir>` = 한 seed의 산출 디렉토리(`ssw_scene.step` 등이 들어있는 곳).
 
 ---
@@ -33,35 +36,25 @@ CLI 최종형: `pfsolver {inspect|mesh|solve} <bundle_dir>`.
 
 ---
 
-## Phase A — `pfsolver inspect` + 출력 스키마
+## Phase A — `pfsolver.inspect_bundle` + 출력 스키마
 
 > 목표: "HFSS 없이 setup을 구성할 수 있다"를 증명. 번들을 읽어 solve에 필요한
 > 모든 정보를 내부 모델로 복원하고, 누락이면 fail. **출력 스키마는 solve와 함께
 > 확정하므로 여기서는 read-side 모델 + `inspect` dump까지.**
 
-### A.1 파서 (`src/ingest/`)
-- `step_bundle.{hpp,cpp}` — `<bundle_dir>` 존재/파일 5종 확인, 경로 해석.
-- `ledger.cpp` — `ssw_step_ledger.json` → `std::vector<Body>` + name 분류 집합.
-- `port_ledger.cpp` — `ssw_aedt_port_ledger.json` → `std::vector<PortEdge>`.
-- `design_toml.cpp` — `<design_id>.toml` → `FreqPlan` + ferrite enable + material 매핑.
-- `materials.cpp` — `solver/data/materials.toml` → `MaterialDB`.
-- JSON: nlohmann/json, TOML: toml++ (둘 다 header-only, Dockerfile.base에 추가).
+### A.1 파서 (`solver/pfsolver/src/pfsolver/ingest.py`)
+- `bundle.py` — `<bundle_dir>` 존재/파일 5종 확인, 경로 해석.
+- `ledgers.py` — `ssw_step_ledger.json` / `ssw_aedt_port_ledger.json` pydantic 검증.
+- `design.py` — `<design_id>.toml` → `FreqPlan` + ferrite enable + material 매핑.
+- `materials.py` — `solver/data/materials.toml` → `MaterialDB`.
+- JSON: stdlib `json`, TOML: stdlib `tomllib`, 모델: pydantic.
 
-### A.2 내부 모델 (`src/model/scene.hpp`)
-```cpp
-enum class Role { Copper, Fr4, Ferrite, NonModel };
-struct Body { std::string id; Role role; std::string material;
-              std::array<double,3> center_mm, size_mm; };
-struct PortEdge { std::string role;            // "tx" | "rx"
-                  std::string copper_body;     // owning conductor
-                  std::array<std::array<double,3>,2> seg_a, seg_b; }; // edge_vertices_xyz 쌍
-struct Material { double eps_r, mu_r_re, mu_r_im, sigma, tan_d_e, tan_d_m; bool dispersive; };
-struct FreqPlan { double f0_hz=6.78e6; double sweep_start_hz, sweep_end_hz; int sweep_count; bool single; };
-struct Excitation { std::string port; double volt_mag; double phase_deg; }; // TX 100V@0, RX 100V@90
-struct Scene { std::vector<Body> bodies; std::vector<PortEdge> ports;
-               MaterialDB materials; FreqPlan freq; std::vector<Excitation> sources;
-               bool ferrite_enabled; std::string design_id, units; };
-```
+### A.2 내부 모델 (`solver/pfsolver/src/pfsolver/model.py`)
+- `Body`: id, role, material, canonical coordinates, model_state.
+- `PortEdge`: role(`tx`/`rx`), copper body, `edge_vertices_xyz` 쌍, HFSS current direction metadata.
+- `Material`: eps/mu/sigma/loss terms. ferrite complex μ fields are present but solve emission is fail-fast until GOAL2.
+- `FreqPlan`: first scope is fixed `6.78e6 Hz`.
+- `Scene`: bodies, ports, materials, freq, ferrite flag, provenance.
 
 ### A.3 복원 + 검증 규칙 (fail-fast)
 - body role과 `*_body_names` 교차검증 → 불일치 fail.
@@ -71,14 +64,14 @@ struct Scene { std::vector<Body> bodies; std::vector<PortEdge> ports;
 - 모든 material 참조가 `MaterialDB`에 존재 → 아니면 fail.
 - units != "mm" → fail.
 
-### A.4 `inspect` 출력
-- stdout 사람용 요약 + `--json`이면 `inspect.json`(body count·roles, port 쌍 좌표,
-  freq plan, material 표, ferrite flag). 이게 Phase B의 fixture 입력.
+### A.4 `inspect_bundle` 출력
+- Python object `Scene`; `Scene.to_json()`이 body count·roles, port 쌍 좌표,
+  freq plan, material 표, ferrite flag를 직렬화한다. 이게 Phase B의 fixture 입력.
 
 ### A.5 acceptance
-- [ ] `pfsolver inspect run/ssw_0_3_0_fixed` → exit 0, body 11/copper 2/fr4 4/ferrite 1, port tx·rx 각 1.
-- [ ] 일부러 파일 1개 지우면 → 명확한 메시지로 exit≠0.
-- [ ] `--json` 출력이 §A.2 모델을 빠짐없이 직렬화.
+- [ ] `pfsolver.inspect_bundle(Path("run/ssw_0_3_0_fixed"))` → body 11/copper 2/fr4 4/ferrite 1, port tx·rx 각 1.
+- [ ] 일부러 파일 1개 지우면 → 명확한 exception.
+- [ ] `Scene.to_json()` 출력이 §A.2 모델을 빠짐없이 직렬화.
 - [ ] 단위테스트: fixed 번들 fixture로 파서별 골든값 비교.
 
 ---
@@ -88,21 +81,22 @@ struct Scene { std::vector<Body> bodies; std::vector<PortEdge> ports;
 > 목표: 가장 단순한 2-포트(코일 아님, copper pad/loop)로 ingest→mesh→solve→Z
 > 전 경로를 처음 관통시키고 HFSS와 **부호·shape·단위**를 맞춘다. SSW 코일·ferrite는 아직.
 
-### B.1 메시 (`pfsolver mesh`, `src/mesh/`)
-- gmsh C++ API로 `ssw_scene.step`(또는 minimal STEP) import(OCCT).
+### B.1 메시 (`pfsolver.mesh_bundle`, `solver/pfsolver/src/pfsolver/mesh.py`)
+- gmsh Python API로 `ssw_scene.step`(또는 minimal STEP) import(OCCT).
 - physical group 부여: 각 Body→domain group, port edge→port group, 외곽 vacuum→boundary.
 - copper edge·port gap refine, 출력 `mesh.msh`(Palace 호환 포맷) + `mesh_tags.json`(group↔role).
 - acceptance: group 수·태깅이 `inspect` 모델과 1:1, gmsh 무에러.
 
-### B.2 config emit (`src/assemble/palace_config.cpp`)
+### B.2 config emit (`solver/pfsolver/src/pfsolver/palace_config.py`)
 - `Scene` + mesh tags → forked Palace `Driven` config(JSON):
   `Problem.Type=Driven`, `Domains.Materials`(group별 ε/μ/σ/LossTan),
   `Boundaries.LumpedPort`×2(tx/rx, Z₀=50Ω, edge group), `Boundaries.Absorbing`(외곽),
   `Solver.Device=GPU`, 단일 주파수 6.78 MHz.
 - 단위 변환 mm→m, port 방향(edge_vertices_xyz 쌍 → terminal 방향).
 
-### B.3 solve + post (`src/solve/`, `src/post/`)
-- **링크된 forked Palace를 in-process 함수 호출**(아키텍처 B; subprocess CLI 아님). pfsolver가 `MPI_Init`(4 rank) 후 Palace 솔버 객체를 직접 구동 → `port-S/V/I` 결과를 메모리/파일로 수취.
+### B.3 solve + post (`solver/pfsolver/src/pfsolver/solve.py`, `post.py`)
+- **도커 forked Palace 엔진 CLI 호출**. pfsolver는 Python API로 호출되지만, Palace 엔진 경계는
+  `docker run ... palace <config.json>` JSON/CSV 계약이다. in-process/linking 금지.
 - post: S→Z(Z₀ 정규화)와 V/I→Z 두 경로 계산 → 일치 확인 → `network.csv`.
 - 부호 고정: Z12/Z21을 HFSS port current 방향 기준으로.
 
@@ -120,11 +114,11 @@ struct Scene { std::vector<Body> bodies; std::vector<PortEdge> ports;
 
 ## Phase C — CUDA-mandatory 런처 + 4-core MPI
 
-> 목표: `pfsolver solve`를 실제 운영 경로로. GPU 강제·VRAM 적응·OOM 흡수·telemetry.
+> 목표: `pfsolver.solve_bundle`를 실제 운영 경로로. GPU 강제·VRAM 적응·OOM 흡수·telemetry.
 > (Phase B가 "경로 관통"이면 C는 "운영 가능·재현 가능"으로 굳히는 단계.)
 
 ### C.1 GPU 게이트 (doctor 로직 재사용)
-- solve 진입 시 `cuda_probe` 디바이스≥1 확인, 없으면 exit≠0(폴백 없음).
+- solve 진입 시 `cuda_probe` 디바이스≥1 확인, 없으면 exception(폴백 없음).
 - `nvidia-smi`로 free VRAM 조회(or cudaMemGetInfo) → pool 계산 입력.
 
 ### C.2 HYPRE Umpire pool 적응
@@ -133,8 +127,9 @@ struct Scene { std::vector<Body> bodies; std::vector<PortEdge> ports;
 - forked Palace에 pool 크기 주입(환경변수/override lib 또는 config 필드).
 - acceptance: 8 GB RTX 3070에서 cpw/cylinder 예제가 OOM 없이 완주(phase0 재현).
 
-### C.3 MPI (in-process)
-- pfsolver 자체가 `mpirun -np 4 pfsolver solve ...`로 기동되고 `MPI_Init`로 4 rank 운용(링크된 Palace가 그 communicator 사용). subprocess `palace` 아님.
+### C.3 MPI (Palace engine)
+- pfsolver Python API가 Docker Palace를 `palace -np 4 <config.json>`로 호출한다.
+- pfsolver 자체는 MPI process가 아니다. MPI는 도커 안 Palace 엔진 소유다.
 - watchdog(상위 60분 hard-abort 정책과 정합).
 
 ### C.4 OOM/대형 문제 흡수
@@ -146,7 +141,7 @@ struct Scene { std::vector<Body> bodies; std::vector<PortEdge> ports;
   gpu_name·vram, mpi ranks, wall time, 수렴 정보, bundle design_id/provenance.
 
 ### C.6 acceptance
-- [ ] `pfsolver solve <bundle>` GPU에서 완주, no-ferrite 단일주파수 → `network.csv` 산출.
+- [ ] `pfsolver.solve_bundle(bundle_dir=...)` GPU에서 완주, no-ferrite 단일주파수 → `network.csv` 산출.
 - [ ] GPU 없으면 즉시 명확 실패(폴백 없음).
 - [ ] manifest에 재현에 필요한 필드 전부.
 - [ ] phase0 OOM 케이스가 pool 적응으로 통과.
@@ -154,13 +149,12 @@ struct Scene { std::vector<Body> bodies; std::vector<PortEdge> ports;
 ---
 
 ## Phase A–C 종료 시점의 상태
-- `pfsolver inspect|mesh|solve` 동작, **no-ferrite 단일주파수**에서 forked Palace가
+- `pfsolver.inspect_bundle`·`mesh_bundle`·`solve_bundle` 동작, **no-ferrite 단일주파수**에서 forked Palace가
   2-포트 Z를 산출하고 HFSS와 부호/shape/단위 일치.
 - 교차검증 문서 §4·§5의 pfsolver 열을 **no-ferrite 행부터** 채우기 시작.
 - 다음(D+): SSW 코일 본체, ferrite(= **M-fork 복소 μ 패치** 선행), sweep·SRF·C, loss/field,
   Mode 2 warm-start, Mode 3 label.
 
-## 의존성 추가 (Dockerfile.base)
-- nlohmann/json, toml++ (header-only) — 이미 toolchain/base에 추가됨
-- gmsh `libgmsh-dev` — **C++ API in-process 링크**(subprocess 아님)
-- **forked Palace를 라이브러리(+헤더)로 빌드해 링크**(M1). upstream엔 stable libpalace가 없으므로 포크 소스를 vendoring해 우리 빌드에 포함하고 `pfsolver`가 `target_link_libraries`로 링크. CUDA + MPI(MFEM/HYPRE/libCEED 등 Palace 의존성 포함).
+## 의존성 추가
+- `solver/pfsolver/pyproject.toml`: pydantic, numpy, gmsh Python wheel, pytest, pyright.
+- Dockerfile.base는 Palace 엔진 전용이다. pfsolver Python 런타임을 도커 이미지에 넣지 않는다.
