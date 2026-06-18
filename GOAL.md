@@ -44,6 +44,11 @@ Palace 실행, Docker/GPU, HYPRE, mesh generation, CSV parsing이 문제가 아�
 - `run/pfsolver_port_visual_debug/semantic_rx_port_step_plane2d.png`
 - `run/pfsolver_port_visual_debug/semantic_tx_port_step_3d.png`
 - `run/pfsolver_port_visual_debug/semantic_rx_port_step_3d.png`
+보고서 추적 asset:
+- `docs/assets/solver-port-visual/tx_feed_gap_step_plane2d.png`
+- `docs/assets/solver-port-visual/rx_feed_gap_step_plane2d.png`
+- `docs/assets/solver-port-visual/tx_feed_gap_step_3d.png`
+- `docs/assets/solver-port-visual/rx_feed_gap_step_3d.png`
 
 2026-06-19 semantic edge rank1: `run/pfsolver_hfss_fixed_semantic_edge_lumped_rank1/`에서 Docker `peetsfea-palace:0.16.1pfterm01`, 4-rank GPU solve가 정상 수렴했다(GMRES 14/15 iterations, Palace total `84.8 s`, peak HWM `4.5 GB`). 하지만 postprocess는 `surface-F` terminal flux-current Z 비상반성으로 fail-fast했다. Raw diagnostic:
 - `S→Z`: `Z11=45.5285−j0.2659 Ω`, `Z22=39.5760−j0.0158 Ω`, `Z12≈−j0.00984 Ω`

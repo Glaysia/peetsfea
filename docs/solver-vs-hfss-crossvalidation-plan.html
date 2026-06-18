@@ -178,11 +178,11 @@
   <div class="note ok"><b>2026-06-19 port topology checkpoint:</b> pfsolver는 이제 peetsfea/HFSS와 같은 규칙을 따른다. <code>ssw_aedt_port_ledger.json</code>의 <code>edge_vertices_xyz</code> 두 개를 <code>port.copper_body_name</code>의 imported Gmsh/OCC copper boundary curve에 <code>1e-5 mm</code> tolerance로 resolve하고, 새 endpoint point를 만들지 않는다. clean no-ferrite STEP에서 TX는 copper curves <code>372/205</code>, RX는 <code>692/530</code>으로 resolve된다. port sheet는 이 두 copper curve + connector line 두 개로 구성되고, surface boundary가 이 네 curve를 유지하지 않으면 fail-fast한다.</div>
   <div class="figgrid">
     <figure>
-      <img src="../run/pfsolver_port_visual_debug/semantic_tx_port_step_plane2d.png" alt="TX feed-gap port generated from resolved STEP copper edges" />
+      <img src="assets/solver-port-visual/tx_feed_gap_step_plane2d.png" alt="TX feed-gap port generated from resolved STEP copper edges" />
       <figcaption>TX: black = resolved STEP copper feed edges, red = pfsolver gap sheet/port mesh, blue dashed = connector edges.</figcaption>
     </figure>
     <figure>
-      <img src="../run/pfsolver_port_visual_debug/semantic_rx_port_step_plane2d.png" alt="RX feed-gap port generated from resolved STEP copper edges" />
+      <img src="assets/solver-port-visual/rx_feed_gap_step_plane2d.png" alt="RX feed-gap port generated from resolved STEP copper edges" />
       <figcaption>RX: port sheet long edges coincide with the actual imported copper edge curves, not duplicated coordinate-only lines.</figcaption>
     </figure>
   </div>
