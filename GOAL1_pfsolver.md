@@ -77,7 +77,7 @@ Palace 실행 command + stdout/stderr · `port-S/V/I.csv`·`network.csv`·`solve
 
 ## 현재 중간 증거 (2026-06-18)
 - `solver/pfsolver` 독립 서브모듈: Python API만 제공, console script 없음.
-- `../../.venv/bin/pyright` → 0 errors, `../../.venv/bin/python -m pytest -q` → 9 passed.
+- `../../.venv/bin/pyright` → 0 errors, `../../.venv/bin/python -m pytest -q` → 11 passed.
 - stock `palace:0.16.1` 로컬 이미지 build 완료(`localhost/palace:0.16.1`, image `8df41bb914ac`, source `d2b68b6` stock packaging baseline) 및 `~/.local/bin/palace --help/--version` wrapper 동작 확인.
 - `run/ssw_0_3_0_fixed` inspect: body 11 / copper 2 / fr4 4 / ferrite 1 / non_model 4.
 - `run/pfsolver_no_ferrite_bundle` inspect: copper 2 / fr4 4 / ferrite 0 / non_model 4, ferrite_enabled=false.
@@ -85,8 +85,8 @@ Palace 실행 command + stdout/stderr · `port-S/V/I.csv`·`network.csv`·`solve
 - Palace JSON schema 검증 및 `~/.local/bin/palace -dry-run palace_config.json` 통과.
 - `pfsolver.solve_bundle(..., mpi_ranks=1)` 진단 solve 완료: `run/pfsolver_no_ferrite_solve_rank1/network.csv` · `derived.csv` · `port_vi.csv` · `solver_manifest.json`; manifest `pfsolver_commit=8111dd2177eaade60262ada970d3e65e7b681d1f`, wall time 26.0 s, Palace stdout에 `GMRES solver converged in 3 iterations` 2회 기록.
 - `pfsolver.solve_bundle(..., mpi_ranks=2)` MPI 진단 solve 완료: `run/pfsolver_no_ferrite_solve_rank2/*`; manifest wall time 28.5 s, Palace peak memory total 1.8 GiB, HYPRE pool override가 rank별 적용됨.
-- 기본 4-rank acceptance solve는 현재 GPU free VRAM 부족으로 preflight 차단: `free=2506 MiB`, Palace 4-rank 요구 `required>=3072 MiB`. 다른 `dl` Python process가 2924 MiB 사용 중이라 해당 프로세스 종료/완료 후 재실행 필요.
-- HFSS no-ferrite 기준선은 GOAL2에서 진행 예정.
+- 기본 4-rank acceptance solve는 현재 GPU free VRAM 부족으로 preflight 차단: `free=2339 MiB`, Palace 4-rank 요구 `required>=3072 MiB`. 다른 `dl` Python process가 2924 MiB 사용 중이라 해당 프로세스 종료/완료 후 재실행 필요.
+- HFSS no-ferrite 기준선 완료: `run/hfss_no_ferrite_fixed_full/Results1_Pass.csv` · `Results2_Last.csv` · `Results3_Freq.csv`; ferrite body 0, non_model 4, `Setup1 @ 6.78MHz`, 11 pass, sweep 0.1–100 MHz 81pt, solve 592.7 s. 기준값: Ltx 5.6732 µH, Lrx 5.0391 µH, M 0.1523 µH, k 0.02849, R1 0.2798 Ω, R2 0.2151 Ω.
 
 ## Acceptance
 Phase A — `inspect`
@@ -99,7 +99,8 @@ Phase B — `mesh` + config 검증
 - [x] gmsh 무에러 `mesh.msh` + group↔role 태그, group이 inspect 모델과 1:1.
 - [x] emit한 Palace config가 JSON schema 검증 통과.
 - [x] `~/.local/bin/palace -dry-run palace_config.json` 실행 통과(`palace:0.16.1`).
-- [ ] minimal two-port에서 S/Z 2×2·단위·상반성(Z=Zᵀ); `port-S.csv`와 `V_inc`+total V 재구성 S 일치(부호 포함).
+- [x] minimal two-port에서 S/Z 2×2·단위·상반성(Z=Zᵀ); `port-S.csv`와 `V_inc`+total V 재구성 S 일치(부호 포함).
+  - 증거: `solver/pfsolver/tests/test_post.py`가 `network.csv` 2×2 `s*`/`z*_ohm` 컬럼, S→Z 값, `port-S.csv`↔`port-V.csv` 불일치 raise, non-reciprocal Z raise를 검증.
 
 Phase C — `solve`(no-ferrite, 단일주파수)
 - [x] `pfsolver.solve_bundle(bundle_dir=..., mpi_ranks=1)`가 Palace wrapper를 GPU로 완주 → network/derived/port_vi/manifest 생성(진단 실제 실행).
