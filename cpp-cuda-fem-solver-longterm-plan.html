@@ -112,8 +112,8 @@
 <header class="hero">
   <div class="hero-inner">
     <p class="eyebrow">peetsfea · dev/3 branch · long-term plan</p>
-    <h1>오픈소스 CUDA C++ FEM 솔버
-      <small>HFSS를 대체하는 주파수영역 FEM Z-파라미터 추출 엔진 — 0.3.7 STEP + 추출 정보 + field 데이터 기반</small>
+    <h1>오픈소스 full-wave FEM 솔버 <code style="font-size:.45em">pfsolver</code>
+      <small>HFSS 대체 — Python 오케스트레이터 + 도커 안 forked Palace(CUDA C++ 엔진). 0.3.7 STEP 번들 기반 terminal-network 추출</small>
     </h1>
     <div class="badges">
       <span class="badge cuda">CUDA mandatory</span>
@@ -132,14 +132,16 @@
 <div class="panel accent">
   <p class="ptitle">이 문서가 다루는 것 — 브랜치 mandate</p>
   <p class="lead" style="margin-top:0">
-    이 브랜치(<code>dev/3</code>)의 목적은 <strong>오픈소스 C++ FEM 솔버를 만드는 것</strong>이다.
-    기존 <code>프로젝트구상.md</code>에서 C++ 솔버는 <em>Phase 7, 가장 마지막</em>에 놓여 있었다. 그
-    foundation surrogate 연구 자체는 다른 프로젝트들에서 점진적으로 진행 중이므로, 여기서는
-    그 순서를 뒤집어 <strong>C++ FEM 솔버를 최우선이자 핵심 deliverable</strong>로 끌어올린다.
+    이 브랜치(<code>dev/3</code>)의 목적은 HFSS를 대체하는 <strong>오픈소스 full-wave FEM 솔버 <code>pfsolver</code></strong>를 만드는 것이다.
+    기존 <code>프로젝트구상.md</code>에서 자체 솔버는 <em>Phase 7, 가장 마지막</em>에 놓여 있었다. 그
+    foundation surrogate 연구 자체는 다른 프로젝트들에서 진행 중이므로, 여기서는
+    그 순서를 뒤집어 <strong>솔버를 최우선이자 핵심 deliverable</strong>로 끌어올린다.
   </p>
   <p style="margin-bottom:0">
-    <code>pfsolver</code>는 <strong>HFSS replacement executable</strong>이다 — "Palace second backend"가 아니다.
-    Palace는 내부 full-wave FEM core로 쓰지만, 사용자·runner가 보는 실행면은 <code>pfsolver solve …</code>다.
+    <code>pfsolver</code>는 <strong>HFSS replacement</strong>이다 — "Palace second backend"가 아니다.
+    <strong>구조는 pyaedt→ansysedt와 동일</strong>: <code>pfsolver</code>는 <strong>Python 오케스트레이터</strong>(pyright strict + pydantic)이고,
+    <strong>도커 안 forked Palace</strong>(CUDA C++ full-wave 엔진)를 <code>pfsolver solve …</code>로 호출한다.
+    C++은 <strong>forked Palace 안에만</strong> 있다(오케스트레이터엔 없음).
     Ansys 없이, peetsfea 0.3.7이 결정론적으로 생성하는 <strong>STEP + sidecar 번들</strong>
     (<code>ssw_scene.step</code> · <code>ssw_step_ledger.json</code> · <code>ssw_aedt_port_ledger.json</code> ·
     <code>coil_making_token.toml</code> · <code>&lt;design_id&gt;.toml</code>)을 입력으로 받아
@@ -196,8 +198,8 @@
 <div class="panel">
   <p class="ptitle">모드 간 책임 경계</p>
   <ul style="margin:0">
-    <li><strong>이 브랜치(dev/3)</strong> = 모드 1·2의 FEM 엔진 + 모드 2의 warm-start 수용 인터페이스 + 모드 3 label 공급.</li>
-    <li><strong>다른 프로젝트</strong> = Transformer foundation surrogate(모드 3, 모드 2의 mesh/field 예측) 학습 파이프라인.</li>
+    <li><strong>이 브랜치(dev/3)</strong> = 지금은 <strong>모드 1(FEM) 구축</strong>. 모드 1로 데이터셋 축적 + 모드 2의 warm-start 수용 + 모드 2/3 <strong>추론 호출</strong>(학습 안 함).</li>
+    <li><strong>다른 프로젝트</strong> = Transformer foundation surrogate <strong>학습/배포</strong>. pfsolver는 배포된 모델을 추론만.</li>
     <li>세 모드는 <em>동일한 0.3.7 STEP/ledger/token</em>을 입력으로 공유한다. 정체성이 갈라지면 비교가 무의미해진다.</li>
   </ul>
 </div>
@@ -224,7 +226,7 @@
   사전조사(Phase 0)에서 <strong>Palace</strong>(AWS Labs, C++17, MPI/CUDA 가능 오픈소스 3D FEM)가
   주파수영역 driven 시뮬레이션과 lumped/wave port S·V·I·field 출력을 제공함을 확인했다.
   Phase 0 sanity(<code>phase0_sanity/</code>)에서 CUDA 빌드·GPU 기동·cylinder/CPW 예제의 <code>port-S.csv</code> 산출까지 검증되었다.
-  Palace를 <strong>FEM 코어로 채택</strong>하고, 그 위에 0.3.7 STEP을 먹이는 ingestion·mesh·postprocess·Z-추출 C++ 레이어를 우리가 만든다.
+  Palace를 <strong>fork해 FEM 엔진으로 채택</strong>(도커 안)하고, 그 위에 0.3.7 STEP을 먹이는 ingestion·mesh·config·postprocess·Z-추출 <strong>Python 오케스트레이터</strong>를 우리가 만든다. Palace엔 stable 공개 libpalace가 없으므로 안정 인터페이스는 <strong>CLI(JSON config / CSV)</strong>다.
 </p>
 
 <h2 id="inputs"><span class="num">§3</span>입력 — 0.3.7이 이미 만드는 것</h2>
@@ -258,6 +260,7 @@
 <ul>
   <li>주파수영역(frequency-domain) driven 해석만. <strong>transient는 비범위.</strong></li>
   <li>terminal-network-equivalent 출력: 2-port S/Z 행렬, 포트 V/I, 파생 \(L_1,L_2,M,k,Q_1,Q_2,\eta,U\), 손실(copper/dielectric/ferrite/boundary), 선택적 field.</li>
+  <li><strong>Sweep = 메시 재사용(HFSS terminal 방식).</strong> 단일 주파수(6.78 MHz)에서 메시를 한 번 확정하고 그 <strong>같은 메시를 다른 주파수에 재사용</strong>해 sweep한다 — 주파수마다 re-mesh/재적응하는 "진짜 sweep"은 자원 과다라 안 함. Palace <code>Driven</code>의 native(고정 메시 위 다주파수; 필요시 PROM/adaptive fast sweep)와 일치.</li>
   <li>HFSS식 full-wave driven 정식화 단일 경로(변위전류 포함 → E·H·캐패시턴스·SRF·유전손실 전부). 부분물리 솔버(M3D AC/Electrostatic/Q3D)는 실측에서 탈락.</li>
   <li>lumped port excitation, port current 방향·reference impedance 명시.</li>
 </ul>
@@ -279,16 +282,16 @@
 <div class="panel cuda">
   <p class="ptitle">Hard requirement</p>
   <ul style="margin:0">
-    <li><span class="tag cu">CUDA mandatory</span> — CUDA가 없는 환경에서는 <strong>의도적으로 실행 거부</strong>한다. <span class="tag no">no CPU fallback</span> (느리고 관리 부담만 늘어남).</li>
+    <li><span class="tag cu">CUDA mandatory</span> — Palace 도커 이미지는 <strong>CUDA-only 빌드</strong>. <span class="tag no">no CPU fallback</span> (느리고 관리 부담만 늘어남).</li>
     <li>빌드: <code>palace@0.16.0 +cuda</code>, <code>cuda_arch</code>는 타깃 GPU에 맞춤(검증 데스크탑 RTX 3070 → <code>cuda_arch=86</code>).</li>
     <li>병렬: <strong>4-core MPI</strong> 고정 launch + GPU 디바이스 solve(<code>Solver.Device = "GPU"</code>).</li>
-    <li>기동 시 <code>nvidia-smi</code>로 GPU·VRAM 확인 → 없거나 부족하면 즉시 raise(가짜 성공 금지).</li>
+    <li>Python 오케스트레이터가 palace invoke 전 <code>nvidia-smi</code>로 GPU·VRAM 확인 → 없거나 부족하면 즉시 raise(가짜 성공 금지).</li>
   </ul>
 </div>
 <p>
   Phase 0에서 8 GB RTX 3070 세션은 기본 HYPRE/Umpire CUDA 할당이 과도해 <code>cudaMalloc … out of memory</code>로 abort했고,
   <strong>HYPRE pool-size override</strong>(<code>phase0_sanity/hypre_pool_override/</code>)를 적용해야 GPU smoke가 통과했다.
-  따라서 솔버 런처는 <strong>VRAM에 맞춘 pool-size 설정을 1급 파라미터</strong>로 노출하고, full sweep의 OOM을 mesh/주파수 분할로 흡수한다.
+  따라서 오케스트레이터는 <strong>VRAM에 맞춘 pool-size 설정을 1급 파라미터</strong>로 palace에 넘기고, full sweep의 OOM을 mesh/주파수 분할로 흡수한다.
 </p>
 <p style="color:var(--muted);font-size:14px">
   참고: 0.3.5 runner는 이미 <code>nvidia-smi</code> GPU 감지 → AEDT GPU 가속(고정 <code>cores=4</code>) 패턴을 쓴다.
@@ -307,11 +310,12 @@
   <div class="stage"><b>7 · Emit</b><small>solver-neutral em_result + network/derived/loss/field CSV + manifest</small></div>
 </div>
 <div class="panel accent">
-  <p class="ptitle">실행면 — pfsolver CLI 계약 (HFSS-replacement surface)</p>
+  <p class="ptitle">실행면 — pfsolver(Python) CLI 계약 (HFSS-replacement surface)</p>
+  <p style="margin:0 0 8px;color:var(--muted);font-size:13px">stage 1–4·6–7은 <strong>Python 오케스트레이터</strong>가, stage 5(solve)는 <strong>도커 안 forked Palace</strong>가 한다. gmsh는 Python API in-process, palace는 CLI(JSON/CSV)로 호출.</p>
   <ul style="margin:0">
-    <li><code>pfsolver inspect &lt;bundle&gt;</code> — STEP+sidecar 읽어 body·material·port edge·boundary·frequency 전부 복원, <strong>누락이면 즉시 fail</strong>. "HFSS 없이 setup을 만들 수 있나"를 증명하는 첫 deliverable(stage 1–2).</li>
-    <li><code>pfsolver mesh &lt;bundle&gt;</code> — STEP→tet mesh + physical group으로 copper/FR4/ferrite/port/boundary 태깅(stage 3).</li>
-    <li><code>pfsolver solve &lt;bundle&gt;</code> — full-wave driven, lumped terminal 2포트, CUDA mandatory → <code>network.csv</code>·<code>derived.csv</code>·<code>port_vi.csv</code>·<code>loss.csv</code>·<code>field_index.json</code>·<code>solver_manifest.json</code>(stage 4–7).</li>
+    <li><code>pfsolver inspect &lt;bundle&gt;</code> — STEP+sidecar를 pydantic으로 읽어 body·material·port edge·boundary·frequency 전부 복원, <strong>누락이면 즉시 fail</strong>. "HFSS 없이 setup을 만들 수 있나"를 증명하는 첫 deliverable(stage 1–2).</li>
+    <li><code>pfsolver mesh &lt;bundle&gt;</code> — gmsh(Python)로 STEP→tet mesh + physical group으로 copper/FR4/ferrite/port/boundary 태깅(stage 3).</li>
+    <li><code>pfsolver solve &lt;bundle&gt;</code> — config emit → 도커 forked Palace full-wave driven(lumped 2포트, CUDA mandatory) → port S/V/I → <code>network.csv</code>·<code>derived.csv</code>·<code>port_vi.csv</code>·<code>loss.csv</code>·<code>field_index.json</code>·<code>solver_manifest.json</code>(stage 4–7).</li>
   </ul>
   <p style="margin:8px 0 0;color:var(--muted);font-size:13px">첫 구현 순서는 출력 schema가 아니라 <strong>번들 ingest + material/port/boundary 복원</strong>(<code>inspect</code>)이다. 출력 schema는 <code>solve</code> 단계와 함께 확정한다.
   주의: ledger는 port current를 명시 벡터로 주지 않는다 — terminal source convention(TX 100V@0°/RX 100V@90°)과 edge pair 기하로 방향을 정의하고 §7 공통 postprocess에서 부호를 고정한다.</p>

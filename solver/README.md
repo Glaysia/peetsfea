@@ -1,66 +1,43 @@
-# pfsolver — peetsfea CUDA C++ FEM solver
+# pfsolver — open-source full-wave FEM solver (HFSS replacement)
 
-Open-source, CUDA-mandatory, full-wave terminal-network FEM solver that replaces
-Ansys HFSS for Z(f) extraction on peetsfea 0.3.7 geometry. Long-term plan:
-[`../cpp-cuda-fem-solver-longterm-plan.html`](../cpp-cuda-fem-solver-longterm-plan.html).
+HFSS를 대체해 0.3.7 STEP 번들에서 terminal-network Z(f)를 산출한다.
 
-## Non-negotiables
-- **CUDA mandatory.** No CPU build, no CPU fallback. A toolchain without the CUDA
-  toolkit fails to configure; a host without a CUDA device fails `doctor`.
-- **Docker only.** There is no supported host build. Everything goes through the
-  images in `docker/`.
-- **Full-wave only.** HFSS-style full-wave driven terminal-network solve (Palace
-  `Driven`). MQS / electrostatic / Q3D were rejected empirically.
+## 아키텍처 (pyaedt → ansysedt 구도)
+- **pfsolver = Python 오케스트레이터** (pyright strict + pydantic). peetsfea 생태계 안, **도커 밖**.
+  번들 ingest → gmsh(Python) 메시 → Palace config emit → **도커 forked Palace를 CLI 호출** → CSV→Z → manifest.
+- **Docker = forked Palace 엔진만** (`peetsfea-palace:dev`, CUDA C++). 유일하게 컨테이너화되는 것.
+- **C++은 forked Palace 안에만** (주파수 종속 복소 μ 패치). 오케스트레이터엔 C++ 없음.
+- 안정 인터페이스 = **CLI(JSON config / CSV)**. Palace엔 stable 공개 libpalace 없음.
 
-## Quick start (verify the build environment now)
-The toolchain image is self-contained (CUDA + MPI + CMake) and builds the current
-`pfsolver` bootstrap CLI without the long Palace build:
+## 모드
+- **Mode 1 = FEM** (지금 구축). 정밀 Z(f).
+- Mode 1로 데이터셋 축적 → transformer는 **다른 프로젝트**에서 학습/배포.
+- **Mode 2/3 = 추론만** (pfsolver가 배포 모델 호출). 학습 안 함.
 
-```bash
-cd solver
-./docker/build.sh toolchain          # docker build -f docker/Dockerfile.toolchain
-./docker/run.sh doctor               # docker run --rm --gpus all pfsolver:toolchain doctor
-```
+## Sweep 모델
+HFSS terminal처럼 **단일 주파수에서 메시 확정 → 같은 메시로 다주파수 sweep**(주파수마다 재적응하는 진짜 sweep은 자원 과다라 안 함). Palace `Driven`의 native 동작과 일치.
 
-`doctor` reports compiler / CUDA / MPI and **exits non-zero if no CUDA device is
-visible** — the CUDA-mandatory contract in executable form.
-
-## Full FEM pipeline image (heavy, run once)
-Builds CUDA-enabled Palace 0.16.0 from source via spack (tens of minutes):
-
-```bash
-cd solver
-./docker/build.sh base               # peetsfea-solver-base:0.16.0  (Palace + gmsh)
-./docker/build.sh app                # pfsolver:latest  (app on the base)
-IMAGE=pfsolver:latest ./docker/run.sh doctor
-```
-
-Pinned to the phase0-validated build: `palace@0.16.0+cuda~slepc~sundials
-cuda_arch=86`, base `spack/ubuntu-noble:develop`. Adjust `cuda_arch` for other
-GPUs via `--build-arg PALACE_SPEC=...`.
-
-## Layout
+## 디렉토리
 ```
 solver/
-  CMakeLists.txt          # CUDA + MPI required; C++17
-  src/
-    main.cpp              # CLI: version | doctor
-    cuda_probe.{hpp,cpp}  # CUDA runtime probe (device count / VRAM)
-    env_report.{hpp,cpp}  # compiler / CUDA / MPI report
+  data/materials.toml          # 물성 SSOT (AEDT 라이브 + 소스 확인값)
   docker/
-    Dockerfile.toolchain  # fast self-contained CUDA build env
-    Dockerfile.base       # heavy: CUDA Palace + mesher base
-    Dockerfile            # app on top of the base
-    build.sh  run.sh
+    Dockerfile.base            # forked Palace CUDA 엔진 이미지
+    build.sh                   # docker build -> peetsfea-palace:dev
+    shell.sh                   # GPU 붙은 dev 컨테이너 셸 (포크 빌드/palace 실행)
+  docs/implementation-plan-phase-A-C.md
 ```
+Python 오케스트레이터 코드 위치/패키징은 구현 시 확정(peetsfea 생태계).
 
-## Status
-Bootstrap. `pfsolver doctor` is the first executable contract. Next (Phase A of the
-plan): 0.3.7 STEP/ledger/token ingest -> mesh -> Palace `Driven` config emit ->
-port S/V/I -> terminal Z(f), against the solver-neutral output schema.
+## Palace 엔진 도커
+```bash
+cd solver
+./docker/build.sh          # peetsfea-palace:dev 빌드 (heavy, 1회)
+./docker/shell.sh          # GPU 붙은 셸로 진입 (포크 패치/빌드, palace 실행)
+```
+CUDA mandatory: 이미지는 CUDA-only 빌드. 오케스트레이터가 invoke 전 GPU 게이트(no CPU fallback).
 
-## VRAM note
-On 8 GB cards (RTX 3070) default HYPRE/Umpire CUDA pools overshoot and abort with
-`cudaMalloc ... out of memory`. The launcher will set VRAM-fitted pool sizes
-(device/unified 512 MiB, pinned 64 MiB as a starting point); see
-`../phase0_sanity/hypre_pool_override/`.
+## 상세
+- 목표/Acceptance: [../GOAL.md](../GOAL.md)
+- Phase A–C 계획: [docs/implementation-plan-phase-A-C.md](docs/implementation-plan-phase-A-C.md)
+- 교차검증: [../docs/solver-vs-hfss-crossvalidation-plan.html](../docs/solver-vs-hfss-crossvalidation-plan.html)

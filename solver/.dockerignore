@@ -1,8 +1,0 @@
-# Build context is the solver/ directory. Keep it lean.
-build/
-**/build/
-.cache/
-*.o
-*.obj
-compile_commands.json
-.DS_Store

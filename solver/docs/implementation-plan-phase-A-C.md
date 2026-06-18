@@ -5,10 +5,15 @@
 
 - 상위 문서: [`../../cpp-cuda-fem-solver-longterm-plan.html`](../../cpp-cuda-fem-solver-longterm-plan.html)
   (§6 파이프라인·§11 로드맵), 교차검증 [`../../docs/solver-vs-hfss-crossvalidation-plan.html`](../../docs/solver-vs-hfss-crossvalidation-plan.html)
-- 이미 완료: **M0** — Docker 전용 빌드 + `pfsolver doctor`(CUDA 게이트). 본 계획은 그 위.
-- 코어: **forked Palace** `Driven`(full-wave). CUDA mandatory, 4-core MPI, CPU 폴백 없음.
+> **아키텍처 (확정, pyaedt→ansysedt 구도):** `pfsolver`는 **Python 오케스트레이터**(pyright strict + pydantic)다.
+> **도커 안엔 forked Palace 엔진만**(CUDA C++). 오케스트레이터가 도커 palace를 **CLI(JSON config / CSV)** 로 호출한다.
+> 아래 본문의 C++ struct 스케치는 **pydantic 모델로 읽고**, "library 링크/in-process"는 **CLI 호출**로 읽는다.
+> (이전 C++ 드라이버 `solver/src/*`는 폐기됨.) gmsh는 **Python API** in-process.
 
-CLI 최종형: `pfsolver {version|doctor|inspect|mesh|solve} <bundle_dir>`.
+- 코어: **forked Palace** `Driven`(full-wave). CUDA mandatory, 4-core MPI, CPU 폴백 없음.
+- **Sweep 모델(중요):** HFSS terminal-network처럼 **단일 주파수(6.78 MHz)에서 메시를 한 번 확정**하고, 그 **같은 메시를 다른 주파수에 재사용**해 sweep한다(주파수마다 re-mesh/재적응하는 "진짜 sweep"은 자원 과다라 안 함). 이는 Palace `Driven`의 native 동작(고정 메시 위 다주파수 해; 필요시 PROM/adaptive fast sweep)과 정확히 일치.
+
+CLI 최종형: `pfsolver {inspect|mesh|solve} <bundle_dir>`.
 `<bundle_dir>` = 한 seed의 산출 디렉토리(`ssw_scene.step` 등이 들어있는 곳).
 
 ---

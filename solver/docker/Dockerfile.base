@@ -1,16 +1,19 @@
 # syntax=docker/dockerfile:1
 #
-# Full pfsolver FEM base image: CUDA-enabled Palace (full-wave driven) + mesher.
+# Forked-Palace CUDA dev/build image — the FEM ENGINE (and the only thing we
+# containerize). pfsolver is a Python orchestrator that runs outside Docker and
+# invokes this engine, the way pyaedt invokes ansysedt.
 #
-# This is the HEAVY image (spack builds Palace and its deps from source; tens of
-# minutes, needs network). Build it once; iterate the app in docker/Dockerfile,
-# which FROMs this image.
+# This is the HEAVY image (spack builds Palace + deps from source; tens of
+# minutes, needs network). Build once via docker/build.sh; develop/patch the
+# fork inside it via docker/shell.sh.
 #
-#   docker build -f docker/Dockerfile.base -t peetsfea-solver-base:0.16.0 ..
+#   docker build -f docker/Dockerfile.base -t peetsfea-palace:dev ..
 #
-# Palace spec and arch are pinned to the build validated in phase0_sanity:
+# Pinned to the build validated in phase0_sanity:
 #   palace@0.16.0 +cuda ~slepc ~sundials cuda_arch=86   (RTX 3070, sm_86)
-#   palace git changeset 869ee5c
+# The fork (frequency-dependent complex-mu / magnetic-loss patch) starts from
+# this upstream and is built in-tree here.
 FROM spack/ubuntu-noble:develop@sha256:2a6981ff541a1040f26c89e23b8c6be089d7afc339b21bf8e4877562f31209f4
 
 SHELL ["/bin/bash", "-lc"]
@@ -19,29 +22,30 @@ ENV DEBIAN_FRONTEND=noninteractive
 ARG PALACE_SPEC="palace@0.16.0+cuda~slepc~sundials cuda_arch=86"
 
 # Build Palace (and CUDA/MPI/MFEM/HYPRE/PETSc deps) into a named spack env.
-RUN spack env create solver \
- && spack -e solver add ${PALACE_SPEC} \
- && spack -e solver concretize -f \
- && spack -e solver install --fail-fast \
+# Provides the toolchain (cmake/mpi/cuda) to also rebuild the forked Palace
+# source in-tree once the magnetic-loss patch lands.
+RUN spack env create palace \
+ && spack -e palace add ${PALACE_SPEC} \
+ && spack -e palace concretize -f \
+ && spack -e palace install --fail-fast \
  && spack clean -a
 
-# Mesher (STEP -> .msh via OpenCASCADE) and our app toolchain.
+# Build tools for rebuilding the Palace fork from source in-tree.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      cmake ninja-build build-essential gmsh libgmsh-dev nlohmann-json3-dev libtomlplusplus-dev \
+      cmake ninja-build build-essential git \
     && rm -rf /var/lib/apt/lists/*
 
-# Activate the spack env (palace, cuda, mpi on PATH/CMAKE_PREFIX_PATH) for every
-# non-login shell, so the app build and `palace` invocation just work.
+# Activate the spack env (palace, cuda, mpi on PATH) for every non-login shell.
 RUN printf '%s\n' \
       'source /opt/spack/share/spack/setup-env.sh' \
-      'spack env activate solver' \
+      'spack env activate palace' \
       'spack load cuda mpi 2>/dev/null || true' \
-      > /etc/profile.d/zz-solver-env.sh \
-    && chmod +x /etc/profile.d/zz-solver-env.sh
+      > /etc/profile.d/zz-palace-env.sh \
+    && chmod +x /etc/profile.d/zz-palace-env.sh
 
 # phase0 finding: default HYPRE/Umpire CUDA pools overshoot small-VRAM cards and
-# abort with cudaMalloc OOM. The pfsolver launcher sets VRAM-fitted pool sizes;
-# this label records the knob so it is never lost.
+# abort with cudaMalloc OOM. The pfsolver orchestrator sets VRAM-fitted pool
+# sizes before invoking palace; this label records the knob so it is never lost.
 LABEL org.peetsfea.hypre_pool_override="device/unified=512MiB pinned=64MiB (tune to VRAM)"
 
 CMD ["/bin/bash", "-l"]
