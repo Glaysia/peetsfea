@@ -9,5 +9,10 @@
 #
 set -euo pipefail
 
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo="$(cd "${here}/../.." && pwd)"
 image="${IMAGE:-pfsolver:toolchain}"
-exec docker run --rm --gpus all "${image}" "$@"
+exec docker run --rm --gpus all \
+  -v "${repo}:/work" \
+  -w /work \
+  "${image}" "$@"

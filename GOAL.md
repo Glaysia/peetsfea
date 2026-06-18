@@ -11,6 +11,14 @@ Palace `Driven`(full-wave)가 2-포트 terminal Z를 산출해 HFSS와 부호/sh
 - 교차검증 기준값(HFSS): [docs/solver-vs-hfss-crossvalidation-plan.html](docs/solver-vs-hfss-crossvalidation-plan.html)
 - 이미 완료: M0 — Docker 전용 빌드 + `pfsolver doctor`(CUDA 게이트).
 
+## 아키텍처 결정 — 드라이버 ↔ Palace = **C++ 라이브러리 링크 (B)**
+`pfsolver`는 C++이며 **forked Palace를 라이브러리로 링크해 in-process 함수 호출**한다.
+**`palace` 바이너리를 subprocess로 CLI 호출하는 방식(A/C) 아님.** 이유: (1) Mode 2 warm-start는
+surrogate mesh 밀도맵·초기 field를 **메모리에서** 솔버 초기값으로 주입해야 깔끔하고, (2) 포크와 같은
+단일 C++ 빌드, (3) gmsh C++ API in-process. → CLI-only면 드라이버가 C++일 이유가 없으므로, B가 C++의 정당성이다.
+- **M1 함의:** Dockerfile.base는 단순히 `palace` 실행파일만 설치하면 안 되고, **forked Palace를 라이브러리(정적/공유)+헤더로 빌드**해 `pfsolver`가 링크할 수 있어야 한다(`target_link_libraries`). 포크 소스를 vendoring해서 우리 빌드에 포함한다.
+- 단, **upstream Palace는 안정적 `libpalace` 공개 API가 없다**(실행파일 중심). 그래서 링크는 포크 소스 트리에 우리 코드를 같이 빌드/링크하는 형태가 된다. 우리가 포크를 owns하므로 가능.
+
 ## 작업 방식 (중요)
 - **구현은 Codex가 한다.** 한 번에 Phase A–C를 진행한다.
 - **Claude(나)는 1시간마다 호출되어 평가/피드백만 한다.** 코드를 다시 짜지 않고,

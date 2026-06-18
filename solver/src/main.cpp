@@ -11,11 +11,14 @@
 //                      exit non-zero otherwise (CUDA is mandatory, no fallback).
 
 #include <cstring>
+#include <exception>
 #include <iostream>
 #include <string>
 
 #include "cuda_probe.hpp"
 #include "env_report.hpp"
+#include "error.hpp"
+#include "ingest/step_bundle.hpp"
 
 namespace {
 
@@ -61,28 +64,63 @@ int cmd_doctor() {
   return 0;
 }
 
+int cmd_inspect(int argc, char** argv) {
+  bool json = false;
+  std::string bundle;
+  for (int i = 2; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == "--json") {
+      json = true;
+    } else if (bundle.empty()) {
+      bundle = arg;
+    } else {
+      pf::fail("inspect received unexpected extra argument: " + arg);
+    }
+  }
+  if (bundle.empty()) {
+    pf::fail("inspect requires <bundle_dir>");
+  }
+  const pf::Scene scene = pf::load_scene_bundle(bundle);
+  if (json) {
+    std::cout << pf::scene_to_json(scene).dump(2) << "\n";
+  } else {
+    pf::print_scene_summary(scene);
+  }
+  return 0;
+}
+
 void usage(std::ostream& os) {
   os << "usage: pfsolver <command>\n"
         "  version   print version\n"
-        "  doctor    check toolchain + CUDA device (CUDA mandatory)\n";
+        "  doctor    check toolchain + CUDA device (CUDA mandatory)\n"
+        "  inspect   parse an SSW STEP bundle; pass --json for machine output\n";
 }
 
 } // namespace
 
 int main(int argc, char** argv) {
-  if (argc < 2) {
+  try {
+    if (argc < 2) {
+      usage(std::cerr);
+      return 1;
+    }
+    const char* cmd = argv[1];
+    if (std::strcmp(cmd, "version") == 0) return cmd_version();
+    if (std::strcmp(cmd, "doctor") == 0) return cmd_doctor();
+    if (std::strcmp(cmd, "inspect") == 0) return cmd_inspect(argc, argv);
+    if (std::strcmp(cmd, "-h") == 0 || std::strcmp(cmd, "--help") == 0) {
+      usage(std::cout);
+      return 0;
+    }
+
+    std::cerr << "unknown command: " << cmd << "\n";
     usage(std::cerr);
     return 1;
+  } catch (const pf::PfError& exc) {
+    std::cerr << "FATAL: " << exc.what() << "\n";
+    return 2;
+  } catch (const std::exception& exc) {
+    std::cerr << "FATAL: unexpected error: " << exc.what() << "\n";
+    return 2;
   }
-  const char* cmd = argv[1];
-  if (std::strcmp(cmd, "version") == 0) return cmd_version();
-  if (std::strcmp(cmd, "doctor") == 0) return cmd_doctor();
-  if (std::strcmp(cmd, "-h") == 0 || std::strcmp(cmd, "--help") == 0) {
-    usage(std::cout);
-    return 0;
-  }
-
-  std::cerr << "unknown command: " << cmd << "\n";
-  usage(std::cerr);
-  return 1;
 }

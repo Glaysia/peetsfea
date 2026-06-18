@@ -97,7 +97,7 @@ struct Scene { std::vector<Body> bodies; std::vector<PortEdge> ports;
 - 단위 변환 mm→m, port 방향(edge_vertices_xyz 쌍 → terminal 방향).
 
 ### B.3 solve + post (`src/solve/`, `src/post/`)
-- forked Palace 실행(MPI 4) → `postpro/port-S.csv`·`port-V.csv`·`port-I.csv`.
+- **링크된 forked Palace를 in-process 함수 호출**(아키텍처 B; subprocess CLI 아님). pfsolver가 `MPI_Init`(4 rank) 후 Palace 솔버 객체를 직접 구동 → `port-S/V/I` 결과를 메모리/파일로 수취.
 - post: S→Z(Z₀ 정규화)와 V/I→Z 두 경로 계산 → 일치 확인 → `network.csv`.
 - 부호 고정: Z12/Z21을 HFSS port current 방향 기준으로.
 
@@ -128,8 +128,8 @@ struct Scene { std::vector<Body> bodies; std::vector<PortEdge> ports;
 - forked Palace에 pool 크기 주입(환경변수/override lib 또는 config 필드).
 - acceptance: 8 GB RTX 3070에서 cpw/cylinder 예제가 OOM 없이 완주(phase0 재현).
 
-### C.3 MPI launch
-- `palace -np 4`(4-core 고정) wrapper, stdout/stderr 캡처, 종료코드 전파.
+### C.3 MPI (in-process)
+- pfsolver 자체가 `mpirun -np 4 pfsolver solve ...`로 기동되고 `MPI_Init`로 4 rank 운용(링크된 Palace가 그 communicator 사용). subprocess `palace` 아님.
 - watchdog(상위 60분 hard-abort 정책과 정합).
 
 ### C.4 OOM/대형 문제 흡수
@@ -156,6 +156,6 @@ struct Scene { std::vector<Body> bodies; std::vector<PortEdge> ports;
   Mode 2 warm-start, Mode 3 label.
 
 ## 의존성 추가 (Dockerfile.base)
-- nlohmann/json, toml++ (header-only)
-- gmsh (이미 계획됨, OCCT 포함) — C++ API 링크
-- forked Palace(M1) + CUDA + MPI
+- nlohmann/json, toml++ (header-only) — 이미 toolchain/base에 추가됨
+- gmsh `libgmsh-dev` — **C++ API in-process 링크**(subprocess 아님)
+- **forked Palace를 라이브러리(+헤더)로 빌드해 링크**(M1). upstream엔 stable libpalace가 없으므로 포크 소스를 vendoring해 우리 빌드에 포함하고 `pfsolver`가 `target_link_libraries`로 링크. CUDA + MPI(MFEM/HYPRE/libCEED 등 Palace 의존성 포함).

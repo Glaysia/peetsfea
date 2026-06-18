@@ -27,6 +27,10 @@ add_executable(pfsolver
   src/main.cpp
   src/cuda_probe.cpp
   src/env_report.cpp
+  src/error.cpp
+  src/model/scene.cpp
+  src/ingest/json_util.cpp
+  src/ingest/step_bundle.cpp
 )
 target_include_directories(pfsolver PRIVATE src)
 target_link_libraries(pfsolver PRIVATE CUDA::cudart MPI::MPI_CXX)

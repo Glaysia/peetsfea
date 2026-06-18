@@ -27,7 +27,7 @@ RUN spack env create solver \
 
 # Mesher (STEP -> .msh via OpenCASCADE) and our app toolchain.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      cmake ninja-build build-essential gmsh \
+      cmake ninja-build build-essential gmsh libgmsh-dev nlohmann-json3-dev libtomlplusplus-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Activate the spack env (palace, cuda, mpi on PATH/CMAKE_PREFIX_PATH) for every

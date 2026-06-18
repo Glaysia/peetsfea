@@ -21,6 +21,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential \
       openmpi-bin \
       libopenmpi-dev \
+      nlohmann-json3-dev \
+      libtomlplusplus-dev \
+      libgmsh-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
