@@ -14,14 +14,16 @@
   - `SurfaceCurrent.Excitation`으로 current source를 excitation별로 분리.
   - `SurfaceCurrent.Current`로 source current amplitude를 config/schema/docs에 명시.
   - `SurfaceFlux Type="Current"` diagnostic.
+  - `Domains.VolumeCurrent` source scaffold.
   - non-rectangular terminal patch에서는 OBB length 대신 direction-projected length를 사용.
 - Docker `peetsfea-palace:0.16.1pfterm01` 빌드 완료.
-  - image id `sha256:6a2cebf674b21c5af3d5645cfa0575718155d1eaf49ba3d28d4db118017728fe`
-  - build info: `fork_version=0.16.1pfterm01`, `cuda_arch=86`, `source_commit=bc8c335b164ce6c7a2542ade6ee65968e68e4816-dirty`
+  - image id `sha256:c733670e7523ff3dac648472234c2feefe0a751a025dafd880a219ee3345677b`
+  - build info: `fork_version=0.16.1pfterm01`, `cuda_arch=86`, `source_commit=f082c575f847a871d0e0d67d9a6ffa2b099dc2cb`
   - `~/.local/bin/palace` wrapper 기본값도 `peetsfea-palace:0.16.1pfterm01`.
 - ingest contract:
   - runner copy `input.toml`은 design TOML로 오인하지 않는다.
   - canonical design TOML은 port ledger `design_id`와 같은 `<design_id>.toml`만 허용한다.
+  - port ledger `selection`은 peetsfea/HFSS와 같은 `semantic_edge_vertices`만 허용한다.
 - mesh contract:
   - helper/non-model bodies(`tv`, `tx_region`, `tx_region_max`, `rx_region_max`)는 solve domain에서 제거.
   - FR4 + copper만 실제 material volume으로 유지.
@@ -63,6 +65,8 @@ Palace 실행, Docker/GPU, HYPRE, mesh generation, CSV parsing이 문제가 아�
 - `Z12≈Z21=−772.01+j2276.05 Ω`
 
 상반성은 맞지만 self inductance가 음수라 acceptance 불가다. 즉 coordinate-copy 문제가 아니라, Palace의 sheet source가 HFSS terminal conductor current와 등가가 아니다.
+
+2026-06-19 semantic edge + finite VolumeCurrent bridge prototype: `peetsfea-palace:0.16.1pfterm01`을 `source_commit=f082c575...`로 rebuild해 `Domains.VolumeCurrent` schema/operator가 실제 Docker image에 들어간 것을 확인했다. 같은 feed-gap sheet를 copper thickness 방향 70 µm로 extrude한 source volume(`Attributes 201/202`)에 1 A 정규화 current density를 걸어 `run/proto_semantic_edge_volume_current_rank1/`에서 rank1 시도했다. Palace validation은 통과했지만 excitation 1에서 power iteration과 GMRES residual이 즉시 `NaN`으로 들어가 컨테이너를 중단했다. 따라서 finite bridge/volume-current도 acceptance 경로가 아니며, 다음 작업은 Palace에 **edge-aware terminal port**를 직접 추가하는 것이다.
 
 ## ★ Claude 진단 (2026-06-19)
 
@@ -133,6 +137,12 @@ HFSS final adaptive pass @ 6.78 MHz:
    - `port-I-field.csv` 기준 diagnostic도 `Z11≈0.012+j0.534 Ω`, `Z22≈0.012+j0.581 Ω`, `Z12≈0`라 HFSS order가 아니다.
    - internal cut face 자체도 loop terminal current를 만들지 못한다.
 
+7. `run/proto_semantic_edge_volume_current_rank1/`
+   - `peetsfea-palace:0.16.1pfterm01` rebuild: image `sha256:c733670e...`, source `f082c575`, `Domains.VolumeCurrent` schema 확인.
+   - semantic feed-gap sheet를 copper thickness 방향 70 µm로 extrude해 source volumes `201/202` 생성, 1 A 기준 current density 적용.
+   - Palace config validation은 통과하지만 excitation 1 GMRES residual이 시작부터 `NaN`; 컨테이너 중단.
+   - finite bridge/VolumeCurrent는 HFSS terminal port 대체 경로로 폐기한다.
+
 ### 배제한 가설
 
 - Docker vs Podman: Docker로 정상 실행하며 권한도 해결됨.
@@ -142,6 +152,7 @@ HFSS final adaptive pass @ 6.78 MHz:
 - air-domain 200 mm mismatch 단독 원인: 2000 mm로 HFSS region을 맞춰도 numeric parity는 개선되지 않았다.
 - overlapped gap sheet 단독 원인: 1 mm overlap은 Palace `NaN`, 0.02 mm overlap은 gmsh segfault.
 - copper-only internal tet face retag: 수렴하지만 mΩ collapse라 source formulation 문제를 배제하지 못한다.
+- finite source-volume bridge: `VolumeCurrent` image/schema 동기화 후에도 GMRES `NaN`.
 
 ## 남은 핵심 작업
 
@@ -150,7 +161,7 @@ HFSS final adaptive pass @ 6.78 MHz:
 - `network_field.csv`는 Palace field-power/current diagnostic으로 산출하지만 acceptance 전류는 아니다. 현재 field-current 기준도 HFSS order에 들어오지 않는다.
 - HFSS lumped terminal sheet와 등가인 Palace boundary를 재정의:
   - 현재 copper outer surface source나 내부 cut이 아니라, feed-gap sheet topology에서 3D copper terminal current path에 결합되는 formulation이어야 한다.
-  - 필요하면 Palace fork에 terminal-current postprocess/source term을 추가한다.
+  - Palace fork에 edge-aware terminal source/current operator를 추가한다. 기존 `LumpedPort`, `SurfaceCurrent`, `VolumeCurrent`, electrostatic `Terminal`은 acceptance 전류원이 아니다.
 - 그 후 `solve_bundle()` acceptance postprocess를 확정:
   - `stock port-I.csv`는 terminal current로 사용 금지.
   - `surface-I.csv` 또는 새 Palace CSV가 HFSS terminal current와 동등하다는 소스/수치 증거가 있어야 함.
