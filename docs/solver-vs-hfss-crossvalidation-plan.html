@@ -39,6 +39,11 @@
   .card{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:18px;margin:10px 0}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .figgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:12px 0}
+  @media(max-width:760px){.figgrid{grid-template-columns:1fr}}
+  figure{margin:0;background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:10px}
+  figure img{width:100%;height:auto;display:block;border-radius:6px;background:#fff}
+  figcaption{margin-top:8px;color:var(--mut);font-size:12.5px}
   .note{margin-top:12px;padding:12px 16px;border-radius:10px;background:rgba(255,180,84,.08);
         border:1px solid rgba(255,180,84,.3);color:#ffd9a3;font-size:13.5px}
   .note.ok{background:rgba(52,212,183,.08);border-color:rgba(52,212,183,.3);color:#a9ecdc}
@@ -170,6 +175,17 @@
   <b>1차 비교 대상은 §3.2 HFSS no-ferrite fixed bundle</b>다. 현재 수치 비교는 FAIL.</p>
   <div class="note"><b>진단(Claude 2026-06-19):</b> full-wave는 맞다(<code>Problem.Type=Driven</code>). FAIL의 1순위 원인은 <b>port가 코일 루프 전류를 못 만드는 topology 문제</b>다.
   코일은 두 끝이 ~2.1&nbsp;mm 떨어진 열린 스파이럴이고, HFSS lumped terminal은 <b>그 급전 간극(feed gap)을 채우는 sheet</b>에 걸려 전류를 스파이럴 한 바퀴 돌린다(→ j243&nbsp;Ω). 지금 시도들(copper 표면 패치·내부 단면 cut·overlap)은 두 터미널을 간극 너머로 잇지 못해 국소 단락 → <code>Z11≈mΩ, Z12≈0</code> 붕괴(collapse)거나 26~37× overshoot — 둘 다 같은 뿌리(전류가 루프가 아님). copper 3D solve-inside는 유지(R용). 2순위는 6.78&nbsp;MHz 전기적-소형 코일의 full-wave 저주파 한계(port 고친 뒤 확인). 자세히는 <code>GOAL.md</code> ★진단.</div>
+  <div class="note ok"><b>2026-06-19 port topology checkpoint:</b> pfsolver는 이제 peetsfea/HFSS와 같은 규칙을 따른다. <code>ssw_aedt_port_ledger.json</code>의 <code>edge_vertices_xyz</code> 두 개를 <code>port.copper_body_name</code>의 imported Gmsh/OCC copper boundary curve에 <code>1e-5 mm</code> tolerance로 resolve하고, 새 endpoint point를 만들지 않는다. clean no-ferrite STEP에서 TX는 copper curves <code>372/205</code>, RX는 <code>692/530</code>으로 resolve된다. port sheet는 이 두 copper curve + connector line 두 개로 구성되고, surface boundary가 이 네 curve를 유지하지 않으면 fail-fast한다.</div>
+  <div class="figgrid">
+    <figure>
+      <img src="../run/pfsolver_port_visual_debug/semantic_tx_port_step_plane2d.png" alt="TX feed-gap port generated from resolved STEP copper edges" />
+      <figcaption>TX: black = resolved STEP copper feed edges, red = pfsolver gap sheet/port mesh, blue dashed = connector edges.</figcaption>
+    </figure>
+    <figure>
+      <img src="../run/pfsolver_port_visual_debug/semantic_rx_port_step_plane2d.png" alt="RX feed-gap port generated from resolved STEP copper edges" />
+      <figcaption>RX: port sheet long edges coincide with the actual imported copper edge curves, not duplicated coordinate-only lines.</figcaption>
+    </figure>
+  </div>
   <div class="card" style="border-color:rgba(118,185,0,.35)">
     <b>현재 설정 (HFSS와 정렬)</b>
     <ul>
@@ -199,7 +215,7 @@
   L = im(Z)/ω,  R = re(Z),  M = im(Z12)/ω,  k = M/√(L1·L2),  Q = ωL/R<br>
   C·SRF: sweep에서 im(Z)=0 인 f₀ →  C = 1 / ((2πf₀)²·L)</div>
   <div class="note"><b>부호/전류 함정:</b> stock Palace <code>LumpedPort</code>의 <code>port-I.csv</code>는 terminal conductor current가 아니라 <code>V/RLC</code> branch current다. <code>V @ inv(port-I)</code>는 50Ω termination만 재구성하므로 acceptance Z로 쓰지 않는다. <code>surface-I.csv</code>의 0.051521 A는 Palace 소스 기준 dimensionalized physical current가 맞지만, 그 source 자체가 HFSS terminal과 아직 등가가 아니다.</div>
-  <div class="note fail"><b>원인 업데이트:</b> 초기 MSH에서 port <code>101/102</code>는 air/FR4 interface에 붙어 있었고 copper attrs <code>12/15</code>에 adjacent하지 않았다. retag 후에는 <code>101→(air 1, copper 12)</code>, <code>102→(air 1, copper 15)</code> copper-adjacent face가 됐고 Palace <code>0.16.1pfmuflen</code>으로 rank1 solve도 완주했다. 그래도 current-source/native LumpedPort 모두 mΩ급 Z와 <code>Z12≈0</code>로 collapse한다. <code>0.16.1pfterm01</code>의 <code>SurfaceCurrent.Current</code> 명시 patch, copper-only internal cut faces, overlapped gap sheet도 통과하지 못했다. 따라서 남은 직접 원인은 <b>face 태깅이 아니라 HFSS terminal current를 3D copper volume에 결합하는 source formulation 자체</b>다.</div>
+  <div class="note fail"><b>원인 업데이트:</b> 초기 구현은 ledger 좌표를 복사해 새 points/lines로 port sheet를 만들었고, peetsfea/HFSS의 imported copper edge resolve 규칙을 따르지 않았다. copper-adjacent retag, copper-only internal cut faces, overlapped gap sheet는 모두 numeric FAIL이었다. 현재 구현은 실제 copper edge curves를 재사용하는 feed-gap sheet로 고쳤다. 다음 판정은 이 semantic sheet에서 Palace native <code>LumpedPort</code>가 HFSS terminal current를 3D copper volume에 제대로 결합하는지다.</div>
   <div class="note"><b>Field plot acceptance:</b> numeric gate 통과 후 Palace field output에서 air-gap E/H 또는 B-field plot 이미지를 생성해 이 HTML에 실제 이미지로 첨부한다. 숫자 표만 남기지 않고, 형상/포트/field sanity를 눈으로 확인할 수 있게 둔다.</div>
 </section>
 
@@ -223,7 +239,7 @@
   <div class="note"><b>합격 판정 규칙:</b> 모든 scalar(L/M/k/|Z|)가 tolerance 이내 + 상반성·passivity 통과 + sweep 곡선이 SRF 부근까지 정성 일치하면
   <b>"pfsolver가 이 설계점에서 HFSS terminal Z를 재현"</b>으로 판정. R은 표피 메시 의존이 커 ±15%를 1차 목표로 두되, 메시 수렴으로 ±5% 도달을 추적.
   단일 점 합격 후 §6 검증 사다리(V0→V4)로 확장.</div>
-  <div class="note warn"><b>현재 판정:</b> GOAL1 Python API/Palace orchestration, HFSS-size air-domain, 3D-copper mesh, copper-adjacent retag, patched Palace projected-length runtime은 동작한다. numeric parity는 실패했고, 직접 원인은 port가 HFSS conductor cross-section terminal cut/current path가 아니라 copper outer-surface local patch라는 것이다. 다음 작업은 terminal cut/source formulation을 HFSS lumped terminal과 등가로 재정의하는 것이다.</div>
+  <div class="note warn"><b>현재 판정:</b> GOAL1 Python API/Palace orchestration, HFSS-size air-domain, 3D-copper mesh, patched Palace projected-length runtime은 동작한다. port geometry는 peetsfea/HFSS처럼 imported copper edge curves 기반 feed-gap sheet로 고쳤다. numeric parity는 아직 실패 상태이며, 다음 작업은 이 semantic sheet에서 Palace terminal source/current formulation을 HFSS lumped terminal과 등가로 검증하거나 보정하는 것이다.</div>
 </section>
 
 <section>
@@ -251,11 +267,11 @@
   <div class="phase done"><b>M2 — <code>pfsolver.inspect_bundle()</code>: 번들 ingest + setup 복원</b>
     <div class="m">STEP+ledger+port_ledger+token+TOML → body/material/port edge/boundary/frequency 전부 복원, 누락 즉시 exception. pyright strict + pytest 통과.</div></div>
   <div class="phase done"><b>M3 — <code>pfsolver.mesh_bundle()</code>: gmsh tet + physical group 태깅</b>
-    <div class="m">no-ferrite SSW bundle에서 STEP→tet, copper/FR4/boundary physical group, copper-adjacent port retag, Palace JSON schema 검증 통과.</div></div>
+    <div class="m">no-ferrite SSW bundle에서 STEP→tet, copper/FR4/boundary physical group, imported copper edge curves 기반 feed-gap port sheet, Palace JSON schema 검증 통과.</div></div>
   <div class="phase done"><b>M4 — <code>pfsolver.solve_bundle()</code>: no-ferrite 단일 주파수부터</b>
-    <div class="m">rank1 diagnostics 실제 실행. GPU mandatory, HYPRE pool override, manifest 재현 필드 확인. Numeric acceptance는 terminal cut formulation 전까지 FAIL.</div></div>
+    <div class="m">rank1 diagnostics 실제 실행. GPU mandatory, HYPRE pool override, manifest 재현 필드 확인. Numeric acceptance는 feed-gap terminal formulation 검증 전까지 FAIL.</div></div>
   <div class="phase done"><b>M5 — postprocess → Z(f) + 이 표 채우기</b>
-    <div class="m">S→Z/current-source 후처리와 diagnostic 표 갱신 완료. numeric parity는 FAIL로 기록하고 HFSS-equivalent terminal cut/source formulation으로 분리.</div></div>
+    <div class="m">S→Z/current-source 후처리와 diagnostic 표 갱신 완료. numeric parity는 FAIL로 기록하고 HFSS-equivalent feed-gap terminal/source formulation으로 분리.</div></div>
   <div class="phase"><b>M-fork — Palace 패치: 복소 μ(자기손실) + 주파수 종속 material</b>
     <div class="m">forked Palace material/assembly에 magnetic loss tangent(μ″) + μ(f)/ε(f) dispersion 추가. ferrite 검증(V3)·dispersive sweep의 선행 조건. upstream엔 없는 항이라 fork에서만 가능. 단위 검증: ferrite μ=135.6−j0.296 주입 → HFSS와 대조.</div></div>
   <div class="phase"><b>M5b — sweep(메시 재사용) + SRF·C, 손실, field (ferrite는 M-fork 후)</b>
@@ -271,13 +287,13 @@
     <tr><td>HFSS 기준선(6.78MHz)</td><td><span class="pill done">ferrite + exact no-ferrite 완료</span></td><td class="num">ferrite 377.4 s<br>no-ferrite 194 s<br>body-absent sweep 592.7 s</td><td><code>run/hfss_ferrite_enabled_current_full/*</code><br><code>run/hfss_no_ferrite_nonmodel_full/*</code> · Z/L/M/R/Q/k (§3)</td></tr>
     <tr><td>독립 Python API 서브모듈 + GPU 게이트</td><td><span class="pill done">구현</span></td><td class="num">—</td><td><code>solver/pfsolver</code> API, CLI 없음</td></tr>
     <tr><td>Docker Palace 0.16.1pfterm01 로컬 이미지(M1)</td><td><span class="pill done">완료</span></td><td class="num">1회 빌드 완료</td><td><code>~/.local/bin/palace</code> wrapper → <code>peetsfea-palace:0.16.1pfterm01</code></td></tr>
-    <tr><td>ingest+mesh, no-ferrite(M2–M3)</td><td><span class="pill done">구현</span></td><td class="num">mesh 20-40 s</td><td><code>solver/pfsolver</code> gmsh mesh policy + copper-adjacent port retag</td></tr>
+    <tr><td>ingest+mesh, no-ferrite(M2–M3)</td><td><span class="pill done">구현</span></td><td class="num">mesh 20-40 s</td><td><code>solver/pfsolver</code> gmsh mesh policy + semantic copper-edge feed-gap port sheet<br><code>run/pfsolver_port_visual_debug/semantic_*_port_step_*.png</code></td></tr>
     <tr><td>solve+post, no-ferrite(M4–M5)</td><td><span class="pill fail">numeric FAIL</span></td><td class="num">retag rank1 141.6 s wall<br>Palace total 125.4 s</td><td><code>run/pfsolver_hfss_fixed_air2000_retag_pfmuflen2_currentsource_rank1/*</code><br><code>run/proto_air2000_retag_pfmuflen_lumped_native_rank1/*</code></td></tr>
     <tr><td>Palace 패치: 복소 μ + projected-length terminal patch + SurfaceCurrent Current</td><td><span class="pill done">빌드 완료</span></td><td class="num">Docker rebuild 완료<br>image sha256:6a2cebf…</td><td><code>peetsfea-palace:0.16.1pfterm01</code><br><code>fork_version=0.16.1pfterm01</code></td></tr>
     <tr><td>sweep·C·손실·field, ferrite 포함(M5b)</td><td><span class="pill todo">예정</span></td><td class="num">—</td><td>SRF·C·loss·B-plane + HTML field plot image</td></tr>
     <tr><td>교차검증 판정 + 리포트</td><td><span class="pill fail">numeric FAIL</span></td><td class="num">—</td><td>3D copper mesh + terminal-current 모델링 보정 필요</td></tr>
   </table>
-  <div class="note warn"><b>요약:</b> GOAL1의 독립 Python API, Docker Palace 0.16.1pfterm01 wrapper, 3D copper mesh, copper-adjacent retag, projected-length Palace patch는 준비됐다. HFSS no-ferrite numeric parity는 실패했으므로, 완료 조건은 <b>copper cross-section terminal cut/source formulation</b> 후 실제 rank4 solve가 HFSS order/tolerance에 들어오는 것이다.</div>
+  <div class="note warn"><b>요약:</b> GOAL1의 독립 Python API, Docker Palace 0.16.1pfterm01 wrapper, 3D copper mesh, semantic copper-edge feed-gap port sheet, projected-length Palace patch는 준비됐다. HFSS no-ferrite numeric parity는 실패 상태다. 완료 조건은 semantic feed-gap sheet에서 실제 Palace rank4 solve가 HFSS order/tolerance에 들어오는 것이다.</div>
 </section>
 
 </main>

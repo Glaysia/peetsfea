@@ -33,11 +33,17 @@
 
 Palace 실행, Docker/GPU, HYPRE, mesh generation, CSV parsing이 문제가 아니다. 남은 불일치는 **HFSS lumped terminal이 3D conductive copper volume에 주입하는 terminal current path를 Palace boundary formulation으로 아직 재현하지 못한 것**이다.
 
-2026-06-19 추가 확인: generated mesh에서 port physical surfaces `101/102`는 3D copper volume boundary와 공유되지 않는다. MSH 2.2 element adjacency를 확인하면 TX port triangles는 air attr `1` + FR4 attr `11`, RX port triangles는 air attr `1` + FR4 attr `14`에 붙고, copper attrs `12/15`에는 adjacent tetra face가 없다. 즉 현재 port sheet는 **air/FR4 interface sheet**이지 **copper terminal boundary sheet**가 아니다. 이것이 Palace terminal-current 불일치의 직접 원인이다.
+2026-06-19 추가 확인: generated mesh에서 port physical surfaces `101/102`의 triangle face adjacency는 TX `(air 1, FR4 11)`, RX `(air 1, FR4 14)`로 남는다. 이것 자체는 HFSS-style feed-gap sheet에서는 정상일 수 있다. 진짜 불변조건은 face adjacency가 아니라 **port sheet의 긴 두 변이 import된 copper body의 실제 terminal edge curve 두 개를 재사용하는지**다.
 
-2026-06-19 retag 패치 후: `mesh_bundle()`은 port `101/102`를 copper-adjacent terminal faces로 재태깅한다. `run/pfsolver_hfss_fixed_air2000_retag_meshprobe/`에서 TX `101`은 `(air 1, copper 12)`, RX `102`는 `(air 1, copper 15)` face로 확인됐다. 이어 `peetsfea-palace:0.16.1pfmuflen`은 non-rectangular port patch의 projected-length/axis warning을 허용해 rank1 solve를 완주한다. 그러나 current-source와 native LumpedPort 모두 `Z11≈0.0023+j0.000018 Ω`, `Z22≈0.00495+j0.000022 Ω`, `Z12≈0`로 collapse한다. 따라서 단순 copper-adjacent **outer surface patch**는 HFSS terminal cut/current path가 아니다. 다음 단계는 conductor volume을 실제로 끊는 **copper cross-section terminal cut** 또는 그와 등가인 Palace source/current formulation이다.
+2026-06-19 retag 패치 후: `mesh_bundle()`은 port `101/102`를 copper-adjacent terminal faces로 재태깅한다. `run/pfsolver_hfss_fixed_air2000_retag_meshprobe/`에서 TX `101`은 `(air 1, copper 12)`, RX `102`는 `(air 1, copper 15)` face로 확인됐다. 이어 `peetsfea-palace:0.16.1pfmuflen`은 non-rectangular port patch의 projected-length/axis warning을 허용해 rank1 solve를 완주한다. 그러나 current-source와 native LumpedPort 모두 `Z11≈0.0023+j0.000018 Ω`, `Z22≈0.00495+j0.000022 Ω`, `Z12≈0`로 collapse한다. 따라서 단순 copper-adjacent **outer surface patch**는 HFSS feed-gap terminal current path가 아니다.
 
-2026-06-19 `0.16.1pfterm01` 확인: `SurfaceCurrent.Current=1.0` config/schema/docs/operator patch는 빌드와 Python schema validation을 통과했다. 하지만 기하/source 후보 실험은 아직 numeric fail이다. 1 mm overlapped gap sheet는 copper adjacency를 만들지만 SurfaceCurrent/native LumpedPort 모두 GMRES `NaN`; 0.02 mm overlap은 gmsh segmentation fault; copper-only internal tet face cut(TX 4 faces/RX 3 faces)은 Palace가 수렴하지만 `Z11=0.002615+j0.000015 Ω`, `Z22=0.001854+j0.000009 Ω`, `Z12≈0`로 여전히 collapse한다. 따라서 단순 face retag/overlap이 아니라 **source formulation 자체**가 다음 핵심이다.
+2026-06-19 `0.16.1pfterm01` 확인: `SurfaceCurrent.Current=1.0` config/schema/docs/operator patch는 빌드와 Python schema validation을 통과했다. 하지만 기하/source 후보 실험은 아직 numeric fail이다. 1 mm overlapped gap sheet는 copper adjacency를 만들지만 SurfaceCurrent/native LumpedPort 모두 GMRES `NaN`; 0.02 mm overlap은 gmsh segmentation fault; copper-only internal tet face cut(TX 4 faces/RX 3 faces)은 Palace가 수렴하지만 `Z11=0.002615+j0.000015 Ω`, `Z22=0.001854+j0.000009 Ω`, `Z12≈0`로 여전히 collapse한다. 따라서 단순 face retag/overlap이 아니라 **peetsfea/HFSS와 같은 feed-gap edge topology + Palace source formulation**이 다음 핵심이다.
+
+2026-06-19 semantic edge patch: `pfsolver.mesh_bundle()`은 이제 peetsfea `ssw_ports.py`와 같은 규칙을 따른다. `ssw_aedt_port_ledger.json`의 `edge_vertices_xyz` 두 개를 `port.copper_body_name`의 imported Gmsh/OCC copper boundary curves에 `1e-5 mm` tolerance로 resolve하고, 새 endpoint point를 만들지 않는다. 실제 clean bundle에서 TX는 copper curves `(372, 205)`, RX는 `(692, 530)`으로 정확히 resolve된다. port sheet는 이 copper curves 두 개 + 새 connector line 두 개로 구성하고, surface boundary가 그 네 curve를 유지하지 않으면 fail-fast한다. STEP 시각화 PNG:
+- `run/pfsolver_port_visual_debug/semantic_tx_port_step_plane2d.png`
+- `run/pfsolver_port_visual_debug/semantic_rx_port_step_plane2d.png`
+- `run/pfsolver_port_visual_debug/semantic_tx_port_step_3d.png`
+- `run/pfsolver_port_visual_debug/semantic_rx_port_step_3d.png`
 
 ## ★ Claude 진단 (2026-06-19)
 
@@ -47,7 +53,7 @@ Palace 실행, Docker/GPU, HYPRE, mesh generation, CSV parsing이 문제가 아�
 `port_edges`는 코일 두 터미널 패드 사이 **~2.1 mm 급전 간극(feed gap)**의 두 모서리(seg A, seg B)다(실측: TX gap 2.10 mm, RX 2.19 mm). HFSS lumped terminal은 **이 간극을 채우는 sheet**에 걸려 전류를 한 패드→스파이럴 전체 한 바퀴→다른 패드로 돌린다 → 자기인덕턴스 j243 Ω.
 - 코일은 **이미 두 끝이 2.1 mm 떨어진 열린 스파이럴**이다. **copper를 새로 끊지 마라**(internal tet cut 시도들이 틀린 이유). 이미 존재하는 간극을 port sheet로 채우고 두 끝면(터미널 단면)을 전극으로 쓴다.
 - Codex 변형이 전부 같은 식으로 실패한 이유: copper 외부 표면 패치·내부 단면 cut → 전류가 루프를 안 돌고 국소 단락 → `Z11≈mΩ, Z12≈0` 붕괴. overlap sheet → degenerate → NaN/segfault. 작은 air + current-source → 국소 과대 → 26~37배 overshoot. **collapse와 overshoot는 같은 뿌리**(전류가 스파이럴 루프가 아님)다.
-- 수정: port sheet = **2.1 mm 간극을 채우는 사각면**(두 변 = seg A·seg B, 각각 copper 터미널 단면에 접함), excitation = 간극 가로지르는 방향, native `LumpedPort`. copper face / 내부 cut / overlap 아님.
+- 수정: port sheet = **2.1 mm 간극을 채우는 사각면**(두 변 = imported copper curve로 resolve한 seg A·seg B, 각각 copper 터미널 단면에 접함), excitation = 간극 가로지르는 방향, native `LumpedPort`. copper face / 내부 cut / overlap 아님.
 - copper 3D solve-inside(skin depth)는 **그대로 유지** — R용이고 인덕턴스 붕괴 원인 아님.
 
 **2순위 — full-wave의 저주파 한계 (port 고친 뒤 볼 것):**
@@ -99,7 +105,7 @@ HFSS final adaptive pass @ 6.78 MHz:
 5. `run/proto_air2000_retag_pfmuflen_lumped_native_rank1/`
    - 같은 retag mesh에서 `SurfaceCurrent` 제거, native `LumpedPort Active=true`.
    - S→Z 결과도 `Z11 = 0.002305 + j0.000018 Ω`, `Z22 = 0.004947 + j0.000022 Ω`, `Z12≈0`.
-   - current-source만의 문제가 아니라 Palace lumped terminal boundary 자체가 현재 retag patch로는 HFSS terminal cut을 재현하지 못한다.
+   - current-source만의 문제가 아니라 Palace lumped terminal boundary 자체가 현재 retag patch로는 HFSS feed-gap terminal을 재현하지 못한다.
 
 6. `run/proto_internal_copper_cut_currentsource_rank1/`
    - port `101/102`를 copper-only internal tet faces로만 구성(TX 4 faces/RX 3 faces), Docker `peetsfea-palace:0.16.1pfterm01`, rank1.
@@ -120,11 +126,11 @@ HFSS final adaptive pass @ 6.78 MHz:
 
 ## 남은 핵심 작업
 
-- `101/102` copper-adjacent outer-surface retag는 완료됐지만 acceptance 불가다. HFSS terminal은 local surface patch가 아니라 conductor current path를 끊어 구동한다.
+- `101/102` copper-adjacent outer-surface retag는 폐기한다. HFSS terminal은 local surface patch나 내부 cut이 아니라, 이미 열린 스파이럴의 feed-gap edge pair를 terminal sheet로 잇는다.
+- `101/102` port sheet 생성은 이제 peetsfea/HFSS 규칙처럼 실제 imported copper edge curve 두 개를 resolve해서 만든다. 다음 numeric solve로 Palace native `LumpedPort`가 이 topology에서 terminal loop current를 만드는지 확인해야 한다.
 - `network_field.csv`는 Palace field-power/current diagnostic으로 산출하지만 acceptance 전류는 아니다. 현재 field-current 기준도 HFSS order에 들어오지 않는다.
-- port sheet 생성/fragment를 고쳐 physical surfaces `101/102`가 **copper cross-section terminal cut** 또는 그와 등가인 내부 conductor terminal boundary가 되게 만든다.
 - HFSS lumped terminal sheet와 등가인 Palace boundary를 재정의:
-  - 현재 air-domain internal sheet source나 copper outer surface source가 아니라, 3D copper terminal cut/current path에 결합되는 formulation이어야 한다.
+  - 현재 copper outer surface source나 내부 cut이 아니라, feed-gap sheet topology에서 3D copper terminal current path에 결합되는 formulation이어야 한다.
   - 필요하면 Palace fork에 terminal-current postprocess/source term을 추가한다.
 - 그 후 `solve_bundle()` acceptance postprocess를 확정:
   - `stock port-I.csv`는 terminal current로 사용 금지.
@@ -141,10 +147,11 @@ HFSS final adaptive pass @ 6.78 MHz:
 - [x] helper/non-model 제거 + 단일 air domain + 외곽 absorbing only.
 - [x] HFSS 2000 mm radiation region volume 재현.
 - [x] 3D copper solve-inside + skin-depth mesh policy.
-- [x] 현재 port sheet가 copper가 아니라 air/FR4 interface에 붙어 있음을 MSH adjacency로 확인.
+- [x] 초기 좌표복사 port sheet가 peetsfea/HFSS edge-resolve 규칙을 따르지 않음을 STEP/MSH 시각화로 확인.
 - [x] port physical group 101/102를 copper-adjacent outer surface로 retag하고 Palace rank1 완주.
 - [x] `SurfaceCurrent.Current` config/schema/operator patch + Docker `0.16.1pfterm01` 빌드.
-- [ ] port physical group 101/102를 HFSS-equivalent copper cross-section terminal cut/current path로 재정의.
+- [x] port physical group 101/102를 imported copper edge curves `(TX 372/205, RX 692/530)` 기반 feed-gap sheet로 재정의.
+- [ ] semantic feed-gap sheet mesh에서 Palace native `LumpedPort` rank1 diagnostic 실행.
 - [ ] Palace terminal source/current formulation이 HFSS lumped terminal과 동등함을 증명.
 - [ ] rank4 solve: `Z11/Z22/Z12`가 HFSS 크기대(order)로 산출.
 - [ ] HFSS no-ferrite tolerance: L/M ±5%, |Z| ±5%, k ±10%, R ±15%.
