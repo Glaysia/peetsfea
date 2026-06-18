@@ -52,6 +52,13 @@ Palace 실행, Docker/GPU, HYPRE, mesh generation, CSV parsing이 문제가 아�
 
 따라서 **peetsfea/HFSS edge topology는 이제 맞지만, Palace native `LumpedPort`/current diagnostic이 HFSS terminal conductor current를 만들지 못한다**. 다음 핵심은 Palace 쪽 terminal source/current formulation이다.
 
+2026-06-19 semantic edge + SurfaceCurrent 재시도: 같은 semantic feed-gap sheet에 native `LumpedPort` 대신 patched `SurfaceCurrent(Current=1.0, Excitation=1/2)`를 걸어 `run/proto_semantic_edge_surfacecurrent_rank1/`에서 다시 실행했다. Palace는 정상 수렴했다(Palace total `92.7 s`, peak HWM `4.5 GB`). `I_inc=0.051521 A` 기준 `Z=V @ inv(I_inc)`:
+- `Z11=484.34−j7684.19 Ω`
+- `Z22=15186.40−j55850.61 Ω`
+- `Z12≈Z21=−772.01+j2276.05 Ω`
+
+상반성은 맞지만 self inductance가 음수라 acceptance 불가다. 즉 coordinate-copy 문제가 아니라, Palace의 sheet source가 HFSS terminal conductor current와 등가가 아니다.
+
 ## ★ Claude 진단 (2026-06-19)
 
 **full-wave 맞다.** pfsolver config는 `Problem.Type="Driven"` = 완전 Maxwell 주파수영역 = full-wave(코드+생성 config 확인). HFSS도 같은 full-wave terminal로 이 코일에서 j243Ω를 내므로 full-wave로 **가능한** 문제다.
