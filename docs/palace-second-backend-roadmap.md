@@ -12,6 +12,18 @@ tags:
 
 # Palace Second Backend Roadmap
 
+> **Reframed (dev/3):** This document's "second backend" framing is superseded.
+> The product is **`pfsolver`, a full-wave terminal solver that *replaces* the
+> peetsfea HFSS workflow** — not an auxiliary backend. Palace is the internal
+> full-wave FEM core; the user/runner surface is `pfsolver inspect|mesh|solve`.
+> The solver input is the **STEP + sidecar bundle** (`ssw_scene.step`,
+> `ssw_step_ledger.json`, `ssw_aedt_port_ledger.json`, `coil_making_token.toml`,
+> `<design_id>.toml`), and the first deliverable is bundle ingest +
+> material/port/boundary recovery, not a solver-neutral schema. See
+> `../cpp-cuda-fem-solver-longterm-plan.html` and
+> `solver-vs-hfss-crossvalidation-plan.html`. The phase content below remains
+> useful as background.
+
 ## Purpose
 - Use Palace as a second frequency-domain EM backend to reduce the HFSS bottleneck.
 - Keep HFSS as the reference solver until Palace agreement is measured and documented.

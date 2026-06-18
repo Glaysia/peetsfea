@@ -138,10 +138,16 @@
     그 순서를 뒤집어 <strong>C++ FEM 솔버를 최우선이자 핵심 deliverable</strong>로 끌어올린다.
   </p>
   <p style="margin-bottom:0">
-    솔버는 Ansys HFSS 라이선스 병목을 없애기 위해, peetsfea 0.3.7이 결정론적으로 생성하는
-    <code>ssw_scene.step</code> + 추출된 ledger/token + field 데이터를 입력으로 받아
-    <strong>terminal network Z(f)</strong>를 추출한다. HFSS를 100% 대체하는 것이 아니라,
-    "현재 프로젝트가 추출하는 정보 + field 데이터" 범위 안에서 HFSS의 Z-파라미터 역할을 대체한다.
+    <code>pfsolver</code>는 <strong>HFSS replacement executable</strong>이다 — "Palace second backend"가 아니다.
+    Palace는 내부 full-wave FEM core로 쓰지만, 사용자·runner가 보는 실행면은 <code>pfsolver solve …</code>다.
+    Ansys 없이, peetsfea 0.3.7이 결정론적으로 생성하는 <strong>STEP + sidecar 번들</strong>
+    (<code>ssw_scene.step</code> · <code>ssw_step_ledger.json</code> · <code>ssw_aedt_port_ledger.json</code> ·
+    <code>coil_making_token.toml</code> · <code>&lt;design_id&gt;.toml</code>)을 입력으로 받아
+    현재 peetsfea HFSS workflow가 내던 <strong>terminal-network 산출물</strong>(Z/S/V/I·loss·field)을 직접 만든다.
+  </p>
+  <p style="margin-bottom:0;color:var(--muted);font-size:14px">
+    STEP 단독은 형상만 있고 material role·port edge·current 방향·boundary·frequency·complex μ/ε가 없다.
+    그래서 입력 계약은 우회가 아니라 <strong>STEP + ledger/token/TOML 번들</strong> 그 자체다(§3).
   </p>
 </div>
 
@@ -184,7 +190,7 @@
     <div class="mtag">Mode 3 · Surrogate</div>
     <div class="mtime">≈ 0.1초</div>
     <div class="mname">0.99 정확도 대리모델 단독</div>
-    <p>FEM을 호출하지 않고 학습된 대리모델이 직접 Z(f)·L·M·k·Q·η 출력. 대규모 설계 탐색·최적화 inner loop용.</p>
+    <p>FEM 미호출. Transformer가 입력 token(형상)에서 <strong>field(E/H/B/J·loss map)를 예측 → 그 field에서 Z(f)·L·M·k·Q·η 도출</strong>. field를 물리적 중간표현으로 거치는 게 최종 목적. 대규모 설계 탐색 inner loop용.</p>
   </div>
 </div>
 <div class="panel">
@@ -231,6 +237,7 @@
   <tbody>
     <tr><td><code>ssw_scene.step</code></td><td>fused solid geometry (TX/RX SSW coil, under-coil, FR4, ferrite, non-model vacuum box)</td><td>mesh 입력 geometry</td></tr>
     <tr><td><code>ssw_step_ledger.json</code></td><td><span class="kv">bodies[]</span> (role·material·center·size·object_id), <span class="kv">copper/ferrite/fr4/non_model_body_names</span>, units(mm)</td><td>material region·domain 태깅, 도체/유전체/페라이트 분리</td></tr>
+    <tr><td><code>ssw_aedt_port_ledger.json</code></td><td><span class="kv">port_edges[]</span> (role tx/rx + lumped terminal <span class="kv">edge_vertices_xyz</span> 쌍) + body role 분류</td><td><strong>lumped terminal port edge pair</strong> 복원 → 여기·current 방향 기준</td></tr>
     <tr><td><code>coil_making_token.toml</code></td><td>265개 action token (<code>BEGIN_SSW_SCENE</code>, <code>CREATE_NON_MODEL_BOX</code>, spiral 생성, port 정의 …) + schema/seed</td><td>port endpoint·semantic ownership·excitation 의도, ML feature</td></tr>
     <tr><td><code>&lt;design_id&gt;.toml</code></td><td>sampled fixed point (치수·재질·주파수 6.78 MHz·constraints)</td><td>frequency setup, 재질 파라미터, conductivity/μ/loss tangent</td></tr>
     <tr><td>field 데이터</td><td>HFSS/대리모델에서 나온 air-gap B-plane, ferrite surface field, conductor J map 등</td><td>모드 2 warm-start, field-derived metric 검증</td></tr>
@@ -298,6 +305,16 @@
   <div class="stage"><b>5 · Solve</b><small>CUDA + 4-core MPI, adaptive pass. 모드 2는 field warm-start로 패스 단축</small></div>
   <div class="stage"><b>6 · Post</b><small>port S/V/I → Z(f), 부호·reference impedance 정규화, 손실·field 추출</small></div>
   <div class="stage"><b>7 · Emit</b><small>solver-neutral em_result + network/derived/loss/field CSV + manifest</small></div>
+</div>
+<div class="panel accent">
+  <p class="ptitle">실행면 — pfsolver CLI 계약 (HFSS-replacement surface)</p>
+  <ul style="margin:0">
+    <li><code>pfsolver inspect &lt;bundle&gt;</code> — STEP+sidecar 읽어 body·material·port edge·boundary·frequency 전부 복원, <strong>누락이면 즉시 fail</strong>. "HFSS 없이 setup을 만들 수 있나"를 증명하는 첫 deliverable(stage 1–2).</li>
+    <li><code>pfsolver mesh &lt;bundle&gt;</code> — STEP→tet mesh + physical group으로 copper/FR4/ferrite/port/boundary 태깅(stage 3).</li>
+    <li><code>pfsolver solve &lt;bundle&gt;</code> — full-wave driven, lumped terminal 2포트, CUDA mandatory → <code>network.csv</code>·<code>derived.csv</code>·<code>port_vi.csv</code>·<code>loss.csv</code>·<code>field_index.json</code>·<code>solver_manifest.json</code>(stage 4–7).</li>
+  </ul>
+  <p style="margin:8px 0 0;color:var(--muted);font-size:13px">첫 구현 순서는 출력 schema가 아니라 <strong>번들 ingest + material/port/boundary 복원</strong>(<code>inspect</code>)이다. 출력 schema는 <code>solve</code> 단계와 함께 확정한다.
+  주의: ledger는 port current를 명시 벡터로 주지 않는다 — terminal source convention(TX 100V@0°/RX 100V@90°)과 edge pair 기하로 방향을 정의하고 §7 공통 postprocess에서 부호를 고정한다.</p>
 </div>
 
 <h2 id="math"><span class="num">§7</span>수치 정식화</h2>
@@ -383,11 +400,25 @@
   <li>초기 vector potential / field를 solver 초기값으로 로드하는 hook</li>
   <li>밀도 가이드 유무와 무관하게 <strong>같은 수렴 기준·같은 출력 계약</strong> 보장(공정한 시간 측정)</li>
 </ul>
-<h4>모드 3 — surrogate-only</h4>
+<h4>모드 3 — surrogate-only (최종 목적: token → field → Z)</h4>
 <p>
-  솔버는 직접 호출되지 않는다. 대신 모드 1이 생산한 high-fidelity (STEP/token → Z(f)) label로 학습된 대리모델이 0.1초에 추론한다.
-  이 브랜치의 책임은 <strong>label 품질·provenance 추적</strong>: HFSS label, Palace label, cross-solver-calibrated label을 구분 기록한다.
+  솔버는 직접 호출되지 않는다. 대신 Transformer foundation surrogate가 <strong>2단계</strong>로 추론한다:
 </p>
+\[ \underbrace{\text{design token}}_{\text{형상·재질·port}} \;\xrightarrow{\;D_\theta\;}\; \underbrace{\hat{\mathbf F}(\mathbf r,f)=[\mathbf E,\mathbf H,\mathbf B,\mathbf J],\ \text{loss map}}_{\text{예측된 field (물리 중간표현)}} \;\xrightarrow{\;\text{port integral}\;}\; \underbrace{\hat{\mathbf Z}(f),\,L,M,k,R,Q,\eta}_{\text{terminal network}} \]
+<p>
+  핵심은 <strong>field를 물리적 중간표현으로 명시적으로 거치는 것</strong>이다. token에서 곧장 scalar Z로 회귀하지 않고,
+  먼저 field를 예측한 뒤 그 field에서 port 적분·등가회로로 Z를 도출한다 — 이래야 (a) field가 ground-truth FEM field로 직접 supervise되고,
+  (b) 예측 Z가 예측 field와 물리적으로 일관되며(port V/I, passivity, 상반성), (c) field map 자체가 설계 통찰 산출물이 된다.
+  보조로 직접 Z head를 병렬로 둘 수 있으나, <strong>field→Z 경로가 1차</strong>다.
+</p>
+<div class="panel">
+  <p class="ptitle">이 브랜치(FEM 솔버)가 Mode 3에 공급하는 것</p>
+  <ul style="margin:0">
+    <li><strong>field label</strong>: <code>field_index.json</code> + air-gap B-plane·ferrite surface field·conductor J·loss density (모드 3의 field 예측 supervise 대상).</li>
+    <li><strong>Z label</strong>: <code>network.csv</code>/<code>derived.csv</code> (field→Z 경로의 최종 타깃).</li>
+    <li><strong>field↔Z 일관 쌍</strong>: 같은 solve에서 나온 field와 Z를 한 쌍으로 묶어 provenance(HFSS/Palace/calibrated) 기록 → 모델이 둘의 물리 관계를 학습.</li>
+  </ul>
+</div>
 <div class="panel">
   <p class="ptitle">geometry token = 정규 ML 입력</p>
   <p style="margin:0">스크린샷·CAD 파일명이 아니라 <code>coil_making_token.toml</code>의 action token(role·material·layer·conductor path·port endpoint·ferrite domain·boundary)을
@@ -458,7 +489,7 @@
 \[ \text{Foundation surrogate} + 100\ \text{target} \;\approx\; \text{classical surrogate} + 100{,}000\ \text{target} \]
 <ul>
   <li>입력: design IR token(coil/turn/layer/ferrite/port primitive) + 물리 수치 token + 관계 graph + solver setting.</li>
-  <li>출력 head: \(\mathbf{Z}(f)\) · 등가 \(L,R,M,k\) · physics-consistency \(Q=\omega L/R\) · loss \(P_{cu},P_{fe}\) · field latent.</li>
+  <li>출력 구조(<strong>최종 목적 = token→field→Z</strong>, §10): field decoder \(\hat{\mathbf F}(\mathbf r,f)\)를 1차로 두고 그 field에서 port 적분으로 \(\mathbf{Z}(f)\)·등가 \(L,R,M,k\)·\(Q\)·loss \(P_{cu},P_{fe}\)를 도출. 직접 Z head는 보조.</li>
   <li>loss: \(\mathcal L_Z + \lambda_1\mathcal L_{LRM} + \lambda_2\mathcal L_Q + \lambda_3\mathcal L_\eta + \lambda_4\mathcal L_{loss} + \lambda_5\mathcal L_{phys}\) (passivity·상반성 제약 포함).</li>
   <li>검증: held-out target family에서 \(R,Q,\eta\) 중심으로 데이터 효율 \(10^2\!\sim\!10^3\)배 절감 입증.</li>
 </ul>
