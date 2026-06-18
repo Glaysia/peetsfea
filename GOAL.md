@@ -9,7 +9,7 @@
   peetsfea가 나중에 Python API로 호출할 `inspect_bundle`/`mesh_bundle`/`solve_bundle` 표면을 제공하고,
   no-ferrite 단일주파수에서 Palace wrapper(`~/.local/bin/palace`)를 호출해 Z(f)를 산출한다.
   HFSS no-ferrite 기준값 생성(§3.2)도 이 스트림.
-- **[GOAL2_forked_palace.md](GOAL2_forked_palace.md)** — Palace fork: CUDA 도커 엔진(`peetsfea-palace:dev`) + 주파수 종속 복소 μ(자기손실) 패치.
+- **[GOAL2_forked_palace.md](GOAL2_forked_palace.md)** — ① Palace 0.16.1pf 복소 μ 패치 **완료·PASS**(`solver/docs/palace-0.16.1pf-review.md`). ② 현재 할 일 = **HFSS no-ferrite 기준값 생성**(교차검증 §3.2 채움).
 
 ## 아키텍처 (pyaedt → ansysedt 구도)
 - `pfsolver` = **독립 Python API 서브프로젝트**(`solver/pfsolver`, pyright strict + pydantic), 도커 밖.
