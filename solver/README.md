@@ -4,11 +4,11 @@ HFSS를 대체해 0.3.7 STEP 번들에서 terminal-network Z(f)를 산출한다.
 
 ## 아키텍처 (pyaedt → ansysedt 구도)
 - **pfsolver = 독립 Python API 서브프로젝트** (`solver/pfsolver`, pyright strict + pydantic). **도커 밖**.
-  번들 ingest → gmsh(Python) 메시 → Palace config emit → **도커 forked Palace 엔진 CLI 호출** → CSV→Z → manifest.
+  번들 ingest → gmsh(Python) 메시 → Palace config emit → `~/.local/bin/palace` 엔진 래퍼 호출 → CSV→Z → manifest.
 - peetsfea-facing CLI는 없다. peetsfea는 나중에 `pfsolver` Python API를 import/call한다.
-- **Docker = forked Palace 엔진만** (`peetsfea-palace:dev`, CUDA C++). 유일하게 컨테이너화되는 것.
+- 컨테이너 런타임은 Palace 래퍼가 숨긴다. 로컬 dev 기본은 stock `palace:0.16.1`; ferrite 포크 단계는 `PFSOLVER_PALACE_IMAGE=palace:0.16.1pf`.
 - **C++은 forked Palace 안에만** (주파수 종속 복소 μ 패치). 오케스트레이터엔 C++ 없음.
-- `pfsolver`와 Palace의 안정 인터페이스 = **Docker Palace CLI(JSON config / CSV)**. Palace엔 stable 공개 libpalace 없음.
+- `pfsolver`와 Palace의 안정 인터페이스 = **Palace wrapper CLI(JSON config / CSV)**. Palace엔 stable 공개 libpalace 없음.
 
 ## 모드
 - **Mode 1 = FEM** (지금 구축). 정밀 Z(f).
@@ -23,20 +23,18 @@ HFSS terminal처럼 **단일 주파수에서 메시 확정 → 같은 메시로 
 solver/
   data/materials.toml          # 물성 SSOT (AEDT 라이브 + 소스 확인값)
   docker/
-    Dockerfile.base            # forked Palace CUDA 엔진 이미지
-    build.sh                   # docker build -> peetsfea-palace:dev
+    Dockerfile.base            # forked Palace CUDA 엔진 이미지(포크 단계)
+    build.sh                   # docker build -> palace:0.16.1pf(포크 단계)
     shell.sh                   # GPU 붙은 dev 컨테이너 셸 (포크 빌드/palace 실행)
   pfsolver/                    # 독립 Python API 서브프로젝트(별도 서브모듈 대상)
   docs/implementation-plan-phase-A-C.md
 ```
 
-## Palace 엔진 도커
+## Palace 엔진 래퍼
 ```bash
-cd solver
-./docker/build.sh          # peetsfea-palace:dev 빌드 (heavy, 1회)
-./docker/shell.sh          # GPU 붙은 셸로 진입 (포크 패치/빌드, palace 실행)
+~/.local/bin/palace --version
 ```
-CUDA mandatory: 이미지는 CUDA-only 빌드. 오케스트레이터가 invoke 전 GPU 게이트(no CPU fallback).
+CUDA mandatory: 래퍼의 이미지는 CUDA-only 빌드다. 오케스트레이터가 invoke 전 GPU 게이트(no CPU fallback).
 
 ## 상세
 - 목표/Acceptance: [../GOAL.md](../GOAL.md)

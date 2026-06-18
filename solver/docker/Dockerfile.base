@@ -12,9 +12,9 @@
 #
 # Fork baseline:
 #   palace@0.16.1 +cuda ~slepc ~sundials cuda_arch=86   (RTX 3070, sm_86)
-# The frequency-dependent complex-mu / magnetic-loss patch starts from this
-# upstream-equivalent Glaysia fork branch and is built in-tree here.
-FROM spack/ubuntu-noble:develop@sha256:2a6981ff541a1040f26c89e23b8c6be089d7afc339b21bf8e4877562f31209f4
+# The frequency-dependent complex-mu / magnetic-loss patch produces the
+# PEETSFEA fork version 0.16.1pf from this upstream-equivalent baseline.
+FROM docker.io/spack/ubuntu-noble:develop@sha256:2a6981ff541a1040f26c89e23b8c6be089d7afc339b21bf8e4877562f31209f4
 
 SHELL ["/bin/bash", "-lc"]
 ENV DEBIAN_FRONTEND=noninteractive
@@ -59,23 +59,54 @@ COPY docker/palace-wrapper.sh /usr/local/bin/palace
 
 ARG PEETSFEA_PALACE_BASE_VERSION="0.16.1"
 ARG PEETSFEA_PALACE_BASE_COMMIT="c13e409f255392b9d78369c386276cf9343c2205"
+ARG PEETSFEA_PALACE_FORK_VERSION="0.16.1pf"
 ARG PEETSFEA_PALACE_SOURCE_COMMIT="unknown"
 ARG PEETSFEA_PALACE_INSTALL_PREFIX="/opt/peetsfea-palace"
 
-# Build the in-tree fork source. The M1 source is upstream-equivalent and pinned
-# by the submodule commit; future magnetic-loss commits land in this submodule.
+# Build the in-tree fork source. Third-party dependencies come from the Spack
+# closure above; the only delivered Palace binary is compiled from solver/palace.
 RUN source /opt/spack/share/spack/setup-env.sh \
  && spack env activate palace \
- && cmake -S /src/palace -B /build/peetsfea-palace -G Ninja \
+ && spack_view="/opt/spack/var/spack/environments/palace/.spack-env/view" \
+ && arpack_prefix="$(spack -e palace location -i arpack-ng)" \
+ && cuda_prefix="$(spack -e palace location -i cuda)" \
+ && eigen_prefix="$(spack -e palace location -i eigen)" \
+ && gslib_prefix="$(spack -e palace location -i gslib)" \
+ && hypre_prefix="$(spack -e palace location -i hypre)" \
+ && libceed_prefix="$(spack -e palace location -i libceed)" \
+ && metis_prefix="$(spack -e palace location -i metis)" \
+ && mfem_prefix="$(spack -e palace location -i mfem)" \
+ && parmetis_prefix="$(spack -e palace location -i parmetis)" \
+ && pkgconf_prefix="$(spack -e palace location -i pkgconf)" \
+ && superlu_prefix="$(spack -e palace location -i superlu-dist)" \
+ && test -x "${pkgconf_prefix}/bin/pkg-config" \
+ && test -f "${cuda_prefix}/lib64/stubs/libcuda.so" \
+ && ln -sf "${cuda_prefix}/lib64/stubs/libcuda.so" "${cuda_prefix}/lib64/stubs/libcuda.so.1" \
+ && export LIBRARY_PATH="${cuda_prefix}/lib64/stubs:${LIBRARY_PATH:-}" \
+ && export LD_LIBRARY_PATH="${cuda_prefix}/lib64/stubs:${LD_LIBRARY_PATH:-}" \
+ && export PKG_CONFIG_PATH="${libceed_prefix}/lib/pkgconfig:${libceed_prefix}/lib64/pkgconfig:${PKG_CONFIG_PATH:-}" \
+ && cmake -S /src/palace/palace -B /build/peetsfea-palace -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=${PEETSFEA_PALACE_INSTALL_PREFIX} \
+      -DCMAKE_PREFIX_PATH="${spack_view};${eigen_prefix}" \
+      -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath-link,${cuda_prefix}/lib64/stubs" \
+      -DEigen3_DIR="${eigen_prefix}/share/eigen3/cmake" \
+      -DMFEM_DIR="${mfem_prefix}" \
+      -DHYPRE_DIR="${hypre_prefix}" \
+      -DGSLIB_DIR="${gslib_prefix}" \
+      -DSUPERLU_DIST_DIR="${superlu_prefix}" \
+      -DMETIS_DIR="${metis_prefix}" \
+      -DPARMETIS_DIR="${parmetis_prefix}" \
+      -DARPACK_DIR="${arpack_prefix}" \
+      -DPKG_CONFIG_EXECUTABLE="${pkgconf_prefix}/bin/pkg-config" \
       -DPALACE_WITH_CUDA=ON \
       -DCMAKE_CUDA_ARCHITECTURES=86 \
+      -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/c++ \
       -DPALACE_WITH_SLEPC=OFF \
+      -DPALACE_WITH_ARPACK=ON \
       -DPALACE_WITH_SUNDIALS=OFF \
  && cmake --build /build/peetsfea-palace --parallel \
  && cmake --install /build/peetsfea-palace \
- && hypre_prefix="$(spack -e palace location -i hypre)" \
  && mkdir -p ${PEETSFEA_PALACE_INSTALL_PREFIX}/lib \
  && mpicc -shared -fPIC -O2 /tmp/hypre_pool_override.c \
       -I"${hypre_prefix}/include" -L"${hypre_prefix}/lib" -lHYPRE \
@@ -85,11 +116,13 @@ RUN source /opt/spack/share/spack/setup-env.sh \
  && printf '%s\n' \
       "base_version=${PEETSFEA_PALACE_BASE_VERSION}" \
       "base_commit=${PEETSFEA_PALACE_BASE_COMMIT}" \
+      "fork_version=${PEETSFEA_PALACE_FORK_VERSION}" \
       "source_commit=${PEETSFEA_PALACE_SOURCE_COMMIT}" \
       "source_tree=solver/palace submodule" \
       "cuda_arch=86" \
       "palace_with_cuda=ON" \
       "palace_with_slepc=OFF" \
+      "palace_with_arpack=ON" \
       "palace_with_sundials=OFF" \
       "hypre_pool_override=${PEETSFEA_PALACE_INSTALL_PREFIX}/lib/libhypre_pool_override.so" \
       > ${PEETSFEA_PALACE_INSTALL_PREFIX}/PEETSFEA_BUILD_INFO

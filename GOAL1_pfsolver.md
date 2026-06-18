@@ -14,7 +14,7 @@ HFSS no-ferrite와 부호/shape/단위가 일치하는 상태까지.
 - repo root `src/peetsfea/`에 구현하지 않는다. `solver/pfsolver/`는 `solver/palace/`와 별도 서브모듈/서브프로젝트로 개발한다.
 - 역할: 번들 ingest → **gmsh(Python API)** 메시 → Palace `Driven` config(JSON) emit →
   **도커 Palace 엔진 CLI 호출**(JSON in / CSV out) → CSV→Z 후처리 → manifest.
-- 도커 안엔 **forked Palace 엔진만**(GOAL2 산출 `peetsfea-palace:dev`). 오케스트레이터엔 C++ 없음.
+- 컨테이너 안엔 **Palace 엔진만**(stock `palace:0.16.1`, ferrite 단계는 GOAL2 산출 `palace:0.16.1pf`). 오케스트레이터엔 C++ 없음.
 
 ## 병렬성 (GOAL2와의 경계)
 - **Phase A(inspect)·B(mesh·config·dry-run)** 는 Palace solve가 필요 없다 → **GOAL2와 완전 병렬, 의존 0.**
@@ -67,7 +67,7 @@ pfsolver no-ferrite와 맞댈 정답이 없다(현재 HFSS는 ferrite-enabled). 
 - 증거: report CSV + 로그 + ferrite non-model 확인 + §3.2 채움(ferrite 대비 L↓·k↓ sanity).
 
 ## 완료 증거 패키지 (리뷰 시 제출)
-docker run + Python API 호출 코드/로그 · `inspect_bundle(...).to_json()` 출력 · negative pytest 로그(파일 누락·port 불일치·GPU 없음 raise) ·
+Palace wrapper + Python API 호출 코드/로그 · `inspect_bundle(...).to_json()` 출력 · negative pytest 로그(파일 누락·port 불일치·GPU 없음 raise) ·
 gmsh mesh/group summary · Palace **config 검증(validate-config/schema/dry-run)** 통과 로그 ·
 Palace 실행 command + stdout/stderr · `port-S/V/I.csv`·`network.csv`·`solver_manifest.json` 경로 ·
 `solver/pfsolver` pytest(unit/integration) + **pyright strict** 통과.

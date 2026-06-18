@@ -14,7 +14,7 @@
 - `pfsolver` = **독립 Python API 서브프로젝트**(`solver/pfsolver`, pyright strict + pydantic), 도커 밖.
 - peetsfea-facing CLI는 만들지 않는다. peetsfea는 나중에 `pfsolver` Python API를 import/call한다.
 - **Docker = forked Palace 엔진만**(CUDA C++). C++은 포크 안에만, 오케스트레이터엔 없음.
-- `pfsolver`와 Palace 엔진의 경계만 **Docker Palace CLI(JSON config / CSV)** 다. Palace엔 stable libpalace 없음 → 이 내부 엔진 호출이 안정 계약.
+- `pfsolver`와 Palace 엔진의 경계만 **Palace wrapper CLI(JSON config / CSV)** 다. 로컬 기본은 `~/.local/bin/palace <config.json>`이고, 래퍼가 컨테이너와 `mpirun -np 4 palace`를 소유한다. Palace엔 stable libpalace 없음 → 이 내부 엔진 호출이 안정 계약.
 
 ## 병렬성 (두 스트림이 어떻게 안 막히나)
 - GOAL1 Phase A(inspect)·B(mesh/config)는 Palace solve 불필요 → GOAL2와 **완전 병렬**.

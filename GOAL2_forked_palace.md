@@ -1,4 +1,4 @@
-# GOAL 2 — forked Palace 0.16.1 (CUDA 엔진 + 복소 μ 패치) (스트림 B)
+# GOAL 2 — forked Palace 0.16.1pf (CUDA 엔진 + 복소 μ 패치) (스트림 B)
 
 병렬 작업 둘 중 **B**. 짝: [GOAL1_pfsolver.md](GOAL1_pfsolver.md)(Python API 오케스트레이터).
 이 스트림은 **포크한 Palace를 별도 서브모듈로 개발**한다 — upstream 0.16.0에서 시작해 **0.16.1**로,
@@ -9,8 +9,8 @@
 - 위치: **`solver/palace` git submodule**(`.gitmodules`). `v0.16.1` 태그 = **stock 릴리스 0.16.1**(upstream-동등, 패치 없음).
 - **버전 이름 규칙:**
   - **`0.16.1`** = stock 릴리스(포크 패치 없음). 이미지 `palace:0.16.1`. GOAL1이 지금 쓰는 것.
-  - **`0.16.1pfs`** = 이 포크가 **만드는** 버전(자기손실 복소 μ 패치 포함). 이미지 `palace:0.16.1pfs`.
-- pfsolver(GOAL1)와 **완전히 별도**로 이 서브모듈 안에서 개발한다. 자기손실 패치 commit들이 쌓여 **0.16.1pfs**가 된다.
+  - **`0.16.1pf`** = 이 포크가 **만드는** 버전(자기손실 복소 μ 패치 포함). 이미지 `palace:0.16.1pf`.
+- pfsolver(GOAL1)와 **완전히 별도**로 이 서브모듈 안에서 개발한다. 자기손실 패치 commit들이 쌓여 **0.16.1pf**가 된다.
 - 도커는 `solver/palace` 서브모듈 소스를 **in-tree로 빌드**해 바이너리를 만든다(spack 패키지 복사본이 아니라 서브모듈 소스).
 - 로컬 stock 0.16.1 실행환경은 `solver/local/`(podman/docker 래퍼)로 이미 제공됨 — GOAL1은 그걸로 no-ferrite 진행.
 
@@ -58,8 +58,8 @@ M1 — 서브모듈 소스 빌드 (upstream-동등)
 - [ ] phase0 예제(cylinder/CPW)가 GPU로 port-S.csv 산출(HYPRE pool override로 OOM 없이).
 - [ ] no-ferrite/유전 케이스 결과가 upstream Palace와 일치(회귀).
 
-M-fork — 0.16.1pfs: 복소 μ(자기손실) + 분산 material
-- [ ] `solver/palace`(Glaysia/palace)에 magnetic loss(μ″)/복소 μ + μ(f)/ε(f) dispersion commit, config schema 확장 + 문서. 이미지 `palace:0.16.1pfs`로 빌드.
+M-fork — 0.16.1pf: 복소 μ(자기손실) + 분산 material
+- [ ] `solver/palace`(Glaysia/palace)에 magnetic loss(μ″)/복소 μ + μ(f)/ε(f) dispersion commit, config schema 확장 + 문서. 이미지 `palace:0.16.1pf`로 빌드.
 - [ ] ferrite μ=135.59−j0.296 단일주파수 solve → 자기손실≠0, HFSS ferrite 방향과 정합(단위 검증).
 - [ ] upstream no-ferrite 회귀 무파손 재확인.
 - [ ] 새 config 스키마를 GOAL1에 전달(orchestrator emit 가능).

@@ -8,8 +8,9 @@
 > **아키텍처 (확정, pyaedt→ansysedt 구도):** `pfsolver`는 `solver/pfsolver` 아래의
 > **독립 Python API 서브프로젝트**(pyright strict + pydantic)다.
 > peetsfea-facing CLI는 만들지 않는다. peetsfea는 나중에 Python API를 import/call한다.
-> **도커 안엔 forked Palace 엔진만**(CUDA C++). 오케스트레이터가 도커 palace 엔진을
-> **CLI(JSON config / CSV)** 로 호출한다. 이 CLI는 pfsolver 사용자 표면이 아니라 Palace 엔진 경계다.
+> **도커/컨테이너 안엔 Palace 엔진만**(CUDA C++). 오케스트레이터는 기본 `~/.local/bin/palace`
+> 래퍼를 **CLI(JSON config / CSV)** 경계로 호출한다. 래퍼가 podman/docker/enroot와
+> `mpirun -np 4 palace <config.json>`를 소유하며, 이 CLI는 pfsolver 사용자 표면이 아니라 Palace 엔진 경계다.
 > (이전 C++ 드라이버 `solver/src/*`는 폐기됨.) gmsh는 **Python API** in-process.
 
 - 코어: **forked Palace** `Driven`(full-wave). CUDA mandatory, 4-core MPI, CPU 폴백 없음.
@@ -95,8 +96,8 @@ Python API 최종형: `pfsolver.inspect_bundle(bundle_dir)`, `pfsolver.mesh_bund
 - 단위 변환 mm→m, port 방향(edge_vertices_xyz 쌍 → terminal 방향).
 
 ### B.3 solve + post (`solver/pfsolver/src/pfsolver/solve.py`, `post.py`)
-- **도커 forked Palace 엔진 CLI 호출**. pfsolver는 Python API로 호출되지만, Palace 엔진 경계는
-  `docker run ... palace <config.json>` JSON/CSV 계약이다. in-process/linking 금지.
+- **Palace 엔진 래퍼 CLI 호출**. pfsolver는 Python API로 호출되지만, Palace 엔진 경계는
+  `~/.local/bin/palace <config.json>` JSON/CSV 계약이다. in-process/linking 금지.
 - post: S→Z(Z₀ 정규화)와 V/I→Z 두 경로 계산 → 일치 확인 → `network.csv`.
 - 부호 고정: Z12/Z21을 HFSS port current 방향 기준으로.
 
@@ -128,7 +129,7 @@ Python API 최종형: `pfsolver.inspect_bundle(bundle_dir)`, `pfsolver.mesh_bund
 - acceptance: 8 GB RTX 3070에서 cpw/cylinder 예제가 OOM 없이 완주(phase0 재현).
 
 ### C.3 MPI (Palace engine)
-- pfsolver Python API가 Docker Palace를 `palace -np 4 <config.json>`로 호출한다.
+- pfsolver Python API가 Palace 래퍼를 `~/.local/bin/palace <config.json>`로 호출한다.
 - pfsolver 자체는 MPI process가 아니다. MPI는 도커 안 Palace 엔진 소유다.
 - watchdog(상위 60분 hard-abort 정책과 정합).
 
