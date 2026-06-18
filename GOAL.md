@@ -39,6 +39,24 @@ Palace 실행, Docker/GPU, HYPRE, mesh generation, CSV parsing이 문제가 아�
 
 2026-06-19 `0.16.1pfterm01` 확인: `SurfaceCurrent.Current=1.0` config/schema/docs/operator patch는 빌드와 Python schema validation을 통과했다. 하지만 기하/source 후보 실험은 아직 numeric fail이다. 1 mm overlapped gap sheet는 copper adjacency를 만들지만 SurfaceCurrent/native LumpedPort 모두 GMRES `NaN`; 0.02 mm overlap은 gmsh segmentation fault; copper-only internal tet face cut(TX 4 faces/RX 3 faces)은 Palace가 수렴하지만 `Z11=0.002615+j0.000015 Ω`, `Z22=0.001854+j0.000009 Ω`, `Z12≈0`로 여전히 collapse한다. 따라서 단순 face retag/overlap이 아니라 **source formulation 자체**가 다음 핵심이다.
 
+## ★ Claude 진단 (2026-06-19)
+
+**full-wave 맞다.** pfsolver config는 `Problem.Type="Driven"` = 완전 Maxwell 주파수영역 = full-wave(코드+생성 config 확인). HFSS도 같은 full-wave terminal로 이 코일에서 j243Ω를 내므로 full-wave로 **가능한** 문제다.
+
+**1순위 원인 — port가 코일 루프 전류를 안 만든다 (topology):**
+`port_edges`는 코일 두 터미널 패드 사이 **~2.1 mm 급전 간극(feed gap)**의 두 모서리(seg A, seg B)다(실측: TX gap 2.10 mm, RX 2.19 mm). HFSS lumped terminal은 **이 간극을 채우는 sheet**에 걸려 전류를 한 패드→스파이럴 전체 한 바퀴→다른 패드로 돌린다 → 자기인덕턴스 j243 Ω.
+- 코일은 **이미 두 끝이 2.1 mm 떨어진 열린 스파이럴**이다. **copper를 새로 끊지 마라**(internal tet cut 시도들이 틀린 이유). 이미 존재하는 간극을 port sheet로 채우고 두 끝면(터미널 단면)을 전극으로 쓴다.
+- Codex 변형이 전부 같은 식으로 실패한 이유: copper 외부 표면 패치·내부 단면 cut → 전류가 루프를 안 돌고 국소 단락 → `Z11≈mΩ, Z12≈0` 붕괴. overlap sheet → degenerate → NaN/segfault. 작은 air + current-source → 국소 과대 → 26~37배 overshoot. **collapse와 overshoot는 같은 뿌리**(전류가 스파이럴 루프가 아님)다.
+- 수정: port sheet = **2.1 mm 간극을 채우는 사각면**(두 변 = seg A·seg B, 각각 copper 터미널 단면에 접함), excitation = 간극 가로지르는 방향, native `LumpedPort`. copper face / 내부 cut / overlap 아님.
+- copper 3D solve-inside(skin depth)는 **그대로 유지** — R용이고 인덕턴스 붕괴 원인 아님.
+
+**2순위 — full-wave의 저주파 한계 (port 고친 뒤 볼 것):**
+6.78 MHz에서 코일은 전기적으로 매우 작다(λ≈44 m ≫ 0.3 m). full-wave curl-curl은 ω→0에서 ill-conditioned(low-frequency breakdown)다. Palace `Driven`은 본래 GHz(qubit/cavity)용이라 이 극저주파·전기적-소형 영역은 Palace의 비주류 regime이다. port를 고쳐도 L이 노이지/부정확하면 그땐 **저주파 안정화**(element order↑, gauge, 적절한 Palace 설정)가 다음 변수다. 단, 현재의 완전 붕괴(Z12=0)는 저주파보다 **port topology가 1순위**임을 가리킨다.
+
+**rings 예제 주의:** Palace `rings`는 **Magnetostatic(= full-wave 아님)**이다. "루프 전류 + flux로 L 추출" 개념의 **캘리브레이션 참고**로만 쓰고 제품 formulation으로 채택 금지(full-wave 규칙 위반).
+
+**프로세스:** Phase B(단순 1-loop 코일 + 간극 1개)를 건너뛰고 전체 SSW 스파이럴에서 brute-force 중이다. **최소 1-loop 코일로 회귀해 feed-gap lumped port 정의를 못 박고 → SSW로 확대**하라. 전체 형상에서 port 위상 디버깅 금지.
+
 ### 기준 HFSS
 
 현재 가장 깨끗한 no-ferrite 기준 bundle은 `run/hfss_no_ferrite_fixed_full/`이다. 이 디렉터리는 `ssw_scene.step`, `ssw_step_ledger.json`, `ssw_aedt_port_ledger.json`, `coil_making_token.toml`, `<design_id>.toml`, `input.toml`, HFSS reports를 모두 가진다.

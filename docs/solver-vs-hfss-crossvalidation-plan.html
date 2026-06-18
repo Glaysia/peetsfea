@@ -167,7 +167,9 @@
 <section>
   <h2><span class="n">4.</span> pfsolver (Palace full-wave) <span class="pill fail">numeric parity FAIL</span></h2>
   <p class="sub">오픈소스 CUDA full-wave 경로. <code>solver/pfsolver</code> Python API가 같은 STEP을 gmsh로 메시 → Palace wrapper(<code>~/.local/bin/palace</code>)가 Docker <code>peetsfea-palace:0.16.1pfterm01</code> 엔진 솔브 → terminal current/voltage → Z(f).
-  <b>1차 비교 대상은 §3.2 HFSS no-ferrite fixed bundle</b>다. 현재 수치 비교는 FAIL이며, 남은 핵심은 3D conductive copper volume에 HFSS lumped terminal current path를 Palace boundary/source formulation으로 등가 재현하는 것이다.</p>
+  <b>1차 비교 대상은 §3.2 HFSS no-ferrite fixed bundle</b>다. 현재 수치 비교는 FAIL.</p>
+  <div class="note"><b>진단(Claude 2026-06-19):</b> full-wave는 맞다(<code>Problem.Type=Driven</code>). FAIL의 1순위 원인은 <b>port가 코일 루프 전류를 못 만드는 topology 문제</b>다.
+  코일은 두 끝이 ~2.1&nbsp;mm 떨어진 열린 스파이럴이고, HFSS lumped terminal은 <b>그 급전 간극(feed gap)을 채우는 sheet</b>에 걸려 전류를 스파이럴 한 바퀴 돌린다(→ j243&nbsp;Ω). 지금 시도들(copper 표면 패치·내부 단면 cut·overlap)은 두 터미널을 간극 너머로 잇지 못해 국소 단락 → <code>Z11≈mΩ, Z12≈0</code> 붕괴(collapse)거나 26~37× overshoot — 둘 다 같은 뿌리(전류가 루프가 아님). copper 3D solve-inside는 유지(R용). 2순위는 6.78&nbsp;MHz 전기적-소형 코일의 full-wave 저주파 한계(port 고친 뒤 확인). 자세히는 <code>GOAL.md</code> ★진단.</div>
   <div class="card" style="border-color:rgba(118,185,0,.35)">
     <b>현재 설정 (HFSS와 정렬)</b>
     <ul>
