@@ -4,5 +4,5 @@
 	branch = dev
 [submodule "solver/pfsolver"]
 	path = solver/pfsolver
-	url = /home/harry/Projects/PythonProjects/worktrees3/pfsolver.git
+	url = peets:/home/peets/git/pfsolver.git
 	branch = main
