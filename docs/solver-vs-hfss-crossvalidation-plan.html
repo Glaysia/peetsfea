@@ -79,7 +79,7 @@
         <li><b>L1, L2, M, k</b> — im(Z)/ω 유도</li>
         <li><b>R1, R2, Q1, Q2</b> — re(Z), AC 손실</li>
         <li><b>C1, C2 / SRF</b> — full-wave라 self-resonance 직접 산출</li>
-        <li><b>손실·field</b> — copper/ferrite loss, air-gap B-plane, field plot 이미지 첨부</li>
+        <li><b>손실·field</b> — 3D copper solve-inside loss, ferrite loss, air-gap B-plane, 성공 run의 field plot 이미지 첨부</li>
       </ul>
     </div>
     <div class="card">
@@ -92,9 +92,9 @@
       </ul>
     </div>
   </div>
-  <div class="note"><b>no-ferrite와 ferrite 경계:</b> 1차 no-ferrite 검증은 stock Palace <code>0.16.1</code>로 충분하다. ferrite 단계에서는 upstream Palace material 모델이 <code>Permeability</code>(실수 μ)·<code>Permittivity</code>·<code>LossTan</code>(유전체)·<code>Conductivity</code>만 지원하므로 —
+  <div class="note"><b>no-ferrite와 ferrite 경계:</b> 현재 로컬 기본 런타임은 Docker <code>peetsfea-palace:0.16.1pfterm01</code>다. stock Palace <code>0.16.1</code>은 no-ferrite 회귀 진단용으로만 둔다. upstream Palace material 모델은 <code>Permeability</code>(실수 μ)·<code>Permittivity</code>·<code>LossTan</code>(유전체)·<code>Conductivity</code>만 지원하므로 —
   <b>페라이트 자기손실 μ″(= magnetic loss tangent)과 주파수 종속 μ(f)를 넣을 항이 없다.</b> HFSS는 이걸 <code>magnetic_loss_tangent</code> + <code>pwlx($mu,Freq)</code>로 모델링한다.
-  따라서 ferrite 검증 때만 <b>Palace fork로 복소 μ(자기손실) + 주파수 종속 material을 추가</b>한다. Palace는 우리가 owns하는 내부 full-wave core이므로 이 패치는 정당한 작업이다(§6 M-fork).</div>
+  따라서 <b>Palace fork로 복소 μ(자기손실) + 주파수 종속 material을 추가</b>한다. Palace는 우리가 owns하는 내부 full-wave core이므로 이 패치는 정당한 작업이다.</div>
   <div class="note"><b>합격 가설(full-wave↔full-wave):</b> mesh 수렴 후 <b>L1·L2·M ±5%, |Z| ±5%, k ±10%, C/SRF ±10%, R ±15%</b>(표피 메시 민감) 이내 일치.
   Z12/Z21 부호는 port current 방향으로 추적해 공통 postprocess에서 고정. 불일치 1차 원인 후보: 메시 밀도(표피), 포트 정의, region 경계, ferrite μ 모델.
   <b>솔브 시간(비용)</b>도 함께 기록 — HFSS 기준 <b>282초</b>(GPU·4코어·11 pass), pfsolver 목표 Mode 1 ≤30분.</div>
@@ -117,7 +117,7 @@
 
 <section>
   <h2><span class="n">3.</span> HFSS 기준값 — ferrite-enabled(참고) + no-ferrite(1차 기준)</h2>
-  <div class="note"><b>1차 비교는 no-ferrite다.</b> pfsolver의 첫 solve는 stock Palace <code>0.16.1</code>로 <b>no-ferrite 단일주파수</b>다(ferrite 복소 μ는 M-fork 후).
+  <div class="note"><b>1차 비교는 no-ferrite다.</b> pfsolver의 기본 solve는 Docker <code>peetsfea-palace:0.16.1pfterm01</code>로 <b>no-ferrite 단일주파수</b>부터 맞춘다.
   따라서 pfsolver를 맞댈 <b>정답 기준선은 "HFSS no-ferrite"</b>다 — 같은 fixed 형상에서 <b>TX MULL ferrite만 non-model(solve 제외)</b>로 바꿔 재실행한 값.
   아래 ferrite-enabled 표(3.1)는 <b>참고</b>이고, no-ferrite 표(3.2)가 §4·§5의 실제 기준이다.</div>
   <h3>3.1 HFSS ferrite-enabled <span class="pill done">실행 완료 · 참고</span></h3>
@@ -147,79 +147,73 @@
   </table>
 
   <h3>3.2 HFSS no-ferrite <span class="pill done">실행 완료 · §4·§5의 실제 기준</span></h3>
-  <p class="sub">같은 fixed 형상에서 <b>TX MULL ferrite body는 유지하고 non-model</b>
-  (<code>ferrite_body_names=[]</code>, <code>non_model_body_names</code>에 <code>tx_mull_ferrite_sheet</code>,
-  <code>model_state=false</code>)로 동일 Setup 재실행.
-  산출물: <code>run/hfss_no_ferrite_nonmodel_full/Results1_Pass.csv</code> · <code>Results2_Last.csv</code> ·
-  <code>hfss_no_ferrite_nonmodel_full.log</code>. <code>Results3_Freq</code>는 AEDT report export가 실패해 exact non-model C/SRF 기준으로 쓰지 않는다.
-  <code>Setup1 @ 6.78MHz</code>, 마지막 유효 pass 9, MaxMagDeltaS 0.000223, solve 194 s, RTX 3070/4 cores.</p>
+  <p class="sub">같은 fixed 형상에서 ferrite disabled/no-ferrite로 동일 Setup 재실행.
+  현재 pfsolver ingest 기준으로 쓰는 clean bundle은 <code>run/hfss_no_ferrite_fixed_full/</code>이다.
+  이 bundle은 <code>&lt;design_id&gt;.toml</code>과 runner copy <code>input.toml</code>을 함께 포함하며, pfsolver는 port ledger <code>design_id</code>와 같은 canonical TOML만 design으로 인정한다.
+  <code>Setup1 @ 6.78MHz</code>, 마지막 유효 pass 11, MaxMagDeltaS 0.0017877, solve artifact는 RTX 3070/4 cores.</p>
   <table>
     <tr><th>양</th><th class="num">HFSS no-ferrite (기준)</th><th class="num">ferrite-enabled(참고)</th><th>비고</th></tr>
-    <tr><td><b>Z11 / Z22 / Z12</b></td><td class="num">0.3539+j242.79 / 0.2281+j212.94 / 0.01158+j6.690 Ω</td><td class="num">0.3699+j241.85 / 0.2362+j212.63 / 0.01230+j6.706 Ω</td><td>|Z11|=242.79 Ω, |Z22|=212.94 Ω</td></tr>
-    <tr><td><b>L1 / L2</b></td><td class="num">5.6993 / 4.9985 µH</td><td class="num">5.6772 / 4.9912 µH</td><td>6.78 MHz pass result</td></tr>
-    <tr><td><b>M / k</b></td><td class="num">0.1570 µH / 0.02942</td><td class="num">0.1574 µH / 0.02957</td><td>k↓ 확인</td></tr>
-    <tr><td><b>R1 / R2</b></td><td class="num">0.3539 / 0.2281 Ω</td><td class="num">0.3699 / 0.2362 Ω</td><td>ferrite 손실 제거 → R↓</td></tr>
-    <tr><td><b>Q1 / Q2</b></td><td class="num">686.0 / 933.4</td><td class="num">653.9 / 900.1</td><td>R↓로 Q↑</td></tr>
+    <tr><td><b>Z11 / Z22 / Z12</b></td><td class="num">0.2798+j241.68 / 0.2151+j214.66 / 0.00885+j6.489 Ω</td><td class="num">0.3699+j241.85 / 0.2362+j212.63 / 0.01230+j6.706 Ω</td><td>|Z11|=241.68 Ω, |Z22|=214.66 Ω</td></tr>
+    <tr><td><b>L1 / L2</b></td><td class="num">5.6732 / 5.0391 µH</td><td class="num">5.6772 / 4.9912 µH</td><td>6.78 MHz final adaptive pass</td></tr>
+    <tr><td><b>M / k</b></td><td class="num">0.1523 µH / 0.02849</td><td class="num">0.1574 µH / 0.02957</td><td>actual pfsolver 기준값</td></tr>
+    <tr><td><b>R1 / R2</b></td><td class="num">0.2798 / 0.2151 Ω</td><td class="num">0.3699 / 0.2362 Ω</td><td>ferrite 손실 제거 → R↓</td></tr>
+    <tr><td><b>Q1 / Q2</b></td><td class="num">863.9 / 998.0</td><td class="num">653.9 / 900.1</td><td>R↓로 Q↑</td></tr>
     <tr><td><b>C1 / C2</b></td><td class="todo-cell">exact non-model 미회수</td><td class="num">16.35 / 21.62 pF</td><td>C/SRF는 M5b에서 sweep export 재회수</td></tr>
   </table>
-  <div class="note"><b>Sanity 결과:</b> ferrite-enabled 재실행(<code>run/hfss_ferrite_enabled_current_full</code>) 대비 no-ferrite exact는
-  k가 0.02957→0.02942로 내려가고 ferrite solid loss가 제거되며 R1/R2가 감소했다. 단, L1/L2는 각각 +0.39%/+0.15%로 미세하게 증가했다.
-  따라서 기존 "L↓" 기대는 이 HFSS 실측에서는 strict pass 조건으로 쓰지 않는다.</div>
+  <div class="note"><b>Sanity 결과:</b> ferrite-enabled 재실행(<code>run/hfss_ferrite_enabled_current_full</code>) 대비 clean no-ferrite fixed 기준은
+  k가 0.02957→0.02849로 내려가고 ferrite solid loss가 제거되며 R1/R2가 감소했다. 이 표의 값이 §4·§5의 pfsolver numeric gate 기준이다.</div>
 </section>
 
 <section>
-  <h2><span class="n">4.</span> pfsolver (Palace full-wave) <span class="pill done">rank1·rank2·rank4 solve 완료</span></h2>
-  <p class="sub">오픈소스 CUDA full-wave 경로. <code>solver/pfsolver</code> Python API가 같은 STEP을 gmsh로 메시 → Palace wrapper(<code>~/.local/bin/palace</code>)가 stock <code>palace:0.16.1</code> 엔진 솔브 → port S/V/I → Z(f). 기본 4-rank acceptance는 완료됐고,
-  <b>1차 비교 대상은 §3.2 HFSS no-ferrite</b>다. 현재 수치 비교는 FAIL이며, 다음 보정 대상은 Palace conductor boundary와 air-domain/absorbing-boundary 모델링이다.</p>
+  <h2><span class="n">4.</span> pfsolver (Palace full-wave) <span class="pill fail">numeric parity FAIL</span></h2>
+  <p class="sub">오픈소스 CUDA full-wave 경로. <code>solver/pfsolver</code> Python API가 같은 STEP을 gmsh로 메시 → Palace wrapper(<code>~/.local/bin/palace</code>)가 Docker <code>peetsfea-palace:0.16.1pfterm01</code> 엔진 솔브 → terminal current/voltage → Z(f).
+  <b>1차 비교 대상은 §3.2 HFSS no-ferrite fixed bundle</b>다. 현재 수치 비교는 FAIL이며, 남은 핵심은 3D conductive copper volume에 HFSS lumped terminal current path를 Palace boundary/source formulation으로 등가 재현하는 것이다.</p>
   <div class="card" style="border-color:rgba(118,185,0,.35)">
     <b>현재 설정 (HFSS와 정렬)</b>
     <ul>
       <li>문제 유형: <code>Driven</code>(주파수영역 full-wave), GOAL1은 6.78 MHz point. sweep 0.1–100 MHz는 M5b.</li>
-      <li>포트: LumpedPort ×2 (<code>1_T1</code>/<code>2_T1</code>), Z₀=50 Ω 기준, current 방향 명시.</li>
-      <li>재질: copper σ=5.8e7, FR4 εr/tanδ <span class="pill done">upstream OK</span>; ferrite 복소 μ(135.6 − j0.296, tanδ_m 0.00218) <span class="pill todo">fork 패치 필요</span>; vacuum/helper domain + 흡수경계 모델은 numeric 보정 대상.</li>
-      <li>메시: gmsh(OpenCASCADE)로 STEP→tet, physical group으로 body/port/boundary 태깅.</li>
+      <li>포트: terminal gap sheet ×2 (<code>1_T1</code>/<code>2_T1</code>), HFSS와 같은 edge pair에서 생성. stock Palace <code>port-I.csv</code>의 <code>V/RLC</code> 값은 acceptance Z 전류로 쓰지 않는다.</li>
+      <li>재질: copper σ=5.8e7 <b>3D conductive solve-inside volume</b>, FR4 εr/tanδ <span class="pill done">upstream OK</span>; ferrite 복소 μ(135.6 − j0.296, tanδ_m 0.00218)는 Docker <code>0.16.1pfterm01</code> fork material 패치로 지원.</li>
+      <li>메시: gmsh(OpenCASCADE)로 STEP→tet, helper/non-model body 제거, 2000 mm air domain(<code>76.531342 m³</code>) + 외곽 absorbing only. 70 µm copper trace와 6.78 MHz skin depth(≈25 µm)를 반영하는 conductor mesh 정책 유지.</li>
       <li>실행: peetsfea-facing CLI 없음. Python API가 <span class="pill cudapill">CUDA</span> <code>Solver.Device=GPU</code> + 4-core MPI Palace wrapper를 호출, HYPRE Umpire pool은 free VRAM/MPI rank 기준으로 adaptive 설정.</li>
     </ul>
   </div>
-  <div class="note ok"><b>현재 Palace 증거:</b> stock <code>palace:0.16.1</code> 로컬 이미지와 <code>~/.local/bin/palace</code> wrapper가 동작한다. <code>run/pfsolver_no_ferrite_mesh/palace_config.json</code> dry-run 통과, <code>pfsolver.solve_bundle(..., mpi_ranks=1)</code> 진단 solve는 <code>run/pfsolver_no_ferrite_solve_rank1/*</code>를 생성했고 wall time 26.0 s를 기록했다. <code>mpi_ranks=2</code> MPI 진단 solve도 <code>run/pfsolver_no_ferrite_solve_rank2/*</code>로 완주했고 wall time 28.5 s, Palace peak memory total 1.8 GiB를 기록했다. 기본 <code>mpi_ranks=4</code> acceptance도 <code>run/pfsolver_no_ferrite_solve_rank4/*</code>로 완주했고 manifest는 <code>pfsolver_commit=a5cb138</code>, wall time 27.2 s, GPU free 5289 MiB, HYPRE pool 86.7 MB/rank, Palace peak memory total 3.1 GiB를 기록했다. postprocess unit test는 2-port <code>S→Z</code>, <code>z*_ohm</code> 컬럼, <code>port-S</code>↔<code>port-V</code> 검증, non-reciprocal Z reject를 포함해 통과한다.</div>
-  <h3>pfsolver @ 6.78 MHz (rank4 acceptance 산출)</h3>
+  <div class="note ok"><b>현재 Palace 증거:</b> 로컬 기본 런타임은 Docker 이미지 <code>peetsfea-palace:0.16.1pfterm01</code>이며 <code>~/.local/bin/palace</code> wrapper가 <code>PFSOLVER_CONTAINER_RUNTIME=docker</code>, <code>PFSOLVER_PALACE_IMAGE=peetsfea-palace:0.16.1pfterm01</code>로 호출한다. Wrapper는 Docker를 host UID/GID로 실행해 postpro 파일이 root-owned로 남지 않는다. <code>run/pfsolver_hfss_fixed_currentsource_rank1/</code>, <code>run/pfsolver_hfss_fixed_air2000_currentsource_rank1/</code>, <code>run/proto_air2000_lumped_native_rank1/</code>, <code>run/pfsolver_hfss_fixed_air2000_retag_pfmuflen2_currentsource_rank1/</code>, <code>run/proto_air2000_retag_pfmuflen_lumped_native_rank1/</code> 모두 real Palace GPU solve evidence다.</div>
+  <h3>pfsolver @ 6.78 MHz (latest diagnostics)</h3>
   <table>
-    <tr><th>양</th><th class="num">pfsolver 값</th><th class="num">HFSS(참값)</th><th class="num">오차 vs HFSS</th><th>판정</th></tr>
-    <tr><td><b>Z11</b></td><td class="num">0.000421 + j4.48e-8 Ω</td><td class="num">0.3539 + j242.79 Ω</td><td class="num">|Z| -99.9998%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td><b>Z22</b></td><td class="num">0.000424 + j2.20e-8 Ω</td><td class="num">0.2281 + j212.94 Ω</td><td class="num">|Z| -99.9998%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td><b>Z12</b></td><td class="num">~0 + j~0 Ω</td><td class="num">0.01158 + j6.690 Ω</td><td class="num">~-100%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td><b>L1</b></td><td class="num">1.05e-9 µH</td><td class="num">5.6993 µH</td><td class="num">-100%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td><b>L2</b></td><td class="num">5.17e-10 µH</td><td class="num">4.9985 µH</td><td class="num">-100%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td><b>M</b></td><td class="num">6.07e-16 µH</td><td class="num">0.1570 µH</td><td class="num">-100%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td><b>R1</b></td><td class="num">0.000421 Ω</td><td class="num">0.3539 Ω</td><td class="num">-99.88%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td><b>R2</b></td><td class="num">0.000424 Ω</td><td class="num">0.2281 Ω</td><td class="num">-99.81%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td><b>C1 / SRF</b></td><td class="todo-cell">scope out</td><td class="todo-cell">exact non-model 미회수</td><td class="todo-cell">—</td><td><span class="pill todo">M5b</span></td></tr>
-    <tr><td><b>C2 / SRF</b></td><td class="todo-cell">scope out</td><td class="todo-cell">exact non-model 미회수</td><td class="todo-cell">—</td><td><span class="pill todo">M5b</span></td></tr>
-    <tr><td><b>k</b></td><td class="num">8.23e-7</td><td class="num">0.02942</td><td class="num">-99.997%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td>솔브 시간</td><td class="num">27.2 s</td><td class="num">194 s</td><td class="num">faster</td><td><span class="pill done">실행 OK</span></td></tr>
+    <tr><th>경로</th><th class="num">pfsolver/Palace 값</th><th class="num">HFSS 기준</th><th>판정</th></tr>
+    <tr><td><b>current-source, 200 mm air</b><br><code>run/pfsolver_hfss_fixed_currentsource_rank1</code></td><td class="num">Z11=45.53+j6380 Ω<br>Z22=30.72+j7637 Ω<br>Z12=2.568+j238.53 Ω<br>L1/L2/M=149.77/179.28/5.599 µH</td><td class="num">Z11=0.2798+j241.68 Ω<br>Z22=0.2151+j214.66 Ω<br>Z12=0.00885+j6.489 Ω</td><td><span class="pill fail">FAIL</span> 26-37× 과대</td></tr>
+    <tr><td><b>current-source, HFSS 2000 mm air</b><br><code>run/pfsolver_hfss_fixed_air2000_currentsource_rank1</code></td><td class="num">raw Z11=483.1−j7705 Ω<br>Z22=15731.9−j56602.7 Ω<br>Z12≈−799.4+j2315.8 Ω</td><td class="num">동일</td><td><span class="pill fail">FAIL</span> postprocess가 음의 L로 정지</td></tr>
+    <tr><td><b>native LumpedPort, HFSS 2000 mm air</b><br><code>run/proto_air2000_lumped_native_rank1</code></td><td class="num">S→Z: Z11≈45.53−j0.265 Ω<br>Z22≈39.58−j0.015 Ω<br>Z12≈−3e-5−j0.0099 Ω</td><td class="num">동일</td><td><span class="pill fail">FAIL</span> terminal loop current를 구동하지 못함</td></tr>
+    <tr><td><b>retag current-source, HFSS 2000 mm air</b><br><code>run/pfsolver_hfss_fixed_air2000_retag_pfmuflen2_currentsource_rank1</code></td><td class="num">Z11=0.002305+j0.000018 Ω<br>Z22=0.004947+j0.000022 Ω<br>Z12≈0<br>L1/L2/M≈0</td><td class="num">동일</td><td><span class="pill fail">FAIL</span> copper outer-surface patch로 collapse</td></tr>
+    <tr><td><b>retag native LumpedPort</b><br><code>run/proto_air2000_retag_pfmuflen_lumped_native_rank1</code></td><td class="num">S→Z: Z11=0.002305+j0.000018 Ω<br>Z22=0.004947+j0.000022 Ω<br>Z12≈0</td><td class="num">동일</td><td><span class="pill fail">FAIL</span> current-source만의 문제가 아님</td></tr>
+    <tr><td><b>copper-only internal cut faces</b><br><code>run/proto_internal_copper_cut_currentsource_rank1</code></td><td class="num">TX 4 faces / RX 3 faces<br>surface-I: Z11=0.002615+j0.000015 Ω<br>field-I: Z11≈0.012+j0.534 Ω<br>Z12≈0</td><td class="num">동일</td><td><span class="pill fail">FAIL</span> 수렴하지만 loop current 없음</td></tr>
+    <tr><td><b>overlapped gap sheet prototypes</b><br><code>run/proto_overlap_gap_*</code></td><td class="num">1 mm overlap: GMRES NaN<br>0.02 mm overlap: gmsh segfault</td><td class="num">동일</td><td><span class="pill fail">FAIL</span> line-contact 해소만으로 불가</td></tr>
+    <tr><td>솔브 시간/메모리</td><td class="num">retag rank1 141.6 s wall<br>Palace total 125.4 s<br>peak HWM 3.6 GB</td><td class="num">HFSS 6.78 MHz adaptive pass evidence</td><td><span class="pill done">실행 OK</span></td></tr>
   </table>
   <h3>추출식 (Palace 출력 → Z)</h3>
-  <div class="eq">port-S.csv → S(f);  Z = Z₀ (I+S)(I−S)⁻¹   (Z₀=50Ω 기준, 정규화)<br>
-  port-V.csv 검증: S_ij = V_total[i,j] / V_inc[j,j] − δ_ij,  port-S.csv와 일치해야 함<br>
+  <div class="eq">current-source diagnostic: port-V.csv + surface-I.csv → Z = V · I⁻¹<br>
+  native LumpedPort diagnostic: port-S.csv → Z = Z₀ (I+S)(I−S)⁻¹, Z₀=50Ω<br>
   L = im(Z)/ω,  R = re(Z),  M = im(Z12)/ω,  k = M/√(L1·L2),  Q = ωL/R<br>
   C·SRF: sweep에서 im(Z)=0 인 f₀ →  C = 1 / ((2πf₀)²·L)</div>
-  <div class="note"><b>부호 함정:</b> Z는 <code>port-S.csv</code>에서 산출한다. Palace의 <code>port-V/I.csv</code>는 open-circuit Z 행렬이 아니므로 직접 V/I로 Z를 만들지 않고, <code>V_inc</code>+total V로 S를 재구성해 <code>port-S.csv</code>와 일치하는지 검증한다. HFSS와 같은 port current 방향으로 고정한 뒤에만 표를 채운다.</div>
-  <div class="note"><b>Field plot TODO:</b> 4-rank acceptance 이후 Palace field output에서 air-gap E/H 또는 B-field plot 이미지를 생성해 이 HTML에 실제 이미지로 첨부한다. 숫자 표만 남기지 않고, 형상/포트/field sanity를 눈으로 확인할 수 있게 둔다.</div>
+  <div class="note"><b>부호/전류 함정:</b> stock Palace <code>LumpedPort</code>의 <code>port-I.csv</code>는 terminal conductor current가 아니라 <code>V/RLC</code> branch current다. <code>V @ inv(port-I)</code>는 50Ω termination만 재구성하므로 acceptance Z로 쓰지 않는다. <code>surface-I.csv</code>의 0.051521 A는 Palace 소스 기준 dimensionalized physical current가 맞지만, 그 source 자체가 HFSS terminal과 아직 등가가 아니다.</div>
+  <div class="note fail"><b>원인 업데이트:</b> 초기 MSH에서 port <code>101/102</code>는 air/FR4 interface에 붙어 있었고 copper attrs <code>12/15</code>에 adjacent하지 않았다. retag 후에는 <code>101→(air 1, copper 12)</code>, <code>102→(air 1, copper 15)</code> copper-adjacent face가 됐고 Palace <code>0.16.1pfmuflen</code>으로 rank1 solve도 완주했다. 그래도 current-source/native LumpedPort 모두 mΩ급 Z와 <code>Z12≈0</code>로 collapse한다. <code>0.16.1pfterm01</code>의 <code>SurfaceCurrent.Current</code> 명시 patch, copper-only internal cut faces, overlapped gap sheet도 통과하지 못했다. 따라서 남은 직접 원인은 <b>face 태깅이 아니라 HFSS terminal current를 3D copper volume에 결합하는 source formulation 자체</b>다.</div>
+  <div class="note"><b>Field plot acceptance:</b> numeric gate 통과 후 Palace field output에서 air-gap E/H 또는 B-field plot 이미지를 생성해 이 HTML에 실제 이미지로 첨부한다. 숫자 표만 남기지 않고, 형상/포트/field sanity를 눈으로 확인할 수 있게 둔다.</div>
 </section>
 
 <section>
   <h2><span class="n">5.</span> 교차검증 매트릭스 &amp; 합격 기준</h2>
-  <p class="sub">HFSS=참값, pfsolver=rank4 산출. 각 양의 tolerance와 현재 상태. <b>1차 기준은 §3.2 no-ferrite</b>다.</p>
+  <p class="sub">HFSS=참값, pfsolver=rank4 acceptance 산출. 현재는 rank1 diagnostics 단계에서 terminal formulation이 실패했으므로 scalar tolerance는 아직 미통과다. <b>1차 기준은 §3.2 no-ferrite fixed bundle</b>다.</p>
   <table>
     <tr><th>양</th><th class="num">HFSS(참값)</th><th class="num">pfsolver</th><th class="num">tolerance</th><th class="num">오차</th><th>상태</th></tr>
-    <tr><td><b>L1</b></td><td class="num">5.6993 µH</td><td class="num">1.05e-9 µH</td><td class="num">±5%</td><td class="num">-100%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td><b>L2</b></td><td class="num">4.9985 µH</td><td class="num">5.17e-10 µH</td><td class="num">±5%</td><td class="num">-100%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td><b>M</b></td><td class="num">0.1570 µH</td><td class="num">6.07e-16 µH</td><td class="num">±5%</td><td class="num">-100%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td><b>k</b></td><td class="num">0.02942</td><td class="num">8.23e-7</td><td class="num">±10%</td><td class="num">-99.997%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td><b>R1</b></td><td class="num">0.3539 Ω</td><td class="num">0.000421 Ω</td><td class="num">±15%</td><td class="num">-99.88%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td><b>R2</b></td><td class="num">0.2281 Ω</td><td class="num">0.000424 Ω</td><td class="num">±15%</td><td class="num">-99.81%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td><b>Q1/Q2</b></td><td class="num">686.0 / 933.4</td><td class="num">~1.06e-4 / ~5.20e-5</td><td class="num">±15%</td><td class="num">~-100%</td><td><span class="pill fail">FAIL</span></td></tr>
-    <tr><td><b>|Z11|/|Z22|</b></td><td class="num">242.79 / 212.94 Ω</td><td class="num">0.000421 / 0.000424 Ω</td><td class="num">±5%</td><td class="num">-99.9998%</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>L1</b></td><td class="num">5.6732 µH</td><td class="num">149.77 µH(current-source 200mm)<br>negative/current-source 2000mm<br>4.3e-7 µH(retag)</td><td class="num">±5%</td><td class="num">not comparable</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>L2</b></td><td class="num">5.0391 µH</td><td class="num">179.28 µH / negative / 5.2e-7 µH(retag)</td><td class="num">±5%</td><td class="num">not comparable</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>M</b></td><td class="num">0.1523 µH</td><td class="num">5.599 µH / 54.36 µH raw / ≈0(retag)</td><td class="num">±5%</td><td class="num">not comparable</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>k</b></td><td class="num">0.02849</td><td class="num">0.03417 / 0.1109 raw / ≈0(retag)</td><td class="num">±10%</td><td class="num">formulation artifact</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>R1</b></td><td class="num">0.2798 Ω</td><td class="num">45.53 Ω / 483.1 Ω / 0.002305 Ω(retag)</td><td class="num">±15%</td><td class="num">not comparable</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>R2</b></td><td class="num">0.2151 Ω</td><td class="num">30.72 Ω / 15731.9 Ω / 0.004947 Ω(retag)</td><td class="num">±15%</td><td class="num">not comparable</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>Q1/Q2</b></td><td class="num">863.9 / 998.0</td><td class="todo-cell">terminal formulation 미확정</td><td class="num">±15%</td><td class="todo-cell">—</td><td><span class="pill fail">FAIL</span></td></tr>
+    <tr><td><b>|Z11|/|Z22|</b></td><td class="num">241.68 / 214.66 Ω</td><td class="num">6380 / 7637 Ω(current-source)<br>45.5 / 39.6 Ω(native old)<br>0.0023 / 0.0049 Ω(retag)</td><td class="num">±5%</td><td class="num">wrong terminal path</td><td><span class="pill fail">FAIL</span></td></tr>
     <tr><td><b>C1/C2 (SRF)</b></td><td class="todo-cell">exact non-model 미회수</td><td class="todo-cell">scope out</td><td class="num">±10%</td><td class="todo-cell">—</td><td><span class="pill todo">M5b</span></td></tr>
     <tr><td>상반성 Z=Zᵀ</td><td class="num">✓</td><td class="num">✓</td><td class="num">필수</td><td class="num">pass</td><td><span class="pill done">통과</span></td></tr>
     <tr><td>passivity re(Z)⪰0</td><td class="num">✓</td><td class="num">✓</td><td class="num">필수</td><td class="num">pass</td><td><span class="pill done">통과</span></td></tr>
@@ -227,7 +221,7 @@
   <div class="note"><b>합격 판정 규칙:</b> 모든 scalar(L/M/k/|Z|)가 tolerance 이내 + 상반성·passivity 통과 + sweep 곡선이 SRF 부근까지 정성 일치하면
   <b>"pfsolver가 이 설계점에서 HFSS terminal Z를 재현"</b>으로 판정. R은 표피 메시 의존이 커 ±15%를 1차 목표로 두되, 메시 수렴으로 ±5% 도달을 추적.
   단일 점 합격 후 §6 검증 사다리(V0→V4)로 확장.</div>
-  <div class="note warn"><b>현재 판정:</b> GOAL1 Python API/Palace orchestration acceptance는 완료. HFSS numeric parity는 실패했으므로 다음 작업은 copper를 volume material로 넣는 현재 모델을 Palace의 PEC/finite-conductivity boundary 모델과 독립 air domain으로 재구성하는 것이다.</div>
+  <div class="note warn"><b>현재 판정:</b> GOAL1 Python API/Palace orchestration, HFSS-size air-domain, 3D-copper mesh, copper-adjacent retag, patched Palace projected-length runtime은 동작한다. numeric parity는 실패했고, 직접 원인은 port가 HFSS conductor cross-section terminal cut/current path가 아니라 copper outer-surface local patch라는 것이다. 다음 작업은 terminal cut/source formulation을 HFSS lumped terminal과 등가로 재정의하는 것이다.</div>
 </section>
 
 <section>
@@ -243,23 +237,23 @@
       <tr><td><b>3 Mesh</b></td><td>STEP → tet .msh, body/port/boundary physical group</td><td>gmsh (Python API)</td></tr>
       <tr><td><b>4 Assemble</b></td><td>full-wave curl-curl + 재질 + LumpedPort → Palace <code>.json</code> config</td><td>Python config emit</td></tr>
       <tr><td><b>5 Solve</b></td><td>CUDA + 4-core MPI full-wave, 6.78 MHz</td><td>Python API → Palace wrapper → stock/forked Palace <code>Driven</code> 엔진 CLI</td></tr>
-      <tr><td><b>6 Post</b></td><td>port-S/V/I.csv → Z(f), 부호·Z₀ 정규화, L/M/R/C/k, 손실</td><td>Python postprocess</td></tr>
+      <tr><td><b>6 Post</b></td><td>terminal current + port voltage → Z(f), 부호·Z₀ 정규화, L/M/R/C/k, 손실</td><td>Python postprocess</td></tr>
       <tr><td><b>7 Emit</b></td><td>solver-neutral <code>em_result.json</code> + network/derived/loss CSV + manifest</td><td>공통 스키마</td></tr>
       <tr><td><b>8 Visual</b></td><td>Palace field output → field plot PNG/SVG → HTML 첨부</td><td>postprocess</td></tr>
     </table>
   </div>
 
   <h3>마일스톤</h3>
-  <div class="phase done"><b>M1 — stock Palace 0.16.1 로컬 이미지</b> <span class="pill done">완료</span>
-    <div class="m"><code>palace:0.16.1</code> — no-ferrite용 upstream 동등 CUDA 엔진. 로컬 기본 호출은 <code>~/.local/bin/palace</code>. ferrite 자기손실 패치는 별도 <code>palace:0.16.1pf</code>.</div></div>
+  <div class="phase done"><b>M1 — Docker Palace 0.16.1pfterm01 로컬 이미지</b> <span class="pill done">완료</span>
+    <div class="m"><code>peetsfea-palace:0.16.1pfterm01</code> — 로컬 기본 CUDA 엔진. <code>~/.local/bin/palace</code>가 Docker runtime으로 호출한다. stock <code>palace:0.16.1</code>은 no-ferrite 회귀 진단용.</div></div>
   <div class="phase done"><b>M2 — <code>pfsolver.inspect_bundle()</code>: 번들 ingest + setup 복원</b>
     <div class="m">STEP+ledger+port_ledger+token+TOML → body/material/port edge/boundary/frequency 전부 복원, 누락 즉시 exception. pyright strict + pytest 통과.</div></div>
   <div class="phase done"><b>M3 — <code>pfsolver.mesh_bundle()</code>: gmsh tet + physical group 태깅</b>
-    <div class="m">no-ferrite SSW bundle에서 STEP→tet, copper/FR4/port/boundary physical group, Palace JSON schema 검증 통과.</div></div>
+    <div class="m">no-ferrite SSW bundle에서 STEP→tet, copper/FR4/boundary physical group, copper-adjacent port retag, Palace JSON schema 검증 통과.</div></div>
   <div class="phase done"><b>M4 — <code>pfsolver.solve_bundle()</code>: no-ferrite 단일 주파수부터</b>
-    <div class="m">rank1/rank2 진단 실제 실행 및 기본 rank4 acceptance 완료. GPU mandatory, HYPRE pool override, manifest 재현 필드 확인.</div></div>
+    <div class="m">rank1 diagnostics 실제 실행. GPU mandatory, HYPRE pool override, manifest 재현 필드 확인. Numeric acceptance는 terminal cut formulation 전까지 FAIL.</div></div>
   <div class="phase done"><b>M5 — postprocess → Z(f) + 이 표 채우기</b>
-    <div class="m">S→Z 후처리와 port-V 기반 S 검증, rank4 산출물 생성 완료. numeric parity는 FAIL로 기록하고 conductor/air-domain 모델링 보정으로 분리.</div></div>
+    <div class="m">S→Z/current-source 후처리와 diagnostic 표 갱신 완료. numeric parity는 FAIL로 기록하고 HFSS-equivalent terminal cut/source formulation으로 분리.</div></div>
   <div class="phase"><b>M-fork — Palace 패치: 복소 μ(자기손실) + 주파수 종속 material</b>
     <div class="m">forked Palace material/assembly에 magnetic loss tangent(μ″) + μ(f)/ε(f) dispersion 추가. ferrite 검증(V3)·dispersive sweep의 선행 조건. upstream엔 없는 항이라 fork에서만 가능. 단위 검증: ferrite μ=135.6−j0.296 주입 → HFSS와 대조.</div></div>
   <div class="phase"><b>M5b — sweep(메시 재사용) + SRF·C, 손실, field (ferrite는 M-fork 후)</b>
@@ -274,14 +268,14 @@
     <tr><th>항목</th><th>상태</th><th class="num">솔브/작업 시간</th><th>산출</th></tr>
     <tr><td>HFSS 기준선(6.78MHz)</td><td><span class="pill done">ferrite + exact no-ferrite 완료</span></td><td class="num">ferrite 377.4 s<br>no-ferrite 194 s<br>body-absent sweep 592.7 s</td><td><code>run/hfss_ferrite_enabled_current_full/*</code><br><code>run/hfss_no_ferrite_nonmodel_full/*</code> · Z/L/M/R/Q/k (§3)</td></tr>
     <tr><td>독립 Python API 서브모듈 + GPU 게이트</td><td><span class="pill done">구현</span></td><td class="num">—</td><td><code>solver/pfsolver</code> API, CLI 없음</td></tr>
-    <tr><td>stock Palace 0.16.1 로컬 이미지(M1)</td><td><span class="pill done">완료</span></td><td class="num">1회 빌드 완료</td><td><code>~/.local/bin/palace</code> wrapper → <code>palace:0.16.1</code></td></tr>
-    <tr><td>ingest+mesh, no-ferrite(M2–M3)</td><td><span class="pill done">검증</span></td><td class="num">~초</td><td><code>run/pfsolver_no_ferrite_mesh/mesh.msh</code> + config</td></tr>
-    <tr><td>solve+post, no-ferrite(M4–M5)</td><td><span class="pill done">rank1·rank2·rank4 완료</span></td><td class="num">rank1 26.0 s<br>rank2 28.5 s<br>rank4 27.2 s</td><td><code>run/pfsolver_no_ferrite_solve_rank1/*</code><br><code>run/pfsolver_no_ferrite_solve_rank2/*</code><br><code>run/pfsolver_no_ferrite_solve_rank4/*</code></td></tr>
-    <tr><td>Palace 패치: 복소 μ 자기손실(M-fork)</td><td><span class="pill todo">예정</span></td><td class="num">코어 수정</td><td>ferrite μ″ + μ(f) → V3 선행조건</td></tr>
+    <tr><td>Docker Palace 0.16.1pfterm01 로컬 이미지(M1)</td><td><span class="pill done">완료</span></td><td class="num">1회 빌드 완료</td><td><code>~/.local/bin/palace</code> wrapper → <code>peetsfea-palace:0.16.1pfterm01</code></td></tr>
+    <tr><td>ingest+mesh, no-ferrite(M2–M3)</td><td><span class="pill done">구현</span></td><td class="num">mesh 20-40 s</td><td><code>solver/pfsolver</code> gmsh mesh policy + copper-adjacent port retag</td></tr>
+    <tr><td>solve+post, no-ferrite(M4–M5)</td><td><span class="pill fail">numeric FAIL</span></td><td class="num">retag rank1 141.6 s wall<br>Palace total 125.4 s</td><td><code>run/pfsolver_hfss_fixed_air2000_retag_pfmuflen2_currentsource_rank1/*</code><br><code>run/proto_air2000_retag_pfmuflen_lumped_native_rank1/*</code></td></tr>
+    <tr><td>Palace 패치: 복소 μ + projected-length terminal patch + SurfaceCurrent Current</td><td><span class="pill done">빌드 완료</span></td><td class="num">Docker rebuild 완료<br>image sha256:6a2cebf…</td><td><code>peetsfea-palace:0.16.1pfterm01</code><br><code>fork_version=0.16.1pfterm01</code></td></tr>
     <tr><td>sweep·C·손실·field, ferrite 포함(M5b)</td><td><span class="pill todo">예정</span></td><td class="num">—</td><td>SRF·C·loss·B-plane + HTML field plot image</td></tr>
-    <tr><td>교차검증 판정 + 리포트</td><td><span class="pill fail">numeric FAIL</span></td><td class="num">—</td><td>conductor boundary + air-domain 모델링 보정 필요</td></tr>
+    <tr><td>교차검증 판정 + 리포트</td><td><span class="pill fail">numeric FAIL</span></td><td class="num">—</td><td>3D copper mesh + terminal-current 모델링 보정 필요</td></tr>
   </table>
-  <div class="note ok"><b>요약:</b> GOAL1의 독립 Python API, no-ferrite mesh/config, stock Palace 0.16.1 wrapper, rank1/rank2/rank4 solve, S→Z postprocess, manifest 산출은 완료됐다. HFSS no-ferrite numeric parity는 실패했으므로, 다음 액션은 <b>Palace conductor boundary + air-domain/absorbing-boundary 모델링 보정</b>이다.</div>
+  <div class="note warn"><b>요약:</b> GOAL1의 독립 Python API, Docker Palace 0.16.1pfterm01 wrapper, 3D copper mesh, copper-adjacent retag, projected-length Palace patch는 준비됐다. HFSS no-ferrite numeric parity는 실패했으므로, 완료 조건은 <b>copper cross-section terminal cut/source formulation</b> 후 실제 rank4 solve가 HFSS order/tolerance에 들어오는 것이다.</div>
 </section>
 
 </main>

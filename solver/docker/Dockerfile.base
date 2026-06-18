@@ -12,8 +12,10 @@
 #
 # Fork baseline:
 #   palace@0.16.1 +cuda ~slepc ~sundials cuda_arch=86   (RTX 3070, sm_86)
-# The frequency-dependent complex-mu / magnetic-loss patch produces the
-# PEETSFEA fork version 0.16.1pf from this upstream-equivalent baseline.
+# The frequency-dependent complex-mu / magnetic-loss patch plus pfsolver
+# terminal field-current output and non-rectangular port projected-length support
+# produce the PEETSFEA fork version
+# 0.16.1pfterm01 from this upstream-equivalent baseline.
 FROM docker.io/spack/ubuntu-noble:develop@sha256:2a6981ff541a1040f26c89e23b8c6be089d7afc339b21bf8e4877562f31209f4
 
 SHELL ["/bin/bash", "-lc"]
@@ -59,9 +61,10 @@ COPY docker/palace-wrapper.sh /usr/local/bin/palace
 
 ARG PEETSFEA_PALACE_BASE_VERSION="0.16.1"
 ARG PEETSFEA_PALACE_BASE_COMMIT="c13e409f255392b9d78369c386276cf9343c2205"
-ARG PEETSFEA_PALACE_FORK_VERSION="0.16.1pf"
+ARG PEETSFEA_PALACE_FORK_VERSION="0.16.1pfterm01"
 ARG PEETSFEA_PALACE_SOURCE_COMMIT="unknown"
 ARG PEETSFEA_PALACE_INSTALL_PREFIX="/opt/peetsfea-palace"
+ARG PEETSFEA_PALACE_BUILD_JOBS="8"
 
 # Build the in-tree fork source. Third-party dependencies come from the Spack
 # closure above; the only delivered Palace binary is compiled from solver/palace.
@@ -105,7 +108,7 @@ RUN source /opt/spack/share/spack/setup-env.sh \
       -DPALACE_WITH_SLEPC=OFF \
       -DPALACE_WITH_ARPACK=ON \
       -DPALACE_WITH_SUNDIALS=OFF \
- && cmake --build /build/peetsfea-palace --parallel \
+ && cmake --build /build/peetsfea-palace --parallel ${PEETSFEA_PALACE_BUILD_JOBS} \
  && cmake --install /build/peetsfea-palace \
  && mkdir -p ${PEETSFEA_PALACE_INSTALL_PREFIX}/lib \
  && mpicc -shared -fPIC -O2 /tmp/hypre_pool_override.c \

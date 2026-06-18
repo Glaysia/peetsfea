@@ -11,7 +11,10 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ctx="$(cd "${here}/.." && pwd)"   # build context = solver/
 palace_commit="$(git -C "${ctx}/palace" rev-parse HEAD)"
-palace_fork_version="0.16.1pf"
+if ! git -C "${ctx}/palace" diff --quiet || ! git -C "${ctx}/palace" diff --cached --quiet; then
+  palace_commit="${palace_commit}-dirty"
+fi
+palace_fork_version="0.16.1pfterm01"
 
 docker build \
   -f "${here}/Dockerfile.base" \

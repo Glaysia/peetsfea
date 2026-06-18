@@ -1,23 +1,22 @@
 #!/usr/bin/env bash
-# Install a locally-runnable, podman/docker-wrapped Palace 0.16.1 (stock).
+# Install a locally-runnable, docker/podman-wrapped Palace.
 #
 #   ./install-palace-local.sh wrapper   # install ~/.local/bin/palace only (fast)
-#   ./install-palace-local.sh build     # build the palace:0.16.1 image (heavy)
+#   ./install-palace-local.sh build     # build the selected image (heavy)
 #   ./install-palace-local.sh all       # build + install wrapper
 #
-# Result: `palace <config.json>` works from the shell, running stock released
-# Palace 0.16.1 in a container — pfsolver (and Codex) call it as if local, the
-# way pyaedt calls the podman-wrapped ansysedt.
+# Result: `palace <config.json>` works from the shell. The local default is
+# Docker image peetsfea-palace:0.16.1pfterm01; stock palace:0.16.1 can still be selected
+# explicitly for no-ferrite regression diagnostics.
 #
-# The fork's patched engine (magnetic loss) is version 0.16.1pf and is built
-# separately as palace:0.16.1pf; point the wrapper at it with
-# PFSOLVER_PALACE_IMAGE=palace:0.16.1pf.
+# The fork's patched engine tag uses up to eight suffix characters after 0.16.1.
+# Current default: 0.16.1pfterm01 = peetsfea terminal-source fork v01.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 solver="$(cd "${here}/.." && pwd)"
-runtime="${PFSOLVER_CONTAINER_RUNTIME:-podman}"
-image="${PFSOLVER_PALACE_IMAGE:-palace:0.16.1}"
+runtime="${PFSOLVER_CONTAINER_RUNTIME:-docker}"
+image="${PFSOLVER_PALACE_IMAGE:-peetsfea-palace:0.16.1pfterm01}"
 target="${1:-all}"
 
 build_image() {
@@ -46,8 +45,11 @@ build_image() {
     )
   else
     source_commit="$(git -C "${solver}/palace" rev-parse HEAD)"
+    if ! git -C "${solver}/palace" diff --quiet || ! git -C "${solver}/palace" diff --cached --quiet; then
+      source_commit="${source_commit}-dirty"
+    fi
     build_args+=(
-      --build-arg "PEETSFEA_PALACE_FORK_VERSION=0.16.1pf"
+      --build-arg "PEETSFEA_PALACE_FORK_VERSION=0.16.1pfterm01"
       --build-arg "PEETSFEA_PALACE_SOURCE_COMMIT=${source_commit}"
     )
   fi

@@ -13,7 +13,7 @@
 > `mpirun -np 4 palace <config.json>`를 소유하며, 이 CLI는 pfsolver 사용자 표면이 아니라 Palace 엔진 경계다.
 > (이전 C++ 드라이버 `solver/src/*`는 폐기됨.) gmsh는 **Python API** in-process.
 
-- 코어: **Palace** `Driven`(full-wave). no-ferrite는 stock `palace:0.16.1`, ferrite 복소 μ 단계는 forked `palace:0.16.1pf`. CUDA mandatory, 4-core MPI, CPU 폴백 없음.
+- 코어: **Palace** `Driven`(full-wave). 로컬 기본은 Docker `peetsfea-palace:0.16.1pfterm01`; stock `palace:0.16.1`은 no-ferrite 회귀 진단용. CUDA mandatory, 4-core MPI, CPU 폴백 없음.
 - **Sweep 모델(중요):** HFSS terminal-network처럼 **단일 주파수(6.78 MHz)에서 메시를 한 번 확정**하고, 그 **같은 메시를 다른 주파수에 재사용**해 sweep한다(주파수마다 re-mesh/재적응하는 "진짜 sweep"은 자원 과다라 안 함). 이는 Palace `Driven`의 native 동작(고정 메시 위 다주파수 해; 필요시 PROM/adaptive fast sweep)과 정확히 일치.
 
 Python API 최종형: `pfsolver.inspect_bundle(bundle_dir)`, `pfsolver.mesh_bundle(bundle_dir, ...)`,

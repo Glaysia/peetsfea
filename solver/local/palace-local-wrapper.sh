@@ -3,13 +3,13 @@
 #
 # pfsolver invokes `palace <config.json>` exactly as if Palace were a local
 # binary; this wrapper runs it inside the container, the same way pyaedt drives
-# the podman-wrapped ansysedt. It runs STOCK released Palace 0.16.1 (no fork
-# magnetic-loss patches). The fork's patched engine is version 0.16.1pf and
-# uses a different image tag (PFSOLVER_PALACE_IMAGE).
+# the wrapped ansysedt. The local default is the patched Palace 0.16.1pfterm01 Docker
+# image used by pfsolver. Stock Palace 0.16.1 remains available as a diagnostic
+# image when PFSOLVER_CONTAINER_RUNTIME/PFSOLVER_PALACE_IMAGE are set explicitly.
 #
 # Runtime-agnostic by env:
-#   PFSOLVER_CONTAINER_RUNTIME = podman (default) | docker
-#   PFSOLVER_PALACE_IMAGE      = palace:0.16.1 (default; stock). fork → palace:0.16.1pf
+#   PFSOLVER_CONTAINER_RUNTIME = docker (default) | podman
+#   PFSOLVER_PALACE_IMAGE      = peetsfea-palace:0.16.1pfterm01 (default)
 #   PFSOLVER_MPI_RANKS         = 4 (default)
 #   PFSOLVER_WORKDIR           = $PWD (mounted at the same path so config/mesh
 #                                paths stay valid)
@@ -17,8 +17,8 @@
 # solver/local/README.md). The container runner is intentionally abstracted.
 set -euo pipefail
 
-IMAGE="${PFSOLVER_PALACE_IMAGE:-palace:0.16.1}"
-RUNTIME="${PFSOLVER_CONTAINER_RUNTIME:-podman}"
+IMAGE="${PFSOLVER_PALACE_IMAGE:-peetsfea-palace:0.16.1pfterm01}"
+RUNTIME="${PFSOLVER_CONTAINER_RUNTIME:-docker}"
 RANKS="${PFSOLVER_MPI_RANKS:-4}"
 workdir="${PFSOLVER_WORKDIR:-$PWD}"
 
@@ -44,6 +44,7 @@ done
 # installed Palace MPI wrapper. Keep MPI inside the container, but pass rank and
 # root-allowance options to that wrapper instead of nesting mpirun here.
 exec "${RUNTIME}" run --rm "${gpu[@]}" \
+  --user "$(id -u):$(id -g)" \
   "${env_flags[@]}" \
   -v "${workdir}:${workdir}" -w "${workdir}" \
   "${IMAGE}" \
