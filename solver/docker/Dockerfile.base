@@ -10,36 +10,98 @@
 #
 #   docker build -f docker/Dockerfile.base -t peetsfea-palace:dev ..
 #
-# Pinned to the build validated in phase0_sanity:
-#   palace@0.16.0 +cuda ~slepc ~sundials cuda_arch=86   (RTX 3070, sm_86)
-# The fork (frequency-dependent complex-mu / magnetic-loss patch) starts from
-# this upstream and is built in-tree here.
+# Fork baseline:
+#   palace@0.16.1 +cuda ~slepc ~sundials cuda_arch=86   (RTX 3070, sm_86)
+# The frequency-dependent complex-mu / magnetic-loss patch starts from this
+# upstream-equivalent Glaysia fork branch and is built in-tree here.
 FROM spack/ubuntu-noble:develop@sha256:2a6981ff541a1040f26c89e23b8c6be089d7afc339b21bf8e4877562f31209f4
 
 SHELL ["/bin/bash", "-lc"]
 ENV DEBIAN_FRONTEND=noninteractive
 
-ARG PALACE_SPEC="palace@0.16.0+cuda~slepc~sundials cuda_arch=86"
+ARG PALACE_SPEC="palace@0.16.1+cuda~slepc~sundials cuda_arch=86"
 
-# Build Palace (and CUDA/MPI/MFEM/HYPRE/PETSc deps) into a named spack env.
-# Provides the toolchain (cmake/mpi/cuda) to also rebuild the forked Palace
-# source in-tree once the magnetic-loss patch lands.
-RUN spack env create palace \
+# Build tools for rebuilding the Palace fork from source in-tree. libreadline is
+# declared as a Spack external below so the image does not depend on a fragile
+# readline patch mirror during the heavy dependency solve.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      cmake ninja-build build-essential git libreadline-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY palace/spack_repo /tmp/palace/spack_repo
+COPY palace/extern/patch /tmp/palace/extern/patch
+
+# Build CUDA/MPI/MFEM/HYPRE/PETSc dependencies into a named Spack env using the
+# Palace package metadata carried by the fork. M1 then builds the submodule
+# source against this dependency closure, so the delivered binary comes from
+# solver/palace rather than Spack's package copy.
+RUN source /opt/spack/share/spack/setup-env.sh \
+ && spack repo add /tmp/palace/spack_repo/local \
+ && spack env create palace \
+ && printf '%s\n' \
+      'packages:' \
+      '  readline:' \
+      '    externals:' \
+      '    - spec: readline@8.2' \
+      '      prefix: /usr' \
+      '    buildable: false' \
+      > /tmp/palace-packages.yaml \
+ && spack -e palace config add -f /tmp/palace-packages.yaml \
  && spack -e palace add ${PALACE_SPEC} \
  && spack -e palace concretize -f \
- && spack -e palace install --fail-fast \
+ && spack -e palace install --only dependencies --fail-fast \
  && spack clean -a
 
-# Build tools for rebuilding the Palace fork from source in-tree.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      cmake ninja-build build-essential git \
-    && rm -rf /var/lib/apt/lists/*
+COPY palace ./palace
+COPY docker/hypre_pool_override.c /tmp/hypre_pool_override.c
+COPY docker/palace-wrapper.sh /usr/local/bin/palace
+
+ARG PEETSFEA_PALACE_BASE_VERSION="0.16.1"
+ARG PEETSFEA_PALACE_BASE_COMMIT="c13e409f255392b9d78369c386276cf9343c2205"
+ARG PEETSFEA_PALACE_SOURCE_COMMIT="unknown"
+ARG PEETSFEA_PALACE_INSTALL_PREFIX="/opt/peetsfea-palace"
+
+# Build the in-tree fork source. The M1 source is upstream-equivalent and pinned
+# by the submodule commit; future magnetic-loss commits land in this submodule.
+RUN source /opt/spack/share/spack/setup-env.sh \
+ && spack env activate palace \
+ && cmake -S /src/palace -B /build/peetsfea-palace -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=${PEETSFEA_PALACE_INSTALL_PREFIX} \
+      -DPALACE_WITH_CUDA=ON \
+      -DCMAKE_CUDA_ARCHITECTURES=86 \
+      -DPALACE_WITH_SLEPC=OFF \
+      -DPALACE_WITH_SUNDIALS=OFF \
+ && cmake --build /build/peetsfea-palace --parallel \
+ && cmake --install /build/peetsfea-palace \
+ && hypre_prefix="$(spack -e palace location -i hypre)" \
+ && mkdir -p ${PEETSFEA_PALACE_INSTALL_PREFIX}/lib \
+ && mpicc -shared -fPIC -O2 /tmp/hypre_pool_override.c \
+      -I"${hypre_prefix}/include" -L"${hypre_prefix}/lib" -lHYPRE \
+      -Wl,-rpath,"${hypre_prefix}/lib" \
+      -o ${PEETSFEA_PALACE_INSTALL_PREFIX}/lib/libhypre_pool_override.so \
+ && chmod +x /usr/local/bin/palace \
+ && printf '%s\n' \
+      "base_version=${PEETSFEA_PALACE_BASE_VERSION}" \
+      "base_commit=${PEETSFEA_PALACE_BASE_COMMIT}" \
+      "source_commit=${PEETSFEA_PALACE_SOURCE_COMMIT}" \
+      "source_tree=solver/palace submodule" \
+      "cuda_arch=86" \
+      "palace_with_cuda=ON" \
+      "palace_with_slepc=OFF" \
+      "palace_with_sundials=OFF" \
+      "hypre_pool_override=${PEETSFEA_PALACE_INSTALL_PREFIX}/lib/libhypre_pool_override.so" \
+      > ${PEETSFEA_PALACE_INSTALL_PREFIX}/PEETSFEA_BUILD_INFO
 
 # Activate the spack env (palace, cuda, mpi on PATH) for every non-login shell.
 RUN printf '%s\n' \
       'source /opt/spack/share/spack/setup-env.sh' \
       'spack env activate palace' \
       'spack load cuda mpi 2>/dev/null || true' \
+      'export PEETSFEA_PALACE_HOME=/opt/peetsfea-palace' \
+      'export PEETSFEA_HYPRE_POOL_OVERRIDE=/opt/peetsfea-palace/lib/libhypre_pool_override.so' \
+      'export PATH=/usr/local/bin:/opt/peetsfea-palace/bin:$PATH' \
       > /etc/profile.d/zz-palace-env.sh \
     && chmod +x /etc/profile.d/zz-palace-env.sh
 

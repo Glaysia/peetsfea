@@ -25,7 +25,12 @@ HFSS no-ferrite와 부호/shape/단위가 일치하는 상태까지.
 
 ## Palace 인터페이스 계약 (GOAL2와 합의된 경계 — 깨지면 안 됨)
 - 입력: 오케스트레이터가 **Palace `Driven` config(JSON)** + **mesh(.msh)** 를 emit.
-- 호출: `palace <config.json>` (도커 안), MPI 4 rank, `Solver.Device=GPU`.
+- 호출: **런타임 무관 래퍼 `palace <config.json>`** 로 부른다. 직접 `docker run`/`podman run` 하드코딩 금지.
+  - 로컬 dev = `~/.local/bin/palace`(podman/docker-wrapped, pyaedt→podman-aedt 패턴). 설치: `solver/local/install-palace-local.sh`.
+  - 클러스터 = enroot/pyxis(`srun --container-image=…`). 같은 계약(config in / CSV out)이라 래퍼만 다름.
+  - 제어 env: `PFSOLVER_CONTAINER_RUNTIME`(podman/docker)·`PFSOLVER_PALACE_IMAGE`·`PFSOLVER_MPI_RANKS`(4)·`PFSOLVER_WORKDIR`.
+  - 래퍼가 컨테이너 안에서 `mpirun -np 4 palace`(4 rank, GPU, HYPRE pool override LD_PRELOAD) 실행.
+- **지금은 stock 릴리스 `palace:0.16.1`**(포크 패치 없음, no-ferrite 충분). ferrite 단계에서 `PFSOLVER_PALACE_IMAGE=palace:0.16.1pfs`(GOAL2 포크)로 전환.
 - 출력: Palace가 `postpro/port-S.csv`·`port-V.csv`·`port-I.csv`(+ field) 산출 → 오케스트레이터가 읽어 Z 도출.
 - no-ferrite는 upstream material 키(`Permeability`/`Permittivity`/`LossTan`/`Conductivity`)만 사용.
   ferrite 자기손실 config 필드는 GOAL2가 정의 → 그때 orchestrator가 emit(나중).

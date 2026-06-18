@@ -1,0 +1,10 @@
+build/
+**/build/
+**/.cache/
+**/compile_commands.json
+palace/docs/build/
+palace/**/.git/
+*.o
+*.obj
+*.so
+.DS_Store

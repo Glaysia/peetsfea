@@ -1,0 +1,8 @@
+[submodule "solver/palace"]
+	path = solver/palace
+	url = https://github.com/Glaysia/palace.git
+	branch = dev
+[submodule "solver/pfsolver"]
+	path = solver/pfsolver
+	url = /home/harry/Projects/PythonProjects/worktrees3/pfsolver.git
+	branch = main
