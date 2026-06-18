@@ -45,6 +45,13 @@ Palace 실행, Docker/GPU, HYPRE, mesh generation, CSV parsing이 문제가 아�
 - `run/pfsolver_port_visual_debug/semantic_tx_port_step_3d.png`
 - `run/pfsolver_port_visual_debug/semantic_rx_port_step_3d.png`
 
+2026-06-19 semantic edge rank1: `run/pfsolver_hfss_fixed_semantic_edge_lumped_rank1/`에서 Docker `peetsfea-palace:0.16.1pfterm01`, 4-rank GPU solve가 정상 수렴했다(GMRES 14/15 iterations, Palace total `84.8 s`, peak HWM `4.5 GB`). 하지만 postprocess는 `surface-F` terminal flux-current Z 비상반성으로 fail-fast했다. Raw diagnostic:
+- `S→Z`: `Z11=45.5285−j0.2659 Ω`, `Z22=39.5760−j0.0158 Ω`, `Z12≈−j0.00984 Ω`
+- `V @ inv(surface-F)`: negative self L, nonreciprocal (`Z12≈5.69+j203.74 Ω`, `Z21≈−20.31−j1660.72 Ω`)
+- `V @ inv(port-I-field)`: negative self L, nonreciprocal
+
+따라서 **peetsfea/HFSS edge topology는 이제 맞지만, Palace native `LumpedPort`/current diagnostic이 HFSS terminal conductor current를 만들지 못한다**. 다음 핵심은 Palace 쪽 terminal source/current formulation이다.
+
 ## ★ Claude 진단 (2026-06-19)
 
 **full-wave 맞다.** pfsolver config는 `Problem.Type="Driven"` = 완전 Maxwell 주파수영역 = full-wave(코드+생성 config 확인). HFSS도 같은 full-wave terminal로 이 코일에서 j243Ω를 내므로 full-wave로 **가능한** 문제다.
@@ -127,7 +134,7 @@ HFSS final adaptive pass @ 6.78 MHz:
 ## 남은 핵심 작업
 
 - `101/102` copper-adjacent outer-surface retag는 폐기한다. HFSS terminal은 local surface patch나 내부 cut이 아니라, 이미 열린 스파이럴의 feed-gap edge pair를 terminal sheet로 잇는다.
-- `101/102` port sheet 생성은 이제 peetsfea/HFSS 규칙처럼 실제 imported copper edge curve 두 개를 resolve해서 만든다. 다음 numeric solve로 Palace native `LumpedPort`가 이 topology에서 terminal loop current를 만드는지 확인해야 한다.
+- `101/102` port sheet 생성은 이제 peetsfea/HFSS 규칙처럼 실제 imported copper edge curve 두 개를 resolve해서 만든다. 이 topology에서도 Palace native `LumpedPort`는 HFSS terminal loop current를 만들지 못했다.
 - `network_field.csv`는 Palace field-power/current diagnostic으로 산출하지만 acceptance 전류는 아니다. 현재 field-current 기준도 HFSS order에 들어오지 않는다.
 - HFSS lumped terminal sheet와 등가인 Palace boundary를 재정의:
   - 현재 copper outer surface source나 내부 cut이 아니라, feed-gap sheet topology에서 3D copper terminal current path에 결합되는 formulation이어야 한다.
@@ -151,7 +158,7 @@ HFSS final adaptive pass @ 6.78 MHz:
 - [x] port physical group 101/102를 copper-adjacent outer surface로 retag하고 Palace rank1 완주.
 - [x] `SurfaceCurrent.Current` config/schema/operator patch + Docker `0.16.1pfterm01` 빌드.
 - [x] port physical group 101/102를 imported copper edge curves `(TX 372/205, RX 692/530)` 기반 feed-gap sheet로 재정의.
-- [ ] semantic feed-gap sheet mesh에서 Palace native `LumpedPort` rank1 diagnostic 실행.
+- [x] semantic feed-gap sheet mesh에서 Palace native `LumpedPort` rank1 diagnostic 실행.
 - [ ] Palace terminal source/current formulation이 HFSS lumped terminal과 동등함을 증명.
 - [ ] rank4 solve: `Z11/Z22/Z12`가 HFSS 크기대(order)로 산출.
 - [ ] HFSS no-ferrite tolerance: L/M ±5%, |Z| ±5%, k ±10%, R ±15%.

@@ -205,6 +205,7 @@
     <tr><td><b>native LumpedPort, HFSS 2000 mm air</b><br><code>run/proto_air2000_lumped_native_rank1</code></td><td class="num">S→Z: Z11≈45.53−j0.265 Ω<br>Z22≈39.58−j0.015 Ω<br>Z12≈−3e-5−j0.0099 Ω</td><td class="num">동일</td><td><span class="pill fail">FAIL</span> terminal loop current를 구동하지 못함</td></tr>
     <tr><td><b>retag current-source, HFSS 2000 mm air</b><br><code>run/pfsolver_hfss_fixed_air2000_retag_pfmuflen2_currentsource_rank1</code></td><td class="num">Z11=0.002305+j0.000018 Ω<br>Z22=0.004947+j0.000022 Ω<br>Z12≈0<br>L1/L2/M≈0</td><td class="num">동일</td><td><span class="pill fail">FAIL</span> copper outer-surface patch로 collapse</td></tr>
     <tr><td><b>retag native LumpedPort</b><br><code>run/proto_air2000_retag_pfmuflen_lumped_native_rank1</code></td><td class="num">S→Z: Z11=0.002305+j0.000018 Ω<br>Z22=0.004947+j0.000022 Ω<br>Z12≈0</td><td class="num">동일</td><td><span class="pill fail">FAIL</span> current-source만의 문제가 아님</td></tr>
+    <tr><td><b>semantic copper-edge feed-gap LumpedPort</b><br><code>run/pfsolver_hfss_fixed_semantic_edge_lumped_rank1</code></td><td class="num">Palace solve converged, 84.8 s total<br>S→Z: Z11=45.5285−j0.2659 Ω<br>Z22=39.5760−j0.0158 Ω<br>Z12≈−j0.00984 Ω<br>surface-F Z: nonreciprocal, negative L</td><td class="num">동일</td><td><span class="pill fail">FAIL</span> geometry fixed; Palace terminal current still wrong</td></tr>
     <tr><td><b>copper-only internal cut faces</b><br><code>run/proto_internal_copper_cut_currentsource_rank1</code></td><td class="num">TX 4 faces / RX 3 faces<br>surface-I: Z11=0.002615+j0.000015 Ω<br>field-I: Z11≈0.012+j0.534 Ω<br>Z12≈0</td><td class="num">동일</td><td><span class="pill fail">FAIL</span> 수렴하지만 loop current 없음</td></tr>
     <tr><td><b>overlapped gap sheet prototypes</b><br><code>run/proto_overlap_gap_*</code></td><td class="num">1 mm overlap: GMRES NaN<br>0.02 mm overlap: gmsh segfault</td><td class="num">동일</td><td><span class="pill fail">FAIL</span> line-contact 해소만으로 불가</td></tr>
     <tr><td>솔브 시간/메모리</td><td class="num">retag rank1 141.6 s wall<br>Palace total 125.4 s<br>peak HWM 3.6 GB</td><td class="num">HFSS 6.78 MHz adaptive pass evidence</td><td><span class="pill done">실행 OK</span></td></tr>
@@ -215,7 +216,7 @@
   L = im(Z)/ω,  R = re(Z),  M = im(Z12)/ω,  k = M/√(L1·L2),  Q = ωL/R<br>
   C·SRF: sweep에서 im(Z)=0 인 f₀ →  C = 1 / ((2πf₀)²·L)</div>
   <div class="note"><b>부호/전류 함정:</b> stock Palace <code>LumpedPort</code>의 <code>port-I.csv</code>는 terminal conductor current가 아니라 <code>V/RLC</code> branch current다. <code>V @ inv(port-I)</code>는 50Ω termination만 재구성하므로 acceptance Z로 쓰지 않는다. <code>surface-I.csv</code>의 0.051521 A는 Palace 소스 기준 dimensionalized physical current가 맞지만, 그 source 자체가 HFSS terminal과 아직 등가가 아니다.</div>
-  <div class="note fail"><b>원인 업데이트:</b> 초기 구현은 ledger 좌표를 복사해 새 points/lines로 port sheet를 만들었고, peetsfea/HFSS의 imported copper edge resolve 규칙을 따르지 않았다. copper-adjacent retag, copper-only internal cut faces, overlapped gap sheet는 모두 numeric FAIL이었다. 현재 구현은 실제 copper edge curves를 재사용하는 feed-gap sheet로 고쳤다. 다음 판정은 이 semantic sheet에서 Palace native <code>LumpedPort</code>가 HFSS terminal current를 3D copper volume에 제대로 결합하는지다.</div>
+  <div class="note fail"><b>원인 업데이트:</b> 초기 구현은 ledger 좌표를 복사해 새 points/lines로 port sheet를 만들었고, peetsfea/HFSS의 imported copper edge resolve 규칙을 따르지 않았다. copper-adjacent retag, copper-only internal cut faces, overlapped gap sheet는 모두 numeric FAIL이었다. 현재 구현은 실제 copper edge curves를 재사용하는 feed-gap sheet로 고쳤고 rank1 solve도 수렴했다. 그래도 Palace native <code>LumpedPort</code>의 S→Z는 <code>Z11≈45.53−j0.266Ω</code>, <code>Z22≈39.58−j0.0158Ω</code>, <code>Z12≈−j0.00984Ω</code>라 HFSS terminal current를 만들지 못한다. 따라서 남은 원인은 geometry가 아니라 Palace terminal source/current formulation이다.</div>
   <div class="note"><b>Field plot acceptance:</b> numeric gate 통과 후 Palace field output에서 air-gap E/H 또는 B-field plot 이미지를 생성해 이 HTML에 실제 이미지로 첨부한다. 숫자 표만 남기지 않고, 형상/포트/field sanity를 눈으로 확인할 수 있게 둔다.</div>
 </section>
 
@@ -239,7 +240,7 @@
   <div class="note"><b>합격 판정 규칙:</b> 모든 scalar(L/M/k/|Z|)가 tolerance 이내 + 상반성·passivity 통과 + sweep 곡선이 SRF 부근까지 정성 일치하면
   <b>"pfsolver가 이 설계점에서 HFSS terminal Z를 재현"</b>으로 판정. R은 표피 메시 의존이 커 ±15%를 1차 목표로 두되, 메시 수렴으로 ±5% 도달을 추적.
   단일 점 합격 후 §6 검증 사다리(V0→V4)로 확장.</div>
-  <div class="note warn"><b>현재 판정:</b> GOAL1 Python API/Palace orchestration, HFSS-size air-domain, 3D-copper mesh, patched Palace projected-length runtime은 동작한다. port geometry는 peetsfea/HFSS처럼 imported copper edge curves 기반 feed-gap sheet로 고쳤다. numeric parity는 아직 실패 상태이며, 다음 작업은 이 semantic sheet에서 Palace terminal source/current formulation을 HFSS lumped terminal과 등가로 검증하거나 보정하는 것이다.</div>
+  <div class="note warn"><b>현재 판정:</b> GOAL1 Python API/Palace orchestration, HFSS-size air-domain, 3D-copper mesh, patched Palace projected-length runtime은 동작한다. port geometry는 peetsfea/HFSS처럼 imported copper edge curves 기반 feed-gap sheet로 고쳤고 실제 Palace rank1도 수렴했다. numeric parity는 여전히 실패하며, 다음 작업은 Palace terminal source/current formulation을 HFSS lumped terminal과 등가로 보정하는 것이다.</div>
 </section>
 
 <section>
@@ -288,12 +289,12 @@
     <tr><td>독립 Python API 서브모듈 + GPU 게이트</td><td><span class="pill done">구현</span></td><td class="num">—</td><td><code>solver/pfsolver</code> API, CLI 없음</td></tr>
     <tr><td>Docker Palace 0.16.1pfterm01 로컬 이미지(M1)</td><td><span class="pill done">완료</span></td><td class="num">1회 빌드 완료</td><td><code>~/.local/bin/palace</code> wrapper → <code>peetsfea-palace:0.16.1pfterm01</code></td></tr>
     <tr><td>ingest+mesh, no-ferrite(M2–M3)</td><td><span class="pill done">구현</span></td><td class="num">mesh 20-40 s</td><td><code>solver/pfsolver</code> gmsh mesh policy + semantic copper-edge feed-gap port sheet<br><code>run/pfsolver_port_visual_debug/semantic_*_port_step_*.png</code></td></tr>
-    <tr><td>solve+post, no-ferrite(M4–M5)</td><td><span class="pill fail">numeric FAIL</span></td><td class="num">retag rank1 141.6 s wall<br>Palace total 125.4 s</td><td><code>run/pfsolver_hfss_fixed_air2000_retag_pfmuflen2_currentsource_rank1/*</code><br><code>run/proto_air2000_retag_pfmuflen_lumped_native_rank1/*</code></td></tr>
+    <tr><td>solve+post, no-ferrite(M4–M5)</td><td><span class="pill fail">numeric FAIL</span></td><td class="num">semantic rank1 84.8 s Palace total<br>retag rank1 141.6 s wall</td><td><code>run/pfsolver_hfss_fixed_semantic_edge_lumped_rank1/*</code><br><code>run/pfsolver_hfss_fixed_air2000_retag_pfmuflen2_currentsource_rank1/*</code></td></tr>
     <tr><td>Palace 패치: 복소 μ + projected-length terminal patch + SurfaceCurrent Current</td><td><span class="pill done">빌드 완료</span></td><td class="num">Docker rebuild 완료<br>image sha256:6a2cebf…</td><td><code>peetsfea-palace:0.16.1pfterm01</code><br><code>fork_version=0.16.1pfterm01</code></td></tr>
     <tr><td>sweep·C·손실·field, ferrite 포함(M5b)</td><td><span class="pill todo">예정</span></td><td class="num">—</td><td>SRF·C·loss·B-plane + HTML field plot image</td></tr>
     <tr><td>교차검증 판정 + 리포트</td><td><span class="pill fail">numeric FAIL</span></td><td class="num">—</td><td>3D copper mesh + terminal-current 모델링 보정 필요</td></tr>
   </table>
-  <div class="note warn"><b>요약:</b> GOAL1의 독립 Python API, Docker Palace 0.16.1pfterm01 wrapper, 3D copper mesh, semantic copper-edge feed-gap port sheet, projected-length Palace patch는 준비됐다. HFSS no-ferrite numeric parity는 실패 상태다. 완료 조건은 semantic feed-gap sheet에서 실제 Palace rank4 solve가 HFSS order/tolerance에 들어오는 것이다.</div>
+  <div class="note warn"><b>요약:</b> GOAL1의 독립 Python API, Docker Palace 0.16.1pfterm01 wrapper, 3D copper mesh, semantic copper-edge feed-gap port sheet, projected-length Palace patch는 준비됐다. Semantic feed-gap rank1도 수렴했지만 HFSS no-ferrite numeric parity는 실패 상태다. 완료 조건은 Palace terminal source/current formulation 보정 후 실제 Palace rank4 solve가 HFSS order/tolerance에 들어오는 것이다.</div>
 </section>
 
 </main>
