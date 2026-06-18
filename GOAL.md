@@ -68,6 +68,19 @@ Palace 실행, Docker/GPU, HYPRE, mesh generation, CSV parsing이 문제가 아�
 
 2026-06-19 semantic edge + finite VolumeCurrent bridge prototype: `peetsfea-palace:0.16.1pfterm01`을 `source_commit=f082c575...`로 rebuild해 `Domains.VolumeCurrent` schema/operator가 실제 Docker image에 들어간 것을 확인했다. 같은 feed-gap sheet를 copper thickness 방향 70 µm로 extrude한 source volume(`Attributes 201/202`)에 1 A 정규화 current density를 걸어 `run/proto_semantic_edge_volume_current_rank1/`에서 rank1 시도했다. Palace validation은 통과했지만 excitation 1에서 power iteration과 GMRES residual이 즉시 `NaN`으로 들어가 컨테이너를 중단했다. 따라서 finite bridge/volume-current도 acceptance 경로가 아니며, 다음 작업은 Palace에 **edge-aware terminal port**를 직접 추가하는 것이다.
 
+## ★★ 검증 완료 — 근본 원인·fix 확정 (2026-06-19, Claude 실험)
+
+**Palace 실험으로 못박았다.** 최소 PEC 사각루프(간극+lumped port, vacuum box) → `run/claude_minloop/`:
+- `Zin = 0.0017 + j10.84 Ω`, L = **254.6 nH**(해석 square-loop ~234 nH, ~9% 일치).
+- 즉 **Palace `Driven` full-wave + feed-gap lumped port + PEC 도체 = 코일 인덕턴스 정확히 산출.**
+
+**따라서 pfsolver 붕괴(Zin≈포트R, L≈0)의 근본 원인 = copper를 `solve-inside σ volume`으로 둔 것.**
+lumped port는 **PEC/표면-임피던스 도체 경계**를 기대한다(cpw 예제도 금속=`PEC` boundary, 도체 volume 없음). solve-inside 유한도전율 volume에는 포트가 conduction 전류를 못 밀어넣어 코일이 회로에서 빠진다.
+
+**FIX (확정):** copper를 **boundary로 모델링**한다 — copper를 air에서 void로 빼고 그 표면을 **PEC**(1차: L/M/k parity) → 이후 **finite-conductivity surface-impedance**(R/skin까지). copper 3D solve-inside는 **폐기**(skin-depth 위해 volume으로 둔 Hard Rule이 바로 collapse의 원인이었다). FR4는 dielectric volume 유지.
+
+다음: 이 fix를 실제 SSW no-ferrite에 적용해 Z를 HFSS order로 끌어올린다(진행 중).
+
 ## ★ Claude 진단 v2 (2026-06-19, 정정)
 
 **[정정] 앞선 v1 진단("Codex가 gap sheet를 안 만든다")은 틀렸다.** 코드 확인 결과 `mesh.py:_add_port_sheet`가
