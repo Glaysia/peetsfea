@@ -69,6 +69,16 @@ Phase C — `solve`(no-ferrite, 단일주파수)
 - [ ] phase0의 HYPRE OOM 케이스가 VRAM 적응 pool로 통과(8 GB RTX 3070).
 - [ ] manifest에 재현 필드 전부 존재.
 
+## 선행 task — HFSS no-ferrite 기준값 생성 (Codex, 이 push에 포함)
+pfsolver no-ferrite와 맞댈 정답 기준선이 아직 없다(현재 HFSS 값은 ferrite-enabled).
+Codex가 이 push에서 HFSS no-ferrite를 1회 돌려 교차검증 문서 §3.2를 채운다.
+- 입력: `src/peetsfea/data/0.3.x_fixed.toml`(design_id `0_3_7_p6561d2a5c7808f6e`, 동일 형상).
+- 방법: TX MULL ferrite body를 **non-model**로 둔다 — `hfss.modeler.set_object_model_state(<ferrite_name>, False)`(이미 존재하는 경로, ssw_ports.py). 형상은 유지, EM solve에서만 제외. (tx_mull_is_enabled=0으로 ferrite 자체를 끄는 변형도 허용하나, **non-model이 형상 동일 비교라 우선**.)
+- solve: 동일 `Setup1 @ 6.78MHz`, 4 cores, GPU. 추출은 기존 출력변수(`Ltx_uH/Lrx_uH/M_uH/k_ratio/Qtx/Qrx/re|im Z11/Z12/Z22`, ssw_ports.py `_TXRX_OUTPUT_VARIABLE_EXPRESSIONS`).
+- 환경: `peetsfea-main/.venv`(pyaedt 0.25.1), warm ansysedt에 attach(자체 기동 금지 권장) 또는 별도 ansysedt.
+- 산출/증거: report CSV 경로 + solve 로그 + ferrite가 non-model임을 ledger/design에서 확인 + 추출값으로 **§3.2 표 채움**.
+- acceptance: §3.2의 Z/L/M/k/R/Q가 실제 HFSS no-ferrite 실측으로 채워지고, ferrite-enabled 대비 L↓·k↓ 같은 물리적 방향이 맞는지 sanity 확인.
+
 ## 완료 증거 패키지 (각 리뷰 시 Codex가 제출)
 "완료"는 주장이 아니라 아래 산출물로 증명한다. 없으면 미완.
 - 실행한 Docker **build/run command** 원문.
