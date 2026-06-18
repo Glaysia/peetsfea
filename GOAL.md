@@ -68,23 +68,34 @@ Palace 실행, Docker/GPU, HYPRE, mesh generation, CSV parsing이 문제가 아�
 
 2026-06-19 semantic edge + finite VolumeCurrent bridge prototype: `peetsfea-palace:0.16.1pfterm01`을 `source_commit=f082c575...`로 rebuild해 `Domains.VolumeCurrent` schema/operator가 실제 Docker image에 들어간 것을 확인했다. 같은 feed-gap sheet를 copper thickness 방향 70 µm로 extrude한 source volume(`Attributes 201/202`)에 1 A 정규화 current density를 걸어 `run/proto_semantic_edge_volume_current_rank1/`에서 rank1 시도했다. Palace validation은 통과했지만 excitation 1에서 power iteration과 GMRES residual이 즉시 `NaN`으로 들어가 컨테이너를 중단했다. 따라서 finite bridge/volume-current도 acceptance 경로가 아니며, 다음 작업은 Palace에 **edge-aware terminal port**를 직접 추가하는 것이다.
 
-## ★ Claude 진단 (2026-06-19)
+## ★ Claude 진단 v2 (2026-06-19, 정정)
 
-**full-wave 맞다.** pfsolver config는 `Problem.Type="Driven"` = 완전 Maxwell 주파수영역 = full-wave(코드+생성 config 확인). HFSS도 같은 full-wave terminal로 이 코일에서 j243Ω를 내므로 full-wave로 **가능한** 문제다.
+**[정정] 앞선 v1 진단("Codex가 gap sheet를 안 만든다")은 틀렸다.** 코드 확인 결과 `mesh.py:_add_port_sheet`가
+**이미 간극을 가로지르는 quad sheet**(imported copper curve로 resolve한 seg A + connector + seg B + connector)를
+만들고 fail-fast 검증까지 한다. 즉 "gap sheet를 채워라"는 이미 done이다. 문제는 그 다음이다.
 
-**1순위 원인 — port가 코일 루프 전류를 안 만든다 (topology):**
-`port_edges`는 코일 두 터미널 패드 사이 **~2.1 mm 급전 간극(feed gap)**의 두 모서리(seg A, seg B)다(실측: TX gap 2.10 mm, RX 2.19 mm). HFSS lumped terminal은 **이 간극을 채우는 sheet**에 걸려 전류를 한 패드→스파이럴 전체 한 바퀴→다른 패드로 돌린다 → 자기인덕턴스 j243 Ω.
-- 코일은 **이미 두 끝이 2.1 mm 떨어진 열린 스파이럴**이다. **copper를 새로 끊지 마라**(internal tet cut 시도들이 틀린 이유). 이미 존재하는 간극을 port sheet로 채우고 두 끝면(터미널 단면)을 전극으로 쓴다.
-- Codex 변형이 전부 같은 식으로 실패한 이유: copper 외부 표면 패치·내부 단면 cut → 전류가 루프를 안 돌고 국소 단락 → `Z11≈mΩ, Z12≈0` 붕괴. overlap sheet → degenerate → NaN/segfault. 작은 air + current-source → 국소 과대 → 26~37배 overshoot. **collapse와 overshoot는 같은 뿌리**(전류가 스파이럴 루프가 아님)다.
-- 수정: port sheet = **2.1 mm 간극을 채우는 사각면**(두 변 = imported copper curve로 resolve한 seg A·seg B, 각각 copper 터미널 단면에 접함), excitation = 간극 가로지르는 방향, native `LumpedPort`. copper face / 내부 cut / overlap 아님.
-- copper 3D solve-inside(skin depth)는 **그대로 유지** — R용이고 인덕턴스 붕괴 원인 아님.
+**full-wave 맞다.** `Problem.Type="Driven"` = full Maxwell(코드+config 확인).
 
-**2순위 — full-wave의 저주파 한계 (port 고친 뒤 볼 것):**
-6.78 MHz에서 코일은 전기적으로 매우 작다(λ≈44 m ≫ 0.3 m). full-wave curl-curl은 ω→0에서 ill-conditioned(low-frequency breakdown)다. Palace `Driven`은 본래 GHz(qubit/cavity)용이라 이 극저주파·전기적-소형 영역은 Palace의 비주류 regime이다. port를 고쳐도 L이 노이지/부정확하면 그땐 **저주파 안정화**(element order↑, gauge, 적절한 Palace 설정)가 다음 변수다. 단, 현재의 완전 붕괴(Z12=0)는 저주파보다 **port topology가 1순위**임을 가리킨다.
+**진짜 증상 (결정적 데이터, semantic-edge gap-sheet lumped port + Palace 수렴):**
+`run/pfsolver_hfss_fixed_semantic_edge_lumped_rank1/` → `Z11 = 45.53 − j0.27 Ω`, `Z22 = 39.58 − j0.016 Ω`.
+HFSS는 `0.28 + j242`. **즉 결과가 포트 기준저항 50 Ω 근처의 순저항 + 인덕턴스 ≈ 0**이다(붕괴가 mΩ가 아니라 ~포트R).
 
-**rings 예제 주의:** Palace `rings`는 **Magnetostatic(= full-wave 아님)**이다. "루프 전류 + flux로 L 추출" 개념의 **캘리브레이션 참고**로만 쓰고 제품 formulation으로 채택 금지(full-wave 규칙 위반).
+**해석 — 코일이 회로에 안 들어와 있다:**
+Zin ≈ 50 Ω(포트 R)는 "**lumped port가 코일 conduction loop를 구동하지 못하고 자기 기준저항/주변 도메인만 보고 있다**"는 신호다.
+HFSS terminal은 포트 전류가 copper 단면을 통해 스파이럴을 한 바퀴 돌아 jωL(j242)을 만든다. Palace에선 그 **conduction 회로가 안 닫혀** L이 사라진다. (mΩ collapse 변형들도 같은 본질: 코일 미관여.)
 
-**프로세스:** Phase B(단순 1-loop 코일 + 간극 1개)를 건너뛰고 전체 SSW 스파이럴에서 brute-force 중이다. **최소 1-loop 코일로 회귀해 feed-gap lumped port 정의를 못 박고 → SSW로 확대**하라. 전체 형상에서 port 위상 디버깅 금지.
+**1순위 의심 (검증 필요):**
+1. **lumped port ↔ 3D solve-inside copper 결합.** gap sheet 두 변이 copper 바깥면 edge(1D)에만 접하지 copper 단면을 cap하지 않아, 포트 전압이 copper 도체로 conduction 전류를 못 밀어 넣는 것일 수 있다. → 포트가 copper 터미널 단면(end-face)을 제대로 전극으로 잡는지 확인.
+2. **multi-element 포트 방향.** `mesh_tags.json`에서 TX 포트가 element 2개(101/102)이고 direction이 간극 가로지르는 방향이 아니라 **copper edge를 따라(서로 antiparallel)** 잡혀 있다 → 포트 전압 적분이 상쇄/오류일 수 있다. 단일 element + 간극 가로지르는 단일 direction으로 점검.
+
+**2순위 — full-wave 저주파 한계:** 6.78 MHz·전기적 소형(λ≈44 m)이라 Palace `Driven`(본래 GHz용)이 low-frequency breakdown 영역. 위 1순위 고친 뒤에도 L이 노이지면 element order↑/gauge 등 저주파 안정화가 변수.
+
+**★ 결정적 다음 실험 (변수 격리):** **단순 단일 루프 코일**(한 바퀴 + 간극 1개, 해석적 L 알려짐)에 같은 feed-gap lumped port를 걸어라.
+- 단일 루프도 `Zin ≈ 포트R / L≈0`이면 → **포트 method 자체가 깨진 것**(SSW 기하 무관). 위 1순위(포트↔도체 결합)부터 고친다.
+- 단일 루프가 `jωL`(해석값)이 나오면 → 포트 method는 맞고 **SSW 스파이럴 기하**가 원인. 그쪽을 본다.
+지금 45.53−j0.27(≈포트R) 신호는 **단일 루프도 깨질 것**(포트 method 문제)을 강하게 시사한다. 전체 SSW에서 brute-force 그만, **단일 루프로 격리**가 다음 한 수.
+
+**rings 예제:** Magnetostatic(full-wave 아님) — 개념 캘리브레이션 참고로만. **copper 3D solve-inside는 유지**(R/skin용, L 붕괴 원인 아님).
 
 ### 기준 HFSS
 
