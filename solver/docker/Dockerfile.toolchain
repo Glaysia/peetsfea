@@ -1,0 +1,37 @@
+# syntax=docker/dockerfile:1
+#
+# Fast, self-contained CUDA C++ build environment for pfsolver.
+#
+# This proves the CUDA-mandatory build + run contract today, without the long
+# Palace/spack build. The full FEM pipeline image is docker/Dockerfile.base
+# (+ docker/Dockerfile). Build/run only through Docker — there is no supported
+# host build.
+#
+#   docker build -f docker/Dockerfile.toolchain -t pfsolver:toolchain ..
+#   docker run --rm --gpus all pfsolver:toolchain doctor
+#
+# Base is the CUDA devel image validated for GPU passthrough in phase0_sanity
+# (RTX 3070, sm_86). devel variant provides nvcc + cudart headers/libs.
+FROM nvidia/cuda:13.0.2-devel-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      cmake \
+      ninja-build \
+      build-essential \
+      openmpi-bin \
+      libopenmpi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+# Copy only what the build needs (see solver/.dockerignore).
+COPY CMakeLists.txt ./
+COPY src ./src
+
+# CUDA is mandatory: find_package(CUDAToolkit REQUIRED) aborts here if absent.
+RUN cmake -S . -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build /build --parallel \
+    && cmake --install /build --prefix /usr/local
+
+ENTRYPOINT ["pfsolver"]
+CMD ["doctor"]

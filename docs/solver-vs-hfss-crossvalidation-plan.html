@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>pfsolver vs HFSS 교차검증 계획 — open-source CUDA full-wave Z @ 6.78 MHz</title>
+<style>
+  :root{--bg:#0b1020;--panel:#161f3d;--soft:#121a33;--bd:#26315c;--tx:#e6ebff;--mut:#9aa6c9;
+        --ac:#5b8cff;--ac2:#34d4b7;--warn:#ffb454;--ok:#34d4b7;--todo:#ffb454;--code:#0d1428;
+        --cuda:#76b900;}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1100px 560px at 82% -8%,#1a2342 0,transparent 60%),var(--bg);
+       color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;line-height:1.65}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  header{padding:64px 0 28px;border-bottom:1px solid var(--bd)}
+  .badge{display:inline-flex;gap:8px;align-items:center;padding:5px 12px;border:1px solid var(--bd);
+         background:var(--soft);border-radius:999px;font-size:12.5px;color:var(--mut)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--cuda);box-shadow:0 0 10px var(--cuda)}
+  h1{font-size:clamp(26px,4.4vw,40px);line-height:1.15;margin:18px 0 8px;letter-spacing:-.02em}
+  h1 .g{background:linear-gradient(90deg,var(--ac),var(--ac2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lede{color:var(--mut);max-width:780px;font-size:16px}
+  section{padding:34px 0;border-bottom:1px solid var(--bd)}
+  h2{font-size:22px;margin:0 0 6px;letter-spacing:-.01em}
+  h2 .n{color:var(--ac2);font-variant-numeric:tabular-nums}
+  h3{font-size:16px;color:var(--mut);margin:20px 0 4px}
+  .sub{color:var(--mut);margin:0 0 18px;font-size:14.5px}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0}
+  th,td{padding:9px 12px;border:1px solid var(--bd);text-align:left;vertical-align:top}
+  th{background:var(--soft);color:var(--mut);font-weight:600}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  td.todo-cell{color:var(--todo);text-align:right;font-variant-numeric:tabular-nums}
+  code{font-family:"SFMono-Regular",Consolas,Menlo,monospace;font-size:.92em;background:var(--code);
+       padding:1px 6px;border-radius:6px;color:#cdd9ff}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700}
+  .done{background:rgba(52,212,183,.15);color:var(--ok);border:1px solid rgba(52,212,183,.35)}
+  .todo{background:rgba(255,180,84,.13);color:var(--todo);border:1px solid rgba(255,180,84,.35)}
+  .cudapill{background:rgba(118,185,0,.14);color:#a9e05a;border:1px solid rgba(118,185,0,.4)}
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:18px;margin:10px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .note{margin-top:12px;padding:12px 16px;border-radius:10px;background:rgba(255,180,84,.08);
+        border:1px solid rgba(255,180,84,.3);color:#ffd9a3;font-size:13.5px}
+  .note.ok{background:rgba(52,212,183,.08);border-color:rgba(52,212,183,.3);color:#a9ecdc}
+  ul{margin:6px 0 0;padding-left:20px;color:var(--mut)}
+  ul li{margin:3px 0}
+  .eq{background:var(--code);border:1px solid var(--bd);border-radius:10px;padding:12px 16px;color:#cdd9ff;
+      font-family:"SFMono-Regular",Consolas,Menlo,monospace;font-size:13.5px;overflow-x:auto}
+  .phase{border-left:2px solid var(--bd);padding:2px 0 2px 18px;margin:6px 0 6px 6px;position:relative}
+  .phase::before{content:"";position:absolute;left:-6px;top:11px;width:10px;height:10px;border-radius:50%;background:var(--ac)}
+  .phase.done::before{background:var(--ok)}
+  .phase b{color:var(--tx)}
+  .phase .m{font-family:"SFMono-Regular",Consolas,Menlo,monospace;font-size:11.5px;color:var(--mut)}
+  footer{padding:28px 0 56px;color:var(--mut);font-size:13px}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <span class="badge"><span class="dot"></span> peetsfea · pfsolver(open-source CUDA full-wave) vs HFSS · 6.78&nbsp;MHz</span>
+  <h1><span class="g">교차검증 계획</span>: 오픈소스 CUDA 솔버 ⟷ HFSS 터미널 Z-파라미터</h1>
+  <p class="lede">동일한 fixed SSW 코일 STEP(<code>src/peetsfea/data/0.3.x_fixed.toml</code> → <code>ssw_scene.step</code>)에 대해,
+  <b>HFSS terminal full-wave</b>(이미 실측 <span class="pill done">완료</span>)와 우리가 만들 <b>오픈소스 CUDA full-wave 솔버 <code>pfsolver</code></b>(Palace <code>Driven</code> 코어, <span class="pill todo">구현 예정</span>)가
+  <b>6.78&nbsp;MHz</b>에서 같은 Z(f)·L·M·R·C·k를 내는지 검증한다. pfsolver 열은 <b>의도적으로 빈칸</b>으로 두고 구현 후 채운다(§4·§5).
+  4-솔버 준정적 비교는 별도 문서 <code>em-cross-validation-plan.html</code> 참고.</p>
+</div></header>
+
+<main class="wrap">
+
+<section>
+  <h2><span class="n">1.</span> 목적과 합격 가설</h2>
+  <p class="sub">둘 다 <b>full-wave terminal-network</b> 솔버다. 같은 형상·같은 포트·같은 주파수면 같은 Z가 나와야 한다 — 이를 정량 확인하고, HFSS 라이선스 없이 동일 결과를 재현할 수 있음을 증명한다.</p>
+  <div class="grid2">
+    <div class="card">
+      <b>검증 대상 양 (6.78 MHz)</b>
+      <ul>
+        <li><b>Z11, Z12, Z22</b> — 2-포트 임피던스(양쪽 1차 산출)</li>
+        <li><b>L1, L2, M, k</b> — im(Z)/ω 유도</li>
+        <li><b>R1, R2, Q1, Q2</b> — re(Z), AC 손실</li>
+        <li><b>C1, C2 / SRF</b> — full-wave라 self-resonance 직접 산출</li>
+        <li><b>손실·field</b> — copper/ferrite loss, air-gap B-plane (선택)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <b>왜 pfsolver도 full-wave인가</b>
+      <ul>
+        <li>HFSS full-wave가 <b>무조건 가장 정확</b>(M3D AC/Electrostatic/Q3D는 실측 탈락).</li>
+        <li>pfsolver = Palace <code>Driven</code>(변위전류 포함) → E·H·C·L·손실·SRF 전부.</li>
+        <li>HFSS와 <b>정식화가 같으므로</b> 준정적 솔버보다 tight tolerance를 기대.</li>
+        <li><span class="pill cudapill">CUDA mandatory</span> · 4-core MPI · CPU 폴백 없음.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="note"><b>합격 가설(full-wave↔full-wave):</b> mesh 수렴 후 <b>L1·L2·M ±5%, |Z| ±5%, k ±10%, C/SRF ±10%, R ±15%</b>(표피 메시 민감) 이내 일치.
+  Z12/Z21 부호는 port current 방향으로 추적해 공통 postprocess에서 고정. 불일치 1차 원인 후보: 메시 밀도(표피), 포트 정의, region 경계, ferrite μ 모델.
+  <b>솔브 시간(비용)</b>도 함께 기록 — HFSS 기준 <b>282초</b>(GPU·4코어·11 pass), pfsolver 목표 Mode 1 ≤30분.</div>
+</section>
+
+<section>
+  <h2><span class="n">2.</span> 형상 (공통 입력) <span class="pill done">고정</span></h2>
+  <p class="sub">design_id <code>0_3_7_p6561d2a5c7808f6e</code> · 외형 한계 360×180&nbsp;mm · TX–RX edge-to-edge <b>100&nbsp;mm</b> · 단일 결정론 STEP을 두 솔버가 동일 import.</p>
+  <table>
+    <tr><th>코일</th><th class="num">크기 (mm)</th><th class="num">turn</th><th class="num">twist</th>
+        <th class="num">gap_ratio</th><th class="num">void</th><th class="num">PCB gap (mm)</th></tr>
+    <tr><td><b>TX</b> (tx_ssw_coil)</td><td class="num">288 × 144</td><td class="num">4</td><td class="num">3</td>
+        <td class="num">0.44</td><td class="num">0.50</td><td class="num">8.0</td></tr>
+    <tr><td><b>RX</b> (rx_ssw_coil)</td><td class="num">324 × 162</td><td class="num">4</td><td class="num">3</td>
+        <td class="num">0.60</td><td class="num">0.25</td><td class="num">3.0</td></tr>
+  </table>
+  <p class="sub" style="margin-top:8px">도체: copper(0.07&nbsp;mm, σ=5.8e7), FR4(0.24&nbsp;mm 2-PCB, εr≈4.4 tanδ≈0.02), MULL ferrite sheet(0.12&nbsp;mm, μr=135.6 tanδ=0.00218, <b>TX만 enable</b>). 포트: TX <code>1_T1</code>, RX <code>2_T1</code> lumped terminal.
+  입력 artifact: <code>ssw_scene.step</code> · <code>ssw_step_ledger.json</code>(role/material/body) · <code>coil_making_token.toml</code>(port endpoint/semantic).</p>
+</section>
+
+<section>
+  <h2><span class="n">3.</span> HFSS (참값) <span class="pill done">실행 완료</span></h2>
+  <p class="sub">Terminal-driven HFSS, <code>Setup1 @ 6.78MHz</code> 적응 메시 + interpolating sweep 0.1–100&nbsp;MHz(81pt). 이 값이 pfsolver의 정답 기준선.</p>
+  <div class="card">
+    <b>설정 (peetsfea 0.3.7)</b>
+    <ul>
+      <li>적응: MaximumPasses <b>11</b> / Min <b>8</b> / MinConverged <b>9</b>, MaxDeltaS <b>0.005</b>, PercentRefinement 23, BasisOrder 0(mixed)</li>
+      <li>메시 seed: NumMaxElem <b>50,000</b> + MaxLength <b>1mm</b> → 적응 후 <b>최종 156,761 tets</b></li>
+      <li>포트: TX <code>1_T1</code> 100V@0°, RX <code>2_T1</code> 100V@90° · 경계: radiation, region margin 2000mm</li>
+      <li>수렴 <b>MaxMagDeltaS = 0.00088</b>(&lt;0.005 ✓) · <b>솔브 282초</b> · GPU(RTX 3070) · 4 cores · 11 pass</li>
+    </ul>
+  </div>
+  <h3>HFSS @ 6.78 MHz 실측 (ω = 2π·6.78×10⁶ = 4.2599×10⁷ rad/s)</h3>
+  <table>
+    <tr><th>양</th><th class="num">HFSS 값</th><th>비고</th></tr>
+    <tr><td><b>Z11</b></td><td class="num">0.3699 + j241.85 Ω</td><td>|Z11| = 241.85 Ω</td></tr>
+    <tr><td><b>Z22</b></td><td class="num">0.2362 + j212.63 Ω</td><td></td></tr>
+    <tr><td><b>Z12</b></td><td class="num">0.01230 + j6.7063 Ω</td><td>약결합</td></tr>
+    <tr><td><b>L1</b> (Ltx)</td><td class="num">5.6772 µH</td><td>im(Z11)/ω</td></tr>
+    <tr><td><b>L2</b> (Lrx)</td><td class="num">4.9912 µH</td><td>im(Z22)/ω</td></tr>
+    <tr><td><b>M</b></td><td class="num">0.1574 µH</td><td>im(Z12)/ω, k = 0.0296</td></tr>
+    <tr><td><b>R1</b></td><td class="num">0.3699 Ω</td><td>re(Z11), Qtx ≈ 654</td></tr>
+    <tr><td><b>R2</b></td><td class="num">0.2362 Ω</td><td>re(Z22), Qrx ≈ 900</td></tr>
+    <tr><td><b>C1</b></td><td class="num">16.35 pF</td><td>TX self-resonance 16.52 MHz</td></tr>
+    <tr><td><b>C2</b></td><td class="num">21.62 pF</td><td>RX self-resonance 15.32 MHz</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2><span class="n">4.</span> pfsolver (Palace full-wave) <span class="pill todo">구현 예정 · 결과 빈칸</span></h2>
+  <p class="sub">오픈소스 CUDA C++ 솔버. 같은 STEP을 gmsh로 메시 → Palace <code>Driven</code> full-wave 솔브 → port S/V/I → Z(f). 아래 표는 <b>구현 후 채운다.</b></p>
+  <div class="card" style="border-color:rgba(118,185,0,.35)">
+    <b>예정 설정 (HFSS와 정렬)</b>
+    <ul>
+      <li>문제 유형: <code>Driven</code>(주파수영역 full-wave), 6.78 MHz point + sweep 0.1–100 MHz.</li>
+      <li>포트: LumpedPort ×2 (<code>1_T1</code>/<code>2_T1</code>), Z₀=50 Ω 기준, current 방향 명시.</li>
+      <li>재질: copper σ=5.8e7, FR4 εr/tanδ, ferrite 복소 μ(135.6, tanδ 0.00218); vacuum region + 흡수경계.</li>
+      <li>메시: gmsh(OpenCASCADE)로 STEP→tet, copper edge·port gap refine; p-refinement 적응.</li>
+      <li>실행: <span class="pill cudapill">CUDA</span> <code>Solver.Device=GPU</code> + 4-core MPI, HYPRE Umpire pool override(device/unified 512 MiB).</li>
+    </ul>
+  </div>
+  <h3>pfsolver @ 6.78 MHz (채울 예정)</h3>
+  <table>
+    <tr><th>양</th><th class="num">pfsolver 값</th><th class="num">HFSS(참값)</th><th class="num">오차 vs HFSS</th><th>판정</th></tr>
+    <tr><td><b>Z11</b></td><td class="todo-cell">— TBD</td><td class="num">0.3699 + j241.85</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>Z22</b></td><td class="todo-cell">— TBD</td><td class="num">0.2362 + j212.63</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>Z12</b></td><td class="todo-cell">— TBD</td><td class="num">0.01230 + j6.7063</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>L1</b></td><td class="todo-cell">— TBD</td><td class="num">5.6772 µH</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>L2</b></td><td class="todo-cell">— TBD</td><td class="num">4.9912 µH</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>M</b></td><td class="todo-cell">— TBD</td><td class="num">0.1574 µH</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>R1</b></td><td class="todo-cell">— TBD</td><td class="num">0.3699 Ω</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>R2</b></td><td class="todo-cell">— TBD</td><td class="num">0.2362 Ω</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>C1 / SRF</b></td><td class="todo-cell">— TBD</td><td class="num">16.35 pF / 16.52 MHz</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>C2 / SRF</b></td><td class="todo-cell">— TBD</td><td class="num">21.62 pF / 15.32 MHz</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>k</b></td><td class="todo-cell">— TBD</td><td class="num">0.0296</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td>솔브 시간</td><td class="todo-cell">— TBD</td><td class="num">282 s</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+  </table>
+  <h3>추출식 (Palace 출력 → Z)</h3>
+  <div class="eq">port-S.csv → S(f);  Z = Z₀ (I+S)(I−S)⁻¹   (Z₀=50Ω 기준, 정규화)<br>
+  또는 port-V.csv·port-I.csv 직접:  Z_ij = V_i / I_j |(I_{k≠j}=0)<br>
+  L = im(Z)/ω,  R = re(Z),  M = im(Z12)/ω,  k = M/√(L1·L2),  Q = ωL/R<br>
+  C·SRF: sweep에서 im(Z)=0 인 f₀ →  C = 1 / ((2πf₀)²·L)</div>
+  <div class="note"><b>부호 함정:</b> S↔Z 변환과 V/I 직접 추출이 Z12/Z21 부호에서 갈릴 수 있다. 두 경로를 모두 계산해 일치시키고, HFSS와 같은 port current 방향으로 고정한 뒤에만 표를 채운다.</div>
+</section>
+
+<section>
+  <h2><span class="n">5.</span> 교차검증 매트릭스 &amp; 합격 기준</h2>
+  <p class="sub">HFSS=참값(채움), pfsolver=구현 후 채움. 각 양의 tolerance와 현재 상태.</p>
+  <table>
+    <tr><th>양</th><th class="num">HFSS(참값)</th><th class="num">pfsolver</th><th class="num">tolerance</th><th class="num">오차</th><th>상태</th></tr>
+    <tr><td><b>L1</b></td><td class="num">5.6772 µH</td><td class="todo-cell">— TBD</td><td class="num">±5%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>L2</b></td><td class="num">4.9912 µH</td><td class="todo-cell">— TBD</td><td class="num">±5%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>M</b></td><td class="num">0.1574 µH</td><td class="todo-cell">— TBD</td><td class="num">±5%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>k</b></td><td class="num">0.0296</td><td class="todo-cell">— TBD</td><td class="num">±10%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>R1</b></td><td class="num">0.3699 Ω</td><td class="todo-cell">— TBD</td><td class="num">±15%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>R2</b></td><td class="num">0.2362 Ω</td><td class="todo-cell">— TBD</td><td class="num">±15%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>Q1/Q2</b></td><td class="num">654 / 900</td><td class="todo-cell">— TBD</td><td class="num">±15%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>|Z11|/|Z22|</b></td><td class="num">241.85 / 212.63 Ω</td><td class="todo-cell">— TBD</td><td class="num">±5%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td><b>C1/C2 (SRF)</b></td><td class="num">16.35 / 21.62 pF</td><td class="todo-cell">— TBD</td><td class="num">±10%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td>상반성 Z=Zᵀ</td><td class="num">✓</td><td class="todo-cell">— TBD</td><td class="num">필수</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+    <tr><td>passivity re(Z)⪰0</td><td class="num">✓</td><td class="todo-cell">— TBD</td><td class="num">필수</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>
+  </table>
+  <div class="note"><b>합격 판정 규칙:</b> 모든 scalar(L/M/k/|Z|)가 tolerance 이내 + 상반성·passivity 통과 + sweep 곡선이 SRF 부근까지 정성 일치하면
+  <b>"pfsolver가 이 설계점에서 HFSS terminal Z를 재현"</b>으로 판정. R은 표피 메시 의존이 커 ±15%를 1차 목표로 두되, 메시 수렴으로 ±5% 도달을 추적.
+  단일 점 합격 후 §6 검증 사다리(V0→V4)로 확장.</div>
+</section>
+
+<section>
+  <h2><span class="n">6.</span> solver 구현 계획 (pfsolver)</h2>
+  <p class="sub">이 교차검증을 가능케 하는 <code>solver/</code> 파이프라인. 부트스트랩(빌드환경·CUDA 게이트)은 완료, 이후 ingest→post를 쌓는다.</p>
+
+  <div class="card">
+    <b>파이프라인</b> &nbsp; STEP+ledger+token → mesh → Palace <code>Driven</code> config → CUDA solve → port S/V/I → Z(f)
+    <table style="margin-top:10px">
+      <tr><th>단계</th><th>입력 → 출력</th><th>도구</th></tr>
+      <tr><td><b>1 Ingest</b></td><td><code>ssw_scene.step</code>·<code>ssw_step_ledger.json</code>·<code>coil_making_token.toml</code> → role/material/port 정체성</td><td>C++ 파서</td></tr>
+      <tr><td><b>2 Tag</b></td><td>copper/FR4/ferrite/vacuum domain + lumped port endpoint + 경계</td><td>ledger 매핑</td></tr>
+      <tr><td><b>3 Mesh</b></td><td>STEP → tet .msh, copper edge·port gap refine</td><td>gmsh + OCCT</td></tr>
+      <tr><td><b>4 Assemble</b></td><td>full-wave curl-curl + 재질 + LumpedPort → Palace <code>.json</code> config</td><td>C++ config emit</td></tr>
+      <tr><td><b>5 Solve</b></td><td>CUDA + 4-core MPI full-wave, 6.78 MHz + sweep</td><td>Palace <code>Driven</code></td></tr>
+      <tr><td><b>6 Post</b></td><td>port-S/V/I.csv → Z(f), 부호·Z₀ 정규화, L/M/R/C/k, 손실</td><td>C++ postprocess</td></tr>
+      <tr><td><b>7 Emit</b></td><td>solver-neutral <code>em_result.json</code> + network/derived/loss CSV + manifest</td><td>공통 스키마</td></tr>
+    </table>
+  </div>
+
+  <h3>마일스톤</h3>
+  <div class="phase done"><b>M0 — 빌드환경 + CUDA 게이트</b> <span class="pill done">완료</span>
+    <div class="m">solver/ Docker 전용 빌드, pfsolver doctor: CUDA 없으면 거부(exit 2), RTX 3070 통과 검증</div></div>
+  <div class="phase"><b>M1 — Palace 베이스 이미지</b> <span class="pill todo">다음</span>
+    <div class="m">docker/Dockerfile.base: palace@0.16.0+cuda cuda_arch=86 + gmsh, HYPRE pool override 내장</div></div>
+  <div class="phase"><b>M2 — STEP/ledger/token ingest + gmsh 메시</b>
+    <div class="m">0.3.x_fixed STEP → 태깅된 tet 메시, 도체/페라이트/포트 분리 확인</div></div>
+  <div class="phase"><b>M3 — Palace Driven config emit + 단일 점 solve</b>
+    <div class="m">6.78 MHz LumpedPort full-wave, port-S/V/I.csv 산출(우선 GPU OOM은 pool override·메시 분할로 흡수)</div></div>
+  <div class="phase"><b>M4 — postprocess → Z(f) + 이 표 채우기</b>
+    <div class="m">S↔Z 두 경로 일치·부호 고정 → §4·§5 pfsolver 열 채움, HFSS 대비 오차 산출</div></div>
+  <div class="phase"><b>M5 — sweep + SRF·C, 손실, field</b>
+    <div class="m">0.1–100 MHz sweep로 self-resonance·C, copper/ferrite 손실, air-gap B-plane</div></div>
+  <div class="phase"><b>M6 — 검증 사다리 확장</b>
+    <div class="m">V0 minimal two-port → V1 coil pair → V2 +FR4 → V3 +ferrite → V4 design-space 분포 일치</div></div>
+</section>
+
+<section style="border-bottom:none">
+  <h2><span class="n">7.</span> 진행 상태 · 다음 단계</h2>
+  <table>
+    <tr><th>항목</th><th>상태</th><th class="num">솔브/작업 시간</th><th>산출</th></tr>
+    <tr><td>HFSS 기준선(6.78MHz + sweep)</td><td><span class="pill done">완료</span></td><td class="num">282 s</td><td>Z/L/M/R/C/k (§3)</td></tr>
+    <tr><td>pfsolver 빌드환경 + CUDA 게이트(M0)</td><td><span class="pill done">완료</span></td><td class="num">~수 분(이미지)</td><td>solver/ · doctor 통과</td></tr>
+    <tr><td>Palace 베이스 이미지(M1)</td><td><span class="pill todo">다음</span></td><td class="num">~수십 분(1회)</td><td>peetsfea-solver-base:0.16.0</td></tr>
+    <tr><td>ingest+mesh+solve+post(M2–M4)</td><td><span class="pill todo">예정</span></td><td class="num">목표 ≤30 min/점</td><td>pfsolver Z(f) → §4·§5 채움</td></tr>
+    <tr><td>sweep·C·손실·field(M5)</td><td><span class="pill todo">예정</span></td><td class="num">—</td><td>SRF·C·loss·B-plane</td></tr>
+    <tr><td>교차검증 판정 + 리포트</td><td><span class="pill todo">예정</span></td><td class="num">—</td><td>합격/불일치 원인 분석</td></tr>
+  </table>
+  <div class="note ok"><b>요약:</b> HFSS 참값과 빈 pfsolver 표가 나란히 준비됐다. 다음 액션은 <b>M1 Palace 베이스 빌드</b> → ingest 골격. pfsolver 열이 채워지고 tolerance를 통과하면, 이 설계점에서 HFSS 라이선스 없이 동일 Z를 재현했다는 첫 증거가 된다.</div>
+</section>
+
+</main>
+<footer><div class="wrap">peetsfea 0.3.7 · pfsolver vs HFSS 교차검증 <b>계획</b> @ 6.78 MHz · HFSS 완료 / pfsolver(Palace full-wave) 구현 예정 · 준정적 4-솔버 비교는 em-cross-validation-plan.html</div></footer>
+</body>
+</html>

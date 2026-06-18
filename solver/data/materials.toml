@@ -1,0 +1,76 @@
+# pfsolver material SSOT @ 6.78 MHz cross-validation point
+# ----------------------------------------------------------------------------
+# Provenance:
+#   copper / air / vacuum / pec  -> pulled LIVE from the headless AEDT material
+#       library (PyAEDT gRPC, port 38873, design 0_3_7_p5a455aaabf345156).
+#   fr4 / MULL12060ferrite       -> peetsfea source SSOT (these are NOT stock
+#       AEDT materials; ssw_ports.py defines and pushes them into HFSS).
+#       Verified consistent: ferrite mu(6.78MHz)=135.59-j0.296 matches the
+#       m3d_ac_magnetic constants (FERRITE_PERMEABILITY=135.6, tand=0.00218).
+# Units: conductivity S/m. eps_r / mu_r relative. tan_delta dimensionless.
+
+[meta]
+frequency_hz = 6.78e6
+source_live = "AEDT v252 gRPC :38873"
+source_defined = "src/peetsfea/backend/pyaedt/ssw_ports.py"
+
+# --- conductors -------------------------------------------------------------
+[copper]                       # AEDT library (live)
+role = "conductor"
+conductivity = 58000000.0      # 5.8e7 S/m
+eps_r = 1.0
+mu_r = 0.999991
+mass_density = 8933.0
+thermal_conductivity = 400.0
+
+# --- dielectrics ------------------------------------------------------------
+[fr4]                          # peetsfea-defined (source)
+role = "dielectric"
+eps_r = 4.4
+mu_r = 1.0
+conductivity = 0.0
+dielectric_loss_tangent = 0.02
+magnetic_loss_tangent = 0.0
+
+[air]                          # AEDT library (live)
+role = "background"
+eps_r = 1.0006
+mu_r = 1.0000004
+conductivity = 0.0
+
+[vacuum]                       # AEDT library (live) — used for non-model regions
+role = "background"
+eps_r = 1.0
+mu_r = 1.0
+conductivity = 0.0
+
+[pec]                          # AEDT library (live) — reference only
+role = "perfect_conductor"
+conductivity = 1e30
+
+# --- ferrite (frequency-dependent complex mu) -------------------------------
+[ferrite]                      # MULL12060ferrite, peetsfea-defined (source)
+role = "magnetic"
+material_name = "MULL12060ferrite"
+eps_r = 6.0
+conductivity = 0.01
+mass_density = 4600.0
+thermal_conductivity = 4.0
+# Value at the 6.78 MHz cross-validation point (interpolated from datasets):
+mu_r_real_at_6p78MHz = 135.59
+magnetic_loss_tangent_at_6p78MHz = 0.00218
+mu_r_imag_at_6p78MHz = 0.296          # mu' * tan_delta_m
+# Full mu'(f) and tan_delta_m(f). x-axis is GHz (Freq), as fed to HFSS via
+# pwlx($mu_r_real, Freq) / pwlx($mu_tand_m, Freq).
+mu_r_real_dataset_ghz = [
+  [0.001,133.0],[0.003,134.0],[0.005,135.0],[0.008,136.0],[0.01,137.0],
+  [0.012,142.0],[0.015,152.0],[0.018,160.0],[0.02,166.0],[0.025,150.0],
+  [0.03,130.0],[0.04,100.0],[0.05,82.0],[0.07,65.0],[0.1,50.0],
+  [0.15,35.0],[0.2,25.0],[0.3,15.0],[0.5,10.0],[0.7,11.0],[1.0,18.0],
+]
+magnetic_loss_tangent_dataset_ghz = [
+  [0.001,0.0],[0.003,0.0],[0.005,0.0],[0.008,0.00367647],[0.01,0.00729927],
+  [0.012,0.0140845],[0.015,0.0328947],[0.018,0.075],[0.02,0.150602],[0.025,0.4],
+  [0.03,0.553846],[0.04,0.76],[0.05,0.890244],[0.07,1.01538],[0.1,1.16],
+  [0.15,1.42857],[0.2,1.8],[0.3,2.46667],[0.5,2.8],[0.7,2.0],[1.0,1.0],
+]

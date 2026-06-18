@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1
+#
+# Full pfsolver FEM base image: CUDA-enabled Palace (full-wave driven) + mesher.
+#
+# This is the HEAVY image (spack builds Palace and its deps from source; tens of
+# minutes, needs network). Build it once; iterate the app in docker/Dockerfile,
+# which FROMs this image.
+#
+#   docker build -f docker/Dockerfile.base -t peetsfea-solver-base:0.16.0 ..
+#
+# Palace spec and arch are pinned to the build validated in phase0_sanity:
+#   palace@0.16.0 +cuda ~slepc ~sundials cuda_arch=86   (RTX 3070, sm_86)
+#   palace git changeset 869ee5c
+FROM spack/ubuntu-noble:develop@sha256:2a6981ff541a1040f26c89e23b8c6be089d7afc339b21bf8e4877562f31209f4
+
+SHELL ["/bin/bash", "-lc"]
+ENV DEBIAN_FRONTEND=noninteractive
+
+ARG PALACE_SPEC="palace@0.16.0+cuda~slepc~sundials cuda_arch=86"
+
+# Build Palace (and CUDA/MPI/MFEM/HYPRE/PETSc deps) into a named spack env.
+RUN spack env create solver \
+ && spack -e solver add ${PALACE_SPEC} \
+ && spack -e solver concretize -f \
+ && spack -e solver install --fail-fast \
+ && spack clean -a
+
+# Mesher (STEP -> .msh via OpenCASCADE) and our app toolchain.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      cmake ninja-build build-essential gmsh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Activate the spack env (palace, cuda, mpi on PATH/CMAKE_PREFIX_PATH) for every
+# non-login shell, so the app build and `palace` invocation just work.
+RUN printf '%s\n' \
+      'source /opt/spack/share/spack/setup-env.sh' \
+      'spack env activate solver' \
+      'spack load cuda mpi 2>/dev/null || true' \
+      > /etc/profile.d/zz-solver-env.sh \
+    && chmod +x /etc/profile.d/zz-solver-env.sh
+
+# phase0 finding: default HYPRE/Umpire CUDA pools overshoot small-VRAM cards and
+# abort with cudaMalloc OOM. The pfsolver launcher sets VRAM-fitted pool sizes;
+# this label records the knob so it is never lost.
+LABEL org.peetsfea.hypre_pool_override="device/unified=512MiB pinned=64MiB (tune to VRAM)"
+
+CMD ["/bin/bash", "-l"]
