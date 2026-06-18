@@ -124,7 +124,7 @@ Python API 최종형: `pfsolver.inspect_bundle(bundle_dir)`, `pfsolver.mesh_bund
 
 ### C.2 HYPRE Umpire pool 적응
 - free VRAM 기반 device/unified/pinned pool 크기 산출
-  (phase0 기준: device/unified 512 MiB, pinned 64 MiB; VRAM에 비례 스케일).
+  (free VRAM과 MPI rank 수를 함께 반영; 8 GB/4-rank에서는 512 MiB 고정이 OOM이라 더 낮춘다).
 - Palace 엔진에 pool 크기 주입(환경변수/override lib 또는 config 필드).
 - acceptance: 8 GB RTX 3070에서 cpw/cylinder 예제가 OOM 없이 완주(phase0 재현).
 

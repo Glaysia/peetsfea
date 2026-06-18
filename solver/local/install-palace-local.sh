@@ -21,19 +21,43 @@ image="${PFSOLVER_PALACE_IMAGE:-palace:0.16.1}"
 target="${1:-all}"
 
 build_image() {
-  # Stock 0.16.1 = the solver/palace submodule at its v0.16.1 tag (no fork
-  # magnetic-loss patches yet). Built in-tree by docker/Dockerfile.base.
+  # Stock 0.16.1 = the solver/palace build-baseline ref before forked magnetic
+  # loss patches. It carries local Spack packaging needed by this Dockerfile but
+  # no solver physics patch.
   command -v "${runtime}" >/dev/null || { echo "FATAL: ${runtime} not found" >&2; exit 2; }
   [ -e "${solver}/palace/CMakeLists.txt" ] || {
     echo "FATAL: solver/palace submodule not checked out (run: git submodule update --init solver/palace)" >&2
     exit 2; }
+  build_context="${solver}"
+  build_args=()
+  temp_context=""
+  if [ "${image}" = "palace:0.16.1" ] || [ "${image}" = "localhost/palace:0.16.1" ]; then
+    stock_ref="${PFSOLVER_PALACE_STOCK_REF:-d2b68b6ba0b5834a9c3c6acc01caf13a9fa6a947}"
+    stock_commit="$(git -C "${solver}/palace" rev-parse "${stock_ref}^{commit}")"
+    temp_context="$(mktemp -d)"
+    trap 'if [ -n "${temp_context:-}" ]; then rm -rf "${temp_context}"; fi' EXIT
+    cp -a "${solver}/docker" "${temp_context}/docker"
+    mkdir -p "${temp_context}/palace"
+    git -C "${solver}/palace" archive --format=tar "${stock_commit}" | tar -C "${temp_context}/palace" -xf -
+    build_context="${temp_context}"
+    build_args+=(
+      --build-arg "PEETSFEA_PALACE_FORK_VERSION=0.16.1"
+      --build-arg "PEETSFEA_PALACE_SOURCE_COMMIT=${stock_commit}"
+    )
+  else
+    source_commit="$(git -C "${solver}/palace" rev-parse HEAD)"
+    build_args+=(
+      --build-arg "PEETSFEA_PALACE_FORK_VERSION=0.16.1pf"
+      --build-arg "PEETSFEA_PALACE_SOURCE_COMMIT=${source_commit}"
+    )
+  fi
   echo "building ${image} via ${runtime} (heavy; spack builds Palace deps)…"
   # Dockerfile uses SHELL ["/bin/bash","-lc"] + `source`; podman's default OCI
   # format ignores SHELL and runs RUN under /bin/sh (source -> exit 127).
   # --format docker makes podman honor the SHELL directive. docker needs no flag.
   fmt=()
   [ "${runtime}" = "podman" ] && fmt=(--format docker)
-  "${runtime}" build "${fmt[@]}" -f "${solver}/docker/Dockerfile.base" -t "${image}" "${solver}"
+  "${runtime}" build "${fmt[@]}" "${build_args[@]}" -f "${build_context}/docker/Dockerfile.base" -t "${image}" "${build_context}"
   echo "built: ${image}"
 }
 
