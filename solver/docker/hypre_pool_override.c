@@ -36,11 +36,14 @@ static void peetsfea_set_hypre_pool_sizes(void)
     return;
   }
   const size_t device_pool_bytes =
-      peetsfea_pool_size_from_env("PEETSFEA_HYPRE_DEVICE_POOL_BYTES", 512ULL * 1024ULL * 1024ULL);
+      peetsfea_pool_size_from_env("PEETSFEA_HYPRE_DEVICE_POOL_BYTES",
+                                  128ULL * 1024ULL * 1024ULL);
   const size_t unified_pool_bytes =
-      peetsfea_pool_size_from_env("PEETSFEA_HYPRE_UNIFIED_POOL_BYTES", 512ULL * 1024ULL * 1024ULL);
+      peetsfea_pool_size_from_env("PEETSFEA_HYPRE_UNIFIED_POOL_BYTES",
+                                  128ULL * 1024ULL * 1024ULL);
   const size_t pinned_pool_bytes =
-      peetsfea_pool_size_from_env("PEETSFEA_HYPRE_PINNED_POOL_BYTES", 64ULL * 1024ULL * 1024ULL);
+      peetsfea_pool_size_from_env("PEETSFEA_HYPRE_PINNED_POOL_BYTES",
+                                  32ULL * 1024ULL * 1024ULL);
 
   const HYPRE_Int device_status = HYPRE_SetUmpireDevicePoolSize(device_pool_bytes);
   const HYPRE_Int unified_status = HYPRE_SetUmpireUMPoolSize(unified_pool_bytes);

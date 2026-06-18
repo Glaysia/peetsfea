@@ -28,11 +28,23 @@ case "${RUNTIME}" in
   *) echo "FATAL: unknown PFSOLVER_CONTAINER_RUNTIME=${RUNTIME} (podman|docker)" >&2; exit 2 ;;
 esac
 
+env_flags=()
+for name in \
+  PEETSFEA_HYPRE_DEVICE_POOL_BYTES \
+  PEETSFEA_HYPRE_UNIFIED_POOL_BYTES \
+  PEETSFEA_HYPRE_PINNED_POOL_BYTES
+do
+  if [ -n "${!name:-}" ]; then
+    env_flags+=(-e "${name}=${!name}")
+  fi
+done
+
 # CUDA mandatory: the image is CUDA-only; if no GPU is attached, palace fails.
 # The image's /usr/local/bin/palace wrapper owns LD_PRELOAD and delegates to the
 # installed Palace MPI wrapper. Keep MPI inside the container, but pass rank and
 # root-allowance options to that wrapper instead of nesting mpirun here.
 exec "${RUNTIME}" run --rm "${gpu[@]}" \
+  "${env_flags[@]}" \
   -v "${workdir}:${workdir}" -w "${workdir}" \
   "${IMAGE}" \
   /bin/bash -lc 'exec palace -np "$0" -launcher-args "--allow-run-as-root" "$@"' "${RANKS}" "$@"
