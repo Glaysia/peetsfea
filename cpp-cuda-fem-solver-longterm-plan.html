@@ -251,7 +251,7 @@
 <ul>
   <li>주파수영역(frequency-domain) driven 해석만. <strong>transient는 비범위.</strong></li>
   <li>terminal-network-equivalent 출력: 2-port S/Z 행렬, 포트 V/I, 파생 \(L_1,L_2,M,k,Q_1,Q_2,\eta,U\), 손실(copper/dielectric/ferrite/boundary), 선택적 field.</li>
-  <li>full-wave driven 정식화 기본(변위전류 포함 → 캐패시턴스·E field·SRF·유전손실). MQS는 입증된 경우에만 fast-mode 옵션.</li>
+  <li>HFSS식 full-wave driven 정식화 단일 경로(변위전류 포함 → E·H·캐패시턴스·SRF·유전손실 전부). 부분물리 솔버(M3D AC/Electrostatic/Q3D)는 실측에서 탈락.</li>
   <li>lumped port excitation, port current 방향·reference impedance 명시.</li>
 </ul>
 <h4>Out of scope (이 브랜치)</h4>
@@ -302,18 +302,21 @@
 
 <h2 id="math"><span class="num">§7</span>수치 정식화</h2>
 <div class="panel danger">
-  <p class="ptitle">기본은 full-wave — Maxwell AC Magnetic(MQS) 가정 금지</p>
+  <p class="ptitle">full-wave 터미널-네트워크로 확정 — 부분물리 솔버는 경험적으로 탈락</p>
   <p style="margin:0">
-    Maxwell 3D Eddy Current(AC Magnetic)는 변위전류를 버려 <strong>캐패시턴스·E field를 못 잡고 \(Z=R+j\omega L\)로 고정 가정</strong>한다.
-    HFSS 대체가 목적이므로 우리는 <strong>변위전류를 포함한 full-wave driven 정식화(Palace <code>Driven</code> 모드)</strong>를 기본으로 쓴다.
+    실측 비교에서 <strong>Maxwell 3D AC(H field, eddy-current)</strong>, <strong>Maxwell 3D Electrostatic(E field)</strong>, <strong>Q3D</strong> 같은 quasi-static/부분물리 솔버는
+    HFSS full-wave 대비 정확도가 떨어졌다(특히 \(R,Q,\eta\)·self-resonance·용량성 거동). 결론은 <strong>HFSS식 full-wave가 무조건 가장 정확</strong>하다는 것.
+    따라서 이 솔버는 <strong>변위전류를 포함한 full-wave driven 정식화(Palace <code>Driven</code> 모드)로 HFSS terminal-network 솔루션을 그대로 재현</strong>하는 것을 유일한 기본·검증 경로로 둔다.
+    transient는 바라지 않으므로 비범위. 결과는 lumped terminal port → S/Z 행렬(=terminal network).
     이래야 <strong>E·H field 모두, 턴간/권선간 캐패시턴스, self-resonance(SRF), 유전 손실</strong>이 HFSS처럼 잡히고 \(Z=R+jX\)의 \(X\)가 유도+용량을 일반적으로 표현한다.
   </p>
 </div>
 <p>주파수영역 full curl-curl(완전 Maxwell):</p>
 \[ \nabla\times\!\left(\tfrac{1}{\mu}\nabla\times \mathbf{E}\right) - \omega^2\varepsilon\,\mathbf{E} + j\omega\sigma\,\mathbf{E} = -j\omega\,\mathbf{J}_s \]
 <p>
-  \(-\omega^2\varepsilon\) 항이 변위전류 = 캐패시턴스·E field의 출처다. 이 항을 빼면 곧 eddy-current(MQS) 식
-  \(\nabla\times(\tfrac{1}{\mu}\nabla\times\mathbf{A}) + j\omega\sigma\mathbf{A} = \mathbf{J}_s\)가 되고, 그게 바로 Maxwell AC Magnetic이라 캐패시턴스가 사라진다 — <strong>기본 경로에서는 쓰지 않는다.</strong>
+  \(-\omega^2\varepsilon\) 항이 변위전류 = 캐패시턴스·E field의 출처다. 이 항을 빼면 곧 eddy-current 식
+  \(\nabla\times(\tfrac{1}{\mu}\nabla\times\mathbf{A}) + j\omega\sigma\mathbf{A} = \mathbf{J}_s\)(= Maxwell 3D AC)이 되어 캐패시턴스가 사라지고, 반대로 \(\nabla\times\mathbf E\approx 0\)만 두면 Electrostatic(E field)·Q3D가 된다.
+  세 경우 모두 실측에서 full-wave보다 부정확했으므로 <strong>이 솔버는 항을 모두 유지한 full-wave만 쓴다.</strong>
 </p>
 <p>도체에는 \(\sigma\), 유전체(FR4·vacuum)에는 복소 유전율 \(\varepsilon(\omega)=\varepsilon'(1-j\tan\delta)\), 페라이트에는 복소 투자율 \(\mu(\omega)=\mu'-j\mu''\)(loss)를 부여한다. 포트별 단위 여기로 풀어 admittance 열을 얻고 Z로 역변환한다.</p>
 \[ \mathbf{Z}(f) = \mathbf{Y}(f)^{-1}, \qquad Z_{ij}=\left.\frac{V_i}{I_j}\right|_{I_{k\neq j}=0} \]
@@ -321,9 +324,16 @@
 \[ L_i = \frac{\Im\{Z_{ii}\}}{\omega},\quad R_i=\Re\{Z_{ii}\},\quad M=\frac{\Im\{Z_{12}\}}{\omega},\quad k=\frac{M}{\sqrt{L_1 L_2}},\quad Q_i=\frac{\omega L_i}{R_i} \]
 <p>물리 일관성 제약(post-check, 위반 시 fail): 상반성 \(\mathbf{Z}=\mathbf{Z}^{\mathsf T}\), passivity \(\Re\{\mathbf{Z}\}\succeq 0\), \(R>0,\ L>0,\ |k|\le 1\).</p>
 <div class="panel">
-  <p class="ptitle">MQS는 옵션-온리 fast mode</p>
-  <p style="margin:0">MQS(eddy-current) 정식화는 <strong>같은 설계점에서 full-wave 대비 캐패시턴스 기여가 무시 가능함을 입증한 경우에만</strong> 빠른 근사 옵션으로 허용한다.
-  기본값·label 생성·HFSS cross-check는 항상 full-wave로 한다. (\(L,M,k\)만 맞고 \(R,Q,\eta\)·SRF가 어긋나는 MQS 함정 회피.)</p>
+  <p class="ptitle">왜 full-wave 단일 경로인가 (경험적 근거)</p>
+  <table style="margin:6px 0 0">
+    <thead><tr><th>풀이</th><th>잡는 것</th><th>실측 한계</th></tr></thead>
+    <tbody>
+      <tr><td>M3D AC (H field, eddy)</td><td>L, 도체손실</td><td>캐패시턴스·SRF 없음, \(Z=R+j\omega L\) 고정 → R/Q/η 어긋남</td></tr>
+      <tr><td>M3D Electrostatic (E field)</td><td>C</td><td>전류·인덕턴스·손실 미해결, Z 추출 불가</td></tr>
+      <tr><td>Q3D</td><td>RLGC 추출(준정적)</td><td>고주파 분포효과·SRF·복사 근사화 → full-wave 대비 정확도 하락</td></tr>
+      <tr><td><strong>HFSS full-wave (채택)</strong></td><td><strong>E·H·C·L·손실·SRF 전부</strong></td><td><strong>가장 정확 — 유일 검증 경로</strong></td></tr>
+    </tbody>
+  </table>
 </div>
 <div class="panel">
   <p class="ptitle">port 부호 함정</p>
@@ -430,7 +440,7 @@
   <li><strong>Port normalization</strong>: 정확한 두 솔버가 부호·정규화 때문에 틀려 보임 → 공통 postprocess에서 고정.</li>
   <li><strong>Mesh near port gap / copper edge</strong>: Rac·Q를 지배 → refine 규칙을 명시·고정.</li>
   <li><strong>Ferrite 모델 차이</strong>: HFSS와 μ/loss 모델이 다를 수 있음 → ferrite 비교 격리.</li>
-  <li><strong>6.78 MHz 대형 air domain</strong>: 파장(~44 m)≫코일이라 full-wave FEM이 저주파에서 ill-conditioning·수렴 난조를 겪을 수 있음 → 도메인/경계 크기·preconditioner 관리, 필요시 low-frequency-stabilized full-wave 사용. 캐패시턴스를 버리는 MQS로의 도피는 기본 경로에서 금지.</li>
+  <li><strong>6.78 MHz 대형 air domain</strong>: 파장(~44 m)≫코일이라 full-wave FEM이 저주파에서 ill-conditioning·수렴 난조를 겪을 수 있음 → 도메인/경계 크기·preconditioner 관리, 필요시 low-frequency-stabilized full-wave 사용. 부분물리 솔버는 실측에서 탈락했으므로 정확도를 버리는 도피는 없다.</li>
   <li><strong>GPU VRAM</strong>: 8 GB급에서 기본 할당 OOM → pool-size override + mesh/freq 분할. CUDA 강제이므로 CPU 회피 불가(설계상 수용).</li>
   <li><strong>ML label solver bias</strong>: HFSS/Palace 불일치 미추적 시 label 편향 → provenance 필수.</li>
 </ul>
@@ -458,7 +468,7 @@
 </p>
 
 <footer>
-  peetsfea · dev/3 long-term plan · 작성 2026-06-17 ·
+  peetsfea · dev/3 long-term plan · 작성 2026-06-17 · 갱신 2026-06-18 (full-wave 터미널-네트워크 확정) ·
   근거: <code>프로젝트구상.md</code>, <code>docs/palace-second-backend-roadmap.md</code>, <code>phase0_sanity/</code>, <code>README.md</code>, <code>GOAL.md</code> ·
   세 모드: ① FEM+CUDA ≤30분 · ② surrogate mesh밀도/field warm-start FEM ≤15분 · ③ 0.99 surrogate ≈0.1초
 </footer>
