@@ -113,8 +113,12 @@
 </section>
 
 <section>
-  <h2><span class="n">3.</span> HFSS (참값) <span class="pill done">실행 완료</span></h2>
-  <p class="sub">Terminal-driven HFSS, <code>Setup1 @ 6.78MHz</code> 적응 메시 + interpolating sweep 0.1–100&nbsp;MHz(81pt). 이 값이 pfsolver의 정답 기준선.</p>
+  <h2><span class="n">3.</span> HFSS 기준값 — ferrite-enabled(참고) + no-ferrite(1차 기준)</h2>
+  <div class="note"><b>1차 비교는 no-ferrite다.</b> pfsolver의 첫 solve는 upstream forked Palace로 <b>no-ferrite 단일주파수</b>다(ferrite 복소 μ는 M-fork 후).
+  따라서 pfsolver를 맞댈 <b>정답 기준선은 "HFSS no-ferrite"</b>다 — 같은 fixed 형상에서 <b>TX MULL ferrite만 non-model(solve 제외)</b>로 바꿔 재실행한 값.
+  아래 ferrite-enabled 표(3.1)는 <b>참고</b>이고, no-ferrite 표(3.2)가 §4·§5의 실제 기준이다.</div>
+  <h3>3.1 HFSS ferrite-enabled <span class="pill done">실행 완료 · 참고</span></h3>
+  <p class="sub">design_id <code>0_3_7_p6561d2a5c7808f6e</code> · Terminal-driven, <code>Setup1 @ 6.78MHz</code> 적응 + sweep 0.1–100 MHz(81pt). <b>TX ferrite 포함</b>.</p>
   <div class="card">
     <b>설정 (peetsfea 0.3.7)</b>
     <ul>
@@ -124,9 +128,9 @@
       <li>수렴 <b>MaxMagDeltaS = 0.00088</b>(&lt;0.005 ✓) · <b>솔브 282초</b> · GPU(RTX 3070) · 4 cores · 11 pass</li>
     </ul>
   </div>
-  <h3>HFSS @ 6.78 MHz 실측 (ω = 2π·6.78×10⁶ = 4.2599×10⁷ rad/s)</h3>
+  <h4 style="color:var(--mut);margin:14px 0 4px">@ 6.78 MHz (ω = 4.2599×10⁷ rad/s)</h4>
   <table>
-    <tr><th>양</th><th class="num">HFSS 값</th><th>비고</th></tr>
+    <tr><th>양</th><th class="num">HFSS ferrite-enabled</th><th>비고</th></tr>
     <tr><td><b>Z11</b></td><td class="num">0.3699 + j241.85 Ω</td><td>|Z11| = 241.85 Ω</td></tr>
     <tr><td><b>Z22</b></td><td class="num">0.2362 + j212.63 Ω</td><td></td></tr>
     <tr><td><b>Z12</b></td><td class="num">0.01230 + j6.7063 Ω</td><td>약결합</td></tr>
@@ -138,11 +142,23 @@
     <tr><td><b>C1</b></td><td class="num">16.35 pF</td><td>TX self-resonance 16.52 MHz</td></tr>
     <tr><td><b>C2</b></td><td class="num">21.62 pF</td><td>RX self-resonance 15.32 MHz</td></tr>
   </table>
+
+  <h3>3.2 HFSS no-ferrite <span class="pill todo">재실행 예정 · §4·§5의 실제 기준</span></h3>
+  <p class="sub">같은 fixed 형상에서 <b>TX MULL ferrite를 non-model</b>(<code>set_object_model_state(ferrite, False)</code>)로 두고 동일 Setup으로 재실행 → 추출. ferrite 자속경로가 빠지므로 L↓·k↓ 예상.</p>
+  <table>
+    <tr><th>양</th><th class="num">HFSS no-ferrite (기준)</th><th class="num">ferrite-enabled(참고)</th><th>비고</th></tr>
+    <tr><td><b>Z11 / Z22 / Z12</b></td><td class="todo-cell">— TBD</td><td class="num">위 3.1</td><td>재실행 후</td></tr>
+    <tr><td><b>L1 / L2</b></td><td class="todo-cell">— TBD</td><td class="num">5.6772 / 4.9912 µH</td><td>ferrite 제거 → 감소 예상</td></tr>
+    <tr><td><b>M / k</b></td><td class="todo-cell">— TBD</td><td class="num">0.1574 µH / 0.0296</td><td></td></tr>
+    <tr><td><b>R1 / R2</b></td><td class="todo-cell">— TBD</td><td class="num">0.3699 / 0.2362 Ω</td><td>ferrite 손실 제거</td></tr>
+    <tr><td><b>Q1 / Q2</b></td><td class="todo-cell">— TBD</td><td class="num">654 / 900</td><td></td></tr>
+  </table>
 </section>
 
 <section>
   <h2><span class="n">4.</span> pfsolver (Palace full-wave) <span class="pill todo">구현 예정 · 결과 빈칸</span></h2>
-  <p class="sub">오픈소스 CUDA C++ 솔버. 같은 STEP을 gmsh로 메시 → forked Palace <code>Driven</code> full-wave 솔브 → port S/V/I → Z(f). 아래 표는 <b>구현 후 채운다.</b></p>
+  <p class="sub">오픈소스 CUDA C++ 솔버. 같은 STEP을 gmsh로 메시 → forked Palace <code>Driven</code> full-wave 솔브 → port S/V/I → Z(f). 아래 표는 <b>구현 후 채운다.</b>
+  <b>1차 비교 대상은 §3.2 HFSS no-ferrite</b>(아래 표의 "HFSS(참값)" 열은 현재 ferrite-enabled 참고값 → no-ferrite 재실행 후 교체).</p>
   <div class="card" style="border-color:rgba(118,185,0,.35)">
     <b>예정 설정 (HFSS와 정렬)</b>
     <ul>
@@ -179,7 +195,7 @@
 
 <section>
   <h2><span class="n">5.</span> 교차검증 매트릭스 &amp; 합격 기준</h2>
-  <p class="sub">HFSS=참값(채움), pfsolver=구현 후 채움. 각 양의 tolerance와 현재 상태.</p>
+  <p class="sub">HFSS=참값, pfsolver=구현 후 채움. 각 양의 tolerance와 현재 상태. <b>1차 기준은 §3.2 no-ferrite(TBD)</b>; 아래 HFSS 열의 값은 ferrite-enabled 참고로, no-ferrite 재실행 후 교체한다.</p>
   <table>
     <tr><th>양</th><th class="num">HFSS(참값)</th><th class="num">pfsolver</th><th class="num">tolerance</th><th class="num">오차</th><th>상태</th></tr>
     <tr><td><b>L1</b></td><td class="num">5.6772 µH</td><td class="todo-cell">— TBD</td><td class="num">±5%</td><td class="todo-cell">—</td><td><span class="pill todo">대기</span></td></tr>

@@ -1,54 +1,99 @@
-# Goal: `tx_under_coil`은 TX의 x-min 쪽 YZ 평면 코일이다
+# GOAL: `pfsolver`로 Phase A–C를 한 번에 — HFSS 없이 no-ferrite 단일주파수 Z(f) 재현
 
-`examples/under_coil.step`에는 TX coil이 두 개 있다. 위쪽의 큰 XY 평면 spiral은 TX main coil이고, under-coil이 아니다. under-coil은 global X 방향 영역이 최소인 쪽에 붙어 있는 두 번째 TX coil이다.
+이 브랜치(dev/3)의 목표는 Ansys HFSS를 대체하는 오픈소스 CUDA full-wave 솔버
+`pfsolver`다. 이번 push의 목표는 **Phase A→B→C를 단번에 밀어** `pfsolver
+inspect|mesh|solve`가 동작하고, **no-ferrite 단일주파수(6.78 MHz)** 에서 forked
+Palace `Driven`(full-wave)가 2-포트 terminal Z를 산출해 HFSS와 부호/shape/단위가
+일치하는 상태까지 가는 것이다.
 
-따라서 `examples/under_coil.step`를 볼 때 전체 bbox나 위쪽 큰 XY spiral을 under-coil로 해석하면 안 된다. under-coil 기준은 x-min 영역의 얇은 YZ 평면 loop다.
+- 상세 계획(task/struct/acceptance): [solver/docs/implementation-plan-phase-A-C.md](solver/docs/implementation-plan-phase-A-C.md)
+- 큰 그림: [cpp-cuda-fem-solver-longterm-plan.html](cpp-cuda-fem-solver-longterm-plan.html)
+- 교차검증 기준값(HFSS): [docs/solver-vs-hfss-crossvalidation-plan.html](docs/solver-vs-hfss-crossvalidation-plan.html)
+- 이미 완료: M0 — Docker 전용 빌드 + `pfsolver doctor`(CUDA 게이트).
 
-## STEP 확인 기준
+## 작업 방식 (중요)
+- **구현은 Codex가 한다.** 한 번에 Phase A–C를 진행한다.
+- **Claude(나)는 1시간마다 호출되어 평가/피드백만 한다.** 코드를 다시 짜지 않고,
+  이 GOAL.md의 Acceptance와 Hard Rules 기준으로 진행 상태를 검수한다.
+- 따라서 아래 Acceptance는 **객관적으로 체크 가능**해야 하며, Codex는 각 항목을
+  실제 명령 출력/테스트로 증명한다(주장만으로 "완료" 금지).
 
-`examples/under_coil.step`는 하나의 fused solid로 읽히지만, face/mesh를 x 위치로 보면 under-coil 영역을 분리해서 확인할 수 있다.
+## 범위 (이번 push)
+포함:
+- `pfsolver inspect <bundle>` — 번들 5종 파싱 → 내부 Scene 모델 복원, 누락 즉시 fail.
+- `pfsolver mesh <bundle>` — STEP→tet, physical group으로 copper/FR4/(ferrite)/port/boundary 태깅.
+- `pfsolver solve <bundle>` — forked Palace `Driven`, lumped terminal 2포트, **no-ferrite 단일주파수 6.78 MHz**, CUDA + 4-core MPI → `network.csv` 등.
+- 출력 스키마: `em_result.json`, `network.csv`, `derived.csv`, `port_vi.csv`, `solver_manifest.json`.
 
-- 전체 artifact bbox는 대략 `X -9.0..81.14`, `Y -81.07..81.07`, `Z 234.0..290.0`이다.
-- 이 전체 bbox에는 TX main coil과 under-coil이 같이 들어 있으므로 under-coil 방향 판정에 그대로 쓰면 안 된다.
-- x-min 쪽 under-coil surface만 보면 대략 `X -9.0..-7.77`, `Y -80.14..81.02`, `Z 234.0..266.55`이다.
-- 즉 under-coil은 global X 방향으로 얇고, global Y/Z 방향으로 footprint를 갖는 YZ 평면 coil이다.
+제외(이번 push 아님):
+- ferrite(복소 μ) — Palace fork 패치(M-fork)가 선행. 이번엔 no-ferrite만.
+- frequency sweep / SRF / C 추출.
+- loss.csv / field_index.json(field 산출), Mode 2 warm-start, Mode 3 label.
 
-## 올바른 형상 의도
+## 입력 번들 계약
+`<bundle_dir>` 안의 5파일을 모두 읽는다(우회 없음). STEP 단독은 material/port/boundary가 없다.
+- `ssw_scene.step` — geometry
+- `ssw_step_ledger.json` — `bodies[]`(role·material·center·size), `*_body_names`, `units`
+- `ssw_aedt_port_ledger.json` — `port_edges[]`(role tx/rx, `edge_vertices_xyz` 쌍, `copper_body_name`)
+- `coil_making_token.toml` — metadata(seed·schema·spec), actions
+- `<design_id>.toml` — frequency 6.78 MHz, material 참조, ferrite enable flag
+- + `solver/data/materials.toml`(물성 SSOT: copper σ=5.8e7, FR4 εr 4.4/tanδ 0.02, air/vacuum)
 
-- `tx_under_coil`은 TX main coil과 직렬로 연결되는 두 번째 TX coil이다.
-- `tx_under_coil`은 독립 coil도 아니고 별도 port 대상도 아니다.
-- TX main coil은 기존처럼 XY 평면에 있을 수 있다. 이 XY main coil을 under-coil 오류로 오인하지 않는다.
-- under-coil copper는 global X 최소 영역에 배치한다.
-- under-coil copper의 local coil 면은 global YZ 평면과 평행해야 한다.
-- under-coil normal은 global X 축과 정렬되어야 한다.
-- under-coil의 X 방향 두께는 coil/trace 두께 수준으로 얇아야 하고, footprint는 Y/Z 방향으로 펼쳐져야 한다.
+## Hard Rules (위반 시 즉시 실패 — degrade 금지)
+- **CUDA mandatory.** GPU 없으면 build 실패(`CUDAToolkit REQUIRED`) 또는 run 실패(exit≠0). **CPU 폴백 절대 없음.**
+- **Docker 전용.** 호스트 빌드 미지원. 모든 빌드/실행은 `solver/docker/`.
+- **Full-wave only.** forked Palace `Driven`(변위전류 포함). MQS/electrostatic/Q3D로의 도피 금지.
+- **Fail-fast.** 번들 키 누락·port 쌍 불일치·material 미정의·units≠mm·port count≠(tx1+rx1)이면 즉시 raise. silent fallback/log-and-continue/degraded geometry 금지.
+- **부호 계약.** Z12/Z21은 HFSS port current 방향 기준으로 고정. S→Z와 V/I→Z 두 경로가 일치해야 한다.
+- **Mock/stub 금지.** `network.csv`·`port_vi.csv`를 테스트용 가짜 값으로 생성하면 **완료 아님**. 반드시 forked Palace `Driven` **실제 실행**으로 `port-S/V/I.csv`가 나온 뒤 후처리한 값만 인정.
+- **no-ferrite 경계.** 이번 solve는 no-ferrite만이다. ferrite enabled 번들에서 upstream Palace 한계 때문에 **lossless ferrite로 조용히 대체하면 실패**로 본다. ferrite enabled인데 M-fork 전 solve 시도 = fail-fast, 또는 명시적 no-ferrite fixture(ferrite 논모델/제외)로만 진행.
+- **재현성.** solve는 `solver_manifest.json`에 다음을 모두 남긴다: forked Palace commit, pfsolver commit, run command, mesh hash, config hash, GPU name/VRAM, MPI ranks, HYPRE pool 설정, bundle design_id/provenance, wall time, 수렴 정보.
 
-## 구현 범위
+## Acceptance Criteria (Claude 검수 체크리스트)
+Phase A — `inspect`
+- [ ] `pfsolver inspect run/ssw_0_3_0_fixed` → exit 0. body 11 / copper 2 / fr4 4 / ferrite 1 / non_model 4, port tx 1·rx 1을 정확히 보고.
+- [ ] 번들 파일 1개를 지우면 명확한 메시지로 exit≠0.
+- [ ] `--json` 출력이 Scene 모델(body·port 좌표·freq·material·ferrite flag)을 빠짐없이 직렬화.
+- [ ] 파서별 단위테스트(fixed 번들 fixture 골든값) 통과.
 
-먼저 under-coil의 semantic 분리와 placement frame/orientation을 바로잡는다. YZ 평면 under-coil 계약을 성립시키는 데 꼭 필요한 경우가 아니면 새 coil topology, extra port, ferrite redesign, sampled-field 변경, type1 유지보수로 범위를 넓히지 않는다.
+Phase B — `mesh` + config 검증 + V0 two-port
+- [ ] `pfsolver mesh`가 gmsh 무에러로 `mesh.msh` + group↔role 태그 산출, group이 inspect 모델과 1:1.
+- [ ] emit한 Palace config가 **`palace --dry-run`(또는 동등 config parse 검증)** 통과 — 잘못된 JSON/schema/attribute mapping은 solve 전에 잡는다.
+- [ ] minimal two-port에서 S/Z가 2×2·올바른 단위·상반성(Z=Zᵀ) 만족.
+- [ ] S→Z와 V/I→Z 두 경로가 tight 일치(부호 포함).
+- [ ] (no-ferrite HFSS 기준값이 준비된 경우) 저복잡도 L/R가 mesh refine 후 tolerance 내 수렴.
 
-구현은 가능한 한 기존 normal spiral 생성 경로를 재사용한다. 필요한 변경은 `tx_under_coil`을 TX main coil과 같은 XY plane에 다시 생성하는 것이 아니라, x-min 쪽 YZ plane에 세워서 배치하는 것이다.
+Phase C — `solve`(no-ferrite, 단일주파수)
+- [ ] `pfsolver solve <bundle>`가 GPU에서 완주 → `network.csv`/`derived.csv`/`port_vi.csv`/`solver_manifest.json` 생성.
+- [ ] GPU 미부착 시 즉시 실패(폴백 없음) 재확인.
+- [ ] phase0의 HYPRE OOM 케이스가 VRAM 적응 pool로 통과(8 GB RTX 3070).
+- [ ] manifest에 재현 필드 전부 존재.
 
-## Fail-Fast 요구사항
+## 완료 증거 패키지 (각 리뷰 시 Codex가 제출)
+"완료"는 주장이 아니라 아래 산출물로 증명한다. 없으면 미완.
+- 실행한 Docker **build/run command** 원문.
+- `pfsolver inspect --json` 산출물.
+- **negative test 로그**(파일 누락·port 불일치·GPU 없음 → exit≠0).
+- gmsh **mesh/group summary** + Palace **config `--dry-run`** 통과 로그.
+- forked Palace **실행 command + stdout/stderr**.
+- 실제 파일 경로: `port-S.csv`·`port-V.csv`·`port-I.csv`·`network.csv`·`solver_manifest.json`.
+- 관련 **unit/integration test 결과**.
 
-`is_under_coil_enabled = true`일 때 아래 조건 중 하나라도 성립하면 즉시 raise한다.
+## Definition of Done (이번 push)
+`pfsolver inspect|mesh|solve`가 fixed 번들의 **no-ferrite 단일주파수**에서 끝까지
+돌아 (forked Palace 실제 실행으로) `network.csv`를 만들고, 그 Z가 HFSS terminal Z와
+**부호·shape·단위가 일치**하며, 위 Acceptance 전 항목이 실제 출력으로 증명된다.
+- 1차 DoD = **부호/shape/단위 일치**.
+- **numeric tolerance**(L/M/R 수치 오차)는 **no-ferrite HFSS 기준값이 있을 때만** 요구한다.
+  현재 HFSS 기준값은 ferrite-enabled라, no-ferrite 기준은 별도로 다시 뽑는다(→ 진행 중).
+  기준값 확보 전에는 numeric parity를 "준비/기록"으로 둔다.
+그 시점에 교차검증 문서 §4·§5의 pfsolver 열을 no-ferrite 행부터 채우기 시작한다.
 
-- `tx_under_coil`이 TX main coil과 같은 global XY 평면 coil로 생성됨
-- `tx_under_coil`이 global X 최소 영역에 배치되지 않음
-- `tx_under_coil`의 local coil 면이 global YZ 평면과 평행하지 않음
-- `tx_under_coil` normal이 global X와 정렬되지 않음
-- 생성된 STEP/ledger에서 `tx_under_coil`과 TX main coil을 구분할 수 없음
-- under-coil용 독립 port pair가 생성됨
-- TX serial-coil 계약이 깨짐
-
-fallback orientation, silent rotation substitute, degraded geometry, log-and-continue는 허용하지 않는다.
-
-## Acceptance Criteria
-
-- 재생성된 STEP에서 TX main coil과 `tx_under_coil` 두 TX coil을 구분할 수 있어야 한다.
-- TX main coil은 under-coil 판정 대상이 아니다.
-- `tx_under_coil`은 global X 최소 영역에 있어야 한다.
-- `tx_under_coil` bbox는 global X 방향으로 얇고, global Y/Z 방향으로 의도한 footprint를 가져야 한다.
-- TX/RX port count는 기존 계약을 유지해야 하며, under-coil 독립 포트가 생기면 안 된다.
-- ledger/STEP semantic identity는 legacy internal name이 아니라 `tx_under_coil`을 사용해야 한다.
-- AEDT/PyAEDT에 영향을 주는 code change 후에는 real headless AEDT validation을 실행해야 한다.
+## Claude 시간별 리뷰가 볼 것 (특히 강하게)
+1. **실제 Palace run 증거** — mock/stub로 채운 CSV는 미완.
+2. **no-ferrite/ferrite 경계** — lossless ferrite 조용한 대체 금지.
+3. **manifest 재현성** — 위 필드 전부 존재.
+4. Hard Rules 위반(CPU 폴백·silent degrade·full-wave 이탈).
+5. Acceptance 항목별 **증거**(명령 출력/테스트 로그) 유무 — 주장만이면 미완.
+6. 입력 번들 계약(5파일 전부, fail-fast 실동작), 부호/단위/상반성 물리 계약.
+7. 다음 1시간 우선순위 제안(막힌 지점 unblock 위주).
