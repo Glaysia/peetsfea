@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>peetsfea — Open-Source CUDA C++ FEM Solver · 장기 프로젝트 계획</title>
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1d212b;
+    --ink: #e7ebf0;
+    --muted: #9aa4b2;
+    --line: #2a2f3a;
+    --accent: #5ec8ff;
+    --accent-2: #7ee787;
+    --warn: #ffb454;
+    --danger: #ff6b6b;
+    --cuda: #76b900;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Roboto, sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 22px 120px; }
+  header.hero {
+    padding: 56px 22px 40px;
+    background: radial-gradient(1200px 400px at 20% -10%, rgba(94,200,255,.18), transparent 60%),
+                radial-gradient(900px 360px at 90% 0%, rgba(118,185,0,.16), transparent 55%);
+    border-bottom: 1px solid var(--line);
+  }
+  .hero-inner { max-width: 980px; margin: 0 auto; }
+  .eyebrow { font-family: var(--mono); font-size: 12.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin: 0 0 14px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 14px; }
+  h1 small { display:block; font-size: 17px; color: var(--muted); font-weight: 500; margin-top: 8px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .badge { font-family: var(--mono); font-size: 12px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); }
+  .badge.cuda { color: #cde9a0; border-color: rgba(118,185,0,.5); background: rgba(118,185,0,.12); }
+  .badge.hard { color: var(--warn); border-color: rgba(255,180,84,.45); }
+
+  h2 { font-size: 23px; margin: 52px 0 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+  h2 .num { font-family: var(--mono); color: var(--accent); font-size: 16px; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 28px 0 8px; color: #f2f5f9; }
+  h4 { font-size: 15px; margin: 18px 0 6px; color: var(--accent-2); }
+  p { margin: 10px 0; }
+  a { color: var(--accent); }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--panel-2); padding: 1.5px 6px; border-radius: 5px; color: #ffd9a0; }
+  strong { color: #fff; }
+
+  .lead { font-size: 17.5px; color: #dbe2ea; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin: 18px 0; }
+  .panel.accent { border-color: rgba(94,200,255,.4); background: linear-gradient(180deg, rgba(94,200,255,.07), transparent); }
+  .panel.cuda { border-color: rgba(118,185,0,.45); background: linear-gradient(180deg, rgba(118,185,0,.08), transparent); }
+  .panel.danger { border-color: rgba(255,107,107,.45); background: linear-gradient(180deg, rgba(255,107,107,.07), transparent); }
+  .panel .ptitle { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--accent); font-weight: 600; background: var(--panel-2); }
+  tr:hover td { background: rgba(255,255,255,.02); }
+
+  .modes { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin: 20px 0; }
+  .mode { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--panel); position: relative; overflow: hidden; }
+  .mode::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; }
+  .mode.m1::before { background: var(--accent); }
+  .mode.m2::before { background: var(--warn); }
+  .mode.m3::before { background: var(--accent-2); }
+  .mode .mtag { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+  .mode .mtime { font-size: 26px; font-weight: 700; margin: 6px 0 2px; }
+  .mode .mname { font-size: 14px; color: #dbe2ea; margin-bottom: 8px; }
+  .mode p { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+  @media (max-width: 760px) { .modes { grid-template-columns: 1fr; } }
+
+  .pipeline { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; margin: 18px 0; }
+  .stage { flex: 1 1 120px; border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--panel-2); font-size: 13px; }
+  .stage b { display: block; color: var(--accent); font-size: 13px; margin-bottom: 4px; }
+  .stage small { color: var(--muted); font-size: 11.5px; }
+
+  .phase { border-left: 2px solid var(--line); padding: 4px 0 4px 20px; margin: 6px 0 6px 6px; position: relative; }
+  .phase::before { content: ""; position: absolute; left: -6px; top: 12px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+  .phase.done::before { background: var(--accent-2); }
+  .phase .pt { font-weight: 600; color: #fff; }
+  .phase .pmeta { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+
+  .kv { font-family: var(--mono); font-size: 12.5px; }
+  .tag { display:inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 7px; border-radius: 5px; border:1px solid var(--line); color: var(--muted); }
+  .tag.cu { color:#cde9a0; border-color: rgba(118,185,0,.4); }
+  .tag.no { color: var(--danger); border-color: rgba(255,107,107,.35); }
+
+  .toc { columns: 2; column-gap: 28px; font-size: 14px; }
+  .toc a { color: var(--muted); text-decoration: none; }
+  .toc a:hover { color: var(--accent); }
+  @media (max-width: 620px) { .toc { columns: 1; } }
+  footer { color: var(--muted); font-size: 13px; margin-top: 60px; border-top: 1px solid var(--line); padding-top: 20px; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">peetsfea · dev/3 branch · long-term plan</p>
+    <h1>오픈소스 CUDA C++ FEM 솔버
+      <small>HFSS를 대체하는 주파수영역 FEM Z-파라미터 추출 엔진 — 0.3.7 STEP + 추출 정보 + field 데이터 기반</small>
+    </h1>
+    <div class="badges">
+      <span class="badge cuda">CUDA mandatory</span>
+      <span class="badge hard">no CPU fallback (by design)</span>
+      <span class="badge">4-core MPI</span>
+      <span class="badge">C++17/20</span>
+      <span class="badge">freq-domain full-wave FEM</span>
+      <span class="badge">terminal Z(f) extraction</span>
+      <span class="badge">open-source / MIT</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<div class="panel accent">
+  <p class="ptitle">이 문서가 다루는 것 — 브랜치 mandate</p>
+  <p class="lead" style="margin-top:0">
+    이 브랜치(<code>dev/3</code>)의 목적은 <strong>오픈소스 C++ FEM 솔버를 만드는 것</strong>이다.
+    기존 <code>프로젝트구상.md</code>에서 C++ 솔버는 <em>Phase 7, 가장 마지막</em>에 놓여 있었다. 그
+    foundation surrogate 연구 자체는 다른 프로젝트들에서 점진적으로 진행 중이므로, 여기서는
+    그 순서를 뒤집어 <strong>C++ FEM 솔버를 최우선이자 핵심 deliverable</strong>로 끌어올린다.
+  </p>
+  <p style="margin-bottom:0">
+    솔버는 Ansys HFSS 라이선스 병목을 없애기 위해, peetsfea 0.3.7이 결정론적으로 생성하는
+    <code>ssw_scene.step</code> + 추출된 ledger/token + field 데이터를 입력으로 받아
+    <strong>terminal network Z(f)</strong>를 추출한다. HFSS를 100% 대체하는 것이 아니라,
+    "현재 프로젝트가 추출하는 정보 + field 데이터" 범위 안에서 HFSS의 Z-파라미터 역할을 대체한다.
+  </p>
+</div>
+
+<h2><span class="num">§0</span>목차</h2>
+<div class="toc">
+  <a href="#modes">1. 세 가지 운영 모드</a><br/>
+  <a href="#why">2. 배경 — 왜 자체 솔버인가</a><br/>
+  <a href="#inputs">3. 입력 — 0.3.7이 이미 만드는 것</a><br/>
+  <a href="#scope">4. 솔버 범위와 비범위</a><br/>
+  <a href="#cuda">5. CUDA / 병렬 강제 규약</a><br/>
+  <a href="#arch">6. 솔버 아키텍처 파이프라인</a><br/>
+  <a href="#math">7. 수치 정식화 (full-wave FEM + 포트)</a><br/>
+  <a href="#outputs">8. 솔버-중립 출력 계약</a><br/>
+  <a href="#validation">9. 검증 사다리 (vs HFSS)</a><br/>
+  <a href="#surrogate">10. 대리모델 결합 (모드 2·3)</a><br/>
+  <a href="#roadmap">11. 단계별 로드맵</a><br/>
+  <a href="#risks">12. 리스크</a><br/>
+  <a href="#umbrella">13. 상위 연구 맥락 (foundation surrogate)</a><br/>
+</div>
+
+<h2 id="modes"><span class="num">§1</span>세 가지 운영 모드</h2>
+<p>
+  이 프로젝트의 산출물은 <strong>같은 geometry/spec 정체성</strong> 위에서 정확도–시간을 trade-off하는 세 가지 모드로 동작한다.
+  이 브랜치가 만드는 <strong>C++ FEM 솔버</strong>는 모드 1과 모드 2의 엔진이며, 모드 3의 정답(label) 생성기이기도 하다.
+</p>
+<div class="modes">
+  <div class="mode m1">
+    <div class="mtag">Mode 1 · FEM</div>
+    <div class="mtime">≤ 30분</div>
+    <div class="mname">순수 FEM + CUDA, 정밀 해</div>
+    <p>밀도 가이드 없이 mesh부터 adaptive하게 풀어 reference급 정밀도 확보. surrogate 학습용 high-fidelity label의 출처.</p>
+  </div>
+  <div class="mode m2">
+    <div class="mtag">Mode 2 · Hybrid</div>
+    <div class="mtime">≤ 15분</div>
+    <div class="mname">대리모델 mesh밀도+field 위 FEM 몇 패스</div>
+    <p>Transformer 대리모델이 예측한 mesh 밀도 맵과 초기 field를 warm-start로 받아 FEM 몇 패스만 더 돌려 정밀 해로 수렴. 시간 절반.</p>
+  </div>
+  <div class="mode m3">
+    <div class="mtag">Mode 3 · Surrogate</div>
+    <div class="mtime">≈ 0.1초</div>
+    <div class="mname">0.99 정확도 대리모델 단독</div>
+    <p>FEM을 호출하지 않고 학습된 대리모델이 직접 Z(f)·L·M·k·Q·η 출력. 대규모 설계 탐색·최적화 inner loop용.</p>
+  </div>
+</div>
+<div class="panel">
+  <p class="ptitle">모드 간 책임 경계</p>
+  <ul style="margin:0">
+    <li><strong>이 브랜치(dev/3)</strong> = 모드 1·2의 FEM 엔진 + 모드 2의 warm-start 수용 인터페이스 + 모드 3 label 공급.</li>
+    <li><strong>다른 프로젝트</strong> = Transformer foundation surrogate(모드 3, 모드 2의 mesh/field 예측) 학습 파이프라인.</li>
+    <li>세 모드는 <em>동일한 0.3.7 STEP/ledger/token</em>을 입력으로 공유한다. 정체성이 갈라지면 비교가 무의미해진다.</li>
+  </ul>
+</div>
+
+<h2 id="why"><span class="num">§2</span>배경 — 왜 자체 솔버인가</h2>
+<p>
+  WPT 코일·변압기 설계 성능은 인덕턴스, 상호인덕턴스, 결합계수, AC 저항, Q, 손실, 효율로 결정된다.
+  공진형 WPT의 figure of merit은 다음과 같다.
+</p>
+\[ U = k\sqrt{Q_1 Q_2}, \qquad Q_i = \frac{\omega L_i}{R_i} \]
+<p>
+  따라서 \(L, M, k\)뿐 아니라 \(R, Q\), 손실 예측이 핵심이다. 현재 이 값들은 HFSS terminal Z(f) 추출에 의존하는데,
+  3D full-wave / quasi-static FEM은 얇은 도체, skin/proximity effect, ferrite loss, adaptive mesh, port normalization 때문에
+  설계 1점당 수십 분이 걸리고, <strong>무엇보다 Ansys 라이선스가 병목</strong>이다.
+</p>
+<div class="panel danger">
+  <p class="ptitle">핵심 문제</p>
+  <p style="margin:0">
+    대규모 surrogate corpus를 만들려면 수만~수십만 점의 Z(f)를 풀어야 하는데, 상용 라이선스로는
+    동시성·비용·자동화가 모두 막힌다. → <strong>라이선스 프리, GPU 가속, headless 자동화가 되는 자체 C++ FEM 솔버</strong>가 필요하다.
+  </p>
+</div>
+<p>
+  사전조사(Phase 0)에서 <strong>Palace</strong>(AWS Labs, C++17, MPI/CUDA 가능 오픈소스 3D FEM)가
+  주파수영역 driven 시뮬레이션과 lumped/wave port S·V·I·field 출력을 제공함을 확인했다.
+  Phase 0 sanity(<code>phase0_sanity/</code>)에서 CUDA 빌드·GPU 기동·cylinder/CPW 예제의 <code>port-S.csv</code> 산출까지 검증되었다.
+  Palace를 <strong>FEM 코어로 채택</strong>하고, 그 위에 0.3.7 STEP을 먹이는 ingestion·mesh·postprocess·Z-추출 C++ 레이어를 우리가 만든다.
+</p>
+
+<h2 id="inputs"><span class="num">§3</span>입력 — 0.3.7이 이미 만드는 것</h2>
+<p>
+  솔버는 형상을 새로 정의하지 않는다. peetsfea 0.3.7 (<code>entry/sample.py</code>)이 seed별로 결정론적으로 생성하는
+  아래 artifact를 <strong>그대로</strong> 받아 푼다. 이것이 "현재 프로젝트에서 추출한 정보"이다.
+</p>
+<table>
+  <thead><tr><th>artifact</th><th>내용</th><th>솔버에서의 역할</th></tr></thead>
+  <tbody>
+    <tr><td><code>ssw_scene.step</code></td><td>fused solid geometry (TX/RX SSW coil, under-coil, FR4, ferrite, non-model vacuum box)</td><td>mesh 입력 geometry</td></tr>
+    <tr><td><code>ssw_step_ledger.json</code></td><td><span class="kv">bodies[]</span> (role·material·center·size·object_id), <span class="kv">copper/ferrite/fr4/non_model_body_names</span>, units(mm)</td><td>material region·domain 태깅, 도체/유전체/페라이트 분리</td></tr>
+    <tr><td><code>coil_making_token.toml</code></td><td>265개 action token (<code>BEGIN_SSW_SCENE</code>, <code>CREATE_NON_MODEL_BOX</code>, spiral 생성, port 정의 …) + schema/seed</td><td>port endpoint·semantic ownership·excitation 의도, ML feature</td></tr>
+    <tr><td><code>&lt;design_id&gt;.toml</code></td><td>sampled fixed point (치수·재질·주파수 6.78 MHz·constraints)</td><td>frequency setup, 재질 파라미터, conductivity/μ/loss tangent</td></tr>
+    <tr><td>field 데이터</td><td>HFSS/대리모델에서 나온 air-gap B-plane, ferrite surface field, conductor J map 등</td><td>모드 2 warm-start, field-derived metric 검증</td></tr>
+  </tbody>
+</table>
+<div class="panel">
+  <p class="ptitle">실측 예 (run/ssw_0_3_0_fixed)</p>
+  <p class="kv" style="margin:0">
+    copper = [tx_ssw_coil_ssw_copper, rx_ssw_coil_ssw_copper] ·
+    ferrite = [tx_mull_ferrite_sheet] ·
+    fr4 = [tx/rx_ssw_coil_pcb_1/2_fr4] ·
+    ports = Tx 1개(<code>1_T1</code>), Rx 1개(<code>2_T1</code>) · units = mm · f = 6.78 MHz
+  </p>
+</div>
+
+<h2 id="scope"><span class="num">§4</span>솔버 범위와 비범위</h2>
+<h4>In scope</h4>
+<ul>
+  <li>주파수영역(frequency-domain) driven 해석만. <strong>transient는 비범위.</strong></li>
+  <li>terminal-network-equivalent 출력: 2-port S/Z 행렬, 포트 V/I, 파생 \(L_1,L_2,M,k,Q_1,Q_2,\eta,U\), 손실(copper/dielectric/ferrite/boundary), 선택적 field.</li>
+  <li>full-wave driven 정식화 기본(변위전류 포함 → 캐패시턴스·E field·SRF·유전손실). MQS는 입증된 경우에만 fast-mode 옵션.</li>
+  <li>lumped port excitation, port current 방향·reference impedance 명시.</li>
+</ul>
+<h4>Out of scope (이 브랜치)</h4>
+<ul>
+  <li>HFSS의 GUI·재질 라이브러리·full RF 기능 100% 재현.</li>
+  <li>Transformer surrogate 학습 자체(다른 프로젝트). 여기서는 label 공급과 warm-start 수용만.</li>
+  <li>형상 생성 로직 변경. STEP은 0.3.7 계약을 따른다.</li>
+</ul>
+<div class="panel danger">
+  <p class="ptitle">실패 정책 (fail-fast)</p>
+  <p style="margin:0">
+    Palace 실행이 요구된 terminal-network 출력을 재현하지 못하면 <strong>부분 결과로 degrade하지 않고 backend run을 실패시킨다.</strong>
+    silent fallback·log-and-continue 금지. raw solver 파일은 report 수식·부호·단위·mesh 설정을 감사할 수 있을 만큼 보존한다.
+  </p>
+</div>
+
+<h2 id="cuda"><span class="num">§5</span>CUDA / 병렬 강제 규약</h2>
+<div class="panel cuda">
+  <p class="ptitle">Hard requirement</p>
+  <ul style="margin:0">
+    <li><span class="tag cu">CUDA mandatory</span> — CUDA가 없는 환경에서는 <strong>의도적으로 실행 거부</strong>한다. <span class="tag no">no CPU fallback</span> (느리고 관리 부담만 늘어남).</li>
+    <li>빌드: <code>palace@0.16.0 +cuda</code>, <code>cuda_arch</code>는 타깃 GPU에 맞춤(검증 데스크탑 RTX 3070 → <code>cuda_arch=86</code>).</li>
+    <li>병렬: <strong>4-core MPI</strong> 고정 launch + GPU 디바이스 solve(<code>Solver.Device = "GPU"</code>).</li>
+    <li>기동 시 <code>nvidia-smi</code>로 GPU·VRAM 확인 → 없거나 부족하면 즉시 raise(가짜 성공 금지).</li>
+  </ul>
+</div>
+<p>
+  Phase 0에서 8 GB RTX 3070 세션은 기본 HYPRE/Umpire CUDA 할당이 과도해 <code>cudaMalloc … out of memory</code>로 abort했고,
+  <strong>HYPRE pool-size override</strong>(<code>phase0_sanity/hypre_pool_override/</code>)를 적용해야 GPU smoke가 통과했다.
+  따라서 솔버 런처는 <strong>VRAM에 맞춘 pool-size 설정을 1급 파라미터</strong>로 노출하고, full sweep의 OOM을 mesh/주파수 분할로 흡수한다.
+</p>
+<p style="color:var(--muted);font-size:14px">
+  참고: 0.3.5 runner는 이미 <code>nvidia-smi</code> GPU 감지 → AEDT GPU 가속(고정 <code>cores=4</code>) 패턴을 쓴다.
+  자체 솔버는 같은 4-core 규약을 따르되, AEDT와 달리 <strong>CPU 폴백을 제거</strong>한다.
+</p>
+
+<h2 id="arch"><span class="num">§6</span>솔버 아키텍처 파이프라인</h2>
+<p>입력 artifact → Z(f)까지의 결정론적 파이프라인. 굵은 단계가 이 브랜치의 신규 C++ 작업이다.</p>
+<div class="pipeline">
+  <div class="stage"><b>1 · Ingest</b><small>STEP + ledger + token + design TOML 파싱, role/material/port 정체성 복원</small></div>
+  <div class="stage"><b>2 · Tag</b><small>도체/FR4/ferrite/vacuum domain, lumped port endpoint, boundary 지정</small></div>
+  <div class="stage"><b>3 · Mesh</b><small>mesh 생성은 솔버가 직접 수행. 모드 2는 surrogate가 예측한 밀도 맵으로 refine 분포만 가이드</small></div>
+  <div class="stage"><b>4 · Assemble</b><small>주파수영역 curl-curl + 재질 + lumped port를 Palace config로 emit</small></div>
+  <div class="stage"><b>5 · Solve</b><small>CUDA + 4-core MPI, adaptive pass. 모드 2는 field warm-start로 패스 단축</small></div>
+  <div class="stage"><b>6 · Post</b><small>port S/V/I → Z(f), 부호·reference impedance 정규화, 손실·field 추출</small></div>
+  <div class="stage"><b>7 · Emit</b><small>solver-neutral em_result + network/derived/loss/field CSV + manifest</small></div>
+</div>
+
+<h2 id="math"><span class="num">§7</span>수치 정식화</h2>
+<div class="panel danger">
+  <p class="ptitle">기본은 full-wave — Maxwell AC Magnetic(MQS) 가정 금지</p>
+  <p style="margin:0">
+    Maxwell 3D Eddy Current(AC Magnetic)는 변위전류를 버려 <strong>캐패시턴스·E field를 못 잡고 \(Z=R+j\omega L\)로 고정 가정</strong>한다.
+    HFSS 대체가 목적이므로 우리는 <strong>변위전류를 포함한 full-wave driven 정식화(Palace <code>Driven</code> 모드)</strong>를 기본으로 쓴다.
+    이래야 <strong>E·H field 모두, 턴간/권선간 캐패시턴스, self-resonance(SRF), 유전 손실</strong>이 HFSS처럼 잡히고 \(Z=R+jX\)의 \(X\)가 유도+용량을 일반적으로 표현한다.
+  </p>
+</div>
+<p>주파수영역 full curl-curl(완전 Maxwell):</p>
+\[ \nabla\times\!\left(\tfrac{1}{\mu}\nabla\times \mathbf{E}\right) - \omega^2\varepsilon\,\mathbf{E} + j\omega\sigma\,\mathbf{E} = -j\omega\,\mathbf{J}_s \]
+<p>
+  \(-\omega^2\varepsilon\) 항이 변위전류 = 캐패시턴스·E field의 출처다. 이 항을 빼면 곧 eddy-current(MQS) 식
+  \(\nabla\times(\tfrac{1}{\mu}\nabla\times\mathbf{A}) + j\omega\sigma\mathbf{A} = \mathbf{J}_s\)가 되고, 그게 바로 Maxwell AC Magnetic이라 캐패시턴스가 사라진다 — <strong>기본 경로에서는 쓰지 않는다.</strong>
+</p>
+<p>도체에는 \(\sigma\), 유전체(FR4·vacuum)에는 복소 유전율 \(\varepsilon(\omega)=\varepsilon'(1-j\tan\delta)\), 페라이트에는 복소 투자율 \(\mu(\omega)=\mu'-j\mu''\)(loss)를 부여한다. 포트별 단위 여기로 풀어 admittance 열을 얻고 Z로 역변환한다.</p>
+\[ \mathbf{Z}(f) = \mathbf{Y}(f)^{-1}, \qquad Z_{ij}=\left.\frac{V_i}{I_j}\right|_{I_{k\neq j}=0} \]
+<p>등가회로 파라미터(저주파 유도 우세 구간에서 의미를 갖고, SRF 부근에서는 full \(Z(f)\) 곡선을 1차 산출물로 본다):</p>
+\[ L_i = \frac{\Im\{Z_{ii}\}}{\omega},\quad R_i=\Re\{Z_{ii}\},\quad M=\frac{\Im\{Z_{12}\}}{\omega},\quad k=\frac{M}{\sqrt{L_1 L_2}},\quad Q_i=\frac{\omega L_i}{R_i} \]
+<p>물리 일관성 제약(post-check, 위반 시 fail): 상반성 \(\mathbf{Z}=\mathbf{Z}^{\mathsf T}\), passivity \(\Re\{\mathbf{Z}\}\succeq 0\), \(R>0,\ L>0,\ |k|\le 1\).</p>
+<div class="panel">
+  <p class="ptitle">MQS는 옵션-온리 fast mode</p>
+  <p style="margin:0">MQS(eddy-current) 정식화는 <strong>같은 설계점에서 full-wave 대비 캐패시턴스 기여가 무시 가능함을 입증한 경우에만</strong> 빠른 근사 옵션으로 허용한다.
+  기본값·label 생성·HFSS cross-check는 항상 full-wave로 한다. (\(L,M,k\)만 맞고 \(R,Q,\eta\)·SRF가 어긋나는 MQS 함정 회피.)</p>
+</div>
+<div class="panel">
+  <p class="ptitle">port 부호 함정</p>
+  <p style="margin:0">port normalization과 current 방향만으로도 두 정확한 솔버가 서로 틀려 보일 수 있다. \(Z_{12}/Z_{21}\) 부호 반전은
+  반드시 port current 방향으로 추적해 <strong>공통 postprocess 레이어</strong>에서 고정한다(HFSS와의 cross-check 기준).</p>
+</div>
+
+<h2 id="outputs"><span class="num">§8</span>솔버-중립 출력 계약</h2>
+<p>HFSS든 Palace든 <strong>같은 스키마</strong>로 떨어뜨려야 cross-solver 비교와 surrogate label이 성립한다.</p>
+<table>
+  <thead><tr><th>파일</th><th>내용</th></tr></thead>
+  <tbody>
+    <tr><td><code>em_result.json</code></td><td>정규화된 solver-neutral 결과 요약</td></tr>
+    <tr><td><code>network.csv</code></td><td>frequency, 복소 S 행렬, 복소 Z 행렬, port reference 데이터</td></tr>
+    <tr><td><code>derived.csv</code></td><td>\(L_{tx}, L_{rx}, M, k, R, Q, U, \eta\)</td></tr>
+    <tr><td><code>port_vi.csv</code></td><td>복소 peak port V·I + 명시적 current 방향</td></tr>
+    <tr><td><code>loss.csv</code></td><td>copper / dielectric / ferrite / boundary / total 손실</td></tr>
+    <tr><td><code>field_index.json</code></td><td>field 파일·probe·slice·좌표계·field 단위 참조</td></tr>
+    <tr><td><code>solver_manifest.json</code></td><td>solver 이름/버전, run command, mesh 입력, 수렴 설정, source TOML, geometry 정체성, postprocess 버전, GPU/MPI telemetry</td></tr>
+  </tbody>
+</table>
+
+<h2 id="validation"><span class="num">§9</span>검증 사다리 (vs HFSS)</h2>
+<p>Palace를 신뢰 가능한 백엔드로 인정하기 전까지 HFSS를 reference로 두고, 같은 설계점을 나란히 비교한다. 복잡도를 단계적으로 올린다.</p>
+<table>
+  <thead><tr><th>단계</th><th>geometry</th><th>physics</th><th>요구 비교</th></tr></thead>
+  <tbody>
+    <tr><td>V0</td><td>minimal two-port</td><td>copper pad, vacuum</td><td>S/Z 행렬, port V/I, 형상·단위·상반성 일치</td></tr>
+    <tr><td>V1</td><td>simple coil pair</td><td>copper, no ferrite</td><td>L/M/k, R/Q, field probe</td></tr>
+    <tr><td>V2</td><td>SSW pair</td><td>copper + FR4</td><td>S/Z, 손실, field slice</td></tr>
+    <tr><td>V3</td><td>SSW + ferrite</td><td>ferrite loss/μ</td><td>scalar 추세, total loss, field 집중</td></tr>
+    <tr><td>V4</td><td>full design-space sample</td><td>active 0.3.x SSW surface</td><td>분포 수준 HFSS/Palace 일치</td></tr>
+  </tbody>
+</table>
+<p style="color:var(--muted);font-size:14px">scalar(6.78 MHz의 L/M/k, R/Q)가 안정된 뒤에만 full frequency curve를 비교한다. ferrite 비교는 μ/loss 모델 차이가 지배하므로 따로 격리한다.</p>
+
+<h2 id="surrogate"><span class="num">§10</span>대리모델 결합 (모드 2·3)</h2>
+<h4>모드 2 — warm-started FEM</h4>
+<p>
+  대리모델은 <strong>mesh 자체를 생성하지 않는다.</strong> mesh 생성은 솔버가 하는 쉬운 단계이고,
+  대리모델은 <strong>mesh 밀도(refinement density) 맵과 초기 EM field</strong>만 예측한다.
+  솔버는 이 밀도 맵으로 mesh를 생성하고 예측 field를 초기 guess로 써서
+  adaptive pass 수를 줄여 <strong>≤15분</strong>에 정밀 해로 수렴한다. 솔버는 이를 위해:
+</p>
+<ul>
+  <li>외부에서 주입된 <strong>mesh 밀도 맵</strong>(target edge length / refinement field)을 수용해 mesh를 생성하는 입력 경로</li>
+  <li>초기 vector potential / field를 solver 초기값으로 로드하는 hook</li>
+  <li>밀도 가이드 유무와 무관하게 <strong>같은 수렴 기준·같은 출력 계약</strong> 보장(공정한 시간 측정)</li>
+</ul>
+<h4>모드 3 — surrogate-only</h4>
+<p>
+  솔버는 직접 호출되지 않는다. 대신 모드 1이 생산한 high-fidelity (STEP/token → Z(f)) label로 학습된 대리모델이 0.1초에 추론한다.
+  이 브랜치의 책임은 <strong>label 품질·provenance 추적</strong>: HFSS label, Palace label, cross-solver-calibrated label을 구분 기록한다.
+</p>
+<div class="panel">
+  <p class="ptitle">geometry token = 정규 ML 입력</p>
+  <p style="margin:0">스크린샷·CAD 파일명이 아니라 <code>coil_making_token.toml</code>의 action token(role·material·layer·conductor path·port endpoint·ferrite domain·boundary)을
+  대리모델의 canonical 입력으로 쓴다. 토큰 payload는 scalar/list/ref-only·결정론적이어야 하며, 같은 token 스트림이 geometry ledger·mesh intent·solver config·ML feature를 모두 재생성한다.</p>
+</div>
+
+<h2 id="roadmap"><span class="num">§11</span>단계별 로드맵</h2>
+<div class="phase done">
+  <div class="pt">Phase 0 — Palace feasibility (완료)</div>
+  <div class="pmeta">phase0_sanity/ · CUDA 빌드·GPU 기동·cylinder/CPW port-S.csv·HYPRE pool override 검증</div>
+  <p>고정 Palace 0.16.0 바이너리, MPI/CUDA launch path, CSV·ParaView 출력 확인. peetsfea runtime 무변경.</p>
+</div>
+<div class="phase">
+  <div class="pt">Phase A — solver-neutral 결과 스키마 + STEP ingestion</div>
+  <div class="pmeta">em_result/network/derived/port_vi/loss/field_index/manifest 정의 · 0.3.7 STEP/ledger/token 파서</div>
+  <p>HFSS report를 먼저 이 스키마로 매핑. S→Z, V/I→Z 수식과 reference impedance 처리 명시. 부호·shape·단위·복소 직렬화 fixture 테스트.</p>
+</div>
+<div class="phase">
+  <div class="pt">Phase B — minimal two-port cross-solver check (V0)</div>
+  <div class="pmeta">같은 geometry/port ledger → HFSS·Palace 어댑터 → S/Z 비교</div>
+  <p>형상·단위·상반성 정확 일치. 저복잡도 L/R/Z는 mesh refine 후 tight tolerance 수렴. Z12/Z21 부호는 공통 postprocess에서 고정.</p>
+</div>
+<div class="phase">
+  <div class="pt">Phase C — CUDA-mandatory 런처 + 4-core MPI</div>
+  <div class="pmeta">CPU 폴백 제거 · nvidia-smi 게이트 · VRAM 맞춤 HYPRE pool-size · OOM을 mesh/freq 분할로 흡수</div>
+  <p>Mode 1의 골격 완성: STEP 한 점을 GPU로 끝까지 풀어 정밀 Z(f)를 ≤30분에 산출.</p>
+</div>
+<div class="phase">
+  <div class="pt">Phase D — SSW cross-solver ladder (V1→V3)</div>
+  <div class="pmeta">copper-only → +FR4 → +ferrite → under-coil enabled · scalar 먼저, curve 나중</div>
+  <p>Ltx/Lrx/M/k/R/Q/FOM 우선 비교. ferrite는 격리. HFSS 대비 신뢰도 결정 노트 작성.</p>
+</div>
+<div class="phase">
+  <div class="pt">Phase E — warm-start 인터페이스 (Mode 2)</div>
+  <div class="pmeta">외부 mesh 밀도 맵·초기 field 주입 hook · 같은 수렴기준·출력계약 · ≤15분 목표 측정</div>
+  <p>대리모델의 mesh 밀도 예측 + 초기 field를 받아 패스 단축. 밀도 가이드 유무 시간/정확도 벤치.</p>
+</div>
+<div class="phase">
+  <div class="pt">Phase F — label corpus + provenance (Mode 3 공급)</div>
+  <div class="pmeta">raw + normalized 보존 · 실패 샘플 구조화 · topology/range 분할 · HFSS/Palace/calibrated label 구분</div>
+  <p>대규모 자동 sweep으로 surrogate 학습 corpus 생성. 솔버 bias 추적. active learning(불일치·불확실 점 우선 solve)로 확장.</p>
+</div>
+<div class="phase">
+  <div class="pt">Phase G — 공개</div>
+  <div class="pmeta">MIT 라이선스 · solver/launcher/스키마/벤치마크 split 공개</div>
+</div>
+
+<h2 id="risks"><span class="num">§12</span>리스크</h2>
+<ul>
+  <li><strong>Port normalization</strong>: 정확한 두 솔버가 부호·정규화 때문에 틀려 보임 → 공통 postprocess에서 고정.</li>
+  <li><strong>Mesh near port gap / copper edge</strong>: Rac·Q를 지배 → refine 규칙을 명시·고정.</li>
+  <li><strong>Ferrite 모델 차이</strong>: HFSS와 μ/loss 모델이 다를 수 있음 → ferrite 비교 격리.</li>
+  <li><strong>6.78 MHz 대형 air domain</strong>: 파장(~44 m)≫코일이라 full-wave FEM이 저주파에서 ill-conditioning·수렴 난조를 겪을 수 있음 → 도메인/경계 크기·preconditioner 관리, 필요시 low-frequency-stabilized full-wave 사용. 캐패시턴스를 버리는 MQS로의 도피는 기본 경로에서 금지.</li>
+  <li><strong>GPU VRAM</strong>: 8 GB급에서 기본 할당 OOM → pool-size override + mesh/freq 분할. CUDA 강제이므로 CPU 회피 불가(설계상 수용).</li>
+  <li><strong>ML label solver bias</strong>: HFSS/Palace 불일치 미추적 시 label 편향 → provenance 필수.</li>
+</ul>
+
+<h2 id="umbrella"><span class="num">§13</span>상위 연구 맥락 — foundation surrogate</h2>
+<p style="color:var(--muted)">
+  아래는 원본 <code>프로젝트구상.md</code>의 비전을 보존한 요약이다. 이 브랜치의 C++ 솔버는 그 비전의 <strong>데이터 기반(data foundation)</strong>을 담당한다.
+</p>
+<div class="panel">
+  <p class="ptitle">중심 명제</p>
+  <p style="margin:0">전자기 설계는 최종 CAD 형상이 아니라 <strong>물리 의미를 가진 실행 가능한 생성 과정</strong>이다. 이를 physical IR token으로 표현해
+  Transformer foundation surrogate로 사전학습하면, 새로운 설계 family에 <strong>소량(수십~수백) fine-tuning</strong>만으로 적응할 수 있다.</p>
+</div>
+<p>핵심 검증 목표:</p>
+\[ \text{Foundation surrogate} + 100\ \text{target} \;\approx\; \text{classical surrogate} + 100{,}000\ \text{target} \]
+<ul>
+  <li>입력: design IR token(coil/turn/layer/ferrite/port primitive) + 물리 수치 token + 관계 graph + solver setting.</li>
+  <li>출력 head: \(\mathbf{Z}(f)\) · 등가 \(L,R,M,k\) · physics-consistency \(Q=\omega L/R\) · loss \(P_{cu},P_{fe}\) · field latent.</li>
+  <li>loss: \(\mathcal L_Z + \lambda_1\mathcal L_{LRM} + \lambda_2\mathcal L_Q + \lambda_3\mathcal L_\eta + \lambda_4\mathcal L_{loss} + \lambda_5\mathcal L_{phys}\) (passivity·상반성 제약 포함).</li>
+  <li>검증: held-out target family에서 \(R,Q,\eta\) 중심으로 데이터 효율 \(10^2\!\sim\!10^3\)배 절감 입증.</li>
+</ul>
+<p>
+  이 surrogate 학습 자체는 <strong>다른 프로젝트들에서</strong> 진행된다. dev/3은 그 corpus와 모드 2의 warm-start 엔진,
+  그리고 모드 3의 정답 생성기를 만드는 <strong>오픈소스 CUDA C++ FEM 솔버</strong>에 집중한다.
+</p>
+
+<footer>
+  peetsfea · dev/3 long-term plan · 작성 2026-06-17 ·
+  근거: <code>프로젝트구상.md</code>, <code>docs/palace-second-backend-roadmap.md</code>, <code>phase0_sanity/</code>, <code>README.md</code>, <code>GOAL.md</code> ·
+  세 모드: ① FEM+CUDA ≤30분 · ② surrogate mesh밀도/field warm-start FEM ≤15분 · ③ 0.99 surrogate ≈0.1초
+</footer>
+
+</div>
+</body>
+</html>
