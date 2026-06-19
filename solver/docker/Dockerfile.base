@@ -13,9 +13,9 @@
 # Fork baseline:
 #   palace@0.16.1 +cuda ~slepc ~sundials cuda_arch=86   (RTX 3070, sm_86)
 # The frequency-dependent complex-mu / magnetic-loss patch plus pfsolver
-# terminal field-current output and non-rectangular port projected-length support
+# terminal field-current output and explicit skew-port geometry support
 # produce the PEETSFEA fork version
-# 0.16.1pfterm01 from this upstream-equivalent baseline.
+# 0.16.1pfgeom1 from this upstream-equivalent baseline.
 FROM docker.io/spack/ubuntu-noble:develop@sha256:2a6981ff541a1040f26c89e23b8c6be089d7afc339b21bf8e4877562f31209f4
 
 SHELL ["/bin/bash", "-lc"]
@@ -61,7 +61,7 @@ COPY docker/palace-wrapper.sh /usr/local/bin/palace
 
 ARG PEETSFEA_PALACE_BASE_VERSION="0.16.1"
 ARG PEETSFEA_PALACE_BASE_COMMIT="c13e409f255392b9d78369c386276cf9343c2205"
-ARG PEETSFEA_PALACE_FORK_VERSION="0.16.1pfterm01"
+ARG PEETSFEA_PALACE_FORK_VERSION="0.16.1pfgeom1"
 ARG PEETSFEA_PALACE_SOURCE_COMMIT="unknown"
 ARG PEETSFEA_PALACE_INSTALL_PREFIX="/opt/peetsfea-palace"
 ARG PEETSFEA_PALACE_BUILD_JOBS="8"
