@@ -2,6 +2,10 @@
 
 이 브랜치(`solver`)의 목표는 Ansys HFSS를 대체하는 오픈소스 full-wave 솔버 `pfsolver`다. `pfsolver`는 `solver/pfsolver` 아래의 독립 Python API 서브모듈이고, peetsfea-facing CLI는 만들지 않는다. peetsfea는 나중에 Python API를 import/call한다.
 
+> ## ⭐ 다음 작업 지시 (Codex) → **[solver/docs/pec-conductor-fix-for-codex.md](solver/docs/pec-conductor-fix-for-codex.md)**
+> HFSS-mismatch의 근본 원인·fix는 Palace 실험으로 **확정**됐다(아래 ★★ 참고). copper를 solve-inside volume이
+> 아니라 **PEC/표면-임피던스 경계**로 바꾸는 게 핵심. 그 지시 문서대로 SSW를 마무리하라.
+
 ## 완료된 기반
 
 - `pfsolver` API: `inspect_bundle()` / `mesh_bundle()` / `solve_bundle()` 구현. Palace 호출은 `~/.local/bin/palace` wrapper를 통한 JSON config / CSV boundary로 유지.
@@ -79,7 +83,14 @@ lumped port는 **PEC/표면-임피던스 도체 경계**를 기대한다(cpw 예
 
 **FIX (확정):** copper를 **boundary로 모델링**한다 — copper를 air에서 void로 빼고 그 표면을 **PEC**(1차: L/M/k parity) → 이후 **finite-conductivity surface-impedance**(R/skin까지). copper 3D solve-inside는 **폐기**(skin-depth 위해 volume으로 둔 Hard Rule이 바로 collapse의 원인이었다). FR4는 dielectric volume 유지.
 
-다음: 이 fix를 실제 SSW no-ferrite에 적용해 Z를 HFSS order로 끌어올린다(진행 중).
+### SSW 적용 시도 (2026-06-19, Claude) — fix 방향 맞으나 메시 토폴로지 난제
+실제 SSW에 PEC-도체를 적용하며 확인된 것:
+- **copper를 thin-solid void(전체 shell PEC)로** 두면 토폴로지는 맞지만 0.07mm 두께가 메시 폭발(>2M tets). HFSS는 solid를 ~1만, 공기를 ~3만으로 두는데, gmsh conformal 메시는 thin 두께/촘촘한 turn 간격을 분해하느라 폭발.
+- **copper를 평면 face만 떠서 zero-thickness 시트로** 두면 coarse(150k tets, GPU 완주)지만 Z11≈Z22≈**50Ω(≈포트R)**, S21≈0로 **여전히 붕괴**. 원인: ① `occ.copy`로 face를 개별 복사하면 공유 모서리 연결이 끊겨 도체가 전기적으로 분리됨, ② TX는 main(XY)+under-coil(YZ) 직렬 3D 코일이라 단일 평면 시트로는 루프 미완성.
+- → **정답: 전체 코일을 "연결된 zero-thickness mid-surface"(또는 coarse-meshable finite-conductivity impedance boundary)로** 모델링해야 한다. 연결성(full shell)과 coarse 메시(thin 회피)를 동시에 만족해야 하며, 이게 남은 핵심 엔지니어링이다. minloop가 검증한 물리(PEC 도체+lumped port=정확한 L)는 그대로 유효하다.
+- 다음 후보: (a) 3D 코일 mid-surface 추출, (b) Palace AMR(coarse seed→적응 세분, Palace native)로 turn-gap 해상, (c) 도체 두께를 인위적으로 키워(예 1–2mm) void로 coarse-mesh(L은 두께에 둔감).
+
+실험 산출물: `run/claude_minloop/`(검증 성공), `run/claude_ssw_sheet/`(150k mesh, solve 완주, 토폴로지 미해결).
 
 ## ★ Claude 진단 v2 (2026-06-19, 정정)
 
