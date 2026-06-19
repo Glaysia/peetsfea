@@ -3,8 +3,10 @@
 이 브랜치(`solver`)의 목표는 Ansys HFSS를 대체하는 오픈소스 full-wave 솔버 `pfsolver`다. `pfsolver`는 `solver/pfsolver` 아래의 독립 Python API 서브모듈이고, peetsfea-facing CLI는 만들지 않는다. peetsfea는 나중에 Python API를 import/call한다.
 
 > ## ⭐ 다음 작업 지시 (Codex) → **[solver/docs/pec-conductor-fix-for-codex.md](solver/docs/pec-conductor-fix-for-codex.md)**
-> HFSS-mismatch의 근본 원인·fix는 Palace 실험으로 **확정**됐다(아래 ★★ 참고). copper를 solve-inside volume이
-> 아니라 **PEC/표면-임피던스 경계**로 바꾸는 게 핵심. 그 지시 문서대로 SSW를 마무리하라.
+> HFSS-mismatch 진단은 Palace 실험으로 계속 좁힌다. 단, **동손/R/Q acceptance에서 copper를 표면-only
+> impedance/conductivity boundary로 대체하는 경로는 금지**다. 사용자가 HFSS에서 solve-inside on/off를 직접
+> 비교했고, 70 µm trace @ 6.78 MHz(skin depth 약 25 µm)에서는 표면-only 금속 저항 모델이 Q를 약 반토막 내는
+> 오답이다. PEC/표면 sheet 실험은 포트/인덕턴스 topology 진단용일 뿐, R/Q/동손 acceptance가 아니다.
 
 ## 완료된 기반
 
@@ -32,6 +34,8 @@
   - helper/non-model bodies(`tv`, `tx_region`, `tx_region_max`, `rx_region_max`)는 solve domain에서 제거.
   - FR4 + copper만 실제 material volume으로 유지.
   - copper는 3D conductive solve-inside volume. 70 µm trace, 6.78 MHz skin depth ≈25 µm 기준으로 thickness 4 layers.
+  - **금속 저항/동손/Q는 표면-only conductor boundary로 계산하지 않는다.** surface impedance/conductivity boundary는
+    이 프로젝트의 acceptance R/Q 모델이 아니며, 사용자가 HFSS solve-inside on/off 비교로 Q 약 1/2 오차를 확인했다.
   - absorbing boundary는 외곽 air box 6면에만 태깅.
   - HFSS `Region_Abs_2000mm`와 같은 2000 mm absolute-offset air domain을 생성. 현재 mesh summary volume `76.5313424536621 m^3`.
 
@@ -78,16 +82,23 @@ Palace 실행, Docker/GPU, HYPRE, mesh generation, CSV parsing이 문제가 아�
 - `Zin = 0.0017 + j10.84 Ω`, L = **254.6 nH**(해석 square-loop ~234 nH, ~9% 일치).
 - 즉 **Palace `Driven` full-wave + feed-gap lumped port + PEC 도체 = 코일 인덕턴스 정확히 산출.**
 
-**따라서 pfsolver 붕괴(Zin≈포트R, L≈0)의 근본 원인 = copper를 `solve-inside σ volume`으로 둔 것.**
-lumped port는 **PEC/표면-임피던스 도체 경계**를 기대한다(cpw 예제도 금속=`PEC` boundary, 도체 volume 없음). solve-inside 유한도전율 volume에는 포트가 conduction 전류를 못 밀어넣어 코일이 회로에서 빠진다.
+**해석 정정:** minloop는 Palace가 PEC topology에서 L을 낼 수 있음을 보여준 진단이다. 하지만 이 결과를
+근거로 70 µm copper의 R/Q/동손 모델을 PEC 또는 표면-only impedance로 대체하면 안 된다. 현재 붕괴는
+**Palace lumped port와 3D solve-inside copper terminal current path의 결합 문제**로 다루며, 이 결합 문제를
+풀어도 최종 동손 모델은 3D copper 기준이어야 한다.
 
-**FIX (확정):** copper를 **boundary로 모델링**한다 — copper를 air에서 void로 빼고 그 표면을 **PEC**(1차: L/M/k parity) → 이후 **finite-conductivity surface-impedance**(R/skin까지). copper 3D solve-inside는 **폐기**(skin-depth 위해 volume으로 둔 Hard Rule이 바로 collapse의 원인이었다). FR4는 dielectric volume 유지.
+**정정된 FIX boundary:** copper를 표면-only 금속 저항 모델로 바꾸면 안 된다. PEC/zero-thickness sheet 실험은
+Palace lumped port가 **도체 topology가 맞을 때 L을 낼 수 있는지** 확인하는 진단 전용이다. 최종 R/Q/동손
+acceptance는 70 µm copper를 3D conductive solve-inside로 유지하거나, 그와 동등함이 별도 검증된 volumetric
+conductor formulation이어야 한다. **finite-conductivity surface-impedance만으로 R/skin/Q를 맞추는 경로는 폐기**한다.
 
 ### SSW 적용 시도 (2026-06-19, Claude) — fix 방향 맞으나 메시 토폴로지 난제
 실제 SSW에 PEC-도체를 적용하며 확인된 것:
 - **copper를 thin-solid void(전체 shell PEC)로** 두면 토폴로지는 맞지만 0.07mm 두께가 메시 폭발(>2M tets). HFSS는 solid를 ~1만, 공기를 ~3만으로 두는데, gmsh conformal 메시는 thin 두께/촘촘한 turn 간격을 분해하느라 폭발.
 - **copper를 평면 face만 떠서 zero-thickness 시트로** 두면 coarse(150k tets, GPU 완주)지만 Z11≈Z22≈**50Ω(≈포트R)**, S21≈0로 **여전히 붕괴**. 원인: ① `occ.copy`로 face를 개별 복사하면 공유 모서리 연결이 끊겨 도체가 전기적으로 분리됨, ② TX는 main(XY)+under-coil(YZ) 직렬 3D 코일이라 단일 평면 시트로는 루프 미완성.
-- → **정답: 전체 코일을 "연결된 zero-thickness mid-surface"(또는 coarse-meshable finite-conductivity impedance boundary)로** 모델링해야 한다. 연결성(full shell)과 coarse 메시(thin 회피)를 동시에 만족해야 하며, 이게 남은 핵심 엔지니어링이다. minloop가 검증한 물리(PEC 도체+lumped port=정확한 L)는 그대로 유효하다.
+- → **진단용 다음 단계: 전체 코일을 "연결된 zero-thickness mid-surface" PEC로** 모델링해 포트/topology가 L/M을
+  만드는지 먼저 격리한다. 단 이 모델은 동손/R/Q acceptance가 아니다. 표면-only finite-conductivity/impedance
+  boundary로 최종 Q를 산출하지 않는다.
 - 다음 후보: (a) 3D 코일 mid-surface 추출, (b) Palace AMR(coarse seed→적응 세분, Palace native)로 turn-gap 해상, (c) 도체 두께를 인위적으로 키워(예 1–2mm) void로 coarse-mesh(L은 두께에 둔감).
 
 실험 산출물: `run/claude_minloop/`(검증 성공), `run/claude_ssw_sheet/`(150k mesh, solve 완주, 토폴로지 미해결).
@@ -230,6 +241,8 @@ HFSS final adaptive pass @ 6.78 MHz:
 - Mock/stub 결과 금지. 실제 Palace 실행만 인정.
 - Fail-fast. 실패를 로그만 남기고 계속 진행하지 않는다.
 - copper를 2D boundary로 접지 않는다. 70 µm trace에서 skin depth가 약 25 µm라 3D가 필수다.
+- **동손/R/Q를 표면-only 금속 저항 모델로 계산하지 않는다.** HFSS solve-inside on/off 비교에서 surface-only가 Q를
+  약 반토막 내는 오답으로 확인됐다. PEC/표면 sheet는 L/M/topology 진단 전용이며 acceptance 결과가 아니다.
 - `solver_manifest.json`에는 palace/pfsolver commit, container runtime/image, mesh/config hash, GPU, MPI, pool, design_id를 남긴다.
 
 ## 참조
